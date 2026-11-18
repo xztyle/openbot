@@ -98,21 +98,37 @@ async function shot(page: Page, label: string): Promise<void> {
 }
 
 /**
- * Opens a view from the sidebar, as the reader does: on a phone, Back shows the sidebar first. The
- * page is not loaded again, so the mock host keeps what the walk changed.
+ * Opens a view as the reader does: on a computer from the sidebar row; on a phone from the shortcut
+ * chips of the Home tab (or the DMs tab). The page is not loaded again, so the mock host keeps what
+ * the walk changed.
  */
 async function openView(page: Page, view: "unreads" | "threads" | "later" | "dms", title: string): Promise<void> {
   const back = page.getByRole("button", { name: english("workspace.layout.back"), exact: true }).first();
   if (await back.isVisible()) await back.click();
-  const nav = page.getByRole("navigation", { name: english("workspace.sidebar.label") });
-  if (view === "dms") {
-    await nav.getByRole("button", { name: english("workspace.sidebar.more"), exact: true }).click();
-    await page.getByRole("menuitem", { name: english("workspace.view.dms") }).click();
-  } else
-    await nav
-      .getByRole("button", { name: english(`workspace.view.${view}`) })
-      .first()
+  const tabs = page.getByRole("navigation", { name: english("workspace.phone.tabs") });
+  const phone = page.viewportSize()?.width === VIEWPORTS.phone.viewport.width;
+  if (phone) await tabs.waitFor({ timeout: UI_WAIT_MS });
+  if (phone) {
+    if (view === "dms") {
+      await tabs.getByRole("button", { name: new RegExp(`^${english("workspace.phone.dms")}`, "u") }).click();
+      return;
+    }
+    await tabs.getByRole("button", { name: new RegExp(`^${english("workspace.phone.home")}`, "u") }).click();
+    await page
+      .getByRole("list", { name: english("workspace.phone.shortcuts") })
+      .getByRole("button", { name: new RegExp(`^${english(`workspace.view.${view}`)}`, "u") })
       .click();
+  } else {
+    const nav = page.getByRole("navigation", { name: english("workspace.sidebar.label") });
+    if (view === "dms") {
+      await nav.getByRole("button", { name: english("workspace.sidebar.more"), exact: true }).click();
+      await page.getByRole("menuitem", { name: english("workspace.view.dms") }).click();
+    } else
+      await nav
+        .getByRole("button", { name: english(`workspace.view.${view}`) })
+        .first()
+        .click();
+  }
   await page.getByRole("heading", { name: title, exact: true }).first().waitFor({ timeout: UI_WAIT_MS });
 }
 
@@ -171,7 +187,7 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
     await shot(page, `${viewport}-unreads`);
     await markButtons.first().click();
     await page.getByText(english("workspace.unreads.marked")).waitFor({ timeout: UI_WAIT_MS });
-    await button(page, english("workspace.unreads.undo")).click();
+    await button(page, english("common.undo")).click();
     await markButtons.nth(1).waitFor({ timeout: UI_WAIT_MS });
   });
   if (desktop)
@@ -223,7 +239,7 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
       english("workspace.later.remove"),
       { timeout: UI_WAIT_MS },
     );
-    await button(page, english("workspace.unreads.undo")).click();
+    await button(page, english("common.undo")).click();
     await remove.nth(1).waitFor({ timeout: UI_WAIT_MS });
   });
 
@@ -240,15 +256,21 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
       await shot(page, `${viewport}-search-field`);
       await page.keyboard.press("Enter");
     } else {
+      // A phone: the Home header's search opens Jump to, whose first row searches the messages.
       const back = page.getByRole("button", { name: english("workspace.layout.back"), exact: true }).first();
       if (await back.isVisible()) await back.click();
-      await button(page, english("workspace.search.startTitle")).click();
+      await page
+        .getByRole("navigation", { name: english("workspace.phone.tabs") })
+        .getByRole("button", { name: new RegExp(`^${english("workspace.phone.home")}`, "u") })
+        .click();
+      await button(page, english("workspace.app.menu.search")).click();
+      const jump = page.getByRole("dialog", { name: english("workspace.app.switcher.title") });
+      await jump.waitFor({ timeout: UI_WAIT_MS });
+      await page.keyboard.type("rivals");
+      await jump.getByRole("button", { name: english("workspace.jump.searchMessages", { query: "rivals" }) }).click();
       await page
         .getByRole("heading", { name: english("workspace.view.search"), exact: true })
         .waitFor({ timeout: UI_WAIT_MS });
-      const field = page.getByRole("searchbox", { name: english("workspace.search.placeholder") });
-      await field.fill("rivals");
-      await field.press("Enter");
     }
     await page
       .getByRole("tab", { name: english("workspace.search.messages", { count: 2 }) })

@@ -8,6 +8,7 @@ import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState, LoadingState } from "../../view-state";
 import { AiBadge, AvatarStack, MemberAvatar } from "./WorkspaceAvatar";
+import { WorkspaceList, WorkspaceListRow } from "./WorkspaceList";
 import { PaneHeaderAction, WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { useRecentTime } from "./workspace-format";
 import type { WorkspaceMember } from "./workspace-types";
@@ -145,54 +146,46 @@ export function DirectMessagesView(props: DirectMessagesViewProps): JSX.Element 
             </Switch>
           }
         >
-          <ul class="ws-feed ws-dms-list">
+          <WorkspaceList class="ws-dms-list">
             <For each={shown()} keyed={(item) => item.id}>
               {(item) => (
-                <li>
-                  <Button
-                    variant="ghost"
-                    class="ws-feed-row ws-dm-row"
-                    data-unread={item().unread && !item().muted ? "" : undefined}
-                    data-muted={item().muted ? "" : undefined}
-                    aria-current={props.activeId === item().id ? "page" : undefined}
-                    onClick={() => props.onOpen(item().id)}
-                  >
-                    <span class="ws-feed-avatar">
-                      <Show
-                        when={item().members.length > 1}
-                        fallback={
-                          <Show when={item().members[0]}>
-                            {(member) => <MemberAvatar member={member()} size="lg" />}
-                          </Show>
-                        }
-                      >
-                        <AvatarStack members={item().members} max={2} size="sm" />
+                <WorkspaceListRow
+                  class={item().muted ? "ws-dm-row ws-dm-muted" : "ws-dm-row"}
+                  unread={item().unread && !item().muted}
+                  selected={props.activeId === item().id}
+                  onOpen={() => props.onOpen(item().id)}
+                  leading={
+                    <Show
+                      when={item().members.length > 1}
+                      fallback={
+                        <Show when={item().members[0]}>{(member) => <MemberAvatar member={member()} size="lg" />}</Show>
+                      }
+                    >
+                      <AvatarStack members={item().members} max={2} size="sm" />
+                    </Show>
+                  }
+                  title={
+                    <>
+                      <span class="ws-truncate">{item().name}</span>
+                      <Show when={item().members.length === 1 && item().members[0]?.kind === "agent"}>
+                        <AiBadge />
                       </Show>
-                    </span>
-                    <span class="ws-feed-copy">
-                      <span class="ws-feed-heading">
-                        <span class="ws-feed-what ws-dm-name">
-                          <span class="ws-truncate">{item().name}</span>
-                          <Show when={item().members.length === 1 && item().members[0]?.kind === "agent"}>
-                            <AiBadge />
-                          </Show>
-                        </span>
-                        <Show when={item().at}>{(at) => <span class="ws-feed-time">{recent(at())}</span>}</Show>
-                      </span>
-                      <Show when={item().preview || (item().count > 0 && !item().muted)}>
-                        <span class="ws-dm-preview">
-                          <span class="ws-feed-preview">{preview(item())}</span>
-                          <Show when={item().count > 0 && !item().muted}>
-                            <span class="ws-mention-badge">{item().count}</span>
-                          </Show>
-                        </span>
-                      </Show>
-                    </span>
-                  </Button>
-                </li>
+                    </>
+                  }
+                  titleEnd={item().at ? recent(item().at ?? 0) : undefined}
+                  trailing={
+                    <Show when={item().count > 0 && !item().muted}>
+                      <span class="ws-mention-badge">{item().count}</span>
+                    </Show>
+                  }
+                >
+                  <Show when={item().preview}>
+                    <span class="ws-feed-preview ws-dm-preview">{preview(item())}</span>
+                  </Show>
+                </WorkspaceListRow>
               )}
             </For>
-          </ul>
+          </WorkspaceList>
         </Show>
       </div>
     </section>

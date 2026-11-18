@@ -202,7 +202,7 @@ export function UnreadsView(props: UnreadsViewProps): JSX.Element {
                         <Show when={props.onUndo}>
                           {(undo) => (
                             <Button variant="link" size="xs" onClick={() => undo()(group().id)}>
-                              {t("workspace.unreads.undo")}
+                              {t("common.undo")}
                             </Button>
                           )}
                         </Show>
@@ -225,7 +225,7 @@ export function UnreadsView(props: UnreadsViewProps): JSX.Element {
                               <span class="ws-unreads-message-copy">
                                 <span class="ws-unreads-message-heading">
                                   <MemberName member={message().author} />
-                                  <span class="ws-feed-time">{recent(message().at)}</span>
+                                  <span class="ws-unreads-time">{recent(message().at)}</span>
                                 </span>
                                 <span class="ws-unreads-message-text">
                                   <MessageText segments={message().text} />

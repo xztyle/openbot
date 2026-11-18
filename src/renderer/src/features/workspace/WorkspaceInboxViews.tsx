@@ -200,7 +200,7 @@ export function WorkspaceLaterView() {
             // Undo instead of a confirm: the item comes back as it was.
             toast(t("workspace.later.removed"), {
               action: {
-                label: t("workspace.unreads.undo"),
+                label: t("common.undo"),
                 onClick: () => void ws.later.set(item.channelId, item.messageId, before).catch(fail),
               },
             }),

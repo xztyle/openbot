@@ -289,13 +289,6 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
               <span class="ws-jump-label">{t("workspace.app.switcher.jump")}</span>
               <kbd class="ws-jump-key">{props.searchShortcut}</kbd>
             </Button>
-            {/* A phone has no top bar: the message search opens from here. */}
-            <Show when={ws.env.phone() && ws.search.supported()}>
-              <Button variant="ghost" class="ws-jump" onClick={() => ws.openSearch()}>
-                <Search aria-hidden="true" />
-                <span class="ws-jump-label">{t("workspace.search.startTitle")}</span>
-              </Button>
-            </Show>
             <Input
               type="search"
               size="sm"

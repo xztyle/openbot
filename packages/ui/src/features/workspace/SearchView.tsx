@@ -8,6 +8,7 @@ import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState, ErrorState, LoadingState } from "../../view-state";
 import { AiBadge, MemberAvatar, MemberName } from "./WorkspaceAvatar";
+import { WorkspaceList, WorkspaceListRow } from "./WorkspaceList";
 import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { useRecentTime } from "./workspace-format";
 import type { ChannelVisibility, WorkspaceMember } from "./workspace-types";
@@ -168,30 +169,39 @@ export function SearchView(props: SearchViewProps): JSX.Element {
                   )}
                 </Show>
               </div>
-              <ul class="ws-feed ws-search-recent">
+              <WorkspaceList class="ws-search-recent" label={t("workspace.search.recent")}>
                 <For each={props.recent}>
                   {(query) => (
-                    <li class="ws-search-recent-item">
-                      <Button variant="ghost" class="ws-search-recent-row" onClick={() => props.onSubmit(query)}>
-                        <History aria-hidden="true" />
-                        <span class="ws-truncate">{query}</span>
-                      </Button>
-                      <Show when={props.onRemoveRecent}>
-                        {(remove) => (
-                          <IconButton
-                            variant="ghost"
-                            class="ws-row-actions"
-                            label={t("workspace.search.removeRecent", { query })}
-                            onClick={() => remove()(query)}
-                          >
-                            <X />
-                          </IconButton>
-                        )}
-                      </Show>
-                    </li>
+                    <WorkspaceListRow
+                      leading={<History aria-hidden="true" />}
+                      title={query}
+                      onOpen={props.onRemoveRecent ? undefined : () => props.onSubmit(query)}
+                      actions={
+                        <Show when={props.onRemoveRecent}>
+                          {(remove) => (
+                            <>
+                              <IconButton
+                                variant="ghost"
+                                label={t("workspace.search.searchFor", { query })}
+                                onClick={() => props.onSubmit(query)}
+                              >
+                                <Search />
+                              </IconButton>
+                              <IconButton
+                                variant="ghost"
+                                label={t("workspace.search.removeRecent", { query })}
+                                onClick={() => remove()(query)}
+                              >
+                                <X />
+                              </IconButton>
+                            </>
+                          )}
+                        </Show>
+                      }
+                    />
                   )}
                 </For>
-              </ul>
+              </WorkspaceList>
             </Show>
             <p class="ws-search-tips">{t("workspace.search.tips")}</p>
           </div>
@@ -227,36 +237,38 @@ export function SearchView(props: SearchViewProps): JSX.Element {
                 when={props.channels.length > 0}
                 fallback={<EmptyState size="compact" icon={<Hash />} title={t("workspace.search.noChannels")} />}
               >
-                <ul class="ws-feed">
+                <WorkspaceList>
                   <For each={props.channels} keyed={(channel) => channel.id}>
                     {(channel) => (
-                      <li>
-                        <Button variant="ghost" class="ws-feed-row" onClick={() => props.onOpenChannel(channel().id)}>
+                      <WorkspaceListRow
+                        onOpen={() => props.onOpenChannel(channel().id)}
+                        leading={
                           <span class="ws-search-glyph" aria-hidden="true">
                             <Show when={channel().visibility === "private"} fallback={<Hash />}>
                               <Lock />
                             </Show>
                           </span>
-                          <span class="ws-feed-copy">
-                            <span class="ws-feed-heading">
-                              <span class="ws-feed-what">{channel().name}</span>
-                              <Show when={channel().joined}>
-                                <span class="ws-search-tag">{t("workspace.browse.joined")}</span>
-                              </Show>
-                              <Show when={channel().archived}>
-                                <span class="ws-search-tag">{t("workspace.browse.archived")}</span>
-                              </Show>
-                            </span>
-                            <span class="ws-feed-where">
-                              {t("workspace.app.browse.members", { count: channel().memberCount })}
-                              <Show when={channel().topic}>{(topic) => ` · ${topic()}`}</Show>
-                            </span>
-                          </span>
-                        </Button>
-                      </li>
+                        }
+                        title={
+                          <>
+                            {channel().name}
+                            <Show when={channel().joined}>
+                              <span class="ws-search-tag">{t("workspace.browse.joined")}</span>
+                            </Show>
+                            <Show when={channel().archived}>
+                              <span class="ws-search-tag">{t("workspace.browse.archived")}</span>
+                            </Show>
+                          </>
+                        }
+                      >
+                        <span class="ws-feed-where">
+                          {t("workspace.app.browse.members", { count: channel().memberCount })}
+                          <Show when={channel().topic}>{(topic) => ` · ${topic()}`}</Show>
+                        </span>
+                      </WorkspaceListRow>
                     )}
                   </For>
-                </ul>
+                </WorkspaceList>
               </Show>
             </Match>
             <Match when={props.tab === "people"}>
@@ -264,30 +276,26 @@ export function SearchView(props: SearchViewProps): JSX.Element {
                 when={props.people.length > 0}
                 fallback={<EmptyState size="compact" icon={<UserRound />} title={t("workspace.search.noPeople")} />}
               >
-                <ul class="ws-feed">
+                <WorkspaceList>
                   <For each={props.people} keyed={(person) => person.id}>
                     {(person) => (
-                      <li>
-                        <Button variant="ghost" class="ws-feed-row" onClick={() => props.onOpenPerson(person().id)}>
-                          <MemberAvatar member={person().member} size="lg" />
-                          <span class="ws-feed-copy">
-                            <span class="ws-feed-heading">
-                              <span class="ws-feed-what">
-                                {person().member.name}
-                                <Show when={person().member.kind === "agent"}>
-                                  <AiBadge />
-                                </Show>
-                              </span>
-                            </span>
-                            <Show when={person().detail}>
-                              {(detail) => <span class="ws-feed-where">{detail()}</span>}
+                      <WorkspaceListRow
+                        onOpen={() => props.onOpenPerson(person().id)}
+                        leading={<MemberAvatar member={person().member} size="lg" />}
+                        title={
+                          <>
+                            {person().member.name}
+                            <Show when={person().member.kind === "agent"}>
+                              <AiBadge />
                             </Show>
-                          </span>
-                        </Button>
-                      </li>
+                          </>
+                        }
+                      >
+                        <Show when={person().detail}>{(detail) => <span class="ws-feed-where">{detail()}</span>}</Show>
+                      </WorkspaceListRow>
                     )}
                   </For>
-                </ul>
+                </WorkspaceList>
               </Show>
             </Match>
             <Match when={missing().length > 0}>
@@ -328,34 +336,27 @@ export function SearchView(props: SearchViewProps): JSX.Element {
               />
             </Match>
             <Match when={true}>
-              <ul class="ws-feed ws-search-results">
+              <WorkspaceList class="ws-search-results">
                 <For each={props.hits} keyed={(hit) => hit.id}>
                   {(hit) => (
-                    <li>
-                      <Button
-                        variant="ghost"
-                        class="ws-feed-row ws-search-hit"
-                        onClick={() => props.onOpenHit(hit().id)}
-                      >
-                        <MemberAvatar member={hit().author} size="lg" />
-                        <span class="ws-feed-copy">
-                          <span class="ws-feed-heading">
-                            <MemberName member={hit().author} class="ws-feed-what" />
-                            <span class="ws-feed-time">{recent(hit().at)}</span>
-                          </span>
-                          <span class="ws-feed-where">
-                            {hit().inThread ? t("workspace.search.inThread", { where: hit().where }) : hit().where}
-                            <Show when={hit().space}>{(space) => ` · ${space()}`}</Show>
-                          </span>
-                          <span class="ws-search-snippet">
-                            <SearchSnippet snippet={hit().snippet} highlights={hit().highlights} />
-                          </span>
-                        </span>
-                      </Button>
-                    </li>
+                    <WorkspaceListRow
+                      class="ws-search-hit"
+                      onOpen={() => props.onOpenHit(hit().id)}
+                      leading={<MemberAvatar member={hit().author} size="lg" />}
+                      title={<MemberName member={hit().author} />}
+                      titleEnd={recent(hit().at)}
+                    >
+                      <span class="ws-feed-where">
+                        {hit().inThread ? t("workspace.search.inThread", { where: hit().where }) : hit().where}
+                        <Show when={hit().space}>{(space) => ` · ${space()}`}</Show>
+                      </span>
+                      <span class="ws-search-snippet">
+                        <SearchSnippet snippet={hit().snippet} highlights={hit().highlights} />
+                      </span>
+                    </WorkspaceListRow>
                   )}
                 </For>
-              </ul>
+              </WorkspaceList>
               <Show when={props.hasMore}>
                 <div class="ws-view-more">
                   <Button

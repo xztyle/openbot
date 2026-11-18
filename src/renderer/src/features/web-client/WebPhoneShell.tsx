@@ -6,10 +6,12 @@ import {
   Bell,
   BellOff,
   Blocks,
+  Bookmark,
   Bot,
   Ellipsis,
   HardDrive,
   House,
+  Inbox,
   KeyRound,
   LayoutDashboard,
   MessageSquare,
@@ -109,12 +111,30 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
       .filter((agent) => agent.status.state === "working" && ws.spaces.agentInCurrent(agent.member.id)).length;
     return [
       {
+        id: "unreads",
+        label: t("workspace.view.unreads"),
+        icon: <Inbox />,
+        unread: ws.unreads.hasUnread(),
+        onSelect: () => openView("unreads"),
+      },
+      {
         id: "threads",
         label: t("workspace.view.threads"),
         icon: <MessageSquareText />,
         unread: ws.threadsUnread(),
         onSelect: () => openView("threads"),
       },
+      ...(ws.later.supported()
+        ? [
+            {
+              id: "later",
+              label: t("workspace.view.later"),
+              icon: <Bookmark />,
+              detail: ws.later.count() > 0 ? String(ws.later.count()) : undefined,
+              onSelect: () => openView("later"),
+            },
+          ]
+        : []),
       {
         id: "drafts",
         label: t("workspace.view.drafts"),

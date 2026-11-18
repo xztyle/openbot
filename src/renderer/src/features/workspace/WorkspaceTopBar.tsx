@@ -32,7 +32,7 @@ export function WorkspaceTopBar() {
   const suggestions = (text: string): SearchSuggestion[] =>
     jump
       .entries(text, 6)
-      .filter((entry) => entry.kind !== "view" && entry.kind !== "create")
+      .filter((entry) => entry.kind !== "view" && entry.kind !== "create" && entry.kind !== "search")
       .map((entry) => ({
         id: entry.id,
         label: entry.label,

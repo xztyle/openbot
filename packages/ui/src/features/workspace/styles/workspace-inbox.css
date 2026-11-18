@@ -114,49 +114,24 @@
   white-space: nowrap;
 }
 
-/* Rows with their own actions ------------------------------------------------------------------- */
+/* Later ---------------------------------------------------------------------------------------- */
 
-.ws-later-item,
-.ws-search-recent-item {
-  position: relative;
-  display: flex;
-  align-items: flex-start;
+.ws-later-preview.ui-button {
+  display: -webkit-box;
+  height: auto;
+  justify-content: flex-start;
+  overflow: hidden;
+  padding: 0;
+  color: var(--openbot-text-secondary);
+  font-weight: var(--openbot-weight-regular);
+  text-align: left;
+  text-decoration: none;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
-.ws-later-item > .ws-feed-row,
-.ws-search-recent-item > .ws-search-recent-row {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.ws-row-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-self: center;
-  gap: var(--openbot-space-0-5);
-  opacity: 0;
-}
-
-.ws-later-item:focus-within .ws-row-actions,
-.ws-search-recent-item:focus-within .ws-row-actions {
-  opacity: 1;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .ws-later-item:hover .ws-row-actions,
-  .ws-search-recent-item:hover .ws-row-actions {
-    opacity: 1;
-  }
-}
-
-/* A touch screen has no hover: the actions show on every row. */
-@media (hover: none) {
-  .ws-row-actions {
-    opacity: 1;
-  }
-}
-
-.ws-later-item[data-done] .ws-feed-preview {
+.ws-later-done .ws-later-preview.ui-button {
   color: var(--openbot-text-muted);
 }
 
@@ -268,6 +243,12 @@
   font-weight: var(--openbot-weight-bold);
 }
 
+.ws-unreads-time {
+  color: var(--openbot-text-dim);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-regular);
+}
+
 .ws-unreads-message-text {
   display: -webkit-box;
   overflow: hidden;
@@ -291,35 +272,15 @@
   margin-left: 0;
 }
 
-.ws-dm-row[data-muted] {
+.ws-dm-muted {
   opacity: 0.6;
 }
 
-.ws-dm-row[aria-current="page"] {
-  background: var(--openbot-hover);
-}
-
-.ws-dm-name {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--openbot-space-1-5);
-}
-
 .ws-dm-preview {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--openbot-space-2);
-}
-
-.ws-dm-preview > .ws-feed-preview {
-  flex: 1 1 auto;
   -webkit-line-clamp: 1;
 }
 
-.ws-dm-row[data-unread] .ws-dm-name,
-.ws-dm-row[data-unread] .ws-feed-preview {
+.ws-row[data-unread] .ws-dm-preview {
   color: var(--openbot-text-primary);
   font-weight: var(--openbot-weight-bold);
 }
@@ -361,16 +322,6 @@
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
-}
-
-.ws-search-recent-row.ui-button {
-  justify-content: flex-start;
-  gap: var(--openbot-space-2);
-  font-weight: var(--openbot-weight-regular);
-}
-
-.ws-search-recent-row > svg {
-  color: var(--openbot-text-muted);
 }
 
 .ws-search-tips {
@@ -529,8 +480,6 @@
 
   .ws-unreads-name.ui-button,
   .ws-unreads-message.ui-button,
-  .ws-search-recent-row.ui-button,
-  .ws-row-actions .ui-button,
   .ws-unreads-group-header .ui-button {
     min-height: var(--openbot-touch-target);
   }

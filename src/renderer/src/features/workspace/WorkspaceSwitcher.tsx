@@ -27,7 +27,7 @@ export interface JumpEntry {
   /** A conversation id, `agent:<id>`, `person:<id>`, `view:<view>` or `create:<name>`. */
   id: string;
   label: string;
-  kind: "channel" | "dm" | "agent" | "person" | "view" | "create";
+  kind: "channel" | "dm" | "agent" | "person" | "view" | "create" | "search";
   private?: boolean | undefined;
   member?: WorkspaceMember | undefined;
   unread?: boolean | undefined;
@@ -195,6 +195,9 @@ export function useJumpEntries() {
     );
     if (name && !taken && !text.startsWith("@"))
       ranked.push({ id: `create:${name}`, label: t("workspace.jump.create", { name }), kind: "create" });
+    // The messages too, as Slack's phone search offers, after the names.
+    if (ws.search.supported())
+      ranked.push({ id: `search:${text}`, label: t("workspace.jump.searchMessages", { query: text }), kind: "search" });
     return ranked;
   }
 
@@ -205,8 +208,8 @@ export function useJumpEntries() {
       const view = entry.id.slice("view:".length);
       const found = VIEWS.find((item) => item.view === view);
       if (found) ws.openView(found.view);
-    } else if (entry.kind === "create")
-      ws.openDialog({ kind: "create-channel", name: entry.id.slice("create:".length) });
+    } else if (entry.kind === "search") ws.openSearch(entry.id.slice("search:".length));
+    else if (entry.kind === "create") ws.openDialog({ kind: "create-channel", name: entry.id.slice("create:".length) });
     else ws.openConversation(entry.id);
   }
 
@@ -281,14 +284,16 @@ export function QuickSwitcher(props: { onClose: () => void }) {
                     when={entry.member}
                     fallback={
                       <Show
-                        when={entry.kind === "create"}
+                        when={entry.kind === "create" || entry.kind === "search"}
                         fallback={
                           <Show when={entry.private} fallback={<Hash />}>
                             <Lock />
                           </Show>
                         }
                       >
-                        <Plus />
+                        <Show when={entry.kind === "search"} fallback={<Plus />}>
+                          <Search />
+                        </Show>
                       </Show>
                     }
                   >

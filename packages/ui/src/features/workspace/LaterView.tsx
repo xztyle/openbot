@@ -1,12 +1,13 @@
 import type { JSX } from "@solidjs/web";
 import { For, Match, Show, Switch } from "solid-js";
 import { Button, IconButton } from "../../button";
-import { Bookmark, BookmarkCheck, Check, RotateCcw, X } from "../../icons";
+import { Bookmark, BookmarkCheck, Check, MessageSquareText, RotateCcw, X } from "../../icons";
 import { SlidingTabs } from "../../sliding-tabs";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState, ErrorState, LoadingState } from "../../view-state";
 import { MemberAvatar, MemberName } from "./WorkspaceAvatar";
+import { WorkspaceList, WorkspaceListRow } from "./WorkspaceList";
 import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { useRecentTime } from "./workspace-format";
 import type { WorkspaceMember } from "./workspace-types";
@@ -49,7 +50,8 @@ export interface LaterViewProps {
 
 /**
  * Slack's Later: the messages the reader saved. In progress holds the open ones, Completed the ones
- * they checked off. A row opens its message; its buttons complete, reopen or remove it.
+ * they checked off. The text of a row opens its message; its buttons open, complete, reopen or
+ * remove it.
  */
 export function LaterView(props: LaterViewProps): JSX.Element {
   const { t } = useText();
@@ -106,62 +108,68 @@ export function LaterView(props: LaterViewProps): JSX.Element {
             </Switch>
           }
         >
-          <ul class="ws-feed">
+          <WorkspaceList
+            label={props.tab === "done" ? t("workspace.later.completed") : t("workspace.later.inProgress")}
+          >
             <For each={props.items} keyed={(item) => item.id}>
               {(item) => (
-                <li class="ws-later-item" data-done={props.tab === "done" ? "" : undefined}>
-                  <Button variant="ghost" class="ws-feed-row ws-later-row" onClick={() => props.onOpen(item().id)}>
-                    <span class="ws-feed-avatar">
-                      <MemberAvatar member={item().author} size="lg" />
-                    </span>
-                    <span class="ws-feed-copy">
-                      <span class="ws-feed-heading">
-                        <MemberName member={item().author} class="ws-feed-what" />
-                        <span class="ws-feed-time">{recent(item().at)}</span>
-                      </span>
-                      <span class="ws-feed-where">
-                        {item().inThread ? t("workspace.later.inThread", { where: item().where }) : item().where}
-                      </span>
-                      <span class="ws-feed-preview">
-                        <Show when={!item().deleted} fallback={<em>{t("workspace.later.deleted")}</em>}>
-                          {item().preview}
-                        </Show>
-                      </span>
-                    </span>
-                  </Button>
-                  <span class="ws-row-actions">
-                    <Show
-                      when={props.tab === "saved"}
-                      fallback={
-                        <IconButton
-                          variant="ghost"
-                          label={t("workspace.later.reopen")}
-                          onClick={() => props.onSetDone(item().id, false)}
-                        >
-                          <RotateCcw />
-                        </IconButton>
-                      }
-                    >
+                <WorkspaceListRow
+                  class={props.tab === "done" ? "ws-later-row ws-later-done" : "ws-later-row"}
+                  leading={<MemberAvatar member={item().author} size="lg" />}
+                  title={<MemberName member={item().author} />}
+                  titleEnd={recent(item().at)}
+                  actions={
+                    <>
                       <IconButton
                         variant="ghost"
-                        label={t("workspace.later.complete")}
-                        onClick={() => props.onSetDone(item().id, true)}
+                        label={t("workspace.later.open")}
+                        onClick={() => props.onOpen(item().id)}
                       >
-                        <Check />
+                        <MessageSquareText />
                       </IconButton>
-                    </Show>
-                    <IconButton
-                      variant="ghost"
-                      label={t("workspace.later.remove")}
-                      onClick={() => props.onRemove(item().id)}
-                    >
-                      <X />
-                    </IconButton>
+                      <Show
+                        when={props.tab === "saved"}
+                        fallback={
+                          <IconButton
+                            variant="ghost"
+                            label={t("workspace.later.reopen")}
+                            onClick={() => props.onSetDone(item().id, false)}
+                          >
+                            <RotateCcw />
+                          </IconButton>
+                        }
+                      >
+                        <IconButton
+                          variant="ghost"
+                          label={t("workspace.later.complete")}
+                          onClick={() => props.onSetDone(item().id, true)}
+                        >
+                          <Check />
+                        </IconButton>
+                      </Show>
+                      <IconButton
+                        variant="ghost"
+                        label={t("workspace.later.remove")}
+                        onClick={() => props.onRemove(item().id)}
+                      >
+                        <X />
+                      </IconButton>
+                    </>
+                  }
+                >
+                  <span class="ws-feed-where">
+                    {item().inThread ? t("workspace.later.inThread", { where: item().where }) : item().where}
                   </span>
-                </li>
+                  {/* The text opens the message too, as a click on a saved item does in Slack. */}
+                  <Button variant="link" class="ws-later-preview" onClick={() => props.onOpen(item().id)}>
+                    <Show when={!item().deleted} fallback={<em>{t("workspace.later.deleted")}</em>}>
+                      {item().preview}
+                    </Show>
+                  </Button>
+                </WorkspaceListRow>
               )}
             </For>
-          </ul>
+          </WorkspaceList>
           <Show when={props.hasMore}>
             <div class="ws-view-more">
               <Button variant="secondary" size="sm" loading={props.loadingMore} onClick={() => props.onLoadMore?.()}>

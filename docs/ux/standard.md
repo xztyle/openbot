@@ -140,6 +140,25 @@ Decided 2026-11-18 (slack-parity.md D1, B4):
   and the open conversation. The collapse state is saved with the sidebar preferences.
 - Activity opens the exact message (scrolled to and highlighted); its badge does not count reactions;
   "Mark all as read" marks only the Activity items read.
+- Sections (stream/p35): Starred (only when it has rows), the reader's own sections, Channels, Direct
+  messages. A conversation is in one section only. Each section header has an options menu (a sheet
+  on a phone): Sort (Custom order, Alphabetical, Recent activity, Priority) and Show (All, Unreads
+  only, Mentions only), then New section, Rename and Delete for the reader's own. Delete has Undo,
+  not a confirm: the conversations go back to their groups. All of it is in the synced sidebar
+  preferences (`starred`, `sections`, `groupOptions`).
+- A row with an unsent draft shows a pencil. Drafts & sent is a top row, with the number of drafts;
+  drafts stay on the device, Sent comes from the host's message search.
+- Keys: Up and Down move between rows, Left on a row goes to its section header, Left and Right on
+  a header collapse and open it, a letter moves to the next conversation with that letter.
+
+## 7a. Message box (Slack)
+
+- On a computer, Edit opens the message in place (Enter saves, Escape cancels, Save and Cancel
+  buttons); an empty save asks to delete. ↑ in an empty box edits the last own message. On a phone
+  the edit stays in the box, as in Slack's app.
+- `:` and two letters offer emoji; `@` people and agents; `#` channels. Enter in an open code block
+  adds a line. The formatting toolbar remembers its state (shown on a computer, hidden on a phone
+  until the reader shows it).
 
 ## 8. Copy
 

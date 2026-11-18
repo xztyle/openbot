@@ -116,6 +116,13 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
         onSelect: () => openView("threads"),
       },
       {
+        id: "drafts",
+        label: t("workspace.view.drafts"),
+        icon: <Pencil />,
+        detail: ws.draftCount() > 0 ? t("workspace.drafts.count", { count: ws.draftCount() }) : undefined,
+        onSelect: () => openView("drafts"),
+      },
+      {
         id: "fleet",
         label: t("workspace.view.fleet"),
         icon: <Activity />,

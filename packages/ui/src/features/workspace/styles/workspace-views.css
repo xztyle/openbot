@@ -617,3 +617,10 @@
   justify-content: center;
   padding: var(--openbot-space-3);
 }
+
+/* A phone keeps the header for the title: the subtitle would cut it. */
+@media (max-width: 720px) {
+  .ws-drafts .ws-pane-header-subtitle {
+    display: none;
+  }
+}

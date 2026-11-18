@@ -270,20 +270,20 @@ export function JoinServerDialog(props: JoinServerDialogProps) {
                     />
                   </Field>
 
+                  {/* The footer of every form dialog (docs/ux/standard.md § 2): Cancel, then the primary action. */}
                   <footer class="join-server-actions">
+                    <Button type="button" variant="ghost" disabled={busy()} onClick={requestClose}>
+                      {t("common.cancel")}
+                    </Button>
                     <Button
                       class="join-server-submit"
                       type="submit"
                       variant="default"
-                      fullWidth
                       loading={phase() === "previewing"}
                       loadingLabel={t("server.join.checking")}
                       disabled={!inviteUrl().trim() || busy()}
                     >
                       {t("server.join.review")}
-                    </Button>
-                    <Button type="button" variant="ghost" disabled={busy()} onClick={requestClose}>
-                      {t("common.cancel")}
                     </Button>
                   </footer>
                 </form>
@@ -338,20 +338,19 @@ export function JoinServerDialog(props: JoinServerDialogProps) {
                     )}
                   </Show>
 
-                  <footer class="join-server-actions join-server-actions-verified">
+                  <footer class="join-server-actions">
+                    <Button type="button" variant="ghost" disabled={busy()} onClick={resetInvite}>
+                      {t("server.join.useAnother")}
+                    </Button>
                     <Button
                       class="join-server-submit"
                       type="submit"
                       variant="default"
-                      fullWidth
                       loading={phase() === "joining"}
                       loadingLabel={t("common.connecting")}
                       disabled={busy()}
                     >
                       {t("server.join.connect")}
-                    </Button>
-                    <Button type="button" variant="ghost" disabled={busy()} onClick={resetInvite}>
-                      {t("server.join.useAnother")}
                     </Button>
                   </footer>
                 </form>

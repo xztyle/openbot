@@ -16,7 +16,6 @@ export const messages = {
   "agentTemplate.install.description":
     "Eklemeden önce bu paylaşılan ajanın talimatlarını, becerilerini ve rutinlerini okuyun.",
   "agentTemplate.install.loading": "Ajan yükleniyor…",
-  "agentTemplate.install.pending": "Ekleniyor…",
   "agentTemplate.install.action": "Ajan ekle",
   "agentTemplate.install.failed": "Ajan eklenemedi.",
   "agentTemplate.install.readFailed": "Paylaşılan ajan okunamadı.",

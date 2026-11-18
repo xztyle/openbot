@@ -1,5 +1,5 @@
 import type { McpChatGrant, McpChatSnapshot } from "@openbot/contracts/team-protocol/mcp-chat-v1";
-import { Button, Dialog, Field, Text } from "@openbot/ui";
+import { Button, FormDialog, FormSection, LoadingState, Text } from "@openbot/ui";
 import { For, Show } from "solid-js";
 import { useText } from "../../text";
 
@@ -19,12 +19,13 @@ function ChatAppRow(props: { id: string; name: string; dialog: ChatAppsDialogPro
   const { t } = useText();
   const mode = () => props.dialog.snapshot.grants.find((grant) => grant.connectionId === props.id)?.mode ?? "off";
   return (
-    <Field label={props.name}>
-      <div class="mcp-connect-footer">
+    <FormSection title={props.name}>
+      <div class="chat-apps-modes">
         <For each={["off", "read", "write"] as const}>
           {(value) => (
             <Button
               type="button"
+              size="sm"
               variant={mode() === value ? "default" : "outline"}
               aria-pressed={mode() === value ? "true" : "false"}
               disabled={props.dialog.busy}
@@ -35,56 +36,36 @@ function ChatAppRow(props: { id: string; name: string; dialog: ChatAppsDialogPro
           )}
         </For>
       </div>
-    </Field>
+    </FormSection>
   );
 }
+
+/** Which chat apps an agent in a chat may read or write: the shared `FormDialog`. */
 export function ChatAppsDialog(props: ChatAppsDialogProps) {
   const { t } = useText();
   return (
-    <Dialog.Root
+    <FormDialog
       open={props.open}
       onOpenChange={(open) => {
-        if (!open && !props.busy) props.onClose();
+        if (!open) props.onClose();
       }}
+      title={t("mcp.chat.title")}
+      description={t("mcp.chat.description")}
+      error={props.error}
+      busy={props.busy}
+      submitLabel={t("common.save")}
+      submitDisabled={!props.loaded || props.loading}
+      onSubmit={props.onSave}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay class="mcp-connect-backdrop">
-          <Dialog.Content class="mcp-connect-dialog" as="section">
-            <header class="mcp-connect-header">
-              <Dialog.Title>{t("mcp.chat.title")}</Dialog.Title>
-              <Dialog.Description>{t("mcp.chat.description")}</Dialog.Description>
-            </header>
-            <div class="mcp-connect-form">
-              <Show when={props.loading}>
-                <Text>{t("common.loading")}</Text>
-              </Show>
-              <For each={props.snapshot.connections}>
-                {(connection) => <ChatAppRow {...connection} dialog={props} />}
-              </For>
-              <Show when={!props.loading && props.snapshot.connections.length === 0}>
-                <Text>{t("mcp.chat.empty")}</Text>
-              </Show>
-              <Text variant="body-sm">{t("mcp.chat.readHint")}</Text>
-              <Text variant="body-sm">{t("mcp.chat.limit")}</Text>
-              <Show when={props.error}>
-                <Text role="alert">{props.error}</Text>
-              </Show>
-              <div class="mcp-connect-footer">
-                <Button variant="outline" disabled={props.busy} onClick={props.onClose}>
-                  {t("common.cancel")}
-                </Button>
-                <Button
-                  loading={props.busy}
-                  disabled={!props.loaded || props.loading || props.busy}
-                  onClick={props.onSave}
-                >
-                  {t("common.save")}
-                </Button>
-              </div>
-            </div>
-          </Dialog.Content>
-        </Dialog.Overlay>
-      </Dialog.Portal>
-    </Dialog.Root>
+      <Show when={props.loading}>
+        <LoadingState rows={2} label={t("mcp.chat.title")} />
+      </Show>
+      <For each={props.snapshot.connections}>{(connection) => <ChatAppRow {...connection} dialog={props} />}</For>
+      <Show when={!props.loading && props.snapshot.connections.length === 0}>
+        <Text>{t("mcp.chat.empty")}</Text>
+      </Show>
+      <Text variant="body-sm">{t("mcp.chat.readHint")}</Text>
+      <Text variant="body-sm">{t("mcp.chat.limit")}</Text>
+    </FormDialog>
   );
 }

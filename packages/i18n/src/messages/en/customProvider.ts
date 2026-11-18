@@ -61,8 +61,6 @@ export const messages = defineMessages("customProvider", {
   "customProvider.form.title": "Add a custom provider",
   "customProvider.form.editTitle": "Edit a custom provider",
   "customProvider.form.description": "Describe an OpenAI-compatible endpoint and the models it serves.",
-  "customProvider.form.heading": "Custom provider",
-  "customProvider.form.subtitle": "Any OpenAI-compatible endpoint.",
   "customProvider.field.providerId": "Provider ID",
   "customProvider.field.providerIdHint": "Lowercase letters, numbers, hyphens, or underscores.",
   "customProvider.field.displayName": "Display name",
@@ -83,7 +81,7 @@ export const messages = defineMessages("customProvider", {
   "customProvider.header.valuePlaceholder": "value",
   "customProvider.header.remove": "Remove header {number}",
   "customProvider.header.add": "Add header",
-  "customProvider.submit": "Submit",
+  "customProvider.submit": "Add provider",
 
   // Model discovery. OpenBot asks the endpoint for its model list, and the user picks from it.
   "customProvider.discovery.find": "Find models",
@@ -99,8 +97,6 @@ export const messages = defineMessages("customProvider", {
   // The first step of the add flow: a preset fills the form that comes next.
   "customProvider.preset.title": "Add a provider or an agent",
   "customProvider.preset.description": "Choose a local model server, an endpoint, or an ACP agent.",
-  "customProvider.preset.heading": "Add custom",
-  "customProvider.preset.subtitle": "Models for OpenCode, or an agent of its own.",
   "customProvider.preset.models": "Models",
   "customProvider.preset.agents": "Agents",
   "customProvider.preset.ollama": "Ollama",
@@ -154,8 +150,6 @@ export const messages = defineMessages("customProvider", {
   // The custom ACP agent form.
   "customProvider.acp.title": "Add a custom ACP agent",
   "customProvider.acp.description": "Describe a command that speaks the Agent Client Protocol.",
-  "customProvider.acp.heading": "Custom ACP agent",
-  "customProvider.acp.subtitle": "Any agent that speaks the Agent Client Protocol.",
   "customProvider.acp.presets": "Start from",
   "customProvider.acp.displayNamePlaceholder": "My Agent",
   "customProvider.acp.agentId": "Agent ID",
@@ -227,13 +221,12 @@ export const messages = defineMessages("customProvider", {
   // The list of saved endpoints.
   "customProvider.list.title": "Custom providers",
   "customProvider.list.description": "The endpoints you have saved. Remove the ones you no longer use.",
-  "customProvider.list.subtitle": "Your own model endpoints.",
   "customProvider.list.empty": "No custom endpoints yet.",
   "customProvider.list.label": "Custom endpoints",
   "customProvider.list.apiKeySaved": "API key saved",
   "customProvider.list.editLabel": "Edit {name}",
   "customProvider.list.deleteLabel": "Delete {name}",
-  "customProvider.list.confirmTitle": "Remove {name}?",
+  "customProvider.list.confirmTitle": "Delete {name}?",
   "customProvider.list.confirmDescription":
     "Its API key is discarded, its models disappear from the picker, and any agent using one falls back to a default model.",
 });

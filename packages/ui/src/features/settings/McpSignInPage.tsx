@@ -11,7 +11,7 @@
  * browse.
  */
 
-import { Alert, AlertDescription, Button, Dialog, Field, Input, ShieldCheck, Text } from "@openbot/ui";
+import { Alert, AlertDescription, Button, Dialog, Field, IconButton, Input, ShieldCheck, Text, X } from "@openbot/ui";
 import { createSignal, Show } from "solid-js";
 import { useText } from "../../text";
 import BrowserLiveView, { type BrowserViewRuntime } from "../browser/BrowserLiveView";
@@ -97,6 +97,16 @@ export function McpSignInPageDialog(props: McpSignInPageDialogProps) {
                 {t("mcp.panel.cancelSignIn")}
               </Button>
             </footer>
+            {/* Last in the dialog, as in McpConnectShell: the first focus stays on the page. */}
+            <IconButton
+              class="mcp-connect-close"
+              variant="ghost"
+              label={t("common.close")}
+              disabled={cancelling()}
+              onClick={cancel}
+            >
+              <X />
+            </IconButton>
           </Dialog.Content>
         </Dialog.Overlay>
       </Dialog.Portal>
@@ -239,6 +249,16 @@ export function McpSignInRelayDialog(props: McpSignInRelayDialogProps) {
                 {t("mcp.panel.cancelSignIn")}
               </Button>
             </footer>
+            {/* Last in the dialog, as in McpConnectShell: the first focus stays on the page. */}
+            <IconButton
+              class="mcp-connect-close"
+              variant="ghost"
+              label={t("common.close")}
+              disabled={cancelling()}
+              onClick={cancel}
+            >
+              <X />
+            </IconButton>
           </Dialog.Content>
         </Dialog.Overlay>
       </Dialog.Portal>

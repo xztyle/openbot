@@ -16,7 +16,6 @@ export const messages = {
   "agentTemplate.install.description":
     "Lies die Anweisungen, Fähigkeiten und Routinen dieses geteilten Agenten, bevor du ihn hinzufügst.",
   "agentTemplate.install.loading": "Agent wird geladen…",
-  "agentTemplate.install.pending": "Wird hinzugefügt…",
   "agentTemplate.install.action": "Agenten hinzufügen",
   "agentTemplate.install.failed": "Der Agent konnte nicht hinzugefügt werden.",
   "agentTemplate.install.readFailed": "Der geteilte Agent konnte nicht gelesen werden.",

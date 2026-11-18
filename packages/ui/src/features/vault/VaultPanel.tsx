@@ -26,13 +26,13 @@ import {
   ConfirmDialog,
   Copy,
   CreditCard,
-  Dialog,
   DropdownMenu,
   Ellipsis,
   ErrorReference,
   Eye,
   EyeOff,
   Field,
+  FormDialog,
   Globe2,
   IconButton,
   Input,
@@ -919,6 +919,10 @@ function ItemDialog(props: {
   const [draft, setDraft] = createSignal<Draft>(untrack(() => draftOf(props.kind, props.item)));
   const [saving, setSaving] = createSignal(false);
   const [failure, setFailure] = createSignal<UserErrorDetails | null>(null);
+  const failureView = () => {
+    const current = failure();
+    return current ? <FailureText failure={current} /> : null;
+  };
   const set = <T extends Draft>(current: T, patch: Partial<T>) => setDraft((): Draft => ({ ...current, ...patch }));
   const loginDraft = () => {
     const current = draft();
@@ -1173,53 +1177,25 @@ function ItemDialog(props: {
   );
 
   return (
-    <Dialog.Root open={true} onOpenChange={(open) => !open && !saving() && props.onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay class="ui-confirm-dialog-overlay">
-          <Dialog.Content as="section" class="ui-confirm-dialog vault-dialog">
-            <form
-              class="vault-dialog-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submit();
-              }}
-            >
-              <header class="vault-dialog-header">
-                <DraftLogo draft={draft()} saved={props.item} />
-                <Dialog.Title as="h2" class="vault-dialog-title">
-                  {props.title}
-                </Dialog.Title>
-                <IconButton label={t("common.close")} variant="ghost" disabled={saving()} onClick={props.onClose}>
-                  <X />
-                </IconButton>
-              </header>
-              <div class="vault-dialog-body">
-                {fields()}
-                <Show when={failure()}>
-                  {(current) => (
-                    <Text tone="danger" variant="caption" role="alert">
-                      <FailureText failure={current()} />
-                    </Text>
-                  )}
-                </Show>
-              </div>
-              <footer class="ui-confirm-dialog-actions">
-                <Button type="button" variant="ghost" disabled={saving()} onClick={props.onClose}>
-                  {t("common.cancel")}
-                </Button>
-                <Button
-                  type="submit"
-                  loading={saving()}
-                  loadingLabel={t("common.saving")}
-                  disabled={!draftReady(draft(), props.item)}
-                >
-                  {t("common.save")}
-                </Button>
-              </footer>
-            </form>
-          </Dialog.Content>
-        </Dialog.Overlay>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <FormDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) props.onClose();
+      }}
+      class="vault-dialog"
+      title={
+        <span class="vault-dialog-heading">
+          <DraftLogo draft={draft()} saved={props.item} />
+          {props.title}
+        </span>
+      }
+      error={failureView()}
+      busy={saving()}
+      submitLabel={t("common.save")}
+      submitDisabled={!draftReady(draft(), props.item)}
+      onSubmit={() => void submit()}
+    >
+      {fields()}
+    </FormDialog>
   );
 }

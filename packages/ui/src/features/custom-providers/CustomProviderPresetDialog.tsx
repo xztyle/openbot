@@ -1,17 +1,4 @@
-import {
-  Badge,
-  Bot,
-  Button,
-  ChevronRight,
-  Dialog,
-  Globe2,
-  HardDrive,
-  Heading,
-  IconButton,
-  Plus,
-  Text,
-  X,
-} from "@openbot/ui";
+import { Badge, Bot, Button, ChevronRight, FormDialog, Globe2, HardDrive, Text } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 import { useText } from "../../text";
@@ -125,52 +112,16 @@ export function CustomProviderPresetDialog(props: CustomProviderPresetDialogProp
     id === "ollama" || id === "lmstudio" ? props.probes?.[id] : undefined;
 
   return (
-    <Dialog.Root open={props.open} onOpenChange={(open) => !open && props.onCancel()}>
-      <Dialog.Portal>
-        <Dialog.Overlay class="custom-provider-backdrop">
-          <Dialog.Content as="section" class="custom-provider-dialog">
-            <Dialog.Title class="sr-only">{t("customProvider.preset.title")}</Dialog.Title>
-            <Dialog.Description class="sr-only">{t("customProvider.preset.description")}</Dialog.Description>
-
-            <header class="custom-provider-header">
-              <span class="custom-provider-mark" aria-hidden="true">
-                <Plus />
-              </span>
-              <div class="custom-provider-title">
-                <Heading as="h2" size="md">
-                  {t("customProvider.preset.heading")}
-                </Heading>
-                <Text tone="muted" variant="caption">
-                  {t("customProvider.preset.subtitle")}
-                </Text>
-              </div>
-              <IconButton
-                class="custom-provider-close"
-                label={t("common.close")}
-                variant="ghost"
-                onClick={props.onCancel}
-              >
-                <X />
-              </IconButton>
-            </header>
-
-            <div class="custom-provider-list">
-              <PresetGroup
-                label={t("customProvider.preset.models")}
-                rows={modelRows}
-                probe={probe}
-                onChoose={props.onChoose}
-              />
-              <PresetGroup
-                label={t("customProvider.preset.agents")}
-                rows={agentRows}
-                probe={probe}
-                onChoose={props.onChoose}
-              />
-            </div>
-          </Dialog.Content>
-        </Dialog.Overlay>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <FormDialog
+      open={props.open}
+      onOpenChange={(open) => {
+        if (!open) props.onCancel();
+      }}
+      title={t("customProvider.preset.title")}
+      description={t("customProvider.preset.description")}
+    >
+      <PresetGroup label={t("customProvider.preset.models")} rows={modelRows} probe={probe} onChoose={props.onChoose} />
+      <PresetGroup label={t("customProvider.preset.agents")} rows={agentRows} probe={probe} onChoose={props.onChoose} />
+    </FormDialog>
   );
 }

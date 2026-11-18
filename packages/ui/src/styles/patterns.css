@@ -62,6 +62,11 @@
   line-height: var(--openbot-leading-md);
 }
 
+.ui-form-dialog-back {
+  flex: 0 0 auto;
+  margin: calc(-1 * var(--openbot-space-1)) 0 0 calc(-1 * var(--openbot-space-2));
+}
+
 .ui-form-dialog-close {
   flex: 0 0 auto;
   margin-top: calc(-1 * var(--openbot-space-1));

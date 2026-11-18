@@ -989,35 +989,9 @@
   height: 12px;
 }
 
-/* The "More providers" dialog uses the custom provider dialog frame: a title, a close button and
- * one plain list. It is pinned near the top, so it does not move when a search changes its height. */
-.custom-provider-backdrop.provider-more-backdrop {
-  align-items: start;
-  padding-top: min(14vh, 120px);
-}
-
-.custom-provider-dialog.provider-more-dialog {
-  width: min(400px, 100%);
-  max-height: min(600px, calc(100dvh - min(14vh, 120px) - var(--openbot-space-6)));
-  padding: var(--openbot-space-2);
-}
-
-.provider-more-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--openbot-space-1) var(--openbot-space-1) var(--openbot-space-1) var(--openbot-space-3);
-}
-
-.provider-more-title {
-  margin: 0;
-  font-size: var(--openbot-text-lg);
-  font-weight: var(--openbot-weight-semibold);
-}
-
+/* The "More providers" dialog is a `FormDialog` with one plain list. */
 .ui-input.provider-more-search {
   flex-shrink: 0;
-  margin: var(--openbot-space-1) 0 var(--openbot-space-2);
 }
 
 .provider-more-search::-webkit-search-cancel-button {

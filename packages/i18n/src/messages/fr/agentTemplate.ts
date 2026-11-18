@@ -16,7 +16,6 @@ export const messages = {
   "agentTemplate.install.description":
     "Lisez les instructions, les compétences et les routines de cet agent partagé avant de l’ajouter.",
   "agentTemplate.install.loading": "Chargement de l’agent…",
-  "agentTemplate.install.pending": "Ajout…",
   "agentTemplate.install.action": "Ajouter l’agent",
   "agentTemplate.install.failed": "Impossible d’ajouter l’agent.",
   "agentTemplate.install.readFailed": "Impossible de lire l’agent partagé.",

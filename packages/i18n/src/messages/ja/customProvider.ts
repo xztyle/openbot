@@ -61,8 +61,6 @@ export const messages = {
   "customProvider.form.title": "カスタムプロバイダーを追加",
   "customProvider.form.editTitle": "カスタムプロバイダーを編集",
   "customProvider.form.description": "OpenAI 互換のエンドポイントと、それが提供するモデルを入力してください。",
-  "customProvider.form.heading": "カスタムプロバイダー",
-  "customProvider.form.subtitle": "OpenAI 互換のエンドポイントなら何でも使えます。",
   "customProvider.field.providerId": "プロバイダー ID",
   "customProvider.field.providerIdHint": "小文字の英字、数字、ハイフン、アンダースコア。",
   "customProvider.field.displayName": "表示名",
@@ -97,8 +95,6 @@ export const messages = {
   "customProvider.preset.title": "プロバイダーまたはエージェントを追加",
   "customProvider.preset.description":
     "ローカルのモデルサーバー、エンドポイント、または ACP エージェントを選んでください。",
-  "customProvider.preset.heading": "カスタムを追加",
-  "customProvider.preset.subtitle": "OpenCode で使うモデル、または独立したエージェントです。",
   "customProvider.preset.models": "モデル",
   "customProvider.preset.agents": "エージェント",
   "customProvider.preset.ollama": "Ollama",
@@ -145,8 +141,6 @@ export const messages = {
 
   "customProvider.acp.title": "カスタム ACP エージェントを追加",
   "customProvider.acp.description": "Agent Client Protocol に対応したコマンドを入力してください。",
-  "customProvider.acp.heading": "カスタム ACP エージェント",
-  "customProvider.acp.subtitle": "Agent Client Protocol に対応したエージェントなら何でも使えます。",
   "customProvider.acp.presets": "プリセットから開始",
   "customProvider.acp.displayNamePlaceholder": "マイエージェント",
   "customProvider.acp.agentId": "エージェント ID",
@@ -217,7 +211,6 @@ export const messages = {
 
   "customProvider.list.title": "カスタムプロバイダー",
   "customProvider.list.description": "保存したエンドポイントです。使わなくなったものは削除してください。",
-  "customProvider.list.subtitle": "自分のモデルエンドポイントです。",
   "customProvider.list.empty": "カスタムエンドポイントはまだありません。",
   "customProvider.list.label": "カスタムエンドポイント",
   "customProvider.list.apiKeySaved": "API キー保存済み",

@@ -3,7 +3,7 @@ import { createSignal, createUniqueId, onCleanup, Show } from "solid-js";
 import { Alert, AlertContent, AlertDescription, AlertIcon } from "./alert";
 import { Button, IconButton } from "./button";
 import { Dialog } from "./complex";
-import { TriangleAlert, X } from "./icons";
+import { ChevronLeft, TriangleAlert, X } from "./icons";
 import { useText } from "./text";
 import { cx } from "./utils";
 
@@ -41,8 +41,14 @@ export interface FormDialogProps {
   secondaryLabel?: JSX.Element;
   /** Runs instead of closing the dialog, as Back in a later step does. */
   onSecondary?: () => void;
+  /** No secondary button: a dialog whose primary action is Done, such as a list to manage. */
+  hideSecondary?: boolean;
   /** Content at the start of the footer instead of the step, such as a link to another flow. */
   footerStart?: JSX.Element;
+  /** A Back button before the title, for a dialog that opened from another one (a picker, a list). */
+  onBack?: (() => void) | undefined;
+  /** Called when the dialog closes, before the focus goes back to the opener (Kobalte's `onCloseAutoFocus`). */
+  onCloseAutoFocus?: ((event: Event) => void) | undefined;
   /** The element that takes the focus when the dialog opens. By default the first field of the body. */
   initialFocus?: () => HTMLElement | null | undefined;
   class?: string;
@@ -100,6 +106,7 @@ export function FormDialog(props: FormDialogProps): JSX.Element {
             class={cx("ui-form-dialog", props.class)}
             data-size={props.size ?? "md"}
             aria-busy={props.busy ? "true" : undefined}
+            onCloseAutoFocus={(event: Event) => props.onCloseAutoFocus?.(event)}
             onOpenAutoFocus={(event: Event) => {
               // The first field takes the focus, not the close button in the corner.
               event.preventDefault();
@@ -111,6 +118,20 @@ export function FormDialog(props: FormDialogProps): JSX.Element {
               <span class="ui-sheet-handle" aria-hidden="true" />
             </Show>
             <header class="ui-form-dialog-header">
+              <Show when={props.onBack}>
+                {(back) => (
+                  <IconButton
+                    variant="ghost"
+                    size="icon-sm"
+                    class="ui-form-dialog-back"
+                    label={t("common.back")}
+                    disabled={props.busy}
+                    onClick={() => back()()}
+                  >
+                    <ChevronLeft />
+                  </IconButton>
+                )}
+              </Show>
               <div class="ui-form-dialog-heading">
                 <Dialog.Title as="h2" class="ui-form-dialog-title">
                   {props.title}
@@ -162,14 +183,16 @@ export function FormDialog(props: FormDialogProps): JSX.Element {
                     {props.footerStart}
                   </Show>
                 </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={props.busy}
-                  onClick={() => (props.onSecondary ? props.onSecondary() : close())}
-                >
-                  {props.secondaryLabel ?? t("common.cancel")}
-                </Button>
+                <Show when={!props.hideSecondary}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={props.busy}
+                    onClick={() => (props.onSecondary ? props.onSecondary() : close())}
+                  >
+                    {props.secondaryLabel ?? t("common.cancel")}
+                  </Button>
+                </Show>
                 <Button type="submit" form={formId} loading={props.busy} disabled={props.submitDisabled}>
                   {props.submitLabel}
                 </Button>

@@ -16,7 +16,6 @@ export const messages = {
   "agentTemplate.install.description":
     "Прочитайте инструкции, навыки и регулярные задачи этого общего агента, прежде чем добавлять его.",
   "agentTemplate.install.loading": "Загрузка агента…",
-  "agentTemplate.install.pending": "Добавление…",
   "agentTemplate.install.action": "Добавить агента",
   "agentTemplate.install.failed": "Не удалось добавить агента.",
   "agentTemplate.install.readFailed": "Не удалось прочитать общего агента.",

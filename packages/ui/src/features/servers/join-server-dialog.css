@@ -177,20 +177,25 @@
   white-space: normal;
 }
 
+/* The footer of every form dialog: the secondary action, then the primary one, at the end. */
 .join-server-actions {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
   gap: var(--openbot-space-2);
   margin-top: auto;
 }
 
-.join-server-actions .ui-button {
-  width: 100%;
+/* The hosted server status of Add server: a status, an alert and one full-width action. */
+.join-server-actions.join-server-actions-stacked {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
 }
 
-.join-server-actions-verified {
-  gap: var(--openbot-space-1);
+.join-server-actions-stacked .ui-button {
+  width: 100%;
 }
 
 .join-server-preview {

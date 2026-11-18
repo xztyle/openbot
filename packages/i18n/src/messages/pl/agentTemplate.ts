@@ -16,7 +16,6 @@ export const messages = {
   "agentTemplate.install.description":
     "Przeczytaj instrukcje, umiejętności i rutyny tego udostępnionego agenta, zanim go dodasz.",
   "agentTemplate.install.loading": "Wczytywanie agenta…",
-  "agentTemplate.install.pending": "Dodawanie…",
   "agentTemplate.install.action": "Dodaj agenta",
   "agentTemplate.install.failed": "Nie udało się dodać agenta.",
   "agentTemplate.install.readFailed": "Nie udało się odczytać udostępnionego agenta.",

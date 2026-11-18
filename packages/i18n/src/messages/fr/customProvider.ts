@@ -60,8 +60,6 @@ export const messages = {
   "customProvider.form.title": "Ajouter un fournisseur personnalisé",
   "customProvider.form.editTitle": "Modifier un fournisseur personnalisé",
   "customProvider.form.description": "Décrivez un point de terminaison compatible OpenAI et les modèles qu’il propose.",
-  "customProvider.form.heading": "Fournisseur personnalisé",
-  "customProvider.form.subtitle": "Tout point de terminaison compatible OpenAI.",
   "customProvider.field.providerId": "ID du fournisseur",
   "customProvider.field.providerIdHint": "Lettres minuscules, chiffres, tirets ou traits de soulignement.",
   "customProvider.field.displayName": "Nom d’affichage",
@@ -98,8 +96,6 @@ export const messages = {
   "customProvider.preset.title": "Ajouter un fournisseur ou un agent",
   "customProvider.preset.description":
     "Choisissez un serveur de modèles local, un point de terminaison ou un agent ACP.",
-  "customProvider.preset.heading": "Ajout personnalisé",
-  "customProvider.preset.subtitle": "Des modèles pour OpenCode, ou un agent à part entière.",
   "customProvider.preset.models": "Modèles",
   "customProvider.preset.agents": "Agents",
   "customProvider.preset.ollama": "Ollama",
@@ -149,8 +145,6 @@ export const messages = {
 
   "customProvider.acp.title": "Ajouter un agent ACP personnalisé",
   "customProvider.acp.description": "Décrivez une commande qui utilise l’Agent Client Protocol.",
-  "customProvider.acp.heading": "Agent ACP personnalisé",
-  "customProvider.acp.subtitle": "Tout agent qui utilise l’Agent Client Protocol.",
   "customProvider.acp.presets": "Partir de",
   "customProvider.acp.displayNamePlaceholder": "Mon agent",
   "customProvider.acp.agentId": "ID de l’agent",
@@ -225,7 +219,6 @@ export const messages = {
   "customProvider.list.title": "Fournisseurs personnalisés",
   "customProvider.list.description":
     "Les points de terminaison que vous avez enregistrés. Supprimez ceux que vous n’utilisez plus.",
-  "customProvider.list.subtitle": "Vos propres points de terminaison de modèle.",
   "customProvider.list.empty": "Aucun point de terminaison personnalisé pour l’instant.",
   "customProvider.list.label": "Points de terminaison personnalisés",
   "customProvider.list.apiKeySaved": "Clé API enregistrée",

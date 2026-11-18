@@ -1,4 +1,4 @@
-import { Button, CalendarClock, Dialog } from "@openbot/ui";
+import { Button, CalendarClock, Dialog, IconButton, X } from "@openbot/ui";
 import { useText } from "../../text";
 
 export interface HostedServerUpsellDialogProps {
@@ -26,6 +26,16 @@ export function HostedServerUpsellDialog(props: HostedServerUpsellDialogProps) {
               seePlans?.focus({ preventScroll: true });
             }}
           >
+            {/* Every dialog has a close button in its corner (docs/ux/standard.md § 2). */}
+            <IconButton
+              variant="ghost"
+              size="icon-sm"
+              class="hosted-upsell-close"
+              label={t("common.close")}
+              onClick={() => props.onClose()}
+            >
+              <X />
+            </IconButton>
             <div class="hosted-upsell-scene" aria-hidden="true">
               <figure class="hosted-upsell-device">
                 <div class="hosted-upsell-laptop">

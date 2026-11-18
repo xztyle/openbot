@@ -15,18 +15,7 @@ import type {
   ProviderApiKeyStatus,
 } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
-import {
-  Alert,
-  AlertContent,
-  AlertDescription,
-  AlertIcon,
-  AlertTitle,
-  Button,
-  Dialog,
-  Field,
-  Input,
-  OctagonX,
-} from "@openbot/ui";
+import { Button, Field, FormDialog, Input } from "@openbot/ui";
 import { createSignal, onSettled, Show } from "solid-js";
 import { useText } from "../../text";
 
@@ -175,115 +164,77 @@ export function OpenCodeKeyDialog(props: OpenCodeKeyDialogProps) {
       setError(errorMessage(cause, t("provider.openCodeKey.reconnectFailed")));
     }
   }
+  const canReconnect = () =>
+    Boolean(props.onReconnect) &&
+    provider() !== "antigravity" &&
+    provider() !== "claude" &&
+    !(isKeyOnlyProvider(provider()) && stored() === "missing");
   return (
-    <Dialog.Root
-      open={true}
+    <FormDialog
+      open
+      size="sm"
       onOpenChange={(open) => {
         if (!open && !busy()) props.onClose();
       }}
-    >
-      <Dialog.Portal>
-        <Dialog.Overlay class="opencode-key-backdrop">
-          <Dialog.Content class="opencode-key-dialog" as="section">
-            <header class="opencode-key-header">
-              <Dialog.Title class="opencode-key-title">{t(text().title)}</Dialog.Title>
-              {/* One line that is always the dialog's whole message: the default pitch, the saved
-                  fact, or the unreadable warning. A second text block would repeat it. */}
-              <Dialog.Description class="opencode-key-description">
-                <Show
-                  when={stored() === "saved"}
-                  fallback={
-                    <Show when={stored() === "unreadable"} fallback={t(text().description)}>
-                      {t("provider.openCodeKey.unreadable")}
-                    </Show>
-                  }
-                >
-                  <span class="opencode-key-status-dot" aria-hidden="true" />
-                  {t("provider.openCodeKey.saved")}
-                </Show>
-              </Dialog.Description>
-            </header>
-
-            <form
-              class="opencode-key-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void save();
-              }}
+      title={t(text().title)}
+      description={
+        // One line that is always the dialog's whole message: the default pitch, the saved fact, or the
+        // unreadable warning. A second text block would repeat it.
+        <Show
+          when={stored() === "saved"}
+          fallback={
+            <Show when={stored() === "unreadable"} fallback={t(text().description)}>
+              {t("provider.openCodeKey.unreadable")}
+            </Show>
+          }
+        >
+          <span class="opencode-key-status-dot" aria-hidden="true" />
+          {t("provider.openCodeKey.saved")}
+        </Show>
+      }
+      error={error()}
+      busy={phase() === "saving"}
+      submitLabel={t("provider.openCodeKey.save")}
+      submitDisabled={busy() || !key().trim()}
+      onSubmit={() => void save()}
+      footerStart={
+        <>
+          {/* Gemini's and Claude's reconnect is an account sign-in, which a saved key overrides. The
+              row's Connect offers it once the key is removed. A key-only provider, such as Inception,
+              has nothing to reconnect with until a key is saved. */}
+          <Show when={canReconnect()}>
+            <Button type="button" variant="ghost" disabled={busy()} onClick={() => void reconnect()}>
+              {t("provider.action.reconnect")}
+            </Button>
+          </Show>
+          <Show when={stored() !== "missing"}>
+            <Button
+              type="button"
+              variant="destructive-ghost"
+              loading={phase() === "removing"}
+              loadingLabel={t("common.removing")}
+              disabled={busy()}
+              data-cuelume-tap="close"
+              data-cuelume-emphasis="strong"
+              onClick={() => void remove()}
             >
-              <Field label={t(text().label)}>
-                <Input
-                  type="password"
-                  autocomplete="off"
-                  spellcheck={false}
-                  placeholder={t("provider.openCodeKey.placeholder")}
-                  value={key()}
-                  disabled={busy()}
-                  onValueChange={setKey}
-                />
-              </Field>
-
-              <Show when={error()}>
-                {(message) => (
-                  <Alert class="opencode-key-alert" tone="danger" role="alert">
-                    <AlertIcon>
-                      <OctagonX />
-                    </AlertIcon>
-                    <AlertContent>
-                      <AlertTitle>{text().name}</AlertTitle>
-                      <AlertDescription>{message()}</AlertDescription>
-                    </AlertContent>
-                  </Alert>
-                )}
-              </Show>
-
-              <footer class="opencode-key-actions">
-                <Button type="button" variant="ghost" disabled={busy()} onClick={props.onClose}>
-                  {t("common.cancel")}
-                </Button>
-                {/* Gemini's and Claude's reconnect is an account sign-in, which a saved key
-                    overrides. The row's Connect offers it once the key is removed. A key-only provider,
-                    such as Inception, has nothing to reconnect with until a key is saved. */}
-                <Show
-                  when={
-                    props.onReconnect &&
-                    provider() !== "antigravity" &&
-                    provider() !== "claude" &&
-                    !(isKeyOnlyProvider(provider()) && stored() === "missing")
-                  }
-                >
-                  <Button type="button" variant="ghost" disabled={busy()} onClick={() => void reconnect()}>
-                    {t("provider.action.reconnect")}
-                  </Button>
-                </Show>
-                <Show when={stored() !== "missing"}>
-                  <Button
-                    type="button"
-                    variant="destructive-ghost"
-                    loading={phase() === "removing"}
-                    loadingLabel={t("common.removing")}
-                    disabled={busy()}
-                    data-cuelume-tap="close"
-                    data-cuelume-emphasis="strong"
-                    onClick={() => void remove()}
-                  >
-                    {t("provider.openCodeKey.remove")}
-                  </Button>
-                </Show>
-                <Button
-                  type="submit"
-                  variant="default"
-                  loading={phase() === "saving"}
-                  loadingLabel={t("common.saving")}
-                  disabled={busy() || !key().trim()}
-                >
-                  {t("provider.openCodeKey.save")}
-                </Button>
-              </footer>
-            </form>
-          </Dialog.Content>
-        </Dialog.Overlay>
-      </Dialog.Portal>
-    </Dialog.Root>
+              {t("provider.openCodeKey.remove")}
+            </Button>
+          </Show>
+        </>
+      }
+    >
+      <Field label={t(text().label)}>
+        <Input
+          type="password"
+          autocomplete="off"
+          spellcheck={false}
+          placeholder={t("provider.openCodeKey.placeholder")}
+          value={key()}
+          disabled={busy()}
+          onValueChange={setKey}
+        />
+      </Field>
+    </FormDialog>
   );
 }

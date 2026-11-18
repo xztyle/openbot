@@ -57,8 +57,6 @@ export const messages = {
   "customProvider.form.title": "添加自定义服务商",
   "customProvider.form.editTitle": "编辑自定义服务商",
   "customProvider.form.description": "描述一个兼容 OpenAI 的端点以及它提供的模型。",
-  "customProvider.form.heading": "自定义服务商",
-  "customProvider.form.subtitle": "任何兼容 OpenAI 的端点。",
   "customProvider.field.providerId": "服务商 ID",
   "customProvider.field.providerIdHint": "小写字母、数字、连字符或下划线。",
   "customProvider.field.displayName": "显示名称",
@@ -95,8 +93,6 @@ export const messages = {
   // The first step of the add flow: a preset fills the form that comes next.
   "customProvider.preset.title": "添加服务商或助手",
   "customProvider.preset.description": "选择本地模型服务器、端点或 ACP 助手。",
-  "customProvider.preset.heading": "添加自定义项",
-  "customProvider.preset.subtitle": "供 OpenCode 使用的模型，或独立的助手。",
   "customProvider.preset.models": "模型",
   "customProvider.preset.agents": "助手",
   "customProvider.preset.ollama": "Ollama",
@@ -150,8 +146,6 @@ export const messages = {
   // The custom ACP agent form.
   "customProvider.acp.title": "添加自定义 ACP 助手",
   "customProvider.acp.description": "描述一个使用 Agent Client Protocol 的命令。",
-  "customProvider.acp.heading": "自定义 ACP 助手",
-  "customProvider.acp.subtitle": "任何使用 Agent Client Protocol 的助手。",
   "customProvider.acp.presets": "从以下预设开始",
   "customProvider.acp.displayNamePlaceholder": "我的助手",
   "customProvider.acp.agentId": "助手 ID",
@@ -220,7 +214,6 @@ export const messages = {
   // The list of saved endpoints.
   "customProvider.list.title": "自定义服务商",
   "customProvider.list.description": "你已保存的端点。不再使用的可以移除。",
-  "customProvider.list.subtitle": "你自己的模型端点。",
   "customProvider.list.empty": "还没有自定义端点。",
   "customProvider.list.label": "自定义端点",
   "customProvider.list.apiKeySaved": "API 密钥已保存",

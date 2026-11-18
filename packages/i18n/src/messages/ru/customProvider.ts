@@ -59,8 +59,6 @@ export const messages = {
   "customProvider.form.title": "Добавить своего провайдера",
   "customProvider.form.editTitle": "Изменить своего провайдера",
   "customProvider.form.description": "Опишите эндпоинт, совместимый с OpenAI, и модели, которые он предоставляет.",
-  "customProvider.form.heading": "Свой провайдер",
-  "customProvider.form.subtitle": "Любой эндпоинт, совместимый с OpenAI.",
   "customProvider.field.providerId": "ID провайдера",
   "customProvider.field.providerIdHint": "Строчные буквы, цифры, дефисы или подчёркивания.",
   "customProvider.field.displayName": "Отображаемое имя",
@@ -97,8 +95,6 @@ export const messages = {
 
   "customProvider.preset.title": "Добавить провайдера или агента",
   "customProvider.preset.description": "Выберите локальный сервер моделей, эндпоинт или агента ACP.",
-  "customProvider.preset.heading": "Добавить своё",
-  "customProvider.preset.subtitle": "Модели для OpenCode или собственный агент.",
   "customProvider.preset.models": "Модели",
   "customProvider.preset.agents": "Агенты",
   "customProvider.preset.ollama": "Ollama",
@@ -155,8 +151,6 @@ export const messages = {
 
   "customProvider.acp.title": "Добавить своего агента ACP",
   "customProvider.acp.description": "Опишите команду, которая работает по Agent Client Protocol.",
-  "customProvider.acp.heading": "Свой агент ACP",
-  "customProvider.acp.subtitle": "Любой агент, поддерживающий Agent Client Protocol.",
   "customProvider.acp.presets": "Взять за основу",
   "customProvider.acp.displayNamePlaceholder": "Мой агент",
   "customProvider.acp.agentId": "ID агента",
@@ -233,7 +227,6 @@ export const messages = {
 
   "customProvider.list.title": "Свои провайдеры",
   "customProvider.list.description": "Сохранённые вами эндпоинты. Удалите те, которыми больше не пользуетесь.",
-  "customProvider.list.subtitle": "Ваши собственные эндпоинты моделей.",
   "customProvider.list.empty": "Своих эндпоинтов пока нет.",
   "customProvider.list.label": "Свои эндпоинты",
   "customProvider.list.apiKeySaved": "API-ключ сохранён",

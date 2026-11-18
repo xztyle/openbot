@@ -16,7 +16,6 @@ export const messages = {
   "agentTemplate.install.description":
     "追加する前に、この共有エージェントの指示、スキル、ルーティンを確認してください。",
   "agentTemplate.install.loading": "エージェントを読み込み中…",
-  "agentTemplate.install.pending": "追加中…",
   "agentTemplate.install.action": "エージェントを追加",
   "agentTemplate.install.failed": "エージェントを追加できませんでした。",
   "agentTemplate.install.readFailed": "共有エージェントを読み込めませんでした。",

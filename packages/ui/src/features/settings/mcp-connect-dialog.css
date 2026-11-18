@@ -287,3 +287,10 @@
   gap: var(--openbot-space-3);
   margin-top: var(--openbot-space-4);
 }
+
+/* The Off, Read and Write choice of one chat app. */
+.chat-apps-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-2);
+}

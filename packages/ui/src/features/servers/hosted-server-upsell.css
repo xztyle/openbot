@@ -114,6 +114,7 @@
 
 /* The modal. It portals out of the workspace, so the rules match the content element itself. */
 .hosted-upsell-modal {
+  position: relative;
   width: min(420px, 100%);
   display: grid;
   gap: var(--openbot-space-2);
@@ -123,6 +124,12 @@
   outline: 0;
   color: var(--openbot-text-primary);
   background: var(--openbot-bg-sidebar);
+}
+
+.hosted-upsell-close.ui-button {
+  position: absolute;
+  top: var(--openbot-space-3);
+  right: var(--openbot-space-3);
 }
 
 .hosted-upsell-modal .hosted-upsell-modal-title {

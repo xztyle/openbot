@@ -15,7 +15,6 @@ export const messages = defineMessages("agentTemplate", {
   "agentTemplate.install.description":
     "Read the instructions, skills and routines of this shared agent before you add it.",
   "agentTemplate.install.loading": "Loading agent…",
-  "agentTemplate.install.pending": "Adding…",
   "agentTemplate.install.action": "Add agent",
   "agentTemplate.install.failed": "Could not add the agent.",
   "agentTemplate.install.readFailed": "Could not read the shared agent.",

@@ -40,10 +40,6 @@
   padding: var(--openbot-space-6) var(--openbot-space-4) var(--openbot-space-4);
 }
 
-.agent-template-scroll {
-  overflow-y: auto;
-}
-
 .agent-template-identity {
   display: flex;
   flex-direction: column;

@@ -15,7 +15,6 @@ export const messages = {
   "agentTemplate.install.nameFallback": "공유된 에이전트",
   "agentTemplate.install.description": "이 공유된 에이전트를 추가하기 전에 지침, 스킬, 루틴을 읽어 보세요.",
   "agentTemplate.install.loading": "에이전트를 불러오는 중…",
-  "agentTemplate.install.pending": "추가하는 중…",
   "agentTemplate.install.action": "에이전트 추가",
   "agentTemplate.install.failed": "에이전트를 추가할 수 없어요.",
   "agentTemplate.install.readFailed": "공유된 에이전트를 읽을 수 없어요.",

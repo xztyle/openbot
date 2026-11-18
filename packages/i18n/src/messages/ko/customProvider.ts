@@ -62,8 +62,6 @@ export const messages = {
   "customProvider.form.title": "사용자 지정 제공자 추가",
   "customProvider.form.editTitle": "사용자 지정 제공자 편집",
   "customProvider.form.description": "OpenAI 호환 엔드포인트와 그 엔드포인트가 제공하는 모델을 설명해 주세요.",
-  "customProvider.form.heading": "사용자 지정 제공자",
-  "customProvider.form.subtitle": "모든 OpenAI 호환 엔드포인트.",
   "customProvider.field.providerId": "제공자 ID",
   "customProvider.field.providerIdHint": "영문 소문자, 숫자, 하이픈, 밑줄.",
   "customProvider.field.displayName": "표시 이름",
@@ -99,8 +97,6 @@ export const messages = {
   // The first step of the add flow: a preset fills the form that comes next.
   "customProvider.preset.title": "제공자 또는 에이전트 추가",
   "customProvider.preset.description": "로컬 모델 서버, 엔드포인트, 또는 ACP 에이전트를 선택하세요.",
-  "customProvider.preset.heading": "사용자 지정 추가",
-  "customProvider.preset.subtitle": "OpenCode용 모델 또는 독립 에이전트.",
   "customProvider.preset.models": "모델",
   "customProvider.preset.agents": "에이전트",
   "customProvider.preset.ollama": "Ollama",
@@ -153,8 +149,6 @@ export const messages = {
   // The custom ACP agent form.
   "customProvider.acp.title": "사용자 지정 ACP 에이전트 추가",
   "customProvider.acp.description": "Agent Client Protocol을 사용하는 명령을 설명해 주세요.",
-  "customProvider.acp.heading": "사용자 지정 ACP 에이전트",
-  "customProvider.acp.subtitle": "Agent Client Protocol을 사용하는 모든 에이전트.",
   "customProvider.acp.presets": "시작 템플릿",
   "customProvider.acp.displayNamePlaceholder": "내 에이전트",
   "customProvider.acp.agentId": "에이전트 ID",
@@ -221,7 +215,6 @@ export const messages = {
   // The list of saved endpoints.
   "customProvider.list.title": "사용자 지정 제공자",
   "customProvider.list.description": "저장한 엔드포인트예요. 더 이상 쓰지 않는 것은 제거하세요.",
-  "customProvider.list.subtitle": "내 모델 엔드포인트.",
   "customProvider.list.empty": "아직 사용자 지정 엔드포인트가 없어요.",
   "customProvider.list.label": "사용자 지정 엔드포인트",
   "customProvider.list.apiKeySaved": "API 키 저장됨",

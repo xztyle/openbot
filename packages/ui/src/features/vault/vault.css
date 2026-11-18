@@ -150,38 +150,10 @@
   border-color: var(--openbot-border-focus);
 }
 
-.vault-dialog.ui-confirm-dialog {
-  width: min(520px, 100%);
-}
-
-.vault-dialog-form {
+/* The item form is a `FormDialog`; its title carries the logo of the item. */
+.vault-dialog-heading {
   display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.vault-dialog-header {
-  display: flex;
-  gap: var(--openbot-space-3);
-  align-items: center;
-  padding: var(--openbot-space-4) var(--openbot-space-4) 0 var(--openbot-space-6);
-}
-
-.vault-dialog-title {
-  flex: 1;
   min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  font-size: var(--openbot-text-md);
-  font-weight: var(--openbot-weight-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.vault-dialog-body {
-  display: grid;
+  align-items: center;
   gap: var(--openbot-space-3);
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--openbot-space-4) var(--openbot-space-6) var(--openbot-space-6);
 }

@@ -1,4 +1,4 @@
-import { Button, Dialog, Input, Pencil, Plus, Trash2 } from "@openbot/ui";
+import { Button, FormDialog, IconButton, Input, Pencil, Plus, Trash2 } from "@openbot/ui";
 import { createSignal, For, Show } from "solid-js";
 import { useText } from "../../text";
 import { SAVED_REPLY_LIMIT, SAVED_REPLY_MAX_LENGTH } from "./saved-reply-limits";
@@ -71,91 +71,70 @@ export function SavedReplies(props: SavedRepliesProps) {
           <Pencil aria-hidden="true" />
         </Button>
       </fieldset>
-      <Dialog.Root open={editing()} onOpenChange={setEditing}>
-        <Dialog.Portal>
-          <Dialog.Overlay class="saved-replies-backdrop">
-            <Dialog.Content class="saved-replies-dialog" as="section">
-              <header class="saved-replies-header">
-                <Dialog.Title class="saved-replies-title">{t("composer.savedReplies.title")}</Dialog.Title>
-                <Dialog.Description class="saved-replies-description">
-                  {t("composer.savedReplies.description")}
-                </Dialog.Description>
-              </header>
-              <form
-                class="saved-replies-form"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  save();
+      <FormDialog
+        open={editing()}
+        onOpenChange={setEditing}
+        title={t("composer.savedReplies.title")}
+        description={t("composer.savedReplies.description")}
+        submitLabel={t("common.save")}
+        onSubmit={save}
+        footerStart={
+          <Show when={props.onReset}>
+            {(reset) => (
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  reset()();
+                  setEditing(false);
                 }}
               >
-                <ul class="saved-replies-list">
-                  {/* Not keyed by value: a row must stay mounted while its text changes. */}
-                  <For each={draft()} keyed={false}>
-                    {(reply, index) => (
-                      <li class="saved-replies-row">
-                        <Input
-                          value={reply()}
-                          maxlength={SAVED_REPLY_MAX_LENGTH}
-                          aria-label={t("composer.savedReplies.item", { number: index + 1 })}
-                          onValueChange={(value) =>
-                            setDraft((current) => current.map((item, at) => (at === index ? value : item)))
-                          }
-                        />
-                        <Button
-                          variant="destructive-ghost"
-                          size="icon-sm"
-                          type="button"
-                          aria-label={t("composer.savedReplies.remove", { number: index + 1 })}
-                          onClick={() => setDraft((current) => current.filter((_, at) => at !== index))}
-                        >
-                          <Trash2 aria-hidden="true" />
-                        </Button>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-                <Show when={draft().length === 0}>
-                  <p class="saved-replies-empty">{t("composer.savedReplies.empty")}</p>
-                </Show>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  type="button"
-                  class="saved-replies-add"
-                  disabled={draft().length >= SAVED_REPLY_LIMIT}
-                  onClick={() => setDraft((current) => [...current, ""])}
+                {t("composer.savedReplies.reset")}
+              </Button>
+            )}
+          </Show>
+        }
+      >
+        <ul class="saved-replies-list">
+          {/* Not keyed by value: a row must stay mounted while its text changes. */}
+          <For each={draft()} keyed={false}>
+            {(reply, index) => (
+              <li class="saved-replies-row">
+                <Input
+                  value={reply()}
+                  maxlength={SAVED_REPLY_MAX_LENGTH}
+                  aria-label={t("composer.savedReplies.item", { number: index + 1 })}
+                  onValueChange={(value) =>
+                    setDraft((current) => current.map((item, at) => (at === index ? value : item)))
+                  }
+                />
+                <IconButton
+                  variant="destructive-ghost"
+                  size="icon-sm"
+                  label={t("composer.savedReplies.remove", { number: index + 1 })}
+                  onClick={() => setDraft((current) => current.filter((_, at) => at !== index))}
                 >
-                  <Plus aria-hidden="true" />
-                  {t("composer.savedReplies.add")}
-                </Button>
-                <footer class="saved-replies-actions">
-                  <Show when={props.onReset}>
-                    {(reset) => (
-                      <Button
-                        variant="ghost"
-                        type="button"
-                        class="saved-replies-reset"
-                        onClick={() => {
-                          reset()();
-                          setEditing(false);
-                        }}
-                      >
-                        {t("composer.savedReplies.reset")}
-                      </Button>
-                    )}
-                  </Show>
-                  <Button variant="ghost" type="button" onClick={() => setEditing(false)}>
-                    {t("common.cancel")}
-                  </Button>
-                  <Button variant="default" type="submit">
-                    {t("common.save")}
-                  </Button>
-                </footer>
-              </form>
-            </Dialog.Content>
-          </Dialog.Overlay>
-        </Dialog.Portal>
-      </Dialog.Root>
+                  <Trash2 />
+                </IconButton>
+              </li>
+            )}
+          </For>
+        </ul>
+        <Show when={draft().length === 0}>
+          <p class="saved-replies-empty">{t("composer.savedReplies.empty")}</p>
+        </Show>
+        <Button
+          variant="ghost"
+          size="sm"
+          type="button"
+          class="saved-replies-add"
+          disabled={draft().length >= SAVED_REPLY_LIMIT}
+          onClick={() => setDraft((current) => [...current, ""])}
+        >
+          <Plus aria-hidden="true" />
+          {t("composer.savedReplies.add")}
+        </Button>
+      </FormDialog>
     </>
   );
 }

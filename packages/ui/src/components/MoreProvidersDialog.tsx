@@ -1,7 +1,8 @@
 import { ProviderLogo } from "@openbot/brand";
 import type { AgentProviderId } from "@openbot/contracts/ipc";
-import { Button, Dialog, IconButton, Input, SlidersHorizontal, X } from "@openbot/ui";
+import { Button, Input, SlidersHorizontal } from "@openbot/ui";
 import { createSignal, For, Show } from "solid-js";
+import { FormDialog } from "../form-dialog";
 import { useText } from "../text";
 
 interface MoreProvidersEntry {
@@ -55,76 +56,64 @@ export function MoreProvidersDialog(props: MoreProvidersDialogProps) {
   };
 
   return (
-    <Dialog.Root open={props.open} onOpenChange={(open) => (open ? props.onOpenChange(true) : close())}>
-      <Dialog.Portal>
-        <Dialog.Overlay class="custom-provider-backdrop provider-more-backdrop">
-          <Dialog.Content
-            as="section"
-            class="custom-provider-dialog provider-more-dialog"
-            onCloseAutoFocus={(event) => props.onCloseAutoFocus?.(event)}
+    <FormDialog
+      open={props.open}
+      onOpenChange={(open) => (open ? props.onOpenChange(true) : close())}
+      size="sm"
+      title={t("onboarding.provider.more")}
+      onCloseAutoFocus={props.onCloseAutoFocus}
+    >
+      <Show when={searchable()}>
+        <Input
+          type="search"
+          class="provider-more-search"
+          placeholder={t("common.search")}
+          aria-label={t("onboarding.provider.moreSearch")}
+          autocomplete="off"
+          value={query()}
+          onValueChange={setQuery}
+        />
+      </Show>
+      <div class="provider-more-list">
+        <For each={matches()} keyed={false}>
+          {(provider) => (
+            <Button
+              type="button"
+              variant="ghost"
+              class="provider-more-row"
+              data-cuelume-tap="select"
+              onClick={() => choose(provider().id)}
+            >
+              <ProviderLogo provider={provider().id} class="provider-picker-logo" />
+              <span class="provider-picker-identity">
+                <span class="provider-picker-name">{provider().name}</span>
+                <Show when={provider().description}>
+                  {(description) => <small class="provider-picker-email">{description()}</small>}
+                </Show>
+              </span>
+            </Button>
+          )}
+        </For>
+        <Show when={query().trim() && matches().length === 0}>
+          <p class="provider-more-empty">{t("onboarding.provider.moreNoMatch", { query: query().trim() })}</p>
+        </Show>
+        <Show when={props.custom}>
+          <hr class="provider-more-divider" />
+          <Button
+            type="button"
+            variant="ghost"
+            class="provider-more-row"
+            data-cuelume-tap="select"
+            onClick={chooseCustom}
           >
-            <header class="provider-more-header">
-              <Dialog.Title as="h2" class="provider-more-title">
-                {t("onboarding.provider.more")}
-              </Dialog.Title>
-              <IconButton label={t("common.close")} variant="ghost" data-cuelume-tap="close" onClick={close}>
-                <X />
-              </IconButton>
-            </header>
-            <Show when={searchable()}>
-              <Input
-                type="search"
-                class="provider-more-search"
-                placeholder={t("common.search")}
-                aria-label={t("onboarding.provider.moreSearch")}
-                autocomplete="off"
-                value={query()}
-                onValueChange={setQuery}
-              />
-            </Show>
-            <div class="provider-more-list">
-              <For each={matches()} keyed={false}>
-                {(provider) => (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    class="provider-more-row"
-                    data-cuelume-tap="select"
-                    onClick={() => choose(provider().id)}
-                  >
-                    <ProviderLogo provider={provider().id} class="provider-picker-logo" />
-                    <span class="provider-picker-identity">
-                      <span class="provider-picker-name">{provider().name}</span>
-                      <Show when={provider().description}>
-                        {(description) => <small class="provider-picker-email">{description()}</small>}
-                      </Show>
-                    </span>
-                  </Button>
-                )}
-              </For>
-              <Show when={query().trim() && matches().length === 0}>
-                <p class="provider-more-empty">{t("onboarding.provider.moreNoMatch", { query: query().trim() })}</p>
-              </Show>
-              <Show when={props.custom}>
-                <hr class="provider-more-divider" />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  class="provider-more-row"
-                  data-cuelume-tap="select"
-                  onClick={chooseCustom}
-                >
-                  <SlidersHorizontal class="provider-picker-custom-mark" aria-hidden="true" />
-                  <span class="provider-picker-identity">
-                    <span class="provider-picker-name">{t("provider.custom.name")}</span>
-                    <small class="provider-picker-email">{t("provider.custom.description")}</small>
-                  </span>
-                </Button>
-              </Show>
-            </div>
-          </Dialog.Content>
-        </Dialog.Overlay>
-      </Dialog.Portal>
-    </Dialog.Root>
+            <SlidersHorizontal class="provider-picker-custom-mark" aria-hidden="true" />
+            <span class="provider-picker-identity">
+              <span class="provider-picker-name">{t("provider.custom.name")}</span>
+              <small class="provider-picker-email">{t("provider.custom.description")}</small>
+            </span>
+          </Button>
+        </Show>
+      </div>
+    </FormDialog>
   );
 }

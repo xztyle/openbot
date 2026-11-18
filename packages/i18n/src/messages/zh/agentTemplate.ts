@@ -15,7 +15,6 @@ export const messages = {
   "agentTemplate.install.nameFallback": "共享助手",
   "agentTemplate.install.description": "添加前请先阅读该共享助手的指令、技能和自动化任务。",
   "agentTemplate.install.loading": "正在加载助手…",
-  "agentTemplate.install.pending": "正在添加…",
   "agentTemplate.install.action": "添加助手",
   "agentTemplate.install.failed": "无法添加该助手。",
   "agentTemplate.install.readFailed": "无法读取该共享助手。",

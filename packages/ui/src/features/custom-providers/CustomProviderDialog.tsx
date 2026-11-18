@@ -1,34 +1,9 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { SaveCustomProviderInput } from "@openbot/contracts/ipc";
 import { CUSTOM_PROVIDER_LIMITS } from "@openbot/contracts/ipc";
-import {
-  ArrowLeft,
-  Button,
-  Checkbox,
-  Dialog,
-  Field,
-  Heading,
-  IconButton,
-  Input,
-  RefreshCw,
-  SlidersHorizontal,
-  Spinner,
-  Text,
-  X,
-} from "@openbot/ui";
-import {
-  createEffect,
-  createSignal,
-  createStore,
-  createUniqueId,
-  For,
-  Match,
-  onSettled,
-  Show,
-  Switch,
-  untrack,
-} from "solid-js";
-import { createScrollFades } from "../../components/createScrollFades";
+import { Button, Checkbox, Field, Input, RefreshCw, Spinner, Text } from "@openbot/ui";
+import { createEffect, createSignal, createStore, createUniqueId, For, Match, Show, Switch, untrack } from "solid-js";
+import { FormDialog } from "../../form-dialog";
 import { useText } from "../../text";
 import { createUnsavedGuard, DiscardChangesDialog } from "../settings/unsaved-changes";
 import {
@@ -143,20 +118,6 @@ export function CustomProviderDialog(props: CustomProviderDialogProps) {
   const busy = () => Boolean(props.busy);
   const discovery = (): ModelDiscovery => props.discovery ?? { status: "idle" };
 
-  // The form itself scrolls, and its own box keeps the same size when a row is added, so the
-  // helper's ResizeObserver never fires for new content. Remeasure on what changes the height.
-  const fades = createScrollFades();
-  onSettled(() => fades.stop);
-  createEffect(
-    () => ({
-      models: draft.models.length,
-      headers: draft.headers.length,
-      errors: shown(),
-      discovery: discovery().status,
-    }),
-    () => fades.remeasure(),
-  );
-
   const modelColumns: readonly [RepeatableColumn<ModelRow>, RepeatableColumn<ModelRow>] = [
     {
       label: (number) => t("customProvider.model.id", { number }),
@@ -247,269 +208,209 @@ export function CustomProviderDialog(props: CustomProviderDialogProps) {
 
   return (
     <>
-      <Dialog.Root open={props.open} onOpenChange={(open) => !open && guard.request(props.onCancel)}>
-        <Dialog.Portal>
-          <Dialog.Overlay class="custom-provider-backdrop">
-            <Dialog.Content as="section" class="custom-provider-dialog" aria-busy={busy() ? "true" : undefined}>
-              <Dialog.Title class="sr-only">
-                {props.providerIdLocked ? t("customProvider.form.editTitle") : t("customProvider.form.title")}
-              </Dialog.Title>
-              <Dialog.Description class="sr-only">{t("customProvider.form.description")}</Dialog.Description>
+      <FormDialog
+        open={props.open}
+        onOpenChange={(open) => {
+          if (!open) guard.request(props.onCancel);
+        }}
+        size="lg"
+        title={props.providerIdLocked ? t("customProvider.form.editTitle") : t("customProvider.form.title")}
+        description={t("customProvider.form.description")}
+        onBack={props.onBack ? () => guard.request(() => props.onBack?.()) : undefined}
+        error={props.submitError}
+        busy={busy()}
+        submitLabel={props.providerIdLocked ? t("common.save") : t("customProvider.submit")}
+        onSubmit={submit}
+      >
+        <Field
+          label={t("customProvider.field.providerId")}
+          description={t("customProvider.field.providerIdHint")}
+          error={shown()?.providerId}
+          required
+        >
+          <Input
+            value={draft.providerId}
+            onValueChange={(value) =>
+              setDraft((state) => {
+                state.providerId = value;
+              })
+            }
+            placeholder={PROVIDER_ID_PLACEHOLDER}
+            autocomplete="off"
+            spellcheck={false}
+            maxlength={INPUT_LIMITS.identifier}
+            disabled={busy() || Boolean(props.providerIdLocked)}
+          />
+        </Field>
 
-              <header class="custom-provider-header">
-                <Show when={props.onBack}>
-                  <IconButton
-                    label={t("common.back")}
-                    variant="ghost"
-                    disabled={busy()}
-                    data-cuelume-tap="navigate"
-                    onClick={() => guard.request(() => props.onBack?.())}
-                  >
-                    <ArrowLeft />
-                  </IconButton>
-                </Show>
-                <span class="custom-provider-mark" aria-hidden="true">
-                  <SlidersHorizontal />
-                </span>
-                <div class="custom-provider-title">
-                  <Heading as="h2" size="md">
-                    {t("customProvider.form.heading")}
-                  </Heading>
-                  <Text tone="muted" variant="caption">
-                    {t("customProvider.form.subtitle")}
-                  </Text>
-                </div>
-                <IconButton
-                  class="custom-provider-close"
-                  label={t("common.close")}
+        <Field label={t("customProvider.field.displayName")} error={shown()?.displayName} required>
+          <Input
+            value={draft.displayName}
+            onValueChange={(value) =>
+              setDraft((state) => {
+                state.displayName = value;
+              })
+            }
+            placeholder={t("customProvider.field.displayNamePlaceholder")}
+            maxlength={INPUT_LIMITS.agentName}
+            disabled={busy()}
+          />
+        </Field>
+
+        <Field label={t("customProvider.field.baseUrl")} error={shown()?.baseUrl} required>
+          <Input
+            value={draft.baseUrl}
+            onValueChange={(value) =>
+              setDraft((state) => {
+                state.baseUrl = value;
+              })
+            }
+            placeholder={BASE_URL_PLACEHOLDER}
+            inputmode="url"
+            autocomplete="off"
+            spellcheck={false}
+            maxlength={CUSTOM_PROVIDER_LIMITS.baseUrl}
+            disabled={busy()}
+          />
+        </Field>
+
+        <Field
+          label={t("customProvider.field.apiKey")}
+          description={
+            props.apiKeyKept ? t("customProvider.field.apiKeyKeptHint") : t("customProvider.field.apiKeyHint")
+          }
+          error={shown()?.apiKey}
+        >
+          <Input
+            type="password"
+            value={draft.apiKey}
+            onValueChange={(value) =>
+              setDraft((state) => {
+                state.apiKey = value;
+              })
+            }
+            autocomplete="off"
+            spellcheck={false}
+            maxlength={CUSTOM_PROVIDER_LIMITS.apiKey}
+            disabled={busy()}
+          />
+        </Field>
+
+        <RepeatableRows
+          label={t("customProvider.models")}
+          removeLabel={(number) => t("customProvider.model.remove", { number })}
+          addLabel={t("customProvider.model.add")}
+          columns={modelColumns}
+          rows={draft.models}
+          limit={CUSTOM_PROVIDER_LIMITS.models}
+          busy={busy()}
+          sectionError={shown()?.models}
+          rowError={(index) => shown()?.modelRows[index]}
+          onAdd={() =>
+            setDraft((state) => {
+              state.models.push({ id: "", name: "" });
+            })
+          }
+          onRemove={(index) =>
+            setDraft((state) => {
+              state.models.splice(index, 1);
+            })
+          }
+          action={
+            <Show when={props.onDiscoverModels}>
+              {(discover) => (
+                <Button
+                  type="button"
                   variant="ghost"
-                  disabled={busy()}
-                  onClick={() => guard.request(props.onCancel)}
+                  size="xs"
+                  class="custom-provider-discover"
+                  disabled={busy() || !draft.baseUrl.trim() || discovery().status === "loading"}
+                  onClick={() => discover()(customProviderEndpoint(draft))}
                 >
-                  <X />
-                </IconButton>
-              </header>
-
-              {/*
-               * The fields scroll inside the form rather than the form scrolling itself, so the footer
-               * below stays reachable and outside the scroll fade. Submit is a `type="submit"` button,
-               * which needs the form as an ancestor - hence the wrapper rather than a sibling footer.
-               */}
-              <form
-                class="custom-provider-body"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  submit();
-                }}
-              >
-                <div class={["custom-provider-form", fades.classes()]} ref={fades.bind} onScroll={fades.measure}>
-                  <Field
-                    label={t("customProvider.field.providerId")}
-                    description={t("customProvider.field.providerIdHint")}
-                    error={shown()?.providerId}
-                    required
-                  >
-                    <Input
-                      value={draft.providerId}
-                      onValueChange={(value) =>
-                        setDraft((state) => {
-                          state.providerId = value;
-                        })
-                      }
-                      placeholder={PROVIDER_ID_PLACEHOLDER}
-                      autocomplete="off"
-                      spellcheck={false}
-                      maxlength={INPUT_LIMITS.identifier}
-                      disabled={busy() || Boolean(props.providerIdLocked)}
-                    />
-                  </Field>
-
-                  <Field label={t("customProvider.field.displayName")} error={shown()?.displayName} required>
-                    <Input
-                      value={draft.displayName}
-                      onValueChange={(value) =>
-                        setDraft((state) => {
-                          state.displayName = value;
-                        })
-                      }
-                      placeholder={t("customProvider.field.displayNamePlaceholder")}
-                      maxlength={INPUT_LIMITS.agentName}
-                      disabled={busy()}
-                    />
-                  </Field>
-
-                  <Field label={t("customProvider.field.baseUrl")} error={shown()?.baseUrl} required>
-                    <Input
-                      value={draft.baseUrl}
-                      onValueChange={(value) =>
-                        setDraft((state) => {
-                          state.baseUrl = value;
-                        })
-                      }
-                      placeholder={BASE_URL_PLACEHOLDER}
-                      inputmode="url"
-                      autocomplete="off"
-                      spellcheck={false}
-                      maxlength={CUSTOM_PROVIDER_LIMITS.baseUrl}
-                      disabled={busy()}
-                    />
-                  </Field>
-
-                  <Field
-                    label={t("customProvider.field.apiKey")}
-                    description={
-                      props.apiKeyKept ? t("customProvider.field.apiKeyKeptHint") : t("customProvider.field.apiKeyHint")
-                    }
-                    error={shown()?.apiKey}
-                  >
-                    <Input
-                      type="password"
-                      value={draft.apiKey}
-                      onValueChange={(value) =>
-                        setDraft((state) => {
-                          state.apiKey = value;
-                        })
-                      }
-                      autocomplete="off"
-                      spellcheck={false}
-                      maxlength={CUSTOM_PROVIDER_LIMITS.apiKey}
-                      disabled={busy()}
-                    />
-                  </Field>
-
-                  <RepeatableRows
-                    label={t("customProvider.models")}
-                    removeLabel={(number) => t("customProvider.model.remove", { number })}
-                    addLabel={t("customProvider.model.add")}
-                    columns={modelColumns}
-                    rows={draft.models}
-                    limit={CUSTOM_PROVIDER_LIMITS.models}
-                    busy={busy()}
-                    sectionError={shown()?.models}
-                    rowError={(index) => shown()?.modelRows[index]}
-                    onAdd={() =>
-                      setDraft((state) => {
-                        state.models.push({ id: "", name: "" });
-                      })
-                    }
-                    onRemove={(index) =>
-                      setDraft((state) => {
-                        state.models.splice(index, 1);
-                      })
-                    }
-                    action={
-                      <Show when={props.onDiscoverModels}>
-                        {(discover) => (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            class="custom-provider-discover"
-                            disabled={busy() || !draft.baseUrl.trim() || discovery().status === "loading"}
-                            onClick={() => discover()(customProviderEndpoint(draft))}
-                          >
-                            <RefreshCw />
-                            {discovery().status === "idle"
-                              ? t("customProvider.discovery.find")
-                              : t("customProvider.discovery.refresh")}
-                          </Button>
-                        )}
-                      </Show>
-                    }
-                  >
-                    <Switch>
-                      <Match when={discovery().status === "loading"}>
-                        <div class="custom-provider-discovery-status" role="status">
-                          <Spinner size="sm" />
-                          <Text tone="muted" variant="caption">
-                            {t("customProvider.discovery.loading", { url: draft.baseUrl.trim() })}
-                          </Text>
-                        </div>
-                      </Match>
-                      <Match when={discoveryFailed()}>
-                        {(message) => (
-                          <Text class="custom-provider-rows-error" tone="danger" variant="caption" role="alert">
-                            {message()}
-                          </Text>
-                        )}
-                      </Match>
-                      <Match when={discovered()}>
-                        {(models) => (
-                          <Show
-                            when={models().length > 0}
-                            fallback={
-                              <Text tone="muted" variant="caption" role="status">
-                                {t("customProvider.discovery.empty")}
-                              </Text>
-                            }
-                          >
-                            <Text tone="muted" variant="caption" role="status">
-                              {t("customProvider.discovery.found", { count: models().length })}
+                  <RefreshCw />
+                  {discovery().status === "idle"
+                    ? t("customProvider.discovery.find")
+                    : t("customProvider.discovery.refresh")}
+                </Button>
+              )}
+            </Show>
+          }
+        >
+          <Switch>
+            <Match when={discovery().status === "loading"}>
+              <div class="custom-provider-discovery-status" role="status">
+                <Spinner size="sm" />
+                <Text tone="muted" variant="caption">
+                  {t("customProvider.discovery.loading", { url: draft.baseUrl.trim() })}
+                </Text>
+              </div>
+            </Match>
+            <Match when={discoveryFailed()}>
+              {(message) => (
+                <Text class="custom-provider-rows-error" tone="danger" variant="caption" role="alert">
+                  {message()}
+                </Text>
+              )}
+            </Match>
+            <Match when={discovered()}>
+              {(models) => (
+                <Show
+                  when={models().length > 0}
+                  fallback={
+                    <Text tone="muted" variant="caption" role="status">
+                      {t("customProvider.discovery.empty")}
+                    </Text>
+                  }
+                >
+                  <Text tone="muted" variant="caption" role="status">
+                    {t("customProvider.discovery.found", { count: models().length })}
+                  </Text>
+                  <ul class="custom-provider-discovered" aria-label={t("customProvider.discovery.label")}>
+                    <For each={models()}>
+                      {(model, index) => (
+                        <li>
+                          <label class="custom-provider-discovered-row" for={`${discoveryId}-${index()}`}>
+                            <Checkbox
+                              id={`${discoveryId}-${index()}`}
+                              checked={listed(model.id)}
+                              disabled={busy()}
+                              onChange={(event) => toggleModel(model, event.currentTarget.checked)}
+                            />
+                            <Text variant="body-sm" class="custom-provider-discovered-id">
+                              {model.id}
                             </Text>
-                            <ul class="custom-provider-discovered" aria-label={t("customProvider.discovery.label")}>
-                              <For each={models()}>
-                                {(model, index) => (
-                                  <li>
-                                    <label class="custom-provider-discovered-row" for={`${discoveryId}-${index()}`}>
-                                      <Checkbox
-                                        id={`${discoveryId}-${index()}`}
-                                        checked={listed(model.id)}
-                                        disabled={busy()}
-                                        onChange={(event) => toggleModel(model, event.currentTarget.checked)}
-                                      />
-                                      <Text variant="body-sm" class="custom-provider-discovered-id">
-                                        {model.id}
-                                      </Text>
-                                    </label>
-                                  </li>
-                                )}
-                              </For>
-                            </ul>
-                          </Show>
-                        )}
-                      </Match>
-                    </Switch>
-                  </RepeatableRows>
+                          </label>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </Show>
+              )}
+            </Match>
+          </Switch>
+        </RepeatableRows>
 
-                  <RepeatableRows
-                    label={t("customProvider.headers")}
-                    removeLabel={(number) => t("customProvider.header.remove", { number })}
-                    addLabel={t("customProvider.header.add")}
-                    columns={headerColumns}
-                    rows={draft.headers}
-                    limit={CUSTOM_PROVIDER_LIMITS.headers}
-                    busy={busy()}
-                    rowError={(index) => shown()?.headerRows[index]}
-                    onAdd={() =>
-                      setDraft((state) => {
-                        state.headers.push({ name: "", value: "" });
-                      })
-                    }
-                    onRemove={(index) =>
-                      setDraft((state) => {
-                        state.headers.splice(index, 1);
-                      })
-                    }
-                  />
-                </div>
-
-                <footer class="custom-provider-actions">
-                  <Show when={props.submitError}>
-                    {(message) => (
-                      <Text class="custom-provider-submit-error" tone="danger" variant="caption" role="alert">
-                        {message()}
-                      </Text>
-                    )}
-                  </Show>
-                  <Button type="submit" variant="default" loading={busy()} loadingLabel={t("common.saving")}>
-                    {t("customProvider.submit")}
-                  </Button>
-                </footer>
-              </form>
-            </Dialog.Content>
-          </Dialog.Overlay>
-        </Dialog.Portal>
-      </Dialog.Root>
+        <RepeatableRows
+          label={t("customProvider.headers")}
+          removeLabel={(number) => t("customProvider.header.remove", { number })}
+          addLabel={t("customProvider.header.add")}
+          columns={headerColumns}
+          rows={draft.headers}
+          limit={CUSTOM_PROVIDER_LIMITS.headers}
+          busy={busy()}
+          rowError={(index) => shown()?.headerRows[index]}
+          onAdd={() =>
+            setDraft((state) => {
+              state.headers.push({ name: "", value: "" });
+            })
+          }
+          onRemove={(index) =>
+            setDraft((state) => {
+              state.headers.splice(index, 1);
+            })
+          }
+        />
+      </FormDialog>
       <DiscardChangesDialog guard={guard} />
     </>
   );

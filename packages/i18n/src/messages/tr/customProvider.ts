@@ -63,8 +63,6 @@ export const messages = {
   "customProvider.form.title": "Özel sağlayıcı ekle",
   "customProvider.form.editTitle": "Özel sağlayıcıyı düzenle",
   "customProvider.form.description": "OpenAI uyumlu bir uç noktayı ve sunduğu modelleri tanımlayın.",
-  "customProvider.form.heading": "Özel sağlayıcı",
-  "customProvider.form.subtitle": "Herhangi bir OpenAI uyumlu uç nokta.",
   "customProvider.field.providerId": "Sağlayıcı kimliği",
   "customProvider.field.providerIdHint": "Küçük harfler, rakamlar, kısa çizgiler veya alt çizgiler.",
   "customProvider.field.displayName": "Görünen ad",
@@ -102,8 +100,6 @@ export const messages = {
   // Ekleme akışının ilk adımı: hazır bir ayar bir sonraki formu doldurur.
   "customProvider.preset.title": "Sağlayıcı veya ajan ekle",
   "customProvider.preset.description": "Yerel bir model sunucusu, bir uç nokta veya bir ACP ajanı seçin.",
-  "customProvider.preset.heading": "Özel ekle",
-  "customProvider.preset.subtitle": "OpenCode için modeller veya kendine ait bir ajan.",
   "customProvider.preset.models": "Modeller",
   "customProvider.preset.agents": "Ajanlar",
   "customProvider.preset.ollama": "Ollama",
@@ -160,8 +156,6 @@ export const messages = {
   // Özel ACP ajanı formu.
   "customProvider.acp.title": "Özel ACP ajanı ekle",
   "customProvider.acp.description": "Agent Client Protocol konuşan bir komut tanımlayın.",
-  "customProvider.acp.heading": "Özel ACP ajanı",
-  "customProvider.acp.subtitle": "Agent Client Protocol konuşan herhangi bir ajan.",
   "customProvider.acp.presets": "Şununla başla",
   "customProvider.acp.displayNamePlaceholder": "Ajanım",
   "customProvider.acp.agentId": "Ajan kimliği",
@@ -237,7 +231,6 @@ export const messages = {
   // Kaydedilen uç noktaların listesi.
   "customProvider.list.title": "Özel sağlayıcılar",
   "customProvider.list.description": "Kaydettiğiniz uç noktalar. Artık kullanmadıklarınızı kaldırın.",
-  "customProvider.list.subtitle": "Kendi model uç noktalarınız.",
   "customProvider.list.empty": "Henüz özel uç nokta yok.",
   "customProvider.list.label": "Özel uç noktalar",
   "customProvider.list.apiKeySaved": "API anahtarı kaydedildi",

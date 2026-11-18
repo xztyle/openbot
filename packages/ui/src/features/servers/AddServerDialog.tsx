@@ -485,7 +485,7 @@ export function AddServerDialog(props: AddServerDialogProps) {
                     </header>
 
                     <Show when={!running()}>
-                      <footer class="join-server-actions">
+                      <footer class="join-server-actions join-server-actions-stacked">
                         <Show when={paymentError()}>
                           {(failure) => (
                             <Alert class="join-server-alert" tone="danger" role="alert">

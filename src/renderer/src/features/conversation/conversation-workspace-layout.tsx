@@ -21,6 +21,8 @@ export interface ConversationWorkspaceLayout {
   quickReactions: () => readonly string[];
   /** The full emoji picker behind the action bar's react button and the box's emoji button. */
   emojiPicker: ReactionEmojiPicker;
+  /** A link that opens a message of this chat again, for "Copy link". Null where the client has none. */
+  messageLink: (messageId: string) => string | null;
   /**
    * Where the chat's controls (the model, search, the side panel) go: the workspace's header of the
    * DM. One header row then names the agent and holds its controls, as a channel's header does.

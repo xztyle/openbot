@@ -55,7 +55,7 @@ import { createMessageActions } from "./stores/message-actions";
 import { createPanelsStore, SIDE_PANEL_MODES } from "./stores/panels-store";
 import { PENDING_SEND_ID_PREFIX, pendingSendMessage } from "./stores/pending-send-store";
 import { createQueueStore } from "./stores/queue-store";
-import { createReplyJumpStore } from "./stores/reply-jump-store";
+import { createReplyJumpStore, flashChatRow } from "./stores/reply-jump-store";
 import { createScrollStore } from "./stores/scroll-store";
 import { createSearchStore } from "./stores/search-store";
 import { type AgentPatchResult, createSettingsStore, runtimeSettingsEqual } from "./stores/settings-store";
@@ -1060,6 +1060,8 @@ export function createConversationViewScope(props: ConversationProps) {
         latestScrollSettleFrame = undefined;
         updateVirtualScrollMargin();
         target.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
+        // As Slack shows a message that a link or a search opened: it is marked, then the mark fades.
+        flashChatRow(target.closest<HTMLElement>(".virtual-chat-row") ?? target);
         updateScrollFade();
         updateUnreadDividerVisibility();
       });

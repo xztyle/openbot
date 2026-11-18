@@ -1,7 +1,7 @@
 import { chatVisualReply } from "@openbot/contracts/chat-visual";
 import type { ConversationMessageSender, MessageReaction } from "@openbot/contracts/ipc";
 import type { ConversationUiBlock } from "@openbot/contracts/ui-blocks";
-import { AudioLines, Button, Copy, MessageSquareReply, Square } from "@openbot/ui";
+import { AudioLines, Button, Copy, Link, MessageSquareReply, Square, toast } from "@openbot/ui";
 import type { AgentMessage, ChatActionMarkerModel, RoutineRunMarkerModel } from "@openbot/ui/data";
 import { ChannelActivityIndicator } from "@openbot/ui/features/channels/ChannelActivityIndicator";
 import { AgentActivityIndicator } from "@openbot/ui/features/conversation/AgentActivity";
@@ -1357,6 +1357,18 @@ export function ConversationTimeline() {
                         onSelect: messageActions.onCopy,
                       },
                     ];
+                    const link = layout.messageLink((message() ?? initialMessage).id);
+                    if (link)
+                      items.push({
+                        id: "copy-link",
+                        label: t("workspace.app.message.copyLink"),
+                        icon: <Link aria-hidden="true" />,
+                        onSelect: () =>
+                          void navigator.clipboard?.writeText(link).then(
+                            () => toast.success(t("workspace.app.message.linkCopied")),
+                            () => undefined,
+                          ),
+                      });
                     const readAloud = messageReadAloud();
                     if (readAloud)
                       items.push({

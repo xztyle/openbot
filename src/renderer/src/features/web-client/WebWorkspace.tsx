@@ -2048,6 +2048,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       placeLink({ kind: "channel", channelId, threadRootId }, messageId, ws.rowSpace(channelId)),
     channelLink: (channelId) =>
       placeLink({ kind: "channel", channelId, threadRootId: null }, null, ws.rowSpace(channelId)),
+    agentMessageLink: (agentId, messageId) =>
+      placeLink({ kind: "agent", agentId }, messageId, ws.spaces.agentSpace(agentId)),
     openAddress: (url) => {
       let address: URL;
       try {

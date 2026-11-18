@@ -14,6 +14,24 @@ const SCROLL_IDLE_FRAMES = 6;
 const SCROLL_ATTEMPTS = 2;
 const FLASH_ANIMATION = "reply-flash";
 
+/**
+ * Marks a row of the chat for a moment, as Slack marks a message that a link opened: the band holds,
+ * then fades out. A quote's original, the way back to the reply, and a message that a search or a
+ * link opens use it.
+ */
+export function flashChatRow(row: HTMLElement): void {
+  delete row.dataset.replyFlash;
+  // A new flash on a row that still flashes starts again from the start.
+  void row.offsetWidth;
+  row.dataset.replyFlash = "";
+  const end = (event: AnimationEvent) => {
+    if (event.target !== row || event.animationName !== FLASH_ANIMATION) return;
+    row.removeEventListener("animationend", end);
+    delete row.dataset.replyFlash;
+  };
+  row.addEventListener("animationend", end);
+}
+
 export interface ReplyJumpStoreDeps {
   props: ConversationProps;
   scrollElement: () => HTMLDivElement | undefined;
@@ -152,19 +170,6 @@ export function createReplyJumpStore(deps: ReplyJumpStoreDeps) {
     return row;
   }
 
-  function flash(row: HTMLElement): void {
-    delete row.dataset.replyFlash;
-    // A new flash on a row that still flashes starts again from the start.
-    void row.offsetWidth;
-    row.dataset.replyFlash = "";
-    const end = (event: AnimationEvent) => {
-      if (event.target !== row || event.animationName !== FLASH_ANIMATION) return;
-      row.removeEventListener("animationend", end);
-      delete row.dataset.replyFlash;
-    };
-    row.addEventListener("animationend", end);
-  }
-
   /* The way back removes the control that had focus, so focus goes to the quote of the reply. */
   function focusQuote(replyId: string): void {
     messageElement(replyId)?.querySelector<HTMLElement>(".message-reply-open")?.focus({ preventScroll: true });
@@ -183,7 +188,7 @@ export function createReplyJumpStore(deps: ReplyJumpStoreDeps) {
         setUnavailableReplyId(reply.id);
         return;
       }
-      flash(row);
+      flashChatRow(row);
       setReturnReplyId(reply.id);
       // A page load removes the quote that had focus. Focus then goes to the way back.
       if (!document.activeElement || document.activeElement === document.body) {
@@ -205,7 +210,7 @@ export function createReplyJumpStore(deps: ReplyJumpStoreDeps) {
     try {
       const row = await reveal(replyId, replyId, deps.props.agent?.id);
       if (!row) return;
-      flash(row);
+      flashChatRow(row);
       focusQuote(replyId);
     } finally {
       jumping = false;

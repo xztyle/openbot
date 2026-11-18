@@ -253,6 +253,8 @@ export interface WorkspaceEnvironment {
   hostId?: (() => string | null) | undefined;
   /** A link to a message that opens it again, where the client has one. */
   messageLink?: ((channelId: string, messageId: string, threadRootId: string | null) => string | null) | undefined;
+  /** A link to a message of the owner's DM with an agent (the agent's chat), where the client has one. */
+  agentMessageLink?: ((agentId: string, messageId: string) => string | null) | undefined;
   /** A link to a channel, DM or group that opens it again, where the client has one. */
   channelLink?: ((channelId: string) => string | null) | undefined;
   /**

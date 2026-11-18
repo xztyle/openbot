@@ -35,6 +35,7 @@ const layout: ConversationWorkspaceLayout = {
   quickReactions: () => ["✅", "👀", "🙌"],
   emojiPicker: { recent: ["🎉", "🚀"], skinTone: 0, onSkinToneChange: () => undefined },
   headerSlot: () => undefined,
+  messageLink: (messageId) => `https://bots.example/app/agent/chief/m/${messageId}`,
   composer: {
     toolbarShown: () => true,
     setToolbarShown: () => undefined,

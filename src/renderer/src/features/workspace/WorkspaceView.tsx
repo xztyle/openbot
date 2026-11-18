@@ -139,6 +139,7 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
     quickReactions: () => ws.quickReactions(),
     emojiPicker: ws.reactionPicker,
     headerSlot,
+    messageLink: (messageId) => ws.env.agentMessageLink?.(props.agentId, messageId) ?? null,
     composer: {
       toolbarShown: () => toolbar.shown(),
       setToolbarShown: (shown) => toolbar.setShown(shown),

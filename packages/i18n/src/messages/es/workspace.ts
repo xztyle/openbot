@@ -717,7 +717,8 @@ export const messages = {
   "workspace.search.noResultsTitle": "Sin resultados",
   "workspace.search.noResults": "Ningún mensaje coincide con «{query}». Prueba otras palabras o menos filtros.",
   "workspace.search.noTermsTitle": "Añade una palabra para buscar",
-  "workspace.search.noTerms": "Los filtros acotan una búsqueda. Escribe al menos una palabra con ellos.",
+  "workspace.search.noTerms":
+    "Los filtros acotan una búsqueda. Escribe al menos una palabra con ellos o elige una persona en De.",
   "workspace.search.unknownTitle": "Un filtro no coincide con nada",
   "workspace.search.unknown": "OpenBot no encontró ninguna conversación, persona o fecha para: {names}.",
   "workspace.search.noChannels": "Ningún canal coincide",

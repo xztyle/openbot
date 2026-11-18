@@ -5,8 +5,9 @@
   Messages, Channels and People tabs. Filter by conversation, person, date and threads, sort by
   relevance or newest, and search this space or all spaces. You can also type `in:#channel`,
   `from:@name`, `from:me`, `before:`, `after:`, `on:`, `during:` and `is:thread`. A result opens the
-  exact message, in its thread when it is a reply. ⌘F in a channel searches that channel. On a phone,
-  the search opens from the sidebar and fills the screen.
+  exact message, in its thread when it is a reply. ⌘F in a channel searches that channel. With a
+  person in From and no words, the search lists that person's messages. On a phone, the search opens
+  from More, or from Jump to with "Search messages for …", and fills the screen.
 - Unreads (⌘⇧A): the unread messages of every conversation, in groups. Mark one conversation as read
   (with Undo) or all of them; new messages show a button instead of moving the list. Up and Down move
   between messages, Escape marks the group read.
@@ -19,7 +20,9 @@
 
 ### Changed
 
-- The sidebar starts with Unreads, Threads, Activity, Later (with its count) and Fleet.
+- The sidebar starts with Unreads, Threads, Activity, Drafts & sent, Later (with its count) and Fleet.
+- On a phone, Home has Unreads and Later chips, and More lists Search, Unreads, Threads, Later and
+  Browse channels.
 - Jump to (⌘K) shows unread conversations first, then the ones you visited, and finds names by word
   starts, initials ("dh"), names without dashes ("devweb") or letters in order ("gnrl"). It also opens
   the views, and offers "Create #name" when no channel has that name.

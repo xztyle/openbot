@@ -10,6 +10,7 @@ import {
   Bot,
   Ellipsis,
   HardDrive,
+  Hash,
   House,
   Inbox,
   KeyRound,
@@ -19,6 +20,7 @@ import {
   MessagesSquare,
   Pencil,
   Plus,
+  Search,
   Settings,
   Workflow,
   X,
@@ -247,6 +249,31 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
   /** The views that the desktop sidebar keeps under More, in the same order. */
   const viewRows = createMemo((): PhoneMoreRow[] => {
     const rows: PhoneMoreRow[] = [];
+    // The message search and Slack's pages, which a phone also reaches from the Home chips.
+    if (ws.search.supported())
+      rows.push({ id: "search", label: t("workspace.view.search"), icon: <Search />, onSelect: () => ws.openSearch() });
+    rows.push(
+      { id: "unreads", label: t("workspace.view.unreads"), icon: <Inbox />, onSelect: () => openView("unreads") },
+      {
+        id: "threads",
+        label: t("workspace.view.threads"),
+        icon: <MessageSquareText />,
+        onSelect: () => openView("threads"),
+      },
+    );
+    if (ws.later.supported())
+      rows.push({
+        id: "later",
+        label: t("workspace.view.later"),
+        icon: <Bookmark />,
+        onSelect: () => openView("later"),
+      });
+    rows.push({
+      id: "browse",
+      label: t("workspace.shortcuts.browse"),
+      icon: <Hash />,
+      onSelect: () => ws.openDialog({ kind: "browse" }),
+    });
     if (ws.spaces.available())
       rows.push({
         id: "space-agents",

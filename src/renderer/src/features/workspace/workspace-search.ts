@@ -198,7 +198,8 @@ export function createWorkspaceSearch(deps: WorkspaceSearchDeps) {
     const parsed = parseSearchQuery(query);
     const current = ++run;
     const request = input(parsed);
-    const noTerms = !searchHasTerms(parsed);
+    // The host lists an author's messages without words; anything else needs a word.
+    const noTerms = !searchHasTerms(parsed) && parsed.from.length === 0;
     setState((draft) => {
       draft.query = query;
       draft.hits = [];

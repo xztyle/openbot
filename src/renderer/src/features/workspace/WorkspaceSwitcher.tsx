@@ -93,6 +93,7 @@ export function useJumpEntries() {
     { view: "activity", label: () => t("workspace.view.activity") },
     { view: "dms", label: () => t("workspace.view.dms") },
     { view: "later", label: () => t("workspace.view.later") },
+    { view: "drafts", label: () => t("workspace.view.drafts") },
     { view: "fleet", label: () => t("workspace.view.fleet") },
     { view: "artifacts", label: () => t("workspace.view.artifacts") },
     { view: "agents", label: () => t("workspace.view.agents") },
@@ -276,7 +277,10 @@ export function QuickSwitcher(props: { onClose: () => void }) {
                 class="ws-switcher-item"
                 data-active={active() === index() ? "" : undefined}
                 data-unread={entry.unread ? "" : undefined}
-                onMouseEnter={() => setActive(index())}
+                // Only a mouse moves the highlight: a finger that lifts over a new list must not pick its row.
+                onPointerMove={(event: PointerEvent) => {
+                  if (event.pointerType === "mouse") setActive(index());
+                }}
                 onClick={() => choose(entry)}
               >
                 <span class="ws-switcher-glyph" aria-hidden="true">

@@ -733,7 +733,7 @@ export const messages = defineMessages("workspace", {
   "workspace.search.noResultsTitle": "No results",
   "workspace.search.noResults": "No messages match “{query}”. Try other words or fewer filters.",
   "workspace.search.noTermsTitle": "Add a word to search for",
-  "workspace.search.noTerms": "Filters narrow a search. Type at least one word with them.",
+  "workspace.search.noTerms": "Filters narrow a search. Type at least one word with them, or pick a person in From.",
   "workspace.search.unknownTitle": "Nothing matches a filter",
   "workspace.search.unknown": "OpenBot found no conversation, person or date for: {names}.",
   "workspace.search.noChannels": "No channels match",

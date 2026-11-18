@@ -11,10 +11,12 @@ import {
   Badge,
   Button,
   Check,
+  IconButton,
   Input,
   LoaderCircle,
   LogIn,
   Maximize2,
+  Minimize2,
   Monitor,
   MousePointer2,
   RadioGroup,
@@ -22,9 +24,11 @@ import {
   X,
 } from "@openbot/ui";
 import { StandingApprovalConfirmation } from "@openbot/ui/components/StandingApprovalConfirmation";
+import BrowserLiveView, { type BrowserViewRuntime } from "@openbot/ui/features/browser/BrowserLiveView";
 import { BrowserSecretCard } from "@openbot/ui/features/conversation/BrowserSecretCard";
 import { BrowserTakeoverPreview } from "@openbot/ui/features/conversation/BrowserTakeoverPreview";
 import { type TextValue, useText } from "@openbot/ui/text";
+import { usesTouchLayout } from "@openbot/ui/utils";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import type { AgentProfile } from "../../data";
@@ -349,6 +353,12 @@ interface BrowserTakeoverCardProps {
    * `onOpen`, as on a web client whose host gives no browser view.
    */
   openUnavailable?: string | undefined;
+  /**
+   * The live view of a host's tab. With it, Take over shows the page in the card on a computer,
+   * where the person types and clicks, and Expand opens it in the full view (`onOpen`). A phone
+   * opens the full view, which fills the screen.
+   */
+  liveView?: { runtime: BrowserViewRuntime; clipboard: boolean; online: boolean } | undefined;
   onComplete: () => Promise<boolean>;
   onCancel: () => Promise<boolean>;
   /** A sign-in on this computer for the tab, when the page refuses a sign-in from the server. */
@@ -391,7 +401,19 @@ export function BrowserTakeoverCard(props: BrowserTakeoverCardProps) {
 function BrowserManualTakeoverCard(props: BrowserTakeoverCardProps) {
   const { t } = useText();
   const [submitting, setSubmitting] = createSignal<"complete" | "cancel" | null>(null);
+  /** The page is live in the card: the person works in it here, and hands it back from the card. */
+  const [watching, setWatching] = createSignal(false);
+  const [frameSize, setFrameSize] = createSignal<{ width: number; height: number }>();
   const pageDetails = createMemo(() => browserPageDetails(props.tab, t));
+  const live = () => (watching() && !props.decision && props.tab ? props.liveView : undefined);
+  const takeOver = () => {
+    if (props.liveView && props.tab && !usesTouchLayout()) setWatching(true);
+    else props.onOpen?.();
+  };
+  const expand = () => {
+    setWatching(false);
+    props.onOpen?.();
+  };
   const completed = () => props.decision === "complete";
   const cancelled = () => props.decision === "cancel";
   const accessibleLabel = () =>
@@ -473,7 +495,7 @@ function BrowserManualTakeoverCard(props: BrowserTakeoverCardProps) {
             <LoaderCircle class="conversation-interaction-spinner" data-icon="inline-start" aria-hidden="true" />
             {props.signInBlocked?.signingIn
               ? t("prompt.browser.signInBlocked.waiting")
-              : t("prompt.browser.actionRequired")}
+              : t("prompt.browser.waitingForYou")}
           </Badge>
         </Show>
       </header>
@@ -492,11 +514,50 @@ function BrowserManualTakeoverCard(props: BrowserTakeoverCardProps) {
           <Monitor aria-hidden="true" />
           <span title={pageDetails().title}>{pageDetails().title}</span>
           <small title={pageHost()}>{pageHost()}</small>
+          <Show when={live()}>
+            <IconButton
+              variant="ghost"
+              size="icon-xs"
+              label={t("prompt.browser.expand")}
+              onClick={expand}
+              disabled={!props.onOpen}
+            >
+              <Maximize2 aria-hidden="true" />
+            </IconButton>
+            <IconButton
+              variant="ghost"
+              size="icon-xs"
+              label={t("prompt.browser.stopWatching")}
+              onClick={() => setWatching(false)}
+            >
+              <Minimize2 aria-hidden="true" />
+            </IconButton>
+          </Show>
         </figcaption>
+        <Show when={live()}>
+          {(view) => (
+            <div
+              class="browser-takeover-live"
+              style={{
+                "--browser-frame-width": String(frameSize()?.width ?? 16),
+                "--browser-frame-height": String(frameSize()?.height ?? 10),
+              }}
+            >
+              <BrowserLiveView
+                runtime={view().runtime}
+                tabId={props.tab?.id ?? ""}
+                active
+                online={view().online}
+                clipboard={view().clipboard}
+                onFrameSize={setFrameSize}
+              />
+            </div>
+          )}
+        </Show>
         <Show
-          when={props.onOpen}
+          when={!live() && props.onOpen}
           fallback={
-            <div class="browser-takeover-preview-viewport">
+            <div class="browser-takeover-preview-viewport" hidden={Boolean(live())}>
               <BrowserTakeoverPreview
                 preview={props.preview}
                 previewStatus={props.previewStatus}
@@ -510,7 +571,7 @@ function BrowserManualTakeoverCard(props: BrowserTakeoverCardProps) {
             type="button"
             class="browser-takeover-preview-viewport browser-takeover-preview-open"
             aria-label={t("prompt.browser.openPage", { title: pageDetails().title })}
-            onClick={() => props.onOpen?.()}
+            onClick={takeOver}
           >
             <BrowserTakeoverPreview preview={props.preview} previewStatus={props.previewStatus} page={pageDetails()} />
             <span class="browser-takeover-preview-open-label" aria-hidden="true">
@@ -556,7 +617,7 @@ function BrowserManualTakeoverCard(props: BrowserTakeoverCardProps) {
                     )}
                   </Show>
                   <Button
-                    variant={props.onOpen ? "secondary" : "default"}
+                    variant={props.onOpen && !live() ? "secondary" : "default"}
                     size="sm"
                     type="button"
                     class="approval-button"
@@ -565,18 +626,18 @@ function BrowserManualTakeoverCard(props: BrowserTakeoverCardProps) {
                     disabled={Boolean(submitting())}
                     onClick={() => void submit("complete")}
                   >
-                    {t("prompt.browser.done")}
+                    {live() ? t("prompt.browser.handBack", { name: props.agentName }) : t("prompt.browser.done")}
                   </Button>
                   {/* The page is where the person does the step, so opening it is the card's first action. */}
-                  <Show when={props.onOpen}>
-                    {(open) => (
+                  <Show when={props.onOpen && !live()}>
+                    {(_open) => (
                       <Button
                         variant="default"
                         size="sm"
                         type="button"
                         class="approval-button"
                         disabled={Boolean(submitting())}
-                        onClick={() => open()()}
+                        onClick={takeOver}
                       >
                         <MousePointer2 data-icon="inline-start" aria-hidden="true" />
                         {t("prompt.browser.takeOver")}

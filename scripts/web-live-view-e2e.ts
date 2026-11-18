@@ -292,13 +292,15 @@ async function open(browser: Browser, origin: string, viewport: ViewportName) {
 
 const button = (scope: Page | Locator, name: string | RegExp) =>
   scope.getByRole("button", { name, exact: typeof name === "string" });
-const takeoverCard = (page: Page) => page.getByRole("region", { name: english("prompt.browser.label.pending") });
+const takeoverCard = (page: Page) =>
+  page.getByRole("region", { name: english("prompt.browser.label.pending"), exact: true });
 
 const liveView = (page: Page) => page.getByRole("img", { name: english("browser.liveView.label") }).last();
 
 /** Where a point of the agent's page is on the client's screen: the live view letterboxes the frame. */
 async function onScreen(page: Page, tab: Page, selector: string, offset = { x: 0.5, y: 0.5 }) {
   const target = await tab.locator(selector).boundingBox();
+  await liveView(page).evaluate((element) => element.scrollIntoView({ block: "center" }));
   const view = await liveView(page).boundingBox();
   assert.ok(target && view, `No box for ${selector} or for the live view.`);
   const scale = Math.min(view.width / TAB_SIZE.width, view.height / TAB_SIZE.height);
@@ -450,12 +452,28 @@ async function phone(browser: Browser, origin: string): Promise<void> {
 async function desktop(browser: Browser, origin: string): Promise<void> {
   const viewport = "desktop";
   const { page, host, tab, context, tabContext } = await open(browser, origin, viewport);
+  const card = () => takeoverCard(page);
 
-  await step(page, viewport, "Take over shows the agent's page live", async () => {
-    await load(page, origin, DM_PATH, takeoverCard(page));
+  await step(page, viewport, "the card says the agent waits for the reader", async () => {
+    await load(page, origin, DM_PATH, card());
+    await card()
+      .getByRole("status")
+      .filter({ hasText: english("prompt.browser.waitingForYou") })
+      .waitFor();
     await shot(page, "desktop-card");
-    await button(page, english("prompt.browser.takeOver")).click();
+  });
+
+  await step(page, viewport, "Take over shows the agent's page live in the card", async () => {
+    await button(card(), english("prompt.browser.takeOver")).click();
+    await liveView(page).waitFor({ timeout: UI_WAIT_MS });
+    assert.equal(
+      await card()
+        .getByRole("img", { name: english("browser.liveView.label") })
+        .count(),
+      1,
+    );
     await viewing(page, host);
+    await card().scrollIntoViewIfNeeded();
     await shot(page, "desktop-live");
   });
 
@@ -481,9 +499,26 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
     await waitForTab(tab, scrolledPast, scrollTop, "100", "The wheel scrolls the page");
   });
 
-  await step(page, viewport, "I'm done hands the page back once", async () => {
-    await button(page, english("prompt.browser.done")).last().click();
+  await step(page, viewport, "Expand opens the full view, and the card's view gives it the stream", async () => {
+    const starts = host.starts;
+    await button(card(), english("prompt.browser.expand")).click();
+    await page.waitForFunction((count) => count > 0, starts, { timeout: UI_WAIT_MS });
+    await page
+      .getByRole("tabpanel")
+      .getByRole("img", { name: english("browser.liveView.label") })
+      .waitFor({ timeout: UI_WAIT_MS });
+    assert.ok(host.starts > starts, "The full view starts its own stream.");
+    await shot(page, "desktop-expanded");
+  });
+
+  await step(page, viewport, "Hand back ends the takeover once", async () => {
+    await page.keyboard.press("Escape");
+    // The full view's dock and the card both answer; two presses are one answer.
+    const done = button(page, english("prompt.browser.done")).last();
+    await done.click();
+    await done.click({ timeout: 2_000 }).catch(() => undefined);
     await handedBack(page);
+    await card().waitFor({ state: "detached", timeout: UI_WAIT_MS });
     await shot(page, "desktop-done");
   });
   await context.close();

@@ -812,3 +812,21 @@
   padding: var(--openbot-space-2) var(--openbot-space-3);
   color: var(--openbot-warning-text);
 }
+
+/* The page live in the card. It takes the page's shape, and is never taller than most of the window. */
+.browser-takeover-live {
+  position: relative;
+  width: min(100%, calc(55vh * var(--browser-frame-width) / var(--browser-frame-height)));
+  margin: 0 auto;
+  aspect-ratio: var(--browser-frame-width) / var(--browser-frame-height);
+  background: var(--openbot-bg-control);
+}
+
+.browser-takeover-preview-bar .ui-icon-button {
+  flex: 0 0 auto;
+}
+
+/* A live page needs more room than a preview. */
+.browser-takeover-card:has(.browser-takeover-live) {
+  width: min(880px, 100%);
+}

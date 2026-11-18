@@ -41,7 +41,7 @@ import { createMemo, createSignal, createStore, For, Loading, lazy, onCleanup, S
 import { useShowAgentSteps } from "../../agent-steps-preference";
 import { planItems, planTitle } from "../../app-message-projection";
 import { currentDevicePlatform, deviceSendShortcut } from "../../send-shortcut-preference";
-import { remoteRoutineRecovery } from "../servers/server-capabilities";
+import { remoteRoutineRecovery, serverSupportsCapability } from "../servers/server-capabilities";
 import { speechModelReady } from "../speech/speech-model";
 import { recordingGone, speechReading, spokenReply } from "../speech/speech-playback";
 import {
@@ -57,6 +57,7 @@ import { groupedMessageIds } from "./agent-message-timeline";
 import { continuesSenderRun } from "./chat-grouping";
 import { isChatVisualAppShortcut } from "./chat-visual-shortcuts";
 import { chatVisualPageUrl } from "./chat-visual-url";
+import { conversationPort } from "./conversation-port";
 import { conversationRoutinesApi, conversationRuntime } from "./conversation-runtime";
 import { useConversationViewScope } from "./conversation-scope";
 import type { ConversationProps } from "./conversation-types";
@@ -1750,6 +1751,18 @@ export function ConversationTimeline() {
                       : t("prompt.browser.openUnavailable", {
                           name: interactionAgentName() ?? t("chat.message.agentFallback"),
                         })
+                  }
+                  liveView={
+                    // A host's tab is drawn from its live view. A tab on this computer is a native view.
+                    canOpenBrowserTakeoverTab() &&
+                    props.server?.kind === "remote" &&
+                    serverSupportsCapability(props.server, "browser-view")
+                      ? {
+                          runtime: props.browserRuntime ?? conversationPort().browser,
+                          clipboard: serverSupportsCapability(props.server, "browser-view-clipboard"),
+                          online: !props.browserVisibilitySuspended,
+                        }
+                      : undefined
                   }
                   onComplete={() => respondToBrowserTakeover("complete")}
                   onCancel={() => respondToBrowserTakeover("cancel")}

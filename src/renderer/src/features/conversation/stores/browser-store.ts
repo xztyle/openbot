@@ -205,9 +205,24 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     const resolution = untrack(browserTakeoverResolution);
     if (resolution && resolution.messageMarker !== messageMarker) setBrowserTakeoverResolution(null);
   });
-  const respondToBrowserTakeover = async (decision: "complete" | "cancel") => {
+  /**
+   * The answer on its way for a request. The card, the full view's dock and the Done of a channel
+   * card can all answer, and the agent's waiting tool call takes one answer: a second press while
+   * the first is on its way gets the first one's result.
+   */
+  let answering: { requestId: string; result: Promise<boolean> } | null = null;
+  const respondToBrowserTakeover = (decision: "complete" | "cancel"): Promise<boolean> => {
     const request = deps.props.browserTakeover;
-    if (!request) return false;
+    if (!request) return Promise.resolve(false);
+    const requestId = String(request.requestId);
+    if (answering?.requestId === requestId) return answering.result;
+    const result = answerBrowserTakeover(decision).finally(() => {
+      if (answering?.result === result) answering = null;
+    });
+    answering = { requestId, result };
+    return result;
+  };
+  const answerBrowserTakeover = async (decision: "complete" | "cancel") => {
     const resolution = {
       decision,
       tab: browserTakeoverTab(),

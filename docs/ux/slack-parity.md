@@ -397,6 +397,12 @@ Rank = impact first, then lower effort, then how many other items it unblocks. "
 | 29 | Starred + custom sidebar sections | B2 | M | M | P3 |
 | 30 | Saved for later and Pins (backend + menu + views) | M6, M5 | L | M | P0 then P1 + P6 |
 
+Status after the QA pass (2026-11-18, `stream/qa-ui`): C10 ⌘J, D9 "Replied to a thread", N4 tab title with
+the place ("#general - Market - OpenBot"), B8 Mark as read in the row menu, and a filter (All, Channels, DMs)
+and sort (sidebar, newest, oldest) for C8 Unreads are done; E2E `scripts/workspace-seams-e2e.ts`. A2 view
+history stays open on the desktop: the web client already gets Back and Forward for views from the address
+(stream/deeplinks), and the desktop history (`src/renderer/src/navigation.tsx`) records chats only.
+
 Below the line (do later or on request): D2 floating date pill, C2/C3 divider details, E3 delete preview, F2-F4 reaction details, G3 code-fence Enter, G4 quote and code block, G11 drop overlay, L3-L6, O1 away, P3 edge swipe, P5 Catch up cards, A2 view history, A3 space keys, D14 jumbo emoji, J3 rename group DM, R6 suggested prompts, G8 draft sync, G10 schedule, N5 push hold.
 
 ---

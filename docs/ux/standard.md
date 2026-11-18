@@ -199,3 +199,4 @@ Ranked by impact. "Done" items are on `stream/uxflows`.
 | 10 | Spanish wording: Quitar for Remove, Eliminar for Delete, Salir de for Leave; one "Deleting…", "Removing…" and "Undo" key | Done |
 | 11 | One row component for workspace lists (`WorkspaceListRow` in Threads, Activity, Between agents, Space agents, Secrets) | Done |
 | 12 | Unreads, Later, DMs, message search (top bar), Jump to frecency, Browse filters, shortcuts sheet (slack-parity P2, P4) | Done on `stream/p24`; E2E `scripts/workspace-inbox-e2e.ts` |
+| 13 | QA pass of the merged streams (`stream/qa-ui`): one DMs list on a computer and a phone (the phone's DMs tab is the DMs view; Jump to DMs or Activity opens the tab), Mark as read and "Conversation details" in row menus, the bell as a sheet on a phone, Back alone on a phone pane, field text size in dialogs and the sidebar filter, toasts clear of the safe areas | Done; E2E `scripts/workspace-seams-e2e.ts` |

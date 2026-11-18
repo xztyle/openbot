@@ -109,19 +109,25 @@ function takeBillingReturn(): BillingReturn | null {
   return kind === "license" || kind === "portal" ? { outcome, kind } : { outcome };
 }
 
-/** The query fields of a push notification link, `/app?host=<id>&chat=<id>`. The service worker builds them. */
-const CHAT_LINK_FIELDS = { host: "host", chat: "chat" } as const;
+/**
+ * The query fields of a push notification link, `/app?host=<id>&chat=<id>[&thread=<id>]`. The service
+ * worker builds them. The thread is the agent's: the channel that holds it opens instead of the chat.
+ */
+const CHAT_LINK_FIELDS = { host: "host", chat: "chat", thread: "thread" } as const;
 
 /** The chat that a push notification opened the app on. The query is removed after it is read. */
-function takeChatLink(): { hostId: string; agentId: string } | null {
+function takeChatLink(): { hostId: string; agentId: string; threadId: string | null } | null {
   const url = new URL(window.location.href);
   const hostId = url.searchParams.get(CHAT_LINK_FIELDS.host);
   const agentId = url.searchParams.get(CHAT_LINK_FIELDS.chat);
+  const threadId = url.searchParams.get(CHAT_LINK_FIELDS.thread);
   if (hostId === null && agentId === null) return null;
   url.searchParams.delete(CHAT_LINK_FIELDS.host);
   url.searchParams.delete(CHAT_LINK_FIELDS.chat);
+  url.searchParams.delete(CHAT_LINK_FIELDS.thread);
   window.history.replaceState(window.history.state, "", url);
-  return hostId && agentId && hostId.length <= 128 && agentId.length <= 128 ? { hostId, agentId } : null;
+  if (!hostId || !agentId || hostId.length > 128 || agentId.length > 128) return null;
+  return { hostId, agentId, threadId: threadId && threadId.length <= 128 ? threadId : null };
 }
 
 export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {

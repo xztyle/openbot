@@ -27,11 +27,18 @@ self.addEventListener("pushsubscriptionchange", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const data = event.notification.data ?? {};
-  event.waitUntil(openChat(data.hostId, data.agentId));
+  event.waitUntil(openChat(data));
 });
 
 function text(value, limit) {
   return typeof value === "string" ? value.slice(0, limit) : "";
+}
+
+// The address of the place the event is about, such as `/app/s/<host>/<space>/c/<channel>/t/<root>/m/<message>`.
+// Only a path of the web client: a push names no other page.
+function appPath(value) {
+  const path = text(value, 1024);
+  return /^\/app(?:\/[\w%.~-]+)*$/u.test(path) ? path : "";
 }
 
 async function showNotification(event) {
@@ -53,7 +60,12 @@ async function showNotification(event) {
     tag,
     renotify: !watched,
     silent: watched,
-    data: { hostId: text(message.hostId, 128), agentId },
+    data: {
+      hostId: text(message.hostId, 128),
+      agentId,
+      threadId: text(message.threadId, 128),
+      path: appPath(message.path),
+    },
   });
   if (!watched) return;
   for (const notification of await self.registration.getNotifications({ tag })) notification.close();
@@ -64,19 +76,30 @@ async function tellPages() {
   for (const client of windows) client.postMessage({ type: "openbot:push-changed", scope: self.registration.scope });
 }
 
-async function openChat(hostId, agentId) {
+// Opens the place of the event: the address it names, else the agent's chat, or the channel of the agent's
+// thread (`threadId`), which the page finds in its channel list.
+async function openChat(data) {
+  const hostId = text(data.hostId, 128);
+  const agentId = text(data.agentId, 128);
+  const threadId = text(data.threadId, 128);
+  const path = appPath(data.path);
   const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
   // The web client shows its place in the path, `/app/<space>/c/<channel>`, so any page under /app is one.
   const page = windows.find((client) => /^\/app(?:\/.*)?$/u.test(new URL(client.url).pathname));
   if (page) {
     await page.focus();
-    page.postMessage({ type: "openbot:open-chat", hostId, agentId });
+    page.postMessage({ type: "openbot:open-chat", hostId, agentId, threadId, path });
+    return;
+  }
+  if (path) {
+    await self.clients.openWindow(new URL(path, self.location.origin).href);
     return;
   }
   const url = new URL("/app", self.location.origin);
   if (hostId && agentId) {
     url.searchParams.set("host", hostId);
     url.searchParams.set("chat", agentId);
+    if (threadId) url.searchParams.set("thread", threadId);
   }
   await self.clients.openWindow(url.href);
 }

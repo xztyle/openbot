@@ -43,12 +43,22 @@ export function createWebNotificationRouting(options: {
   channelForThread: (hostId: string, threadId: string) => AgentNotificationChannel | null;
   /** True when the host sends push notifications to this browser for the host. The page then shows none of its own. */
   pushes?: (hostId: string) => boolean;
+  /**
+   * Whether the reader muted a conversation of the open host: a channel id, or `agent:<id>` for the
+   * DM with an agent. A muted conversation tells no new reply; a question or an approval still tells.
+   */
+  conversationMuted?: (hostId: string, conversationId: string) => boolean;
 }) {
+  const quietConversation = (hostId: string, conversationId: string) =>
+    options.conversationMuted?.(hostId, conversationId) ?? false;
   const { workspace, notifications } = options;
   function notify(hostId: string, event: AgentEvent, agents: ClientAgentSummary[]): void {
     withdrawWebAgentNotification(hostId, event);
     const { muted, level } = untrack(() => notifications.state(hostId));
     if (muted || level === "nothing") return;
+    // A reply in a muted conversation is quiet, as in Slack. The channel of the agent's thread is unknown
+    // for a reply, so the DM's mute decides.
+    if (event.type === "turn-completed" && quietConversation(hostId, `agent:${event.agentId}`)) return;
     if (event.type === "turn-completed" && level === "all") playCompletionSoundForAgentEvent(event, agents);
     // The push message already tells the user, also on a phone where a page cannot show a notification.
     if (options.pushes?.(hostId)) return;
@@ -88,7 +98,11 @@ export function createWebNotificationRouting(options: {
       // As for an agent reply, the web client shows no preview.
       redact: null,
     });
-    showWebChannelNotifications({ hostId, replies, onOpen: (channelId) => options.onOpenChannel(hostId, channelId) });
+    showWebChannelNotifications({
+      hostId,
+      replies: replies.filter((reply) => !quietConversation(hostId, reply.channelId)),
+      onOpen: (channelId) => options.onOpenChannel(hostId, channelId),
+    });
   }
   function setMuted(hostId: string, muted: boolean, durationMs?: number) {
     if (!muted) requestWebNotificationPermission(true);

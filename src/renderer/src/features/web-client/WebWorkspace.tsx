@@ -337,7 +337,7 @@ type WebWorkspaceProps = {
   hostingReturn?: AddServerResume | null;
   onHostingReturnConsumed?: () => void;
   /** The chat that a notification link named, `/app?host=<id>&chat=<id>`. It opens once the host is connected. */
-  chatLink?: { hostId: string; agentId: string } | null;
+  chatLink?: { hostId: string; agentId: string; threadId?: string | null } | null;
   onChatLinkConsumed?: () => void;
   /** The interface language this browser keeps. Account settings change it. */
   language: AppLanguage;
@@ -732,7 +732,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     });
   }
   const usageCalls = createWebUsagePort(workspace, hostRequest, servers);
-  async function openNotified(hostId: string, agentId: string) {
+  /**
+   * Opens the agent of a notification. A notification about the agent's thread in a channel, such as a
+   * question there, opens that channel, as the in-page notification does.
+   */
+  async function openNotified(hostId: string, agentId: string, threadId: string | null = null) {
     setMobilePane("conversation");
     if (hostId !== workspace.state.host?.hostId) {
       const host = workspace.state.hosts.find((item) => item.hostId === hostId);
@@ -741,8 +745,27 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       chatHistory.userOpens({ hostId, kind: "agent", id: agentId });
       await workspace.connect(host);
     }
-    if (workspace.state.host?.hostId === hostId && workspace.state.agents.some((agent) => agent.id === agentId))
-      await select(agentId);
+    if (workspace.state.host?.hostId !== hostId) return;
+    const channel = threadId
+      ? channelForThread(
+          untrack(() => channels.state.channels),
+          threadId,
+        )
+      : null;
+    if (channel) {
+      await openNotifiedChannel(hostId, channel.id);
+      return;
+    }
+    if (workspace.state.agents.some((agent) => agent.id === agentId)) await select(agentId);
+  }
+  /** Opens the place that a notification names by its address, such as a message in a thread. */
+  function openNotifiedAddress(path: string): boolean {
+    const address = new URL(path, window.location.origin);
+    const target = parseWebLocation(address.pathname, address.search);
+    if (!target || (!target.hostId && !target.space)) return false;
+    setMobilePane("conversation");
+    locationHistory.go(target);
+    return true;
   }
   // The host sends push notifications to this browser when the user turned them on for that host.
   const push = createWebPush({
@@ -753,7 +776,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     request: () => workspace.runtime.admin?.request,
     notificationState: notifications.state,
     locale: () => resolveLocale(props.language, navigator.language),
-    onOpenChat: (hostId, agentId) => void openNotified(hostId, agentId),
+    onOpenChat: (hostId, agentId, link) => {
+      if (link.path && openNotifiedAddress(link.path)) return;
+      void openNotified(hostId, agentId, link.threadId);
+    },
   });
   onSettled(() => push.listen());
   // The host knows only what this browser told it, so a new level, a mute or a language goes to it.
@@ -785,7 +811,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       if (!link || !hostsLoaded) return;
       if (hostId === link.hostId && loaded) {
         props.onChatLinkConsumed?.();
-        void openNotified(link.hostId, link.agentId);
+        void openNotified(link.hostId, link.agentId, link.threadId ?? null);
       } else if (hostId !== link.hostId) {
         if (workspace.state.hosts.some((host) => host.hostId === link.hostId)) selectServer(link.hostId);
         else props.onChatLinkConsumed?.();
@@ -809,6 +835,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     onOpen: (hostId, agentId) => void openNotified(hostId, agentId),
     pushes: push.pushes,
     onOpenChannel: (hostId, channelId) => void openNotifiedChannel(hostId, channelId),
+    // The sidebar mutes are the open host's; another host's are not loaded.
+    conversationMuted: (hostId, conversationId) =>
+      workspaceOn() && hostId === workspace.state.host?.hostId && workspaceController.isMuted(conversationId),
     // Only the open host has a channel list. A prompt of another host names the agent only.
     channelForThread: (hostId, threadId) =>
       hostId === workspace.state.host?.hostId

@@ -118,7 +118,11 @@ export function createWebPush(options: {
   /** The locale of the interface, such as `de`. The host writes the notification in it. */
   locale: () => string;
   /** The user tapped a notification. */
-  onOpenChat: (hostId: string, agentId: string) => void;
+  /**
+   * Opens what a tapped notification is about: the place of `path` when the host named one, else the
+   * channel that holds the agent's thread, else the agent's chat.
+   */
+  onOpenChat: (hostId: string, agentId: string, link: { threadId: string | null; path: string | null }) => void;
 }) {
   const [enabledHosts, setEnabledHosts] = createSignal(readEnabled(options.accountId));
   const [busy, setBusy] = createSignal(false);
@@ -247,7 +251,10 @@ export function createWebPush(options: {
         isString(data.hostId) &&
         isString(data.agentId)
       )
-        options.onOpenChat(data.hostId, data.agentId);
+        options.onOpenChat(data.hostId, data.agentId, {
+          threadId: isString(data.threadId) && data.threadId ? data.threadId : null,
+          path: isString(data.path) && data.path ? data.path : null,
+        });
       // The host holds the old address. The same call as at each connect gives it the new one.
       else if (isDynamicRecord(data) && data.type === WEB_PUSH_CHANGED_MESSAGE) void sync();
     };

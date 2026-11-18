@@ -16,7 +16,6 @@ export const messages = {
   "common.back": "戻る",
   "common.continue": "続行",
   "common.add": "追加",
-  "common.create": "作成",
   "common.open": "開く",
   "common.search": "検索",
   "common.loading": "読み込み中…",

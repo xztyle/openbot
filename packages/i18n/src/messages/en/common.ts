@@ -22,7 +22,6 @@ export const messages = defineMessages("common", {
   "common.step": "Step {current} of {total}",
   "common.continue": "Continue",
   "common.add": "Add",
-  "common.create": "Create",
   "common.open": "Open",
   "common.search": "Search",
   "common.loading": "Loading…",

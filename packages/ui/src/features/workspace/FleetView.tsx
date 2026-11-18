@@ -2,13 +2,14 @@ import type { JSX } from "@solidjs/web";
 import { createSignal, For, Show } from "solid-js";
 import { Button, IconButton } from "../../button";
 import { Input } from "../../form";
-import { Activity, LayoutDashboard, List, MessageSquare, Search, Send, Settings } from "../../icons";
+import { Activity, Bot, LayoutDashboard, List, MessageSquare, Search, Settings } from "../../icons";
 import { SlidingTabs } from "../../sliding-tabs";
 import { useText } from "../../text";
 import { cx } from "../../utils";
+import { EmptyState } from "../../view-state";
 import { AgentStatusLine } from "./MemberProfileCard";
 import { AiBadge, MemberAvatar } from "./WorkspaceAvatar";
-import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
+import { PaneHeaderAction, WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { useCost, useWorkspaceDuration } from "./workspace-format";
 import type { AgentWorkStatus, WorkspaceMember } from "./workspace-types";
 
@@ -27,7 +28,6 @@ type FleetFilter = "all" | AgentWorkStatus["state"];
 export interface FleetViewProps {
   agents: readonly FleetAgent[];
   onMessage?: ((agentId: string) => void) | undefined;
-  onAssign?: ((agentId: string) => void) | undefined;
   onSettings?: ((agentId: string) => void) | undefined;
   /** Adds an agent to the workspace. */
   onAddAgent?: (() => void) | undefined;
@@ -68,11 +68,7 @@ export function FleetView(props: FleetViewProps): JSX.Element {
         onBack={props.onBack}
         actions={
           <Show when={props.onAddAgent}>
-            {(add) => (
-              <Button size="xs" onClick={() => add()()}>
-                {t("workspace.fleet.addAgent")}
-              </Button>
-            )}
+            {(add) => <PaneHeaderAction label={t("workspace.fleet.addAgent")} onClick={() => add()()} />}
           </Show>
         }
       />
@@ -128,7 +124,45 @@ export function FleetView(props: FleetViewProps): JSX.Element {
         </div>
       </div>
       <div class="ws-view-scroll">
-        <Show when={shown().length > 0} fallback={<p class="ws-view-empty">{t("workspace.fleet.empty")}</p>}>
+        <Show
+          when={shown().length > 0}
+          fallback={
+            <Show
+              when={props.agents.length > 0}
+              fallback={
+                <EmptyState
+                  icon={<Bot />}
+                  title={t("workspace.fleet.noAgents")}
+                  description={t("workspace.fleet.noAgentsHint")}
+                  action={
+                    <Show when={props.onAddAgent}>
+                      {(add) => <PaneHeaderAction label={t("workspace.fleet.addAgent")} onClick={() => add()()} />}
+                    </Show>
+                  }
+                />
+              }
+            >
+              <EmptyState
+                size="compact"
+                icon={<Search />}
+                title={t("workspace.view.noMatch")}
+                description={t("workspace.view.noMatchHint")}
+                action={
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setFilter("all");
+                      setQuery("");
+                    }}
+                  >
+                    {t("workspace.view.clearFilters")}
+                  </Button>
+                }
+              />
+            </Show>
+          }
+        >
           <ul class="ws-fleet-list" data-layout={layout()}>
             <For each={shown()} keyed={(agent) => agent.member.id}>
               {(agent) => (
@@ -168,12 +202,6 @@ export function FleetView(props: FleetViewProps): JSX.Element {
                       <Button variant="secondary" size="xs" onClick={() => props.onMessage?.(agent().member.id)}>
                         <MessageSquare aria-hidden="true" />
                         {t("workspace.fleet.message")}
-                      </Button>
-                    </Show>
-                    <Show when={props.onAssign}>
-                      <Button variant="ghost" size="xs" onClick={() => props.onAssign?.(agent().member.id)}>
-                        <Send aria-hidden="true" />
-                        {t("workspace.fleet.assign")}
                       </Button>
                     </Show>
                     <Show when={props.onSettings}>

@@ -539,9 +539,16 @@ export function createChannelsController(env: ChannelsEnvironment) {
     return refresh(undefined, live);
   }
 
-  /** Reads each unread channel's latest page for its boundary, since a summary has no sequence. */
-  function markAllRead(): Promise<boolean> {
-    const unread = state.channels.filter((channel) => channel.unreadCount > 0).map((channel) => channel.id);
+  /**
+   * Reads each unread channel's latest page for its boundary, since a summary has no sequence.
+   * `channelIds` limits it to those channels, as Activity's Mark all as read does: they are marked
+   * read even when only a thread reply in them is unread.
+   */
+  function markAllRead(channelIds?: readonly string[]): Promise<boolean> {
+    const known = new Set(state.channels.map((channel) => channel.id));
+    const unread = channelIds
+      ? channelIds.filter((channelId) => known.has(channelId))
+      : state.channels.filter((channel) => channel.unreadCount > 0).map((channel) => channel.id);
     const account = env.scopeKey();
     return perform(async () => {
       const results = await Promise.allSettled(

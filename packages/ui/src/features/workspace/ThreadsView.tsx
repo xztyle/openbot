@@ -1,9 +1,10 @@
 import type { JSX } from "@solidjs/web";
-import { For, Show } from "solid-js";
+import { For, Match, Show, Switch } from "solid-js";
 import { Button } from "../../button";
 import { Hash, Lock, MessageSquareText } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
+import { EmptyState, ErrorState, LoadingState } from "../../view-state";
 import { messagePlainText } from "./MessageRow";
 import { AvatarStack, MemberAvatar, MemberName } from "./WorkspaceAvatar";
 import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
@@ -26,6 +27,11 @@ export interface ThreadListItem {
 
 export interface ThreadsViewProps {
   threads: readonly ThreadListItem[];
+  /** The first read runs: placeholder rows show. */
+  loading?: boolean | undefined;
+  /** The list could not load and nothing is shown yet. */
+  failed?: boolean | undefined;
+  onRetry?: (() => void) | undefined;
   onOpen: (threadId: string) => void;
   onBack?: (() => void) | undefined;
   class?: string;
@@ -43,7 +49,26 @@ export function ThreadsView(props: ThreadsViewProps): JSX.Element {
         onBack={props.onBack}
       />
       <div class="ws-view-scroll">
-        <Show when={props.threads.length > 0} fallback={<p class="ws-view-empty">{t("workspace.threads.empty")}</p>}>
+        <Show
+          when={props.threads.length > 0}
+          fallback={
+            <Switch>
+              <Match when={props.failed}>
+                <ErrorState title={t("workspace.activity.loadFailed")} onRetry={props.onRetry} />
+              </Match>
+              <Match when={props.loading}>
+                <LoadingState label={t("workspace.view.threads")} />
+              </Match>
+              <Match when={true}>
+                <EmptyState
+                  icon={<MessageSquareText />}
+                  title={t("workspace.threads.emptyTitle")}
+                  description={t("workspace.threads.empty")}
+                />
+              </Match>
+            </Switch>
+          }
+        >
           <ul class="ws-feed">
             <For each={props.threads} keyed={(thread) => thread.id}>
               {(thread) => (

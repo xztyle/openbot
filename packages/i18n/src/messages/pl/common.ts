@@ -16,7 +16,6 @@ export const messages = {
   "common.back": "Wstecz",
   "common.continue": "Dalej",
   "common.add": "Dodaj",
-  "common.create": "Utwórz",
   "common.open": "Otwórz",
   "common.search": "Szukaj",
   "common.loading": "Wczytywanie…",

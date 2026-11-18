@@ -18,7 +18,6 @@ export const messages = {
   "common.step": "Paso {current} de {total}",
   "common.continue": "Continuar",
   "common.add": "Añadir",
-  "common.create": "Crear",
   "common.open": "Abrir",
   "common.search": "Buscar",
   "common.loading": "Cargando…",

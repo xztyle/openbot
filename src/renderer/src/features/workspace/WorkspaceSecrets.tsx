@@ -12,10 +12,11 @@ import { memberById } from "./workspace-model";
 
 /** The Secrets view: the agent key store of the host, for its owner and admins. */
 export function WorkspaceSecretsView() {
-  const { t } = useText();
+  const { t, errorMessage } = useText();
   const ws = useWorkspace();
   const agent = () => ws.channels.port().agent;
   const [secrets, setSecrets] = createSignal<WorkspaceSecret[] | null>(null);
+  const [loadError, setLoadError] = createSignal<string | null>(null);
 
   async function refresh() {
     const list = agent().workspaceSecrets;
@@ -25,21 +26,20 @@ export function WorkspaceSecretsView() {
     }
     try {
       setSecrets((await list()).secrets);
-    } catch {
-      setSecrets([]);
-      toast.error(t("workspace.secrets.failed"));
+      setLoadError(null);
+    } catch (error) {
+      // The view says the list did not load, with Retry; an empty list would say there are no keys.
+      if (secrets() === null) setLoadError(errorMessage(error, t("workspace.secrets.loadFailed")));
+      else toast.error(t("workspace.secrets.loadFailed"));
     }
   }
   onSettled(() => void refresh());
 
-  /** Runs a change, says how it went, and reads the list again. A failure is thrown on for the form. */
+  /** Runs a change and reads the list again. A failure is thrown on: the form or the confirm shows it. */
   async function change(run: () => Promise<void>, done: string) {
     try {
       await run();
       toast.success(done);
-    } catch (error) {
-      toast.error(t("workspace.secrets.failed"));
-      throw error;
     } finally {
       void refresh();
     }
@@ -75,6 +75,11 @@ export function WorkspaceSecretsView() {
   return (
     <SecretsView
       groups={groups()}
+      loadError={loadError()}
+      onRetry={() => {
+        setLoadError(null);
+        void refresh();
+      }}
       scopes={scopes()}
       namePattern={WORKSPACE_SECRET_NAME_PATTERN}
       onReveal={reveal}

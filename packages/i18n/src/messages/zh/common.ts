@@ -21,7 +21,6 @@ export const messages = {
   "common.back": "返回",
   "common.continue": "继续",
   "common.add": "添加",
-  "common.create": "创建",
   "common.open": "打开",
   "common.search": "搜索",
   "common.loading": "加载中…",

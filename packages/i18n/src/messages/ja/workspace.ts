@@ -44,7 +44,6 @@ export const messages = {
   "workspace.secrets.updated": "{time} に更新",
   "workspace.secrets.empty":
     "シークレットはまだありません。エージェントがここにキーを保存します。自分で追加することもできます。",
-  "workspace.secrets.loading": "シークレットを読み込み中…",
   "workspace.secrets.saved": "{name} を保存しました",
   "workspace.secrets.deleted": "{name} を削除しました",
   "workspace.secrets.copied": "{name} をコピーしました",
@@ -56,7 +55,6 @@ export const messages = {
   "workspace.agentTalk.all": "すべての会話",
   "workspace.agentTalk.filter": "{name} との会話",
   "workspace.agentTalk.clear": "すべてのエージェントを表示",
-  "workspace.agentTalk.loading": "読み込み中…",
   "workspace.agentTalk.empty": "エージェント間のメッセージはまだありません。",
   "workspace.agentTalk.older": "以前のメッセージを読み込む",
   "workspace.agentTalk.alsoTo": "{names} にも送信",
@@ -288,11 +286,9 @@ export const messages = {
   "workspace.fleet.waiting": { other: "応答待ち {count}" },
   "workspace.fleet.idle": { other: "待機中 {count}" },
   "workspace.fleet.search": "エージェントを検索",
-  "workspace.fleet.empty": "一致するエージェントはありません。",
   "workspace.fleet.costToday": "今日のコスト",
   "workspace.fleet.timeToday": "今日の時間",
   "workspace.fleet.message": "メッセージ",
-  "workspace.fleet.assign": "割り当て",
   "workspace.fleet.settings": "{name} の設定",
 
   "workspace.activity.filter": "アクティビティの種類",

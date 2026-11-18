@@ -16,7 +16,6 @@ export const messages = {
   "common.back": "뒤로",
   "common.continue": "계속",
   "common.add": "추가",
-  "common.create": "만들기",
   "common.open": "열기",
   "common.search": "검색",
   "common.loading": "불러오는 중…",

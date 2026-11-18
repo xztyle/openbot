@@ -12,6 +12,8 @@ interface AgentTalkState {
   messages: WorkspaceAgentExchangeMessage[] | null;
   hasOlder: boolean;
   loading: boolean;
+  /** The pairs could not load and none show. */
+  failed: boolean;
 }
 
 const pairKey = (pair: WorkspaceAgentPair) => pair.agentIds.join("|");
@@ -28,41 +30,40 @@ export function WorkspaceAgentTalkView() {
     messages: null,
     hasOlder: false,
     loading: false,
+    failed: false,
   });
   let listRun = 0;
   let readRun = 0;
 
-  createEffect(
-    () => ws.state.agentTalkAgentId,
-    (agentId) => {
-      const read = ws.channels.port().agent.workspaceAgentPairs;
-      const run = ++listRun;
-      readRun += 1;
-      setState((draft) => {
-        draft.pairs = read ? null : [];
-        draft.selected = null;
-        draft.messages = null;
-      });
-      if (!read) return;
-      read(agentId ? { agentId } : {}).then(
-        (result) => {
-          if (run === listRun)
-            setState((draft) => {
-              // Only the pairs of the space that shows; an agent of another space is not in this list.
-              draft.pairs = result.pairs.filter((pair) =>
-                pair.agentIds.every((agentId) => ws.spaces.agentInCurrent(agentId)),
-              );
-            });
-        },
-        () => {
-          if (run === listRun)
-            setState((draft) => {
-              draft.pairs = [];
-            });
-        },
-      );
-    },
-  );
+  function loadPairs(agentId: string | null) {
+    const read = ws.channels.port().agent.workspaceAgentPairs;
+    const run = ++listRun;
+    readRun += 1;
+    setState((draft) => {
+      draft.pairs = read ? null : [];
+      draft.selected = null;
+      draft.messages = null;
+      draft.failed = false;
+    });
+    if (!read) return;
+    read(agentId ? { agentId } : {}).then(
+      (result) => {
+        if (run === listRun)
+          setState((draft) => {
+            draft.pairs = result.pairs;
+          });
+      },
+      () => {
+        // The view says the list did not load, with Retry; an empty list would say no agent talked.
+        if (run === listRun)
+          setState((draft) => {
+            draft.pairs = [];
+            draft.failed = true;
+          });
+      },
+    );
+  }
+  createEffect(() => ws.state.agentTalkAgentId, loadPairs);
 
   async function load(agentIds: [string, string], before?: number) {
     const read = ws.channels.port().agent.workspaceAgentExchange;
@@ -136,16 +137,20 @@ export function WorkspaceAgentTalkView() {
   }
 
   const member = (id: string) => memberById(ws.directory(), id);
+  // Only the pairs of the space that shows, after every read: an agent of another space is not in
+  // this list. The refresh that follows agent activity used to skip this filter.
   const pairs = createMemo((): AgentTalkPair[] | null =>
     state.pairs
-      ? state.pairs.map((pair) => ({
-          id: pairKey(pair),
-          members: [member(pair.agentIds[0]), member(pair.agentIds[1])],
-          count: pair.count,
-          lastAt: pair.lastAt,
-          lastSenderName: member(pair.lastSenderId).name,
-          lastText: pair.lastText,
-        }))
+      ? state.pairs
+          .filter((pair) => pair.agentIds.every((agentId) => ws.spaces.agentInCurrent(agentId)))
+          .map((pair) => ({
+            id: pairKey(pair),
+            members: [member(pair.agentIds[0]), member(pair.agentIds[1])],
+            count: pair.count,
+            lastAt: pair.lastAt,
+            lastSenderName: member(pair.lastSenderId).name,
+            lastText: pair.lastText,
+          }))
       : null,
   );
   const selected = () => pairs()?.find((pair) => pair.id === state.selected) ?? null;
@@ -177,6 +182,8 @@ export function WorkspaceAgentTalkView() {
       messages={messages()}
       hasOlder={state.hasOlder}
       loading={state.loading}
+      failed={state.failed}
+      onRetry={() => loadPairs(ws.state.agentTalkAgentId)}
       filterName={filterName()}
       onClearFilter={() => ws.openAgentTalk(null)}
       onSelect={(id) => {

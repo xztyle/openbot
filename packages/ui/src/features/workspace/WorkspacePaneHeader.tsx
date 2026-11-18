@@ -1,7 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
-import { IconButton } from "../../button";
-import { ChevronLeft, X } from "../../icons";
+import { Button, IconButton } from "../../button";
+import { ChevronLeft, Plus, X } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 
@@ -49,5 +49,18 @@ export function WorkspacePaneHeader(props: WorkspacePaneHeaderProps): JSX.Elemen
         </Show>
       </div>
     </header>
+  );
+}
+
+/**
+ * The one primary action of a view header, such as "New agent": the default button with a plus.
+ * Other header actions are ghost buttons. See docs/ux/standard.md § 3.
+ */
+export function PaneHeaderAction(props: { label: string; onClick: () => void }): JSX.Element {
+  return (
+    <Button size="sm" onClick={() => props.onClick()}>
+      <Plus aria-hidden="true" />
+      {props.label}
+    </Button>
   );
 }

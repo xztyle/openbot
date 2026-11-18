@@ -80,19 +80,22 @@ function WorkspaceActivityView() {
   return (
     <ActivityView
       items={items()}
+      loading={ws.state.activity.data === null && ws.state.activity.loading}
+      failed={ws.state.activity.data === null && ws.state.activity.failed}
+      onRetry={() => void ws.refreshActivity()}
       onOpen={(id) => {
         const item = ws.state.activity.data?.items.find((candidate) => candidate.id === id);
         if (!item) return;
+        // As in Slack: the exact message opens, scrolled to and marked; a thread reply in its thread.
         if (item.threadRootId) ws.openThread(item.channelId, item.threadRootId);
         else ws.openChannel(item.channelId);
+        ws.focusMessage(item.channelId, item.messageId);
       }}
-      onMarkAllRead={
-        ws.activityCount() > 0
-          ? () => {
-              void ws.channels.markAllRead().then(() => ws.refreshActivity());
-            }
-          : undefined
-      }
+      onMarkAllRead={() => {
+        // Only the conversations of the unread items that the list shows, not every channel.
+        const channelIds = [...new Set(ws.spaceActivity().flatMap((item) => (item.unread ? [item.channelId] : [])))];
+        void ws.channels.markAllRead(channelIds).then(() => ws.refreshActivity());
+      }}
       onBack={() => ws.back()}
     />
   );
@@ -119,6 +122,9 @@ function WorkspaceThreadsView() {
   return (
     <ThreadsView
       threads={threads()}
+      loading={ws.state.activity.data === null && ws.state.activity.loading}
+      failed={ws.state.activity.data === null && ws.state.activity.failed}
+      onRetry={() => void ws.refreshActivity()}
       onOpen={(id) => {
         const [channelId, rootId] = id.split("/");
         if (channelId && rootId) ws.openThread(channelId, rootId);
@@ -134,7 +140,6 @@ function WorkspaceFleetView() {
     <FleetView
       agents={ws.fleet.agents().filter((agent) => ws.spaces.agentInCurrent(agent.member.id))}
       onMessage={(agentId) => ws.openAgent(agentId)}
-      onAssign={(agentId) => ws.openAgent(agentId)}
       onSettings={(agentId) => ws.env.openAgentSettings(agentId)}
       onAddAgent={ws.env.createAgent}
       onBack={() => ws.back()}

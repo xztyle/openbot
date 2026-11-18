@@ -16,7 +16,6 @@ export const messages = {
   "common.back": "Назад",
   "common.continue": "Продолжить",
   "common.add": "Добавить",
-  "common.create": "Создать",
   "common.open": "Открыть",
   "common.search": "Поиск",
   "common.loading": "Загрузка…",

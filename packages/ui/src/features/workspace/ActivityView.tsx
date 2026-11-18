@@ -1,11 +1,12 @@
 import { Dynamic, type JSX } from "@solidjs/web";
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, Match, Show, Switch } from "solid-js";
 import { Button } from "../../button";
 import { AtSign, MessageSquare, MessageSquareReply, SmilePlus } from "../../icons";
 import { SlidingTabs } from "../../sliding-tabs";
-import { Switch } from "../../switch";
+import { Switch as Toggle } from "../../switch";
 import { useText } from "../../text";
 import { cx } from "../../utils";
+import { EmptyState, ErrorState, LoadingState } from "../../view-state";
 import { MemberAvatar, MemberName } from "./WorkspaceAvatar";
 import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { useRecentTime } from "./workspace-format";
@@ -45,6 +46,11 @@ type ActivityFilter = "all" | "mention" | "reply" | "dm";
 
 export interface ActivityViewProps {
   items: readonly ActivityItem[];
+  /** The first read runs: placeholder rows show. */
+  loading?: boolean | undefined;
+  /** The feed could not load and nothing is shown yet. */
+  failed?: boolean | undefined;
+  onRetry?: (() => void) | undefined;
   onOpen: (itemId: string) => void;
   onMarkAllRead?: (() => void) | undefined;
   onBack?: (() => void) | undefined;
@@ -93,7 +99,7 @@ export function ActivityView(props: ActivityViewProps): JSX.Element {
         </SlidingTabs.Root>
         <span class="ws-inline-switch">
           <span aria-hidden="true">{t("workspace.activity.unreadOnly")}</span>
-          <Switch
+          <Toggle
             size="sm"
             aria-label={t("workspace.activity.unreadOnly")}
             checked={unreadOnly()}
@@ -102,7 +108,46 @@ export function ActivityView(props: ActivityViewProps): JSX.Element {
         </span>
       </div>
       <div class="ws-view-scroll">
-        <Show when={shown().length > 0} fallback={<p class="ws-view-empty">{t("workspace.activity.empty")}</p>}>
+        <Show
+          when={shown().length > 0}
+          fallback={
+            <Switch>
+              <Match when={props.items.length > 0}>
+                <EmptyState
+                  size="compact"
+                  icon={<AtSign />}
+                  title={t("workspace.view.noMatch")}
+                  description={t("workspace.view.noMatchHint")}
+                  action={
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setFilter("all");
+                        setUnreadOnly(false);
+                      }}
+                    >
+                      {t("workspace.view.clearFilters")}
+                    </Button>
+                  }
+                />
+              </Match>
+              <Match when={props.failed}>
+                <ErrorState title={t("workspace.activity.loadFailed")} onRetry={props.onRetry} />
+              </Match>
+              <Match when={props.loading}>
+                <LoadingState label={t("workspace.view.activity")} />
+              </Match>
+              <Match when={true}>
+                <EmptyState
+                  icon={<AtSign />}
+                  title={t("workspace.activity.empty")}
+                  description={t("workspace.activity.emptyHint")}
+                />
+              </Match>
+            </Switch>
+          }
+        >
           <ul class="ws-feed">
             <For each={shown()} keyed={(item) => item.id}>
               {(item) => (

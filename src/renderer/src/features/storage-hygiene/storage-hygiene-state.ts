@@ -48,6 +48,9 @@ export function createStorageHygieneState(calls: () => StorageHygieneCalls | und
     } catch {
       if (disposed || current !== request) return;
       setPhase("error");
+      // A failed poll while the host scans or cleans tries again: the last state says the work
+      // runs, and without a new read its progress bar and the disabled Scan again stayed forever.
+      schedule(untrack(data));
     }
   }
 

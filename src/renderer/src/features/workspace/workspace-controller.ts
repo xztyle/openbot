@@ -1026,7 +1026,10 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   const spaceThreads = createMemo(() =>
     (state.activity.data?.threads ?? []).filter((thread) => spaces.channelInCurrent(thread.channelId)),
   );
-  const activityCount = createMemo(() => spaceActivity().filter((item) => item.unread).length);
+  /** The Activity badge: unread mentions, replies and DMs. Reactions never count (Slack). */
+  const activityCount = createMemo(
+    () => spaceActivity().filter((item) => item.unread && item.kind !== "reaction").length,
+  );
   const threadsUnread = createMemo(() => spaceThreads().some((thread) => thread.unreadCount > 0));
 
   const artifactsFallback = createMessageArtifactsSource(directory);

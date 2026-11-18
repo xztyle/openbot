@@ -6,7 +6,7 @@ import { LIGHT, StoryFrame } from "./workspace-story";
 
 const fleet = () => (
   <StoryFrame>
-    <FleetView agents={FLEET} onMessage={fn()} onAssign={fn()} onSettings={fn()} onAddAgent={fn()} />
+    <FleetView agents={FLEET} onMessage={fn()} onSettings={fn()} onAddAgent={fn()} />
   </StoryFrame>
 );
 
@@ -20,3 +20,12 @@ type Story = StoryObj<typeof meta>;
 
 export const Dark: Story = { render: fleet };
 export const Light: Story = { ...LIGHT, render: fleet };
+
+/** A space with no agents: the empty state offers New agent. */
+export const NoAgents: Story = {
+  render: () => (
+    <StoryFrame>
+      <FleetView agents={[]} onMessage={fn()} onSettings={fn()} onAddAgent={fn()} />
+    </StoryFrame>
+  ),
+};

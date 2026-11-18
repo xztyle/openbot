@@ -1,13 +1,14 @@
 import type { JSX } from "@solidjs/web";
 import { createSignal, For, onCleanup, Show } from "solid-js";
-import { Button } from "../../button";
+import { Button, IconButton } from "../../button";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { Input } from "../../form";
-import { Copy, Eye, EyeOff, KeyRound, Pencil, Plus, Trash2 } from "../../icons";
+import { Copy, Eye, EyeOff, KeyRound, Pencil, Trash2 } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
+import { EmptyState, ErrorState, LoadingState } from "../../view-state";
 import { MemberAvatar } from "./WorkspaceAvatar";
-import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
+import { PaneHeaderAction, WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { WorkspaceSelect, type WorkspaceSelectOption } from "./WorkspaceSelect";
 import type { WorkspaceMember } from "./workspace-types";
 
@@ -22,6 +23,10 @@ export interface SecretsGroup {
 export interface SecretsViewProps {
   /** Null while the list loads. */
   groups: readonly SecretsGroup[] | null;
+  /** The list could not load: the reason, in the reader's language. */
+  loadError?: string | null | undefined;
+  /** Reads the list again after a failure. */
+  onRetry?: (() => void) | undefined;
   /** Where a new key can go: the shared keys and each agent. */
   scopes: readonly WorkspaceSelectOption<string>[];
   namePattern: RegExp;
@@ -41,21 +46,27 @@ const REVEAL_MS = 30_000;
  * agent's. Values stay hidden until the person shows or copies one.
  */
 export function SecretsView(props: SecretsViewProps): JSX.Element {
-  const { t, format } = useText();
+  const { t, format, errorMessage } = useText();
   const [adding, setAdding] = createSignal(false);
   const [draft, setDraft] = createSignal({ scope: "shared", name: "", value: "" });
   const [busy, setBusy] = createSignal(false);
   const [removing, setRemoving] = createSignal<{ scope: string; name: string } | null>(null);
+  const [formError, setFormError] = createSignal<string | null>(null);
+  const [removeError, setRemoveError] = createSignal<string | null>(null);
   const nameValid = () => props.namePattern.test(draft().name);
 
   async function add() {
     const current = draft();
     if (!nameValid() || current.value.trim() === "" || busy()) return;
     setBusy(true);
+    setFormError(null);
     try {
       await props.onSave(current);
       setDraft({ scope: current.scope, name: "", value: "" });
       setAdding(false);
+    } catch (error) {
+      // The form stays filled; the reason shows under it.
+      setFormError(errorMessage(error, t("workspace.secrets.failed")));
     } finally {
       setBusy(false);
     }
@@ -70,10 +81,7 @@ export function SecretsView(props: SecretsViewProps): JSX.Element {
         onBack={props.onBack}
         actions={
           <Show when={!adding()}>
-            <Button variant="ghost" size="xs" onClick={() => setAdding(true)}>
-              <Plus aria-hidden="true" />
-              {t("workspace.secrets.add")}
-            </Button>
+            <PaneHeaderAction label={t("workspace.secrets.add")} onClick={() => setAdding(true)} />
           </Show>
         }
       />
@@ -123,8 +131,23 @@ export function SecretsView(props: SecretsViewProps): JSX.Element {
                 onInput={(event) => setDraft((current) => ({ ...current, value: event.currentTarget.value }))}
               />
             </label>
+            <Show when={formError()}>
+              {(message) => (
+                <p class="ws-secrets-error" role="alert">
+                  {message()}
+                </p>
+              )}
+            </Show>
             <div class="ws-secrets-form-actions">
-              <Button variant="ghost" size="sm" type="button" onClick={() => setAdding(false)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                type="button"
+                onClick={() => {
+                  setAdding(false);
+                  setFormError(null);
+                }}
+              >
                 {t("common.cancel")}
               </Button>
               <Button size="sm" type="submit" loading={busy()} disabled={!nameValid() || draft().value.trim() === ""}>
@@ -136,9 +159,27 @@ export function SecretsView(props: SecretsViewProps): JSX.Element {
         <Show
           when={props.groups?.some((group) => group.secrets.length > 0)}
           fallback={
-            <p class="ws-view-empty">
-              {props.groups === null ? t("workspace.secrets.loading") : t("workspace.secrets.empty")}
-            </p>
+            <Show
+              when={!props.loadError}
+              fallback={
+                <ErrorState
+                  title={t("workspace.secrets.loadFailed")}
+                  description={props.loadError}
+                  onRetry={props.onRetry}
+                />
+              }
+            >
+              <Show when={props.groups !== null} fallback={<LoadingState label={t("workspace.view.secrets")} />}>
+                <Show when={!adding()}>
+                  <EmptyState
+                    icon={<KeyRound />}
+                    title={t("workspace.secrets.empty")}
+                    description={t("workspace.secrets.emptyHint")}
+                    action={<PaneHeaderAction label={t("workspace.secrets.add")} onClick={() => setAdding(true)} />}
+                  />
+                </Show>
+              </Show>
+            </Show>
           }
         >
           <For each={(props.groups ?? []).filter((group) => group.secrets.length > 0)} keyed={(group) => group.scope}>
@@ -180,12 +221,21 @@ export function SecretsView(props: SecretsViewProps): JSX.Element {
         title={t("workspace.secrets.deleteTitle", { name: removing()?.name ?? "" })}
         description={t("workspace.secrets.deleteBody")}
         confirmLabel={t("workspace.secrets.delete")}
-        onCancel={() => setRemoving(null)}
+        error={removeError() ?? undefined}
+        onCancel={() => {
+          setRemoving(null);
+          setRemoveError(null);
+        }}
         onConfirm={async () => {
           const target = removing();
           if (!target) return;
-          await props.onRemove(target.scope, target.name).catch(() => undefined);
-          setRemoving(null);
+          setRemoveError(null);
+          try {
+            await props.onRemove(target.scope, target.name);
+            setRemoving(null);
+          } catch (error) {
+            setRemoveError(errorMessage(error, t("workspace.secrets.failed")));
+          }
         }}
       />
     </section>
@@ -201,11 +251,12 @@ function SecretRow(props: {
   onSave: SecretsViewProps["onSave"];
   onRemove: () => void;
 }): JSX.Element {
-  const { t } = useText();
+  const { t, errorMessage } = useText();
   const [value, setValue] = createSignal<string | null>(null);
   const [replacing, setReplacing] = createSignal(false);
   const [replacement, setReplacement] = createSignal("");
   const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => clearTimeout(hideTimer));
 
@@ -222,11 +273,14 @@ function SecretRow(props: {
   async function replace() {
     if (replacement().trim() === "" || busy()) return;
     setBusy(true);
+    setError(null);
     try {
       await props.onSave({ scope: props.scope, name: props.name, value: replacement() });
       setReplacement("");
       setReplacing(false);
       setValue(null);
+    } catch (failure) {
+      setError(errorMessage(failure, t("workspace.secrets.failed")));
     } finally {
       setBusy(false);
     }
@@ -240,35 +294,40 @@ function SecretRow(props: {
           <span class="ws-muted">{t("workspace.secrets.updated", { time: props.updated })}</span>
         </span>
         <span class="ws-secret-actions">
-          <Button
+          <IconButton
             variant="ghost"
-            size="xs"
-            aria-label={value() === null ? t("workspace.secrets.show") : t("workspace.secrets.hide")}
+            size="icon-xs"
+            label={value() === null ? t("workspace.secrets.show") : t("workspace.secrets.hide")}
             onClick={() => void toggle().catch(() => undefined)}
           >
-            <Show when={value() === null} fallback={<EyeOff aria-hidden="true" />}>
-              <Eye aria-hidden="true" />
+            <Show when={value() === null} fallback={<EyeOff />}>
+              <Eye />
             </Show>
-          </Button>
-          <Button
+          </IconButton>
+          <IconButton
             variant="ghost"
-            size="xs"
-            aria-label={t("workspace.secrets.copy")}
+            size="icon-xs"
+            label={t("workspace.secrets.copy")}
             onClick={() => void props.onCopy(props.scope, props.name).catch(() => undefined)}
           >
-            <Copy aria-hidden="true" />
-          </Button>
-          <Button
+            <Copy />
+          </IconButton>
+          <IconButton
             variant="ghost"
-            size="xs"
-            aria-label={t("workspace.secrets.replace")}
+            size="icon-xs"
+            label={t("workspace.secrets.replace")}
             onClick={() => setReplacing((open) => !open)}
           >
-            <Pencil aria-hidden="true" />
-          </Button>
-          <Button variant="ghost" size="xs" aria-label={t("workspace.secrets.delete")} onClick={() => props.onRemove()}>
-            <Trash2 aria-hidden="true" />
-          </Button>
+            <Pencil />
+          </IconButton>
+          <IconButton
+            variant="ghost"
+            size="icon-xs"
+            label={t("workspace.secrets.delete")}
+            onClick={() => props.onRemove()}
+          >
+            <Trash2 />
+          </IconButton>
         </span>
       </div>
       <Show when={value()}>{(shown) => <code class="ws-secret-value">{shown()}</code>}</Show>
@@ -277,7 +336,7 @@ function SecretRow(props: {
           class="ws-secret-replace"
           onSubmit={(event) => {
             event.preventDefault();
-            void replace().catch(() => undefined);
+            void replace();
           }}
         >
           <Input
@@ -293,6 +352,13 @@ function SecretRow(props: {
             {t("workspace.secrets.save")}
           </Button>
         </form>
+        <Show when={error()}>
+          {(message) => (
+            <p class="ws-secrets-error" role="alert">
+              {message()}
+            </p>
+          )}
+        </Show>
       </Show>
     </li>
   );

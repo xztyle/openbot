@@ -16,7 +16,6 @@ export const messages = {
   "common.back": "Geri",
   "common.continue": "Devam et",
   "common.add": "Ekle",
-  "common.create": "Oluştur",
   "common.open": "Aç",
   "common.search": "Ara",
   "common.loading": "Yükleniyor…",

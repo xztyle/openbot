@@ -7,8 +7,9 @@ import { Input } from "../../form";
 import { ArrowLeftRight, Bot, MessageSquare, Search, Trash2 } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
+import { EmptyState } from "../../view-state";
 import { AiBadge, MemberAvatar } from "../workspace/WorkspaceAvatar";
-import { WorkspacePaneHeader } from "../workspace/WorkspacePaneHeader";
+import { PaneHeaderAction, WorkspacePaneHeader } from "../workspace/WorkspacePaneHeader";
 import { useRecentTime } from "../workspace/workspace-format";
 import type { WorkspaceMember } from "../workspace/workspace-types";
 
@@ -78,11 +79,7 @@ export function SpaceAgentsView(props: SpaceAgentsViewProps): JSX.Element {
         onBack={props.onBack}
         actions={
           <Show when={props.onAddAgent}>
-            {(add) => (
-              <Button size="xs" onClick={() => add()()}>
-                {t("workspace.fleet.addAgent")}
-              </Button>
-            )}
+            {(add) => <PaneHeaderAction label={t("workspace.fleet.addAgent")} onClick={() => add()()} />}
           </Show>
         }
       />
@@ -131,7 +128,38 @@ export function SpaceAgentsView(props: SpaceAgentsViewProps): JSX.Element {
         </Show>
       </div>
       <div class="ws-view-scroll">
-        <Show when={shown().length > 0} fallback={<p class="ws-view-empty">{t("workspace.spaces.noAgents")}</p>}>
+        <Show
+          when={shown().length > 0}
+          fallback={
+            <Show
+              when={props.agents.length > 0}
+              fallback={
+                <EmptyState
+                  icon={<Bot />}
+                  title={t("workspace.spaces.noAgents")}
+                  description={t("workspace.fleet.noAgentsHint")}
+                  action={
+                    <Show when={props.onAddAgent}>
+                      {(add) => <PaneHeaderAction label={t("workspace.fleet.addAgent")} onClick={() => add()()} />}
+                    </Show>
+                  }
+                />
+              }
+            >
+              <EmptyState
+                size="compact"
+                icon={<Search />}
+                title={t("workspace.view.noMatch")}
+                description={t("workspace.view.noMatchHint")}
+                action={
+                  <Button variant="secondary" size="sm" onClick={() => setQuery("")}>
+                    {t("workspace.view.clearFilters")}
+                  </Button>
+                }
+              />
+            </Show>
+          }
+        >
           <ul class="space-agents-list">
             <For each={shown()} keyed={(agent) => agent.member.id}>
               {(agent) => (

@@ -28,3 +28,30 @@ export const ActivityDark: Story = { render: activity };
 export const ActivityLight: Story = { ...LIGHT, render: activity };
 export const ThreadsDark: Story = { render: threads };
 export const ThreadsLight: Story = { ...LIGHT, render: threads };
+
+/** The first read runs: placeholder rows, not text. */
+export const ActivityLoading: Story = {
+  render: () => (
+    <StoryFrame width="720px">
+      <ActivityView items={[]} loading onOpen={fn()} />
+    </StoryFrame>
+  ),
+};
+
+/** The read failed: the reason and Retry, never the empty text. */
+export const ActivityFailed: Story = {
+  render: () => (
+    <StoryFrame width="720px">
+      <ActivityView items={[]} failed onRetry={fn()} onOpen={fn()} />
+    </StoryFrame>
+  ),
+};
+
+/** Nothing to show: what fills the view. */
+export const ActivityEmpty: Story = {
+  render: () => (
+    <StoryFrame width="720px">
+      <ActivityView items={[]} onOpen={fn()} />
+    </StoryFrame>
+  ),
+};

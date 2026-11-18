@@ -1,9 +1,10 @@
 import type { JSX } from "@solidjs/web";
-import { createEffect, For, Show } from "solid-js";
+import { createEffect, For, Match, Show, Switch } from "solid-js";
 import { Button } from "../../button";
 import { ArrowLeftRight, ChevronLeft, X } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
+import { EmptyState, ErrorState, LoadingState } from "../../view-state";
 import { MessageRow } from "./MessageRow";
 import { MemberAvatar } from "./WorkspaceAvatar";
 import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
@@ -38,6 +39,9 @@ export interface AgentTalkViewProps {
   messages: readonly AgentTalkMessage[] | null;
   hasOlder: boolean;
   loading: boolean;
+  /** The pairs could not load. */
+  failed?: boolean | undefined;
+  onRetry?: (() => void) | undefined;
   /** The name of the agent that the list shows the pairs of, when one is chosen. */
   filterName?: string | undefined;
   onClearFilter?: (() => void) | undefined;
@@ -124,9 +128,21 @@ export function AgentTalkView(props: AgentTalkViewProps): JSX.Element {
             <Show
               when={props.pairs?.length}
               fallback={
-                <p class="ws-view-empty">
-                  {props.pairs === null ? t("workspace.agentTalk.loading") : t("workspace.agentTalk.empty")}
-                </p>
+                <Switch>
+                  <Match when={props.failed}>
+                    <ErrorState title={t("workspace.agentTalk.loadFailed")} onRetry={props.onRetry} />
+                  </Match>
+                  <Match when={props.pairs === null}>
+                    <LoadingState label={t("workspace.view.agents")} />
+                  </Match>
+                  <Match when={true}>
+                    <EmptyState
+                      icon={<ArrowLeftRight />}
+                      title={t("workspace.agentTalk.empty")}
+                      description={t("workspace.agentTalk.emptyHint")}
+                    />
+                  </Match>
+                </Switch>
               }
             >
               <ul class="ws-agent-talk-list">
@@ -166,7 +182,7 @@ export function AgentTalkView(props: AgentTalkViewProps): JSX.Element {
                 {t("workspace.agentTalk.older")}
               </Button>
             </Show>
-            <Show when={props.messages} fallback={<p class="ws-view-empty">{t("workspace.agentTalk.loading")}</p>}>
+            <Show when={props.messages} fallback={<LoadingState label={t("workspace.view.agents")} />}>
               <Show when={props.messages?.length === 0}>
                 <p class="ws-view-empty">{t("workspace.agentTalk.empty")}</p>
               </Show>

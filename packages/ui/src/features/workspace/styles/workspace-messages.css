@@ -20,6 +20,8 @@
 
 /* The name keeps its width and the topic gives way, as in Slack; a name too long for the row ends in "…". */
 .ws-channel-header-heading {
+  /* A flex box: as a line box, a DM's face and AI badge set a taller line and lifted the name. */
+  display: flex;
   min-width: 0;
   max-width: 100%;
   margin: 0;

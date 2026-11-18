@@ -1050,14 +1050,12 @@ export function createConversationViewScope(props: ConversationProps) {
         lastHandledMessageFocusNonce = request.nonce;
         // The message the user picked replaces the opening at the unread divider.
         unreadOpening = { ...unreadOpening, pending: false };
-        stickToLatest = false;
         // A page that loaded just before the request queued a scroll to the latest message. That scroll
         // must not move the transcript away from the message the user picked, so it is cancelled and
-        // its other updates run here.
-        if (latestScrollFrame !== undefined) cancelAnimationFrame(latestScrollFrame);
-        if (latestScrollSettleFrame !== undefined) cancelAnimationFrame(latestScrollSettleFrame);
-        latestScrollFrame = undefined;
-        latestScrollSettleFrame = undefined;
+        // its other updates run here. The chat holds as after a scroll up: in a short chat the message
+        // can sit near the bottom, and the next resize, such as the message box that grows, followed
+        // the latest message again and moved the picked one out of view.
+        leaveLatest();
         updateVirtualScrollMargin();
         target.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
         // As Slack shows a message that a link or a search opened: it is marked, then the mark fades.

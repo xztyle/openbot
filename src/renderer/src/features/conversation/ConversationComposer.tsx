@@ -188,6 +188,13 @@ export function ConversationComposer() {
   const editorLocked = () =>
     !agentReady() &&
     !((props.agent || channel) && (props.agentStatus.phase === "starting" || props.agentStatus.phase === "restarting"));
+  /*
+   * A memo of the component: the toolbar's buttons read `disabled` in an effect, and the agent's
+   * status behind `editorLocked` makes a memo when it is read. Made there, it halted the chat.
+   */
+  const formatLocked = createMemo(
+    () => submitting() || voicePhase() === "transcribing" || editorLocked() || savePending(),
+  );
   // The mention picker grows out of the same edge as the queue, so only one of them holds it.
   const queueVisible = () => queuePanelVisible() && !pickerOpen();
   const awaitingVisible = () => awaitingReplies().length > 0 && !pickerOpen();
@@ -719,11 +726,7 @@ export function ConversationComposer() {
           }}
         >
           <Show when={workspaceBox?.toolbarShown()}>
-            <ComposerFormatToolbar
-              class="composer-format-toolbar"
-              onFormat={applyFormat}
-              disabled={submitting() || voicePhase() === "transcribing" || editorLocked() || savePending()}
-            />
+            <ComposerFormatToolbar class="composer-format-toolbar" onFormat={applyFormat} disabled={formatLocked()} />
           </Show>
           <Show when={unreferencedDraftAttachments().length > 0}>
             <div class="composer-attachments">

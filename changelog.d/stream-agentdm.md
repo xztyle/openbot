@@ -9,5 +9,7 @@
 ### Fixed
 
 - The "new messages since" pill over a channel is solid. Before, the messages behind it showed through its text.
+- A link to a message of a short agent chat keeps that message in view. Before, the chat could follow the latest message again a moment later.
+- The name in the header of a DM stands on one line with the header's buttons. Before, the face and the AI badge lifted it a few pixels.
 - In an agent's chat, the Delete key on the last tab of the side panel no longer stops the chat. Before, no button of the chat worked after it until you opened the chat again.
 - On a phone, the search filters stand in two columns, so each one shows. Before, they were in one row that scrolled sideways, and the last filters were past the edge of the screen.

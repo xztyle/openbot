@@ -2571,6 +2571,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     throw new Error(t("webClient.error.desktopOnly"));
   };
   /** The agent chat, framed as a DM in the workspace. */
+  // A named function, not a ternary in the prop: the compiler wraps a ternary prop in a memo, and a
+  // control that reads the status in an effect callback (the formatting toolbar's buttons) would make
+  // that memo there and halt the chat.
+  const conversationAgentStatus = () =>
+    workspace.state.status === "online" && workspace.conversation()?.page ? providerAdmin.status() : CONNECTING_STATUS;
   const webConversation = () => (
     <Conversation
       headerActions={
@@ -2594,11 +2599,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         setMarketplaceOpen(true);
       }}
       marketplaceAppAccess={appAccess}
-      agentStatus={
-        workspace.state.status === "online" && workspace.conversation()?.page
-          ? providerAdmin.status()
-          : CONNECTING_STATUS
-      }
+      agentStatus={conversationAgentStatus()}
       accountUsage={accountUsage()}
       // As in the desktop app on a joined host: an owner or admin downloads the host's
       // providers, and Connect runs the provider's route for this tab.

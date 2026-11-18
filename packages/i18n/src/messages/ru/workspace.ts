@@ -300,8 +300,6 @@ export const messages = {
   "workspace.gate.on": "Фильтр вкл.",
   "workspace.gate.off": "Фильтр выкл.",
 
-  "workspace.dialog.back": "Назад",
-  "workspace.dialog.next": "Далее",
   "workspace.create.title": "Создать канал",
   "workspace.create.description": "В каналах ваша команда и агенты работают над одной темой.",
   "workspace.create.name": "Название",
@@ -312,12 +310,10 @@ export const messages = {
   "workspace.create.descriptionPlaceholder": "Чему посвящён этот канал?",
   "workspace.create.private": "Сделать закрытым",
   "workspace.create.privateHint": "Его видят только люди и агенты, которых вы добавите.",
-  "workspace.create.step": "Шаг {step} из {total}",
   "workspace.create.addTitle": "Добавить людей в #{name}",
   "workspace.create.addDescription": "Добавьте коллег и ИИ-агентов. Позже можно добавить ещё.",
   "workspace.create.addLabel": "Добавить людей и агентов",
   "workspace.create.create": "Создать",
-  "workspace.create.skip": "Пропустить",
   "workspace.create.failed": "Не удалось создать канал.",
 
   "workspace.newMessage.title": "Новое сообщение",

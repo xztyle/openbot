@@ -47,6 +47,8 @@ import { useServers } from "./features/servers/servers-context";
 import { useSettings } from "./features/settings/settings-context";
 import { dynamicIslandSettingsShown, navItems } from "./features/settings/settings-tabs";
 import { useUsage } from "./features/usage/usage-context";
+import { useDesktopWorkspaceMode } from "./features/workspace/desktop-workspace";
+import { useWorkspace } from "./features/workspace/workspace-context";
 import { keyboardShortcuts } from "./global-search-shortcut";
 import { useNavigation } from "./navigation";
 import { usePlatform } from "./platform";
@@ -160,6 +162,8 @@ export function useGlobalSearchSources(open: () => boolean) {
   const { t } = useText();
   const platform = usePlatform();
   const channels = useChannels();
+  const workspace = useWorkspace();
+  const workspaceMode = useDesktopWorkspaceMode();
   const { agentList, agentSetupOpen, creatingAgent, openAgentSetup, setSettingsRequest } = useAgents();
   const { selectAgent, globalSearchOpener } = useNavigation();
   const { activeServer } = useServers();
@@ -265,7 +269,9 @@ export function useGlobalSearchSources(open: () => boolean) {
           label: t("sidebar.new.channel"),
           group: "actions",
           icon: Hash,
-          run: channels.create,
+          // The workspace has its own channel form, with people and privacy. The legacy form is for
+          // a server without the workspace.
+          run: () => (workspaceMode.on() ? workspace.openDialog({ kind: "create-channel" }) : channels.create()),
         });
       }
       list.push({

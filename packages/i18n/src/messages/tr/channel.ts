@@ -19,7 +19,6 @@ export const messages = {
   "channel.settings.memoryCount": { one: "{count} kayıtlı", other: "{count} kayıtlı" },
   "channel.settings.routines": "Rutinler",
   "channel.settings.routineCount": { one: "{count} yapılandırılmış", other: "{count} yapılandırılmış" },
-  "channel.create.close": "Yeni kanalı kapat",
   "channel.create.addAgents": "Ajan ekle",
   "channel.create.searchAgents": "Ajanlarda ara",
   "channel.create.noMatches": "Bu aramayla eşleşen ajan yok.",

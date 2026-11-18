@@ -220,8 +220,6 @@ export const messages = {
   "workspace.answerMode.leadHint": "Envoie chaque message au membre le plus adapté.",
   "workspace.gate.on": "Filtre activé",
   "workspace.gate.off": "Filtre désactivé",
-  "workspace.dialog.back": "Retour",
-  "workspace.dialog.next": "Suivant",
   "workspace.create.title": "Créer un canal",
   "workspace.create.description": "Dans un canal, votre équipe et vos agents travaillent sur un sujet.",
   "workspace.create.name": "Nom",
@@ -232,13 +230,11 @@ export const messages = {
   "workspace.create.descriptionPlaceholder": "De quoi parle ce canal ?",
   "workspace.create.private": "Rendre privé",
   "workspace.create.privateHint": "Seuls les personnes et les agents que vous ajoutez peuvent le voir.",
-  "workspace.create.step": "Étape {step} sur {total}",
   "workspace.create.addTitle": "Ajouter des personnes à #{name}",
   "workspace.create.addDescription":
     "Ajoutez des coéquipiers et des agents IA. Vous pourrez en ajouter d’autres plus tard.",
   "workspace.create.addLabel": "Ajouter des personnes et des agents",
   "workspace.create.create": "Créer",
-  "workspace.create.skip": "Ignorer pour l’instant",
   "workspace.create.failed": "Impossible de créer le canal.",
   "workspace.newMessage.title": "Nouveau message",
   "workspace.newMessage.description":

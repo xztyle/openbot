@@ -359,75 +359,7 @@
   white-space: normal;
 }
 
-/* Dialogs --------------------------------------------------------------------------------------- */
-
-.ws-dialog {
-  display: flex;
-  width: min(520px, 100%);
-  max-height: calc(100dvh - 2 * var(--openbot-space-6));
-  flex-direction: column;
-  overflow: hidden;
-  outline: 0;
-  background: var(--openbot-bg-sidebar);
-  color: var(--openbot-text-primary);
-}
-
-.ws-dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--openbot-space-3);
-  padding: var(--openbot-space-4) var(--openbot-space-4) var(--openbot-space-2) var(--openbot-space-6);
-}
-
-.ws-dialog-title {
-  margin: 0;
-  font-size: var(--openbot-text-2xl);
-  font-weight: var(--openbot-weight-bold);
-}
-
-.ws-dialog-body {
-  display: flex;
-  flex: 1 1 auto;
-  min-height: 0;
-  flex-direction: column;
-  gap: var(--openbot-space-4);
-  overflow-y: auto;
-  padding: var(--openbot-space-2) var(--openbot-space-6) var(--openbot-space-4);
-}
-
-.ws-dialog-body .ws-details-setting {
-  border: 1px solid var(--ws-line);
-  border-radius: var(--openbot-radius-lg);
-}
-
-.ws-dialog-description {
-  margin: 0;
-  color: var(--openbot-text-secondary);
-  font-size: var(--openbot-text-md);
-  line-height: var(--openbot-leading-md);
-}
-
-.ws-dialog-error {
-  margin: 0 var(--openbot-space-6);
-  color: var(--openbot-danger-text);
-  font-size: var(--openbot-text-md);
-}
-
-.ws-dialog-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--openbot-space-2);
-  border-top: 1px solid var(--ws-line);
-  padding: var(--openbot-space-3) var(--openbot-space-6);
-}
-
-.ws-dialog-step {
-  margin-right: auto;
-  color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-md);
-}
+/* Dialog fields: the shared FormDialog holds them (packages/ui/src/styles/patterns.css). ----------- */
 
 .ws-name-field {
   position: relative;

@@ -1,16 +1,3 @@
-.channel-dialog-header,
-.channel-editor-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--openbot-space-2);
-}
-.channel-dialog-header h2 {
-  margin: 0;
-  font-size: var(--openbot-text-xl);
-  line-height: var(--openbot-leading-xl);
-  font-weight: var(--openbot-weight-semibold);
-}
 .channel-empty {
   min-height: 100%;
   display: flex;
@@ -39,11 +26,6 @@
    channel form further apart than the agent form. */
 .channel-editor {
   display: block;
-}
-.channel-create-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--openbot-space-3);
 }
 .channel-members {
   display: flex;
@@ -223,10 +205,6 @@
   padding: var(--openbot-space-2) 0;
   cursor: pointer;
 }
-.channel-editor-footer {
-  padding-top: var(--openbot-space-3);
-  border-top: 1px solid var(--openbot-border);
-}
 .channel-search-icon {
   width: var(--openbot-space-4);
   height: var(--openbot-space-4);
@@ -255,50 +233,20 @@
   font-size: var(--openbot-text-md);
 }
 
-.channel-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--openbot-layer-dialog);
-  display: grid;
-  place-items: center;
-  padding: var(--openbot-space-6);
-}
-.channel-create-dialog {
-  /* One inset for the header, the fields, every row and the footer. */
-  --channel-dialog-inset: var(--openbot-space-4);
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: min(440px, 100%);
-  max-height: calc(100dvh - 48px);
-  overflow: hidden;
-  outline: 0;
-  background: var(--openbot-bg-surface);
-}
-.channel-create-dialog .channel-dialog-header {
-  padding: var(--channel-dialog-inset);
-}
-.channel-create-dialog .channel-dialog-header .ui-button svg {
-  width: var(--openbot-space-4);
-  height: var(--openbot-space-4);
-}
-.channel-create-form {
-  min-height: 0;
-  gap: var(--openbot-space-4);
-}
-.channel-create-form > .ui-field,
-.channel-create-form > .ui-alert {
-  margin-inline: var(--channel-dialog-inset);
-}
-.channel-create-form .channel-picker {
+/* The legacy channel form inside the shared `FormDialog`: a name, then the agent list. */
+.channel-create-dialog .channel-picker {
   display: flex;
   flex-direction: column;
   min-height: 0;
   /* No gap: the chips row collapses to zero height, and a gap would leave a strip behind it. */
   gap: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
 }
-.channel-create-form .channel-picker legend {
-  margin-inline: var(--channel-dialog-inset);
+.channel-create-dialog .channel-picker legend {
+  margin-bottom: var(--openbot-space-2);
+  padding: 0;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
@@ -309,76 +257,70 @@
  * focus treatment (a dim border, and the focus ring only for keyboard focus). Only the size is local,
  * to match the name field above it.
  */
-.channel-create-form .channel-member-search {
+.channel-create-dialog .channel-member-search {
   height: var(--openbot-control-lg);
-  margin-inline: var(--channel-dialog-inset);
   padding-inline: var(--openbot-space-3);
   gap: var(--openbot-space-2);
   border-radius: var(--openbot-radius-md);
 }
-.channel-create-form .channel-member-search input::-webkit-search-cancel-button {
+.channel-create-dialog .channel-member-search input::-webkit-search-cancel-button {
   display: none;
 }
-.channel-create-form .channel-picker-list {
+.channel-create-dialog .channel-picker-list {
   min-height: 0;
   /* Taller than the settings picker: picking several agents is the whole job of this dialog. */
   max-height: calc(var(--openbot-space-8) * 11);
   margin-top: var(--openbot-space-2);
   padding: 0;
 }
-.channel-create-form .channel-picker-body {
+.channel-create-dialog .channel-picker-body {
   display: flex;
   flex-direction: column;
 }
-/* Rows run edge to edge: the selected and hover surfaces read as one list, not as cards. The row
-   inside is the shared member row, so the label around it only paints the surface. */
-.channel-create-form .channel-picker-entry {
+/* The label is the row and paints the surface; the shared member row inside paints nothing. */
+.channel-create-dialog .channel-picker-entry {
   display: block;
-  padding: var(--openbot-space-2) var(--channel-dialog-inset);
-  border-radius: 0;
+  padding: var(--openbot-space-2);
+  border-radius: var(--openbot-radius-md);
   transition: background-color var(--openbot-duration-normal) var(--openbot-ease-out);
 }
-/* Here the label is the row and paints the hover, so the shared member row must not paint a second,
-   inset one inside it. In Channel settings the member row is the row, and keeps its own hover. */
-.channel-create-form .channel-picker-entry .channel-member:is(.ui-item) {
+.channel-create-dialog .channel-picker-entry .channel-member:is(.ui-item) {
   min-height: 0;
   padding: 0;
   background: transparent;
 }
 @media (prefers-reduced-motion: reduce) {
-  .channel-create-form .channel-picker-entry {
+  .channel-create-dialog .channel-picker-entry {
     transition: none;
   }
 }
-.channel-create-form .channel-picker-entry:hover {
-  background: var(--openbot-bg-control-hover);
+@media (hover: hover) and (pointer: fine) {
+  .channel-create-dialog .channel-picker-entry:hover {
+    background: var(--openbot-bg-control-hover);
+  }
 }
-.channel-create-form .channel-picker-entry:has(.ui-checkbox-input:checked) {
+.channel-create-dialog .channel-picker-entry:has(.ui-checkbox-input:checked) {
   background: var(--openbot-accent-soft);
 }
 /*
  * One line per agent - name, then the description beside it - so a row costs the height of a
  * single line and more of the list is on screen while several agents are being selected.
  */
-.channel-create-form .channel-picker-entry .ui-item-content {
+.channel-create-dialog .channel-picker-entry .ui-item-content {
   display: flex;
   align-items: baseline;
   gap: var(--openbot-space-2);
   overflow: hidden;
 }
-.channel-create-form .channel-picker-entry .ui-item-title {
+.channel-create-dialog .channel-picker-entry .ui-item-title {
   flex: 0 0 auto;
   font-weight: var(--openbot-weight-regular);
 }
-.channel-create-form .channel-picker-entry .ui-item-description {
+.channel-create-dialog .channel-picker-entry .ui-item-description {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.channel-create-form .channel-editor-footer {
-  justify-content: flex-end;
-  padding: var(--channel-dialog-inset);
 }
 
 /* The header title is the agent chat's `.conversation-title`, so the member stack has to be the
@@ -430,4 +372,3 @@
   line-height: var(--openbot-leading-sm);
   text-align: center;
 }
-

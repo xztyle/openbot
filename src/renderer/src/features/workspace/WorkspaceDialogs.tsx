@@ -1,6 +1,5 @@
 import { channelKind, channelVisibility } from "@openbot/contracts/ipc";
-import { Button, ConfirmDialog, Hash, IconButton, Input, Lock, Search, Textarea, X } from "@openbot/ui";
-import { Dialog } from "@openbot/ui/complex";
+import { Button, ConfirmDialog, FormDialog, Hash, Input, Lock, Search, Textarea } from "@openbot/ui";
 import { CreateChannelDialog } from "@openbot/ui/features/workspace/CreateChannelDialog";
 import { MemberPicker } from "@openbot/ui/features/workspace/MemberPicker";
 import { NewMessageDialog } from "@openbot/ui/features/workspace/NewMessageDialog";
@@ -89,48 +88,19 @@ export function WorkspaceDialogs() {
   );
 }
 
-function DialogFrame(props: {
-  title: string;
-  description?: string;
-  onClose: () => void;
-  children: JSX.Element;
-  footer?: JSX.Element;
-  class?: string;
-}) {
-  const { t } = useText();
+/** A picker dialog: a search and a list that acts on a row, with no footer. */
+function PickerDialog(props: { title: string; onClose: () => void; children: JSX.Element; size?: "md" | "lg" }) {
   return (
-    <Dialog.Root
+    <FormDialog
       open
+      size={props.size}
       onOpenChange={(open) => {
         if (!open) props.onClose();
       }}
+      title={props.title}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay>
-          <Dialog.Content
-            as="section"
-            class={["ws-dialog", props.class]}
-            onOpenAutoFocus={(event: Event) => event.preventDefault()}
-          >
-            <header class="ws-dialog-header">
-              <Dialog.Title class="ws-dialog-title">{props.title}</Dialog.Title>
-              <IconButton variant="ghost" label={t("common.close")} onClick={() => props.onClose()}>
-                <X />
-              </IconButton>
-            </header>
-            <div class="ws-dialog-body">
-              <Show when={props.description}>
-                <Dialog.Description class="ws-dialog-description">{props.description}</Dialog.Description>
-              </Show>
-              {props.children}
-            </div>
-            <Show when={props.footer}>
-              <footer class="ws-dialog-footer">{props.footer}</footer>
-            </Show>
-          </Dialog.Content>
-        </Dialog.Overlay>
-      </Dialog.Portal>
-    </Dialog.Root>
+      {props.children}
+    </FormDialog>
   );
 }
 
@@ -155,7 +125,7 @@ function ChannelBrowser(props: { onClose: () => void }) {
       .sort((left, right) => left.name.localeCompare(right.name));
   });
   return (
-    <DialogFrame title={t("workspace.app.browse.title")} onClose={props.onClose} class="ws-dialog-wide">
+    <PickerDialog title={t("workspace.app.browse.title")} onClose={props.onClose} size="lg">
       <div class="ws-switcher-field">
         <Search aria-hidden="true" />
         <Input
@@ -228,7 +198,7 @@ function ChannelBrowser(props: { onClose: () => void }) {
           {t("workspace.app.browse.create")}
         </Button>
       </footer>
-    </DialogFrame>
+    </PickerDialog>
   );
 }
 
@@ -312,7 +282,7 @@ function QuickSwitcher(props: { onClose: () => void }) {
     else ws.openConversation(entry.id);
   };
   return (
-    <DialogFrame title={t("workspace.app.switcher.title")} onClose={props.onClose} class="ws-switcher">
+    <PickerDialog title={t("workspace.app.switcher.title")} onClose={props.onClose}>
       <div class="ws-switcher-field">
         <Search aria-hidden="true" />
         <Input
@@ -375,7 +345,7 @@ function QuickSwitcher(props: { onClose: () => void }) {
           )}
         </For>
       </ul>
-    </DialogFrame>
+    </PickerDialog>
   );
 }
 
@@ -385,35 +355,33 @@ function EditMetaDialog(props: { channelId: string; field: "topic" | "descriptio
   const channel = () => ws.summary(props.channelId);
   const [value, setValue] = createSignal(channel()?.[props.field] ?? "");
   const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
   const save = async () => {
     setBusy(true);
+    setError(null);
     const done = await ws.setMeta(props.channelId, { [props.field]: value().trim() });
     setBusy(false);
-    if (done) props.onClose();
+    if (done === true) props.onClose();
+    else setError(done);
   };
   return (
-    <DialogFrame
+    <FormDialog
+      open
+      size="sm"
+      onOpenChange={(open) => {
+        if (!open) props.onClose();
+      }}
       title={t(props.field === "topic" ? "workspace.app.meta.topicTitle" : "workspace.app.meta.descriptionTitle")}
       description={t(props.field === "topic" ? "workspace.app.meta.topicHint" : "workspace.app.meta.descriptionHint")}
-      onClose={props.onClose}
-      footer={
-        <>
-          <Button variant="ghost" onClick={() => props.onClose()}>
-            {t("common.cancel")}
-          </Button>
-          <Button loading={busy()} onClick={() => void save()}>
-            {t("common.save")}
-          </Button>
-        </>
-      }
+      error={error()}
+      busy={busy()}
+      submitLabel={t("common.save")}
+      onSubmit={() => void save()}
     >
       <Show
         when={props.field === "topic"}
         fallback={
           <Textarea
-            ref={(element: HTMLTextAreaElement) => {
-              requestAnimationFrame(() => element.focus());
-            }}
             value={value()}
             maxlength={2000}
             rows={5}
@@ -422,20 +390,9 @@ function EditMetaDialog(props: { channelId: string; field: "topic" | "descriptio
           />
         }
       >
-        <Input
-          ref={(element) => {
-            requestAnimationFrame(() => element.focus());
-          }}
-          value={value()}
-          maxlength={250}
-          onValueChange={setValue}
-          aria-label={t("workspace.details.topic")}
-          onKeyDown={(event: KeyboardEvent) => {
-            if (event.key === "Enter") void save();
-          }}
-        />
+        <Input value={value()} maxlength={250} onValueChange={setValue} aria-label={t("workspace.details.topic")} />
       </Show>
-    </DialogFrame>
+    </FormDialog>
   );
 }
 
@@ -444,6 +401,7 @@ function InviteDialog(props: { channelId: string; candidates: readonly Workspace
   const ws = useWorkspace();
   const [ids, setIds] = createSignal<string[]>([]);
   const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
   const present = createMemo(() => {
     const channel = ws.summary(props.channelId);
     return new Set(channel ? channelMembers(ws.directory(), channel).map((member) => member.id) : []);
@@ -452,30 +410,27 @@ function InviteDialog(props: { channelId: string; candidates: readonly Workspace
     const channel = ws.summary(props.channelId);
     return channel ? conversationName(ws.directory(), channel) : "";
   };
+  const add = async () => {
+    setBusy(true);
+    setError(null);
+    const done = await ws.invite(props.channelId, ids());
+    setBusy(false);
+    if (done === true) props.onClose();
+    else setError(done);
+  };
   return (
-    <DialogFrame
+    <FormDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) props.onClose();
+      }}
       title={t("workspace.app.invite.title", { name: name() })}
       description={t("workspace.app.invite.description")}
-      onClose={props.onClose}
-      footer={
-        <>
-          <Button variant="ghost" onClick={() => props.onClose()}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            loading={busy()}
-            disabled={ids().length === 0}
-            onClick={async () => {
-              setBusy(true);
-              const done = await ws.invite(props.channelId, ids());
-              setBusy(false);
-              if (done) props.onClose();
-            }}
-          >
-            {t("workspace.app.invite.add")}
-          </Button>
-        </>
-      }
+      error={error()}
+      busy={busy()}
+      submitLabel={t("workspace.app.invite.add")}
+      submitDisabled={ids().length === 0}
+      onSubmit={() => void add()}
     >
       <MemberPicker
         autofocus
@@ -484,7 +439,7 @@ function InviteDialog(props: { channelId: string; candidates: readonly Workspace
         selectedIds={ids()}
         onChange={setIds}
       />
-    </DialogFrame>
+    </FormDialog>
   );
 }
 

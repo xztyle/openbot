@@ -300,8 +300,6 @@ export const messages = {
   "workspace.gate.on": "Bramka wł.",
   "workspace.gate.off": "Bramka wył.",
 
-  "workspace.dialog.back": "Wstecz",
-  "workspace.dialog.next": "Dalej",
   "workspace.create.title": "Utwórz kanał",
   "workspace.create.description": "Na kanałach twój zespół i agenci pracują nad jednym tematem.",
   "workspace.create.name": "Nazwa",
@@ -312,12 +310,10 @@ export const messages = {
   "workspace.create.descriptionPlaceholder": "Czego dotyczy ten kanał?",
   "workspace.create.private": "Ustaw jako prywatny",
   "workspace.create.privateHint": "Widzą go tylko osoby i agenci, których dodasz.",
-  "workspace.create.step": "Krok {step} z {total}",
   "workspace.create.addTitle": "Dodaj osoby do #{name}",
   "workspace.create.addDescription": "Dodaj członków zespołu i agentów AI. Więcej możesz dodać później.",
   "workspace.create.addLabel": "Dodaj osoby i agentów",
   "workspace.create.create": "Utwórz",
-  "workspace.create.skip": "Na razie pomiń",
   "workspace.create.failed": "Nie udało się utworzyć kanału.",
 
   "workspace.newMessage.title": "Nowa wiadomość",

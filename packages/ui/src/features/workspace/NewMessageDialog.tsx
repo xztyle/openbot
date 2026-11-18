@@ -1,8 +1,6 @@
 import type { JSX } from "@solidjs/web";
-import { createStore, Show } from "solid-js";
-import { Button, IconButton } from "../../button";
-import { Dialog } from "../../complex";
-import { X } from "../../icons";
+import { createStore } from "solid-js";
+import { FormDialog } from "../../form-dialog";
 import { useText } from "../../text";
 import { MemberPicker } from "./MemberPicker";
 import type { WorkspaceMember } from "./workspace-types";
@@ -53,55 +51,29 @@ export function NewMessageDialog(props: NewMessageDialogProps): JSX.Element {
   }
 
   return (
-    <Dialog.Root open={props.open} onOpenChange={close}>
-      <Dialog.Portal>
-        <Dialog.Overlay>
-          <Dialog.Content
-            as="section"
-            class="ws-dialog"
-            onOpenAutoFocus={(event: Event) => {
-              // The first field takes the focus, not the close button in the corner.
-              event.preventDefault();
-            }}
-          >
-            <header class="ws-dialog-header">
-              <Dialog.Title class="ws-dialog-title">{t("workspace.newMessage.title")}</Dialog.Title>
-              <IconButton variant="ghost" label={t("common.close")} onClick={() => close(false)}>
-                <X />
-              </IconButton>
-            </header>
-            <div class="ws-dialog-body">
-              <Dialog.Description class="ws-dialog-description">
-                {t("workspace.newMessage.description")}
-              </Dialog.Description>
-              <MemberPicker
-                autofocus
-                label={t("workspace.newMessage.to")}
-                candidates={props.candidates}
-                selectedIds={state.memberIds}
-                max={GROUP_DM_MAX_OTHERS}
-                onChange={(ids) =>
-                  setState((draft) => {
-                    draft.memberIds = ids;
-                  })
-                }
-              />
-            </div>
-            <Show when={state.error}>
-              {(message) => (
-                <p class="ws-dialog-error" role="alert">
-                  {message()}
-                </p>
-              )}
-            </Show>
-            <footer class="ws-dialog-footer">
-              <Button loading={state.busy} disabled={state.memberIds.length === 0} onClick={() => void start()}>
-                {state.memberIds.length > 1 ? t("workspace.newMessage.startGroup") : t("workspace.newMessage.start")}
-              </Button>
-            </footer>
-          </Dialog.Content>
-        </Dialog.Overlay>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <FormDialog
+      open={props.open}
+      onOpenChange={close}
+      title={t("workspace.newMessage.title")}
+      description={t("workspace.newMessage.description")}
+      error={state.error}
+      busy={state.busy}
+      submitLabel={state.memberIds.length > 1 ? t("workspace.newMessage.startGroup") : t("workspace.newMessage.start")}
+      submitDisabled={state.memberIds.length === 0}
+      onSubmit={() => void start()}
+    >
+      <MemberPicker
+        autofocus
+        label={t("workspace.newMessage.to")}
+        candidates={props.candidates}
+        selectedIds={state.memberIds}
+        max={GROUP_DM_MAX_OTHERS}
+        onChange={(ids) =>
+          setState((draft) => {
+            draft.memberIds = ids;
+          })
+        }
+      />
+    </FormDialog>
   );
 }

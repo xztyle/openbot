@@ -35,6 +35,18 @@ const MINUTE = 60_000;
 /** The Storybook globals of the light palette, for a `Light` story. */
 export const LIGHT = { globals: { colorScheme: "light" } } as const;
 
+/** The viewports of a story file that shows a flow on a phone too. Spread into `meta.parameters`. */
+export const PHONE_VIEWPORTS = {
+  viewport: {
+    options: {
+      iphone: { name: "iPhone — 390 × 844", styles: { width: "390px", height: "844px" } },
+    },
+  },
+} as const;
+
+/** The Storybook globals of an iPhone, for a `Phone` story of a file with `PHONE_VIEWPORTS`. */
+export const PHONE = { globals: { viewport: { value: "iphone", isRotated: false } } } as const;
+
 /** A frame with the height of the canvas, for panes that fill their parent. */
 export function StoryFrame(props: { children: JSX.Element; width?: string; height?: string }): JSX.Element {
   return (

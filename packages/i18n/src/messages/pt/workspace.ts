@@ -234,8 +234,6 @@ export const messages = {
   "workspace.gate.on": "Filtro ativado",
   "workspace.gate.off": "Filtro desativado",
 
-  "workspace.dialog.back": "Voltar",
-  "workspace.dialog.next": "Avançar",
   "workspace.create.title": "Criar um canal",
   "workspace.create.description": "Os canais são onde sua equipe e os agentes trabalham em um tema.",
   "workspace.create.name": "Nome",
@@ -246,12 +244,10 @@ export const messages = {
   "workspace.create.descriptionPlaceholder": "Sobre o que é este canal?",
   "workspace.create.private": "Tornar privado",
   "workspace.create.privateHint": "Só as pessoas e os agentes que você adicionar podem vê-lo.",
-  "workspace.create.step": "Etapa {step} de {total}",
   "workspace.create.addTitle": "Adicionar pessoas a #{name}",
   "workspace.create.addDescription": "Adicione colegas e agentes de IA. Você pode adicionar mais depois.",
   "workspace.create.addLabel": "Adicionar pessoas e agentes",
   "workspace.create.create": "Criar",
-  "workspace.create.skip": "Pular por enquanto",
   "workspace.create.failed": "Não foi possível criar o canal.",
 
   "workspace.newMessage.title": "Nova mensagem",

@@ -29,7 +29,6 @@ export const messages = {
     many: "Настроено: {count}",
     other: "Настроено: {count}",
   },
-  "channel.create.close": "Закрыть создание канала",
   "channel.create.addAgents": "Добавить агентов",
   "channel.create.searchAgents": "Поиск агентов",
   "channel.create.noMatches": "Нет агентов, подходящих под этот запрос.",

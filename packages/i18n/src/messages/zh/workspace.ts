@@ -229,8 +229,6 @@ export const messages = {
   "workspace.gate.on": "判断：开",
   "workspace.gate.off": "判断：关",
 
-  "workspace.dialog.back": "返回",
-  "workspace.dialog.next": "下一步",
   "workspace.create.title": "创建频道",
   "workspace.create.description": "频道是团队和助手围绕一个主题协作的地方。",
   "workspace.create.name": "名称",
@@ -241,12 +239,10 @@ export const messages = {
   "workspace.create.descriptionPlaceholder": "这个频道是做什么的？",
   "workspace.create.private": "设为私密",
   "workspace.create.privateHint": "只有你添加的成员和助手可以看到。",
-  "workspace.create.step": "第 {step} 步，共 {total} 步",
   "workspace.create.addTitle": "向 #{name} 添加成员",
   "workspace.create.addDescription": "添加队友和 AI 助手。你之后还可以继续添加。",
   "workspace.create.addLabel": "添加成员和助手",
   "workspace.create.create": "创建",
-  "workspace.create.skip": "暂时跳过",
   "workspace.create.failed": "无法创建频道。",
 
   "workspace.newMessage.title": "新消息",

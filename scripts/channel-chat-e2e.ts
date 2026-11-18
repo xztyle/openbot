@@ -103,7 +103,7 @@ try {
   await dialog.getByRole("textbox", { name: english("channel.form.name") }).fill(name);
   for (const agent of [a, b]) await dialog.locator(`[id="channel-member-${agent.id}"]`).check();
   await shot("create-dialog", dialog);
-  await dialog.getByRole("button", { name: english("common.create"), exact: true }).click();
+  await dialog.getByRole("button", { name: english("channel.create.submit"), exact: true }).click();
   await dialog.waitFor({ state: "detached", timeout: UI_WAIT_MS });
   const created = await waitFor(
     page,

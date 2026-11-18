@@ -3,12 +3,12 @@ import { DeleteSpaceDialog, MoveToSpaceDialog, SpaceDialog } from "@openbot/ui/f
 import { SpaceRail, type SpaceRailItem } from "@openbot/ui/features/spaces/SpaceRail";
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
-import { CakemakerSidebar, LIGHT, StoryFrame } from "./workspace-story";
+import { CakemakerSidebar, LIGHT, PHONE, PHONE_VIEWPORTS, StoryFrame } from "./workspace-story";
 
 const meta = {
   title: "Workspace/Spaces",
   component: SpaceRail,
-  parameters: { layout: "fullscreen" },
+  parameters: { layout: "fullscreen", ...PHONE_VIEWPORTS },
 } satisfies Meta<typeof SpaceRail>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -89,6 +89,12 @@ export const Agents: Story = {
 };
 
 export const CreateDialog: Story = {
+  render: () => <SpaceDialog open initial={null} onOpenChange={fn()} onSave={fn()} />,
+};
+
+/** The create flow on an iPhone: a full screen sheet, as every create flow. */
+export const CreateDialogPhone: Story = {
+  ...PHONE,
   render: () => <SpaceDialog open initial={null} onOpenChange={fn()} onSave={fn()} />,
 };
 

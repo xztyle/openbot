@@ -464,6 +464,12 @@ function sameDirectory(left: WorkspaceDirectory, right: WorkspaceDirectory): boo
   );
 }
 
+/** The failure in the reader's language, for a dialog that shows it in place. */
+function failureText(error: unknown, fallback: AppTextKey): string {
+  const text = currentText();
+  return text.errorMessage(error, text.t(fallback));
+}
+
 function failureToast(error: unknown, fallback: AppTextKey): void {
   const text = currentText();
   actionToast.error(text.errorMessage(error, text.t(fallback)), {
@@ -1516,7 +1522,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     }
     const dm = existingDm([], [agentId]);
     if (dm) openChannel(dm.id);
-    else void startDm([agentId]);
+    else void startDm([agentId]).catch((error: unknown) => failureToast(error, "workspace.app.error.openDm"));
   }
 
   /**
@@ -1897,7 +1903,10 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     openChannel(channelId);
   }
 
-  /** Opens the DM or group with these people and agents, and makes it when it does not exist. */
+  /**
+   * Opens the DM or group with these people and agents, and makes it when it does not exist. A
+   * failure rejects: the New message dialog shows it in place, and the other callers in a toast.
+   */
   async function startDm(memberIds: readonly string[]): Promise<void> {
     const agents = new Set(env.agents().map((agent) => agent.id));
     const agentIds = memberIds.filter((id) => agents.has(id));
@@ -1911,23 +1920,18 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       openChannel(existing.id);
       return;
     }
-    try {
-      const channelId = crypto.randomUUID();
-      // A DM with one agent follows that agent; a group or a DM of people is in the space that shows.
-      if (people.length > 0 || agentIds.length !== 1) await placeInSpace(channelId);
-      const channel = await command({
-        type: "open-dm",
-        operationId: crypto.randomUUID(),
-        channelId,
-        memberIds: people,
-        agentIds,
-      });
-      await channels.refresh();
-      openChannel(channel.id);
-    } catch (error) {
-      failureToast(error, "workspace.app.error.openDm");
-      throw error;
-    }
+    const channelId = crypto.randomUUID();
+    // A DM with one agent follows that agent; a group or a DM of people is in the space that shows.
+    if (people.length > 0 || agentIds.length !== 1) await placeInSpace(channelId);
+    const channel = await command({
+      type: "open-dm",
+      operationId: crypto.randomUUID(),
+      channelId,
+      memberIds: people,
+      agentIds,
+    });
+    await channels.refresh();
+    openChannel(channel.id);
   }
 
   /**
@@ -2023,19 +2027,22 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     }
   }
 
-  async function invite(channelId: string, memberIds: readonly string[]): Promise<boolean> {
-    const agents = new Set(env.agents().map((agent) => agent.id));
-    const members = await Promise.all(memberIds.filter((id) => agents.has(id)).map(newMember));
-    return run(
-      {
+  /** Adds people and agents. The dialog shows a failure in place: it gets the message instead of `false`. */
+  async function invite(channelId: string, memberIds: readonly string[]): Promise<true | string> {
+    try {
+      const agents = new Set(env.agents().map((agent) => agent.id));
+      const members = await Promise.all(memberIds.filter((id) => agents.has(id)).map(newMember));
+      await command({
         type: "invite",
         operationId: crypto.randomUUID(),
         channelId,
         humanMemberIds: memberIds.filter((id) => !agents.has(id)),
         members,
-      },
-      "workspace.app.error.invite",
-    );
+      });
+      return true;
+    } catch (error) {
+      return failureText(error, "workspace.app.error.invite");
+    }
   }
 
   async function removeMember(channelId: string, memberId: string): Promise<boolean> {
@@ -2070,11 +2077,17 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     );
   }
 
-  async function setMeta(channelId: string, change: { name?: string; topic?: string; description?: string }) {
-    return run(
-      { type: "set-meta", operationId: crypto.randomUUID(), channelId, ...change },
-      "workspace.app.error.meta",
-    );
+  /** Changes the name, topic or description. The dialog shows a failure in place: it gets the message. */
+  async function setMeta(
+    channelId: string,
+    change: { name?: string; topic?: string; description?: string },
+  ): Promise<true | string> {
+    try {
+      await command({ type: "set-meta", operationId: crypto.randomUUID(), channelId, ...change });
+      return true;
+    } catch (error) {
+      return failureText(error, "workspace.app.error.meta");
+    }
   }
 
   /** Makes a channel public or private. Owners and admins only; the host checks it again. */
@@ -2120,7 +2133,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     else {
       const existing = existingDm([memberId], []);
       if (existing) openChannel(existing.id);
-      else void startDm([memberId]).catch(() => undefined);
+      else void startDm([memberId]).catch((error: unknown) => failureToast(error, "workspace.app.error.openDm"));
     }
   }
 

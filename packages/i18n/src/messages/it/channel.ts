@@ -19,7 +19,6 @@ export const messages = {
   "channel.settings.memoryCount": { one: "{count} salvata", other: "{count} salvate" },
   "channel.settings.routines": "Routine",
   "channel.settings.routineCount": { one: "{count} configurata", other: "{count} configurate" },
-  "channel.create.close": "Chiudi il nuovo canale",
   "channel.create.addAgents": "Aggiungi agenti",
   "channel.create.searchAgents": "Cerca agenti",
   "channel.create.noMatches": "Nessun agente corrisponde a questa ricerca.",

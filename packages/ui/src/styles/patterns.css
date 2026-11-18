@@ -1,0 +1,322 @@
+/*
+ * The shared screen patterns of docs/ux/standard.md: the form dialog of every create and edit flow,
+ * the states of a view (empty, loading, failed), and the header of a list view. Feature stylesheets
+ * may set the content of a pattern, not its frame.
+ */
+
+/* Form dialog ----------------------------------------------------------------------------------- */
+
+.ui-dialog-content.ui-form-dialog {
+  display: flex;
+  width: min(520px, 100%);
+  max-height: calc(100dvh - 2 * var(--openbot-space-6));
+  flex-direction: column;
+  overflow: hidden;
+  outline: 0;
+  border: 1px solid var(--openbot-dialog-ring);
+  border-radius: var(--openbot-radius-xl);
+  box-shadow: none;
+  background: var(--openbot-bg-sidebar);
+  color: var(--openbot-text-primary);
+  animation: ui-form-dialog-in var(--openbot-duration-slow) var(--openbot-ease-out);
+}
+
+.ui-form-dialog[data-size="sm"] {
+  width: min(440px, 100%);
+}
+
+.ui-form-dialog[data-size="lg"] {
+  width: min(640px, 100%);
+}
+
+.ui-form-dialog-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  gap: var(--openbot-space-3);
+  padding: var(--openbot-space-6) var(--openbot-space-4) var(--openbot-space-2) var(--openbot-space-6);
+}
+
+.ui-form-dialog-heading {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+}
+
+.ui-form-dialog-title {
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-xl);
+  font-weight: var(--openbot-weight-semibold);
+  line-height: var(--openbot-leading-xl);
+  letter-spacing: var(--openbot-tracking-tight);
+  overflow-wrap: anywhere;
+}
+
+.ui-form-dialog-description {
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-md);
+  line-height: var(--openbot-leading-md);
+}
+
+.ui-form-dialog-close {
+  flex: 0 0 auto;
+  margin-top: calc(-1 * var(--openbot-space-1));
+}
+
+.ui-form-dialog-form {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.ui-form-dialog-body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--openbot-space-3) var(--openbot-space-6) var(--openbot-space-6);
+}
+
+.ui-form-dialog-error.ui-alert {
+  flex: 0 0 auto;
+  margin: 0 var(--openbot-space-6) var(--openbot-space-4);
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+}
+
+.ui-form-dialog-error .ui-alert-icon {
+  color: var(--openbot-danger-text);
+}
+
+.ui-form-dialog-footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  border-top: 1px solid var(--openbot-dialog-ring);
+  padding: var(--openbot-space-4) var(--openbot-space-6);
+}
+
+.ui-form-dialog-footer-start {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+}
+
+.ui-form-dialog-step {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-md);
+}
+
+.ui-form-dialog-footer .ui-button:active:not(:disabled):not([data-disabled]) {
+  transform: scale(0.97);
+}
+
+/* A group of fields with an optional heading. */
+.ui-form-section {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.ui-form-section-title {
+  margin-bottom: var(--openbot-space-1);
+  padding: 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.ui-form-section-description {
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+}
+
+/* A switch row inside a form: a bordered card like the other fields. */
+.ui-form-dialog-body .ui-switch-field {
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  padding: var(--openbot-space-3) var(--openbot-space-4);
+}
+
+@keyframes ui-form-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(4px);
+  }
+}
+
+@keyframes ui-form-dialog-sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+
+/* A phone: the dialog is a full screen sheet. The header and the footer stay; the body scrolls. */
+@media (max-width: 720px) {
+  .ui-form-dialog-overlay.ui-dialog-overlay {
+    place-items: stretch;
+    padding: 0;
+  }
+
+  .ui-dialog-content.ui-form-dialog,
+  .ui-form-dialog[data-size="sm"],
+  .ui-form-dialog[data-size="lg"] {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    animation-name: ui-form-dialog-sheet-in;
+  }
+
+  .ui-form-dialog-header {
+    padding: max(var(--openbot-space-4), env(safe-area-inset-top, 0px)) var(--openbot-space-3) var(--openbot-space-2)
+      var(--openbot-space-4);
+  }
+
+  .ui-form-dialog-body {
+    padding: var(--openbot-space-2) var(--openbot-space-4) var(--openbot-space-4);
+  }
+
+  .ui-form-dialog-error.ui-alert {
+    margin: 0 var(--openbot-space-4) var(--openbot-space-3);
+  }
+
+  .ui-form-dialog-footer {
+    padding: var(--openbot-space-3) var(--openbot-space-4) max(var(--openbot-space-3), env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Thumb-sized actions. */
+  .ui-form-dialog-footer .ui-button {
+    min-height: var(--openbot-control-lg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-dialog-content.ui-form-dialog {
+    animation-name: ui-dialog-overlay-in;
+  }
+
+  .ui-form-dialog-footer .ui-button:active {
+    transform: none;
+  }
+}
+
+/* View states ----------------------------------------------------------------------------------- */
+
+.ui-view-state {
+  display: flex;
+  min-height: 160px;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-8) var(--openbot-space-4);
+  color: var(--openbot-text-muted);
+  text-align: center;
+}
+
+.ui-view-state[data-size="compact"] {
+  min-height: 0;
+  padding: var(--openbot-space-4);
+}
+
+.ui-view-state-icon {
+  display: grid;
+  width: var(--openbot-control-xl);
+  height: var(--openbot-control-xl);
+  place-items: center;
+  margin-bottom: var(--openbot-space-1);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-bg-control);
+  color: var(--openbot-text-secondary);
+}
+
+.ui-view-state[data-tone="danger"] .ui-view-state-icon {
+  background: var(--openbot-danger-soft);
+  color: var(--openbot-danger-text);
+}
+
+.ui-view-state-icon svg {
+  width: var(--openbot-icon-lg);
+  height: var(--openbot-icon-lg);
+  stroke-width: var(--openbot-icon-stroke);
+}
+
+.ui-view-state-title {
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-lg);
+  font-weight: var(--openbot-weight-semibold);
+  line-height: var(--openbot-leading-lg);
+}
+
+.ui-view-state-text {
+  max-width: 44ch;
+  margin: 0;
+  font-size: var(--openbot-text-md);
+  line-height: var(--openbot-leading-md);
+}
+
+.ui-view-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--openbot-space-2);
+  margin-top: var(--openbot-space-2);
+}
+
+.ui-view-state-skeleton {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: var(--openbot-space-3);
+  padding: var(--openbot-space-3) 0;
+}
+
+.ui-view-state-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-3);
+}
+
+.ui-view-state-skeleton-avatar {
+  width: var(--openbot-control-md);
+  height: var(--openbot-control-md);
+  flex: 0 0 auto;
+  border-radius: var(--openbot-radius-md);
+}
+
+.ui-view-state-skeleton-lines {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-1-5);
+}
+
+.ui-view-state-skeleton-line {
+  height: 10px;
+  border-radius: var(--openbot-radius-pill);
+}
+
+.ui-view-state-skeleton-line:last-child {
+  width: 60%;
+}

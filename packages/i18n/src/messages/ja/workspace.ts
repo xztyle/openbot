@@ -233,8 +233,6 @@ export const messages = {
   "workspace.gate.on": "判定オン",
   "workspace.gate.off": "判定オフ",
 
-  "workspace.dialog.back": "戻る",
-  "workspace.dialog.next": "次へ",
   "workspace.create.title": "チャンネルを作成",
   "workspace.create.description": "チャンネルは、チームとエージェントが 1 つのトピックについて作業する場所です。",
   "workspace.create.name": "名前",
@@ -245,12 +243,10 @@ export const messages = {
   "workspace.create.descriptionPlaceholder": "このチャンネルの目的は何ですか？",
   "workspace.create.private": "プライベートにする",
   "workspace.create.privateHint": "追加したメンバーとエージェントだけが表示できます。",
-  "workspace.create.step": "ステップ {step}/{total}",
   "workspace.create.addTitle": "#{name} にメンバーを追加",
   "workspace.create.addDescription": "チームメンバーと AI エージェントを追加します。あとで追加することもできます。",
   "workspace.create.addLabel": "メンバーとエージェントを追加",
   "workspace.create.create": "作成",
-  "workspace.create.skip": "今はスキップ",
   "workspace.create.failed": "チャンネルを作成できませんでした。",
 
   "workspace.newMessage.title": "新規メッセージ",

@@ -234,8 +234,6 @@ export const messages = {
   "workspace.gate.on": "Filtre açık",
   "workspace.gate.off": "Filtre kapalı",
 
-  "workspace.dialog.back": "Geri",
-  "workspace.dialog.next": "İleri",
   "workspace.create.title": "Kanal oluştur",
   "workspace.create.description": "Kanallar, ekibinizin ve ajanların tek bir konu üzerinde çalıştığı yerlerdir.",
   "workspace.create.name": "Ad",
@@ -246,13 +244,11 @@ export const messages = {
   "workspace.create.descriptionPlaceholder": "Bu kanal ne hakkında?",
   "workspace.create.private": "Özel yap",
   "workspace.create.privateHint": "Yalnızca eklediğiniz kişiler ve ajanlar görebilir.",
-  "workspace.create.step": "Adım {step}/{total}",
   "workspace.create.addTitle": "Kişi ekle: #{name}",
   "workspace.create.addDescription":
     "Ekip arkadaşlarını ve YZ ajanlarını ekleyin. Daha sonra başkalarını da ekleyebilirsiniz.",
   "workspace.create.addLabel": "Kişi ve ajan ekle",
   "workspace.create.create": "Oluştur",
-  "workspace.create.skip": "Şimdilik atla",
   "workspace.create.failed": "Kanal oluşturulamadı.",
 
   "workspace.newMessage.title": "Yeni mesaj",

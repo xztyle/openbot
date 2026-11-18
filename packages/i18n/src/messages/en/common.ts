@@ -18,6 +18,8 @@ export const messages = defineMessages("common", {
   "common.copied": "Copied",
   "common.done": "Done",
   "common.back": "Back",
+  "common.next": "Next",
+  "common.step": "Step {current} of {total}",
   "common.continue": "Continue",
   "common.add": "Add",
   "common.create": "Create",

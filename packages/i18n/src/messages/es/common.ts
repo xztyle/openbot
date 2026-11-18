@@ -14,6 +14,8 @@ export const messages = {
   "common.copied": "Copiado",
   "common.done": "Listo",
   "common.back": "Atrás",
+  "common.next": "Siguiente",
+  "common.step": "Paso {current} de {total}",
   "common.continue": "Continuar",
   "common.add": "Añadir",
   "common.create": "Crear",
@@ -26,4 +28,8 @@ export const messages = {
   "common.download": "Descargar",
   "common.removing": "Quitando…",
   "common.sending": "Enviando…",
+  "common.unsaved.title": "¿Descartar los cambios?",
+  "common.unsaved.description": "Se perderán los cambios sin guardar.",
+  "common.unsaved.discard": "Descartar cambios",
+  "common.unsaved.keepEditing": "Seguir editando",
 } as const satisfies PartialTranslation<typeof source>;

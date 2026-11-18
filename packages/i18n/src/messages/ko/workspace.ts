@@ -232,8 +232,6 @@ export const messages = {
   "workspace.gate.on": "판단 켬",
   "workspace.gate.off": "판단 끔",
 
-  "workspace.dialog.back": "뒤로",
-  "workspace.dialog.next": "다음",
   "workspace.create.title": "채널 만들기",
   "workspace.create.description": "채널은 팀과 에이전트가 하나의 주제로 함께 일하는 곳이에요.",
   "workspace.create.name": "이름",
@@ -244,12 +242,10 @@ export const messages = {
   "workspace.create.descriptionPlaceholder": "이 채널은 무엇에 관한 채널인가요?",
   "workspace.create.private": "비공개로 만들기",
   "workspace.create.privateHint": "추가한 사람과 에이전트만 볼 수 있어요.",
-  "workspace.create.step": "{total}단계 중 {step}단계",
   "workspace.create.addTitle": "#{name}에 사람 추가",
   "workspace.create.addDescription": "팀원과 AI 에이전트를 추가하세요. 나중에 더 추가할 수 있어요.",
   "workspace.create.addLabel": "사람과 에이전트 추가",
   "workspace.create.create": "만들기",
-  "workspace.create.skip": "나중에 하기",
   "workspace.create.failed": "채널을 만들 수 없어요.",
 
   "workspace.newMessage.title": "새 메시지",

@@ -97,6 +97,15 @@ export function MemberPicker(props: MemberPickerProps): JSX.Element {
             if (event.key === "Backspace" && query() === "" && props.selectedIds.length > 0) {
               props.onChange(props.selectedIds.slice(0, -1));
             }
+            // Enter with a search adds the first match, as in Slack; an empty search lets the form submit.
+            if (event.key === "Enter" && !event.isComposing && query().trim()) {
+              event.preventDefault();
+              const first = matches().find((member) => !selected().has(member.id));
+              if (first && !full()) {
+                toggle(first.id);
+                setQuery("");
+              }
+            }
           }}
         />
       </div>

@@ -466,14 +466,6 @@
 
 /* Dialogs ----------------------------------------------------------------------------------------- */
 
-.ws-switcher {
-  width: min(560px, calc(100vw - 32px));
-}
-
-.ws-dialog-wide {
-  width: min(640px, calc(100vw - 32px));
-}
-
 .ws-switcher-field {
   display: flex;
   align-items: center;

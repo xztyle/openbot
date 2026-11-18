@@ -164,6 +164,27 @@ Decided 2026-11-18 (slack-parity.md D1, B4):
   adds a line. The formatting toolbar remembers its state (shown on a computer, hidden on a phone
   until the reader shows it).
 
+## 7b. The owner's DM with an agent
+
+The DM is the agent's main chat: provider turns, steps, tool calls, approvals, questions, browser
+steps, routine runs, the side panel, the queue and steer stay its own. It looks and acts as a channel
+(stream/agentdm):
+
+- `WorkspaceAgentFrame` provides `ConversationWorkspaceLayoutContext`. With it, the chat draws each
+  message with `WorkspaceChatRow` (the shared `MessageRow`): face, name, time, five-minute grouping,
+  the hover action bar (quick reactions, emoji picker, Reply, More) and the long-press sheet. Reply
+  quotes the message in the box; More has Reply, Copy text, Copy link (web) and Read aloud.
+- The steps of a turn fold inside the answer's row. Cards of a turn and cards that wait for the reader
+  stand in the text column. Markers between messages stay centered.
+- The day pill, the "New" line, the "N new messages since" pill and the jump pill are the channel's.
+- The message box is the channel's box: formatting toolbar (the same "Aa" choice), emoji, `:` search,
+  the paper plane. The "+" menu, the context meter, the microphone, Stop, the queue and the saved
+  replies stay.
+- One header row: the DM header holds the chat's controls (model, search, side panel) through a
+  portal. On a phone the model is its provider's mark.
+- A message that a link, a search or a notification opens is scrolled to the middle and flashes.
+- Without the context (the chat outside the workspace, a channel in the chat view) nothing changes.
+
 ## 8. Copy
 
 All text comes from `@openbot/i18n`. Write English and Spanish together; the other languages may
@@ -200,3 +221,4 @@ Ranked by impact. "Done" items are on `stream/uxflows`.
 | 11 | One row component for workspace lists (`WorkspaceListRow` in Threads, Activity, Between agents, Space agents, Secrets) | Done |
 | 12 | Unreads, Later, DMs, message search (top bar), Jump to frecency, Browse filters, shortcuts sheet (slack-parity P2, P4) | Done on `stream/p24`; E2E `scripts/workspace-inbox-e2e.ts` |
 | 13 | QA pass of the merged streams (`stream/qa-ui`): one DMs list on a computer and a phone (the phone's DMs tab is the DMs view; Jump to DMs or Activity opens the tab), Mark as read and "Conversation details" in row menus, the bell as a sheet on a phone, Back alone on a phone pane, field text size in dialogs and the sidebar filter, toasts clear of the safe areas | Done; E2E `scripts/workspace-seams-e2e.ts` |
+| 14 | The owner's DM with an agent as a workspace conversation (§ 7b); the side panel E2E opens the DM; Storybook draws stories with args; phone search filters in two columns | Done on `stream/agentdm`; E2E `scripts/agent-dm-e2e.ts`, `scripts/web-side-panel-e2e.ts` |

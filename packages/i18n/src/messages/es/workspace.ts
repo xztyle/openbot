@@ -177,6 +177,7 @@ export const messages = {
   "workspace.composer.send": "Enviar",
   "workspace.composer.alsoSend": "Enviar también a #{channel}",
   "workspace.details.title": "Detalles del canal",
+  "workspace.details.titleDirect": "Detalles de la conversación",
   "workspace.details.about": "Información",
   "workspace.details.membersTab": { one: "Miembros {count}", other: "Miembros {count}" },
   "workspace.details.integrations": "Integraciones",

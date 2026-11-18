@@ -190,6 +190,7 @@ export const messages = defineMessages("workspace", {
   "workspace.composer.alsoSend": "Also send to #{channel}",
 
   "workspace.details.title": "Channel details",
+  "workspace.details.titleDirect": "Conversation details",
   "workspace.details.about": "About",
   "workspace.details.membersTab": { one: "Members {count}", other: "Members {count}" },
   "workspace.details.integrations": "Integrations",

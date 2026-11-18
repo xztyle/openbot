@@ -216,6 +216,8 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
     const focus = ws.state.focus;
     return focus?.channelId === props.channelId && !threadRoot() ? focus.messageId : undefined;
   };
+  /** "Channel details", or "Conversation details" for a DM or a group. */
+  const detailsLabel = () => t(kind() === "channel" ? "workspace.details.title" : "workspace.details.titleDirect");
   /** Right-click on the header: details, members, mute, a link, and leave for a channel. */
   const headerMenu = (): WorkspaceMenuItem[] => {
     const muted = ws.isMuted(props.channelId);
@@ -223,7 +225,7 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
     return [
       {
         id: "details",
-        label: t("workspace.details.title"),
+        label: detailsLabel(),
         icon: <Info aria-hidden="true" />,
         onSelect: () => ws.openDetails(props.channelId, "about"),
       },
@@ -268,7 +270,7 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
   };
   return (
     <section class="ws-channel-pane" aria-label={name()}>
-      <WorkspaceContextMenu items={headerMenu} label={t("workspace.details.title")}>
+      <WorkspaceContextMenu items={headerMenu} label={detailsLabel()}>
         <ChannelHeader
           kind={kind()}
           name={name()}

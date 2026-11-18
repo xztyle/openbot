@@ -137,7 +137,7 @@ export function useConversationMenu(): (id: string, extra?: readonly WorkspaceMe
         : [
             {
               id: "details",
-              label: t("workspace.details.title"),
+              label: t(direct ? "workspace.details.titleDirect" : "workspace.details.title"),
               icon: <Info aria-hidden="true" />,
               onSelect: () => {
                 ws.openConversation(id);

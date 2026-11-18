@@ -363,7 +363,6 @@ export const messages = defineMessages("server", {
   "server.settings.removeConfirmTitle": "Remove {name}?",
   "server.settings.removeConfirmDescription":
     "This removes the server from the account service for all members and ends remote access. Files and chats on its computer stay intact. To use it again, register it from that computer.",
-  "server.settings.removing": "Removing…",
   "server.settings.removedTitle": "Removed {name}",
   "server.settings.leaveTitle": "Leave server",
   "server.settings.leaveDescription":

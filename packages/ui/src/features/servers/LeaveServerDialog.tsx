@@ -40,7 +40,7 @@ export function LeaveServerDialog(props: {
         props.removeOwned ? "server.settings.removeConfirmDescription" : "server.settings.leaveConfirmDescription",
       )}
       confirmLabel={t(props.removeOwned ? "server.settings.removeTitle" : "server.settings.leaveTitle")}
-      pendingLabel={t(props.removeOwned ? "server.settings.removing" : "server.settings.leaving")}
+      pendingLabel={t(props.removeOwned ? "common.removing" : "server.settings.leaving")}
       error={error() ?? undefined}
       onCancel={close}
       onConfirm={async () => {

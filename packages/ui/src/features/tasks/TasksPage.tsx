@@ -285,7 +285,7 @@ function TaskTookLine(props: TasksPageProps & { took: TasksTook }) {
       <span class="tasks-page-took-text">{t("conversation.tasks.page.took", { title: props.took.task.title })}</span>
       <Show when={props.took.pending}>
         <Button type="button" variant="ghost" size="sm" onClick={() => props.onUndo()}>
-          {t("conversation.tasks.page.undo")}
+          {t("common.undo")}
         </Button>
       </Show>
       <Button type="button" variant="ghost" size="sm" onClick={() => props.onOpenTook()}>

@@ -146,7 +146,6 @@ export const messages = {
   "conversation.tasks.page.reassign": "「{title}」を{name}に渡す",
   "conversation.tasks.page.start": "タスクを開始",
   "conversation.tasks.page.took": "が「{title}」を担当",
-  "conversation.tasks.page.undo": "元に戻す",
   "conversation.tasks.page.dismiss": "閉じる",
   "conversation.tasks.page.row": "{title}、{agent}、{status}",
   "conversation.tasks.page.showAgents": "エージェントを表示",

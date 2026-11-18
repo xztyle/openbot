@@ -297,7 +297,6 @@ export const messages = {
   "routine.settings.pauseFailed": "Nie udało się wstrzymać tej rutyny.",
   "routine.settings.resumeFailed": "Nie udało się wznowić tej rutyny.",
   "routine.settings.deleteNow": "Usuń teraz",
-  "routine.settings.deleting": "Usuwanie…",
   "routine.settings.starting": "Uruchamianie…",
   "routine.settings.testRun": "Uruchom test",
   "routine.settings.copyRunCommand": "Kopiuj polecenie",

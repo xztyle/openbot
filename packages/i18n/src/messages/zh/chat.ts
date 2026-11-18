@@ -386,7 +386,6 @@ export const messages = {
   "chat.suggestion.detailsNamed": "在市场中查看 {name}",
   "chat.suggestion.dismissNamed": "关闭 {name} 推荐",
   "chat.suggestion.dismissed": "已关闭 {name} 的推荐。",
-  "chat.suggestion.undo": "撤销",
   "chat.suggestion.localOnly": "请在你自己的电脑上通过 OpenBot 连接 {name}。",
   "chat.suggestion.unavailable": "该服务器无法连接 {name}。",
   "chat.mcpSignIn.signIn": "登录",

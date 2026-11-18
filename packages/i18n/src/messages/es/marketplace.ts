@@ -105,9 +105,9 @@ export const messages = {
   "marketplace.app.disconnect.description":
     "Elimina {name} y sus habilidades de este equipo. Puedes volver a conectarla más adelante.",
   "marketplace.app.disconnect.action": "Desconectar",
-  "marketplace.app.remove.title": "Eliminar servidor",
+  "marketplace.app.remove.title": "Quitar servidor",
   "marketplace.app.remove.description": "Tus agentes ya no podrán usar este servidor. Se eliminarán sus ajustes.",
-  "marketplace.app.remove.action": "Eliminar",
+  "marketplace.app.remove.action": "Quitar",
   "marketplace.app.remove.confirmTitle": "¿Eliminar {name}?",
   "marketplace.app.remove.keep": "Conservar",
   "marketplace.plugin.aave.tagline": "Datos y transacciones de Aave",

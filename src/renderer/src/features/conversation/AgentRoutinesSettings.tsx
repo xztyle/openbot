@@ -921,7 +921,7 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
                           type="button"
                           size="sm"
                           loading={deleting()}
-                          loadingLabel={t("routine.settings.deleting")}
+                          loadingLabel={t("common.deleting")}
                           onClick={() => void deleteRoutine()}
                         >
                           {t("routine.settings.deleteNow")}

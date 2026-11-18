@@ -39,7 +39,6 @@ export const messages = {
   "memory.updateFailed": "Bellek güncellenemedi.",
   "memory.deleteFailed": "Bellek silinemedi.",
   "memory.deleteUndo.title": "Bellek silindi",
-  "memory.deleteUndo.action": "Geri al",
   "memory.clearFailed": "Bellekler temizlenemedi.",
   "memory.inclusion.label": "Bellek kullanımı",
   "memory.inclusion.essential": "Her zaman dahil",

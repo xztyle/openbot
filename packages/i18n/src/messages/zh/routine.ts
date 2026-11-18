@@ -246,7 +246,6 @@ export const messages = {
   "routine.settings.pauseFailed": "无法暂停该自动化任务。",
   "routine.settings.resumeFailed": "无法恢复该自动化任务。",
   "routine.settings.deleteNow": "立即删除",
-  "routine.settings.deleting": "正在删除…",
   "routine.settings.starting": "正在启动…",
   "routine.settings.testRun": "测试运行",
   "routine.settings.copyRunCommand": "复制运行命令",

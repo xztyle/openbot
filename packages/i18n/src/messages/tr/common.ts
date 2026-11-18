@@ -25,4 +25,6 @@ export const messages = {
   "common.download": "İndir",
   "common.removing": "Kaldırılıyor…",
   "common.sending": "Gönderiliyor…",
+  "common.deleting": "Siliniyor…",
+  "common.undo": "Geri al",
 } as const satisfies PartialTranslation<typeof source>;

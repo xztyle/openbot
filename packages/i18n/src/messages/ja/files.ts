@@ -51,8 +51,6 @@ export const messages = {
     "「{name}」はディスクから削除されます。このファイルを表示するメッセージは、ファイルなしでチャットに残ります。",
   "files.delete.descriptionRemoved":
     "「{name}」は一覧から外されます。このファイルを送信したメッセージはチャットに残ります。",
-  "files.delete.deleting": "削除中…",
-  "files.delete.removing": "除外中…",
   "files.delete.failed": "ファイルを削除できませんでした。",
   "files.storage.removedAgent": "削除されたエージェント",
   "files.storage.back": "ストレージに戻る",

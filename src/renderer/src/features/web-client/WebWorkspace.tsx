@@ -1795,7 +1795,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         }
         toast(t("agent.hideUndo.title", { name: agent.name }), {
           id: toastId,
-          action: { label: t("agent.hideUndo.action"), onClick: () => setAgentHidden(agentId, false) },
+          action: { label: t("common.undo"), onClick: () => setAgentHidden(agentId, false) },
         });
       },
       (error: unknown) => {

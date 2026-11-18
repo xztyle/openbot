@@ -51,8 +51,6 @@ export const messages = {
     "« {name} » est supprimé du disque. Les messages qui l’affichent restent dans la discussion sans le fichier.",
   "files.delete.descriptionRemoved":
     "« {name} » est retiré de la liste. Le message qui l’a envoyé reste dans la discussion.",
-  "files.delete.deleting": "Suppression…",
-  "files.delete.removing": "Retrait…",
   "files.delete.failed": "Impossible de supprimer le fichier.",
   "files.storage.removedAgent": "Agent supprimé",
   "files.storage.back": "Retour au stockage",

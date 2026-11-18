@@ -28,7 +28,7 @@ function WorkflowDeleteUndoToast(props: { name: string; countdown: UndoCountdown
         </strong>
       </div>
       <Button type="button" variant="outline" size="sm" onClick={() => props.onUndo()}>
-        {t("workflow.canvas.deleteUndo.action")}
+        {t("common.undo")}
       </Button>
       <Progress
         value={props.countdown.left() * 100}

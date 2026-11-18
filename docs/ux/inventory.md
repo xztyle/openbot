@@ -110,9 +110,9 @@ Gaps:
 | Step | "Step {step} of {total}", workspace-only keys | `common.step`, `common.next`, `common.back` |
 | Spanish gaps | `common.unsaved.*` missing | added |
 
-Still open: "Remove member" is "Eliminar miembro" in Spanish (it removes, it does not delete);
-"Leave server" is "Abandonar" but "Leave channel" is "Salir"; four keys say "Deleting…"; four keys say
-"Undo".
+Fixed in round 2: Spanish uses Quitar for every "Remove" (it was Eliminar in 25 keys, such as "Remove
+member"), "Salir de" for every "Leave" ("Abandonar servidor" before), and one common key each for
+"Deleting…" (five before), "Removing…" (three) and "Undo" (five).
 
 ## 6. Screenshots
 

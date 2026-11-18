@@ -39,7 +39,6 @@ export const messages = {
   "memory.updateFailed": "No se pudo actualizar el recuerdo.",
   "memory.deleteFailed": "No se pudo eliminar el recuerdo.",
   "memory.deleteUndo.title": "Recuerdo eliminado",
-  "memory.deleteUndo.action": "Deshacer",
   "memory.clearFailed": "No se pudieron borrar los recuerdos.",
   "memory.inclusion.label": "Uso de la memoria",
   "memory.inclusion.essential": "Incluir siempre",

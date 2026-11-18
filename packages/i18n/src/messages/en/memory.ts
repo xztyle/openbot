@@ -40,7 +40,6 @@ export const messages = defineMessages("memory", {
   "memory.updateFailed": "Could not update the memory.",
   "memory.deleteFailed": "Could not delete the memory.",
   "memory.deleteUndo.title": "Memory deleted",
-  "memory.deleteUndo.action": "Undo",
   "memory.clearFailed": "Could not clear the memories.",
   "memory.inclusion.label": "Memory use",
   "memory.inclusion.essential": "Always included",

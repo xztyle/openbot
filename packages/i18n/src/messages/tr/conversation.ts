@@ -146,7 +146,6 @@ export const messages = {
   "conversation.tasks.page.reassign": "“{title}” görevini {name} adlı ajana ver",
   "conversation.tasks.page.start": "Görevi başlat",
   "conversation.tasks.page.took": "“{title}” görevini aldı",
-  "conversation.tasks.page.undo": "Geri al",
   "conversation.tasks.page.dismiss": "Kapat",
   "conversation.tasks.page.row": "{title}, {agent}, {status}",
   "conversation.tasks.page.showAgents": "Ajanları göster",

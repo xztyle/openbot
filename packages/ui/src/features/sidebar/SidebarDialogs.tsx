@@ -25,7 +25,7 @@ export function SidebarDialogs() {
       return t("common.delete");
     },
     get pendingLabel() {
-      return t("sidebar.delete.pending");
+      return t("common.deleting");
     },
     onCancel: closeDelete,
   };

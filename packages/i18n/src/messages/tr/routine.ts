@@ -258,7 +258,6 @@ export const messages = {
   "routine.settings.pauseFailed": "Bu rutin duraklatılamadı.",
   "routine.settings.resumeFailed": "Bu rutin sürdürülemedi.",
   "routine.settings.deleteNow": "Şimdi sil",
-  "routine.settings.deleting": "Siliniyor…",
   "routine.settings.starting": "Başlatılıyor…",
   "routine.settings.testRun": "Test et",
   "routine.settings.copyRunCommand": "Çalıştırma komutunu kopyala",

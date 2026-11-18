@@ -66,8 +66,6 @@ export const messages = {
     "Файл «{name}» будет удалён с диска. Сообщения с ним останутся в чате, но уже без файла.",
   "files.delete.descriptionRemoved":
     "Файл «{name}» будет убран из списка. Сообщение, в котором он был отправлен, останется в чате.",
-  "files.delete.deleting": "Удаление…",
-  "files.delete.removing": "Удаление из списка…",
   "files.delete.failed": "Не удалось удалить файл.",
   "files.storage.removedAgent": "Удалённый агент",
   "files.storage.back": "Назад к хранилищу",

@@ -25,4 +25,6 @@ export const messages = {
   "common.download": "Scarica",
   "common.removing": "Rimozione…",
   "common.sending": "Invio…",
+  "common.deleting": "Eliminazione…",
+  "common.undo": "Annulla",
 } as const satisfies PartialTranslation<typeof source>;

@@ -244,7 +244,6 @@ export const messages = {
   "routine.settings.pauseFailed": "이 루틴을 일시 정지할 수 없어요.",
   "routine.settings.resumeFailed": "이 루틴을 재개할 수 없어요.",
   "routine.settings.deleteNow": "지금 삭제",
-  "routine.settings.deleting": "삭제 중…",
   "routine.settings.starting": "시작하는 중…",
   "routine.settings.testRun": "테스트 실행",
   "routine.settings.copyRunCommand": "실행 명령 복사",

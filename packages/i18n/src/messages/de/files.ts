@@ -60,8 +60,6 @@ export const messages = {
     "„{name}“ wird vom Datenträger gelöscht. Die Nachrichten, die die Datei zeigen, bleiben ohne sie im Chat.",
   "files.delete.descriptionRemoved":
     "„{name}“ wird aus der Liste entfernt. Die Nachricht, mit der die Datei gesendet wurde, bleibt im Chat.",
-  "files.delete.deleting": "Wird gelöscht…",
-  "files.delete.removing": "Wird entfernt…",
   "files.delete.failed": "Die Datei konnte nicht gelöscht werden.",
   "files.storage.removedAgent": "Entfernter Agent",
   "files.storage.back": "Zurück zum Speicher",

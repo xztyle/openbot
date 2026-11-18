@@ -344,7 +344,6 @@ export const messages = {
   "server.settings.removeConfirmTitle": "移除 {name}？",
   "server.settings.removeConfirmDescription":
     "这会从账号服务中移除该服务器（对所有成员生效），并终止远程访问。其电脑上的文件和对话不受影响。如需再次使用，请在那台电脑上重新注册。",
-  "server.settings.removing": "正在移除…",
   "server.settings.removedTitle": "已移除 {name}",
   "server.settings.leaveTitle": "离开服务器",
   "server.settings.leaveDescription": "从你的服务器列表中移除该服务器。服务器及其他成员仍会保留。",

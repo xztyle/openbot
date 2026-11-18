@@ -49,8 +49,6 @@ export const messages = {
   "files.delete.titleRemoved": "移除该文件？",
   "files.delete.descriptionAvailable": "“{name}”将从磁盘删除。显示它的消息仍保留在对话中，但不再包含该文件。",
   "files.delete.descriptionRemoved": "“{name}”将从列表中移除。发送它的消息仍保留在对话中。",
-  "files.delete.deleting": "正在删除…",
-  "files.delete.removing": "正在移除…",
   "files.delete.failed": "无法删除该文件。",
   "files.storage.removedAgent": "已移除的助手",
   "files.storage.back": "返回存储",

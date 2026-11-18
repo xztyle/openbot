@@ -104,7 +104,6 @@ export const messages = defineMessages("sidebar", {
   "sidebar.state.usageLimit": "Waits for limit",
   "sidebar.state.usageLimitResets": "Waits for limit · {reset}",
   "sidebar.state.usageLimitChip": "Limit",
-  "sidebar.delete.pending": "Deleting…",
   "sidebar.delete.title": "Delete {name}?",
   "sidebar.delete.agentDescription":
     "This removes the agent and its OpenBot conversation from the app. Its queue, memories, routines, and workspace are deleted. History stored separately by the connected CLI provider is not deleted. You cannot undo this.",

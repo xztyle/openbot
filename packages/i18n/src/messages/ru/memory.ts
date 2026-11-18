@@ -39,7 +39,6 @@ export const messages = {
   "memory.updateFailed": "Не удалось обновить запись.",
   "memory.deleteFailed": "Не удалось удалить запись.",
   "memory.deleteUndo.title": "Запись удалена",
-  "memory.deleteUndo.action": "Отменить",
   "memory.clearFailed": "Не удалось очистить память.",
   "memory.inclusion.label": "Использование памяти",
   "memory.inclusion.essential": "Всегда включать",

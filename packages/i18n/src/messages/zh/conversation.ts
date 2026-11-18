@@ -145,7 +145,6 @@ export const messages = {
   "conversation.tasks.page.reassign": "把“{title}”交给 {name}",
   "conversation.tasks.page.start": "开始任务",
   "conversation.tasks.page.took": "接手了“{title}”",
-  "conversation.tasks.page.undo": "撤销",
   "conversation.tasks.page.dismiss": "忽略",
   "conversation.tasks.page.row": "{title}，{agent}，{status}",
   "conversation.tasks.page.showAgents": "显示助手",

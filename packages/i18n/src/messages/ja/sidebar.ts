@@ -102,7 +102,6 @@ export const messages = {
   "sidebar.state.usageLimit": "上限のリセット待ち",
   "sidebar.state.usageLimitResets": "上限のリセット待ち · {reset}",
   "sidebar.state.usageLimitChip": "上限",
-  "sidebar.delete.pending": "削除中…",
   "sidebar.delete.title": "{name} を削除しますか？",
   "sidebar.delete.agentDescription":
     "エージェントとその OpenBot の会話をアプリから削除します。キュー、メモリー、ルーティン、ワークスペースも削除されます。接続した CLI プロバイダーが別に保存している履歴は削除されません。",

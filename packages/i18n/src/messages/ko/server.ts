@@ -353,7 +353,6 @@ export const messages = {
   "server.settings.removeConfirmTitle": "{name}을(를) 제거할까요?",
   "server.settings.removeConfirmDescription":
     "모든 멤버에 대해 계정 서비스에서 서버가 제거되고 원격 접근이 종료돼요. 서버 컴퓨터의 파일과 채팅은 그대로 남아요. 다시 사용하려면 해당 컴퓨터에서 등록하세요.",
-  "server.settings.removing": "제거 중…",
   "server.settings.removedTitle": "{name}을(를) 제거했어요",
   "server.settings.leaveTitle": "서버 나가기",
   "server.settings.leaveDescription": "내 서버 목록에서 이 서버를 제거해요. 서버와 다른 멤버는 그대로 남아요.",

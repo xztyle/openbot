@@ -59,8 +59,6 @@ export const messages = {
   "files.delete.descriptionAvailable":
     "«{name}» se eliminará del disco. Los mensajes que lo muestran permanecerán en el chat sin el archivo.",
   "files.delete.descriptionRemoved": "«{name}» se quitará de la lista. El mensaje que lo envió permanecerá en el chat.",
-  "files.delete.deleting": "Eliminando…",
-  "files.delete.removing": "Quitando…",
   "files.delete.failed": "No se pudo eliminar el archivo.",
   "files.storage.removedAgent": "Agente eliminado",
   "files.storage.back": "Volver a almacenamiento",

@@ -49,8 +49,6 @@ export const messages = defineMessages("files", {
   "files.delete.descriptionAvailable":
     "“{name}” is deleted from the disk. The messages that show it stay in the chat without the file.",
   "files.delete.descriptionRemoved": "“{name}” is removed from the list. The message that sent it stays in the chat.",
-  "files.delete.deleting": "Deleting…",
-  "files.delete.removing": "Removing…",
   "files.delete.failed": "Could not delete the file.",
   "files.storage.removedAgent": "Removed agent",
   "files.storage.back": "Back to storage",

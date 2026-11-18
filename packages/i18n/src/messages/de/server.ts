@@ -339,7 +339,6 @@ export const messages = {
   "server.settings.removeConfirmTitle": "{name} entfernen?",
   "server.settings.removeConfirmDescription":
     "Dadurch wird der Server für alle Mitglieder aus dem Kontodienst entfernt und der Fernzugriff beendet. Dateien und Chats auf seinem Computer bleiben erhalten. Um ihn wieder zu nutzen, registriere ihn auf diesem Computer.",
-  "server.settings.removing": "Wird entfernt…",
   "server.settings.removedTitle": "{name} entfernt",
   "server.settings.leaveTitle": "Server verlassen",
   "server.settings.leaveDescription":

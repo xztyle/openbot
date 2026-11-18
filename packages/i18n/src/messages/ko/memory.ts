@@ -39,7 +39,6 @@ export const messages = {
   "memory.updateFailed": "메모리를 업데이트할 수 없어요.",
   "memory.deleteFailed": "메모리를 삭제할 수 없어요.",
   "memory.deleteUndo.title": "메모리를 삭제했어요",
-  "memory.deleteUndo.action": "실행 취소",
   "memory.clearFailed": "메모리를 지울 수 없어요.",
   "memory.inclusion.label": "메모리 사용 방식",
   "memory.inclusion.essential": "항상 포함",

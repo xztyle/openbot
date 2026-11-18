@@ -41,7 +41,6 @@ export const messages = {
   "agent.setup.suggestion.learningCoach.description": "讲解难懂的主题，制定学习计划。",
   "agent.setup.suggestion.learningCoach.purpose": "把难懂的主题讲清楚，并制定符合我的节奏和目标的学习计划。",
   "agent.hideUndo.title": "{name} 已隐藏",
-  "agent.hideUndo.action": "撤销",
   "agent.error.createFailed": "无法创建助手，请重试。",
   "agent.error.duplicateTitle": "无法复制助手",
   "agent.error.duplicateFailed": "无法复制该助手，请重试。",

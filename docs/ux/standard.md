@@ -151,9 +151,11 @@ follow.
   <thing>" is the primary button that makes it. "Add <thing>" puts an existing thing into another
   (members into a channel). "Save" stores an edit. "Delete" loses data. "Remove" takes a thing out of a
   group and keeps it. "Leave" takes the reader out.
-- Spanish: Nuevo/Nueva, Crear, Añadir, Guardar, Eliminar (delete), Quitar (remove), Salir (leave).
-  Infinitive on buttons ("Crear canal"), not the imperative.
-- Pending labels: "Creating…", "Saving…", "Deleting…" from the common area.
+- Spanish follows the English verb, one to one: New → Nuevo/Nueva, Create → Crear, Add → Añadir,
+  Save → Guardar, Delete → Eliminar, Remove → Quitar ("Quitar a {name}" for a person or an agent),
+  Leave → Salir de. Infinitive on buttons ("Crear canal"), not the imperative.
+- Pending labels and Undo come from the common area: `common.saving`, `common.deleting`,
+  `common.removing`, `common.undo`. Do not add a screen's own copy of them.
 - Errors: what failed, then what to do: "Could not create the channel. Try again."
 
 ## 9. What is left
@@ -171,5 +173,5 @@ Ranked by impact. "Done" items are on `stream/uxflows`.
 | 7 | Confirm Leave private channel, Delete channel (details) and Remove member; agent delete is a confirm only, on desktop and web | Done |
 | 8 | Settings page: visible close/Back, rows stack on a phone, one `SettingsSaveBar`, unsaved guard on section change and on Close/Back/Escape | Done; a switch of server while a draft is open still drops it |
 | 9 | Move template install, custom provider, vault, OpenCode key, chat apps, saved replies, more providers to `FormDialog`; join server button order; close buttons | Done; Publish agent and Join/Add server keep their own frames |
-| 10 | Spanish wording: Quitar vs Eliminar for remove; one "Leave" verb; one "Deleting…" and one "Undo" key | Open |
+| 10 | Spanish wording: Quitar for Remove, Eliminar for Delete, Salir de for Leave; one "Deleting…", "Removing…" and "Undo" key | Done |
 | 11 | One row component for workspace lists (`WorkspaceListRow` in Threads, Activity, Between agents, Space agents, Secrets) | Done |

@@ -287,7 +287,7 @@ export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
     toast(t("memory.deleteUndo.title"), {
       id: toastId,
       duration: AGENT_DELETE_UNDO_MS,
-      action: { label: t("memory.deleteUndo.action"), onClick: undo },
+      action: { label: t("common.undo"), onClick: undo },
       onAutoClose: () => void commit(),
       onDismiss: () => void commit(),
     });

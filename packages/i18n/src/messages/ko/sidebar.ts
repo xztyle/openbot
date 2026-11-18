@@ -100,7 +100,6 @@ export const messages = {
   "sidebar.state.usageLimit": "한도 대기 중",
   "sidebar.state.usageLimitResets": "한도 대기 중 · {reset}",
   "sidebar.state.usageLimitChip": "한도",
-  "sidebar.delete.pending": "삭제 중…",
   "sidebar.delete.title": "{name}을(를) 삭제할까요?",
   "sidebar.delete.agentDescription":
     "앱에서 에이전트와 OpenBot 대화가 삭제돼요. 에이전트의 대기열, 메모리, 루틴, 워크스페이스도 삭제돼요. 연결된 CLI 제공자가 따로 저장한 기록은 삭제되지 않아요.",

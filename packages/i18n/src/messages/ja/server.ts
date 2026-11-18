@@ -329,7 +329,6 @@ export const messages = {
   "server.settings.removeConfirmTitle": "{name} を削除しますか？",
   "server.settings.removeConfirmDescription":
     "すべてのメンバーについてサーバーをアカウントサービスから削除し、リモートアクセスを終了します。そのコンピューター上のファイルとチャットはそのまま残ります。再び使うには、そのコンピューターから登録してください。",
-  "server.settings.removing": "削除中…",
   "server.settings.removedTitle": "{name} を削除しました",
   "server.settings.leaveTitle": "サーバーから退出",
   "server.settings.leaveDescription":

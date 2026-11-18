@@ -334,7 +334,6 @@ export const messages = {
   "server.settings.removeConfirmTitle": "Remover {name}?",
   "server.settings.removeConfirmDescription":
     "Isto remove o servidor do serviço de contas para todos os membros e encerra o acesso remoto. Os arquivos e chats no computador dele continuam intactos. Para usá-lo de novo, registre-o naquele computador.",
-  "server.settings.removing": "Removendo…",
   "server.settings.removedTitle": "{name} removido",
   "server.settings.leaveTitle": "Sair do servidor",
   "server.settings.leaveDescription":

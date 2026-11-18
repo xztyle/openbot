@@ -40,7 +40,6 @@ export const messages = {
   "memory.updateFailed": "Impossible de mettre à jour le souvenir.",
   "memory.deleteFailed": "Impossible de supprimer le souvenir.",
   "memory.deleteUndo.title": "Souvenir supprimé",
-  "memory.deleteUndo.action": "Annuler",
   "memory.clearFailed": "Impossible d’effacer les souvenirs.",
   "memory.inclusion.label": "Utilisation du souvenir",
   "memory.inclusion.essential": "Toujours inclus",

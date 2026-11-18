@@ -37,7 +37,7 @@ export const messages = {
     "Esta habilidad tiene cambios locales en el espacio de trabajo del agente. Eliminar borra esos archivos. Los mensajes originales del chat se conservan.",
   "skill.confirm.removeBody": "OpenBot eliminará esta habilidad del agente. Se conserva el historial de chats.",
   "skill.confirm.replace": "Reemplazar habilidad",
-  "skill.confirm.remove": "Eliminar habilidad",
+  "skill.confirm.remove": "Quitar habilidad",
   "skill.unavailable.readOnly": "Las habilidades remotas son de solo lectura.",
   "skill.unavailable.add": "Añade esta habilidad para probarla.",
   "skill.unavailable.repair": "Repara esta habilidad para probarla.",

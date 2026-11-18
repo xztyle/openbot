@@ -323,7 +323,6 @@ export const messages = {
   "workflow.canvas.version.restore": "Geri yüklemeden önce",
   "workflow.canvas.version.run": "Çalıştırmadan önce",
   "workflow.canvas.deleteUndo.title": "{name} silindi",
-  "workflow.canvas.deleteUndo.action": "Geri al",
   "workflow.page.failed": "OpenBot bunu yapamadı. Tekrar deneyin.",
   "workflow.page.conflict": "Başka bir cihazda değiştirildi. Düzenlemelerinizi geri almak için Geri Al'ı kullanın.",
   "workflow.page.needsNewerApp":

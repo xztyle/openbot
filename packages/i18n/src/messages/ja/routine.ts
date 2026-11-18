@@ -249,7 +249,6 @@ export const messages = {
   "routine.settings.pauseFailed": "このルーティンを一時停止できませんでした。",
   "routine.settings.resumeFailed": "このルーティンを再開できませんでした。",
   "routine.settings.deleteNow": "今すぐ削除",
-  "routine.settings.deleting": "削除中…",
   "routine.settings.starting": "開始中…",
   "routine.settings.testRun": "テスト実行",
   "routine.settings.copyRunCommand": "実行コマンドをコピー",

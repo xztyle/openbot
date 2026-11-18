@@ -262,7 +262,6 @@ export const messages = defineMessages("routine", {
   "routine.settings.timeZoneNote": "Runs use {zone}.",
   "routine.settings.lastRunFailed": "Last run failed",
   "routine.settings.lastRunNeedsAttention": "Last run needs attention",
-  "routine.settings.deleting": "Deleting…",
   "routine.settings.starting": "Starting…",
   "routine.settings.testRun": "Test run",
   "routine.settings.copyRunCommand": "Copy run command",

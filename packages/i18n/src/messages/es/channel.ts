@@ -44,7 +44,7 @@ export const messages = {
   "channel.members.makeLeadLabel": "Nombrar a {name} responsable del canal",
   "channel.members.lead": "Responsable del canal",
   "channel.members.makeLead": "Nombrar responsable del canal",
-  "channel.members.remove": "Quitar {name}",
+  "channel.members.remove": "Quitar a {name}",
   "channel.members.add": "Añadir miembro",
   "channel.members.empty": "Un canal necesita un miembro para poder asignar trabajo.",
   "channel.error.load": "No se pudieron cargar los canales.",

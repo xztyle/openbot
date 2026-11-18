@@ -338,7 +338,6 @@ export const messages = {
   "server.settings.removeConfirmTitle": "{name} kaldırılsın mı?",
   "server.settings.removeConfirmDescription":
     "Bu işlem sunucuyu tüm üyeler için hesap hizmetinden kaldırır ve uzaktan erişimi sonlandırır. Bilgisayarındaki dosyalar ve sohbetler olduğu gibi kalır. Yeniden kullanmak için o bilgisayardan kaydedin.",
-  "server.settings.removing": "Kaldırılıyor…",
   "server.settings.removedTitle": "{name} kaldırıldı",
   "server.settings.leaveTitle": "Sunucudan ayrıl",
   "server.settings.leaveDescription": "Bu sunucuyu sunucu listenizden kaldırın. Sunucu ve diğer üyeleri kalır.",

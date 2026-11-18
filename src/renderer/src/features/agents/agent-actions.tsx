@@ -358,7 +358,7 @@ const AgentActions = createSimpleContext({
         hideToastIds.add(toastId);
         toast(t("agent.hideUndo.title", { name: agent.name }), {
           id: toastId,
-          action: { label: t("agent.hideUndo.action"), onClick: () => void setAgentHiddenByUser(agentId, false) },
+          action: { label: t("common.undo"), onClick: () => void setAgentHiddenByUser(agentId, false) },
           onDismiss: () => hideToastIds.delete(toastId),
           onAutoClose: () => hideToastIds.delete(toastId),
         });

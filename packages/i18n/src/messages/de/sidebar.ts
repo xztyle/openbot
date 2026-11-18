@@ -126,7 +126,6 @@ export const messages = {
   "sidebar.state.usageLimit": "Wartet auf Limit",
   "sidebar.state.usageLimitResets": "Wartet auf Limit · {reset}",
   "sidebar.state.usageLimitChip": "Limit",
-  "sidebar.delete.pending": "Wird gelöscht…",
   "sidebar.delete.title": "{name} löschen?",
   "sidebar.delete.agentDescription":
     "Dies entfernt den Agenten und seine OpenBot-Unterhaltung aus der App. Seine Warteschlange, Erinnerungen, Routinen und sein Arbeitsbereich werden gelöscht. Der separat vom verbundenen CLI-Anbieter gespeicherte Verlauf wird nicht gelöscht.",

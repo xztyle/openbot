@@ -47,7 +47,6 @@ export const messages = defineMessages("agent", {
   "agent.setup.suggestion.learningCoach.purpose":
     "Explain difficult topics clearly and build study plans that match my pace and goals.",
   "agent.hideUndo.title": "{name} is hidden",
-  "agent.hideUndo.action": "Undo",
   "agent.error.createFailed": "Could not create the agent. Try again.",
   "agent.error.duplicateTitle": "Could not duplicate agent",
   "agent.error.duplicateFailed": "Could not duplicate this agent. Try again.",

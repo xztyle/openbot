@@ -35,4 +35,6 @@ export const messages = defineMessages("common", {
   "common.unsaved.description": "Your unsaved changes will be lost.",
   "common.unsaved.discard": "Discard changes",
   "common.unsaved.keepEditing": "Keep editing",
+  "common.deleting": "Deleting…",
+  "common.undo": "Undo",
 });

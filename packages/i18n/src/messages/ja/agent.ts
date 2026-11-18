@@ -46,7 +46,6 @@ export const messages = {
   "agent.setup.suggestion.learningCoach.purpose":
     "難しいテーマを分かりやすく説明し、私のペースと目標に合った学習計画を立ててください。",
   "agent.hideUndo.title": "{name} を非表示にしました",
-  "agent.hideUndo.action": "元に戻す",
   "agent.error.createFailed": "エージェントを作成できませんでした。もう一度お試しください。",
   "agent.error.duplicateTitle": "エージェントを複製できませんでした",
   "agent.error.duplicateFailed": "このエージェントを複製できませんでした。もう一度お試しください。",

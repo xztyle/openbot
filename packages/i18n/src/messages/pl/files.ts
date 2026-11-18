@@ -56,8 +56,6 @@ export const messages = {
     "Plik „{name}” zostanie usunięty z dysku. Wiadomości, które go pokazują, zostaną w czacie bez pliku.",
   "files.delete.descriptionRemoved":
     "Plik „{name}” zostanie usunięty z listy. Wiadomość, która go wysłała, zostanie w czacie.",
-  "files.delete.deleting": "Usuwanie…",
-  "files.delete.removing": "Usuwanie…",
   "files.delete.failed": "Nie udało się usunąć pliku.",
   "files.storage.removedAgent": "Usunięty agent",
   "files.storage.back": "Wróć do miejsca na dysku",

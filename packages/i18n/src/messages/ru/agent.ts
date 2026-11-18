@@ -46,7 +46,6 @@ export const messages = {
   "agent.setup.suggestion.learningCoach.purpose":
     "Понятно объяснять сложные темы и составлять планы обучения под мой темп и мои цели.",
   "agent.hideUndo.title": "{name} скрыт",
-  "agent.hideUndo.action": "Отменить",
   "agent.error.createFailed": "Не удалось создать агента. Повторите попытку.",
   "agent.error.duplicateTitle": "Не удалось дублировать агента",
   "agent.error.duplicateFailed": "Не удалось дублировать этого агента. Повторите попытку.",

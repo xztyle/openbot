@@ -291,7 +291,7 @@ export function FileList(props: FileListProps) {
             : t("files.delete.descriptionRemoved", { name: pendingDelete()?.name ?? "" })
         }
         confirmLabel={pendingDelete()?.status === "available" ? t("common.delete") : t("common.remove")}
-        pendingLabel={pendingDelete()?.status === "available" ? t("files.delete.deleting") : t("files.delete.removing")}
+        pendingLabel={pendingDelete()?.status === "available" ? t("common.deleting") : t("common.removing")}
         error={deleteError() ?? undefined}
       />
     </section>

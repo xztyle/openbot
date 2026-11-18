@@ -298,7 +298,6 @@ export const messages = {
   "routine.settings.pauseFailed": "Не удалось приостановить эту регулярную задачу.",
   "routine.settings.resumeFailed": "Не удалось возобновить эту регулярную задачу.",
   "routine.settings.deleteNow": "Удалить сейчас",
-  "routine.settings.deleting": "Удаление…",
   "routine.settings.starting": "Запуск…",
   "routine.settings.testRun": "Тестовый запуск",
   "routine.settings.copyRunCommand": "Копировать команду запуска",

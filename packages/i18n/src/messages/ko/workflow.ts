@@ -323,7 +323,6 @@ export const messages = {
   "workflow.canvas.version.restore": "복원 전",
   "workflow.canvas.version.run": "실행 전",
   "workflow.canvas.deleteUndo.title": "{name}을(를) 삭제했어요",
-  "workflow.canvas.deleteUndo.action": "실행 취소",
   "workflow.page.failed": "OpenBot이 이 작업을 할 수 없었어요. 다시 시도해 주세요.",
   "workflow.page.conflict": "다른 기기에서 변경됐어요. 실행 취소하면 내 편집 내용이 돌아와요.",
   "workflow.page.needsNewerApp":

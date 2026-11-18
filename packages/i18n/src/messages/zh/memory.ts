@@ -37,7 +37,6 @@ export const messages = {
   "memory.updateFailed": "无法更新该记忆。",
   "memory.deleteFailed": "无法删除该记忆。",
   "memory.deleteUndo.title": "记忆已删除",
-  "memory.deleteUndo.action": "撤销",
   "memory.clearFailed": "无法清空记忆。",
   "memory.inclusion.label": "记忆使用方式",
   "memory.inclusion.essential": "始终包含",

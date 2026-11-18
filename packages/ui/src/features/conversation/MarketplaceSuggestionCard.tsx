@@ -80,7 +80,7 @@ export function MarketplaceSuggestionCard(props: MarketplaceSuggestionCardProps)
                 onSettled(() => dismissButton?.focus());
               }}
             >
-              {t("chat.suggestion.undo")}
+              {t("common.undo")}
             </Button>
           </Show>
         </div>

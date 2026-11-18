@@ -50,8 +50,6 @@ export const messages = {
   "files.delete.descriptionAvailable":
     "“{name}” 파일이 디스크에서 삭제돼요. 이 파일이 표시된 메시지는 파일 없이 채팅에 남아요.",
   "files.delete.descriptionRemoved": "“{name}” 파일이 목록에서 제거돼요. 이 파일을 보낸 메시지는 채팅에 남아요.",
-  "files.delete.deleting": "삭제 중…",
-  "files.delete.removing": "제거 중…",
   "files.delete.failed": "파일을 삭제할 수 없어요.",
   "files.storage.removedAgent": "제거된 에이전트",
   "files.storage.back": "저장 공간으로 돌아가기",

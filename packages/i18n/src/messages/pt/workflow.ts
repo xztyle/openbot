@@ -323,7 +323,6 @@ export const messages = {
   "workflow.canvas.version.restore": "Antes de uma restauração",
   "workflow.canvas.version.run": "Antes de uma execução",
   "workflow.canvas.deleteUndo.title": "{name} excluído",
-  "workflow.canvas.deleteUndo.action": "Desfazer",
   "workflow.page.failed": "O OpenBot não conseguiu fazer isso. Tente de novo.",
   "workflow.page.conflict": "Alterado em outro dispositivo. Desfaça para recuperar suas edições.",
   "workflow.page.needsNewerApp":

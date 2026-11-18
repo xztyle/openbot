@@ -39,7 +39,6 @@ export const messages = {
   "memory.updateFailed": "Nie udało się zaktualizować wspomnienia.",
   "memory.deleteFailed": "Nie udało się usunąć wspomnienia.",
   "memory.deleteUndo.title": "Usunięto wspomnienie",
-  "memory.deleteUndo.action": "Cofnij",
   "memory.clearFailed": "Nie udało się wyczyścić wspomnień.",
   "memory.inclusion.label": "Użycie wspomnienia",
   "memory.inclusion.essential": "Zawsze dołączane",

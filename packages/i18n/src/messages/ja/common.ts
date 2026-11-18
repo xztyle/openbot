@@ -25,4 +25,6 @@ export const messages = {
   "common.download": "ダウンロード",
   "common.removing": "削除中…",
   "common.sending": "送信中…",
+  "common.deleting": "削除中…",
+  "common.undo": "元に戻す",
 } as const satisfies PartialTranslation<typeof source>;

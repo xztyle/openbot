@@ -47,7 +47,6 @@ export const messages = {
   "agent.setup.suggestion.learningCoach.purpose":
     "Zor konuları açıkça anlatmak ve hızıma ve hedeflerime uygun çalışma planları hazırlamak.",
   "agent.hideUndo.title": "{name} gizlendi",
-  "agent.hideUndo.action": "Geri al",
   "agent.error.createFailed": "Ajan oluşturulamadı. Tekrar deneyin.",
   "agent.error.duplicateTitle": "Ajan çoğaltılamadı",
   "agent.error.duplicateFailed": "Bu ajan çoğaltılamadı. Tekrar deneyin.",

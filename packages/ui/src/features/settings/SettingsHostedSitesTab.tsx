@@ -114,7 +114,7 @@ export function SettingsHostedSitesTab(props: SettingsHostedSitesTabProps) {
           title={t("settings.hostedSites.deleteTitle", { hostname: props.store.state.pendingDelete?.hostname ?? "" })}
           description={t("settings.hostedSites.deleteDescription")}
           confirmLabel={t("common.delete")}
-          pendingLabel={t("settings.hostedSites.deleting")}
+          pendingLabel={t("common.deleting")}
           pending={props.store.state.busy}
           error={props.store.state.deleteError ?? undefined}
           onCancel={props.store.cancelDelete}

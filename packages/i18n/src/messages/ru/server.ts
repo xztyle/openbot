@@ -338,7 +338,6 @@ export const messages = {
   "server.settings.removeConfirmTitle": "Удалить {name}?",
   "server.settings.removeConfirmDescription":
     "Сервер будет удалён из сервиса аккаунтов для всех участников, удалённый доступ прекратится. Файлы и чаты на его компьютере останутся. Чтобы снова использовать сервер, зарегистрируйте его с того компьютера.",
-  "server.settings.removing": "Удаление…",
   "server.settings.removedTitle": "{name} удалён",
   "server.settings.leaveTitle": "Покинуть сервер",
   "server.settings.leaveDescription":

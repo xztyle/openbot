@@ -378,7 +378,6 @@ export const messages = {
   "chat.suggestion.detailsNamed": "マーケットプレイスで {name} を開く",
   "chat.suggestion.dismissNamed": "{name} を閉じる",
   "chat.suggestion.dismissed": "{name} の提案を閉じました。",
-  "chat.suggestion.undo": "元に戻す",
   "chat.suggestion.localOnly": "{name} は自分のコンピューターの OpenBot で接続してください。",
   "chat.suggestion.unavailable": "このサーバーでは {name} を接続できません。",
   "chat.compaction.running": "コンテキストを圧縮しています",

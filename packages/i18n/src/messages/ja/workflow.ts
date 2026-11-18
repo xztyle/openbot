@@ -323,7 +323,6 @@ export const messages = {
   "workflow.canvas.version.restore": "復元前",
   "workflow.canvas.version.run": "実行前",
   "workflow.canvas.deleteUndo.title": "{name} を削除しました",
-  "workflow.canvas.deleteUndo.action": "元に戻す",
   "workflow.page.failed": "OpenBot で実行できませんでした。もう一度お試しください。",
   "workflow.page.conflict": "別のデバイスで変更されました。元に戻すと編集内容を復元できます。",
   "workflow.page.needsNewerApp":

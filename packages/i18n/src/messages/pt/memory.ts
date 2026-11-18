@@ -39,7 +39,6 @@ export const messages = {
   "memory.updateFailed": "Não foi possível atualizar a memória.",
   "memory.deleteFailed": "Não foi possível excluir a memória.",
   "memory.deleteUndo.title": "Memória excluída",
-  "memory.deleteUndo.action": "Desfazer",
   "memory.clearFailed": "Não foi possível limpar as memórias.",
   "memory.inclusion.label": "Uso de memória",
   "memory.inclusion.essential": "Sempre incluída",

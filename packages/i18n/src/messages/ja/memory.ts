@@ -40,7 +40,6 @@ export const messages = {
   "memory.updateFailed": "メモリーを更新できませんでした。",
   "memory.deleteFailed": "メモリーを削除できませんでした。",
   "memory.deleteUndo.title": "メモリーを削除しました",
-  "memory.deleteUndo.action": "元に戻す",
   "memory.clearFailed": "メモリーを消去できませんでした。",
   "memory.inclusion.label": "メモリーの使い方",
   "memory.inclusion.essential": "常に含める",

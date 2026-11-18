@@ -195,7 +195,7 @@ export function SettingsHostedServersTab(props: SettingsHostedServersTabProps) {
         title={t("settings.hostedServers.deleteTitle", { name: state().pendingDelete?.name ?? "" })}
         description={t("settings.hostedServers.deleteDescription")}
         confirmLabel={t("common.delete")}
-        pendingLabel={t("settings.hostedServers.deleting")}
+        pendingLabel={t("common.deleting")}
         pending={state().deleting}
         error={state().deleteError ?? undefined}
         initialFocus="cancel"

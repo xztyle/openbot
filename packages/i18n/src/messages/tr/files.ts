@@ -49,8 +49,6 @@ export const messages = {
   "files.delete.titleRemoved": "Bu dosya kaldırılsın mı?",
   "files.delete.descriptionAvailable": "“{name}” diskten silinir. Onu gösteren mesajlar dosya olmadan sohbette kalır.",
   "files.delete.descriptionRemoved": "“{name}” listeden kaldırılır. Onu gönderen mesaj sohbette kalır.",
-  "files.delete.deleting": "Siliniyor…",
-  "files.delete.removing": "Kaldırılıyor…",
   "files.delete.failed": "Dosya silinemedi.",
   "files.storage.removedAgent": "Kaldırılan ajan",
   "files.storage.back": "Depolamaya geri dön",

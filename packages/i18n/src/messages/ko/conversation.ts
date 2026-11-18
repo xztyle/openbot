@@ -140,7 +140,6 @@ export const messages = {
   "conversation.tasks.page.reassign": "“{title}”을(를) {name}에게 맡기기",
   "conversation.tasks.page.start": "작업 시작",
   "conversation.tasks.page.took": "“{title}” 작업을 맡았어요",
-  "conversation.tasks.page.undo": "실행 취소",
   "conversation.tasks.page.dismiss": "닫기",
   "conversation.tasks.page.row": "{title}, {agent}, {status}",
   "conversation.tasks.page.showAgents": "에이전트 보기",

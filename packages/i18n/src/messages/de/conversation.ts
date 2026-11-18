@@ -149,7 +149,6 @@ export const messages = {
   "conversation.tasks.page.reassign": "„{title}“ an {name} geben",
   "conversation.tasks.page.start": "Aufgabe starten",
   "conversation.tasks.page.took": "übernimmt „{title}“",
-  "conversation.tasks.page.undo": "Rückgängig",
   "conversation.tasks.page.dismiss": "Ausblenden",
   "conversation.tasks.page.row": "{title}, {agent}, {status}",
   "conversation.tasks.page.showAgents": "Agenten anzeigen",

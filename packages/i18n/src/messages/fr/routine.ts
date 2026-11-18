@@ -260,7 +260,6 @@ export const messages = {
   "routine.settings.pauseFailed": "Impossible de mettre cette routine en pause.",
   "routine.settings.resumeFailed": "Impossible de reprendre cette routine.",
   "routine.settings.deleteNow": "Supprimer",
-  "routine.settings.deleting": "Suppression…",
   "routine.settings.starting": "Lancement…",
   "routine.settings.testRun": "Tester",
   "routine.settings.copyRunCommand": "Copier la commande",

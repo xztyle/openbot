@@ -31,4 +31,6 @@ export const messages = {
   "common.unsaved.description": "Se perderán los cambios sin guardar.",
   "common.unsaved.discard": "Descartar cambios",
   "common.unsaved.keepEditing": "Seguir editando",
+  "common.deleting": "Eliminando…",
+  "common.undo": "Deshacer",
 } as const satisfies PartialTranslation<typeof source>;

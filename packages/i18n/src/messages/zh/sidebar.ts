@@ -100,7 +100,6 @@ export const messages = {
   "sidebar.state.usageLimit": "等待额度恢复",
   "sidebar.state.usageLimitResets": "等待额度恢复 · {reset}",
   "sidebar.state.usageLimitChip": "额度",
-  "sidebar.delete.pending": "正在删除…",
   "sidebar.delete.title": "删除 {name}？",
   "sidebar.delete.agentDescription":
     "这会从应用中移除该助手及其 OpenBot 对话，该助手的队列、记忆、自动化任务和工作区都会被删除。由所连接的 CLI 服务商单独保存的历史记录不会被删除。",

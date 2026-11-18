@@ -46,7 +46,6 @@ export const messages = {
   "agent.setup.suggestion.learningCoach.purpose":
     "어려운 주제를 명확하게 설명하고 내 속도와 목표에 맞는 학습 계획을 세워 줘.",
   "agent.hideUndo.title": "{name}을(를) 숨겼어요",
-  "agent.hideUndo.action": "실행 취소",
   "agent.error.createFailed": "에이전트를 만들지 못했어요. 다시 시도해 주세요.",
   "agent.error.duplicateTitle": "에이전트를 복제하지 못했어요",
   "agent.error.duplicateFailed": "이 에이전트를 복제하지 못했어요. 다시 시도해 주세요.",

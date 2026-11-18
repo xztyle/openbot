@@ -332,7 +332,6 @@ export const messages = {
   "server.settings.removeConfirmTitle": "Usunąć: {name}?",
   "server.settings.removeConfirmDescription":
     "Serwer zostanie usunięty z usługi kont dla wszystkich członków, a zdalny dostęp się zakończy. Pliki i czaty na jego komputerze pozostaną nienaruszone. Aby użyć go ponownie, zarejestruj go z tamtego komputera.",
-  "server.settings.removing": "Usuwanie…",
   "server.settings.removedTitle": "Usunięto: {name}",
   "server.settings.leaveTitle": "Opuść serwer",
   "server.settings.leaveDescription":

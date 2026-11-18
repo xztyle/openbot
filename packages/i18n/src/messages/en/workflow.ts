@@ -322,7 +322,6 @@ export const messages = defineMessages("workflow", {
   "workflow.canvas.version.restore": "Before a restore",
   "workflow.canvas.version.run": "Before a run",
   "workflow.canvas.deleteUndo.title": "{name} deleted",
-  "workflow.canvas.deleteUndo.action": "Undo",
   "workflow.page.failed": "OpenBot could not do this. Try again.",
   "workflow.page.conflict": "Changed on another device. Undo to get your edits back.",
   "workflow.page.needsNewerApp": "This workflow has steps from a newer OpenBot. Update OpenBot to change it.",

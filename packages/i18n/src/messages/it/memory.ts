@@ -40,7 +40,6 @@ export const messages = {
   "memory.updateFailed": "Impossibile aggiornare la memoria.",
   "memory.deleteFailed": "Impossibile eliminare la memoria.",
   "memory.deleteUndo.title": "Memoria eliminata",
-  "memory.deleteUndo.action": "Annulla",
   "memory.clearFailed": "Impossibile cancellare le memorie.",
   "memory.inclusion.label": "Uso della memoria",
   "memory.inclusion.essential": "Sempre inclusa",

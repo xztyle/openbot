@@ -30,4 +30,6 @@ export const messages = {
   "common.download": "下载",
   "common.removing": "移除中…",
   "common.sending": "发送中…",
+  "common.deleting": "正在删除…",
+  "common.undo": "撤销",
 } as const satisfies PartialTranslation<typeof source>;

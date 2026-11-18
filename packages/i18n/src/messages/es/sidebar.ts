@@ -126,7 +126,6 @@ export const messages = {
   "sidebar.state.usageLimit": "En espera por el límite",
   "sidebar.state.usageLimitResets": "En espera por el límite · {reset}",
   "sidebar.state.usageLimitChip": "Límite",
-  "sidebar.delete.pending": "Eliminando…",
   "sidebar.delete.title": "¿Eliminar {name}?",
   "sidebar.delete.agentDescription":
     "Esto elimina de la aplicación el agente y su conversación de OpenBot. Se eliminan su cola, recuerdos, rutinas y espacio de trabajo. El historial guardado por separado por el proveedor CLI conectado no se elimina. No se puede deshacer.",

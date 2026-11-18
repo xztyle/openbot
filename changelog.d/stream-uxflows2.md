@@ -17,3 +17,6 @@
   connections are one component.
 - Threads, Activity, Between agents, Space agents and Secrets use one row: the same spacing, line
   between rows, unread tint and title. On a computer, row buttons show on hover; on a phone, always.
+- Spanish: "Remove" is always "Quitar" and "Delete" always "Eliminar" (before, "Remove member" read as
+  "Eliminar miembro"), and "Leave server" is "Salir del servidor", as "Leave channel" is "Salir del
+  canal".

@@ -25,4 +25,6 @@ export const messages = {
   "common.download": "다운로드",
   "common.removing": "제거 중…",
   "common.sending": "보내는 중…",
+  "common.deleting": "삭제 중…",
+  "common.undo": "실행 취소",
 } as const satisfies PartialTranslation<typeof source>;

@@ -3004,6 +3004,8 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       test: async () => undefined,
       openSettings: async () => undefined,
       onOpened: () => () => undefined,
+      // The preview has no Dock icon.
+      setBadgeCount: async () => undefined,
     },
     maintenance: {
       exportData: async () => ({ saved: true }),

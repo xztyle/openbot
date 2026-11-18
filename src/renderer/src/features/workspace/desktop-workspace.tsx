@@ -5,7 +5,7 @@ import { Bot, CheckCheck, Search, Settings, Store } from "@openbot/ui";
 import { computeSidebarAgentStates } from "@openbot/ui/features/sidebar/sidebar-agent-states";
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createMemo, type ParentProps } from "solid-js";
+import { createEffect, createMemo, onCleanup, type ParentProps } from "solid-js";
 import { useLayout } from "../../layout";
 import { useNavigation } from "../../navigation";
 import { useTurns } from "../../turns";
@@ -29,6 +29,7 @@ import { useSettings } from "../settings/settings-context";
 import { desktopStorageHygieneCalls, serverHasStorageHygiene } from "../storage-hygiene/storage-hygiene-port";
 import { isReaderAuthor } from "../team/reader-identity";
 import { usePresence } from "../team/team-context";
+import { workspaceAttention } from "./workspace-attention";
 import { WorkspaceProvider } from "./workspace-context";
 import { createWorkspaceController, desktopMessageLink } from "./workspace-controller";
 import { workspacePersonName } from "./workspace-model";
@@ -280,5 +281,12 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
         void channels.open(link.channelId);
     },
   );
+  // The Dock or taskbar icon counts what the web tab title counts. Main takes it only from the main
+  // window, and a closed workspace clears it.
+  createEffect(
+    () => workspaceAttention(controller).count,
+    (count) => void window.openbot.notifications.setBadgeCount(count).catch(() => undefined),
+  );
+  onCleanup(() => void window.openbot.notifications.setBadgeCount(0).catch(() => undefined));
   return <WorkspaceProvider controller={controller}>{props.children}</WorkspaceProvider>;
 }

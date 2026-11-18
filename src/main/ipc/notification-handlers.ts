@@ -2,12 +2,12 @@
 
 import type { AppTranslate } from "@openbot/i18n";
 import { sourceText } from "@openbot/i18n/source";
-import { Notification } from "electron";
+import { type IpcMainInvokeEvent, Notification } from "electron";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import { notificationSettingsUrl, showRetainedNotification } from "../desktop-notifications";
 import type { NotificationPreferenceStore } from "../notification-preference-store";
-import { parseNotificationPreference } from "./app-inputs";
-import { handler, type IpcGroupHandlers, payloadHandler } from "./define-ipc-group";
+import { parseBadgeCount, parseNotificationPreference } from "./app-inputs";
+import { authorizedHandler, handler, type IpcGroupHandlers, payloadHandler } from "./define-ipc-group";
 
 export interface NotificationIpcDependencies {
   notificationPreference: NotificationPreferenceStore;
@@ -15,6 +15,10 @@ export interface NotificationIpcDependencies {
   /** Asks the operating system for permission if OpenBot has not asked yet. */
   requestPermission: () => Promise<void>;
   openExternal: (url: string) => Promise<void>;
+  /** The web contents id of the main window, or null while it has none. */
+  mainRendererId: () => number | null;
+  /** Shows the count on the Dock or taskbar icon; 0 clears it. */
+  setBadgeCount: (count: number) => void;
 }
 
 export function notificationIpcHandlers({
@@ -22,7 +26,14 @@ export function notificationIpcHandlers({
   translate,
   requestPermission,
   openExternal,
+  mainRendererId,
+  setBadgeCount,
 }: NotificationIpcDependencies): Pick<IpcGroupHandlers, "notifications"> {
+  // Every window of the app shares one origin; the Dynamic Island and the browser dock overlay must
+  // not set the count of the main window.
+  const fromMainRenderer = (event: IpcMainInvokeEvent) => {
+    if (event.sender.id !== mainRendererId()) throw new Error("Rejected badge IPC request outside the main renderer.");
+  };
   return {
     notifications: {
       getPreference: handler(() => notificationPreference.get()),
@@ -43,6 +54,7 @@ export function notificationIpcHandlers({
         if (!url) throw new Error(sourceText("error.app.notificationSettingsMissing"));
         await openExternal(url);
       }),
+      setBadgeCount: authorizedHandler(fromMainRenderer, parseBadgeCount, (_event, count) => setBadgeCount(count)),
     },
   };
 }

@@ -234,6 +234,7 @@ import { ServerSettingsPageTitle, SettingsPageFrame } from "../window/SettingsPa
 import type { SettingsKind, WindowPage } from "../window/window-page-context";
 import { WorkspaceSidebarPane } from "../workspace/WorkspaceSidebarPane";
 import { WorkspaceAgentFrame, WorkspaceChrome, WorkspaceMain } from "../workspace/WorkspaceView";
+import { workspaceAttention } from "../workspace/workspace-attention";
 import { WorkspaceProvider } from "../workspace/workspace-context";
 import { createWorkspaceController, type WorkspaceController } from "../workspace/workspace-controller";
 import { AGENT_DM_PREFIX, workspacePersonName } from "../workspace/workspace-model";
@@ -2131,17 +2132,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     t,
     badge: () => {
       if (!workspaceOn()) return { count: attentionCount(), unread: false };
-      let count = 0;
-      let unread = false;
-      for (const space of ws.spaceUnread().values()) {
-        count += space.mentions;
-        unread ||= space.unread;
-      }
-      // The rail leaves out a muted conversation, or one set to Nothing; its mentions still count, as
-      // Slack's badge counts them. "Just mentions" is in the rail's count already.
-      for (const item of ws.state.activity.data?.items ?? [])
-        if (item.unread && item.kind === "mention" && ws.notifyLevel(item.channelId) === "nothing") count += 1;
-      return { count, unread };
+      return workspaceAttention(ws);
     },
   });
   // The browser's Back and the page rail move between the list and the conversation on a phone.

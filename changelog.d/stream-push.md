@@ -2,6 +2,7 @@
 
 - Web push notifications now come for what Slack notifies: a mention of you in a channel, thread or group, a message in a DM or a group, and a reply in a thread that you follow. They follow each conversation's bell (Just mentions, Nothing, mute) and your level for the server. Messages between agents send none.
 - A tap on a web push notification opens the exact place: the message in its channel or thread, or the chat with the agent.
+- The desktop app's Dock icon (macOS) and launcher icon (Linux) show the same count as the web tab title: your mentions, DM messages and agents that wait for you.
 
 ### Changed
 

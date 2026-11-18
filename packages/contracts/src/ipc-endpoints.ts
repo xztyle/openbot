@@ -1346,6 +1346,9 @@ export const IPC_ENDPOINTS = {
     // system that has no such page.
     openSettings: request<undefined, void>()("notifications:open-settings"),
     opened: event<NotificationOpenedEvent>()("notifications:opened-event"),
+    // The count on the Dock or taskbar icon: the main window's mentions, DM messages and waiting
+    // agents, as the web tab title counts them. 0 clears it. Only the main window may set it.
+    setBadgeCount: request<number, void>()("notifications:set-badge-count"),
   },
   agent: {
     getStatus: scopedQuery<AgentStatus>()("agent:get-status"),

@@ -701,6 +701,12 @@ function registerIpcHandlers({
       translate: language.translate,
       requestPermission: () => requestDesktopNotificationPermission(notificationPreference, language.translate),
       openExternal: (url) => shell.openExternal(url),
+      mainRendererId: () => {
+        const window = windowHolder.current;
+        return window && !window.isDestroyed() ? window.webContents.id : null;
+      },
+      // macOS shows it on the Dock icon and Linux on a Unity launcher; Windows has no count badge.
+      setBadgeCount: (count) => app.setBadgeCount(count),
     }),
     ...teamIpcHandlers({
       host,

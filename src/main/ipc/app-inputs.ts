@@ -213,6 +213,15 @@ function parseSwitches<Key extends string>(
   return change;
 }
 
+/** The most that the Dock or taskbar badge shows; a larger count shows this. */
+const BADGE_COUNT_LIMIT = 9_999;
+
+export function parseBadgeCount(input: unknown): number {
+  if (typeof input !== "number" || !Number.isSafeInteger(input) || input < 0)
+    throw new Error("Badge count is required.");
+  return Math.min(input, BADGE_COUNT_LIMIT);
+}
+
 export function parseNotificationPreference(input: unknown): NotificationPreference {
   if (!isDynamicRecord(input) || !isBoolean(input.desktopNotifications) || !isBoolean(input.messagePreview)) {
     throw new Error("Notification preference is required.");

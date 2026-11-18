@@ -1245,6 +1245,7 @@ const openbotApi: OpenBotDesktopApi = {
     test: decodeVoid,
     openSettings: decodeVoid,
     opened: decodeNotificationOpenedEvent,
+    setBadgeCount: decodeVoid,
   }),
   maintenance: bridgeGroup(IPC_ENDPOINTS.maintenance, {
     exportData: decodeExportResult,

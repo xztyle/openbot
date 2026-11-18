@@ -7,8 +7,9 @@ import {
   type FirstAgentDraft,
   FirstAgentSetup,
 } from "@openbot/ui/features/agents/FirstAgentSetup";
+import { NewAgentDialog } from "@openbot/ui/features/agents/NewAgentDialog";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createStore, onSettled } from "solid-js";
+import { createEffect, createStore, onSettled, Show } from "solid-js";
 import { type CreationPreference, resolveCreationModel } from "../agents/agent-creation-model";
 import { createAgentInitialMessage } from "../agents/agent-initial-message";
 import { WebHostRequestError } from "./web-host-connections";
@@ -34,8 +35,11 @@ export function WebAgentSettings(props: {
   /** The draft the form starts from. */
   initialDraft?: FirstAgentDraft;
   onDraftChange?: (draft: FirstAgentDraft) => void;
+  /** A later agent: the New agent dialog over the pane, instead of the form page. */
+  dialog?: boolean;
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  /** The agent is made; it gets its id, to open its chat. */
+  onSaved: (agentId: string) => Promise<void>;
 }) {
   const { t, errorMessage } = useText();
   const [state, setState] = createStore<{
@@ -141,7 +145,7 @@ export function WebAgentSettings(props: {
     let created = false;
     try {
       const selectedModel = state.models.find((model) => model.provider === value.provider && model.id === value.model);
-      await props.runtime.createAgent({
+      const agent = await props.runtime.createAgent({
         name: value.name,
         description: value.purpose,
         initialMessage: createAgentInitialMessage(value),
@@ -157,7 +161,7 @@ export function WebAgentSettings(props: {
       });
       created = true;
       if (!disposed) {
-        await props.onSaved();
+        await props.onSaved(agent.id);
         props.onClose();
       }
     } catch (error) {
@@ -179,31 +183,65 @@ export function WebAgentSettings(props: {
         });
     }
   }
+  const fieldProps = {
+    get value() {
+      return state.draft;
+    },
+    suggestions: FIRST_AGENT_SUGGESTIONS,
+    get submitting() {
+      return state.busy;
+    },
+    // After a failure whose result is not known, a second Create could make the agent twice.
+    get submitDisabled() {
+      return state.uncertain;
+    },
+    get error() {
+      return state.error;
+    },
+    get modelOptions() {
+      return supportsModelSelection() && state.models.length > 0 ? state.models : undefined;
+    },
+    get agentStatus() {
+      return state.status ?? undefined;
+    },
+    get customProviders() {
+      return props.customProviders;
+    },
+    get onManageProviders() {
+      return props.onManageProviders;
+    },
+    onChange: (value: FirstAgentDraft) => {
+      setState((draft) => {
+        if (
+          value.provider !== draft.draft.provider ||
+          value.model !== draft.draft.model ||
+          value.reasoningEffort !== draft.draft.reasoningEffort
+        )
+          draft.modelTouched = true;
+        draft.draft = value;
+      });
+      props.onDraftChange?.(value);
+    },
+    onSubmit: save,
+  };
   return (
-    <FirstAgentSetup
-      value={state.draft}
-      suggestions={FIRST_AGENT_SUGGESTIONS}
-      mode={props.first ? "first" : "additional"}
-      submitting={state.busy}
-      error={state.error}
-      modelOptions={supportsModelSelection() && state.models.length > 0 ? state.models : undefined}
-      agentStatus={state.status ?? undefined}
-      customProviders={props.customProviders}
-      onManageProviders={props.onManageProviders}
-      onChange={(value) => {
-        setState((draft) => {
-          if (
-            value.provider !== draft.draft.provider ||
-            value.model !== draft.draft.model ||
-            value.reasoningEffort !== draft.draft.reasoningEffort
-          )
-            draft.modelTouched = true;
-          draft.draft = value;
-        });
-        props.onDraftChange?.(value);
-      }}
-      onSubmit={save}
-      onCancel={props.first ? undefined : props.onClose}
-    />
+    <Show
+      when={props.dialog}
+      fallback={
+        <FirstAgentSetup
+          {...fieldProps}
+          mode={props.first ? "first" : "additional"}
+          onCancel={props.first ? undefined : props.onClose}
+        />
+      }
+    >
+      <NewAgentDialog
+        {...fieldProps}
+        open
+        onOpenChange={(open) => {
+          if (!open) props.onClose();
+        }}
+      />
+    </Show>
   );
 }

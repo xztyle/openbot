@@ -101,7 +101,8 @@ function WorkspaceShellFrame(props: { account: () => CentralAuthUser }) {
     refreshServers,
   } = useServers();
   const { remoteDesktopWorkspaceVisible } = useRemoteDesktop();
-  const { agentSetupOpen, serverOnboardingOpen, activeAgent, agentList, agentListSettled } = useAgents();
+  const { agentSetupOpen, agentSetupFirst, serverOnboardingOpen, activeAgent, agentList, agentListSettled } =
+    useAgents();
   const { conversations, retryConversation } = useConversation();
   const activeConversation = () => conversations[activeAgent()?.id ?? ""];
   const { activeDirectMember } = useDirectMessages();
@@ -114,7 +115,8 @@ function WorkspaceShellFrame(props: { account: () => CentralAuthUser }) {
   const middlePane = createMemo(() => {
     if (chatWindow) return "agent";
     if (windowPage.page() === "tasks") return "tasks";
-    if (agentSetupOpen()) return "agent-setup";
+    // The first agent's form is a page; a later one opens the New agent dialog over the pane.
+    if (agentSetupOpen() && agentSetupFirst()) return "agent-setup";
     if (workspaceOn()) return workspace.route().kind === "agent" ? "agent" : "workspace";
     if (channelOpen()) return "channel";
     if (activeDirectMember()) return "direct";
@@ -322,6 +324,9 @@ function WorkspaceShellFrame(props: { account: () => CentralAuthUser }) {
           </Show>
           <Show when={middlePane() === "agent-setup" && !serverOnboardingOpen()}>
             <WorkspaceAgentSetup />
+          </Show>
+          <Show when={!chatWindow && agentSetupOpen() && !agentSetupFirst()}>
+            <WorkspaceAgentSetup dialog />
           </Show>
           {/* Keyed by id: each presence snapshot is a new member object, and remounting would clear the draft. */}
           <Show when={activePeopleEnabled() && middlePane() === "direct" && activeDirectMember()?.id} keyed>

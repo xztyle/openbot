@@ -49,26 +49,9 @@ export interface FirstAgentSuggestion {
   animationOffset: number;
 }
 
-export interface FirstAgentSetupProps {
-  value: FirstAgentDraft;
-  suggestions: FirstAgentSuggestion[];
+export interface FirstAgentSetupProps extends AgentDraftEditorProps {
   mode?: "first" | "additional";
-  submitting?: boolean;
   error?: string | null;
-  /** The live catalog behind the model picker. Absent, the form keeps no model choice. */
-  modelOptions?: ClientAgentModelOption[] | undefined;
-  agentStatus?: AgentStatus | undefined;
-  runtimeStatuses?: Partial<Record<AgentProviderId, ProviderRuntimeStatus>> | undefined;
-  customProviders?: readonly CustomProviderSummary[] | undefined;
-  /** The user's own ACP agents on this computer, for the model picker's Custom tab. */
-  customAgents?: readonly CustomAgentSummary[] | undefined;
-  onDownloadProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
-  onCancelProviderDownload?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
-  onConnectProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
-  onAddCustomProvider?: ((trigger: HTMLElement) => void) | undefined;
-  /** Opens the provider settings from a plus button in the model picker. */
-  onManageProviders?: ((trigger: HTMLElement) => void) | undefined;
-  onChange: (value: FirstAgentDraft) => void;
   onSubmit: (value: FirstAgentDraft) => void | Promise<void>;
   onCancel?: (() => void) | undefined;
 }
@@ -170,6 +153,217 @@ function matchesSuggestion(draft: FirstAgentDraft, suggestion: FirstAgentSuggest
   );
 }
 
+/** The props that edit a draft: the form page and the New agent dialog take the same. */
+export interface AgentDraftEditorProps {
+  value: FirstAgentDraft;
+  suggestions: FirstAgentSuggestion[];
+  submitting?: boolean | undefined;
+  /** Create is off, as after a failure whose result is not known; the error says why. */
+  submitDisabled?: boolean | undefined;
+  /** The live catalog behind the model picker. Absent, the form keeps no model choice. */
+  modelOptions?: ClientAgentModelOption[] | undefined;
+  agentStatus?: AgentStatus | undefined;
+  runtimeStatuses?: Partial<Record<AgentProviderId, ProviderRuntimeStatus>> | undefined;
+  customProviders?: readonly CustomProviderSummary[] | undefined;
+  /** The user's own ACP agents on this computer, for the model picker's Custom tab. */
+  customAgents?: readonly CustomAgentSummary[] | undefined;
+  onDownloadProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
+  onCancelProviderDownload?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
+  onConnectProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
+  onAddCustomProvider?: ((trigger: HTMLElement) => void) | undefined;
+  /** Opens the provider settings from a plus button in the model picker. */
+  onManageProviders?: ((trigger: HTMLElement) => void) | undefined;
+  onChange: (value: FirstAgentDraft) => void;
+}
+
+/** The changes a form makes to a draft, shared by the form page and the New agent dialog. */
+export function createAgentDraftEditor(props: AgentDraftEditorProps) {
+  const { t } = useText();
+  function update(updates: Partial<FirstAgentDraft>): void {
+    if (props.submitting) return;
+    const next = { ...props.value, ...updates };
+    const selected = props.suggestions.find((suggestion) => suggestion.id === next.suggestionId);
+    props.onChange({
+      ...next,
+      suggestionId: selected && matchesSuggestion(next, selected, t) ? selected.id : null,
+    });
+  }
+
+  function selectSuggestion(suggestion: FirstAgentSuggestion): void {
+    if (props.submitting) return;
+    props.onChange({
+      name: t(suggestion.nameKey),
+      purpose: t(suggestion.purposeKey),
+      avatarSeed: suggestion.avatarSeed,
+      avatarHue: suggestion.avatarHue,
+      suggestionId: suggestion.id,
+      provider: props.value.provider,
+      model: props.value.model,
+      reasoningEffort: props.value.reasoningEffort,
+    });
+  }
+
+  const modelOption = (provider: AgentProviderId, model: AgentModelId) =>
+    props.modelOptions?.find((option) => option.provider === provider && option.id === model);
+  /** The level the agent starts on: the user's choice, else the model's default. */
+  const reasoningEffort = () =>
+    props.value.reasoningEffort ?? modelOption(props.value.provider, props.value.model)?.defaultReasoningEffort;
+
+  /** A new model keeps the chosen level when it supports it, and else starts on its own default. */
+  function selectModel(model: AgentModelId, provider: AgentProviderId): void {
+    const kept = props.value.reasoningEffort;
+    update({
+      model,
+      provider,
+      reasoningEffort:
+        kept && modelOption(provider, model)?.supportedReasoningEfforts.includes(kept) ? kept : undefined,
+    });
+  }
+
+  return {
+    update,
+    selectSuggestion,
+    selectModel,
+    reasoningEffort,
+    canSubmit: () =>
+      Boolean(props.value.name.trim()) &&
+      !instructionsTooLong(props.value.purpose) &&
+      !props.submitting &&
+      !props.submitDisabled,
+    displayName: () => props.value.name.trim() || t("agent.setup.nameFallback"),
+  };
+}
+
+export type AgentDraftEditor = ReturnType<typeof createAgentDraftEditor>;
+
+/** The color and the face of a new agent. */
+export function AgentAppearanceFields(props: {
+  value: FirstAgentDraft;
+  submitting?: boolean | undefined;
+  editor: AgentDraftEditor;
+}) {
+  const { t } = useText();
+  return (
+    <>
+      <fieldset class="first-agent-avatar-fieldset first-agent-color-fieldset" disabled={props.submitting}>
+        <legend class="sr-only">{t("agent.setup.color")}</legend>
+        <div class="first-agent-color-options">
+          <Button
+            variant="ghost"
+            type="button"
+            size="sm"
+            class="first-agent-color-choice"
+            aria-label={t("agent.setup.colorAutomatic")}
+            aria-pressed={props.value.avatarHue === null ? "true" : "false"}
+            data-cuelume-tap="select"
+            onClick={() => props.editor.update({ avatarHue: null })}
+          >
+            <span
+              class="first-agent-color-swatch"
+              style={{ background: avatarHeadColor(props.value.avatarSeed, null) }}
+            />
+          </Button>
+          <For each={AVATAR_HUE_CHOICES}>
+            {(option) => (
+              <Button
+                variant="ghost"
+                type="button"
+                size="sm"
+                class="first-agent-color-choice"
+                aria-label={t("agent.setup.colorOption", { color: t(AVATAR_HUE_LABEL[option.hue]) })}
+                aria-pressed={props.value.avatarHue === option.hue ? "true" : "false"}
+                data-cuelume-tap="select"
+                onClick={() => props.editor.update({ avatarHue: option.hue })}
+              >
+                <span class="first-agent-color-swatch" style={{ background: avatarHueSwatch(option.hue) }} />
+              </Button>
+            )}
+          </For>
+        </div>
+      </fieldset>
+
+      <fieldset class="first-agent-avatar-fieldset first-agent-face-fieldset" disabled={props.submitting}>
+        <legend class="sr-only">{t("agent.setup.face")}</legend>
+        <div class="first-agent-face-options">
+          <For each={FIRST_AGENT_AVATAR_SEEDS}>
+            {(seed, index) => (
+              <Button
+                variant="ghost"
+                type="button"
+                size="sm"
+                class="first-agent-face-choice"
+                aria-label={t("agent.setup.faceOption", { number: index() + 1 })}
+                aria-pressed={props.value.avatarSeed === seed ? "true" : "false"}
+                data-cuelume-tap="select"
+                onClick={() => props.editor.update({ avatarSeed: seed })}
+              >
+                <AgentAvatar seed={seed} hue={props.value.avatarHue} motion="idle" animationOffset={index() * 0.16} />
+              </Button>
+            )}
+          </For>
+        </div>
+      </fieldset>
+    </>
+  );
+}
+
+/** The name, the purpose and the model of a new agent. */
+export function AgentDetailsFields(props: AgentDraftEditorProps & { editor: AgentDraftEditor }) {
+  const { t } = useText();
+  return (
+    <>
+      <Field label={t("agent.setup.name")} required>
+        <Input
+          value={props.value.name}
+          maxlength={INPUT_LIMITS.agentName}
+          autocomplete="off"
+          disabled={props.submitting}
+          onValueChange={(name) => props.editor.update({ name })}
+        />
+      </Field>
+      <Field label={t("agent.setup.purpose")}>
+        <Textarea
+          value={props.value.purpose}
+          rows={2}
+          invalid={instructionsTooLong(props.value.purpose)}
+          placeholder={t("agent.setup.purposePlaceholder")}
+          disabled={props.submitting}
+          onValueChange={(purpose) => props.editor.update({ purpose })}
+        />
+        <InstructionsLimit text={props.value.purpose} />
+      </Field>
+      <Show when={props.modelOptions}>
+        {(options) => (
+          <Show when={props.agentStatus}>
+            {(status) => (
+              <ProviderModelPicker
+                variant="field"
+                ariaLabel={t("agent.setup.model")}
+                provider={props.value.provider}
+                value={props.value.model}
+                modelOptions={options()}
+                agentStatus={status()}
+                runtimeStatuses={props.runtimeStatuses}
+                customProviders={props.customProviders}
+                customAgents={props.customAgents}
+                onDownloadProvider={props.onDownloadProvider}
+                onCancelProviderDownload={props.onCancelProviderDownload}
+                onConnectProvider={props.onConnectProvider}
+                onAddCustomProvider={props.onAddCustomProvider}
+                onManageProviders={props.onManageProviders}
+                disabled={props.submitting}
+                reasoningEffort={props.editor.reasoningEffort()}
+                onReasoningEffortChange={(effort) => props.editor.update({ reasoningEffort: effort })}
+                onChange={props.editor.selectModel}
+              />
+            )}
+          </Show>
+        )}
+      </Show>
+    </>
+  );
+}
+
 export function FirstAgentSetup(props: FirstAgentSetupProps) {
   const { t, sourceText } = useText();
   let suggestionList: HTMLUListElement | undefined;
@@ -185,9 +379,9 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
   const [canScrollSuggestionsBack, setCanScrollSuggestionsBack] = createSignal(false);
   const [canScrollSuggestionsForward, setCanScrollSuggestionsForward] = createSignal(false);
   const [draggingSuggestions, setDraggingSuggestions] = createSignal(false);
-  const canSubmit = () =>
-    Boolean(props.value.name.trim()) && !instructionsTooLong(props.value.purpose) && !props.submitting;
-  const displayName = () => props.value.name.trim() || t("agent.setup.nameFallback");
+  const editor = createAgentDraftEditor(props);
+  const canSubmit = editor.canSubmit;
+  const displayName = editor.displayName;
 
   function updateSuggestionFades(): void {
     if (!suggestionList) return;
@@ -294,46 +488,7 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
     }, 0);
   }
 
-  function updateDraft(updates: Partial<FirstAgentDraft>): void {
-    if (props.submitting) return;
-    const next = { ...props.value, ...updates };
-    const selected = props.suggestions.find((suggestion) => suggestion.id === next.suggestionId);
-    props.onChange({
-      ...next,
-      suggestionId: selected && matchesSuggestion(next, selected, t) ? selected.id : null,
-    });
-  }
-
-  function selectSuggestion(suggestion: FirstAgentSuggestion): void {
-    if (props.submitting) return;
-    props.onChange({
-      name: t(suggestion.nameKey),
-      purpose: t(suggestion.purposeKey),
-      avatarSeed: suggestion.avatarSeed,
-      avatarHue: suggestion.avatarHue,
-      suggestionId: suggestion.id,
-      provider: props.value.provider,
-      model: props.value.model,
-      reasoningEffort: props.value.reasoningEffort,
-    });
-  }
-
-  const modelOption = (provider: AgentProviderId, model: AgentModelId) =>
-    props.modelOptions?.find((option) => option.provider === provider && option.id === model);
-  /** The level the agent starts on: the user's choice, else the model's default. */
-  const reasoningEffort = () =>
-    props.value.reasoningEffort ?? modelOption(props.value.provider, props.value.model)?.defaultReasoningEffort;
-
-  /** A new model keeps the chosen level when it supports it, and else starts on its own default. */
-  function selectModel(model: AgentModelId, provider: AgentProviderId): void {
-    const kept = props.value.reasoningEffort;
-    updateDraft({
-      model,
-      provider,
-      reasoningEffort:
-        kept && modelOption(provider, model)?.supportedReasoningEfforts.includes(kept) ? kept : undefined,
-    });
-  }
+  const selectSuggestion = editor.selectSuggestion;
 
   return (
     <main class="conversation-panel first-agent-setup-panel" aria-labelledby="first-agent-setup-title">
@@ -385,119 +540,10 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
             />
           </div>
 
-          <fieldset class="first-agent-avatar-fieldset first-agent-color-fieldset" disabled={props.submitting}>
-            <legend class="sr-only">{t("agent.setup.color")}</legend>
-            <div class="first-agent-color-options">
-              <Button
-                variant="ghost"
-                type="button"
-                size="sm"
-                class="first-agent-color-choice"
-                aria-label={t("agent.setup.colorAutomatic")}
-                aria-pressed={props.value.avatarHue === null ? "true" : "false"}
-                data-cuelume-tap="select"
-                onClick={() => updateDraft({ avatarHue: null })}
-              >
-                <span
-                  class="first-agent-color-swatch"
-                  style={{ background: avatarHeadColor(props.value.avatarSeed, null) }}
-                />
-              </Button>
-              <For each={AVATAR_HUE_CHOICES}>
-                {(option) => (
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    size="sm"
-                    class="first-agent-color-choice"
-                    aria-label={t("agent.setup.colorOption", { color: t(AVATAR_HUE_LABEL[option.hue]) })}
-                    aria-pressed={props.value.avatarHue === option.hue ? "true" : "false"}
-                    data-cuelume-tap="select"
-                    onClick={() => updateDraft({ avatarHue: option.hue })}
-                  >
-                    <span class="first-agent-color-swatch" style={{ background: avatarHueSwatch(option.hue) }} />
-                  </Button>
-                )}
-              </For>
-            </div>
-          </fieldset>
-
-          <fieldset class="first-agent-avatar-fieldset first-agent-face-fieldset" disabled={props.submitting}>
-            <legend class="sr-only">{t("agent.setup.face")}</legend>
-            <div class="first-agent-face-options">
-              <For each={FIRST_AGENT_AVATAR_SEEDS}>
-                {(seed, index) => (
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    size="sm"
-                    class="first-agent-face-choice"
-                    aria-label={t("agent.setup.faceOption", { number: index() + 1 })}
-                    aria-pressed={props.value.avatarSeed === seed ? "true" : "false"}
-                    data-cuelume-tap="select"
-                    onClick={() => updateDraft({ avatarSeed: seed })}
-                  >
-                    <AgentAvatar
-                      seed={seed}
-                      hue={props.value.avatarHue}
-                      motion="idle"
-                      animationOffset={index() * 0.16}
-                    />
-                  </Button>
-                )}
-              </For>
-            </div>
-          </fieldset>
+          <AgentAppearanceFields value={props.value} submitting={props.submitting} editor={editor} />
 
           <div class="first-agent-fields">
-            <Field label={t("agent.setup.name")} required>
-              <Input
-                value={props.value.name}
-                maxlength={INPUT_LIMITS.agentName}
-                autocomplete="off"
-                disabled={props.submitting}
-                onValueChange={(name) => updateDraft({ name })}
-              />
-            </Field>
-            <Field label={t("agent.setup.purpose")}>
-              <Textarea
-                value={props.value.purpose}
-                rows={2}
-                invalid={instructionsTooLong(props.value.purpose)}
-                placeholder={t("agent.setup.purposePlaceholder")}
-                disabled={props.submitting}
-                onValueChange={(purpose) => updateDraft({ purpose })}
-              />
-              <InstructionsLimit text={props.value.purpose} />
-            </Field>
-            <Show when={props.modelOptions}>
-              {(options) => (
-                <Show when={props.agentStatus}>
-                  {(status) => (
-                    <ProviderModelPicker
-                      variant="field"
-                      ariaLabel={t("agent.setup.model")}
-                      provider={props.value.provider}
-                      value={props.value.model}
-                      modelOptions={options()}
-                      agentStatus={status()}
-                      runtimeStatuses={props.runtimeStatuses}
-                      customProviders={props.customProviders}
-                      customAgents={props.customAgents}
-                      onDownloadProvider={props.onDownloadProvider}
-                      onCancelProviderDownload={props.onCancelProviderDownload}
-                      onConnectProvider={props.onConnectProvider}
-                      onAddCustomProvider={props.onAddCustomProvider}
-                      onManageProviders={props.onManageProviders}
-                      disabled={props.submitting}
-                      reasoningEffort={reasoningEffort()}
-                      onReasoningEffortChange={(effort) => updateDraft({ reasoningEffort: effort })}
-                      onChange={selectModel}
-                    />
-                  )}
-                </Show>
-              )}
-            </Show>
+            <AgentDetailsFields {...props} editor={editor} />
           </div>
 
           <Show when={props.error}>

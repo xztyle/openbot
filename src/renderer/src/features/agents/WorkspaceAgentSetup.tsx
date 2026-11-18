@@ -1,6 +1,11 @@
 import { TEAM_AGENT_CREATE_MODEL_CAPABILITY } from "@openbot/contracts/team-protocol/current";
-import { FIRST_AGENT_SUGGESTIONS, FirstAgentSetup } from "@openbot/ui/features/agents/FirstAgentSetup";
-import { createEffect, createMemo, createSignal } from "solid-js";
+import {
+  FIRST_AGENT_SUGGESTIONS,
+  type FirstAgentDraft,
+  FirstAgentSetup,
+} from "@openbot/ui/features/agents/FirstAgentSetup";
+import { NewAgentDialog } from "@openbot/ui/features/agents/NewAgentDialog";
+import { createEffect, createMemo, createSignal, Show } from "solid-js";
 import { useProviders } from "../../providers";
 import { useCustomAgents } from "../custom-agents/custom-agents-context";
 import { useCustomProviders } from "../custom-providers/custom-providers-context";
@@ -12,11 +17,11 @@ import { resolveCreationModel } from "./agent-creation-model";
 import { useAgents } from "./agents-context";
 
 /**
- * The create-an-agent form, which takes over the conversation pane instead of
- * opening over it. `mode` is derived from the agent list rather than passed in
- * because the first agent and the fifth are the same command with different copy.
+ * The create-an-agent form. The server's first agent takes over the conversation pane, as a step of
+ * setting the server up; a later agent opens the New agent dialog over it (`dialog`), the same
+ * frame as a new channel or space. Both are the same command with the same fields.
  */
-export function WorkspaceAgentSetup() {
+export function WorkspaceAgentSetup(props: { dialog?: boolean }) {
   const {
     agentList,
     agentSetupDraft,
@@ -98,36 +103,79 @@ export function WorkspaceAgentSetup() {
     },
   );
 
+  const fieldProps = {
+    get value() {
+      return agentSetupDraft();
+    },
+    suggestions: FIRST_AGENT_SUGGESTIONS,
+    get submitting() {
+      return creatingAgent();
+    },
+    get error() {
+      return agentSetupError();
+    },
+    get modelOptions() {
+      return createModelSupported() ? modelOptions() : undefined;
+    },
+    get agentStatus() {
+      return agentStatus();
+    },
+    get runtimeStatuses() {
+      return localProviderDownloads() ? providerRuntimeStatuses() : undefined;
+    },
+    get customProviders() {
+      return customProviders();
+    },
+    // The custom agents are this computer's. A joined host's picker counts its own from its models.
+    get customAgents() {
+      return activeServer()?.kind === "local" ? customAgents() : undefined;
+    },
+    get onDownloadProvider() {
+      return localProviderDownloads() ? downloadProviderRuntime : undefined;
+    },
+    get onCancelProviderDownload() {
+      return localProviderDownloads() ? cancelProviderRuntimeDownload : undefined;
+    },
+    get onConnectProvider() {
+      return localProviderDownloads() ? connectProvider : undefined;
+    },
+    get onAddCustomProvider() {
+      return manageProviders() ? openProviderSettings : undefined;
+    },
+    get onManageProviders() {
+      return manageProviders() ? openProviderSettings : undefined;
+    },
+    onChange: (next: FirstAgentDraft) => {
+      const current = agentSetupDraft();
+      if (
+        next.provider !== current.provider ||
+        next.model !== current.model ||
+        next.reasoningEffort !== current.reasoningEffort
+      )
+        setModelTouched(true);
+      setAgentSetupDraft(next);
+    },
+    onSubmit: createAgent,
+  };
+
   return (
-    <FirstAgentSetup
-      value={agentSetupDraft()}
-      suggestions={FIRST_AGENT_SUGGESTIONS}
-      mode={agentList().length === 0 ? "first" : "additional"}
-      submitting={creatingAgent()}
-      error={agentSetupError()}
-      modelOptions={createModelSupported() ? modelOptions() : undefined}
-      agentStatus={agentStatus()}
-      runtimeStatuses={localProviderDownloads() ? providerRuntimeStatuses() : undefined}
-      customProviders={customProviders()}
-      // The custom agents are this computer's. A joined host's picker counts its own from its models.
-      customAgents={activeServer()?.kind === "local" ? customAgents() : undefined}
-      onDownloadProvider={localProviderDownloads() ? downloadProviderRuntime : undefined}
-      onCancelProviderDownload={localProviderDownloads() ? cancelProviderRuntimeDownload : undefined}
-      onConnectProvider={localProviderDownloads() ? connectProvider : undefined}
-      onAddCustomProvider={manageProviders() ? openProviderSettings : undefined}
-      onManageProviders={manageProviders() ? openProviderSettings : undefined}
-      onChange={(next) => {
-        const current = agentSetupDraft();
-        if (
-          next.provider !== current.provider ||
-          next.model !== current.model ||
-          next.reasoningEffort !== current.reasoningEffort
-        )
-          setModelTouched(true);
-        setAgentSetupDraft(next);
-      }}
-      onSubmit={createAgent}
-      onCancel={agentList().length > 0 ? cancelAgentSetup : undefined}
-    />
+    <Show
+      when={props.dialog}
+      fallback={
+        <FirstAgentSetup
+          {...fieldProps}
+          mode={agentList().length === 0 ? "first" : "additional"}
+          onCancel={agentList().length > 0 ? cancelAgentSetup : undefined}
+        />
+      }
+    >
+      <NewAgentDialog
+        {...fieldProps}
+        open
+        onOpenChange={(open) => {
+          if (!open) cancelAgentSetup();
+        }}
+      />
+    </Show>
   );
 }

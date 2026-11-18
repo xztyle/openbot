@@ -376,3 +376,91 @@
     transition: none;
   }
 }
+
+/* New agent dialog ------------------------------------------------------------------------------ */
+
+.new-agent-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-4);
+}
+
+.new-agent-preview {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.new-agent-preview .agent-avatar {
+  width: 64px;
+  height: 64px;
+}
+
+.new-agent-appearance {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+}
+
+.new-agent-appearance .first-agent-color-options,
+.new-agent-appearance .first-agent-face-options {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.new-agent-idea-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ui-button.new-agent-idea {
+  gap: var(--openbot-space-1-5);
+  padding-inline: var(--openbot-space-2) var(--openbot-space-3);
+}
+
+.new-agent-idea .agent-avatar {
+  width: 18px;
+  height: 18px;
+}
+
+.new-agent-idea[aria-pressed="true"] {
+  border-color: var(--openbot-accent);
+  background: var(--openbot-accent-soft);
+}
+
+/* A phone: the faces scroll in one row instead of wrapping into three. */
+@media (max-width: 720px) {
+  .new-agent-identity {
+    align-items: flex-start;
+  }
+
+  .new-agent-preview,
+  .new-agent-preview .agent-avatar {
+    width: 48px;
+    height: 48px;
+  }
+
+  .new-agent-appearance .first-agent-face-options {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .new-agent-idea-list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .new-agent-idea-list > li {
+    flex: 0 0 auto;
+  }
+}

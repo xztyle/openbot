@@ -575,6 +575,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     onJoin: () => setJoinOpen(true),
   });
   const [creating, setCreating] = createSignal(false);
+  /**
+   * The open form is the server's first agent: a page, as part of setting the server up. A later
+   * agent opens the New agent dialog over the pane, as on the desktop. Kept from the open on, so the
+   * roster that the new agent fills does not switch the form while it saves.
+   */
+  const [creatingFirst, setCreatingFirst] = createSignal(true);
   /** The new agent form's avatar. The first-agent row in an empty sidebar shows it. */
   const [agentAvatar, setAgentAvatar] = createSignal(newAgentAvatar());
   const [mobilePane, setMobilePane] = createSignal<WebMobilePane>("conversation");
@@ -1402,7 +1408,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   /** A host with no agents. The first-agent form opens there by itself, as in the desktop app. */
   const firstAgent = () => workspace.state.agentsLoaded && workspace.profiles().length === 0 && createSupported();
   /** An open channel still takes the pane, as a channel closes the desktop form. */
-  const agentFormOpen = () => creating() || (firstAgent() && !channelOpen());
+  const agentFormOpen = () => (creating() && creatingFirst()) || (firstAgent() && !channelOpen());
+  /** The New agent dialog, over whatever the pane shows. */
+  const agentDialogOpen = () => creating() && !creatingFirst();
   const agentChatOpen = () =>
     !tasksOpen() &&
     !agentFormOpen() &&
@@ -1431,7 +1439,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   // The host reports the new agent before the create call returns. Hold the form open until the
   // save is done, so the new-agent avatar still changes after it.
   createEffect(firstAgent, (first) => {
-    if (first && !untrack(channelOpen)) setCreating(true);
+    if (first && !untrack(channelOpen)) {
+      setCreatingFirst(true);
+      setCreating(true);
+    }
   });
   /** Gives the chat that the user opens on the connected server its own history entry. */
   function userOpensChat(kind: "agent" | "channel", id: string): void {
@@ -1658,7 +1669,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   const view = createWebConversationView({
     workspace,
     remoteAgentAdmin,
-    hidden: () => creating() || channelOpen(),
+    hidden: () => (creating() && creatingFirst()) || channelOpen(),
   });
   // A routine that an agent makes leaves a marker in its turn. The offer of a hosted server waits until that turn ends.
   // The marker does not tell whether the routine is paused; an agent makes an active routine unless told otherwise.
@@ -1801,9 +1812,14 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     workspace.state.capabilities.includes(AGENT_HIDDEN_CAPABILITY) &&
     canAdministerServer(workspace.state.host?.role);
   function startCreate() {
-    setMobilePane("conversation");
-    channels.close();
-    showAgents();
+    const first = firstAgent();
+    setCreatingFirst(first);
+    // The dialog opens over the pane; the first agent's page replaces the pane.
+    if (first) {
+      setMobilePane("conversation");
+      channels.close();
+      showAgents();
+    }
     setCreating(true);
   }
   /** The rail button of the page. The server settings open from the server menu, so no button is current. */
@@ -3192,26 +3208,37 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                 </Loading>
               )}
             </Show>
-            <Show when={!tasksOpen() && agentFormOpen() && !serverOnboarding()}>
-              <WebAgentSettings
-                runtime={workspace.runtime}
-                capabilities={workspace.state.capabilities}
-                first={firstAgent()}
-                preference={serverSetupChoice()}
-                customProviders={providerSettings()?.customProviders}
-                onManageProviders={providerSettings() ? openProviderSettings : undefined}
-                liveModels={models()}
-                liveStatus={status()}
-                // A new form starts empty, with the avatar that the first-agent row showed.
-                initialDraft={{ ...createFirstAgentDraft(), ...untrack(agentAvatar) }}
-                onDraftChange={({ avatarSeed, avatarHue }) => setAgentAvatar({ avatarSeed, avatarHue })}
-                onClose={() => setCreating(false)}
-                onSaved={async () => {
-                  await workspace.refresh();
-                  setAgentAvatar(newAgentAvatar());
-                  setCreating(false);
-                }}
-              />
+            <Show
+              when={
+                agentDialogOpen() ? "dialog" : !tasksOpen() && agentFormOpen() && !serverOnboarding() ? "page" : null
+              }
+              keyed
+            >
+              {(form) => (
+                <WebAgentSettings
+                  runtime={workspace.runtime}
+                  capabilities={workspace.state.capabilities}
+                  dialog={form === "dialog"}
+                  first={firstAgent()}
+                  preference={serverSetupChoice()}
+                  customProviders={providerSettings()?.customProviders}
+                  onManageProviders={providerSettings() ? openProviderSettings : undefined}
+                  liveModels={models()}
+                  liveStatus={status()}
+                  // A new form starts empty, with the avatar that the first-agent row showed.
+                  initialDraft={{ ...createFirstAgentDraft(), ...untrack(agentAvatar) }}
+                  onDraftChange={({ avatarSeed, avatarHue }) => setAgentAvatar({ avatarSeed, avatarHue })}
+                  onClose={() => setCreating(false)}
+                  onSaved={async (agentId) => {
+                    await workspace.refresh();
+                    setAgentAvatar(newAgentAvatar());
+                    setCreating(false);
+                    // As every create flow: the new thing opens.
+                    if (workspaceOn()) ws.openAgent(agentId);
+                    else void select(agentId);
+                  }}
+                />
+              )}
             </Show>
             <Show when={workspaceOn() && !tasksOpen() && !agentFormOpen() && !noHost() && ws.route().kind !== "agent"}>
               <WorkspaceProvider controller={ws}>

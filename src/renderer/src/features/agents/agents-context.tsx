@@ -93,6 +93,12 @@ const Agents = createSimpleContext({
     const [activeAgentId, updateActiveAgentId] = createSignal("");
     const [agentChatOpenRevision, setAgentChatOpenRevision] = createSignal(0);
     const [agentSetupOpen, setAgentSetupOpen] = createSignal(false);
+    /**
+     * The form opened for the server's first agent: it shows as a page, as part of setting up the
+     * server; later agents use the New agent dialog. Kept from the open on, so the roster that the
+     * new agent fills does not switch the form while it saves.
+     */
+    const [agentSetupFirst, setAgentSetupFirst] = createSignal(true);
     const [agentSetupDraft, setAgentSetupDraft] = createSignal<FirstAgentDraft>(createFirstAgentDraft());
     const [agentSetupError, setAgentSetupError] = createSignal<string | null>(null);
     const [creatingAgent, setCreatingAgent] = createSignal(false);
@@ -246,6 +252,7 @@ const Agents = createSimpleContext({
       if (profiles.length === 0 && !agentSetupOpen()) {
         setAgentSetupDraft(createFirstAgentDraft());
         setAgentSetupError(null);
+        setAgentSetupFirst(true);
         setAgentSetupOpen(true);
       }
       // An agent event can be a provider or an account change made elsewhere.
@@ -290,6 +297,7 @@ const Agents = createSimpleContext({
       setAgentSetupDraft(createFirstAgentDraft());
       setAgentSetupError(null);
       openedAgentChatId = null;
+      setAgentSetupFirst(agentList().length === 0);
       setAgentSetupOpen(true);
     }
 
@@ -389,6 +397,7 @@ const Agents = createSimpleContext({
       setUiErrors,
       appendUiError,
       agentSetupOpen,
+      agentSetupFirst,
       serverOnboardingOpen,
       serverSetupChoice,
       setServerSetupChoice,

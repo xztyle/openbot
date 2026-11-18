@@ -149,6 +149,11 @@ interface Notice {
   threadId: string | null;
   /** The web client address that a tap opens, or null when the host has no workspace. */
   path: string | null;
+  /**
+   * The notice repeats what a message notice of the same conversation says, as the end of an agent's
+   * turn in a channel repeats its reply there: it goes only when no burst of the conversation is on.
+   */
+  repeat?: boolean;
 }
 
 /** The notices of one conversation for one browser in the last `BURST_MS`. */
@@ -306,6 +311,7 @@ export class WebPushService {
         agentId: content.agentId,
         threadId: content.threadId,
         path,
+        repeat: inChannel && (kind === "finished" || kind === "failed"),
       };
       this.#notify(subscription, conversation, notice, now);
     }
@@ -382,7 +388,9 @@ export class WebPushService {
     }
     const key = `${subscriptionId(subscription)}:${conversation}`;
     const burst = this.#bursts.get(key);
-    if (!burst || (now >= burst.until && !burst.pending)) {
+    const on = burst !== undefined && (now < burst.until || burst.pending !== null);
+    if (notice.repeat && on) return;
+    if (!burst || !on) {
       this.#bursts.set(key, { subscription, until: now + this.#burstMs(), count: 1, pending: null, timer: null });
       this.#prune(now);
       this.#send(subscription, burstTag(conversation), notice, false);

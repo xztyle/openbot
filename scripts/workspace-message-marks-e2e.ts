@@ -207,13 +207,19 @@ async function run(browser: Browser, options: BrowserContextOptions, touch: bool
     { timeout: 10_000 },
   );
 
-  // The header bell: "Just mentions" stays chosen.
+  // The header bell: "Just mentions" stays chosen. A computer shows a menu; a phone a sheet, as its
+  // other menus.
   const bell = pane.getByRole("button", { name: /Notifications for/ });
+  const surface = () => page.getByRole(touch ? "dialog" : "menu");
+  const choice = (name: string) =>
+    touch ? surface().getByRole("button", { name }) : page.getByRole("menuitemradio", { name });
   await press(bell);
-  await press(page.getByRole("menuitemradio", { name: "Just mentions" }));
-  await page.getByRole("menu").waitFor({ state: "detached", timeout: 5_000 });
+  await press(choice("Just mentions"));
+  await surface().waitFor({ state: "detached", timeout: 5_000 });
   await press(bell);
-  const checked = page.getByRole("menuitemradio", { checked: true });
+  const checked = touch
+    ? surface().getByRole("button", { pressed: true })
+    : page.getByRole("menuitemradio", { checked: true });
   await checked.waitFor({ timeout: 5_000 });
   const bellLevel = (await checked.innerText()).trim();
   await page.screenshot({ path: resolve(OUT, `${name}-bell-menu.png`) });

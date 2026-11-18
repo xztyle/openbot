@@ -600,7 +600,7 @@ export function createMockChannels(
     // until the first save, so the window uploads what this computer had.
     workspaceSidebar: async (serverId?: string): Promise<WorkspaceSidebar> => {
       const saved = sidebars.get(serverId ?? "local");
-      return { sidebar: saved ? structuredClone(saved) : null };
+      return { sidebar: saved ? structuredClone(saved) : null, notifyLevels: true };
     },
     setWorkspaceSidebar: async (prefs: WorkspaceSidebarPrefs, serverId?: string): Promise<WorkspaceSidebar> => {
       const saved = decodeWorkspaceSidebarPrefs(prefs);
@@ -608,7 +608,7 @@ export function createMockChannels(
       // As a host does: every session of the member hears of the change, the one that saved too,
       // after the answer.
       setTimeout(() => emit({ type: "workspace-sidebar-changed" }), 0);
-      return { sidebar: structuredClone(saved) };
+      return { sidebar: structuredClone(saved), notifyLevels: true };
     },
     workspaceActivity: async (input: WorkspaceActivityInput): Promise<WorkspaceActivity> => {
       const items: WorkspaceActivityItem[] = [];

@@ -33,7 +33,9 @@ export async function routeWorkspaceSidebar(
     throw new HttpError(400, sourceText("error.team.workspaceUnsupported"));
   // `readJson` has already run the body through the workspace-sidebar wire codec.
   const body = await readJson(request);
-  if (url.pathname === WORKSPACE_SIDEBAR_ROUTES.read) return json(200, { sidebar: sidebar.get(member.id) });
+  // `notifyLevels`: this host keeps the level of each conversation, so a client may offer it.
+  if (url.pathname === WORKSPACE_SIDEBAR_ROUTES.read)
+    return json(200, { sidebar: sidebar.get(member.id), notifyLevels: true });
   const saved = await runCauseEffect(sidebar.set(member.id, parsedSidebar(body)));
-  return json(200, { sidebar: saved });
+  return json(200, { sidebar: saved, notifyLevels: true });
 }

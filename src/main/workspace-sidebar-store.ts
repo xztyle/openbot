@@ -38,7 +38,7 @@ function decodeStoredSidebars(parsed: unknown): StoredSidebars | null {
 
 /**
  * The workspace sidebar of each member of this host: the order they dragged the channel and DM
- * rows into, and their muted conversations. One version 1 JSON file, which only this host reads:
+ * rows into, their muted conversations and the notification level of each conversation they set. One version 1 JSON file, which only this host reads:
  * `{ version: 1, members: { [memberId]: { order: { channels, direct }, muted, updatedAt } } }`.
  * The host user of this computer is one more member, under the id that `HostService.channelActor`
  * gives.
@@ -80,6 +80,8 @@ export class WorkspaceSidebarStore {
           ...(stored.closed === undefined ? {} : { closed: [...stored.closed] }),
           ...(stored.space === undefined ? {} : { space: stored.space }),
           ...(stored.collapsed === undefined ? {} : { collapsed: [...stored.collapsed] }),
+          ...(stored.notifyMentions === undefined ? {} : { notifyMentions: [...stored.notifyMentions] }),
+          ...(stored.notifyNothing === undefined ? {} : { notifyNothing: [...stored.notifyNothing] }),
         }
       : null;
   }

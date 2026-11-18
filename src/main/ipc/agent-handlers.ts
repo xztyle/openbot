@@ -532,12 +532,13 @@ export function agentIpcHandlers({
       }),
       // The host user of this computer is a member under the id their channel messages carry.
       workspaceSidebar: scopedQueryHandler({
-        local: () => ({ sidebar: workspaceSidebar.get(host.channelActor().id) }),
+        local: () => ({ sidebar: workspaceSidebar.get(host.channelActor().id), notifyLevels: true }),
         remote: (serverId) => remoteSidebar(serverId, WORKSPACE_SIDEBAR_ROUTES.read, {}),
       }),
       setWorkspaceSidebar: scopedHandler(decodeWorkspaceSidebarPrefs, {
         local: async (prefs) => ({
           sidebar: await runCauseEffect(workspaceSidebar.set(host.channelActor().id, prefs)),
+          notifyLevels: true,
         }),
         remote: (prefs, serverId) => remoteSidebar(serverId, WORKSPACE_SIDEBAR_ROUTES.save, prefs),
       }),

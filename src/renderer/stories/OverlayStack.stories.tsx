@@ -1,9 +1,13 @@
 import {
+  ActionSheet,
   Button,
   ConfirmDialog,
+  Copy,
   Dialog,
   DropdownMenu,
   Input,
+  Link,
+  MessageSquareReply,
   Pencil,
   Popover,
   Select,
@@ -15,7 +19,7 @@ import {
   Trash2,
   toast,
 } from "@openbot/ui";
-import { createStore, For } from "solid-js";
+import { createSignal, createStore, For } from "solid-js";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 
 const meta = {
@@ -278,6 +282,53 @@ export const NestedSurfaces: Story = {
               draft.confirm = false;
             });
           }}
+        />
+      </main>
+    );
+  },
+};
+
+/** The phone form of a menu. A long press on a workspace message opens it with these rows. */
+export const PhoneActionSheet: Story = {
+  parameters: { viewport: { defaultViewport: "mobile1" } },
+  render: () => {
+    const [open, setOpen] = createSignal(true);
+    return (
+      <main class="foundation-story foundation-interaction-stage">
+        <Button variant="secondary" onClick={() => setOpen(true)}>
+          Open the sheet
+        </Button>
+        <ActionSheet
+          open={open()}
+          onOpenChange={setOpen}
+          title="Message actions"
+          header={
+            <For each={["👍", "❤️", "😂", "🎉", "👀", "✅"]}>
+              {(emoji) => (
+                <Button variant="ghost" size="icon-sm" aria-label={`React with ${emoji}`}>
+                  {emoji}
+                </Button>
+              )}
+            </For>
+          }
+          items={[
+            {
+              id: "reply",
+              label: "Reply in thread",
+              icon: <MessageSquareReply aria-hidden="true" />,
+              onSelect: () => {},
+            },
+            { id: "copy", label: "Copy text", icon: <Copy aria-hidden="true" />, onSelect: () => {} },
+            { id: "link", label: "Copy link", icon: <Link aria-hidden="true" />, onSelect: () => {} },
+            { id: "edit", label: "Edit message", icon: <Pencil aria-hidden="true" />, onSelect: () => {} },
+            {
+              id: "delete",
+              label: "Delete message",
+              icon: <Trash2 aria-hidden="true" />,
+              danger: true,
+              onSelect: () => {},
+            },
+          ]}
         />
       </main>
     );

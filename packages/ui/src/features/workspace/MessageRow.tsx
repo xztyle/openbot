@@ -5,11 +5,11 @@ import { Popover } from "../../complex";
 import { ChevronRight, Ellipsis, MessageSquareReply, SmilePlus } from "../../icons";
 import { useText } from "../../text";
 import { LabelTooltip, LabelTooltipTrigger } from "../../tooltip";
-import { cx } from "../../utils";
+import { cx, usesTouchLayout } from "../../utils";
 import { EmojiPicker, type EmojiPickerProps } from "./EmojiPicker";
 import { MemberProfilePopover } from "./MemberProfileCard";
 import { AvatarStack, MemberAvatar, MemberName } from "./WorkspaceAvatar";
-import { WorkspaceContextMenu } from "./WorkspaceContextMenu";
+import { WorkspaceContextMenu, type WorkspaceSheetControls } from "./WorkspaceContextMenu";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 import { useMessageTime, useRecentTime } from "./workspace-format";
 import type {
@@ -66,16 +66,34 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
   const { t, format } = useText();
   const time = useMessageTime();
   const [menuOpen, setMenuOpen] = createSignal(false);
+  // A touch screen has no hover bar: a long press opens the actions in a sheet, as in Slack.
+  const touch = usesTouchLayout();
   // The action bar and the profile popovers are built when the row is first hovered or focused. A
   // long channel builds a few rows on each scroll frame, and those controls were most of their cost.
-  const [armed, setArmed] = createSignal(alwaysShowsActions());
+  const [armed, setArmed] = createSignal(false);
   const arm = () => {
     if (!armed()) setArmed(true);
   };
   const fullTime = () => format.date(props.sentAt, { dateStyle: "full", timeStyle: "short" });
   const profileLabel = () => t("workspace.profile.open", { name: props.author.name });
   return (
-    <WorkspaceContextMenu items={() => props.menuItems ?? []} label={t("workspace.message.more")}>
+    <WorkspaceContextMenu
+      items={() => props.menuItems ?? []}
+      label={t(touch ? "workspace.message.actions" : "workspace.message.more")}
+      sheetHeader={
+        props.onToggleReaction && !props.deleted
+          ? (controls) => (
+              <SheetReactions
+                controls={controls}
+                quickReactions={props.quickReactions}
+                emojiPicker={props.emojiPicker}
+                onOpenEmojiPicker={props.onOpenEmojiPicker}
+                onPick={(emoji) => props.onToggleReaction?.(emoji)}
+              />
+            )
+          : undefined
+      }
+    >
       <article
         class={cx("ws-message", props.class)}
         tabindex="0"
@@ -143,7 +161,7 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
             </Show>
           </Show>
         </div>
-        <Show when={armed() && !props.deleted}>
+        <Show when={!touch && armed() && !props.deleted}>
           <div class="ws-message-actions" role="toolbar" aria-label={t("workspace.message.actions")}>
             <Show when={props.onToggleReaction}>
               {(toggle) => (
@@ -200,11 +218,58 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
   );
 }
 
-/** A screen without hover shows the action bar of every message, so its rows build it at once. */
-let actionsAlwaysShown: boolean | undefined;
-function alwaysShowsActions(): boolean {
-  actionsAlwaysShown ??= typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
-  return actionsAlwaysShown;
+/**
+ * The top of a message's phone sheet: the quick reactions and "more", which shows every emoji in
+ * the sheet in place of the actions.
+ */
+function SheetReactions(props: {
+  controls: WorkspaceSheetControls;
+  quickReactions?: readonly string[] | undefined;
+  emojiPicker?: ReactionEmojiPicker | undefined;
+  onOpenEmojiPicker?: (() => void) | undefined;
+  onPick: (emoji: string) => void;
+}): JSX.Element {
+  const { t } = useText();
+  const [full, setFull] = createSignal(false);
+  const pick = (emoji: string) => {
+    props.onPick(emoji);
+    props.controls.close();
+  };
+  return (
+    <Show
+      when={full() && props.emojiPicker}
+      fallback={
+        <QuickReactionRow
+          quickReactions={props.quickReactions}
+          onPick={pick}
+          onMore={
+            props.emojiPicker
+              ? () => {
+                  setFull(true);
+                  props.controls.setItemsHidden(true);
+                }
+              : props.onOpenEmojiPicker
+                ? () => {
+                    props.controls.close();
+                    props.onOpenEmojiPicker?.();
+                  }
+                : undefined
+          }
+        />
+      }
+    >
+      {(picker) => (
+        <section class="ws-sheet-emoji" aria-label={t("workspace.emoji.label")}>
+          <EmojiPicker
+            recent={picker().recent}
+            skinTone={picker().skinTone}
+            onSkinToneChange={picker().onSkinToneChange}
+            onPick={pick}
+          />
+        </section>
+      )}
+    </Show>
+  );
 }
 
 /** Message text with highlighted mentions, channel links, links and inline code. */

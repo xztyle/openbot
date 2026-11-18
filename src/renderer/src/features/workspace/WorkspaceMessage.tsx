@@ -118,13 +118,6 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
         icon: <MessageSquareReply aria-hidden="true" />,
         onSelect: () => ws.openThread(props.channelId, entry().id),
       });
-    if (own() && (entry().message.text.trim() || entry().message.attachments?.length))
-      items.push({
-        id: "edit",
-        label: t("workspace.app.message.edit"),
-        icon: <Pencil aria-hidden="true" />,
-        onSelect: () => ws.startEditing(props.channelId, entry().id, threadRootId()),
-      });
     items.push({
       id: "copy-text",
       label: t("workspace.app.message.copyText"),
@@ -138,6 +131,14 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
         label: t("workspace.app.message.copyLink"),
         icon: <Link aria-hidden="true" />,
         onSelect: () => copy(link, t("workspace.app.message.linkCopied")),
+      });
+    // Slack's order: reply, copy, then the changes to the reader's own message, delete last.
+    if (own() && (entry().message.text.trim() || entry().message.attachments?.length))
+      items.push({
+        id: "edit",
+        label: t("workspace.app.message.edit"),
+        icon: <Pencil aria-hidden="true" />,
+        onSelect: () => ws.startEditing(props.channelId, entry().id, threadRootId()),
       });
     if (own() || ws.isAdmin())
       items.push({

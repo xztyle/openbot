@@ -1,3 +1,4 @@
+export * from "./action-sheet";
 export * from "./alert";
 export * from "./badge";
 export * from "./bubble";

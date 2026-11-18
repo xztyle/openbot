@@ -286,14 +286,16 @@ button.ws-profile-trigger.ws-message-author:hover {
   pointer-events: auto;
 }
 
-@media (hover: none) {
-  .ws-message-actions {
-    position: static;
-    grid-column: 2;
-    justify-self: start;
-    margin-top: var(--openbot-space-1);
-    opacity: 1;
-    pointer-events: auto;
+/*
+ * A touch screen draws no action bar: a long press opens the message's actions in a sheet. The
+ * browser's own selection and link callout would start under the same finger, so they are off;
+ * "Copy text" in the sheet copies the message.
+ */
+@media (hover: none), (pointer: coarse) {
+  .ws-message {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 }
 
@@ -356,6 +358,13 @@ button.ws-profile-trigger.ws-message-author:hover {
 .ws-reaction-add:focus-visible,
 .ws-reaction-add[aria-expanded="true"] {
   opacity: 1;
+}
+
+/* No hover to reveal it on a touch screen, so it shows beside the pills. */
+@media (hover: none), (pointer: coarse) {
+  .ws-reaction-add {
+    opacity: 1;
+  }
 }
 
 .ws-reaction-add > svg {

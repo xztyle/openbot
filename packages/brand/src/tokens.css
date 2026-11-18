@@ -330,6 +330,8 @@
   --openbot-control-md: 32px;
   --openbot-control-lg: 36px;
   --openbot-control-xl: 40px;
+  /* The smallest box a finger hits reliably (Apple HIG). Touch layouts give rows and buttons this. */
+  --openbot-touch-target: 44px;
   /* The switch follows the same compact pill proportions across desktop and web.
    * Keep its geometry named so the motion code can measure the same inset and travel
    * that CSS paints. */

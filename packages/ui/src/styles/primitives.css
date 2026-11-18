@@ -1515,7 +1515,7 @@
   height: 3px;
   overflow: hidden;
   border-radius: var(--openbot-radius-pill);
-  background: var(--openbot-border-strong);
+  background: color-mix(in srgb, var(--openbot-text-muted) 40%, transparent);
 }
 
 /* Kobalte reports the value as a custom property and leaves the width to us, so a fill without this
@@ -2213,6 +2213,107 @@
 
 .ui-confirm-dialog-actions .ui-button:active:not(:disabled):not([data-disabled]) {
   transform: scale(0.97);
+}
+
+/* `ActionSheet`: the phone form of a menu. It rises from the bottom edge over the full width,
+ * keeps clear of the home indicator, and gives each row a finger-sized height. */
+.ui-dialog-overlay.ui-sheet-overlay {
+  place-items: end stretch;
+  padding: 0;
+  padding-top: max(var(--openbot-space-6), env(safe-area-inset-top, 0px));
+}
+
+.ui-dialog-content.ui-sheet {
+  display: flex;
+  max-height: 85dvh;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  outline: 0;
+  border-radius: var(--openbot-radius-xl) var(--openbot-radius-xl) 0 0;
+  background: var(--openbot-bg-sidebar);
+  color: var(--openbot-text-primary);
+  padding: var(--openbot-space-2) max(var(--openbot-space-2), env(safe-area-inset-right, 0px))
+    calc(var(--openbot-space-2) + env(safe-area-inset-bottom, 0px))
+    max(var(--openbot-space-2), env(safe-area-inset-left, 0px));
+  animation: ui-sheet-in var(--openbot-duration-overlay) var(--openbot-ease-out);
+}
+
+.ui-sheet-handle {
+  width: var(--openbot-space-8);
+  height: var(--openbot-space-1);
+  flex: none;
+  align-self: center;
+  margin-bottom: var(--openbot-space-2);
+  border-radius: var(--openbot-radius-pill);
+  background: color-mix(in srgb, var(--openbot-text-muted) 40%, transparent);
+}
+
+.ui-sheet-title {
+  margin: 0;
+  padding: var(--openbot-space-1) var(--openbot-space-3) var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ui-sheet-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--openbot-space-1);
+  padding: 0 var(--openbot-space-1) var(--openbot-space-2);
+}
+
+.ui-sheet-header .ui-button {
+  min-width: var(--openbot-touch-target);
+  min-height: var(--openbot-touch-target);
+}
+
+.ui-sheet-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ui-sheet-item-row[data-divided] {
+  margin-top: var(--openbot-space-1);
+  border-top: 1px solid var(--openbot-border);
+  padding-top: var(--openbot-space-1);
+}
+
+.ui-button.ui-sheet-item {
+  width: 100%;
+  min-height: var(--openbot-touch-target);
+  justify-content: flex-start;
+  gap: var(--openbot-space-3);
+  padding: 0 var(--openbot-space-3);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-xl);
+  font-weight: var(--openbot-weight-regular);
+}
+
+.ui-button.ui-sheet-item > svg {
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
+  color: var(--openbot-text-muted);
+}
+
+.ui-button.ui-sheet-item[data-danger],
+.ui-button.ui-sheet-item[data-danger] > svg {
+  color: var(--openbot-danger-text);
+}
+
+@keyframes ui-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-dialog-content.ui-sheet {
+    animation-name: ui-dialog-overlay-in;
+  }
 }
 
 @keyframes ui-dialog-overlay-in {

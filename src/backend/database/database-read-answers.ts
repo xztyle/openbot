@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { ConversationPage, ConversationReadState } from "@openbot/contracts/ipc";
+import { ChannelSearchQueries } from "./channel-search-queries";
 import { ConversationQueries } from "./conversation-queries";
 import type {
   DatabaseReadRequest,
@@ -30,12 +31,14 @@ export class DatabaseReadAnswers {
   readonly #encodePage: PageEncoder | null;
   readonly #conversations: ConversationQueries;
   readonly #states: ThreadReadStates;
+  readonly #channelSearch: ChannelSearchQueries;
 
   constructor(connection: DatabaseSync, encodePage: PageEncoder | null = null) {
     this.#connection = connection;
     this.#encodePage = encodePage;
     const core = { connection };
     this.#conversations = new ConversationQueries({ core });
+    this.#channelSearch = new ChannelSearchQueries({ core });
     // Committed rows only: no other transaction of this connection can take a version back.
     this.#states = new ThreadReadStates({
       core,
@@ -120,6 +123,8 @@ export class DatabaseReadAnswers {
             request.limit,
           ),
         };
+      case "search-channel-messages":
+        return { type: "result", id, kind: request.kind, result: this.#channelSearch.search(request.request) };
       case "search-files":
         return {
           type: "result",

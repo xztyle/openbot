@@ -90,6 +90,7 @@ export function createWebChannelsPort(
       workspaceReadThread: channels?.workspaceReadThread,
       workspaceFollowThread: channels?.workspaceFollowThread,
       workspaceMarkUnread: channels?.workspaceMarkUnread,
+      workspaceSearch: channels?.workspaceSearch,
       channelTyping: channels?.channelTyping,
       workspaceDmAgents: channels?.workspaceDmAgents,
       workspaceFleet: channels?.workspaceFleet,

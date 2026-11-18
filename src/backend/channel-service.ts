@@ -79,6 +79,7 @@ import {
 import { ChannelMemoryStore } from "./channel-memory-store";
 import { ChannelReadState } from "./channel-read-state";
 import { type ChannelGateOutcome, ChannelResponders, memberAnswerMode, usesAnswerModes } from "./channel-responders";
+import { ChannelSearch } from "./channel-search";
 import { type ChannelAssignment, type ChannelContext, type ChannelMessageChange, ChannelStore } from "./channel-store";
 import { ChannelTyping } from "./channel-typing";
 import { type ChannelViewer, canSeeChannel } from "./channel-visibility";
@@ -192,6 +193,8 @@ export interface ChannelHooks {
    * that person's own sessions hear of it (`workspace-read-state-changed`).
    */
   readStateChanged?(memberId: string, channelId: string, threadRootId?: string): void;
+  /** The space of a channel, for the message search. Omitted, the host has no spaces. */
+  channelSpaceId?(channel: Channel): string;
   error(error: unknown): void;
 }
 
@@ -257,6 +260,8 @@ export class ChannelService {
   readonly memories: ChannelMemoryStore;
   /** The read positions and follows of each person in each thread. */
   readonly readState: ChannelReadState;
+  /** The message search over the channels, groups and DMs of a reader. */
+  readonly search: ChannelSearch;
   /** Which member agents answer a person's message, the answer gate included. */
   readonly responders = new ChannelResponders();
   /** The channel bridge with Discord, while messaging runs. Without it, `link-discord` fails. */
@@ -315,6 +320,11 @@ export class ChannelService {
   ) {
     this.store = new ChannelStore(database);
     this.readState = new ChannelReadState(this.store);
+    const spaceOf = hooks.channelSpaceId;
+    this.search = new ChannelSearch({
+      store: this.store,
+      ...(spaceOf ? { channelSpaceId: (channel: Channel) => spaceOf.call(hooks, channel) } : {}),
+    });
     this.#activity = new ChannelActivity(this.store, this.readState);
     this.#typing = new ChannelTyping({
       emit: (channelId, typing) => hooks.typingChanged?.(channelId, typing),

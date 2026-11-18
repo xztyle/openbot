@@ -75,6 +75,7 @@ import { WORKFLOWS_CODECS } from "./workflows-v1";
 import { WORKSPACE_DIRECTORY_CODECS } from "./workspace-directory-v1";
 import { WORKSPACE_FLEET_CODECS } from "./workspace-fleet-v1";
 import { WORKSPACE_READ_STATE_CODECS } from "./workspace-read-state-v1";
+import { WORKSPACE_SEARCH_CODECS } from "./workspace-search-v1";
 import { WORKSPACE_SIDEBAR_CODECS } from "./workspace-sidebar-v1";
 import { WORKSPACE_SPACES_CODECS } from "./workspace-spaces-v1";
 import { WORKSPACE_CODECS } from "./workspace-v1";
@@ -157,6 +158,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...WORKSPACE_SIDEBAR_CODECS,
   ...WORKSPACE_SPACES_CODECS,
   ...WORKSPACE_READ_STATE_CODECS,
+  ...WORKSPACE_SEARCH_CODECS,
   ...STORAGE_HYGIENE_CODECS,
 ]);
 

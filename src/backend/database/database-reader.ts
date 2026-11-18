@@ -120,6 +120,11 @@ export class DatabaseReader {
   searchFiles(request: DatabaseReadRequestOf<"search-files">): Promise<DatabaseReadResults["search-files"]> {
     return this.#send(request, (reply) => (reply.kind === "search-files" ? reply.result : null));
   }
+  searchChannelMessages(
+    request: DatabaseReadRequestOf<"search-channel-messages">,
+  ): Promise<DatabaseReadResults["search-channel-messages"]> {
+    return this.#send(request, (reply) => (reply.kind === "search-channel-messages" ? reply.result : null));
+  }
 
   /** Sends one read; `pick` takes the result out of the reply of the same kind. */
   #send<T>(request: DatabaseReadRequest, pick: (reply: DatabaseReadResultReply) => T | null): Promise<T> {

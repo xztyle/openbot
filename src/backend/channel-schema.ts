@@ -152,3 +152,50 @@ export const CHANNEL_THREAD_STATE_SCHEMA_SQL = `
     ON projection_channel_messages(channel_id, json_extract(message_json, '$.threadRootId'), sequence)
     WHERE json_extract(message_json, '$.threadRootId') IS NOT NULL;
 `;
+
+/** The SQL condition of a channel message row `row` that the message search finds. */
+function searchable(row: string): string {
+  return `json_extract(${row}.message_json, '$.deletedAt') IS NULL
+      AND COALESCE(json_extract(${row}.message_json, '$.message.status'), '') != 'streaming'
+      AND COALESCE(json_extract(${row}.message_json, '$.message.itemType'), '') NOT IN ('plan', 'subagents', 'channel-change', 'commentary')
+      AND COALESCE(json_extract(${row}.message_json, '$.message.itemType'), '') NOT LIKE 'channel-routing-event:%'
+      AND trim(COALESCE(json_extract(${row}.message_json, '$.message.text'), '')) != ''`;
+}
+
+const searchText = (row: string) => `json_extract(${row}.message_json, '$.message.text')`;
+
+// Shared by migration v53 and the separate new-database schema. The full-text index of the channel
+// messages that a person can find: complete, not deleted, and not a step, a note or a routing event.
+// It keeps no copy of the text (`content=''`); a row is the message row's `rowid`. The triggers keep
+// it in step with every write, also a rebuild and a deletion, and skip the frames of a streaming
+// answer: the answer is indexed once, when it completes.
+export const CHANNEL_SEARCH_SCHEMA_SQL = `
+  CREATE VIRTUAL TABLE IF NOT EXISTS channel_message_search USING fts5(
+    text, content='', contentless_delete=1, tokenize='unicode61 remove_diacritics 2'
+  );
+  CREATE TRIGGER IF NOT EXISTS channel_message_search_insert AFTER INSERT ON projection_channel_messages
+  WHEN ${searchable("new")}
+  BEGIN
+    INSERT INTO channel_message_search(rowid, text) VALUES (new.rowid, ${searchText("new")});
+  END;
+  CREATE TRIGGER IF NOT EXISTS channel_message_search_update AFTER UPDATE OF message_json ON projection_channel_messages
+  WHEN (${searchable("old")}) OR (${searchable("new")})
+  BEGIN
+    DELETE FROM channel_message_search WHERE rowid = old.rowid
+      AND (${searchable("old")}) AND (NOT (${searchable("new")}) OR ${searchText("old")} IS NOT ${searchText("new")});
+    INSERT INTO channel_message_search(rowid, text) SELECT new.rowid, ${searchText("new")}
+      WHERE (${searchable("new")}) AND (NOT (${searchable("old")}) OR ${searchText("old")} IS NOT ${searchText("new")});
+  END;
+  CREATE TRIGGER IF NOT EXISTS channel_message_search_delete AFTER DELETE ON projection_channel_messages
+  WHEN ${searchable("old")}
+  BEGIN
+    DELETE FROM channel_message_search WHERE rowid = old.rowid;
+  END;
+`;
+
+/** Migration 53 fills the index from the stored messages, in rowid order. */
+export const V53_CHANNEL_SEARCH_BACKFILL_SQL = `
+  INSERT INTO channel_message_search(rowid, text)
+  SELECT message.rowid, ${searchText("message")} FROM projection_channel_messages message
+   WHERE ${searchable("message")} ORDER BY message.rowid;
+`;

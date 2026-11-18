@@ -35,6 +35,7 @@ export interface ChannelsPort {
         | "workspaceReadThread"
         | "workspaceFollowThread"
         | "workspaceMarkUnread"
+        | "workspaceSearch"
         | "channelTyping"
         | "workspaceDmAgents"
         | "workspaceFleet"

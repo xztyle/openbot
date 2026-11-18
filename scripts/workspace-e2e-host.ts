@@ -6,6 +6,7 @@
 // Run each script with Bun: the main process imports Electron, which this file replaces.
 
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -32,6 +33,7 @@ import { Effect } from "effect";
 import type { AgentBrowserHost } from "../src/backend/agent/turn-lifecycle";
 import { AgentService } from "../src/backend/agent-service";
 import { AgentStore } from "../src/backend/agent-store";
+import { spawnSourceDatabaseReadWorker } from "../src/backend/database/database-read-worker-source";
 import { runCauseEffect } from "../src/backend/effect-boundary";
 import { MailboxStore } from "../src/backend/mailbox-store";
 import { OpenBotDatabase } from "../src/backend/openbot-database";
@@ -183,6 +185,10 @@ export interface WorkspaceE2e {
   page(token: string, channelId: string, threadRootId?: string): Promise<JsonObject>;
   /** The channel list of a member, as the sidebar reads it. */
   channels(token: string): Promise<JsonObject[]>;
+  /** Sends a message, in a thread with `threadRootId`, and answers it as the page has it. */
+  send(person: Person, channelId: string, text: string, threadRootId?: string): Promise<JsonObject>;
+  /** Makes a channel whose members answer for themselves, so a message asks no lead to route it. */
+  createChannel(person: Person, name: string, visibility: "public" | "private"): Promise<string>;
   owner: Person;
   member: Person;
   /** An event socket of a person that declares `fork-host-v1`. */
@@ -194,7 +200,11 @@ export interface WorkspaceE2e {
 }
 
 /** Starts the host on a new profile with an owner and a member, and gives the shared helpers. */
-export async function startWorkspaceE2e(name: string, unverified: string[]): Promise<WorkspaceE2e> {
+export async function startWorkspaceE2e(
+  name: string,
+  unverified: string[],
+  options: { readWorkers?: boolean } = {},
+): Promise<WorkspaceE2e> {
   const out = resolve(import.meta.dirname, `../.openbot-build/${name}`);
   const root = await mkdtemp(join(tmpdir(), `openbot-${name}-`));
   const userData = join(root, "user-data");
@@ -215,6 +225,8 @@ export async function startWorkspaceE2e(name: string, unverified: string[]): Pro
     await runCauseEffect(mailbox.initialize());
     await runCauseEffect(team.initialize());
     assert.equal(await runCauseEffect(access.load()), true, "The roles file did not load.");
+    // After the stores opened the database: a worker opens it only once it is migrated, as the app does.
+    if (options.readWorkers) database.useReadWorkers(spawnSourceDatabaseReadWorker);
     if (!team.getIdentity()) await runCauseEffect(team.configure("E2E Host", OWNER.username, OWNER.password));
     const agents = new AgentService({ store: agentStore, mailbox, browser: agentBrowser, sidebarLayout: sidebar });
     const server = new TeamApiServer({
@@ -336,6 +348,44 @@ export async function startWorkspaceE2e(name: string, unverified: string[]): Pro
     const list = channelResponse(CHANNEL_ROUTES.list, response.status, response.body);
     assert.ok(Array.isArray(list));
     return list.map((entry) => record(entry, "channel summary"));
+  }
+
+  async function send(person: Person, channelId: string, text: string, threadRootId?: string): Promise<JsonObject> {
+    const body: JsonObject = {
+      type: "send",
+      operationId: randomUUID(),
+      channelId,
+      text,
+      recipientAgentId: null,
+      replyToMessageId: null,
+      attachmentDraftIds: [],
+    };
+    // A reply in a thread is a workspace command; a top-level message takes the released route.
+    if (threadRootId) await command(person.token, { ...body, threadRootId });
+    else await releasedCommand(person.token, body);
+    const read = await page(person.token, channelId, threadRootId);
+    assert.ok(Array.isArray(read.messages));
+    const found = read.messages
+      .map((entry) => record(entry, "message"))
+      .find((entry) => record(entry.message, "message body").text === text);
+    assert.ok(found, `The message "${text}" is not on the page.`);
+    return found;
+  }
+
+  async function createChannel(person: Person, name: string, visibility: "public" | "private"): Promise<string> {
+    const channelId = randomUUID();
+    await command(person.token, {
+      type: "create",
+      operationId: randomUUID(),
+      channelId,
+      kind: "channel",
+      visibility,
+      name,
+      humanMemberIds: [],
+      members: [],
+    });
+    await command(person.token, { type: "set-routing", operationId: randomUUID(), channelId, routing: "responders" });
+    return channelId;
   }
 
   async function login(credentials: { username: string; password: string }): Promise<string> {
@@ -460,6 +510,8 @@ export async function startWorkspaceE2e(name: string, unverified: string[]): Pro
     releasedCommand,
     page,
     channels,
+    send,
+    createChannel,
     owner,
     member,
     openEvents,

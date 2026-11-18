@@ -8,11 +8,24 @@ import type {
   WorkspaceMarkUnreadInput,
   WorkspaceReadPosition,
   WorkspaceReadThreadInput,
+  WorkspaceSearchHit,
+  WorkspaceSearchInput,
+  WorkspaceSearchPage,
   WorkspaceThreadState,
   WorkspaceThreadStates,
   WorkspaceThreadStatesInput,
 } from "@openbot/contracts/ipc";
-import { WORKSPACE_FOLLOWED_THREADS_LIMIT } from "@openbot/contracts/ipc";
+import {
+  WORKSPACE_FOLLOWED_THREADS_LIMIT,
+  WORKSPACE_SEARCH_SNIPPET_LIMIT,
+  workspaceSearchLimit,
+} from "@openbot/contracts/ipc";
+import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
+
+/** Lowercase without accents, as the host's index reads words. */
+function fold(text: string): string {
+  return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
 
 /** What the preview's workspace state reads from the preview channels. */
 export interface MockWorkspaceStateChannels {
@@ -96,6 +109,55 @@ export function createMockWorkspaceState(
       const after = await requireState(input.channelId, input.threadRootId);
       emit({ type: "workspace-read-state-changed", channelId: input.channelId, threadRootId: input.threadRootId });
       return after;
+    },
+    /** The preview's message search: each word must start a word of the message, as on the host. */
+    workspaceSearch: async (input: WorkspaceSearchInput): Promise<WorkspaceSearchPage> => {
+      const words = fold(input.query)
+        .split(/\s+/u)
+        .filter((word) => word.length > 0 && !word.startsWith("-"))
+        .map((word) => word.replaceAll('"', ""));
+      if (!words.length) return { hits: [], total: 0, nextCursor: null };
+      const hits: WorkspaceSearchHit[] = [];
+      for (const channel of await channels.listChannels()) {
+        if (input.channelIds && !input.channelIds.includes(channel.id)) continue;
+        const page = await channels.readChannel({ channelId: channel.id });
+        const threads = await Promise.all(
+          page.messages
+            .filter((message) => (message.threadSummary?.replyCount ?? 0) > 0)
+            .map((root) => channels.readChannel({ channelId: channel.id, threadRootId: root.id })),
+        );
+        const messages = [...page.messages, ...threads.flatMap((thread) => thread.messages.slice(1))];
+        for (const message of messages) {
+          const text = markdownPreviewText(message.message.text);
+          const folded = fold(text);
+          const tokens = folded.split(/[^\p{L}\p{N}]+/u);
+          const starts = (word: string) => tokens.some((token) => token.startsWith(word));
+          if (message.deletedAt || !words.every(starts)) continue;
+          if (input.authorIds && !input.authorIds.includes(message.author.id)) continue;
+          if (input.threadsOnly && !message.threadRootId && !(message.threadSummary?.replyCount ?? 0)) continue;
+          const at = folded.indexOf(words[0] ?? "");
+          hits.push({
+            channelId: channel.id,
+            messageId: message.id,
+            sequence: message.sequence,
+            ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
+            author: { kind: message.author.kind, id: message.author.id, name: message.author.name },
+            at: message.message.createdAt,
+            snippet: text.slice(0, WORKSPACE_SEARCH_SNIPPET_LIMIT),
+            highlights:
+              at >= 0 && at < WORKSPACE_SEARCH_SNIPPET_LIMIT ? [{ start: at, length: (words[0] ?? "").length }] : [],
+          });
+        }
+      }
+      hits.sort((left, right) => right.at.localeCompare(left.at));
+      const offset = input.cursor ? Number(input.cursor) : 0;
+      const limit = workspaceSearchLimit(input);
+      const next = offset + limit;
+      return {
+        hits: hits.slice(offset, next),
+        total: hits.length,
+        nextCursor: next < hits.length ? String(next) : null,
+      };
     },
     workspaceMarkUnread: async (input: WorkspaceMarkUnreadInput): Promise<WorkspaceReadPosition> => {
       const page = await channels.readChannel({

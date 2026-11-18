@@ -15,7 +15,7 @@ import schemaHistory from "./openbot-database-schema-history.json";
 
 const sourceAt = "2026-10-08T10:00:00.000Z";
 const appliedAt = "2026-10-09T10:00:00.000Z";
-const latestVersion = 52;
+const latestVersion = 53;
 const connections: DatabaseSync[] = [];
 const sources = ["upstream 31", "fork 31", "fork 32", "upstream 32", "upstream 46"] as const;
 type Source = (typeof sources)[number];
@@ -406,7 +406,7 @@ interface CapturedTable {
 function captureRows(database: DatabaseSync): CapturedTable[] {
   return database
     .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-      AND name != 'schema_migrations' AND name NOT LIKE 'agent_memory_search%' ORDER BY name`)
+      AND name != 'schema_migrations' AND name NOT LIKE 'agent_memory_search%' AND name NOT LIKE 'channel_message_search%' ORDER BY name`)
     .all()
     .map(({ name }) => {
       if (typeof name !== "string") throw new Error("Invalid fixture table name.");

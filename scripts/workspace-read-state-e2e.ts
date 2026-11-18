@@ -107,50 +107,7 @@ async function markUnread(
   });
 }
 
-/** Sends a message and answers it as the channel page has it. */
-async function send(person: Person, channelId: string, text: string, threadRootId?: string): Promise<JsonObject> {
-  const body: JsonObject = {
-    type: "send",
-    operationId: randomUUID(),
-    channelId,
-    text,
-    recipientAgentId: null,
-    replyToMessageId: null,
-    attachmentDraftIds: [],
-  };
-  // A reply in a thread is a workspace command; a top-level message takes the released route.
-  if (threadRootId) await e2e.command(person.token, { ...body, threadRootId });
-  else await e2e.releasedCommand(person.token, body);
-  const page = await e2e.page(person.token, channelId, threadRootId);
-  assert.ok(Array.isArray(page.messages));
-  const found = page.messages
-    .map((entry) => record(entry, "message"))
-    .find((entry) => record(entry.message, "message body").text === text);
-  assert.ok(found, `The message "${text}" is not on the page.`);
-  return found;
-}
-
-async function createChannel(person: Person, name: string, visibility: "public" | "private"): Promise<string> {
-  const channelId = randomUUID();
-  await e2e.command(person.token, {
-    type: "create",
-    operationId: randomUUID(),
-    channelId,
-    kind: "channel",
-    visibility,
-    name,
-    humanMemberIds: [],
-    members: [],
-  });
-  // Members answer for themselves, so a message in a channel with no agent asks no lead to route it.
-  await e2e.command(person.token, {
-    type: "set-routing",
-    operationId: randomUUID(),
-    channelId,
-    routing: "responders",
-  });
-  return channelId;
-}
+const { send, createChannel } = e2e;
 
 async function activityThreads(person: Person): Promise<JsonObject[]> {
   const codec = WORKSPACE_CODECS.get(WORKSPACE_ROUTES.activity);

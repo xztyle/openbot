@@ -138,7 +138,7 @@ describe("imported channel copies migration 51", () => {
 
     migrateOpenBotDatabase(db, { appliedAt: "2026-11-16T12:00:00.000Z" });
 
-    expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 52 });
+    expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 53 });
     expect(deletedIds(db)).toEqual(["imported-copy", "synthetic"]);
     expect(db.prepare("SELECT COUNT(*) AS count FROM projection_thread_messages").get()).toEqual({ count: 0 });
     const copy = JSON.parse(

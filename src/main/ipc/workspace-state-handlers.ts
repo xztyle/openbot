@@ -5,17 +5,23 @@
 
 import {
   decodeWorkspaceReadPosition,
+  decodeWorkspaceSearchPage,
   decodeWorkspaceThreadState,
   decodeWorkspaceThreadStates,
   parseWorkspaceFollowThreadInput,
   parseWorkspaceMarkUnreadInput,
   parseWorkspaceReadThreadInput,
+  parseWorkspaceSearchInput,
   parseWorkspaceThreadStatesInput,
 } from "@openbot/contracts/ipc";
 import {
   WORKSPACE_READ_STATE_CAPABILITY,
   WORKSPACE_READ_STATE_ROUTES,
 } from "@openbot/contracts/team-protocol/workspace-read-state-v1";
+import {
+  WORKSPACE_SEARCH_CAPABILITY,
+  WORKSPACE_SEARCH_ROUTES,
+} from "@openbot/contracts/team-protocol/workspace-search-v1";
 import { sourceText } from "@openbot/i18n/source";
 import type { AgentService } from "../../backend/agent-service";
 import { runCauseEffect } from "../../backend/effect-boundary";
@@ -52,6 +58,19 @@ export function workspaceStateHandlers({ service, host, remoteServers }: Workspa
       local: (input) => service.channels.followThread(input, host.channelActor(), host.channelViewer()),
       remote: (input, serverId) =>
         remote(serverId, WORKSPACE_READ_STATE_ROUTES.followThread, input, decodeWorkspaceThreadState),
+    }),
+    workspaceSearch: scopedHandler(parseWorkspaceSearchInput, {
+      local: (input) => runCauseEffect(service.channels.search.search(input, host.channelViewer())),
+      remote: (input, serverId) => {
+        if (!remoteServers.supportsCapability(serverId, WORKSPACE_SEARCH_CAPABILITY))
+          throw new Error(sourceText("error.team.workspaceUnsupported"));
+        return runCauseEffect(
+          remoteServers.request(serverId, WORKSPACE_SEARCH_ROUTES.search, decodeWorkspaceSearchPage, {
+            method: "POST",
+            body: input,
+          }),
+        );
+      },
     }),
     workspaceMarkUnread: scopedHandler(parseWorkspaceMarkUnreadInput, {
       // The reader here is the host user of this computer, as in `listChannels`.

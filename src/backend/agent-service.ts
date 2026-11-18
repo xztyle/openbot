@@ -1100,6 +1100,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       agents: () => this.listAgents(),
       hidden: (agentId) => this.#store.isHidden(agentId),
       inChannelSpace: (agentId, channel) => agentSeesChannel(this.#store.spaces, agentId, channel),
+      channelSpaceId: (channel) => this.#store.spaces.channelSpaceId(channel),
       generate: (lead, prompt) =>
         Effect.gen({ self: this }, function* () {
           yield* this.#providers.ensureProvider(lead.provider);

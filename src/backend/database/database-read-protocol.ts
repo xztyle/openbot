@@ -8,6 +8,7 @@ import type {
   ConversationReadState,
   ConversationSearchPage,
 } from "@openbot/contracts/ipc";
+import type { ChannelSearchRequest, ChannelSearchResult } from "./channel-search-queries";
 import type { ConversationMarkerExclusions } from "./conversation-queries";
 
 /** One read that a worker answers whole, in one read transaction of its own connection. */
@@ -43,7 +44,9 @@ export type DatabaseReadRequest =
       maxBytes: number;
     }
   | { kind: "search-messages"; query: string; agentId?: string; cursor?: string; limit?: number }
-  | { kind: "search-files"; query: string; cursor?: string; limit?: number };
+  | { kind: "search-files"; query: string; cursor?: string; limit?: number }
+  /** The workspace message search, over the channels that the main process checked. */
+  | { kind: "search-channel-messages"; request: ChannelSearchRequest };
 
 /**
  * A read state that a worker could not give, because the member's cursor must be written first (no
@@ -79,6 +82,7 @@ export interface DatabaseReadResults {
   "read-states": Record<string, WorkerReadState>;
   "search-messages": ConversationSearchPage;
   "search-files": ConversationFileSearchPage;
+  "search-channel-messages": ChannelSearchResult;
 }
 
 export type DatabaseReadKind = DatabaseReadRequest["kind"];

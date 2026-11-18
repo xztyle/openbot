@@ -248,6 +248,7 @@ import { routeWorkspace } from "./team-api/route-workspace";
 import { routeWorkspaceDirectory } from "./team-api/route-workspace-directory";
 import { routeWorkspaceFleet } from "./team-api/route-workspace-fleet";
 import { routeWorkspaceReadState } from "./team-api/route-workspace-read-state";
+import { routeWorkspaceSearch } from "./team-api/route-workspace-search";
 import { routeWorkspaceSidebar } from "./team-api/route-workspace-sidebar";
 import { routeWorkspaceSpaces } from "./team-api/route-workspace-spaces";
 import { TeamStoreError } from "./team-store";
@@ -917,6 +918,7 @@ export class TeamApiServer {
       )
         return;
       if ((await routeWorkspaceReadState(context, this.#options.channels)) === "handled") return;
+      if ((await routeWorkspaceSearch(context, this.#options.channels, hidden)) === "handled") return;
       if ((await routeWorkspaceFleet(context, this.#options.agents, hidden)) === "handled") return;
       if ((await routeWorkspaceSidebar(context, this.#options.workspaceSidebar)) === "handled") return;
       if ((await routeWorkspaceSpaces(context, this.#options.spaces, this.#options.agents, hidden)) === "handled")

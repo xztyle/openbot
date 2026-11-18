@@ -565,6 +565,7 @@ import type {
   WorkspaceSteps,
   WorkspaceStepsInput,
 } from "./ipc-workspace-fleet";
+import type { WorkspaceSearchInput, WorkspaceSearchPage } from "./ipc-workspace-search";
 import type { WorkspaceSidebar, WorkspaceSidebarPrefs } from "./ipc-workspace-sidebar";
 import type { WorkspaceSpaceAction, WorkspaceSpaceActionResult, WorkspaceSpaces } from "./ipc-workspace-spaces";
 import type {
@@ -1379,6 +1380,9 @@ export const IPC_ENDPOINTS = {
     workspaceMarkUnread: scopedRequest<WorkspaceMarkUnreadInput, WorkspaceReadPosition>()(
       "agent:workspace:mark-unread",
     ),
+    // The messages of the channels, groups and DMs the reader can see, by their words. A joined server
+    // answers through workspace-search-v1 (`fork-host-v1`); one without it fails.
+    workspaceSearch: scopedRequest<WorkspaceSearchInput, WorkspaceSearchPage>()("agent:workspace:search"),
     // The person types in a channel, or stopped (`ChannelTypingInput`). `scopedEvent` carries
     // `channel-typing` with the people who type and the agents that think or work there. A joined
     // server answers through `workspace-v1` (`fork-host-v1`).

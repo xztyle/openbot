@@ -29,6 +29,7 @@ import { type DynamicRecord, isDynamicRecord, isOneOf, isString } from "./runtim
 
 export * from "./ipc-chat-workspace";
 export * from "./ipc-workspace-activity";
+export * from "./ipc-workspace-search";
 export * from "./ipc-workspace-threads";
 
 export const CHANNEL_CHATS_CAPABILITY = "channel-chats-v1";

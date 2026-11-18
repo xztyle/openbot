@@ -3,6 +3,8 @@
 - Take over on a browser takeover card shows the agent's page live in the card on a computer, where you type and click, with "Hand back to <agent>" to let the agent continue. Open in the full view makes it bigger. On a phone, Take over opens the page full screen.
 - On a phone, the live view of an agent's browser takes touch: a tap clicks, a drag scrolls, two fingers zoom, and the keyboard button opens the phone's keyboard to type into the page.
 
+- The header of an agent's chat has a Browser menu with the agent's tabs. A tab opens in the browser view, live for a server's tab, on a computer and on a phone.
+
 ### Fixed
 
 - A takeover card is answered once, also when its card and the browser's dock are both pressed.

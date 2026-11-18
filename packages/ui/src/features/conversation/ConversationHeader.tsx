@@ -1,4 +1,4 @@
-import { Badge, Button, Clock3, Lock, Search } from "@openbot/ui";
+import { Badge, Button, buttonVariants, Clock3, DropdownMenu, Globe2, Lock, Search } from "@openbot/ui";
 import { ProviderModelPicker } from "@openbot/ui/components/ProviderModelPicker";
 import type { AgentProfile } from "@openbot/ui/data";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
@@ -7,7 +7,7 @@ import { RemoteDesktopIcon } from "@openbot/ui/features/conversation/Conversatio
 import { SidePanelToggle, type SidePanelToggleProps } from "@openbot/ui/features/conversation/SidePanel";
 import { useText } from "@openbot/ui/text";
 import type { ComponentProps, JSX } from "@solidjs/web";
-import { Show } from "solid-js";
+import { For, Show } from "solid-js";
 
 export interface ConversationHeaderProps {
   actions?: JSX.Element;
@@ -27,6 +27,16 @@ export interface ConversationHeaderProps {
   remoteControl?: ConversationHeaderRemoteControl | undefined;
   /** Missing when the chat has no side panel, such as a deleted channel. */
   sidePanel?: SidePanelToggleProps | undefined;
+  /**
+   * The agent's browser tabs, to watch or work in one at any time. Left out, or empty, when the
+   * agent has no tab or this client cannot show one.
+   */
+  browser?: ConversationHeaderBrowser | undefined;
+}
+
+export interface ConversationHeaderBrowser {
+  tabs: readonly { id: string; title: string; url: string }[];
+  onOpen: (tabId: string) => void;
 }
 
 export interface ConversationHeaderPendingModel {
@@ -102,6 +112,31 @@ export function ConversationHeader(props: ConversationHeaderProps) {
             <Search aria-hidden="true" class="size-[14px]" />
           </Button>
         </Show>
+        <Show when={props.agent && props.browser && props.browser.tabs.length > 0 ? props.browser : undefined}>
+          {(browser) => (
+            <DropdownMenu.Root placement="bottom-end" gutter={4}>
+              <DropdownMenu.Trigger
+                class={`${buttonVariants({ variant: "ghost" })} header-panel-toggle`}
+                aria-label={t("conversation.header.browser", { name: props.agent?.name ?? "" })}
+                title={t("conversation.header.browser", { name: props.agent?.name ?? "" })}
+              >
+                <Globe2 aria-hidden="true" class="size-[14px]" />
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content class="conversation-browser-menu">
+                  <For each={browser().tabs}>
+                    {(tab) => (
+                      <DropdownMenu.Item onSelect={() => browser().onOpen(tab.id)}>
+                        <span class="conversation-browser-menu-title">{tab.title || pageHost(tab.url)}</span>
+                        <small class="conversation-browser-menu-host">{pageHost(tab.url)}</small>
+                      </DropdownMenu.Item>
+                    )}
+                  </For>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+          )}
+        </Show>
         <Show when={props.remoteControl}>
           {(control) => (
             <Button
@@ -125,4 +160,12 @@ export function ConversationHeader(props: ConversationHeaderProps) {
       </div>
     </header>
   );
+}
+
+function pageHost(url: string): string {
+  try {
+    return new URL(url).hostname || url;
+  } catch {
+    return url;
+  }
 }

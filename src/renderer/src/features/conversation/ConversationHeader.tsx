@@ -33,7 +33,10 @@ export function ConversationHeader() {
   const { t } = useText();
   const {
     actingBrowserControl,
+    activateBrowserTab,
+    activeBrowserTab,
     agentActivity,
+    browserTabs,
     browserControlAgent,
     changeFastMode,
     channel,
@@ -142,6 +145,18 @@ export function ConversationHeader() {
               visible: Boolean(props.remoteDesktopVisible),
               onOpen: (trigger) => {
                 if (props.server) void props.onOpenRemoteDesktop(props.server.id, trigger);
+              },
+            }
+          : undefined
+      }
+      // The agent's tabs, to watch or work in at any time: a host's tab shows in its live view.
+      browser={
+        !channel && props.browserEnabled !== false && !props.browserVisibilitySuspended
+          ? {
+              tabs: browserTabs(),
+              onOpen: (tabId) => {
+                if (activeBrowserTab()?.id !== tabId) activateBrowserTab(tabId);
+                setActiveRightPanel("browser-expanded");
               },
             }
           : undefined

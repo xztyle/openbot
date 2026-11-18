@@ -830,3 +830,26 @@
 .browser-takeover-card:has(.browser-takeover-live) {
   width: min(880px, 100%);
 }
+
+/* The agent's tabs in the chat header's Browser menu: the title, and the site under it. */
+.conversation-browser-menu {
+  max-width: min(320px, calc(100vw - 2 * var(--openbot-space-4)));
+}
+
+.conversation-browser-menu [role="menuitem"] {
+  display: grid;
+  min-height: var(--openbot-control-lg);
+  align-content: center;
+}
+
+.conversation-browser-menu-title,
+.conversation-browser-menu-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-browser-menu-host {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}

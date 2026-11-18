@@ -378,6 +378,22 @@ async function handedBack(page: Page): Promise<void> {
   assert.deepEqual(responses, [{ requestId: "takeover-1", decision: "complete" }], "The takeover ends once, as done.");
 }
 
+/** The Browser menu of the DM header opens the agent's tab in the full view, live. */
+async function browserFromHeader(page: Page, host: TabHost, touch: boolean): Promise<void> {
+  const starts = host.starts;
+  const trigger = page.getByRole("button", { name: english("conversation.header.browser", { name: "Chief" }) });
+  if (touch) await trigger.tap();
+  else await trigger.click();
+  const item = page.getByRole("menuitem", { name: /Create your account/u });
+  if (touch) await item.tap();
+  else await item.click();
+  await page
+    .getByRole("tabpanel")
+    .getByRole("img", { name: english("browser.liveView.label") })
+    .waitFor({ timeout: UI_WAIT_MS });
+  assert.ok(host.starts > starts, "The full view starts a stream of the tab.");
+}
+
 async function phone(browser: Browser, origin: string): Promise<void> {
   const viewport = "phone";
   const { page, host, tab, context, tabContext } = await open(browser, origin, viewport);
@@ -444,6 +460,16 @@ async function phone(browser: Browser, origin: string): Promise<void> {
   await step(page, viewport, "I'm done hands the page back once", async () => {
     await button(page, english("prompt.browser.done")).last().tap();
     await handedBack(page);
+  });
+
+  await step(page, viewport, "the DM header's Browser menu opens the agent's tab live", async () => {
+    // The full view is open from the takeover; Back returns to the chat first.
+    await page.goto(`${origin}${DM_PATH}`, { waitUntil: "commit" });
+    await page
+      .getByRole("button", { name: english("conversation.header.browser", { name: "Chief" }) })
+      .waitFor({ timeout: UI_WAIT_MS });
+    await browserFromHeader(page, host, true);
+    await shot(page, "phone-header-browser");
   });
   await context.close();
   await tabContext.close();
@@ -520,6 +546,11 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
     await handedBack(page);
     await card().waitFor({ state: "detached", timeout: UI_WAIT_MS });
     await shot(page, "desktop-done");
+  });
+
+  await step(page, viewport, "the DM header's Browser menu opens the agent's tab live", async () => {
+    await browserFromHeader(page, host, false);
+    await shot(page, "desktop-header-browser");
   });
   await context.close();
   await tabContext.close();

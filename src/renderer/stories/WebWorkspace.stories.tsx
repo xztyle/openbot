@@ -52,6 +52,21 @@ const slackRuntime: WebRuntimeFactory = (_accountId, events) =>
 
 export const SlackWorkspace: Story = { args: { createRuntime: slackRuntime } };
 
+/**
+ * Agents at work: Chief in #general and Research in the pricing thread, each with Stop. Research
+ * posts a progress reply every 2 s, so the thread shows how it keeps the reader's place.
+ */
+const agentWorkingRuntime: WebRuntimeFactory = (_accountId, events) =>
+  mockWebRuntimeFor(
+    createMockOpenBot({
+      channels: seeds(WEB_PREVIEW_MEMBER_ID, { working: true }),
+      channelMemberId: WEB_PREVIEW_MEMBER_ID,
+    }),
+    events,
+  );
+
+export const AgentWorking: Story = { args: { createRuntime: agentWorkingRuntime } };
+
 /** The workspace with spaces: Trading holds Research and #cakemaker. Check it at phone width too. */
 const spacesRuntime: WebRuntimeFactory = (_accountId, events) =>
   mockWebRuntimeFor(

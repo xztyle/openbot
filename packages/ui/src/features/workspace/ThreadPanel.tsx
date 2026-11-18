@@ -1,5 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
+import { Button, IconButton } from "../../button";
+import { Bell, BellOff, ChevronDown } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { RepliesDivider } from "./MessageDividers";
@@ -19,6 +21,16 @@ export interface ThreadPanelProps {
   composer: JSX.Element;
   /** Agents or people who type in the thread, as a `TypingIndicator`. */
   typing?: JSX.Element;
+  /** Gets the scrolling list of the root and the replies, to keep the reader's place in it. */
+  scrollRef?: ((element: HTMLDivElement) => void) | undefined;
+  onScroll?: (() => void) | undefined;
+  /**
+   * Set while the reader reads above the newest reply: a pill at the bottom, "3 new replies" when
+   * replies came since they left the end, else "Jump to latest". Null hides it.
+   */
+  jump?: { newReplies: number; onJump: () => void } | null | undefined;
+  /** Whether the reader follows the thread: a bell in the header turns the notices of its replies on and off. */
+  following?: { on: boolean; onChange: (on: boolean) => void } | undefined;
   onClose: () => void;
   /** The narrow layout's back button. */
   onBack?: (() => void) | undefined;
@@ -37,15 +49,47 @@ export function ThreadPanel(props: ThreadPanelProps): JSX.Element {
             ? t("workspace.thread.inPrivate", { name: props.channelName })
             : t("workspace.thread.inChannel", { name: props.channelName })
         }
+        actions={
+          <Show when={props.following}>
+            {(following) => (
+              <IconButton
+                variant="ghost"
+                label={t(following().on ? "workspace.thread.unfollow" : "workspace.thread.follow")}
+                onClick={() => following().onChange(!following().on)}
+              >
+                <Show when={following().on} fallback={<BellOff />}>
+                  <Bell />
+                </Show>
+              </IconButton>
+            )}
+          </Show>
+        }
         onBack={props.onBack}
         onClose={props.onClose}
       />
-      <div class="ws-thread-scroll">
-        <div class="ws-thread-root">{props.root}</div>
-        <Show when={props.replyCount > 0}>
-          <RepliesDivider count={props.replyCount} />
+      <div class="ws-thread-body">
+        <div class="ws-thread-scroll" ref={(element) => props.scrollRef?.(element)} onScroll={() => props.onScroll?.()}>
+          <div class="ws-thread-root">{props.root}</div>
+          <Show when={props.replyCount > 0}>
+            <RepliesDivider count={props.replyCount} />
+          </Show>
+          <div class="ws-thread-replies">{props.replies}</div>
+        </div>
+        <Show when={props.jump}>
+          {(jump) => (
+            <Button
+              variant={jump().newReplies > 0 ? "default" : "secondary"}
+              size="xs"
+              class="ws-thread-jump"
+              onClick={() => jump().onJump()}
+            >
+              <ChevronDown aria-hidden="true" />
+              {jump().newReplies > 0
+                ? t("workspace.thread.newReplies", { count: jump().newReplies })
+                : t("workspace.app.channel.jumpToLatest")}
+            </Button>
+          )}
         </Show>
-        <div class="ws-thread-replies">{props.replies}</div>
       </div>
       <div class="ws-thread-bottom">
         {props.typing}

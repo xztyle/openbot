@@ -3,17 +3,22 @@ import { Button } from "@openbot/ui";
 import { ThreadPanel } from "@openbot/ui/features/workspace/ThreadPanel";
 import { TypingIndicator } from "@openbot/ui/features/workspace/TypingIndicator";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createMemo, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
 import { WorkspaceComposer } from "./WorkspaceComposer";
 import { WorkspaceMessage } from "./WorkspaceMessage";
+import { createAgentWork } from "./workspace-agent-work";
 import { useWorkspace } from "./workspace-context";
-import { conversationName, memberById, messageRows, thinkingAgents, workingAgents } from "./workspace-model";
+import { conversationName, messageRows, readerJoined } from "./workspace-model";
+import { savedScrollPlace, saveScrollPlace } from "./workspace-scroll-places";
+
+/** How close to the end still counts as reading the newest replies, as in the channel. */
+const FOLLOW_DISTANCE = 80;
 
 /** The thread in the right panel: its root, its replies and a composer with "Also send to #channel". */
 export function WorkspaceThreadPanel(props: { channelId: string; rootId: string }) {
   const { t } = useText();
   const ws = useWorkspace();
-  let scroller: HTMLElement | undefined;
+  let scroller: HTMLDivElement | undefined;
   const thread = () => {
     const current = ws.state.thread;
     return current?.channelId === props.channelId && current.rootId === props.rootId ? current : null;
@@ -36,43 +41,97 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
   };
   const replies = () => rows().filter((row) => row !== root());
   const replyCount = () => replies().filter((row) => !row.pending).length;
-  const live = createMemo(() => ws.typingIn(props.channelId, props.rootId));
-  const typingPeople = createMemo(() => (live()?.humans ?? []).map((id) => memberById(ws.directory(), id)));
-  const typing = createMemo(() => {
-    const host = live();
-    const replies = entries().filter((entry) => entry.id !== props.rootId);
-    const thinking = host
-      ? host.agents.filter((agent) => agent.state === "thinking").map((agent) => agent.id)
-      : thinkingAgents([...entries()]);
-    const busy = (
-      host
-        ? host.agents.filter((agent) => agent.state === "working").map((agent) => agent.id)
-        : workingAgents(replies, [])
-    ).filter((id) => !thinking.includes(id));
-    return [
-      ...thinking.map((id) => ({ member: memberById(ws.directory(), id), state: "thinking" as const })),
-      ...busy.map((id) => ({ member: memberById(ws.directory(), id), state: "working" as const })),
-    ];
+  const archived = () => channel()?.archived === true;
+  const work = createAgentWork({
+    channelId: props.channelId,
+    threadRootId: props.rootId,
+    entries,
+    canStop: () => {
+      const current = channel();
+      return (
+        current !== undefined && !current.archived && ws.env.connectionReady() && readerJoined(ws.directory(), current)
+      );
+    },
   });
+
+  // The reader's place, as in Slack: the panel follows new replies only while the reader is at the
+  // end. Above it, a reply does not move them; a pill counts the new replies and jumps down. The
+  // reader's own reply always goes to the end. The place stays for the next opening of the thread.
+  const placeId = `${ws.env.storageKey()}:thread:${props.channelId}:${props.rootId}`;
+  let follow = true;
+  let opened = false;
   /** The linked reply the panel scrolled to, so a new reply does not scroll back to it. */
   let focused: string | undefined;
-  // New replies keep the end in view; a linked reply shows once, in the middle.
+  let lastId: string | undefined;
+  const [atEnd, setAtEnd] = createSignal(true);
+  /** The reply count when the reader left the end: the replies after it are new to them. */
+  const [awayCount, setAwayCount] = createSignal<number | null>(null);
+  const newReplies = () => {
+    const away = awayCount();
+    return away === null ? 0 : Math.max(0, replyCount() - away);
+  };
+
+  function scrollToEnd() {
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  }
+
+  /** Reads the place after a scroll or a change of the content. */
+  function notePlace() {
+    if (!scroller || !opened) return;
+    const remaining = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    follow = remaining <= FOLLOW_DISTANCE;
+    if (follow !== untrack(atEnd)) {
+      setAtEnd(follow);
+      setAwayCount(follow ? null : untrack(replyCount));
+    }
+    saveScrollPlace(placeId, follow ? null : { offset: scroller.scrollTop });
+  }
+
+  function jumpToLatest() {
+    follow = true;
+    scrollToEnd();
+    notePlace();
+  }
+
   createEffect(
-    () => ({ count: entries().length, focus: focusId() }),
-    ({ focus }) => {
+    () => ({ count: entries().length, last: entries().at(-1), focus: focusId() }),
+    ({ count, last, focus }) => {
       requestAnimationFrame(() => {
-        const element = scroller?.querySelector<HTMLElement>(".ws-thread-scroll");
-        if (!element) return;
-        const marked = focus && focus !== focused ? element.querySelector<HTMLElement>("[data-highlighted]") : null;
+        if (!scroller || count === 0 || !untrack(root)) return;
+        const marked = focus && focus !== focused ? scroller.querySelector<HTMLElement>("[data-highlighted]") : null;
+        const own = last && last.id !== lastId && last.author.kind === "member" && ws.env.isReader(last.author.id);
+        const first = !opened;
+        lastId = last?.id;
+        opened = true;
         if (marked) {
+          // A linked reply shows once, in the middle.
           focused = focus;
+          follow = false;
           marked.scrollIntoView({ block: "center" });
-          return;
-        }
-        element.scrollTop = element.scrollHeight;
+        } else if (first) {
+          const place = savedScrollPlace(placeId);
+          if (place) scroller.scrollTop = place.offset;
+          else scrollToEnd();
+        } else if (follow || own) scrollToEnd();
+        notePlace();
       });
     },
   );
+
+  // A streaming answer grows without a new reply: keep the end in view while the reader follows.
+  onSettled(() => {
+    if (!scroller) return;
+    const observer = new ResizeObserver(() => {
+      if (opened && follow) scrollToEnd();
+    });
+    observer.observe(scroller);
+    for (const child of scroller.children) observer.observe(child);
+    return () => observer.disconnect();
+  });
+  onCleanup(() => {
+    opened = false;
+  });
+
   const visibility = () => {
     const current = channel();
     return current ? channelVisibility(current) : "public";
@@ -82,13 +141,16 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
     return current ? channelKind(current) === "channel" : true;
   };
   return (
-    <div class="ws-thread-frame" ref={(element) => (scroller = element)}>
+    <div class="ws-thread-frame">
       <ThreadPanel
         channelName={name()}
         visibility={visibility()}
         replyCount={replyCount()}
         onClose={() => ws.closePanel()}
         onBack={() => ws.back()}
+        scrollRef={(element) => (scroller = element)}
+        onScroll={notePlace}
+        jump={atEnd() || !root() ? null : { newReplies: newReplies(), onJump: jumpToLatest }}
         root={
           <Show
             when={root()}
@@ -131,7 +193,7 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
             )}
           </For>
         }
-        typing={<TypingIndicator humans={typingPeople()} agents={typing()} />}
+        typing={<TypingIndicator humans={work.humans()} agents={work.agents()} />}
         composer={
           <WorkspaceComposer
             channelId={props.channelId}
@@ -140,7 +202,7 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
             label={t("workspace.app.composer.replyLabel", { name: name() })}
             alsoSendTo={isChannel() ? name() : undefined}
             focusRequest={1}
-            disabled={!ws.env.connectionReady() || channel()?.archived === true}
+            disabled={!ws.env.connectionReady() || archived()}
           />
         }
       />

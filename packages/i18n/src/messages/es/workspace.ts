@@ -522,4 +522,13 @@ export const messages = {
     "OpenBot elimina estos agentes con sus chats, memorias, rutinas y archivos del espacio de trabajo. No se puede deshacer.",
   "workspace.spaces.deleteAgentsButton": { one: "Eliminar {count} agente", other: "Eliminar {count} agentes" },
   "workspace.spaces.deleteAgentsFailed": "OpenBot no pudo eliminar todos los agentes.",
+  // Agent work, the place in a thread, and the header bell.
+  "workspace.typing.stop": "Detener",
+  "workspace.typing.stopLabel": "Detener a {name}",
+  "workspace.typing.stopping": "Deteniendo…",
+  "workspace.typing.stoppingLabel": "Deteniendo a {name}…",
+  "workspace.typing.stopFailed": "OpenBot no pudo detener a {name}.",
+  "workspace.thread.newReplies": { one: "{count} respuesta nueva", other: "{count} respuestas nuevas" },
+  "workspace.thread.follow": "Recibir avisos de respuestas nuevas",
+  "workspace.thread.unfollow": "Desactivar avisos de respuestas",
 } as const satisfies PartialTranslation<typeof source>;

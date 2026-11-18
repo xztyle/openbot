@@ -1,5 +1,5 @@
-import type { Channel, ChannelMessage } from "@openbot/contracts/ipc";
-import type { MockChannelSeed } from "../../src/preview/mock-channels";
+import type { Channel, ChannelMessage, ChannelTask } from "@openbot/contracts/ipc";
+import type { MockChannelSeed, MockChannelWork } from "../../src/preview/mock-channels";
 
 /** The sample workspace of the workspace stories: #general with a thread, a private channel of 2,000 messages, a DM. */
 /** The member id the preview writes as. `seeds` sets it. */
@@ -60,8 +60,33 @@ const ana = { kind: "member" as const, id: "ana", name: "Ana" };
 const chief = { kind: "agent" as const, id: "chief", name: "Chief" };
 const research = { kind: "agent" as const, id: "research", name: "Research" };
 
-/** `reader` is the member id the preview writes as: `local` on the desktop, `preview` on the web. */
-export function seeds(reader = "local"): MockChannelSeed[] {
+function runningTask(channelId: string, id: string, ownerAgentId: string, requestMessageId: string): ChannelTask {
+  return {
+    id,
+    channelId,
+    parentTaskId: null,
+    rootTaskId: id,
+    ownerAgentId,
+    requestMessageId,
+    instruction: "Answer the request.",
+    attachmentDraftIds: [],
+    expectedResult: "Complete the requested work and report the result.",
+    sourceMessageIds: [requestMessageId],
+    dependencies: [],
+    resources: [],
+    state: "running",
+    revision: 1,
+    assignmentCount: 1,
+    error: null,
+  };
+}
+
+/**
+ * `reader` is the member id the preview writes as: `local` on the desktop, `preview` on the web.
+ * `working`: Chief works on the checklist in #general, and Research works in the pricing thread,
+ * which holds 30 progress replies and gets one more every 2 s until someone stops it.
+ */
+export function seeds(reader = "local", options: { working?: boolean } = {}): MockChannelSeed[] {
   READER = reader;
   const you = { kind: "member" as const, id: READER, name: "You" };
   sequences.clear();
@@ -120,6 +145,24 @@ export function seeds(reader = "local"): MockChannelSeed[] {
     message("general", 50, research, "Started: I compare the plans of both rivals.", { threadRootId: rootId }),
     message("general", 55, you, "Great, add the yearly prices too.", { threadRootId: rootId }),
   ];
+  const work: MockChannelWork[] = [];
+  if (options.working) {
+    const request = replies[1];
+    const checklist = messages[1];
+    for (let index = 1; index <= 30; index += 1)
+      replies.push(
+        message("general", 55 + index, research, `Checked the plan table of rival ${index}.`, { threadRootId: rootId }),
+      );
+    const root = messages.find((entry) => entry.id === rootId);
+    if (root?.threadSummary) root.threadSummary.replyCount = replies.length;
+    if (checklist) work.push({ task: runningTask("general", "task-chief", "chief", checklist.id) });
+    if (request)
+      work.push({
+        task: runningTask("general", "task-research", "research", request.id),
+        threadRootId: rootId,
+        replyEveryMs: 2_000,
+      });
+  }
   const cakemaker = channel({
     id: "cakemaker",
     name: "cakemaker",
@@ -142,7 +185,7 @@ export function seeds(reader = "local"): MockChannelSeed[] {
     humanMemberIds: [READER, "ana"],
   });
   return [
-    { channel: general, messages: [...messages, ...replies] },
+    { channel: general, messages: [...messages, ...replies], ...(work.length ? { work } : {}) },
     { channel: cakemaker, messages: many },
     { channel: channel({ id: "random", name: "random", humanMemberIds: ["ana"] }), messages: [] },
     { channel: dm, messages: [message("dm-ana", 70, ana, "Lunch at 12?")] },

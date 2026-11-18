@@ -52,7 +52,24 @@ import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 export interface MockChannelSeed {
   channel: Channel;
   messages: ChannelMessage[];
+  /** Work that agents run in the channel when the preview starts. */
+  work?: MockChannelWork[];
 }
+
+/**
+ * A task that an agent runs when the preview starts. The preview reports the agent as working, in
+ * the channel or in the thread, until the task stops; with `replyEveryMs` the agent posts a reply
+ * in the thread that often, as an agent that reports its progress.
+ */
+export interface MockChannelWork {
+  task: ChannelTask;
+  /** The thread the agent answers in. Absent: the channel. */
+  threadRootId?: string;
+  replyEveryMs?: number;
+}
+
+/** The most replies that one seeded task posts, so a story left open does not grow for ever. */
+const MOCK_WORK_REPLY_LIMIT = 60;
 
 export function createMockChannels(
   emit: (event: AgentEvent) => void,
@@ -66,7 +83,11 @@ export function createMockChannels(
   const messages = new Map<string, ChannelMessage[]>(
     seeds.map((seed) => [seed.channel.id, structuredClone(seed.messages)]),
   );
-  const tasks = new Map<string, ChannelTask[]>();
+  const tasks = new Map<string, ChannelTask[]>(
+    seeds
+      .filter((seed) => seed.work?.length)
+      .map((seed) => [seed.channel.id, (seed.work ?? []).map((work) => structuredClone(work.task))]),
+  );
   const receipts = new Map<string, Channel>();
   const memories = new Map<string, ChannelMemory[]>();
   const routines = new Map<string, ChannelRoutine[]>();
@@ -89,6 +110,79 @@ export function createMockChannels(
     if (!message || message.deletedAt) throw new Error("This message is unavailable.");
     return message;
   };
+  /** The seeded work: the agents it shows as working, and the progress replies it posts. */
+  const seededWork = seeds.flatMap((seed) =>
+    (seed.work ?? []).map((item) => ({ channelId: seed.channel.id, ...item, posted: 0 })),
+  );
+  const running = (channelId: string, taskId: string) =>
+    (tasks.get(channelId) ?? []).some((task) => task.id === taskId && task.state === "running");
+  /** Sends the typing list of each channel with seeded work, as the host does when work starts or ends. */
+  const emitWorkTyping = () => {
+    for (const channelId of new Set(seededWork.map((item) => item.channelId)))
+      emit({
+        type: "channel-typing",
+        channelId,
+        typing: seededWork
+          .filter((item) => item.channelId === channelId && item.task.ownerAgentId && running(channelId, item.task.id))
+          .map((item) => ({
+            kind: "agent" as const,
+            id: item.task.ownerAgentId ?? "",
+            state: "working" as const,
+            ...(item.threadRootId ? { threadRootId: item.threadRootId } : {}),
+          })),
+      });
+  };
+  const postWorkReply = (item: (typeof seededWork)[number]) => {
+    const channel = channels.get(item.channelId);
+    const list = messages.get(item.channelId);
+    const agentId = item.task.ownerAgentId;
+    if (!channel || !list || !agentId || !item.threadRootId) return;
+    item.posted += 1;
+    const id = `${item.task.id}-reply-${item.posted}`;
+    const reply: ChannelMessage = {
+      id,
+      channelId: channel.id,
+      sequence: (list.at(-1)?.sequence ?? 0) + 1,
+      author: { kind: "agent", id: agentId, name: agentName(agentId) },
+      taskId: item.task.id,
+      superseded: false,
+      message: {
+        id,
+        author: "assistant",
+        text: `Progress ${item.posted}: checked another price table.`,
+        createdAt: new Date().toISOString(),
+        status: "completed",
+      },
+      threadRootId: item.threadRootId,
+    };
+    list.push(reply);
+    const updated = { ...channel, revision: channel.revision + 1 };
+    channels.set(channel.id, updated);
+    const root = list.find((message) => message.id === item.threadRootId);
+    if (root) {
+      root.threadSummary = {
+        replyCount: (root.threadSummary?.replyCount ?? 0) + 1,
+        lastReplyAt: reply.message.createdAt,
+        participantIds: [agentId, ...(root.threadSummary?.participantIds ?? []).filter((member) => member !== agentId)],
+      };
+      messageChanged(updated, root);
+    }
+    messageChanged(updated, reply);
+  };
+  if (seededWork.length) {
+    // The workspace listens once it has mounted; the host's list arrives the same way, after a change.
+    setTimeout(emitWorkTyping, 300);
+    for (const item of seededWork) {
+      if (!item.replyEveryMs || !item.threadRootId) continue;
+      const timer = setInterval(() => {
+        if (!running(item.channelId, item.task.id) || item.posted >= MOCK_WORK_REPLY_LIMIT) {
+          clearInterval(timer);
+          return;
+        }
+        postWorkReply(item);
+      }, item.replyEveryMs);
+    }
+  }
   /** The workspace commands of the preview: the same shapes as the host, without the task routing. */
   const applyWorkspace = (input: ChannelCommand, channel: Channel): Channel | null => {
     const humans = channel.humanMemberIds ?? [];
@@ -378,6 +472,22 @@ export function createMockChannels(
         task.state = input.type === "stop" ? "paused" : "queued";
         task.revision += 1;
         if (input.type === "reassign") task.ownerAgentId = input.recipientAgentId;
+        // As on the host, a stop holds the whole run below the task.
+        if (input.type === "stop")
+          for (let changed = true; changed; ) {
+            changed = false;
+            for (const child of work)
+              if (
+                child.parentTaskId &&
+                child.state !== "paused" &&
+                work.some((parent) => parent.id === child.parentTaskId && parent.state === "paused")
+              ) {
+                child.state = "paused";
+                child.revision += 1;
+                changed = true;
+              }
+          }
+        if (input.type === "stop") setTimeout(emitWorkTyping, 0);
       }
       if (input.type === "send") {
         const list = messages.get(channel.id) ?? [];

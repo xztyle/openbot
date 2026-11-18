@@ -1,5 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
+import { Button } from "../../button";
+import { Square } from "../../icons";
 import { useText } from "../../text";
 import { StepTrail } from "./StepTrail";
 import { MemberAvatar } from "./WorkspaceAvatar";
@@ -12,6 +14,10 @@ export interface TypingAgent {
   label?: string | undefined;
   /** The steps of its turn so far. They open from the line, so a person can see what it does. */
   trail?: { steps: readonly AgentStepView[]; durationMs?: number | undefined } | undefined;
+  /** Stops the agent's work here, as Slack's Stop on an agent that works. Only a working agent has it. */
+  onStop?: (() => void) | undefined;
+  /** The stop was sent and the work has not ended yet. */
+  stopping?: boolean | undefined;
 }
 
 export interface TypingIndicatorProps {
@@ -23,8 +29,8 @@ export interface TypingIndicatorProps {
 
 /**
  * The line over the composer: "Fonikad is typing…" and "QA is working… Running the level tests",
- * with the steps of the agent's turn so far behind "Working · 5 steps". It keeps its height when
- * nobody types, so the messages do not jump.
+ * with the steps of the agent's turn so far behind "Working · 5 steps" and a Stop button. It keeps
+ * its height when nobody types, so the messages do not jump.
  */
 export function TypingIndicator(props: TypingIndicatorProps): JSX.Element {
   const { t, format } = useText();
@@ -48,6 +54,24 @@ export function TypingIndicator(props: TypingIndicatorProps): JSX.Element {
             </span>
             <Show when={agent().label}>
               <span class="ws-typing-agent-label">{agent().label}</span>
+            </Show>
+            <Show when={agent().state === "working" ? agent().onStop : undefined}>
+              {(stop) => (
+                <Button
+                  variant="outline"
+                  size="xs"
+                  class="ws-typing-stop"
+                  aria-label={t(agent().stopping ? "workspace.typing.stoppingLabel" : "workspace.typing.stopLabel", {
+                    name: agent().member.name,
+                  })}
+                  loading={agent().stopping === true}
+                  loadingLabel={t("workspace.typing.stopping")}
+                  onClick={() => stop()()}
+                >
+                  <Square aria-hidden="true" />
+                  {t("workspace.typing.stop")}
+                </Button>
+              )}
             </Show>
             <Show when={agent().trail}>
               {(trail) => (

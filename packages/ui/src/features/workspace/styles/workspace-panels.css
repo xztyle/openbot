@@ -8,11 +8,33 @@
   flex-direction: column;
 }
 
+/* The replies and the pill over them. */
+.ws-thread-body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+
 .ws-thread-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--openbot-space-2) 0;
+}
+
+/* "3 new replies" or "Jump to latest", as over the channel transcript. */
+.ws-thread-jump.ui-button {
+  position: absolute;
+  bottom: var(--openbot-space-3);
+  left: 50%;
+  z-index: 2;
+  gap: var(--openbot-space-1);
+  border-radius: var(--openbot-radius-pill);
+  box-shadow: var(--openbot-shadow-dialog);
+  transform: translateX(-50%);
 }
 
 .ws-thread-bottom {
@@ -665,4 +687,35 @@
   line-height: var(--openbot-leading-md);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* Agent work: Stop on the line over the composer ------------------------------------------------ */
+
+/* Small, so the line keeps its height while an agent works. */
+.ws-typing-stop.ui-button {
+  position: relative;
+  height: 20px;
+  flex: 0 0 auto;
+  gap: var(--openbot-space-1);
+  padding-inline: var(--openbot-space-1-5);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-typing-stop.ui-button > svg {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+  fill: currentColor;
+}
+
+/* A finger needs 44 px: the hit area grows around the small button. */
+@media (hover: none), (pointer: coarse) {
+  .ws-typing-stop.ui-button::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--openbot-touch-target));
+    height: var(--openbot-touch-target);
+    content: "";
+    transform: translate(-50%, -50%);
+  }
 }

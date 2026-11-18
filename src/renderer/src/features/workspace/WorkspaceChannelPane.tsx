@@ -5,7 +5,6 @@ import {
   channelKind,
   channelMembersAnswer,
   channelVisibility,
-  type WorkspaceSteps,
 } from "@openbot/contracts/ipc";
 import { Bell, BellOff, Button, Hash, Info, Link, Lock, LogOut, toast, UsersRound } from "@openbot/ui";
 import { QuestionPromptBubble } from "@openbot/ui/components/QuestionPromptBubble";
@@ -26,6 +25,7 @@ import {
 import { WorkspaceComposer } from "./WorkspaceComposer";
 import { WorkspaceMessageList } from "./WorkspaceMessageList";
 import { AnswerModesHint } from "./WorkspaceWelcome";
+import { createAgentWork } from "./workspace-agent-work";
 import { useWorkspace } from "./workspace-context";
 import {
   channelMembers,
@@ -33,7 +33,6 @@ import {
   memberById,
   otherMembers,
   readerJoined,
-  thinkingAgents,
   workingAgents,
 } from "./workspace-model";
 
@@ -79,73 +78,13 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
     if (!held || held.channelId !== props.channelId) return null;
     return firstUnreadChannelMessageId(entries(), held.count, ws.env.isReader);
   });
-  /** The steps so far of each agent that works for the channel, read every 2 s while it works. */
-  const [liveSteps, setLiveSteps] = createSignal<Record<string, WorkspaceSteps>>({});
-  /** The host's typing list once it sent one; until then the gate marks and the running tasks of the page. */
-  const live = createMemo(() => ws.typingIn(props.channelId, null));
-  const typing = createMemo(() => {
-    const host = live();
-    const thinking = host
-      ? host.agents.filter((agent) => agent.state === "thinking").map((agent) => agent.id)
-      : thinkingAgents(entries());
-    const busy = (
-      host ? host.agents.filter((agent) => agent.state === "working").map((agent) => agent.id) : [...working()]
-    ).filter((id) => !thinking.includes(id));
-    const fleet = ws.fleet.agents();
-    const step = (id: string) => fleet.find((agent) => agent.member.id === id)?.currentStep;
-    const trail = (id: string) => {
-      const steps = liveSteps()[id];
-      return steps ? { steps: steps.steps, durationMs: steps.durationMs || undefined } : undefined;
-    };
-    return [
-      ...thinking.map((id) => ({ member: memberById(ws.directory(), id), state: "thinking" as const })),
-      ...busy.map((id) => ({
-        member: memberById(ws.directory(), id),
-        state: "working" as const,
-        label: step(id),
-        trail: trail(id),
-      })),
-    ];
+  /** Who works, thinks and types here, with Stop for a working agent. */
+  const work = createAgentWork({
+    channelId: props.channelId,
+    threadRootId: null,
+    entries,
+    canStop: () => joined() && !archived() && ws.env.connectionReady(),
   });
-  createEffect(
-    () =>
-      typing()
-        .filter((agent) => agent.state === "working")
-        .map((agent) => agent.member.id)
-        .join(" "),
-    (key) => {
-      const read = ws.channels.port().agent.workspaceSteps;
-      if (!key || !read) {
-        setLiveSteps({});
-        return;
-      }
-      const channelId = props.channelId;
-      const agentIds = key.split(" ");
-      let stopped = false;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const poll = async () => {
-        const results = await Promise.all(
-          agentIds.map((agentId) =>
-            read({ channelId, agentId }).then(
-              (steps) => [agentId, steps] as const,
-              () => [agentId, null] as const,
-            ),
-          ),
-        );
-        if (stopped) return;
-        const next: Record<string, WorkspaceSteps> = {};
-        for (const [agentId, steps] of results) if (steps && steps.total > 0) next[agentId] = steps;
-        setLiveSteps(next);
-        timer = setTimeout(() => void poll(), 2_000);
-      };
-      void poll();
-      return () => {
-        stopped = true;
-        clearTimeout(timer);
-      };
-    },
-  );
-  const typingPeople = createMemo(() => (live()?.humans ?? []).map((id) => memberById(ws.directory(), id)));
   // Each channel update reads the prompt again as a new object. The card stays the same while the
   // request does, so the reader keeps the answers they picked or typed.
   const prompt = createMemo(
@@ -432,7 +371,7 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
         <Show when={showModesHint()}>
           <AnswerModesHint channelId={props.channelId} />
         </Show>
-        <TypingIndicator humans={typingPeople()} agents={typing()} />
+        <TypingIndicator humans={work.humans()} agents={work.agents()} />
         <Show when={!archived()} fallback={<p class="ws-channel-notice">{t("workspace.app.channel.archived")}</p>}>
           <Show
             when={joined()}

@@ -540,4 +540,13 @@ export const messages = defineMessages("workspace", {
     "OpenBot deletes these agents with their chats, memories, routines and workspace files. You cannot undo this.",
   "workspace.spaces.deleteAgentsButton": { one: "Delete {count} agent", other: "Delete {count} agents" },
   "workspace.spaces.deleteAgentsFailed": "OpenBot could not delete all of the agents.",
+  // Agent work, the place in a thread, and the header bell.
+  "workspace.typing.stop": "Stop",
+  "workspace.typing.stopLabel": "Stop {name}",
+  "workspace.typing.stopping": "Stopping…",
+  "workspace.typing.stoppingLabel": "Stopping {name}…",
+  "workspace.typing.stopFailed": "OpenBot could not stop {name}.",
+  "workspace.thread.newReplies": { one: "{count} new reply", other: "{count} new replies" },
+  "workspace.thread.follow": "Get notified about new replies",
+  "workspace.thread.unfollow": "Turn off notifications for replies",
 });

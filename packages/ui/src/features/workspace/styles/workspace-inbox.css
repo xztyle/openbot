@@ -468,15 +468,32 @@
     display: flex;
   }
 
-  /* The filters scroll sideways in one row, so the results start high on the screen. */
+  /*
+   * The filters stand in two columns, so each one shows and nothing scrolls sideways. A row that
+   * scrolled hid the last filters past the edge of the screen, and a swipe on it moved the page.
+   */
   .ws-search-filters {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .ws-search-filters > * {
-    flex: 0 0 auto;
+  .ws-search-filters > *,
+  .ws-search-filters .ws-select-trigger {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .ws-search-filters .ws-select-trigger .ui-select-value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ws-search-filters .ws-search-threads {
+    min-height: var(--openbot-touch-target);
+    justify-content: space-between;
+    margin-left: 0;
+    padding: 0 var(--openbot-space-3);
   }
 
   /* The phone header keeps its title: the count and Mark all read are in the list. */

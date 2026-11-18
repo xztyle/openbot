@@ -48,7 +48,8 @@ New agent and new channel looked like two different products (screenshots below)
 | Add members, edit topic, edit description | `FormDialog` | Done. Errors in place; the dialog stays open. |
 | New space, edit space | `FormDialog` | Done. |
 | Browse channels, quick switcher | `FormDialog` without a footer | Done (same frame, full screen on a phone). |
-| Template install, custom provider, profile, vault, join server, OpenCode key, chat apps, saved replies | own frames | Open: move to `FormDialog` (standard § 9). |
+| Edit profile | `FormDialog` | Done. |
+| Template install, custom provider, vault, join server, OpenCode key, chat apps, saved replies | own frames | Open: move to `FormDialog` (standard § 9). |
 
 ## 2. List views
 

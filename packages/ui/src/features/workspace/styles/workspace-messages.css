@@ -1248,3 +1248,32 @@ button.ws-profile-trigger.ws-message-author:hover {
     text-decoration: underline;
   }
 }
+
+/* Agent chat rows: the owner's DM with an agent, which is the agent's chat ------------------------ */
+
+/* The rows reach the edges of the chat's scroll area, as the rows of a channel do. */
+.ws-chat-row-frame {
+  margin-inline: calc(-1 * var(--openbot-space-3));
+}
+
+/* A workspace row brings its own spacing: the chat's gap between rows would double it. */
+.virtual-chat-row:has(> .ws-chat-row-frame) {
+  padding-top: 0;
+}
+
+/* A message that the reader cancelled in the queue. The agent never read it. */
+.ws-chat-row.message-entry-cancelled .ws-message-content {
+  opacity: 0.6;
+}
+
+.ws-chat-row-state:empty {
+  display: none;
+}
+
+.ws-chat-row-state .message-cancelled-note {
+  text-align: start;
+}
+
+.ws-chat-row-state .pending-send-status {
+  justify-content: flex-start;
+}

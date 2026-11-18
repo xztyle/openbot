@@ -578,8 +578,6 @@
 /* The owner's DM with an agent -------------------------------------------------------------------- */
 
 .ws-agent-dm {
-  --ws-line: color-mix(in srgb, var(--openbot-text-primary) 9%, transparent);
-
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
@@ -598,6 +596,14 @@
 .ws-agent-dm-body > .conversation-panel {
   flex: 1 1 auto;
   min-height: 0;
+}
+
+/*
+ * The cards of the agent's turn (tasks, subagents, a question it asked, a visual reply) stand in the
+ * text column of the rows, under the agent's name. A marker between messages stays centered.
+ */
+.ws-agent-dm .virtual-chat-row > article:not(:has(> .chat-action-marker)) {
+  padding-inline-start: calc(36px + var(--openbot-space-2) + var(--openbot-space-4) - var(--openbot-space-3));
 }
 
 /* The DM header names the agent, so the chat header keeps only its controls. */

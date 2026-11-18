@@ -1,7 +1,7 @@
 import { chatVisualReply } from "@openbot/contracts/chat-visual";
 import type { ConversationMessageSender, MessageReaction } from "@openbot/contracts/ipc";
 import type { ConversationUiBlock } from "@openbot/contracts/ui-blocks";
-import { Button } from "@openbot/ui";
+import { AudioLines, Button, Copy, MessageSquareReply, Square } from "@openbot/ui";
 import type { AgentMessage, ChatActionMarkerModel, RoutineRunMarkerModel } from "@openbot/ui/data";
 import { ChannelActivityIndicator } from "@openbot/ui/features/channels/ChannelActivityIndicator";
 import { AgentActivityIndicator } from "@openbot/ui/features/conversation/AgentActivity";
@@ -28,7 +28,14 @@ import { SubagentGroup } from "@openbot/ui/features/conversation/Subagents";
 import { TaskList } from "@openbot/ui/features/conversation/TaskList";
 import { UnreadMessagesBanner, UnreadMessagesDivider } from "@openbot/ui/features/conversation/UnreadMessages";
 import { VoicePlayer } from "@openbot/ui/features/conversation/VoicePlayer";
+import { WorkspaceChatRow } from "@openbot/ui/features/conversation/WorkspaceChatRow";
 import { teamMemberName } from "@openbot/ui/features/team/TeamPersonAvatar";
+import { DayDivider, NewMessagesDivider } from "@openbot/ui/features/workspace/MessageDividers";
+import type {
+  WorkspaceMember,
+  WorkspaceMenuItem,
+  WorkspaceReaction,
+} from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, createStore, For, Loading, lazy, onCleanup, Show, untrack } from "solid-js";
 import { useShowAgentSteps } from "../../agent-steps-preference";
@@ -50,6 +57,7 @@ import { groupedMessageIds } from "./agent-message-timeline";
 import { continuesSenderRun } from "./chat-grouping";
 import { isChatVisualAppShortcut } from "./chat-visual-shortcuts";
 import { chatVisualPageUrl } from "./chat-visual-url";
+import { useConversationRowLayout } from "./conversation-row-layout";
 import { conversationRoutinesApi, conversationRuntime } from "./conversation-runtime";
 import { useConversationViewScope } from "./conversation-scope";
 import type { ConversationProps } from "./conversation-types";
@@ -321,6 +329,52 @@ export function ConversationTimeline() {
       name: (member ? teamMemberName(member) : sender.name.trim()) || t("chat.message.memberFallback"),
       avatarSeed: sender.id,
     };
+  };
+  /**
+   * The workspace's rows, in the owner's DM with an agent: faces, names, the action bar and the
+   * long-press sheet of a channel instead of bubbles. A channel shown in this view keeps its own.
+   */
+  const rowLayout = channel ? null : useConversationRowLayout();
+  /** The face and the name of a row in the workspace layout. */
+  const rowMember = (message: AgentMessage, layout: NonNullable<typeof rowLayout>): WorkspaceMember => {
+    const sender = otherSender(message);
+    if (sender) return layout.member(sender.id, sender.name);
+    if (message.author === "you") return layout.reader();
+    const agent = props.agent;
+    return agent
+      ? layout.member(agent.id, agent.name)
+      : { id: "agent", kind: "agent", name: t("chat.message.agentFallback") };
+  };
+  /** The reactions of a message as the workspace counts them: one pill for each emoji. */
+  const rowReactions = (message: AgentMessage): WorkspaceReaction[] => {
+    const own = message.reaction ?? null;
+    const counts = new Map<string, WorkspaceReaction & { actors: string[] }>();
+    const add = (emoji: string, actor: string, reacted: boolean) => {
+      const entry = counts.get(emoji) ?? { emoji, count: 0, reacted: false, actors: [] };
+      entry.count += 1;
+      entry.reacted ||= reacted;
+      entry.actors.push(actor);
+      counts.set(emoji, entry);
+    };
+    const reader = rowLayout?.reader().name ?? t("chat.message.you");
+    let ownCounted = false;
+    for (const reaction of message.reactions ?? []) {
+      if (reaction.actor.kind === "user") {
+        ownCounted = true;
+        add(reaction.emoji, reader, true);
+      } else {
+        const agentId = reaction.actor.agentId;
+        add(
+          reaction.emoji,
+          props.agents.find((agent) => agent.id === agentId)?.name ?? t("chat.message.agentFallback"),
+          false,
+        );
+      }
+    }
+    if (own && !ownCounted) add(own, reader, true);
+    if (!message.reactions?.length && !own)
+      for (const emoji of message.reactionSummary?.emojis ?? []) add(emoji, reader, true);
+    return [...counts.values()];
   };
   /** The agent messages of the chat by their exchange id, so a marker finds its text and its request. */
   const agentMessagesByExchangeId = createMemo(
@@ -596,6 +650,25 @@ export function ConversationTimeline() {
   // A skill of the agent's own: every agent has the managed OpenBot skills.
   const sampleSkillName = () =>
     installedSkills().find((skill) => skill.enabled !== false && skill.origin !== "managed")?.name;
+  /** The day above a row: the workspace's pill in the workspace layout, the chat's line elsewhere. */
+  const DayMarker = (marker: { label: string; at: string | undefined }) => {
+    const at = marker.at ? Date.parse(marker.at) : Number.NaN;
+    return rowLayout && Number.isFinite(at) ? (
+      <DayDivider date={at} />
+    ) : (
+      <div class="time-marker">
+        <span>{marker.label}</span>
+      </div>
+    );
+  };
+  /** The line above the first unread message. */
+  const UnreadDivider = () => {
+    const register = (element: HTMLDivElement) => {
+      setUnreadMessagesDividerElement(element);
+      scheduleUnreadDividerVisibilityUpdate();
+    };
+    return rowLayout ? <NewMessagesDivider elementRef={register} /> : <UnreadMessagesDivider elementRef={register} />;
+  };
   return (
     <>
       <span class="sr-only" role="status" aria-live="polite" aria-atomic="true">
@@ -820,11 +893,7 @@ export function ConversationTimeline() {
                         <CompactionMarker />
                       </Show>
                       <Show when={dayMarker()}>
-                        {(label) => (
-                          <div class="time-marker">
-                            <span>{label()}</span>
-                          </div>
-                        )}
+                        {(label) => <DayMarker label={label()} at={message()?.createdAt} />}
                       </Show>
                       <ChatRowBoundary>
                         <article
@@ -855,19 +924,10 @@ export function ConversationTimeline() {
                         <CompactionMarker />
                       </Show>
                       <Show when={dayMarker()}>
-                        {(label) => (
-                          <div class="time-marker">
-                            <span>{label()}</span>
-                          </div>
-                        )}
+                        {(label) => <DayMarker label={label()} at={message()?.createdAt} />}
                       </Show>
                       <Show when={message()?.id === unreadBoundaryMessageId()}>
-                        <UnreadMessagesDivider
-                          elementRef={(element) => {
-                            setUnreadMessagesDividerElement(element);
-                            scheduleUnreadDividerVisibilityUpdate();
-                          }}
-                        />
+                        <UnreadDivider />
                       </Show>
                       <ChatRowBoundary>
                         <article
@@ -1021,19 +1081,10 @@ export function ConversationTimeline() {
                         <CompactionMarker />
                       </Show>
                       <Show when={dayMarker()}>
-                        {(label) => (
-                          <div class="time-marker">
-                            <span>{label()}</span>
-                          </div>
-                        )}
+                        {(label) => <DayMarker label={label()} at={message()?.createdAt} />}
                       </Show>
                       <Show when={message()?.id === unreadBoundaryMessageId()}>
-                        <UnreadMessagesDivider
-                          elementRef={(element) => {
-                            setUnreadMessagesDividerElement(element);
-                            scheduleUnreadDividerVisibilityUpdate();
-                          }}
-                        />
+                        <UnreadDivider />
                       </Show>
                       <ChatRowBoundary>
                         <article
@@ -1072,19 +1123,10 @@ export function ConversationTimeline() {
                         <CompactionMarker />
                       </Show>
                       <Show when={dayMarker()}>
-                        {(label) => (
-                          <div class="time-marker">
-                            <span>{label()}</span>
-                          </div>
-                        )}
+                        {(label) => <DayMarker label={label()} at={message()?.createdAt} />}
                       </Show>
                       <Show when={message()?.id === unreadBoundaryMessageId()}>
-                        <UnreadMessagesDivider
-                          elementRef={(element) => {
-                            setUnreadMessagesDividerElement(element);
-                            scheduleUnreadDividerVisibilityUpdate();
-                          }}
-                        />
+                        <UnreadDivider />
                       </Show>
                       <ChatRowBoundary>
                         <article
@@ -1119,12 +1161,7 @@ export function ConversationTimeline() {
                       }}
                     >
                       <Show when={message()?.id === unreadBoundaryMessageId()}>
-                        <UnreadMessagesDivider
-                          elementRef={(element) => {
-                            setUnreadMessagesDividerElement(element);
-                            scheduleUnreadDividerVisibilityUpdate();
-                          }}
-                        />
+                        <UnreadDivider />
                       </Show>
                       <ChatRowBoundary>
                         <article data-chat-search-message={message()?.id}>
@@ -1175,19 +1212,10 @@ export function ConversationTimeline() {
                         <CompactionMarker />
                       </Show>
                       <Show when={dayMarker()}>
-                        {(label) => (
-                          <div class="time-marker">
-                            <span>{label()}</span>
-                          </div>
-                        )}
+                        {(label) => <DayMarker label={label()} at={message()?.createdAt} />}
                       </Show>
                       <Show when={message()?.id === unreadBoundaryMessageId()}>
-                        <UnreadMessagesDivider
-                          elementRef={(element) => {
-                            setUnreadMessagesDividerElement(element);
-                            scheduleUnreadDividerVisibilityUpdate();
-                          }}
-                        />
+                        <UnreadDivider />
                       </Show>
                       <ChatRowBoundary>
                         <article
@@ -1243,6 +1271,151 @@ export function ConversationTimeline() {
                   spokenReplyIds().has((message() ?? initialMessage).id)
                     ? undefined
                     : readAloudAction(message() ?? initialMessage);
+                /** The state of a send that did not go yet, or the note of a cancelled message. */
+                const sendState = () => (
+                  <>
+                    <Show when={pending()}>
+                      <PendingSendStatus
+                        state={pendingState()}
+                        updateRequired={Boolean(providerUpdateRequired())}
+                        error={pendingSend()?.error ?? null}
+                        waitingBehindFailure={pendingSend()?.waitingBehindFailure === true}
+                        retrySafe={pendingRetrySafe()}
+                        canEdit={!editingDeliveryId()}
+                        editBlockedReason={editingDeliveryId() ? t("chat.send.editBlocked") : null}
+                        onRetry={() => {
+                          const send = pendingSend();
+                          if (send) retryPendingSend(send.clientMessageId);
+                        }}
+                        onEdit={() => {
+                          const send = pendingSend();
+                          if (send) editPendingSend(send.clientMessageId);
+                        }}
+                        onDismiss={() => {
+                          const send = pendingSend();
+                          if (send) dismissPendingSend(send.clientMessageId);
+                        }}
+                        onUndo={() => {
+                          const send = pendingSend();
+                          if (send) editPendingSend(send.clientMessageId);
+                        }}
+                      />
+                    </Show>
+                    <Show when={!pending() && message()?.cancelled}>
+                      <span class="message-cancelled-note">{t("chat.message.cancelled")}</span>
+                    </Show>
+                  </>
+                );
+                /** The steps of the turn that wrote this answer, folded above it. */
+                const stepsAbove = () => (
+                  <Show when={turnSteps.stepsAbove(message()?.id)}>
+                    {(steps) => (
+                      <ChatRowBoundary>
+                        <AgentStepsDisclosure
+                          steps={steps()}
+                          defaultOpen={showAgentSteps()}
+                          trace={traceAbove(message()?.id)}
+                          facts={turnSteps.factsAbove(message()?.id)}
+                        />
+                      </ChatRowBoundary>
+                    )}
+                  </Show>
+                );
+                /** The player of a spoken turn: the reader's recording or the reply read aloud. */
+                const voice = () => (
+                  <Show when={playerKind()}>
+                    {(kind) => (
+                      <VoicePlayer
+                        kind={kind()}
+                        state={player()?.state ?? "idle"}
+                        peaks={player()?.peaks}
+                        duration={player()?.duration}
+                        elapsed={player()?.elapsed}
+                        levels={player()?.levels}
+                        onToggle={() => player()?.onToggle()}
+                        onSeek={(seconds) => player()?.onSeek?.(seconds)}
+                      />
+                    )}
+                  </Show>
+                );
+                /** The message as a workspace row, in the owner's DM with an agent. */
+                const workspaceRow = (layout: NonNullable<typeof rowLayout>) => {
+                  const member = createMemo(() => rowMember(message() ?? initialMessage, layout));
+                  const menuItems = createMemo((): WorkspaceMenuItem[] => {
+                    if (hostless()) return [];
+                    const items: WorkspaceMenuItem[] = [
+                      {
+                        id: "reply",
+                        label: t("chat.menu.reply"),
+                        icon: <MessageSquareReply aria-hidden="true" />,
+                        onSelect: messageActions.onReply,
+                      },
+                      {
+                        id: "copy",
+                        label: t("workspace.app.message.copyText"),
+                        icon: <Copy aria-hidden="true" />,
+                        onSelect: messageActions.onCopy,
+                      },
+                    ];
+                    const readAloud = messageReadAloud();
+                    if (readAloud)
+                      items.push({
+                        id: "read-aloud",
+                        label: t(readAloud.reading ? "chat.actions.stopReading" : "chat.actions.readAloud"),
+                        icon: readAloud.reading ? <Square aria-hidden="true" /> : <AudioLines aria-hidden="true" />,
+                        onSelect: readAloud.onToggle,
+                      });
+                    return items;
+                  });
+                  const reactions = () => (hostless() ? undefined : rowReactions(message() ?? initialMessage));
+                  const toggleReaction = (emoji: string) => {
+                    const current = message();
+                    if (current) void reactToMessage(current, current.reaction === emoji ? null : emoji);
+                  };
+                  return (
+                    <div class="ws-chat-row-frame" data-chat-search-message={message()?.id}>
+                      <WorkspaceChatRow
+                        message={message() ?? initialMessage}
+                        author={member()}
+                        grouped={continuesRun()}
+                        animate={animateEntrance}
+                        agents={props.agents}
+                        skills={installedSkills()}
+                        referencedMessage={referencedMessage()}
+                        referencedAuthorName={referencedAuthorName()}
+                        eventCheckOrigin={eventCheckOrigin()}
+                        eventCheckIconUrl={eventCheckIconUrl(eventCheckOrigin()?.checkId)}
+                        onOpenReference={openReference}
+                        referenceState={replyJump.referenceState(message(), referencedMessage())}
+                        reactions={reactions()}
+                        quickReactions={layout.quickReactions()}
+                        emojiPicker={layout.emojiPicker}
+                        onToggleReaction={hostless() ? undefined : toggleReaction}
+                        onReply={hostless() ? undefined : messageActions.onReply}
+                        menuItems={menuItems()}
+                        profile={() => layout.profile(member())}
+                        before={stepsAbove()}
+                        class={!pending() && message()?.cancelled ? "message-entry-cancelled" : undefined}
+                        onSelectAgent={props.onSelectAgent}
+                        onOpenLink={(url) => void openExternalMessageUrl(url)}
+                        onPreview={(attachment) => void previewAttachment(attachment)}
+                        onAttachmentAction={attachmentAction}
+                        onOpenSharedFile={openSharedFile}
+                        onOpenWorkspaceFile={
+                          workspaceAgentId()
+                            ? (path) => openWorkspaceFile(path, undefined, workspaceAgentId())
+                            : undefined
+                        }
+                        onOpenQuote={openQuote}
+                        onDownload={(attachment) => attachmentAction(attachment, "download")}
+                        mediaSource={runtime.attachmentMedia}
+                      >
+                        {voice()}
+                        <div class="ws-chat-row-state">{sendState()}</div>
+                      </WorkspaceChatRow>
+                    </div>
+                  );
+                };
                 return (
                   <div
                     data-index={virtualRow.index}
@@ -1258,165 +1431,107 @@ export function ConversationTimeline() {
                     <Show when={message()?.id === compactionBefore()}>
                       <CompactionMarker />
                     </Show>
-                    <Show when={dayMarker()}>
-                      {(label) => (
-                        <div class="time-marker">
-                          <span>{label()}</span>
-                        </div>
-                      )}
-                    </Show>
+                    <Show when={dayMarker()}>{(label) => <DayMarker label={label()} at={message()?.createdAt} />}</Show>
                     <Show when={message()?.id === unreadBoundaryMessageId()}>
-                      <UnreadMessagesDivider
-                        elementRef={(element) => {
-                          setUnreadMessagesDividerElement(element);
-                          scheduleUnreadDividerVisibilityUpdate();
-                        }}
-                      />
+                      <UnreadDivider />
                     </Show>
-                    <Show when={turnSteps.stepsAbove(message()?.id)}>
-                      {(steps) => (
-                        <ChatRowBoundary>
-                          <AgentStepsDisclosure
-                            steps={steps()}
-                            defaultOpen={showAgentSteps()}
-                            trace={traceAbove(message()?.id)}
-                            facts={turnSteps.factsAbove(message()?.id)}
-                          />
-                        </ChatRowBoundary>
-                      )}
-                    </Show>
+                    {rowLayout ? null : stepsAbove()}
                     <ChatRowBoundary>
                       <Show
                         when={message()?.questionPrompt}
                         keyed
                         fallback={
-                          <ChatMessageRow
-                            message={message() ?? initialMessage}
-                            author={author()}
-                            showAuthor={
-                              author().kind === "member" || (channel && author().kind === "agent")
-                                ? !continuesRun()
-                                : undefined
-                            }
-                            showTime={!continuesRun()}
-                            animate={animateEntrance}
-                            agents={props.agents}
-                            skills={installedSkills()}
-                            referencedMessage={referencedMessage()}
-                            referencedAuthorName={referencedAuthorName()}
-                            eventCheckOrigin={eventCheckOrigin()}
-                            eventCheckIconUrl={eventCheckIconUrl(eventCheckOrigin()?.checkId)}
-                            onOpenReference={openReference}
-                            referenceState={replyJump.referenceState(message(), referencedMessage())}
-                            reactions={channel ? undefined : displayedReactions()}
-                            reactionOverflowCount={message()?.reactionSummary?.overflowCount}
-                            onRemoveReaction={() => {
-                              const currentMessage = message();
-                              if (currentMessage) void reactToMessage(currentMessage, null);
-                            }}
-                            data-chat-search-message={message()?.id}
-                            onSelectAgent={props.onSelectAgent}
-                            onOpenLink={(url) => void openExternalMessageUrl(url)}
-                            onPreview={(attachment) => void previewAttachment(attachment)}
-                            onAttachmentAction={attachmentAction}
-                            onOpenSharedFile={openSharedFile}
-                            onOpenWorkspaceFile={
-                              workspaceAgentId()
-                                ? (path) => openWorkspaceFile(path, undefined, workspaceAgentId())
-                                : undefined
-                            }
-                            onOpenQuote={openQuote}
-                            onDownload={(attachment) => attachmentAction(attachment, "download")}
-                            mediaSource={runtime.attachmentMedia}
-                            class={!pending() && message()?.cancelled ? "message-entry-cancelled" : undefined}
-                            actions={
-                              <>
-                                <Show when={pending()}>
-                                  <PendingSendStatus
-                                    state={pendingState()}
-                                    updateRequired={Boolean(providerUpdateRequired())}
-                                    error={pendingSend()?.error ?? null}
-                                    waitingBehindFailure={pendingSend()?.waitingBehindFailure === true}
-                                    retrySafe={pendingRetrySafe()}
-                                    canEdit={!editingDeliveryId()}
-                                    editBlockedReason={editingDeliveryId() ? t("chat.send.editBlocked") : null}
-                                    onRetry={() => {
-                                      const send = pendingSend();
-                                      if (send) retryPendingSend(send.clientMessageId);
-                                    }}
-                                    onEdit={() => {
-                                      const send = pendingSend();
-                                      if (send) editPendingSend(send.clientMessageId);
-                                    }}
-                                    onDismiss={() => {
-                                      const send = pendingSend();
-                                      if (send) dismissPendingSend(send.clientMessageId);
-                                    }}
-                                    onUndo={() => {
-                                      const send = pendingSend();
-                                      if (send) editPendingSend(send.clientMessageId);
-                                    }}
-                                  />
-                                </Show>
-                                <Show when={!pending() && message()?.cancelled}>
-                                  <span class="message-cancelled-note">{t("chat.message.cancelled")}</span>
-                                </Show>
-                                <Show when={!hostless()}>
-                                  <MessageActions
-                                    message={message() ?? initialMessage}
-                                    pickerOpen={openReactionMessageId() === message()?.id}
-                                    expandedEmoji={expandedEmojiMessageId() === message()?.id}
-                                    copied={copiedMessageId() === message()?.id}
-                                    reactions={!channel}
-                                    authorName={channel ? author().name : undefined}
-                                    onTogglePicker={() => {
-                                      const messageId = message()?.id;
-                                      if (!messageId) return;
-                                      setOpenReactionMessageId((current) => (current === messageId ? null : messageId));
-                                      setExpandedEmojiMessageId(null);
-                                    }}
-                                    onExpandEmoji={() => {
-                                      const messageId = message()?.id;
-                                      if (!messageId) return;
-                                      setExpandedEmojiMessageId((current) =>
-                                        current === messageId ? null : messageId,
-                                      );
-                                    }}
-                                    {...messageActions}
-                                    readAloud={messageReadAloud()}
-                                  />
-                                </Show>
-                              </>
-                            }
-                            menu={
-                              hostless()
-                                ? undefined
-                                : () => (
-                                    <MessageMenu
+                          rowLayout ? (
+                            workspaceRow(rowLayout)
+                          ) : (
+                            <ChatMessageRow
+                              message={message() ?? initialMessage}
+                              author={author()}
+                              showAuthor={
+                                author().kind === "member" || (channel && author().kind === "agent")
+                                  ? !continuesRun()
+                                  : undefined
+                              }
+                              showTime={!continuesRun()}
+                              animate={animateEntrance}
+                              agents={props.agents}
+                              skills={installedSkills()}
+                              referencedMessage={referencedMessage()}
+                              referencedAuthorName={referencedAuthorName()}
+                              eventCheckOrigin={eventCheckOrigin()}
+                              eventCheckIconUrl={eventCheckIconUrl(eventCheckOrigin()?.checkId)}
+                              onOpenReference={openReference}
+                              referenceState={replyJump.referenceState(message(), referencedMessage())}
+                              reactions={channel ? undefined : displayedReactions()}
+                              reactionOverflowCount={message()?.reactionSummary?.overflowCount}
+                              onRemoveReaction={() => {
+                                const currentMessage = message();
+                                if (currentMessage) void reactToMessage(currentMessage, null);
+                              }}
+                              data-chat-search-message={message()?.id}
+                              onSelectAgent={props.onSelectAgent}
+                              onOpenLink={(url) => void openExternalMessageUrl(url)}
+                              onPreview={(attachment) => void previewAttachment(attachment)}
+                              onAttachmentAction={attachmentAction}
+                              onOpenSharedFile={openSharedFile}
+                              onOpenWorkspaceFile={
+                                workspaceAgentId()
+                                  ? (path) => openWorkspaceFile(path, undefined, workspaceAgentId())
+                                  : undefined
+                              }
+                              onOpenQuote={openQuote}
+                              onDownload={(attachment) => attachmentAction(attachment, "download")}
+                              mediaSource={runtime.attachmentMedia}
+                              class={!pending() && message()?.cancelled ? "message-entry-cancelled" : undefined}
+                              actions={
+                                <>
+                                  {sendState()}
+                                  <Show when={!hostless()}>
+                                    <MessageActions
                                       message={message() ?? initialMessage}
+                                      pickerOpen={openReactionMessageId() === message()?.id}
+                                      expandedEmoji={expandedEmojiMessageId() === message()?.id}
+                                      copied={copiedMessageId() === message()?.id}
                                       reactions={!channel}
                                       authorName={channel ? author().name : undefined}
+                                      onTogglePicker={() => {
+                                        const messageId = message()?.id;
+                                        if (!messageId) return;
+                                        setOpenReactionMessageId((current) =>
+                                          current === messageId ? null : messageId,
+                                        );
+                                        setExpandedEmojiMessageId(null);
+                                      }}
+                                      onExpandEmoji={() => {
+                                        const messageId = message()?.id;
+                                        if (!messageId) return;
+                                        setExpandedEmojiMessageId((current) =>
+                                          current === messageId ? null : messageId,
+                                        );
+                                      }}
                                       {...messageActions}
                                       readAloud={messageReadAloud()}
                                     />
-                                  )
-                            }
-                          >
-                            <Show when={playerKind()}>
-                              {(kind) => (
-                                <VoicePlayer
-                                  kind={kind()}
-                                  state={player()?.state ?? "idle"}
-                                  peaks={player()?.peaks}
-                                  duration={player()?.duration}
-                                  elapsed={player()?.elapsed}
-                                  levels={player()?.levels}
-                                  onToggle={() => player()?.onToggle()}
-                                  onSeek={(seconds) => player()?.onSeek?.(seconds)}
-                                />
-                              )}
-                            </Show>
-                          </ChatMessageRow>
+                                  </Show>
+                                </>
+                              }
+                              menu={
+                                hostless()
+                                  ? undefined
+                                  : () => (
+                                      <MessageMenu
+                                        message={message() ?? initialMessage}
+                                        reactions={!channel}
+                                        authorName={channel ? author().name : undefined}
+                                        {...messageActions}
+                                        readAloud={messageReadAloud()}
+                                      />
+                                    )
+                              }
+                            >
+                              {voice()}
+                            </ChatMessageRow>
+                          )
                         }
                       >
                         {(questionPrompt) => (

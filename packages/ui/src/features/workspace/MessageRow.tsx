@@ -28,8 +28,10 @@ export const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀", "✅"]
 
 export interface MessageRowProps {
   author: WorkspaceMember;
-  /** The send time, in milliseconds since the epoch. */
+  /** The send time, in milliseconds since the epoch. NaN for a message with no stored time. */
   sentAt: number;
+  /** The time to show when `sentAt` is not a number: the time that an old message printed. */
+  timeLabel?: string | undefined;
   /** The text, with mentions and channel links as their own runs. */
   text?: readonly MessageSegment[] | undefined;
   /** More content under the text: a step trail, artifact cards, attachments. */
@@ -60,6 +62,8 @@ export interface MessageRowProps {
   emojiPicker?: ReactionEmojiPicker | undefined;
   thread?: ThreadSummary | undefined;
   onOpenThread?: (() => void) | undefined;
+  /** The name of the reply button, when it does not open a thread: the agent chat quotes the message. */
+  replyLabel?: string | undefined;
   /** The items of the "more" menu: edit, copy link, mark unread, delete. */
   menuItems?: readonly WorkspaceMenuItem[] | undefined;
   /** Draws the author's profile card, which the avatar and the name open. */
@@ -88,7 +92,10 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
   const arm = () => {
     if (!armed()) setArmed(true);
   };
-  const fullTime = () => format.date(props.sentAt, { dateStyle: "full", timeStyle: "short" });
+  const timed = () => Number.isFinite(props.sentAt);
+  const shownTime = () => (timed() ? time(props.sentAt) : (props.timeLabel ?? ""));
+  const fullTime = () => (timed() ? format.date(props.sentAt, { dateStyle: "full", timeStyle: "short" }) : undefined);
+  const isoTime = () => (timed() ? new Date(props.sentAt).toISOString() : undefined);
   const profileLabel = () => t("workspace.profile.open", { name: props.author.name });
   return (
     <WorkspaceContextMenu
@@ -116,7 +123,7 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
         data-mention={props.mentionsReader ? "" : undefined}
         data-pinned={props.pinnedBy !== undefined && !props.deleted ? "" : undefined}
         data-menu-open={menuOpen() ? "" : undefined}
-        aria-label={t("workspace.message.label", { name: props.author.name, time: time(props.sentAt) })}
+        aria-label={t("workspace.message.label", { name: props.author.name, time: shownTime() })}
         onPointerEnter={arm}
         onFocusIn={arm}
       >
@@ -124,8 +131,8 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
           <Show
             when={!props.grouped}
             fallback={
-              <time class="ws-message-gutter-time" datetime={new Date(props.sentAt).toISOString()} title={fullTime()}>
-                {time(props.sentAt)}
+              <time class="ws-message-gutter-time" datetime={isoTime()} title={fullTime()}>
+                {shownTime()}
               </time>
             }
           >
@@ -162,8 +169,8 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
               >
                 <MemberName member={props.author} />
               </MemberProfilePopover>
-              <time class="ws-message-time" datetime={new Date(props.sentAt).toISOString()} title={fullTime()}>
-                {time(props.sentAt)}
+              <time class="ws-message-time" datetime={isoTime()} title={fullTime()}>
+                {shownTime()}
               </time>
             </div>
           </Show>
@@ -250,7 +257,7 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
                 <IconButton
                   variant="ghost"
                   size="icon-xs"
-                  label={t("workspace.message.reply")}
+                  label={props.replyLabel ?? t("workspace.message.reply")}
                   onClick={() => open()()}
                 >
                   <MessageSquareReply />

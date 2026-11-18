@@ -1,5 +1,6 @@
 /* Shared workspace values. Slack's density: 28px sidebar rows, 36px message avatars. */
 .ws-layout,
+.ws-agent-dm,
 .ui-form-dialog,
 .ws-profile-popover,
 .ws-quick-reactions {

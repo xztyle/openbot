@@ -33,10 +33,10 @@ export function DayDivider(props: { date: number; now?: number | undefined }): J
 }
 
 /** The line above the first message that the reader has not read. */
-export function NewMessagesDivider(): JSX.Element {
+export function NewMessagesDivider(props: { elementRef?: (element: HTMLDivElement) => void }): JSX.Element {
   const { t } = useText();
   return (
-    <div class="ws-new-divider">
+    <div class="ws-new-divider" ref={props.elementRef}>
       <span class="ws-new-divider-label">{t("workspace.divider.new")}</span>
     </div>
   );

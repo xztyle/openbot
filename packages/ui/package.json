@@ -114,6 +114,7 @@
     "./features/conversation/VoicePlayer": "./src/features/conversation/VoicePlayer.tsx",
     "./features/conversation/ChatRowBoundary": "./src/features/conversation/ChatRowBoundary.tsx",
     "./features/conversation/ChatMessageRow": "./src/features/conversation/ChatMessageRow.tsx",
+    "./features/conversation/WorkspaceChatRow": "./src/features/conversation/WorkspaceChatRow.tsx",
     "./features/conversation/ChatSearch": "./src/features/conversation/ChatSearch.tsx",
     "./features/conversation/ChatVisual": "./src/features/conversation/ChatVisual.tsx",
     "./features/conversation/ThinkingDisclosure": "./src/features/conversation/ThinkingDisclosure.tsx",

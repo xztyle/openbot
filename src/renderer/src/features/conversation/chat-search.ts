@@ -48,7 +48,9 @@ export function renderChatSearchHighlights(matches: ChatSearchMatch[], currentIn
 }
 
 /** The chip of an event check names where a message came from. It is not part of the message. */
-const HIDDEN_TEXT = '[aria-hidden="true"], .sr-only, .message-actions, .message-origin-chip';
+// A workspace row (the owner's DM with an agent) also draws a name, a time and reaction counts.
+const HIDDEN_TEXT =
+  '[aria-hidden="true"], .sr-only, .message-actions, .message-origin-chip, .ws-message-gutter, .ws-message-meta, .ws-message-actions, .ws-reactions';
 
 /** Elements that start a new rendered line. */
 const LINE_CONTAINER_TAGS = new Set([

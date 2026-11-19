@@ -331,7 +331,11 @@ export function createWebWorkspace(
   let hostAway = false;
   /** The time the page was hidden, or null while it is visible. */
   let hiddenAt: number | null = null;
-  /** When the last event of the open host arrived, and how many arrived. A silent running turn is checked. */
+  /**
+   * When the last event of the open chat arrived, and how many arrived. A silent running turn is
+   * checked. Only the open chat counts: while other agents work, the host sends their events all the
+   * time, and the events of this chat can still be missing.
+   */
   let hostEventAt = Date.now();
   let hostEvents = 0;
   /** The silence after which the running turn is checked next. It grows while the host confirms the silence. */
@@ -557,9 +561,12 @@ export function createWebWorkspace(
       },
       event(id, event) {
         if (disposed || id !== hostId) return;
-        hostEventAt = Date.now();
-        hostEvents += 1;
-        turnSilenceMs = TURN_SILENCE_MS;
+        const changed = changedConversation(event);
+        if (changed !== undefined && changed === selectedId) {
+          hostEventAt = Date.now();
+          hostEvents += 1;
+          turnSilenceMs = TURN_SILENCE_MS;
+        }
         for (const listener of hostEventListeners) listener(event);
         if (event.type === "team-presence")
           setState((draft) => {
@@ -739,7 +746,6 @@ export function createWebWorkspace(
             draft.userHiddenAgents = event.agents;
           });
         // A read loads only the open conversation, so the events of other agents do not start one.
-        const changed = changedConversation(event);
         if (changed !== undefined && changed === selectedId) refreshForEvent();
       },
     },
@@ -1570,6 +1576,7 @@ export function createWebWorkspace(
   }
   async function select(id: string) {
     const current = generation;
+    if (selectedId !== id) hostEventAt = Date.now();
     selectedId = id;
     if (hostId) writeAgentSelection(AGENT_SELECTION_STORAGE_KEY, webAgentSelectionKey(props.accountId, hostId), id);
     // A resync after the background read only the queue of the opened chat. This one is read now.
@@ -2434,7 +2441,7 @@ const PANELS_RETRY_MS = 10_000;
  * chat, before the composer says that the provider sent nothing (after a minute). Each check that
  * finds the turn still silent on the host doubles the wait, up to `TURN_SILENCE_MAX_MS`.
  */
-const TURN_SILENCE_MS = 45_000;
+const TURN_SILENCE_MS = 30_000;
 const TURN_SILENCE_MAX_MS = 5 * 60_000;
 const TURN_SILENCE_CHECK_MS = 5_000;
 

@@ -142,7 +142,12 @@ export async function routeAgentQueue(
 }
 
 /** The completed deliveries a queue-window-v1 snapshot keeps at most. */
-const QUEUE_WINDOW_COMPLETED_LIMIT = 100;
+const QUEUE_WINDOW_COMPLETED_LIMIT = 20;
+/**
+ * The text a finished delivery keeps. Clients read the text of open deliveries only (the queue, an
+ * edit); a finished one is kept for its id, status and failure.
+ */
+const FINISHED_TEXT_LIMIT = 280;
 const ACTIVE_STATUSES = new Set<QueueDelivery["status"]>(["queued", "starting", "running"]);
 
 /**
@@ -151,7 +156,11 @@ const ACTIVE_STATUSES = new Set<QueueDelivery["status"]>(["queued", "starting", 
  * Every active delivery stays, because the composer, the queue and the edit lock act on them. Then
  * every failed, interrupted and cancelled delivery stays, newest first, while it fits in the frame:
  * the clients show its failure reason or hide its message, at any age. Only completed deliveries
- * leave: the newest 100 stay, for receipts, while they fit.
+ * leave: the newest 20 stay, for receipts, while they fit.
+ *
+ * The finished ones carry a short text. A client reads the queue again after each start and end of
+ * a turn of any agent, and a reconnect reads every agent's queue at once: with full texts a busy
+ * agent's window was over 1 MB, and those bursts overflowed the connection and lost its events.
  */
 function queueWindow(snapshot: QueueSnapshot): QueueSnapshot {
   const newestFirst = snapshot.deliveries
@@ -160,6 +169,14 @@ function queueWindow(snapshot: QueueSnapshot): QueueSnapshot {
     .sort((a, b) => b.delivery.createdAt.localeCompare(a.delivery.createdAt) || b.index - a.index)
     .map(({ delivery }) => delivery);
   if (newestFirst.length === 0) return snapshot;
+  const short = new Map(
+    newestFirst.map((delivery) => [
+      delivery,
+      delivery.text.length > FINISHED_TEXT_LIMIT
+        ? { ...delivery, text: `${delivery.text.slice(0, FINISHED_TEXT_LIMIT)}…` }
+        : delivery,
+    ]),
+  );
   const kept = new Set<QueueDelivery>();
   let bytes = Buffer.byteLength(
     JSON.stringify({
@@ -169,7 +186,7 @@ function queueWindow(snapshot: QueueSnapshot): QueueSnapshot {
   );
   const keep = (deliveries: QueueDelivery[]) => {
     for (const delivery of deliveries) {
-      const next = bytes + Buffer.byteLength(JSON.stringify(delivery)) + 1;
+      const next = bytes + Buffer.byteLength(JSON.stringify(short.get(delivery) ?? delivery)) + 1;
       if (next > WEBRTC_FRAME_BODY_BUDGET) return;
       bytes = next;
       kept.add(delivery);
@@ -179,6 +196,8 @@ function queueWindow(snapshot: QueueSnapshot): QueueSnapshot {
   keep(newestFirst.filter(({ status }) => status === "completed").slice(0, QUEUE_WINDOW_COMPLETED_LIMIT));
   return {
     ...snapshot,
-    deliveries: snapshot.deliveries.filter((delivery) => ACTIVE_STATUSES.has(delivery.status) || kept.has(delivery)),
+    deliveries: snapshot.deliveries.flatMap((delivery) =>
+      ACTIVE_STATUSES.has(delivery.status) ? [delivery] : kept.has(delivery) ? [short.get(delivery) ?? delivery] : [],
+    ),
   };
 }

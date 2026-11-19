@@ -1169,6 +1169,20 @@ export class AttentionRegistry {
       // happened to press, and resolving either one would hand control back while the other still waits.
       [...this.#takeovers.values()].some((pending) => pending.request.tabId === tabId)
     ) {
+      // A takeover that never showed a card left no trace of which check, if any, turned it away.
+      logger.warn("A browser takeover was refused.", {
+        tool: params.tool,
+        agentId,
+        reason: !agentId
+          ? "unknown-agent"
+          : !turnId || !publicThreadId
+            ? "unknown-turn"
+            : !tab
+              ? "tab-not-found"
+              : tab.ownerThreadId !== publicThreadId || tab.ownerAgentId !== agentId
+                ? "tab-of-another-chat"
+                : "tab-already-handed-over",
+      });
       return browserTakeoverError();
     }
 
@@ -1192,6 +1206,13 @@ export class AttentionRegistry {
       resolve,
     };
     this.#takeovers.set(requestId, pending);
+    const askedAt = Date.now();
+    logger.info("A browser takeover was asked for.", {
+      tool: params.tool,
+      agentId,
+      requestId: String(requestId),
+      tabId,
+    });
     return yield* Effect.gen({ self: this }, function* () {
       // The card is only shown once the tab has actually been handed over -- references invalidated,
       // diagnostics cleared, any recording stopped. Asking the user for control OpenBot then failed to
@@ -1226,6 +1247,13 @@ export class AttentionRegistry {
           this.#routines.markNeedsAttention(turnId);
           pending.surfaced = true;
           this.#emit({ type: "browser-takeover-requested", request: takeover });
+          logger.info("A browser takeover waits for the user.", {
+            tool: params.tool,
+            agentId,
+            requestId: String(requestId),
+            tabId,
+            handoverMs: Date.now() - askedAt,
+          });
         }
       } else {
         const error = prepared.failure.cause;
@@ -1957,6 +1985,12 @@ export class AttentionRegistry {
     vault?: string,
   ): void {
     pending.secret?.cancel();
+    logger.info("A browser takeover ended.", {
+      agentId: pending.request.agentId,
+      requestId: String(pending.request.requestId),
+      decision,
+      shown: pending.surfaced === true,
+    });
     this.#routines.markRunningForTurn(pending.request.turnId);
     this.#takeovers.delete(requestId);
     // `surfaceBrowserTakeover` refuses a second request for the same tab, so this is belt and braces --

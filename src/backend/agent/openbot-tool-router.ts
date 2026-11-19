@@ -476,6 +476,7 @@ export class OpenBotToolRouter {
               const result = yield* this.#attention.surfaceBrowserTakeover(client, toolRequest);
               // A takeover of a stopped client ends with a cancel, and that process has nothing to answer.
               if (client.running) client.respond(toolRequest.id, result);
+              else logger.warn("A browser takeover ended after its provider stopped.", { agentId });
               return;
             }
             if (this.#attention.hasBrowserTakeoverForAgent(agentId)) {

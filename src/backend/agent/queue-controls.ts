@@ -38,6 +38,11 @@ export interface QueueControlsHooks {
   messagingThreadId?(deliveryId: string): string | null;
   /** The provider text of a messaging delivery that joins the running turn of its conversation. */
   steerText?(deliveryId: string): string | undefined;
+  /**
+   * Hands back the browser tabs that the turn gave the user. A turn that waits on a takeover reads
+   * nothing until the takeover ends, so a message steered into it would wait as long.
+   */
+  endTakeoversForTurn?(agentId: string, turnId: string): void;
 }
 
 export interface QueueControlsOptions {
@@ -318,6 +323,11 @@ export class QueueControls {
       this.#mailboxSync.syncMailboxMessages(snapshot);
       this.#mailboxSync.emitQueue(agent.id);
       this.#conversation.emitConversation(snapshot, "queue.message-steered", { deliveryId: input.deliveryId });
+      // The user who writes to an agent that waits for them is done with the tab, or has something to
+      // say instead: "account created", "use the other account". A card they cannot see or did not
+      // press would otherwise keep the agent from reading it.
+      if (this.#mailbox.getDelivery(input.deliveryId)?.delivery.sender.kind === "user")
+        this.#hooks.endTakeoversForTurn?.(agent.id, turnId);
     });
   }, Effect.uninterruptible);
 }

@@ -894,6 +894,19 @@ export class AttentionRegistry {
     return [...this.#takeovers.values()].some((pending) => pending.request.agentId === agentId);
   }
 
+  /**
+   * Ends the plain takeovers of a turn as done, when the user writes into that turn. A secure input
+   * card stays: only the user's answer there can end it.
+   */
+  completeBrowserTakeoversForTurn(agentId: string, turnId: string): void {
+    for (const [requestId, pending] of [...this.#takeovers]) {
+      const request = pending.request;
+      if (request.agentId !== agentId || request.turnId !== turnId || pending.secret || pending.submitting) continue;
+      this.#routines.markRunningForTurn(turnId);
+      this.#resolveBrowserTakeover(requestId, pending, "complete");
+    }
+  }
+
   readonly respondToBrowserTakeover = Effect.fn("AttentionRegistry.respondToBrowserTakeover")(
     (input: RespondToBrowserTakeoverInput) =>
       attentionStep(() => {

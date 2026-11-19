@@ -1490,6 +1490,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         externalTurn: (turnId, deliveryId) => this.messaging.answersExternalMessage(turnId, deliveryId),
         messagingThreadId: (deliveryId) => this.messaging.threadForDelivery(deliveryId),
         steerText: (deliveryId) => this.messaging.steerText(deliveryId),
+        endTakeoversForTurn: (agentId, turnId) => this.#attention.completeBrowserTakeoversForTurn(agentId, turnId),
       },
     });
     this.#turn = new TurnLifecycle({

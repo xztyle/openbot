@@ -113,6 +113,7 @@ import {
   storedTabSession,
 } from "./browser-state";
 import {
+  BrowserTabBusy,
   BrowserToolHold,
   BrowserUserControlHeld,
   boundEngineOperation,
@@ -123,6 +124,7 @@ import {
   runTabAction,
   runTabEvaluation,
   runTabFillFields,
+  type TabQueueWait,
 } from "./browser-tab-operations";
 import {
   type BrowserCardVault,
@@ -344,6 +346,12 @@ export interface BrowserMainPage {
 
 /** How long shutdown waits for the operation that a tab runs before it closes the tab anyway. */
 const DESTROY_QUEUE_WAIT_MS = 2_000;
+/**
+ * How long a sign-in waits for the tab's earlier operations before it gives up. Each step of an
+ * operation has its own deadline, but the wait for the queue had none, and an operation that never
+ * let go of it held `submit_secret` with no card and no answer.
+ */
+const SECRET_QUEUE_WAIT_MS = 15_000;
 
 export class BrowserHost {
   static readonly CONTROL_IDLE_GRACE_MS = BrowserControlSessions.IDLE_GRACE_MS;
@@ -1273,6 +1281,11 @@ export class BrowserHost {
             );
           }),
         true,
+        {
+          queueTimeoutMs: SECRET_QUEUE_WAIT_MS,
+          queueTimeoutMessage:
+            "The browser tab is still busy with an earlier operation, so the sign-in did not start. Take a fresh snapshot and call submit_secret again. If the tab stays busy, call request_takeover.",
+        },
       );
       return {
         // Password cards do not use digits; keep public metadata within its released bounds.
@@ -1359,6 +1372,10 @@ export class BrowserHost {
                     }
                   }),
                 true,
+                {
+                  queueTimeoutMs: SECRET_QUEUE_WAIT_MS,
+                  queueTimeoutMessage: "The browser tab is still busy with an earlier operation.",
+                },
               );
             }).pipe(
               Effect.ensuring(
@@ -1382,10 +1399,13 @@ export class BrowserHost {
           }),
       };
     }).pipe(
-      Effect.catch(() =>
+      Effect.catch((operationFailure) =>
         Effect.gen({ self: this }, function* () {
           tab.secret = undefined;
           this.#syncAttachedView();
+          this.#emitChanged();
+          // A busy tab is worth another try; the agent needs to know which it is.
+          if (operationFailure.cause instanceof BrowserTabBusy) return yield* browserFailure(operationFailure.cause);
           return yield* browserFailure(new Error("Secure authentication is unavailable. Use browser takeover."));
         }),
       ),
@@ -3076,9 +3096,10 @@ export class BrowserHost {
     tabId: string,
     operation: (tab: BrowserHostTab, keepQueueBlocked: KeepQueueBlocked) => Effect.Effect<T, BrowserOperationError>,
     allowProtected = false,
+    wait?: TabQueueWait,
   ) {
     const tab = yield* this.#requireTab(tabId);
-    return yield* enqueueTabOperation(tab, operation, allowProtected);
+    return yield* enqueueTabOperation(tab, operation, allowProtected, wait);
   });
 
   readonly #runAction = Effect.fn("BrowserHost.runAction")(function* (

@@ -473,7 +473,21 @@ export class OpenBotToolRouter {
             const agentId = this.#conversation.agentForThread(toolRequest.params.threadId);
             if (!agentId) throw new Error("The browsing OpenBot agent is unknown.");
             if (toolRequest.params.tool === "request_takeover" || toolRequest.params.tool === "submit_secret") {
+              // These calls wait for a person, so a call that never answers is only visible by these two lines.
+              const takeoverContext = {
+                tool: toolRequest.params.tool,
+                agentId,
+                callId: toolRequest.params.callId,
+                provider: client.provider,
+              };
+              const arrivedAt = Date.now();
+              logger.info("A browser takeover call arrived.", takeoverContext);
               const result = yield* this.#attention.surfaceBrowserTakeover(client, toolRequest);
+              logger.info("A browser takeover call answered.", {
+                ...takeoverContext,
+                success: result.success,
+                durationMs: Date.now() - arrivedAt,
+              });
               // A takeover of a stopped client ends with a cancel, and that process has nothing to answer.
               if (client.running) client.respond(toolRequest.id, result);
               else logger.warn("A browser takeover ended after its provider stopped.", { agentId });

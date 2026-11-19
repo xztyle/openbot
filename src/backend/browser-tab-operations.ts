@@ -1,5 +1,5 @@
 import type { BrowserSnapshot, BrowserTarget } from "@openbot/contracts/ipc";
-import { Context, Deferred, Effect, Fiber } from "effect";
+import { Context, Deferred, Effect, Fiber, Option } from "effect";
 import { type BrowserOperationError, browserFailure, browserSync } from "./browser-effects";
 import {
   BrowserFillFieldsFailure,
@@ -34,11 +34,31 @@ export class BrowserUserControlHeld extends Error {
   }
 }
 
+/**
+ * An operation waited longer than its `queueTimeoutMs` for the earlier operations on the tab, and did
+ * not run. Without this bound a caller waits as long as the slowest earlier operation holds the queue,
+ * which can be with no end.
+ */
+export class BrowserTabBusy extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BrowserTabBusy";
+  }
+}
+
+export interface TabQueueWait {
+  /** How long the operation may wait for its turn. Once it runs, only its own deadlines bound it. */
+  readonly queueTimeoutMs: number;
+  /** The `BrowserTabBusy` message when the wait ends first. */
+  readonly queueTimeoutMessage: string;
+}
+
 /** Return the response when ready; retain the queue until all owned work drains. */
 export const enqueueTabOperation = Effect.fn("BrowserTab.enqueue")(function* <A>(
   tab: BrowserHostTab,
   operation: (tab: BrowserHostTab, keepQueueBlocked: KeepQueueBlocked) => Effect.Effect<A, BrowserOperationError>,
   allowProtected = false,
+  wait?: TabQueueWait,
 ) {
   // Read in the caller's fiber: the queued work below runs in the tab scope.
   const heldByUser = yield* BrowserToolHold;
@@ -47,6 +67,8 @@ export const enqueueTabOperation = Effect.fn("BrowserTab.enqueue")(function* <A>
   const response = Deferred.makeUnsafe<A, BrowserOperationError>();
   const drains: Effect.Effect<unknown, BrowserOperationError>[] = [];
   let cancelled = false;
+  let started = false;
+  const turn = Deferred.makeUnsafe<void>();
   let active: Fiber.Fiber<A, BrowserOperationError> | undefined;
   tab.queue = drained;
   tab.pendingOperations += 1;
@@ -56,6 +78,8 @@ export const enqueueTabOperation = Effect.fn("BrowserTab.enqueue")(function* <A>
         Effect.gen(function* () {
           yield* Deferred.await(previous);
           if (cancelled) return yield* Effect.interrupt;
+          started = true;
+          Deferred.doneUnsafe(turn, Effect.void);
           // An operation that was queued before the person took the tab must not act on it.
           if (heldByUser(tab.id)) return yield* browserFailure(new BrowserUserControlHeld(tab.id));
           if (tab.secret?.submitted && !allowProtected) {
@@ -84,7 +108,17 @@ export const enqueueTabOperation = Effect.fn("BrowserTab.enqueue")(function* <A>
     tab.scope,
     { startImmediately: true, uninterruptible: true },
   );
-  return yield* Deferred.await(response).pipe(
+  return yield* Effect.gen(function* () {
+    if (wait && !started) {
+      const reached = yield* Deferred.await(turn).pipe(Effect.timeoutOption(wait.queueTimeoutMs));
+      // The queued slot stays in line and ends without running when its turn comes.
+      if (Option.isNone(reached) && !started) {
+        cancelled = true;
+        return yield* browserFailure(new BrowserTabBusy(wait.queueTimeoutMessage));
+      }
+    }
+    return yield* Deferred.await(response);
+  }).pipe(
     Effect.onInterrupt(() =>
       Effect.sync(() => {
         cancelled = true;

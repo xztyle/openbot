@@ -973,7 +973,9 @@ export class AttentionRegistry {
     if (input.decision === "submit" && pending.request.secret)
       pending.request.secret = { ...pending.request.secret, requiresReload: true };
     else delete pending.request.secret;
-    yield* this.#browser.beginTakeover(pending.request.tabId).pipe(toAttentionOperationFailed);
+    // As for a first takeover, the card does not wait with no end for the tab's queue.
+    yield* this.#handOver(input.requestId, pending);
+    if (this.#takeovers.get(input.requestId) !== pending) return;
     pending.surfaced = true;
     this.#emit({ type: "browser-takeover-requested", request: pending.request });
     this.#emitRuntimeSnapshot();
@@ -2043,6 +2045,13 @@ export class AttentionRegistry {
     const key = keys.resolveNow(agentId, name);
     if (!key) return false;
     if (!keys.fillApproved(key.scope, name, origin)) {
+      // The approval card is the only thing the agent waits for now, so the log says so.
+      logger.info("A saved key fill waits for the owner's approval.", {
+        agentId,
+        requestId: String(requestId),
+        approvalId: String(providerRequest.id),
+        origin,
+      });
       const decision = yield* this.awaitToolApproval(
         client,
         providerRequest,
@@ -2060,6 +2069,7 @@ export class AttentionRegistry {
         },
         { ownerOnly: true },
       );
+      logger.info("The owner answered a saved key fill.", { agentId, requestId: String(requestId), decision });
       if (this.#takeovers.get(requestId) !== pending) return true;
       if (decision !== "accept") {
         this.#resolveBrowserTakeover(

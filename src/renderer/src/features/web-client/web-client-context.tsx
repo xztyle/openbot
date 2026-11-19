@@ -1766,6 +1766,9 @@ export function createWebWorkspace(
     const events = hostEvents;
     const before = { threadId: page.threadId, revision: page.revision, turnId: page.activeTurnId };
     turnSilenceMs = Math.min(TURN_SILENCE_MAX_MS, turnSilenceMs * 2);
+    // The turn can be silent because it waits for the user on a card whose event was lost: a browser
+    // takeover, an approval or a question. The chat read does not carry those; the runtime snapshot does.
+    runtime.requestRuntimeSnapshot?.();
     turnCheck = load(id)
       .then(
         () => {

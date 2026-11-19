@@ -1,3 +1,4 @@
+import { isAgentManagerValue } from "./agent-org";
 import { type AgentProviderRef, isAgentProviderRef } from "./agent-providers";
 import { INPUT_LIMITS } from "./input-limits";
 import {
@@ -293,6 +294,14 @@ export interface AgentSummary {
    * hidden agents through `agent-hidden-v1`. Absent means the agent is not hidden.
    */
   hiddenAt?: string;
+  /**
+   * The agent this one reports to in the org chart. `null` puts it at the top level. Absent, it
+   * reports to `createdBy`; see `agentManagers` in `agent-org.ts`. A remote host sends it beside the
+   * frozen agent projection; see `agent-reports-to-v1.ts`.
+   */
+  reportsToAgentId?: string | null;
+  /** The agent that created this one with the `create_agent` tool, and when. Absent for one a person made. */
+  createdBy?: AgentCreator;
   threadId: string | null;
   workspacePath: string;
   preview: string;
@@ -307,6 +316,16 @@ export interface AgentSummary {
     skillIds: string[];
     routineIds: string[];
   };
+}
+
+/** The agent that created another one through the `create_agent` tool, and when. */
+export interface AgentCreator {
+  agentId: string;
+  at: string;
+}
+
+export function isAgentCreator(value: unknown): value is AgentCreator {
+  return isDynamicRecord(value) && isIdentifier(value.agentId) && isBoundedString(value.at, 160);
 }
 
 export function isAgentSummary(value: unknown): value is AgentSummary {
@@ -350,6 +369,8 @@ function hasAgentSummaryFields(value: DynamicRecord): boolean {
     (value.pendingRuntime === undefined || isAgentPendingRuntime(value.pendingRuntime)) &&
     (value.hiddenAt === undefined || isHiddenAt(value.hiddenAt)) &&
     (value.background === undefined || isBoolean(value.background)) &&
+    (value.reportsToAgentId === undefined || isAgentManagerValue(value.reportsToAgentId)) &&
+    (value.createdBy === undefined || isAgentCreator(value.createdBy)) &&
     (value.threadId === null || isIdentifier(value.threadId)) &&
     isBoundedString(value.workspacePath, INPUT_LIMITS.path) &&
     isBoundedString(value.preview, INPUT_LIMITS.messageText) &&
@@ -419,6 +440,8 @@ export interface UpdateAgentInput {
   leaveUsageLimit?: boolean;
   /** True makes the agent a background teammate; false shows it in the user's lists again. */
   background?: boolean;
+  /** The agent's manager in the org chart, or `null` for the top level. The host refuses a loop. */
+  reportsToAgentId?: string | null;
   avatarSeed?: string;
   avatarHue?: AvatarHue | null;
 }

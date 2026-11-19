@@ -3,7 +3,7 @@ import { expandChatTagReferences } from "../chat-tag-references";
 import { type AgentEvent, isAgentEvent } from "../ipc-agent-events";
 import { isTeamRealtimeEvent, type TeamRealtimeEvent } from "../ipc-team-host";
 import { isBoolean, isDynamicRecord, isNumber, isString } from "../runtime-values";
-import { withAgentBackground } from "./agent-background-v1";
+import { withAgentSideFields } from "./agent-reports-to-v1";
 import { withAgentTalkTurn } from "./agent-talk-turn-v1";
 import { restoreBrowserSecretMetadata } from "./browser-secret-v1";
 import { restoreBrowserTakeoverReason } from "./browser-sign-in-v1";
@@ -57,11 +57,11 @@ export function decodeTeamProtocolV8BaseCurrentEvent(value: unknown): TeamProtoc
       ),
       value,
     );
-    // `moreWork` and `background` ride beside the frozen projection. See `more-work-turn-v6.ts` and
-    // `agent-background-v1.ts`.
+    // `moreWork`, `background` and the manager ride beside the frozen projection. See
+    // `more-work-turn-v6.ts`, `agent-background-v1.ts` and `agent-reports-to-v1.ts`.
     current = withAgentTalkTurn(withMoreWorkTurn(JSON.parse(JSON.stringify(current)), value), value);
     if (decoded.event.type === "bots-changed")
-      current = withAgentBackground(JSON.parse(JSON.stringify(current)), value);
+      current = withAgentSideFields(JSON.parse(JSON.stringify(current)), value);
   } catch {
     return { kind: "invalid", type: decoded.event.type };
   }
@@ -95,7 +95,7 @@ export function encodeTeamProtocolV8BaseCurrentEvent(
   if (decoded.kind !== "known") return null;
   const encoded = encodeTeamProtocolV8BaseEvent(decoded.event);
   if (encoded && event.type === "agents-changed")
-    return JSON.stringify(withAgentBackground(JSON.parse(encoded), wireValue));
+    return JSON.stringify(withAgentSideFields(JSON.parse(encoded), wireValue));
   const moreWork = event.type === "turn-completed";
   const promptMultiSelect = options.promptMultiSelect === true && eventHasPromptQuestions(event.type);
   if (

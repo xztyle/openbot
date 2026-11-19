@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { agentManagers } from "@openbot/contracts/agent-org";
 import { chatVisualItemType } from "@openbot/contracts/chat-visual";
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
@@ -762,6 +763,11 @@ export class OpenBotToolRouter {
     return agentSeesChannel(this.#store.spaces, agentId, this.#channels.store.get(id));
   }
 
+  /** The manager of `agentId` in the org chart of its space, or null at the top level. */
+  #managerOf(agentId: string): string | null {
+    return agentManagers(this.#spaceAgents(agentId)).get(agentId) ?? null;
+  }
+
   #requireAgent(agentId: string): AgentSummary {
     const agent = this.#hooks.listAgents().find((candidate) => candidate.id === agentId);
     if (!agent) throw new Error(sourceText("error.agent.unknown", { id: agentId }));
@@ -994,9 +1000,10 @@ export class OpenBotToolRouter {
       const openWaits = this.#waits.countByAgent();
       // A hidden agent takes no new messages, so the list leaves it out. A background teammate stays:
       // it keeps working for other agents.
-      const agents = this.#hooks
-        .listAgents()
-        .filter((agent) => agent.hiddenAt === undefined && this.#store.spaces.sameSpace(senderAgentId, agent.id))
+      const spaceAgents = this.#spaceAgents(senderAgentId);
+      const managers = agentManagers(spaceAgents);
+      const agents = spaceAgents
+        .filter((agent) => agent.hiddenAt === undefined)
         .map((agent) => {
           const deliveries = this.#mailbox.listQueue(agent.id).deliveries;
           const queuedMessages = deliveries.filter((delivery) => delivery.status === "queued").length;
@@ -1018,6 +1025,7 @@ export class OpenBotToolRouter {
             title: agent.title,
             description: agent.description,
             ...(isBackgroundAgent(agent) ? { background: true } : {}),
+            reportsTo: managers.get(agent.id) ?? null,
             status: working ? "working" : queuedMessages > 0 ? "queued" : "ready",
             queuedMessages,
             ...(working && startedAt !== null ? { turnStartedAt: new Date(startedAt).toISOString() } : {}),
@@ -1711,6 +1719,7 @@ export class OpenBotToolRouter {
         backupModels,
         access,
         computerUse,
+        reportsToAgentId,
         ...fields
       } = args;
       if (avatarPath !== undefined && (args.avatarSeed !== undefined || avatarHue !== undefined)) {
@@ -1725,7 +1734,8 @@ export class OpenBotToolRouter {
         access === undefined &&
         computerUse === undefined &&
         avatarHue === undefined &&
-        avatarPath === undefined
+        avatarPath === undefined &&
+        reportsToAgentId === undefined
       ) {
         throw new Error("At least one profile field is required.");
       }
@@ -1772,6 +1782,8 @@ export class OpenBotToolRouter {
         ...(backups === undefined ? {} : { backupModels: backups }),
         ...restrictionInput(access, computerUse),
         ...(avatarHue === undefined ? {} : { avatarHue }),
+        // The agent store refuses a manager in another space and a loop.
+        ...(reportsToAgentId === undefined ? {} : { reportsToAgentId }),
       };
       let updated = yield* this.#hooks.updateAgent(input, senderAgentId).pipe(toToolOperationFailed);
       if (image !== undefined) {
@@ -1802,6 +1814,7 @@ export class OpenBotToolRouter {
               computerUse: agentComputerUseEnabled(updated),
               notifications: updated.notifications,
               background: isBackgroundAgent(updated),
+              reportsTo: this.#managerOf(updated.id),
             }),
           },
         ],

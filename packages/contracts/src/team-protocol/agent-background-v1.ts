@@ -52,10 +52,10 @@ export function isBackgroundOnlyUpdate(value: unknown): boolean {
 }
 
 /** The keys under which a payload holds agents, in the wire and the current vocabulary. */
-const AGENT_KEYS = ["bot", "agent"] as const;
-const AGENT_LIST_KEYS = ["bots", "agents"] as const;
+export const AGENT_KEYS = ["bot", "agent"] as const;
+export const AGENT_LIST_KEYS = ["bots", "agents"] as const;
 
-function agentsIn(value: unknown): unknown[] {
+export function agentsIn(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   if (!isDynamicRecord(value)) return [];
   if (isString(value.id)) return [value];

@@ -2,13 +2,8 @@ import { decodeAgentAnalytics } from "../ipc-agent-analytics";
 import { BROWSER_SECRET_RESPONSE_PATH, parseBrowserSecretResponse } from "../ipc-browser-secret";
 import { decodeHostAnalytics } from "../ipc-host-analytics";
 import { isBoolean, isDynamicRecord, isOneOf, isString } from "../runtime-values";
-import {
-  decodeAgentBackgroundRequest,
-  isAgentSummaryResponseRoute,
-  isAgentUpdateRoute,
-  isBackgroundOnlyUpdate,
-  withAgentBackground,
-} from "./agent-background-v1";
+import { isAgentSummaryResponseRoute, isAgentUpdateRoute } from "./agent-background-v1";
+import { decodeAgentSideFieldsRequest, isAgentSideFieldsOnlyUpdate, withAgentSideFields } from "./agent-reports-to-v1";
 import { decodeAnalyticsV1Response } from "./analytics-v1";
 import {
   decodeBrowserDisplayResponse,
@@ -165,13 +160,13 @@ export function encodeTeamProtocolV7CurrentHttpRequest(
       const projected = JSON.parse(encodeTeamProtocolV7BaseCurrentHttpRequest(method, path, value, options));
       return JSON.stringify({ ...projected, ...messageTimezone(value), ...decodeMessageClientId(value) });
     }
-    // `background` rides beside the frozen update projection; an older host drops it. See
-    // `agent-background-v1.ts`.
-    if (isAgentUpdateRoute(method, path) && isBackgroundOnlyUpdate(value))
-      return JSON.stringify(decodeAgentBackgroundRequest(value));
+    // `background` and the manager ride beside the frozen update projection; an older host drops
+    // them. See `agent-background-v1.ts` and `agent-reports-to-v1.ts`.
+    if (isAgentUpdateRoute(method, path) && isAgentSideFieldsOnlyUpdate(value))
+      return JSON.stringify(decodeAgentSideFieldsRequest(value));
     if (isAgentUpdateRoute(method, path)) {
       const projected = JSON.parse(encodeTeamProtocolV7BaseCurrentHttpRequest(method, path, value, options));
-      return JSON.stringify({ ...projected, ...decodeAgentBackgroundRequest(value) });
+      return JSON.stringify({ ...projected, ...decodeAgentSideFieldsRequest(value) });
     }
     return encodeTeamProtocolV7BaseCurrentHttpRequest(method, path, value, options);
   }
@@ -197,7 +192,8 @@ export function decodeTeamProtocolV7CurrentHttpRequest(
   if (scopedUsageRoute(method, path)) {
     return decodeScopedUsageRequest(value);
   }
-  if (isAgentUpdateRoute(method, path) && isBackgroundOnlyUpdate(value)) return decodeAgentBackgroundRequest(value);
+  if (isAgentUpdateRoute(method, path) && isAgentSideFieldsOnlyUpdate(value))
+    return decodeAgentSideFieldsRequest(value);
   if (!duplicateRoute(method, path)) {
     const decoded = options.preserveSemanticTags
       ? decodeTeamProtocolV7BaseCurrentHttpRequest(method, path, value)
@@ -217,7 +213,7 @@ export function decodeTeamProtocolV7CurrentHttpRequest(
     }
     if (isAgentMessageRoute(method, path))
       return { ...decoded, ...messageTimezone(value), ...decodeMessageClientId(value) };
-    if (isAgentUpdateRoute(method, path)) return { ...decoded, ...decodeAgentBackgroundRequest(value) };
+    if (isAgentUpdateRoute(method, path)) return { ...decoded, ...decodeAgentSideFieldsRequest(value) };
     return decoded;
   }
   return toCurrentAgentKeysObjectForPath(path, structuredClone(decodeTeamProtocolV7HttpRequest(method, path, value)));
@@ -314,15 +310,16 @@ function encodeFrozenResponse(
   }
   if (!duplicateRoute(method, path)) {
     const encoded = encodeTeamProtocolV7BaseCurrentHttpResponse(method, path, status, value, options);
-    // `background` rides beside the frozen agent projection. See `agent-background-v1.ts`.
+    // `background`, the manager and the creator ride beside the frozen agent projection. See
+    // `agent-background-v1.ts` and `agent-reports-to-v1.ts`.
     return isAgentSummaryResponseRoute(method, path) && status < 400
-      ? JSON.stringify(withAgentBackground(JSON.parse(encoded), value))
+      ? JSON.stringify(withAgentSideFields(JSON.parse(encoded), value))
       : encoded;
   }
   // The duplicate route reaches the frozen v3 codec directly, so the vocabulary swap happens here.
   const currentValue: TeamProtocolV7BaseJsonValue = JSON.parse(JSON.stringify(value ?? null));
   const projected = decodeTeamProtocolV7HttpResponse(method, path, status, toWireAgentKeys(currentValue));
-  return JSON.stringify(status < 400 ? withAgentBackground(projected, value) : projected);
+  return JSON.stringify(status < 400 ? withAgentSideFields(projected, value) : projected);
 }
 
 /**
@@ -388,10 +385,10 @@ function decodeFrozenResponse(
   }
   if (!duplicateRoute(method, path)) {
     const decoded = decodeTeamProtocolV7BaseCurrentHttpResponse(method, path, status, value);
-    return isAgentSummaryResponseRoute(method, path) && status < 400 ? withAgentBackground(decoded, value) : decoded;
+    return isAgentSummaryResponseRoute(method, path) && status < 400 ? withAgentSideFields(decoded, value) : decoded;
   }
   const decoded = toCurrentAgentKeys(structuredClone(decodeTeamProtocolV7HttpResponse(method, path, status, value)));
-  return status < 400 ? withAgentBackground(decoded, value) : decoded;
+  return status < 400 ? withAgentSideFields(decoded, value) : decoded;
 }
 
 /**

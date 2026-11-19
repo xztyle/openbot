@@ -17,6 +17,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { type AgentManagerRefusal, agentManagerRefusal, isAgentManagerValue } from "@openbot/contracts/agent-org";
 import { avatarFileExtension, isAvatarMimeType, isValidAvatarImage } from "@openbot/contracts/avatar-images";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { AgentProfileDraft } from "@openbot/contracts/ipc";
@@ -24,6 +25,7 @@ import {
   AGENT_PROVIDERS,
   type AgentAccess,
   type AgentBackupModels,
+  type AgentCreator,
   type AgentDefaults,
   type AgentModelId,
   type AgentPendingRuntime,
@@ -78,18 +80,17 @@ import { isRecord } from "./protocol";
 import { SpaceStore } from "./spaces/space-store";
 import { StoredStateFailure, storedIO, storedSync } from "./stored-state-effects";
 
-/** The agent that created this one through the `create_agent` tool, and when. */
-interface AgentCreator {
-  agentId: string;
-  at: string;
-}
+/** Why a manager change is refused, in the words the user reads. */
+const MANAGER_REFUSAL = {
+  self: "error.agent.managerSelf",
+  unknown: "error.agent.managerUnknown",
+  "other-space": "error.agent.managerOtherSpace",
+  cycle: "error.agent.managerLoop",
+} as const satisfies Record<AgentManagerRefusal, string>;
 
 type StoredAgent = AgentSummary & {
   access: AgentAccess;
   computerUse: boolean;
-  // Written only for an agent that another agent created. An older build drops it on its next read, and
-  // no wire protocol carries it, so nothing outside this host depends on it.
-  createdBy?: AgentCreator;
 };
 type PersistedStoredAgent = Omit<StoredAgent, "avatarUrl" | "provider" | "access" | "computerUse"> & {
   avatarUrl?: string | null;
@@ -128,6 +129,11 @@ type PersistedStoredAgent = Omit<StoredAgent, "avatarUrl" | "provider" | "access
   // Written only as `true`. Absent on every agent stored before the setting existed, which keeps it
   // in the user's lists. A background teammate keeps working; a hidden agent (`hiddenAt`) does not.
   background?: boolean;
+  // Written only for an agent that another agent created. An older build drops it on its next read.
+  createdBy?: AgentCreator;
+  // Written only when someone sets the manager; `null` is the top level. Absent on every agent stored
+  // before the org chart existed, which reports to `createdBy`. An older build drops it on its next read.
+  reportsToAgentId?: string | null;
 };
 type StoredAgentBase = Omit<PersistedStoredAgent, "avatarSeed" | "avatarHue"> & DynamicRecord;
 
@@ -851,6 +857,14 @@ export class AgentStore {
         if (input.background) next.background = true;
         else delete next.background;
       }
+      if (input.reportsToAgentId !== undefined) {
+        if (!isAgentManagerValue(input.reportsToAgentId)) throw new Error("Invalid agent manager.");
+        const refusal = agentManagerRefusal(this.#state.agents, agent.id, input.reportsToAgentId, (left, right) =>
+          this.#spaces.sameSpace(left, right),
+        );
+        if (refusal) throw new Error(sourceText(MANAGER_REFUSAL[refusal]));
+        next.reportsToAgentId = input.reportsToAgentId;
+      }
       if (input.taskLimit === null) delete next.taskLimit;
       else if (input.taskLimit !== undefined) {
         if (!isAgentTaskLimit(input.taskLimit)) throw new Error("Invalid task limit.");
@@ -925,6 +939,7 @@ export class AgentStore {
         Object.assign(agent, previous);
         if (previous.busyMessageMode === undefined) delete agent.busyMessageMode;
         if (previous.background === undefined) delete agent.background;
+        if (previous.reportsToAgentId === undefined) delete agent.reportsToAgentId;
         if (previous.taskLimit === undefined) delete agent.taskLimit;
         if (previous.providerAccountId === undefined) delete agent.providerAccountId;
         if (previous.backupModels === undefined) delete agent.backupModels;
@@ -1950,6 +1965,7 @@ function isStoredAgent(value: unknown): value is PersistedStoredAgent {
     (record.pendingRuntime === undefined || isAgentPendingRuntime(record.pendingRuntime)) &&
     (record.hiddenAt === undefined || isHiddenAt(record.hiddenAt)) &&
     (record.background === undefined || isBoolean(record.background)) &&
+    (record.reportsToAgentId === undefined || isAgentManagerValue(record.reportsToAgentId)) &&
     isAvatarSeed(record.avatarSeed) &&
     (record.avatarHue === null || isAvatarHue(record.avatarHue)) &&
     isMarketplaceSource(record.marketplaceSource)
@@ -2066,6 +2082,12 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     isRecord(value.createdBy) && isString(value.createdBy.agentId) && isString(value.createdBy.at)
       ? { agentId: value.createdBy.agentId, at: value.createdBy.at }
       : undefined;
+  // Dropped when unreadable: the agent then reports to its creator, as before the org chart existed.
+  const reportsToAgentId = isAgentManagerValue(value.reportsToAgentId)
+    ? value.reportsToAgentId
+    : value.reportsToAgentId === undefined
+      ? undefined
+      : reset("reportsToAgentId", undefined);
   let marketplaceSource: StoredAgent["marketplaceSource"];
   if (value.marketplaceSource !== undefined) {
     if (isMarketplaceSource(value.marketplaceSource)) {
@@ -2120,6 +2142,7 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     ...(hiddenAt === undefined ? {} : { hiddenAt }),
     ...(background === true ? { background } : {}),
     ...(createdBy === undefined ? {} : { createdBy }),
+    ...(reportsToAgentId === undefined ? {} : { reportsToAgentId }),
     ...(sessionSettingOverrides === undefined ? {} : { sessionSettingOverrides }),
     ...(sessionSettingResets === undefined ? {} : { sessionSettingResets }),
     ...(marketplaceSource === undefined ? {} : { marketplaceSource }),

@@ -10,6 +10,7 @@ import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-
 // property of the reader, not something ~50 routes each have to remember.
 
 import type { IncomingMessage } from "node:http";
+import { isAgentManagerValue } from "@openbot/contracts/agent-org";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   type AgentAccessLevel,
@@ -404,6 +405,13 @@ export function agentUpdate(value: DynamicRecord, agentId: string): UpdateAgentI
       throw new HttpError(400, sourceText("error.team.agentSettingInvalid"));
     }
     result.background = value.background;
+  }
+  // `null` puts the agent at the top level of the org chart. The agent store checks the manager.
+  if (value.reportsToAgentId !== undefined) {
+    if (!isAgentManagerValue(value.reportsToAgentId)) {
+      throw new HttpError(400, sourceText("error.team.agentSettingInvalid"));
+    }
+    result.reportsToAgentId = value.reportsToAgentId;
   }
   if (value.provider !== undefined) {
     if (!isAgentProvider(value.provider)) {

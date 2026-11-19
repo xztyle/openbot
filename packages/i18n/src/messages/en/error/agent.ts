@@ -55,6 +55,10 @@ export const messages = defineMessages("error.agent", {
   "error.agent.queuedMessageCreateFailed": "Unable to create queued message.",
   "error.agent.messageUnavailable": "The message is no longer available.",
   "error.agent.hostLimit": "A host can have up to {limit} agents.",
+  "error.agent.managerSelf": "An agent cannot report to itself.",
+  "error.agent.managerUnknown": "That manager no longer exists.",
+  "error.agent.managerOtherSpace": "An agent can only report to an agent in the same space.",
+  "error.agent.managerLoop": "That change would make a loop: the new manager already reports to this agent.",
   "error.agent.messageRateLimit":
     "You sent {sent} messages to {name} in the last {minutes} minutes. The limit is {limit}. Stop sending messages to this agent now, and ask the user how to continue.",
   "error.agent.creationLimit":

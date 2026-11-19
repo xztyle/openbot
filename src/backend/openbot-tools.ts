@@ -419,7 +419,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "list_agents",
     description:
-      "List local OpenBot agents with their name, title, description, background (true for a teammate hidden from the user's lists), and progress: status (working, queued, or ready), queuedMessages, turnStartedAt while working, lastActivityAt, and openWaits when it has open waits. Call it to find the teammate for work outside your remit: match the work to titles and descriptions. OpenBot does not track which files an agent changed.",
+      "List local OpenBot agents with their name, title, description, background (true for a teammate hidden from the user's lists), reportsTo (the id of the agent's manager in the org chart, or null at the top level), and progress: status (working, queued, or ready), queuedMessages, turnStartedAt while working, lastActivityAt, and openWaits when it has open waits. Call it to find the teammate for work outside your remit: match the work to titles and descriptions. OpenBot does not track which files an agent changed.",
     shape: {},
   },
   {
@@ -449,7 +449,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "update_profile",
     description:
-      "Update a local OpenBot agent’s name, title, instructions, avatar, provider, model, reasoning effort, account, backup models, access, Computer Use, notifications, or background from the user’s request. You can restrict access to workspace and turn Computer Use off; only the user can widen them again. For an uploaded or local image, use avatarPath. Prepare a PNG, JPEG, or WebP copy up to 512 KB with your available tools if needed. Call list_models before you change a model, an account, or the backup models. A new model applies from the agent's next turn. A provider or account change fails while the agent has a turn or queued messages; try again when it is ready. backupModels replaces the whole list. To give several agents the same settings, use update_agents.",
+      "Update a local OpenBot agent’s name, title, instructions, avatar, provider, model, reasoning effort, account, backup models, access, Computer Use, notifications, background, or manager in the org chart (reportsToAgentId) from the user’s request. You can restrict access to workspace and turn Computer Use off; only the user can widen them again. For an uploaded or local image, use avatarPath. Prepare a PNG, JPEG, or WebP copy up to 512 KB with your available tools if needed. Call list_models before you change a model, an account, or the backup models. A new model applies from the agent's next turn. A provider or account change fails while the agent has a turn or queued messages; try again when it is ready. backupModels replaces the whole list. To give several agents the same settings, use update_agents.",
     shape: updateProfileToolSchema.shape,
   },
   {

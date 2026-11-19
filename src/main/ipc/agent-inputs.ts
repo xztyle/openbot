@@ -1,3 +1,4 @@
+import { isAgentManagerValue } from "@openbot/contracts/agent-org";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   type AcknowledgeFailedTurnInput,
@@ -647,6 +648,11 @@ export function parseUpdateAgent(value: unknown): UpdateAgentInput {
   if (value.background !== undefined) {
     if (!isBoolean(value.background)) throw new Error("Invalid background value.");
     result.background = value.background;
+  }
+  // `null` puts the agent at the top level of the org chart. The agent store checks the manager.
+  if (value.reportsToAgentId !== undefined) {
+    if (!isAgentManagerValue(value.reportsToAgentId)) throw new Error("Invalid agent manager.");
+    result.reportsToAgentId = value.reportsToAgentId;
   }
   if (value.allowNewChat !== undefined) {
     if (value.allowNewChat !== null && !isBoolean(value.allowNewChat)) throw new Error("Invalid new chat value.");

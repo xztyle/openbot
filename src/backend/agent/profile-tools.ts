@@ -153,6 +153,16 @@ export const updateProfileToolSchema = z
       .boolean()
       .describe("true hides the agent from the user's agent lists as a background teammate; false shows it again.")
       .optional(),
+    reportsToAgentId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(INPUT_LIMITS.identifier)
+      .nullable()
+      .describe(
+        "Stable id from list_agents of the agent's manager in the org chart, in the same space, or null to put it at the top level. A manager that already reports to this agent fails.",
+      )
+      .optional(),
   })
   .strict();
 

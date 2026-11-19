@@ -1290,14 +1290,15 @@ export function createWebWorkspace(
     }
   }
   /**
-   * `retry`: a read that the connection lost goes once more after `PANELS_RETRY_MS`. The peer checks its
-   * path after a late read and replaces a dead one, so the second read goes over the new connection.
-   * Before, the notice stayed until the reader pressed Retry, also after the connection came back.
+   * A read that the connection lost goes again after `PANELS_RETRY_MS`, then twice and four times that.
+   * The peer checks its path after a late read and replaces a dead one, so the next read goes over the
+   * new connection. Those losses show no notice while a read is still to come: the panels are already
+   * on the screen, and a notice that goes away by itself only alarms. `attempt` counts the reads.
    */
   async function loadPanels(
     capabilities = state.capabilities,
     agentIds = state.agents.map((agent) => agent.id),
-    retry = true,
+    attempt = 0,
   ) {
     const current = generation;
     const isCurrent = () => !disposed && current === generation;
@@ -1306,9 +1307,11 @@ export function createWebWorkspace(
       draft.panelsLoading = true;
     });
     let lost = false;
+    const retries = attempt < PANELS_RETRIES;
     const failed = (error: unknown) => {
-      if (transientFailure(error)) lost = true;
-      if (isCurrent())
+      const transient = transientFailure(error);
+      if (transient) lost = true;
+      if (isCurrent() && !(transient && retries))
         setState((draft) => {
           draft.panelsFailed = true;
         });
@@ -1346,11 +1349,14 @@ export function createWebWorkspace(
       setState((draft) => {
         draft.panelsLoading = false;
       });
-    if (lost && retry && isCurrent())
-      setTimeout(() => {
-        // A reconnect in between reads the panels itself.
-        if (isCurrent() && state.status === "online") void loadPanels(undefined, undefined, false);
-      }, PANELS_RETRY_MS);
+    if (lost && retries && isCurrent())
+      setTimeout(
+        () => {
+          // A reconnect in between reads the panels itself.
+          if (isCurrent() && state.status === "online") void loadPanels(undefined, undefined, attempt + 1);
+        },
+        PANELS_RETRY_MS * 2 ** attempt,
+      );
   }
 
   async function load(id: string, older = false) {
@@ -2436,6 +2442,8 @@ const EVENT_REFRESH_SPACING_MS = 500;
 const REFRESH_RETRY_MS = 3_000;
 /** The wait before the panel reads that the connection lost go once more. */
 const PANELS_RETRY_MS = 10_000;
+/** The reads of the panels after a lost one, before the notice shows. */
+const PANELS_RETRIES = 3;
 /**
  * A running turn of the open chat that sent no event for this long is checked with one read of the
  * chat, before the composer says that the provider sent nothing (after a minute). Each check that

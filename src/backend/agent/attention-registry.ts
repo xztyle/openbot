@@ -243,6 +243,10 @@ interface PendingBrowserTakeover {
   submitting?: boolean;
   /** The saved login that OpenBot filled without the card, so the agent does not credit the user. */
   vaultLoginId?: string;
+  /** The Secrets key that `submit_secret` names. OpenBot fills its value without the card. */
+  secretKey?: string;
+  /** The Secrets key that OpenBot filled without the card, so the agent does not credit the user. */
+  filledSecretKey?: string;
   params: DynamicToolCallParams;
   request: BrowserTakeoverRequest;
   resolve: (result: DynamicToolResult) => void;
@@ -951,9 +955,11 @@ export class AttentionRegistry {
       if (outcome === "submitted") {
         const vault = pending.vaultLoginId
           ? `OpenBot filled saved login ${pending.vaultLoginId}; the user did not type it.`
-          : input.saveToVault && secret.request.method === "password"
-            ? yield* this.#saveTypedPassword(pending, secret.request.origin, input.secret)
-            : undefined;
+          : pending.filledSecretKey
+            ? `OpenBot filled the saved key ${pending.filledSecretKey}; the user did not type it.`
+            : input.saveToVault && secret.request.method === "password"
+              ? yield* this.#saveTypedPassword(pending, secret.request.origin, input.secret)
+              : undefined;
         if (this.#takeovers.get(input.requestId) !== pending) return;
         this.#resolveBrowserTakeover(input.requestId, pending, "complete", vault);
         return;
@@ -963,6 +969,7 @@ export class AttentionRegistry {
     delete pending.secret;
     // The user finishes in the tab, so a later completion is theirs.
     delete pending.vaultLoginId;
+    delete pending.filledSecretKey;
     if (input.decision === "submit" && pending.request.secret)
       pending.request.secret = { ...pending.request.secret, requiresReload: true };
     else delete pending.request.secret;
@@ -1199,6 +1206,11 @@ export class AttentionRegistry {
       return browserTakeoverError();
     }
 
+    const secretKey = params.tool === "submit_secret" ? getString(args, "secretKey") : null;
+    if (secretKey) {
+      const refused = this.#secretKeyRefusal(args, agentId, secretKey);
+      if (refused) return browserTakeoverError(refused);
+    }
     const requestId = params.tool === "submit_secret" ? randomUUID() : request.id;
     const reason = getString(args, "reason");
     const takeover: BrowserTakeoverRequest = {
@@ -1217,6 +1229,7 @@ export class AttentionRegistry {
       params,
       request: takeover,
       resolve,
+      ...(secretKey ? { secretKey } : {}),
     };
     this.#takeovers.set(requestId, pending);
     const askedAt = Date.now();
@@ -1254,7 +1267,9 @@ export class AttentionRegistry {
       if (Result.isSuccess(prepared)) {
         if (
           this.#takeovers.get(requestId) === pending &&
-          !(yield* this.#fillFromVault(requestId, pending)) &&
+          !(yield* pending.secretKey
+            ? this.#fillFromSecretKey(client, request, requestId, pending)
+            : this.#fillFromVault(requestId, pending)) &&
           this.#takeovers.get(requestId) === pending
         ) {
           this.#routines.markNeedsAttention(turnId);
@@ -1988,6 +2003,87 @@ export class AttentionRegistry {
     }
     // A failed fill hands the tab to the user, as a failed card submission does.
     if (this.#takeovers.get(requestId) === pending) this.#routines.markNeedsAttention(pending.request.turnId);
+    return true;
+  }).bind(this);
+
+  /**
+   * Why `submit_secret` with `secretKey` cannot start, or null. The agent learns only whether the key
+   * exists, as from `list_api_keys`, never its value.
+   */
+  #secretKeyRefusal(args: DynamicRecord | null, agentId: string, name: string): string | null {
+    if (getString(args, "method") !== "password") return "secretKey works only with method=password.";
+    if (getString(args, "loginId")) return "Pass loginId or secretKey, not both.";
+    if (!this.#apiKeys) return "No key store is available. Use submit_secret without secretKey.";
+    if (!this.#apiKeys.resolveNow(agentId, name))
+      return `No saved key is named ${name}. Call openbot.list_api_keys for the names of the saved keys, or use submit_secret without secretKey, and the user types the password.`;
+    return null;
+  }
+
+  /**
+   * Fills a password from a Secrets key, without a card. True when the request was answered this
+   * way. The checks are those of a Vault fill: with a script of the agent on the site or a field that
+   * is not a password field, the card opens. A key has no site of its own, so the first fill of a key
+   * on a site waits for the owner's approval, with Full access too: a page can tell an agent to fill
+   * a password into a form that sends it away. The value goes to the browser only.
+   */
+  readonly #fillFromSecretKey = Effect.fn("AttentionRegistry.fillFromSecretKey")(function* (
+    this: AttentionRegistry,
+    client: AgentClient,
+    providerRequest: AppServerRequest,
+    requestId: RequestId,
+    pending: PendingBrowserTakeover,
+  ) {
+    const keys = this.#apiKeys;
+    const name = pending.secretKey;
+    const request = pending.secret?.request;
+    if (!keys || !name || request?.method !== "password") return false;
+    if (pending.secret?.agentScriptedOrigin !== false || pending.secret.vaultFillable !== true) return false;
+    const { agentId, threadId, turnId } = pending.request;
+    const { origin } = request;
+    const key = keys.resolveNow(agentId, name);
+    if (!key) return false;
+    if (!keys.fillApproved(key.scope, name, origin)) {
+      const decision = yield* this.awaitToolApproval(
+        client,
+        providerRequest,
+        {
+          requestId: providerRequest.id,
+          agentId,
+          threadId,
+          turnId,
+          kind: "permissions",
+          command: null,
+          cwd: null,
+          reason: sourceText("status.agent.secretKeyFill", { name, site: origin }),
+          grantRoot: null,
+          permissions: null,
+        },
+        { ownerOnly: true },
+      );
+      if (this.#takeovers.get(requestId) !== pending) return true;
+      if (decision !== "accept") {
+        this.#resolveBrowserTakeover(
+          requestId,
+          pending,
+          "cancel",
+          `The server owner did not let OpenBot fill ${name} on ${origin}. Do not try again: ask the user, or use submit_secret without secretKey.`,
+        );
+        return true;
+      }
+      const kept = yield* Effect.result(keys.approveFill(key.scope, name, origin));
+      if (Result.isFailure(kept))
+        logger.warn("Unable to keep the approval to fill a saved key", { error: toLogValue(kept.failure.cause) });
+    }
+    pending.filledSecretKey = name;
+    const submitted = yield* Effect.result(
+      this.respondToBrowserSecret({ requestId, agentId, decision: "submit", secret: key.value }),
+    );
+    if (Result.isFailure(submitted)) {
+      logger.warn("Unable to submit the saved key", { error: toLogValue(submitted.failure.cause) });
+      if (this.#takeovers.get(requestId) === pending) this.#resolveBrowserTakeover(requestId, pending, "cancel");
+      return true;
+    }
+    if (this.#takeovers.get(requestId) === pending) this.#routines.markNeedsAttention(turnId);
     return true;
   }).bind(this);
 

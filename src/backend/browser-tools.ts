@@ -170,12 +170,19 @@ const BROWSER_TOOL_DEFINITIONS = [
         .describe(
           "For password or authenticator: the id of a saved login from list_logins. OpenBot fills its password or current code without asking the user.",
         ),
+      secretKey: z
+        .string()
+        .regex(API_KEY_NAME_PATTERN)
+        .optional()
+        .describe(
+          "For password, instead of loginId: the name of a saved key from openbot.list_api_keys, such as SITE_PASSWORD. OpenBot fills its value; you never see it. The first fill of a key on a site waits for the owner's approval.",
+        ),
       username: z
         .string()
         .max(VAULT_TEXT_LIMIT)
         .optional()
         .describe(
-          "For password without loginId: the username or email of this sign-in, as typed on the page. When the user saves the password in the OpenBot Vault from the card, the login gets this username.",
+          "For password without loginId or secretKey: the username or email of this sign-in, as typed on the page. When the user saves the password in the OpenBot Vault from the card, the login gets this username.",
         ),
     },
   }),

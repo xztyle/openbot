@@ -2,7 +2,7 @@
 
 import type { AppTextKey } from "@openbot/i18n";
 import { buttonVariants, DropdownMenu, Kbd, MapIcon, Minus, Plus, Scan } from "@openbot/ui";
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 import { useText } from "../../text";
 import { HudButton, hudBarRect } from "./WorkflowCanvasHud";
 import { MOD_KEY } from "./workflow-board";
@@ -10,7 +10,7 @@ import { MOD_KEY } from "./workflow-board";
 /** The zoom levels in the grid of the zoom menu, as on the Higgsfield canvas. */
 const ZOOM_PRESETS = [0.25, 0.5, 0.75, 1, 1.5, 2];
 
-type ZoomAction = "in" | "out" | "reset" | "fit";
+export type ZoomAction = "in" | "out" | "reset" | "fit";
 
 const ZOOM_LABEL = {
   in: "workflow.canvas.zoom.in",
@@ -31,10 +31,11 @@ export function WorkflowZoomMenu(props: {
   scale: number;
   minScale: number;
   maxScale: number;
-  minimap: boolean;
+  /** Absent: the bar has no minimap button, as on the org chart. */
+  minimap?: boolean | undefined;
   onZoom: (action: ZoomAction) => void;
   onZoomTo: (scale: number) => void;
-  onToggleMinimap: () => void;
+  onToggleMinimap?: (() => void) | undefined;
 }) {
   const { t, format } = useText();
   const percent = () => Math.round(props.scale * 100);
@@ -101,13 +102,17 @@ export function WorkflowZoomMenu(props: {
       <HudButton label={t(ZOOM_LABEL.fit)} keys={ZOOM_KEYS.fit} onClick={() => props.onZoom("fit")}>
         <Scan />
       </HudButton>
-      <HudButton
-        label={props.minimap ? t("workflow.canvas.minimap.close") : t("workflow.canvas.minimap.open")}
-        pressed={props.minimap}
-        onClick={props.onToggleMinimap}
-      >
-        <MapIcon />
-      </HudButton>
+      <Show when={props.onToggleMinimap}>
+        {(toggle) => (
+          <HudButton
+            label={props.minimap ? t("workflow.canvas.minimap.close") : t("workflow.canvas.minimap.open")}
+            pressed={props.minimap ?? false}
+            onClick={() => toggle()()}
+          >
+            <MapIcon />
+          </HudButton>
+        )}
+      </Show>
     </div>
   );
 }

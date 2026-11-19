@@ -91,6 +91,27 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
     initialRect: { width: 1, height: 600 },
   });
   let refreshQueued = false;
+  /*
+   * The rendered rows, measured again when a scroll ends and when rows change places. The virtualizer
+   * drops the size changes of rows away from the target of a smooth scroll, and its resize observer
+   * reads a row's place from `data-index`, which can be stale for a moment after rows are added
+   * above. Either leaves a row with a wrong size until it resizes again: the next row is drawn over
+   * it, and a sticky day divider hides its last lines.
+   */
+  const rendered = new Set<TItemElement>();
+  let wasScrolling = false;
+  let remeasureFrame: number | null = null;
+  const remeasure = (): void => {
+    if (remeasureFrame !== null) return;
+    remeasureFrame = requestAnimationFrame(() => {
+      remeasureFrame = null;
+      if (virtualizer.isScrolling) return;
+      for (const element of rendered) {
+        if (element.isConnected) virtualizer.measureElement(element);
+        else rendered.delete(element);
+      }
+    });
+  };
 
   const refresh = (): void => {
     const measured = [...virtualizer.getVirtualItems()];
@@ -100,9 +121,11 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
         ? fallbackItems(count, options.estimateSize, options.getItemKey, options.scrollMargin(), staticLimit)
         : measured;
     const activeKeys = new Set(items.map((item) => item.key));
+    let moved = false;
     const nextItems = items.map((item) => {
       const existing = stableItems.get(item.key);
       if (existing) {
+        if (existing.item.index !== item.index) moved = true;
         if (!virtualItemsEqual(existing.item, item)) existing.update(item);
         return existing.item;
       }
@@ -119,6 +142,7 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
         : nextItems,
     );
     setTotalSize(virtualizer.getTotalSize() || count * options.estimateSize(0));
+    if (moved) remeasure();
   };
 
   const scheduleRefresh = (): void => {
@@ -151,6 +175,8 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
           getItemKey: options.getItemKey,
           scrollMargin,
           onChange: (instance) => {
+            if (wasScrolling && !instance.isScrolling) remeasure();
+            wasScrolling = instance.isScrolling;
             scheduleRefresh();
             untrack(() => options.onChange?.(instance));
           },
@@ -165,7 +191,11 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
     const cleanup = virtualizer._didMount();
     virtualizer._willUpdate();
     scheduleRefresh();
-    return cleanup;
+    return () => {
+      if (remeasureFrame !== null) cancelAnimationFrame(remeasureFrame);
+      rendered.clear();
+      cleanup();
+    };
   });
 
   return {
@@ -180,6 +210,7 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
         return;
       }
       // Solid can run a ref before data-index and the row contents are committed.
+      rendered.add(element);
       queueMicrotask(() => {
         if (element.isConnected) virtualizer.measureElement(element);
       });

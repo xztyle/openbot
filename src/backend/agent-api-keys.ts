@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { sourceText } from "@openbot/i18n/source";
 import { registerSecretValue } from "@openbot/logging";
-import { Effect, Schema } from "effect";
-import { writeFileAtomically } from "./atomic-json-file";
+import { Effect, Option, Schema } from "effect";
+import { writeFileAtomically, writeJsonFileAtomically } from "./atomic-json-file";
 import { isMissingFileError } from "./file-errors";
 
 /** An environment variable name, which is also the file name of the key. */
@@ -19,6 +19,16 @@ export const SHARED_API_KEY_SCOPE = "shared";
 const SHARED_FOLDER = "_shared";
 /** The largest key, in bytes. A token, a key pair or a short JSON credential fits. */
 export const API_KEY_VALUE_LIMIT = 16 * 1024;
+// The sites where the owner let agents fill a key into a password field. It starts with "_", so it
+// never names an agent's folder.
+const FILL_SITES_FILE = "_fill-sites.json";
+
+const FillSites = Schema.Struct({
+  version: Schema.Literal(1),
+  /** `<scope>/<NAME>` to the HTTPS origins where the key can be filled. */
+  sites: Schema.Record(Schema.String, Schema.Array(Schema.String)),
+});
+const decodeFillSites = Schema.decodeUnknownOption(Schema.fromJsonString(FillSites));
 
 export interface SavedApiKey {
   name: string;
@@ -121,6 +131,7 @@ export class AgentApiKeys {
   /** False when the scope has no key with that name. */
   readonly remove = Effect.fn("AgentApiKeys.remove")(function* (this: AgentApiKeys, scope: string, name: string) {
     const path = yield* this.#keyPath(scope, name);
+    yield* this.#changeFillSites((key) => key !== `${scope}/${name}`);
     return yield* Effect.tryPromise({
       try: () =>
         rm(path).then(
@@ -134,6 +145,7 @@ export class AgentApiKeys {
   /** Removes every key of a deleted agent. */
   readonly removeAgent = Effect.fn("AgentApiKeys.removeAgent")(function* (this: AgentApiKeys, agentId: string) {
     const folder = yield* this.#agentFolder(agentId);
+    yield* this.#changeFillSites((key) => !key.startsWith(`${agentId}/`));
     yield* Effect.tryPromise({ try: () => rm(folder, { recursive: true, force: true }), catch: failed });
   });
 
@@ -165,6 +177,61 @@ export class AgentApiKeys {
     };
     const own = scope !== "shared" && agentId && AGENT_ID_PATTERN.test(agentId) ? read(agentId) : null;
     return own ?? (scope === "agent" ? null : read(SHARED_FOLDER));
+  }
+
+  /**
+   * The value of the key that an agent reads by `name` now, as `readNow("any", …)`, and the scope it
+   * comes from. Null when there is none.
+   */
+  resolveNow(agentId: string, name: string): { scope: string; value: string } | null {
+    const own = this.readNow("agent", agentId, name);
+    if (own) return { scope: agentId, value: own };
+    const shared = this.readNow("shared", null, name);
+    return shared ? { scope: SHARED_API_KEY_SCOPE, value: shared } : null;
+  }
+
+  /** Whether the owner let agents fill the key `name` of `scope` into a password field on `origin`. */
+  fillApproved(scope: string, name: string, origin: string): boolean {
+    return this.#readFillSites()[`${scope}/${name}`]?.includes(origin) === true;
+  }
+
+  /** Keeps the owner's approval to fill the key on `origin`. Removing the key removes it. */
+  readonly approveFill = Effect.fn("AgentApiKeys.approveFill")(function* (
+    this: AgentApiKeys,
+    scope: string,
+    name: string,
+    origin: string,
+  ) {
+    yield* this.#keyPath(scope, name);
+    const sites = this.#readFillSites();
+    const key = `${scope}/${name}`;
+    const origins = sites[key] ?? [];
+    if (origins.includes(origin)) return;
+    yield* this.#writeFillSites({ ...sites, [key]: [...origins, origin] });
+  });
+
+  #readFillSites(): Record<string, readonly string[]> {
+    let text: string;
+    try {
+      text = readFileSync(join(this.#root, FILL_SITES_FILE), "utf8");
+    } catch {
+      return {};
+    }
+    return Option.match(decodeFillSites(text), { onNone: () => ({}), onSome: (file) => file.sites });
+  }
+
+  #changeFillSites(keep: (key: string) => boolean): Effect.Effect<void, AgentApiKeyFailed> {
+    const sites = this.#readFillSites();
+    const kept = Object.fromEntries(Object.entries(sites).filter(([key]) => keep(key)));
+    return Object.keys(kept).length === Object.keys(sites).length ? Effect.void : this.#writeFillSites(kept);
+  }
+
+  #writeFillSites(sites: Record<string, readonly string[]>): Effect.Effect<void, AgentApiKeyFailed> {
+    return writeJsonFileAtomically(
+      join(this.#root, FILL_SITES_FILE),
+      { version: 1, sites },
+      { createDirectory: true },
+    ).pipe(Effect.mapError(failed));
   }
 
   #agentFolder(agentId: string): Effect.Effect<string, AgentApiKeyFailed> {

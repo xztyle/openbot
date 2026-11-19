@@ -70,7 +70,7 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
   const layout = useLayout();
   const scope = useServerScope();
   const { activeServer, activeServerId, activeServerSupportsCapability } = useServers();
-  const { agentList, activeAgent, userHiddenAgentIds, openAgentSetup } = useAgents();
+  const { agentList, activeAgent, userHiddenAgentIds, openAgentSetup, updateAgent } = useAgents();
   const { editAgent, deleteAgent } = useAgentActions();
   const { selectAgent, setGlobalSearchVisibility } = useNavigation();
   const { openServerSettings } = useServerSettings();
@@ -209,6 +209,8 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
       openAgentSetup();
     },
     deleteAgent: (agentId) => deleteAgent(agentId),
+    agentRuntime: () => ({ queues: queues(), failedTurns: failedTurns() }),
+    setAgentManager: (agentId, managerId) => updateAgent(agentId, { reportsToAgentId: managerId }),
     inviteTeammates: serverRoleCanAdminister(activeServer())
       ? () => {
           const server = activeServer();

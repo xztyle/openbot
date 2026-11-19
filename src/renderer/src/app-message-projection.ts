@@ -60,6 +60,8 @@ export function toAgentProfile(stored: ClientAgentSummary): AgentProfile {
     ...(stored.pendingRuntime === undefined ? {} : { pendingRuntime: stored.pendingRuntime }),
     // Always written, so a store update that turns it off replaces the old value.
     background: stored.background === true,
+    ...(stored.reportsToAgentId === undefined ? {} : { reportsToAgentId: stored.reportsToAgentId }),
+    ...(stored.createdBy === undefined ? {} : { createdBy: { agentId: stored.createdBy.agentId } }),
     threadId: stored.threadId,
     workspacePath: stored.workspacePath,
     avatarSeed: stored.avatarSeed,
@@ -637,6 +639,8 @@ export function agentProfilesEqual(left: AgentProfile, right: AgentProfile): boo
     left.busyMessageMode === right.busyMessageMode &&
     left.taskLimit === right.taskLimit &&
     left.background === right.background &&
+    left.reportsToAgentId === right.reportsToAgentId &&
+    left.createdBy?.agentId === right.createdBy?.agentId &&
     left.threadId === right.threadId &&
     left.avatarSeed === right.avatarSeed &&
     left.avatarHue === right.avatarHue &&

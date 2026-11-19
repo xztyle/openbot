@@ -82,6 +82,11 @@ const ROUND_TRIPS: Array<[string, WebLocation, boolean]> = [
     false,
   ],
   [
+    "/app/general/org",
+    place({ hostId: "host-1", space: "general", target: { kind: "view", view: "org", agentId: null } }),
+    false,
+  ],
+  [
     "/app/general/fleet?page=server-settings&section=members",
     place({
       hostId: "host-1",

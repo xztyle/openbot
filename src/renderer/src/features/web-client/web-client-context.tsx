@@ -2254,6 +2254,18 @@ export function createWebWorkspace(
         throw error;
       }
     },
+    /**
+     * Sets the agent's manager in the org chart, or puts it at the top level with `null`. The host
+     * checks the space and refuses a loop. The list is read again at once, so the chart does not
+     * wait for the `agents-changed` event.
+     */
+    async setAgentManager(agentId: string, managerId: string | null): Promise<void> {
+      if (state.status !== "online") throw new Error(currentText().t("webClient.error.offline"));
+      const current = generation;
+      await runtime.updateAgent({ agentId, reportsToAgentId: managerId });
+      const agents = await runtime.listAgents();
+      if (!disposed && current === generation) reconcileAgents(agents);
+    },
     async deleteAgent(agentId: string): Promise<void> {
       if (state.status !== "online") throw new Error(currentText().t("webClient.error.deleteOffline"));
       if (state.host && !canAdministerServer(state.host.role))

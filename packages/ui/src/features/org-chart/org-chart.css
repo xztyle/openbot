@@ -1,0 +1,769 @@
+/*
+ * The org chart: the canvas stage, the agent cards, the reporting lines, the message pulses, the
+ * search bar and the right panel. The stage, the dot grid, the glass bars and the zoom bar come from
+ * workflows.css; this file follows it.
+ */
+
+/* The panel sits outside the workflow stage, so the small type and the chip fill have their own names. */
+.ws-org {
+  --ws-org-small: calc(var(--openbot-text-sm) - 1px);
+  --ws-org-chip: color-mix(in srgb, var(--openbot-text-primary) 7%, transparent);
+}
+
+.ws-org-body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The workflow stage fills the window; here it fills the view under the header. */
+.ws-org .ws-org-stage.wfn-stage.wfn-canvas {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border-top: 1px solid var(--ws-line);
+  background-image: none;
+}
+
+.ws-org-viewport {
+  cursor: grab;
+}
+
+.ws-org-viewport[data-panning] {
+  cursor: grabbing;
+}
+
+.ws-org-world {
+  will-change: transform;
+}
+
+/* --------------------------------------------------------------- Lines */
+
+.ws-org-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.ws-org-lines path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.ws-org-line-base {
+  stroke: color-mix(in srgb, var(--openbot-text-primary) 22%, transparent);
+  stroke-width: 1.5;
+  transition: stroke var(--openbot-duration-normal) var(--openbot-ease-out);
+}
+
+.ws-org-line-flow {
+  stroke: transparent;
+  stroke-width: 2;
+}
+
+.ws-org-line[data-state="waiting"] .ws-org-line-base {
+  stroke: color-mix(in srgb, var(--openbot-warning) 65%, transparent);
+}
+
+.ws-org-line[data-state="failed"] .ws-org-line-base {
+  stroke: color-mix(in srgb, var(--openbot-danger) 55%, transparent);
+}
+
+.ws-org-line[data-highlight] .ws-org-line-base {
+  stroke: var(--openbot-accent);
+  stroke-width: 2;
+}
+
+/* A working agent's line carries dashes up toward its manager. The path runs from the manager down,
+ * so a growing offset moves the dashes up. */
+.ws-org-line[data-state="working"] .ws-org-line-flow {
+  stroke: var(--openbot-accent);
+  stroke-dasharray: 2 10;
+  animation: ws-org-flow 0.9s linear infinite;
+}
+
+@keyframes ws-org-flow {
+  to {
+    stroke-dashoffset: 12;
+  }
+}
+
+/* A message between two agents: a curve draws in and out, and a dot travels along it. */
+.ws-org-message-line {
+  stroke: var(--openbot-accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  opacity: 0.7;
+  animation: ws-org-draw 1.4s var(--openbot-ease-in-out) forwards;
+}
+
+@keyframes ws-org-draw {
+  50% {
+    stroke-dashoffset: 0;
+  }
+
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+.ws-org-pulse {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  width: calc(var(--openbot-space-2) + 2px);
+  height: calc(var(--openbot-space-2) + 2px);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-accent);
+  box-shadow:
+    0 0 0 4px var(--openbot-accent-soft),
+    0 0 16px var(--openbot-accent);
+  offset-rotate: 0deg;
+  pointer-events: none;
+  animation: ws-org-pulse 1.4s var(--openbot-ease-in-out) forwards;
+}
+
+@keyframes ws-org-pulse {
+  from {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+
+  15%,
+  85% {
+    opacity: 1;
+  }
+
+  to {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+/* --------------------------------------------------------------- Cards */
+
+.ws-org-cards {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.ws-org-card {
+  position: absolute;
+  display: flex;
+  box-sizing: border-box;
+  flex-direction: column;
+  gap: var(--openbot-space-1-5);
+  padding: var(--openbot-space-3);
+  border: 1px solid var(--wfn-ring-strong);
+  border-radius: var(--wfn-radius-card);
+  background: var(--wfn-card);
+  box-shadow: var(--openbot-shadow-card);
+  color: var(--openbot-text-primary);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  transition:
+    border-color var(--openbot-duration-fast) var(--openbot-ease-out),
+    box-shadow var(--openbot-duration-fast) var(--openbot-ease-out),
+    opacity var(--openbot-duration-normal) var(--openbot-ease-out),
+    scale var(--openbot-duration-fast) var(--openbot-ease-out);
+}
+
+.ws-org-card:hover {
+  border-color: color-mix(in srgb, var(--openbot-text-primary) 20%, transparent);
+}
+
+.ws-org-card:has(.ws-org-card-main:focus-visible) {
+  box-shadow:
+    0 0 0 2px var(--openbot-border-focus),
+    var(--openbot-shadow-card);
+}
+
+/* The card's keyboard stop holds its face and its line; it draws nothing of its own. */
+.ws-org-card .ws-org-card-main.ui-button {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: var(--openbot-space-1-5);
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  outline: none;
+  text-align: left;
+  white-space: normal;
+}
+
+.ws-org-card .ws-org-card-main.ui-button:is(:hover, :active) {
+  background: transparent;
+  transform: none;
+}
+
+.ws-org-card[data-state="working"] {
+  border-color: color-mix(in srgb, var(--openbot-accent) 50%, transparent);
+}
+
+/* A working card breathes: a soft accent halo grows and fades. */
+.ws-org-card[data-state="working"]::before {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+  animation: ws-org-breathe 2.4s var(--openbot-ease-in-out) infinite;
+}
+
+@keyframes ws-org-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--openbot-accent-soft);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px var(--openbot-accent-soft);
+  }
+}
+
+.ws-org-card[data-state="waiting"] {
+  border-color: color-mix(in srgb, var(--openbot-warning) 70%, transparent);
+  background: color-mix(in srgb, var(--openbot-warning) 7%, var(--wfn-card));
+}
+
+.ws-org-card[data-state="failed"] {
+  border-color: color-mix(in srgb, var(--openbot-danger) 60%, transparent);
+  background: color-mix(in srgb, var(--openbot-danger) 6%, var(--wfn-card));
+}
+
+.ws-org-card[data-background] {
+  border-style: dashed;
+}
+
+.ws-org-card[data-selected] {
+  border-color: var(--openbot-accent);
+  box-shadow:
+    0 0 0 3px var(--openbot-accent-soft),
+    var(--openbot-shadow-card);
+}
+
+.ws-org-card[data-dimmed] {
+  opacity: 0.35;
+}
+
+.ws-org-card[data-flash] {
+  animation: ws-org-flash 1.4s var(--openbot-ease-out);
+}
+
+@keyframes ws-org-flash {
+  0%,
+  40% {
+    box-shadow:
+      0 0 0 8px var(--openbot-accent-soft),
+      var(--openbot-shadow-card);
+  }
+}
+
+.ws-org-card[data-dragged] {
+  z-index: 4;
+  box-shadow: var(--openbot-shadow-overlay);
+  opacity: 0.94;
+  pointer-events: none;
+  rotate: -1.5deg;
+}
+
+.ws-org-viewport[data-dragging] .ws-org-card:not([data-dragged], [data-drop-target]) {
+  opacity: 0.7;
+}
+
+.ws-org-card[data-drop-target] {
+  border-color: var(--openbot-accent);
+  background: color-mix(in srgb, var(--openbot-accent) 10%, var(--wfn-card));
+  box-shadow:
+    0 0 0 4px var(--openbot-accent-soft),
+    var(--openbot-shadow-card);
+  scale: 1.03;
+}
+
+.ws-org-card-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: calc(var(--openbot-space-2) + 2px);
+}
+
+.ws-org-card-avatar {
+  flex: 0 0 auto;
+}
+
+.ws-org-card-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.ws-org-card-name {
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-org-card-name,
+.ws-org-card-title,
+.ws-org-card-line,
+.ws-org-chip,
+.ws-org-result-title,
+.ws-org-panel-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-org-card-title {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-org-state {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  align-self: flex-start;
+  gap: var(--openbot-space-1);
+  padding: var(--openbot-space-0-5) var(--openbot-space-1-5);
+  border-radius: var(--openbot-radius-pill);
+  font-size: var(--ws-org-small);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.ws-org-state-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--openbot-radius-pill);
+  background: currentcolor;
+}
+
+.ws-org-state[data-state="working"] {
+  background: var(--openbot-accent-soft);
+  color: var(--openbot-accent-text);
+}
+
+.ws-org-state[data-state="working"] .ws-org-state-dot {
+  animation: ws-pulse 1.6s var(--openbot-ease-in-out) infinite;
+}
+
+.ws-org-state[data-state="waiting"] {
+  background: var(--openbot-warning-soft);
+  color: var(--openbot-warning-text);
+}
+
+.ws-org-state[data-state="failed"] {
+  background: var(--openbot-danger-soft);
+  color: var(--openbot-danger-text);
+}
+
+.ws-org-card-line {
+  display: block;
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-org-card-line[data-state="working"] {
+  color: var(--openbot-text-secondary);
+}
+
+.ws-org-card-line[data-state="waiting"] {
+  color: var(--openbot-warning-text);
+}
+
+.ws-org-card-line[data-state="failed"] {
+  color: var(--openbot-danger-text);
+}
+
+.ws-org-card-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  margin-top: auto;
+}
+
+.ws-org-chip {
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--openbot-space-0-5) var(--openbot-space-1-5);
+  border-radius: var(--openbot-radius-sm);
+  background: var(--ws-org-chip);
+  color: var(--openbot-text-secondary);
+  font-size: var(--ws-org-small);
+  line-height: var(--openbot-leading-sm);
+}
+
+.ws-org-card .ws-org-toggle.ui-button {
+  flex: 0 0 auto;
+  height: auto;
+  margin-left: auto;
+  padding: var(--openbot-space-0-5) var(--openbot-space-1-5);
+  border-radius: var(--openbot-radius-sm);
+  color: var(--openbot-text-secondary);
+  font-size: var(--ws-org-small);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.ws-org-card .ws-org-toggle[data-collapsed] {
+  background: var(--openbot-accent-soft);
+  color: var(--openbot-accent-text);
+}
+
+/* ----------------------------------------------------------- HUD bars */
+
+.ws-org-search {
+  top: var(--wfn-hud-inset);
+  left: var(--wfn-hud-inset);
+  padding-left: calc(var(--openbot-space-2) + 2px);
+}
+
+.ws-org-search > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  flex: 0 0 auto;
+  color: var(--openbot-text-muted);
+}
+
+.ws-org-search .ui-input {
+  width: 220px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ws-org-results {
+  position: absolute;
+  top: calc(var(--wfn-hud-inset) + var(--openbot-control-md) + var(--openbot-space-4));
+  left: var(--wfn-hud-inset);
+  z-index: 4;
+  display: flex;
+  width: 320px;
+  max-width: calc(100% - 2 * var(--wfn-hud-inset));
+  flex-direction: column;
+  padding: var(--openbot-space-1);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-surface-raised);
+  box-shadow:
+    0 0 0 1px var(--wfn-ring-strong),
+    var(--openbot-shadow-menu);
+}
+
+.ws-org-results .ws-org-result.ui-button {
+  justify-content: flex-start;
+  gap: var(--openbot-space-2);
+  padding: 0 var(--openbot-space-2);
+  font-weight: var(--openbot-weight-regular);
+}
+
+.ws-org-result-name {
+  flex: 0 0 auto;
+  color: var(--openbot-text-primary);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.ws-org-result-title {
+  min-width: 0;
+  color: var(--openbot-text-muted);
+}
+
+.ws-org-results-empty {
+  margin: 0;
+  padding: var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+/* The drop zone that makes a dragged agent a root. It shows only during a drag. */
+.ws-org-top-zone {
+  position: absolute;
+  top: var(--wfn-hud-inset);
+  left: 50%;
+  z-index: 3;
+  padding: var(--openbot-space-2) var(--openbot-space-6);
+  border: 1.5px dashed var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--wfn-glass);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  opacity: 0;
+  pointer-events: none;
+  translate: -50% 0;
+  transition:
+    opacity var(--openbot-duration-fast) var(--openbot-ease-out),
+    border-color var(--openbot-duration-fast) var(--openbot-ease-out);
+  backdrop-filter: var(--wfn-glass-blur);
+}
+
+.ws-org-top-zone[data-shown] {
+  opacity: 1;
+}
+
+.ws-org-top-zone[data-over] {
+  border-color: var(--openbot-accent);
+  background: var(--openbot-accent-soft);
+  color: var(--openbot-accent-text);
+}
+
+.ws-org-hint {
+  position: absolute;
+  right: var(--wfn-hud-inset);
+  bottom: var(--wfn-hud-inset);
+  z-index: 2;
+  margin: 0;
+  padding: var(--openbot-space-1-5) var(--openbot-space-3);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--wfn-glass);
+  box-shadow: 0 0 0 1px var(--wfn-ring);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  pointer-events: none;
+  backdrop-filter: var(--wfn-glass-blur);
+}
+
+/* With the panel open the hint would cover the cards beside it. */
+.ws-org-body[data-panel] .ws-org-hint {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- Panel */
+
+.ws-org-panel {
+  display: flex;
+  width: 360px;
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  border-top: 1px solid var(--ws-line);
+  border-left: 1px solid var(--ws-line);
+  background: var(--openbot-bg-canvas);
+}
+
+.ws-org-panel-body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.ws-org-panel-scroll {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-4);
+  overflow-y: auto;
+  padding: var(--openbot-space-4);
+}
+
+.ws-org-panel-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-4) 0 var(--openbot-space-2);
+  text-align: center;
+}
+
+.ws-org-panel-name {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-1-5);
+  font-size: var(--openbot-text-xl);
+}
+
+.ws-org-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--openbot-space-2);
+}
+
+.ws-org-panel-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--openbot-space-1-5);
+}
+
+.ws-org-panel-section > h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-1-5);
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-org-panel-count {
+  padding: 0 var(--openbot-space-1-5);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-bg-control);
+  color: var(--openbot-text-secondary);
+}
+
+.ws-org-panel-muted,
+.ws-org-panel-preview,
+.ws-org-panel-step,
+.ws-org-panel-failed,
+.ws-org-panel-error {
+  margin: 0;
+  font-size: var(--openbot-text-md);
+}
+
+.ws-org-panel-muted {
+  color: var(--openbot-text-muted);
+}
+
+.ws-org-panel-step {
+  max-width: 100%;
+  padding: var(--openbot-space-1-5) var(--openbot-space-2);
+  border-radius: var(--openbot-radius-sm);
+  background: var(--openbot-bg-control);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.ws-org-panel-preview {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--openbot-text-secondary);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.ws-org-panel-failed,
+.ws-org-panel-error {
+  color: var(--openbot-danger-text);
+}
+
+.ws-org-panel-list {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: var(--openbot-space-0-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-org-panel .ws-org-panel-row.ui-button {
+  font-size: var(--openbot-text-md);
+}
+
+.ws-org-panel-row-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  text-align: left;
+}
+
+.ws-org-panel-row-state {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  border-radius: var(--openbot-radius-pill);
+  background: transparent;
+}
+
+.ws-org-panel-row-state[data-state="working"] {
+  background: var(--openbot-accent);
+}
+
+.ws-org-panel-row-state[data-state="waiting"] {
+  background: var(--openbot-warning);
+}
+
+.ws-org-panel-row-state[data-state="failed"] {
+  background: var(--openbot-danger);
+}
+
+.ws-org-panel-top {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border: 1.5px dashed var(--openbot-text-muted);
+  border-radius: var(--openbot-radius-pill);
+}
+
+.ws-org-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-2);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-surface);
+}
+
+.ws-org-picker .ws-org-picker-search {
+  min-width: 0;
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.ws-org-picker .ws-org-panel-list {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+/* A narrow window shows the panel over the chart. */
+@media (max-width: 720px) {
+  .ws-org-panel {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    width: auto;
+    border-left: 0;
+  }
+
+  .ws-org-hint {
+    display: none;
+  }
+
+  .ws-org-search .ui-input {
+    width: 140px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-org-pulse,
+  .ws-org-message-line {
+    display: none;
+  }
+
+  .ws-org-line[data-state="working"] .ws-org-line-flow,
+  .ws-org-card[data-state="working"]::before,
+  .ws-org-card[data-flash] {
+    animation: none;
+  }
+}

@@ -97,6 +97,7 @@ export function useJumpEntries() {
       "later",
       "drafts",
       "fleet",
+      "org",
       "artifacts",
       "agents",
       "space-agents",

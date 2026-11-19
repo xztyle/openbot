@@ -20,6 +20,7 @@ import {
   WorkspaceUnreadsView,
 } from "./WorkspaceInboxViews";
 import { WorkspaceNeedsYouSection } from "./WorkspaceNeedsYou";
+import { WorkspaceOrgChart } from "./WorkspaceOrgChart";
 import { WorkspaceSecretsView } from "./WorkspaceSecrets";
 import { WorkspaceSpaceAgentsView } from "./WorkspaceSpaceAgents";
 import { WorkspaceStorageView } from "./WorkspaceStorageView";
@@ -38,6 +39,9 @@ export function WorkspaceViewPane(props: { view: WorkspaceView }) {
       </Match>
       <Match when={props.view === "fleet"}>
         <WorkspaceFleetView />
+      </Match>
+      <Match when={props.view === "org"}>
+        <WorkspaceOrgChart />
       </Match>
       <Match when={props.view === "artifacts"}>
         <WorkspaceArtifactsView />

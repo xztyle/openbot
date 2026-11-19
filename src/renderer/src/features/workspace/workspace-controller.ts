@@ -23,6 +23,7 @@ import {
   type DraftAttachment,
   GENERAL_SPACE_ID,
   isChannelAnswerMode,
+  type QueueSnapshot,
   type TeamRealtimeEvent,
   type WorkspaceActivity,
   type WorkspaceChannelCommand,
@@ -242,6 +243,19 @@ export interface WorkspaceEnvironment {
   secrets?: (() => boolean) | undefined;
   /** Opens Server settings > Storage, where the cleanup rules are. */
   openStorageRules?: (() => void) | undefined;
+  /**
+   * The runtime state that the org chart reads beside the fleet: each agent's queue, for the agents
+   * that message each other, and the last failed turn of each agent. Absent, the chart shows the
+   * fleet state only.
+   */
+  agentRuntime?:
+    | (() => {
+        queues: Readonly<Record<string, QueueSnapshot>>;
+        failedTurns: Readonly<Record<string, string | undefined>>;
+      })
+    | undefined;
+  /** Sets an agent's manager in the org chart; `null` is the top level. Absent, the chart is read-only. */
+  setAgentManager?: ((agentId: string, managerId: string | null) => Promise<void>) | undefined;
   /** Opens the form of a new agent. */
   createAgent?: (() => void) | undefined;
   /** Deletes an agent, as the shell's own delete does (with its undo, where it has one). */
@@ -303,6 +317,7 @@ const SAVED_VIEWS: readonly WorkspaceView[] = [
   "threads",
   "activity",
   "fleet",
+  "org",
   "artifacts",
   "agents",
   "storage",

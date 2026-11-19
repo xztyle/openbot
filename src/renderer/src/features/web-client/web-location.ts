@@ -8,7 +8,7 @@ import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSide
  * /app[/s/<server>]/<space>                          the space, on its first view
  * /app[/s/<server>]/<space>/c/<channel>[/t/<root>]   a channel, DM or group, and its open thread
  * /app[/s/<server>]/<space>/dm/<agent>               the chat with an agent
- * /app[/s/<server>]/<space>/<view>[/<agent>]         a view: activity, threads, fleet, artifacts,
+ * /app[/s/<server>]/<space>/<view>[/<agent>]         a view: activity, threads, fleet, org, artifacts,
  *                                                    between-agents (of one agent), storage,
  *                                                    routines, secrets, agents (of the space),
  *                                                    unreads, later, dms, search
@@ -62,6 +62,7 @@ const VIEW_SEGMENTS = {
   activity: "activity",
   threads: "threads",
   fleet: "fleet",
+  org: "org",
   artifacts: "artifacts",
   agents: "between-agents",
   storage: "storage",
@@ -79,6 +80,7 @@ const VIEWS: readonly WorkspaceView[] = [
   "activity",
   "threads",
   "fleet",
+  "org",
   "artifacts",
   "agents",
   "storage",

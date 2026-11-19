@@ -18,6 +18,8 @@ export function workspaceViewLabel(view: WorkspaceView, t: TextValue["t"]): stri
       return t("workspace.view.drafts");
     case "fleet":
       return t("workspace.view.fleet");
+    case "org":
+      return t("workspace.view.org");
     case "artifacts":
       return t("workspace.view.artifacts");
     case "agents":

@@ -26,6 +26,7 @@ import {
   Lock,
   MessageSquareText,
   MessagesSquare,
+  Network,
   Pencil,
   Plus,
   SquarePen,
@@ -45,6 +46,8 @@ export type WorkspaceView =
   | "threads"
   | "activity"
   | "fleet"
+  /** The agents of the space as an org chart: who reports to whom, and what each one does now. */
+  | "org"
   | "artifacts"
   | "agents"
   | "storage"
@@ -428,6 +431,13 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                   )}
                 </Show>
               }
+              onSelect={props.onSelectView}
+            />
+            <QuickRow
+              view="org"
+              icon={<Network aria-hidden="true" />}
+              label={t("workspace.view.org")}
+              active={props.activeView === "org"}
               onSelect={props.onSelectView}
             />
             <Show when={activeMore()}>

@@ -1,4 +1,5 @@
 import { AGENT_MEMORY_CONTEXT_BUDGET_BYTES, essentialMemoryBytes } from "@openbot/contracts/agent-memory-context";
+import { agentManagerRefusal } from "@openbot/contracts/agent-org";
 import type {
   AcpRegistryEntry,
   AgentSessionSettings,
@@ -2309,6 +2310,12 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       updateAgent: async (input: UpdateAgentInput) => {
         const current = agents.find((agent) => agent.id === input.agentId);
         if (!current) throw new Error("Agent not found");
+        // The preview has one space, so only the agent itself, an unknown agent and a loop are refused.
+        if (
+          input.reportsToAgentId !== undefined &&
+          agentManagerRefusal(agents, current.id, input.reportsToAgentId, () => true) !== null
+        )
+          throw new Error("That manager is not allowed.");
         const {
           agentId: _agentId,
           busyMessageMode,

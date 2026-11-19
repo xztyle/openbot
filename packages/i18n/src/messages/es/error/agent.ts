@@ -57,6 +57,10 @@ export const messages = {
   "error.agent.queuedMessageCreateFailed": "No se pudo crear el mensaje en cola.",
   "error.agent.messageUnavailable": "El mensaje ya no está disponible.",
   "error.agent.hostLimit": "Un host puede tener hasta {limit} agentes.",
+  "error.agent.managerSelf": "Un agente no puede reportarse a sí mismo.",
+  "error.agent.managerUnknown": "Ese responsable ya no existe.",
+  "error.agent.managerOtherSpace": "Un agente solo puede reportar a un agente del mismo espacio.",
+  "error.agent.managerLoop": "Ese cambio crearía un bucle: el nuevo responsable ya reporta a este agente.",
   "error.agent.changedWhileDuplicating": "El agente cambió mientras se duplicaba. Inténtalo de nuevo.",
   "error.agent.duplicatedAgentGone": "El agente duplicado ya no existe.",
   "error.agent.stateCorrupt":

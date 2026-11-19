@@ -317,6 +317,10 @@ export interface AgentProfile {
   usageLimitReturn?: ClientAgentSummary["usageLimitReturn"];
   /** Set while a turn or task still runs on the previous provider. The next turn uses this runtime. */
   pendingRuntime?: ClientAgentSummary["pendingRuntime"];
+  /** The manager in the org chart: an agent id, or null for the top level. Absent: the creator. */
+  reportsToAgentId?: string | null | undefined;
+  /** The agent that created this one, which it reports to when it names no manager. */
+  createdBy?: { agentId: string } | undefined;
   threadId: string | null;
   /** The agent's working directory. Absent for profiles built before it was tracked. */
   workspacePath?: string;

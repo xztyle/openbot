@@ -1955,6 +1955,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     },
     createAgent: () => startCreate(),
     deleteAgent: (agentId) => workspace.deleteAgent(agentId),
+    agentRuntime: () => ({ queues: workspace.state.queues, failedTurns: workspace.state.failedTurns }),
+    setAgentManager: (agentId, managerId) => workspace.setAgentManager(agentId, managerId),
     inviteTeammates: canAdministerServer(workspace.state.host?.role)
       ? () => {
           const id = server()?.id;

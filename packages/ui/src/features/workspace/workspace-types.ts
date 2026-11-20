@@ -1,3 +1,4 @@
+import type { AvatarMood } from "@openbot/brand/bloub-avatar-motion";
 import type { AvatarHue } from "@openbot/contracts/ipc";
 import type { JSX } from "@solidjs/web";
 
@@ -22,6 +23,8 @@ export interface WorkspaceMember {
   presence?: WorkspacePresence | undefined;
   /** Agent: it runs a turn now. */
   working?: boolean | undefined;
+  /** Agent: what its face shows, when the place knows more than `working` (a reply that streams). */
+  mood?: AvatarMood | undefined;
   /** A person from a bridged service, such as a Discord user. */
   external?: boolean | undefined;
 }

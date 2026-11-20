@@ -46,7 +46,7 @@ export function TypingIndicator(props: TypingIndicatorProps): JSX.Element {
       <For each={props.agents} keyed={(agent) => agent.member.id}>
         {(agent) => (
           <span class="ws-typing-agent" data-state={agent().state}>
-            <MemberAvatar member={agent().member} size="xs" />
+            <MemberAvatar member={agent().member} size="xs" mood="working" />
             <span class="ws-typing-agent-text">
               {t(agent().state === "working" ? "workspace.typing.working" : "workspace.typing.thinking", {
                 name: agent().member.name,

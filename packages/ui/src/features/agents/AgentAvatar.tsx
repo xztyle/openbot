@@ -65,7 +65,8 @@ const FACE_STATES: Readonly<Record<AvatarMood, FaceState>> = {
   talking: "talking",
   waiting: "waiting",
   failed: "failed",
-  responded: "success",
+  // An unread reply rests; the end of the work itself smiles for a moment (AgentFace).
+  responded: "idle",
   connecting: "working",
   asleep: "idle",
 };

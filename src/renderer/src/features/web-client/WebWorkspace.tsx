@@ -1689,6 +1689,13 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       queues: workspace.state.queues,
       unreadReplies: { ...workspace.state.unreadCounts },
       recentReplies: { ...workspace.state.recentReplies },
+      // A reply that streams in: the agent's face talks.
+      streaming: Object.fromEntries(
+        Object.entries(workspace.state.conversations).map(([id, conversation]) => [
+          id,
+          conversation.page?.messages.at(-1)?.status === "streaming",
+        ]),
+      ),
       failedTurns: { ...workspace.state.failedTurns },
       // A teammate's request waits in the chat of the agent that gave it the work too, so that agent
       // goes to "Needs you": the user seldom opens the teammate's chat. A request that only the host's

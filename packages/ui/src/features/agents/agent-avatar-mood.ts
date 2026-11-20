@@ -11,6 +11,8 @@ export interface AgentAvatarMoodsInput {
   /** Only whether an agent has one counts. */
   pendingApprovals: Record<string, { turnId: string } | undefined>;
   recentReplies: Record<string, boolean>;
+  /** The agents whose reply streams in now. Absent: the place does not know. */
+  streaming?: Record<string, boolean>;
 }
 
 /**
@@ -36,7 +38,8 @@ export function computeAgentAvatarMoods(input: AgentAvatarMoodsInput): Record<st
   for (const agentId of input.agentIds) {
     if (input.failedTurns[agentId]) moods[agentId] = "failed";
     else if (input.pendingApprovals[agentId] || input.pendingPrompts[agentId]) moods[agentId] = "waiting";
-    else if (isAgentWorking(agentId, input.activeTurns, input.queues)) moods[agentId] = "working";
+    else if (isAgentWorking(agentId, input.activeTurns, input.queues))
+      moods[agentId] = input.streaming?.[agentId] ? "talking" : "working";
     else if (input.recentReplies[agentId]) moods[agentId] = "responded";
   }
   return moods;

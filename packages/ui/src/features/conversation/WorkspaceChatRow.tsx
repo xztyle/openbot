@@ -67,7 +67,10 @@ export function WorkspaceChatRow(props: WorkspaceChatRowProps): JSX.Element {
       class={["ws-chat-row", props.animate ? "message-entry-animated" : undefined, props.class]
         .filter(Boolean)
         .join(" ")}
-      author={props.author}
+      author={
+        // The face of an agent whose reply streams in talks.
+        props.message.streaming && props.author.kind === "agent" ? { ...props.author, mood: "talking" } : props.author
+      }
       sentAt={sentAt()}
       timeLabel={props.message.time}
       grouped={props.grouped}

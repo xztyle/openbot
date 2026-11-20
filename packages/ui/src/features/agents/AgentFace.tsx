@@ -1,6 +1,6 @@
 import { atelierFaceDefault, atelierTheme } from "@openbot/brand/atelier-appearance";
 import { agentFaceSVG, FACE_STYLES, type FaceState, type FaceStyle } from "@openbot/brand/faces";
-import { createMemo, createSignal, onSettled } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, onSettled } from "solid-js";
 import { documentColorScheme } from "../../document-color-scheme";
 import { agentFaceEntry } from "./agent-face-directory";
 
@@ -23,6 +23,8 @@ export interface AgentFaceProps {
 const SMALL_FACE = 24;
 /** A face at this width or more moves while it rests (blinks, breathes); smaller resting faces hold still. */
 const LIVELY_FACE = 48;
+/** How long a face smiles after its work ends well. */
+const SUCCESS_MS = 4_000;
 /** The most drawings kept. A face is one string; a sidebar of 100 agents in two states fits many times. */
 const CACHE_LIMIT = 800;
 
@@ -95,6 +97,27 @@ function prefersLessMotion(): boolean {
 }
 
 /**
+ * The still face of an agent as SVG markup, for a place that is not a component, such as a mention
+ * chip in the message box. It reads the workspace look and the agent directory as `AgentFace` does.
+ */
+export function agentFaceMarkup(seed: string, name?: string): string {
+  const known = agentFaceEntry(seed);
+  const preferred = familyOf(known?.faceStyle);
+  const fallback = atelierFaceDefault();
+  const words = name ?? known?.name ?? "";
+  return agentFaceSVG({
+    id: seed,
+    name: known?.title ? `${words} · ${known.title}` : words,
+    style: preferred ?? (fallback === "mixed" ? "auto" : fallback),
+    ...(known?.faceSeed ? { seed: known.faceSeed } : {}),
+    theme: documentColorScheme(),
+    brand: atelierTheme() ?? "craft",
+    size: SMALL_FACE,
+    animate: false,
+  });
+}
+
+/**
  * An agent's Atelier face: the same person in every theme and family, with the hat of its role and
  * the expression of its state. The drawing is an SVG string with its own SMIL animation, kept in a
  * shared cache, so a hundred faces cost a hundred strings. Only a face on screen that does something,
@@ -105,7 +128,20 @@ export function AgentFace(props: AgentFaceProps) {
   const [width, setWidth] = createSignal(32);
   const [visible, setVisible] = createSignal(true);
   const entry = createMemo(() => agentFaceEntry(props.id));
-  const state = (): FaceState => props.state ?? "idle";
+  // Work that ends without a failure or a question shows success for a moment, then the face rests.
+  const [celebrating, setCelebrating] = createSignal(false);
+  let celebration: ReturnType<typeof setTimeout> | undefined;
+  createEffect(
+    () => props.state ?? "idle",
+    (next, previous) => {
+      clearTimeout(celebration);
+      const ended = (previous === "working" || previous === "talking") && next === "idle";
+      setCelebrating(ended);
+      if (ended) celebration = setTimeout(() => setCelebrating(false), SUCCESS_MS);
+    },
+  );
+  onCleanup(() => clearTimeout(celebration));
+  const state = (): FaceState => (celebrating() ? "success" : (props.state ?? "idle"));
   const svg = createMemo(() => {
     const known = entry();
     const name = props.name ?? known?.name ?? "";

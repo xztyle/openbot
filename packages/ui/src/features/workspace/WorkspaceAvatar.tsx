@@ -1,3 +1,4 @@
+import type { AvatarMood } from "@openbot/brand/bloub-avatar-motion";
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 import { useText } from "../../text";
@@ -21,6 +22,8 @@ export interface MemberAvatarProps {
   showStatus?: boolean;
   /** Lets a working agent fly its rings. Off in long lists. */
   animate?: boolean;
+  /** What the agent's face shows here, over the member's own mood. */
+  mood?: AvatarMood;
   class?: string;
 }
 
@@ -48,7 +51,8 @@ export function MemberAvatar(props: MemberAvatarProps): JSX.Element {
           hue={props.member.avatarHue ?? null}
           url={props.member.avatarUrl ?? null}
           motion="idle"
-          mood={props.animate && props.member.working ? "working" : "idle"}
+          name={props.member.name}
+          mood={props.mood ?? props.member.mood ?? (props.animate && props.member.working ? "working" : "idle")}
         />
       </Show>
       <Show when={props.showStatus}>

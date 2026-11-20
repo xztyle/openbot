@@ -19,7 +19,7 @@ export function SpeakingBar(props: SpeakingBarProps) {
   const { t } = useText();
   return (
     <section class="speaking-bar" aria-label={t("conversation.speech.label", { name: props.agent.name })}>
-      <AgentAvatar agent={props.agent} mood="responded" motion="always" class="speaking-bar-avatar" />
+      <AgentAvatar agent={props.agent} mood="talking" motion="always" class="speaking-bar-avatar" />
       <VoiceWaveform levels={props.levels} class="speaking-bar-waveform" />
       <p class="speaking-bar-caption">{props.caption}</p>
       <Button

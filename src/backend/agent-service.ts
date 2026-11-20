@@ -115,9 +115,11 @@ import {
   agentNewChatAllowed,
   agentTaskLimit,
   type BusyMessageMode,
+  CONDENSED_ORIGINAL_LIMIT,
   CONTEXT_RESET_ITEM_TYPE,
   DEFAULT_BUSY_MESSAGE_MODE,
   DEFAULT_PROVIDER_ACCOUNT_ID,
+  DEFAULT_WORKSPACE_CONDENSE,
   DEFAULT_WORKSPACE_LEARNING,
   DEFAULT_WORKSPACE_SETTINGS,
   defaultProviderModel,
@@ -201,6 +203,7 @@ import type { ProviderAccountStore } from "./agent/provider-account-store";
 import { isPlanLimitDiagnostic } from "./agent/provider-diagnostics";
 import { type AgentClientFactory, ProviderRuntime, toProviderOperationFailed } from "./agent/provider-runtime";
 import { QueueControls } from "./agent/queue-controls";
+import { type CondenseModel, condenseAnswer } from "./agent/reply-condenser";
 import { quietRoutineRun } from "./agent/routine-quiet-runs";
 import { type RoutineMutationOptions, RoutineScheduler, toRoutineOperationFailed } from "./agent/routine-scheduler";
 import { localTimezone } from "./agent/routine-tools";
@@ -220,8 +223,13 @@ import {
 } from "./agent/thread-items";
 import { ThreadLifecycle } from "./agent/thread-lifecycle";
 import { toToolOperationFailed } from "./agent/tool-operation";
-import { type AgentBrowserHost, TurnLifecycle } from "./agent/turn-lifecycle";
-import { gateUsageObserver, memoryReviewUsageObserver, workflowUsageObserver } from "./agent/usage-collection";
+import { type AgentBrowserHost, type FinishedAnswer, TurnLifecycle } from "./agent/turn-lifecycle";
+import {
+  condenseUsageObserver,
+  gateUsageObserver,
+  memoryReviewUsageObserver,
+  workflowUsageObserver,
+} from "./agent/usage-collection";
 import { toUsageReadFailed, UsageLimitGate, type UsageLimitKey } from "./agent/usage-limit-gate";
 import { WarmGenerations } from "./agent/warm-generations";
 import type { WebhookRoutineWriter } from "./agent/webhook-routine-tool";
@@ -492,6 +500,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     profileClients: this.#gateClients,
   });
   #scope = Scope.makeUnsafe();
+  /** The server's workspace settings, read on each use: the gate model and the reply condenser. */
+  readonly #workspaceSettings: () => WorkspaceSettings;
   /** User sends still before their mailbox write, by idempotency key: a retry joins the first call. */
   readonly #pendingUserSends = new Map<string, Deferred.Deferred<QueuedMessageReceipt, AgentLifecycleFailed>>();
   readonly #store: AgentStore;
@@ -662,6 +672,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       },
     });
     this.#tables = options.tables ?? null;
+    this.#workspaceSettings = () => options.workspaceSettings?.() ?? DEFAULT_WORKSPACE_SETTINGS;
     this.#memories = new AgentMemories({
       store,
       conversation: this.#conversation,
@@ -1596,6 +1607,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         takeRoutinePreview: (deliveryId) => this.#routines.takePreviewBeforeRun(deliveryId),
         closeRoutineSession: (externalThreadId) => this.#threads.closeRoutineThread(externalThreadId),
         conversationTurnEnded: (agentId, turn) => this.#memoryReview.turnEnded(agentId, turn),
+        answerFinished: (answer) => this.#condenseLater(answer),
         routineAnswered: (agentId, deliveryId, answer) => {
           const agent = this.#store.list().find((item) => item.id === agentId);
           const run = this.#routines.runForDelivery(deliveryId);
@@ -2656,6 +2668,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     agentId: string,
     prompt: string,
     generation: ChannelGateGeneration,
+    observer: typeof gateUsageObserver = gateUsageObserver,
   ) {
     return Effect.gen({ self: this }, function* () {
       const failed = (message: string) => new ProfileGenerationFailed({ cause: new Error(message) });
@@ -2677,8 +2690,101 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         { ...model, defaultReasoningEffort: effort },
         prompt,
         generation,
-        gateUsageObserver(this.#store.database.usage, provider, model.id, agentId),
+        observer(this.#store.database.usage, provider, model.id, agentId),
       );
+    });
+  }
+
+  /**
+   * The reply condenser (`reply-condenser.ts`): an answer that people read, long or shaped like a
+   * report, is rewritten on the workspace gate model after its turn ended, and the message keeps the
+   * agent's own text. Not an answer to an agent that waits for it, nor one in a channel to anything
+   * but a person's message. The original shows until the rewrite is there; a rewrite that fails or
+   * comes too late leaves it.
+   */
+  #condenseLater(answer: FinishedAnswer): void {
+    // The turn has ended already: nothing here may fail its completion.
+    try {
+      this.#startCondense(answer);
+    } catch (cause) {
+      logger.warn("Could not condense an agent answer.", { agentId: answer.agentId, cause });
+    }
+  }
+
+  #startCondense(answer: FinishedAnswer): void {
+    if (this.#stopping) return;
+    const workspace = this.#workspaceSettings();
+    const settings = workspace.condense ?? DEFAULT_WORKSPACE_CONDENSE;
+    if (!settings.enabled) return;
+    let personMessage: string | undefined;
+    if (answer.channel) {
+      const request = this.channels?.personRequestForTurn(answer.threadId, answer.turnId);
+      if (!request) return;
+      personMessage = request.text;
+    } else {
+      // The answer goes back to a teammate that asked for it: talk between agents stays whole.
+      if (answer.senders.some((sender) => sender.kind === "agent" && sender.expectsReply)) return;
+      personMessage = answer.senders.findLast((sender) => sender.kind === "user")?.text;
+    }
+    const snapshot = this.#conversation.ensureSnapshot(answer.agentId, answer.threadId);
+    const message =
+      snapshot.threadId === answer.threadId
+        ? snapshot.messages.find((candidate) => candidate.id === answer.messageId)
+        : undefined;
+    if (!message || message.condensed || message.questionPrompt || message.uiBlock) return;
+    const original = message.text;
+    const gate = workspace.gate;
+    const model: CondenseModel = {
+      label: `${gate.provider}/${gate.model}`,
+      generate: (prompt, deadline) =>
+        this.#generateGateText(gate, answer.agentId, prompt, { pool: 1, deadline }, condenseUsageObserver),
+    };
+    const started = Date.now();
+    Effect.runFork(
+      condenseAnswer({ text: original, ...(personMessage ? { personMessage } : {}) }, settings, model).pipe(
+        Effect.flatMap((result) =>
+          Effect.gen({ self: this }, function* () {
+            if (result.kind === "skipped") return;
+            logger.info("The reply condenser finished.", {
+              agentId: answer.agentId,
+              outcome: result.kind === "condensed" ? "condensed" : result.reason,
+              model: model.label,
+              ms: Date.now() - started,
+              originalLength: original.length,
+              ...(result.kind === "condensed" ? { condensedLength: result.text.length } : {}),
+            });
+            if (result.kind === "condensed") yield* this.#applyCondensed(answer, original, result.text);
+          }),
+        ),
+        Effect.catchCause((cause) =>
+          Effect.sync(() => logger.warn("Could not condense an agent answer.", { agentId: answer.agentId, cause })),
+        ),
+        Effect.forkIn(this.#scope, { startImmediately: true }),
+      ),
+    );
+  }
+
+  /**
+   * Puts a condensed answer in place of the original, which stays on the message. Nothing when the
+   * message changed meanwhile, such as an edit, or left the snapshot. The agent's preview follows when
+   * it still shows this answer.
+   */
+  #applyCondensed(answer: FinishedAnswer, original: string, text: string) {
+    return Effect.gen({ self: this }, function* () {
+      if (this.#stopping) return;
+      const snapshot = this.#conversation.ensureSnapshot(answer.agentId, answer.threadId);
+      if (snapshot.threadId !== answer.threadId) return;
+      const message = snapshot.messages.find((candidate) => candidate.id === answer.messageId);
+      if (!message || message.text !== original || message.condensed) return;
+      message.text = text;
+      message.condensed = { original: original.slice(0, CONDENSED_ORIGINAL_LIMIT) };
+      this.#conversation.emitReplacedMessage(snapshot, message.id, "conversation.message-condensed");
+      if (answer.channel) return;
+      const agent = this.#store.list().find((item) => item.id === answer.agentId);
+      if (agent && agent.preview === original.slice(0, agent.preview.length) && agent.preview.length > 0) {
+        yield* this.#store.updatePreview(answer.agentId, text).pipe(Effect.ignore);
+        this.#emit({ type: "agents-changed", agents: this.listAgents() });
+      }
     });
   }
 

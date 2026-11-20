@@ -114,6 +114,12 @@ export const messages = {
   "workspace.debug.on": "Activado",
   "workspace.debug.off": "Desactivado",
   "workspace.message.edited": "(editado)",
+  "workspace.message.condensed": "Resumido",
+  "workspace.message.original": "Original",
+  "workspace.message.showOriginal": "Ver original",
+  "workspace.message.showCondensed": "Ver resumen",
+  "workspace.message.condensedHint":
+    "Un modelo más pequeño acortó esta respuesta larga para ti. El texto completo del agente se guarda, y el agente lo sigue teniendo.",
   "workspace.message.actions": "Acciones del mensaje",
   "workspace.message.react": "Añadir reacción",
   "workspace.message.reply": "Responder en el hilo",

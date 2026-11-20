@@ -173,6 +173,24 @@ export interface TurnHooks {
   routineAnswered(agentId: string, deliveryId: string, answer: string): Effect.Effect<void>;
   /** A turn of the agent's own chat ended: the background memory review counts it. */
   conversationTurnEnded?(agentId: string, turn: { counts: boolean; person: boolean }): Effect.Effect<void>;
+  /**
+   * A turn ended with an answer that people may read, in the agent's own chat or in a channel: the
+   * reply condenser may make it shorter later. It must not wait: the turn has ended already.
+   */
+  answerFinished?(answer: FinishedAnswer): void;
+}
+
+/** The answer of a finished turn, as `TurnHooks.answerFinished` gets it. */
+export interface FinishedAnswer {
+  agentId: string;
+  /** The public id of the thread whose snapshot holds the answer. */
+  threadId: string;
+  turnId: string;
+  messageId: string;
+  /** The turn ran in a channel's execution thread. */
+  channel: boolean;
+  /** What started the turn: each delivery's sender, its text, and whether an agent sender waits for this answer. */
+  senders: Array<{ kind: "user" | "agent" | "routine"; text: string; expectsReply: boolean }>;
 }
 
 export interface TurnLifecycleOptions {
@@ -1170,6 +1188,27 @@ export class TurnLifecycle {
           ? { agentTalk: true as const }
           : {}),
       });
+      if (
+        outcome === "completed" &&
+        !quiet &&
+        !markerAnswer &&
+        !taskTurn &&
+        latestAssistant &&
+        snapshot.threadId &&
+        deliveries.length > 0
+      )
+        this.#hooks.answerFinished?.({
+          agentId,
+          threadId: snapshot.threadId,
+          turnId,
+          messageId: latestAssistant.id,
+          channel: channelTurn,
+          senders: deliveries.map(({ delivery }) => ({
+            kind: delivery.sender.kind,
+            text: delivery.text,
+            expectsReply: delivery.sender.kind === "agent" && delivery.expectsReply !== false && delivery.fyi !== true,
+          })),
+        });
       if (!channelTurn && !taskTurn && !routineSession && this.#hooks.conversationTurnEnded)
         yield* this.#hooks.conversationTurnEnded(agentId, {
           counts:

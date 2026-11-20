@@ -52,6 +52,10 @@
 //   at (80) }`), set while the message is pinned to its channel.
 // - Later still: on each message `agentNote` (`{ to, summary (240) }`, at most 32 agent ids), set on
 //   a message that an agent wrote for other agents; a client shows the summary and opens the text.
+// - Later: on each message `condensed` (`{ original (100000) }`), set on an agent's answer that the
+//   host condensed for people; the text is the short version. In the workspace settings `condense?`
+//   (`{ enabled, words }`): whether the host condenses long agent answers, and past how many words. A
+//   body without it keeps the value that the host has.
 // - `POST /v1/workspace/channels/typing`: `{ channelId, threadRootId?, typing }` answers `{}`. The
 //   person of the session types in the channel, or stopped. A client sends it at most every 3
 //   seconds while the person types; the host ends the typing 6 seconds after the last one.
@@ -199,6 +203,7 @@ const MESSAGE_FIELDS: Record<string, Decoder> = {
     { kind: oneOf("external"), platform: oneOf("discord"), id: identifier, name: string(120) },
     { avatarUrl: string(500) },
   ),
+  condensed: fields({ original: nonEmpty(100_000) }),
   pinned: fields({ by: actor, at: string(80) }),
   agentNote: fields({ to: uniqueIdentifiers(32), summary: string(240) }),
 };
@@ -370,6 +375,7 @@ const settings = fields(
     handsOffChannelIds: list(identifier, 500),
     learning: fields({ memoryReviewTurns: count, skillLearning: oneOf("off", "automatic"), dailyReviewLimit: count }),
     appearance,
+    condense: fields({ enabled: boolean, words: count }),
   },
 );
 

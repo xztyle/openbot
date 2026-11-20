@@ -255,6 +255,18 @@ export const messages = {
   "server.settings.dailyReviewLimitHint":
     "El máximo de revisiones de todos los agentes en un día. Cada una lee unos 10.000 tokens en el modelo más pequeño.",
   "server.settings.dailyReviewLimitValue": "{count} al día",
+  "server.settings.agentReplies": "Respuestas de los agentes",
+  "server.settings.agentRepliesDescription":
+    "Cómo se leen las respuestas de los agentes a las personas. La conversación entre agentes, el código y los textos que alguien pidió se quedan como están.",
+  "server.settings.condenseReplies": "Resumir respuestas largas de los agentes",
+  "server.settings.condenseRepliesHint":
+    "Una respuesta larga o con forma de informe se reescribe como un mensaje corto de chat con el modelo de comprobación de arriba. «Ver original» abre el texto completo del agente. Cada una cuesta alrededor de una quinta parte de un centavo a precio de lista.",
+  "server.settings.condenseRepliesOn": "Activado",
+  "server.settings.condenseRepliesOff": "Desactivado",
+  "server.settings.condenseWords": "Resumir a partir de",
+  "server.settings.condenseWordsHint":
+    "Se resumen las respuestas de más palabras que esto, y también las más cortas con títulos, apartados de estado o listas largas.",
+  "server.settings.condenseWordsValue": "{count} palabras",
   "server.settings.appearance": "Apariencia",
   "server.settings.appearanceDescription":
     "El aspecto de este espacio de trabajo para todos los miembros. Cada persona sigue eligiendo claro, oscuro o el ajuste del sistema en su dispositivo.",

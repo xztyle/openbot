@@ -277,6 +277,11 @@ export interface AgentMessage {
   trace?: ConversationTurnTrace | undefined;
   /** The turns between this agent and another agent, on an `agent-turns` row. */
   agentTurns?: AgentTurnsFold | undefined;
+  /**
+   * The agent's own text of an answer that the host condensed; `body` is the short text. Absent on
+   * every other message.
+   */
+  condensedOriginal?: string | undefined;
 }
 
 export interface AgentProfile {

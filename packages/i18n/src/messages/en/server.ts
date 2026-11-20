@@ -283,6 +283,18 @@ export const messages = defineMessages("server", {
   "server.settings.dailyReviewLimitHint":
     "The most reviews of all agents in one day. Each one reads about 10,000 tokens on the smaller model.",
   "server.settings.dailyReviewLimitValue": "{count} a day",
+  "server.settings.agentReplies": "Agent replies",
+  "server.settings.agentRepliesDescription":
+    "How agents' answers to people read. Talk between agents, code and texts that someone asked for stay as they are.",
+  "server.settings.condenseReplies": "Condense long agent replies",
+  "server.settings.condenseRepliesHint":
+    'A long or report-shaped answer is rewritten as a short chat message by the check model above. "Show original" opens the agent\'s full text. Each one costs about a fifth of a cent at list price.',
+  "server.settings.condenseRepliesOn": "On",
+  "server.settings.condenseRepliesOff": "Off",
+  "server.settings.condenseWords": "Condense past",
+  "server.settings.condenseWordsHint":
+    "Answers longer than this are condensed, and so are shorter ones with headings, status sections or long lists.",
+  "server.settings.condenseWordsValue": "{count} words",
   "server.settings.appearance": "Appearance",
   "server.settings.appearanceDescription":
     "The look of this workspace for every member. Each person still chooses light, dark or the system setting on their own device.",

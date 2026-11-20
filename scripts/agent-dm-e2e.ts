@@ -2,7 +2,8 @@
 // its messages are workspace rows with the author's name and time; one header row names the agent
 // and holds the chat's controls; the action bar's Reply quotes the message in the box; the message
 // menu has Copy text and Copy link; the box has the channel's formatting toolbar, and Bold wraps the
-// selection; a link to a message opens the DM there, in view. On a phone: the header keeps one row
+// selection; a link to a message opens the DM there, in view; a condensed answer opens the agent's
+// original text and closes it again. On a phone: the header keeps one row
 // with Back and More at a finger's size, More opens the chat's controls in a sheet, a long press
 // opens the actions in a sheet with the quick reactions, and the formatting toolbar shows only
 // after "Aa". It serves the web client on a mock host
@@ -204,6 +205,16 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
     await button(lastAnswer(page), english("chat.menu.reply")).click();
     await quoted(page);
     await shot(page, "desktop-reply");
+  });
+
+  await step(page, viewport, "a condensed answer opens the agent's original and closes it again", async () => {
+    const answer = lastAnswer(page);
+    await button(answer, english("workspace.message.showOriginal")).click();
+    await answer.getByText("Budget sign-off").waitFor({ timeout: UI_WAIT_MS });
+    await shot(page, "desktop-condensed-original");
+    await button(answer, english("workspace.message.showCondensed")).click();
+    await answer.getByText("Budget sign-off").waitFor({ state: "detached", timeout: UI_WAIT_MS });
+    await button(answer, english("workspace.message.showOriginal")).waitFor({ timeout: UI_WAIT_MS });
   });
 
   await step(page, viewport, "the message menu has Copy text and Copy link", async () => {

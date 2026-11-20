@@ -437,6 +437,24 @@ button.ws-profile-trigger.ws-message-author:hover {
   margin-left: 0;
 }
 
+/* Under an answer that the host condensed: a quiet mark that opens the agent's own text. */
+.ws-message-condensed {
+  margin: var(--openbot-space-1) 0 0;
+  color: var(--openbot-text-dim);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-message-condensed-toggle.ui-button {
+  height: auto;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+.ws-message-condensed-toggle.ui-button:hover {
+  color: var(--openbot-text-secondary);
+}
+
 .ws-message-editor {
   min-width: 0;
 }

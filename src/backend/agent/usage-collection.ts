@@ -279,6 +279,26 @@ export function gateUsageObserver(
   };
 }
 
+/**
+ * Collects the usage of one rewrite of the reply condenser under the agent whose answer it condensed,
+ * so the cost of an agent includes the shortening of its long answers. Each rewrite is its own session.
+ */
+export function condenseUsageObserver(
+  usage: AgentUsage,
+  provider: ProviderSession["provider"],
+  model: AgentSummary["model"],
+  agentId: string,
+): (notification: { method: string; params?: unknown }) => void {
+  const session = { id: `condense:${randomUUID()}`, provider, createdAt: new Date().toISOString() };
+  return ({ method, params }) => {
+    try {
+      collectProviderUsage(usage, { id: agentId, model }, session, method, params);
+    } catch (error) {
+      logger.warn("Could not save the usage of a condensed answer.", { provider, error });
+    }
+  };
+}
+
 /** Collects the usage of one background memory review, or of the skill it writes, under its agent. */
 export function memoryReviewUsageObserver(
   usage: AgentUsage,

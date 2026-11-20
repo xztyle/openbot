@@ -5,8 +5,8 @@ import { isBoolean, isDynamicRecord, isNumber, isString } from "../runtime-value
 import { withAgentSideFields } from "./agent-reports-to-v1";
 import { withAgentTalkTurn } from "./agent-talk-turn-v1";
 import { restoreBrowserSecretMetadata } from "./browser-secret-v1";
+import { withConversationSendersAndCondensed } from "./conversation-condensed-v1";
 import { eventConversationKey, withConversationPlans } from "./conversation-plan-v4";
-import { withConversationSenders } from "./conversation-sender-v5";
 import {
   toCurrentAgentKeys,
   toCurrentAgentKeysObjectForPath,
@@ -127,7 +127,7 @@ function withEventConversationPlans(
   const key = eventConversationKey(projected.type);
   const conversation = key ? projected[key] : undefined;
   if (!key || conversation === undefined) return projected;
-  const withPlans = withConversationSenders(withConversationPlans(conversation, source[key]), source[key]);
+  const withPlans = withConversationSendersAndCondensed(withConversationPlans(conversation, source[key]), source[key]);
   const withBlocks = isDynamicRecord(uiBlockSource)
     ? withConversationUiBlocks(withPlans, uiBlockSource[key])
     : withPlans;

@@ -5,7 +5,9 @@ import {
   CHANNEL_ANSWER_MODES,
   type ChannelAnswerMode,
   type ClientAgentModelOption,
+  CONDENSE_WORD_THRESHOLDS,
   DEFAULT_WORKSPACE_APPEARANCE,
+  DEFAULT_WORKSPACE_CONDENSE,
   DEFAULT_WORKSPACE_LEARNING,
   foreignProvider,
   isAgentProvider,
@@ -21,6 +23,7 @@ import {
   WORKSPACE_SKIN_DEFAULTS,
   WORKSPACE_THEMES,
   type WorkspaceAppearance,
+  type WorkspaceCondenseSettings,
   type WorkspaceFaceDefault,
   type WorkspaceLearningSettings,
   type WorkspaceSettings,
@@ -122,8 +125,13 @@ function sameSettings(left: WorkspaceSettings, right: WorkspaceSettings): boolea
     left.gate.timeoutMs === right.gate.timeoutMs &&
     left.defaults.agentAnswerMode === right.defaults.agentAnswerMode &&
     sameLearning(left.learning ?? DEFAULT_WORKSPACE_LEARNING, right.learning ?? DEFAULT_WORKSPACE_LEARNING) &&
-    sameAppearance(left.appearance ?? DEFAULT_WORKSPACE_APPEARANCE, right.appearance ?? DEFAULT_WORKSPACE_APPEARANCE)
+    sameAppearance(left.appearance ?? DEFAULT_WORKSPACE_APPEARANCE, right.appearance ?? DEFAULT_WORKSPACE_APPEARANCE) &&
+    sameCondense(left.condense ?? DEFAULT_WORKSPACE_CONDENSE, right.condense ?? DEFAULT_WORKSPACE_CONDENSE)
   );
+}
+
+function sameCondense(left: WorkspaceCondenseSettings, right: WorkspaceCondenseSettings): boolean {
+  return left.enabled === right.enabled && left.words === right.words;
 }
 
 function sameAppearance(left: WorkspaceAppearance, right: WorkspaceAppearance): boolean {
@@ -248,7 +256,7 @@ export function createServerWorkspaceSection(
     if (!next || !dirty()) return;
     const serverId = props.server.id;
     const request = generation;
-    const { gate, defaults, learning, appearance } = structuredClone(snapshot(next));
+    const { gate, defaults, learning, appearance, condense } = structuredClone(snapshot(next));
     // Without `defaults.agents`, the host keeps the channel defaults of each agent as they are now, also
     // the ones that the agent settings changed after this section read them.
     const settings: WorkspaceSettings = {
@@ -256,6 +264,7 @@ export function createServerWorkspaceSection(
       defaults: { agentAnswerMode: defaults.agentAnswerMode },
       ...(learning ? { learning } : {}),
       ...(appearance ? { appearance } : {}),
+      ...(condense ? { condense } : {}),
     };
     await run("workspace", async () => {
       const result = await calls().setWorkspaceSettings(settings, serverId);
@@ -285,6 +294,14 @@ export function createServerWorkspaceSection(
       if (!draft.draft) return;
       draft.draft.learning ??= { ...DEFAULT_WORKSPACE_LEARNING };
       change(draft.draft.learning);
+    });
+  }
+
+  function updateCondense(change: (condense: WorkspaceCondenseSettings) => void): void {
+    setState((draft) => {
+      if (!draft.draft) return;
+      draft.draft.condense ??= { ...DEFAULT_WORKSPACE_CONDENSE };
+      change(draft.draft.condense);
     });
   }
 
@@ -412,6 +429,19 @@ export function createServerWorkspaceSection(
                     disabled={Boolean(busy())}
                     menuMount={host.menuMount()}
                     onChange={updateLearning}
+                  />
+                </ItemGroup>
+              </SettingsSection>
+              <SettingsSection
+                title={t("server.settings.agentReplies")}
+                description={t("server.settings.agentRepliesDescription")}
+              >
+                <ItemGroup class="settings-modal-card">
+                  <CondenseRows
+                    condense={settings().condense ?? DEFAULT_WORKSPACE_CONDENSE}
+                    disabled={Boolean(busy())}
+                    menuMount={host.menuMount()}
+                    onChange={updateCondense}
                   />
                 </ItemGroup>
               </SettingsSection>
@@ -676,6 +706,56 @@ function LearningRows(props: {
           if (Number.isSafeInteger(limit) && limit > 0)
             props.onChange((learning) => {
               learning.dailyReviewLimit = limit;
+            });
+        }}
+      />
+    </>
+  );
+}
+
+/** Server Settings > Workspace > Agent replies: the reply condenser and the length it starts at. */
+function CondenseRows(props: {
+  condense: WorkspaceCondenseSettings;
+  disabled: boolean;
+  menuMount: HTMLElement | undefined;
+  onChange: (change: (condense: WorkspaceCondenseSettings) => void) => void;
+}) {
+  const { t, format } = useText();
+  const thresholds = () =>
+    [...new Set<number>([...CONDENSE_WORD_THRESHOLDS, props.condense.words])].sort((a, b) => a - b);
+  return (
+    <>
+      <ChoiceRow
+        id="server-settings-condense"
+        title={t("server.settings.condenseReplies")}
+        hint={t("server.settings.condenseRepliesHint")}
+        options={["on", "off"]}
+        value={props.condense.enabled ? "on" : "off"}
+        label={(value) =>
+          value === "on" ? t("server.settings.condenseRepliesOn") : t("server.settings.condenseRepliesOff")
+        }
+        disabled={props.disabled}
+        menuMount={props.menuMount}
+        onChange={(value) =>
+          props.onChange((condense) => {
+            condense.enabled = value === "on";
+          })
+        }
+      />
+      <ChoiceRow
+        id="server-settings-condense-words"
+        title={t("server.settings.condenseWords")}
+        hint={t("server.settings.condenseWordsHint")}
+        options={thresholds().map(String)}
+        value={String(props.condense.words)}
+        label={(value) => t("server.settings.condenseWordsValue", { count: format.number(Number(value)) })}
+        disabled={props.disabled || !props.condense.enabled}
+        menuMount={props.menuMount}
+        onChange={(value) => {
+          const words = Number(value);
+          if (Number.isSafeInteger(words) && words > 0)
+            props.onChange((condense) => {
+              condense.words = words;
             });
         }}
       />

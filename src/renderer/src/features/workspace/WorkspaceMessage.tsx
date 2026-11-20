@@ -15,6 +15,7 @@ import {
   toast,
 } from "@openbot/ui";
 import type { AgentMessage } from "@openbot/ui/data";
+import { CondensedNote, createCondensedView } from "@openbot/ui/features/conversation/CondensedNote";
 import { FilePreviewDialog, type FilePreviewDialogState } from "@openbot/ui/features/conversation/FilePreviewDialog";
 import { MessageBody } from "@openbot/ui/features/conversation/MessageRendering";
 import { ArtifactCard } from "@openbot/ui/features/workspace/ArtifactCard";
@@ -210,8 +211,22 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
       live: current.message.status === "streaming",
     };
   };
+  /** An answer that the host condensed shows its short text, or the agent's own one when opened. */
+  const condensed = createCondensedView(() =>
+    deleted() ? undefined : (entry().condensed?.original ?? entry().message.condensed?.original),
+  );
+  const shownEntry = createMemo((): ChannelMessage => {
+    const current = entry();
+    const original = current.condensed?.original ?? current.message.condensed?.original;
+    return original !== undefined && condensed.showingOriginal()
+      ? { ...current, message: { ...current.message, text: original } }
+      : current;
+  });
   /** A plain line takes the light row; Markdown, files and questions take the chat's renderer. */
-  const plain = createMemo(() => (props.row.pending ? null : plainMessageSegments(ws.directory(), entry())));
+  // An agent's original text goes through the renderer, so that the "Show more" fold holds it too.
+  const plain = createMemo(() =>
+    props.row.pending || condensed.showingOriginal() ? null : plainMessageSegments(ws.directory(), shownEntry()),
+  );
   const threadRootId = () => (props.inThread ? (entry().threadRootId ?? null) : null);
   /** The thread that "Mark unread" moves in: in the thread panel the root's thread too. */
   const readThread = () => (props.inThread ? (entry().threadRootId ?? entry().id) : null);
@@ -407,8 +422,11 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
         </Show>
         <Show when={!props.row.pending && !plain()}>
           <LongMessageFold id={fold().id} enabled={fold().enabled} live={fold().live}>
-            <WorkspaceMessageBody entry={entry()} />
+            <WorkspaceMessageBody entry={shownEntry()} />
           </LongMessageFold>
+        </Show>
+        <Show when={!props.row.pending && !note() && condensed.condensed()}>
+          <CondensedNote showingOriginal={condensed.showingOriginal()} onToggle={condensed.toggle} />
         </Show>
         <Show when={artifacts().length}>
           <div class="ws-message-artifacts">

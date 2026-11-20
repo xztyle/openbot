@@ -1487,6 +1487,24 @@ export class ChannelService {
     );
   }
 
+  /**
+   * For the reply condenser: the message of a person that this turn of a channel thread answers,
+   * where the members answer for themselves. Null when the turn answers an agent (a subtask, a brief
+   * or a mention chain), a routine or a bridged author, and in a channel whose lead posts results.
+   */
+  personRequestForTurn(threadId: string, turnId: string): { text: string } | null {
+    const channelId = this.store.channelForThread(threadId);
+    if (!channelId) return null;
+    const channel = this.store.get(channelId);
+    if (channel.archived || !channelMembersAnswer(channel)) return null;
+    const assignment = this.store.assignments(channelId).find((item) => item.turnId === turnId);
+    if (!assignment) return null;
+    const task = this.store.tasks(channelId).find((item) => item.id === assignment.taskId);
+    if (!task || task.parentTaskId !== null || !this.#personRequest(task)) return null;
+    const request = this.store.message(channelId, assignment.requestMessageId ?? task.requestMessageId);
+    return request && request.author.kind === "member" ? { text: request.message.text } : null;
+  }
+
   /** Whether a person wrote the request of a task, not an agent, a routine or a bridged author. */
   #personRequest(task: ChannelTask): boolean {
     const request = this.store.message(task.channelId, task.requestMessageId);
@@ -3111,6 +3129,8 @@ export class ChannelService {
         // The answer goes into the thread of the message it answers.
         ...(assignment.threadRootId ? { threadRootId: assignment.threadRootId } : {}),
         ...(mentions.length ? { mentions } : {}),
+        // The workspace wire drops the fields of `message`, so the agent's own text rides here too.
+        ...(message.condensed ? { condensed: message.condensed } : {}),
         // What people added to the message stays while its text streams: reactions and replies.
         ...(original?.reactions ? { reactions: original.reactions } : {}),
         ...(original?.threadSummary ? { threadSummary: original.threadSummary } : {}),

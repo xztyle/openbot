@@ -212,6 +212,11 @@ export interface ChannelMessageWorkspaceFields {
   gateFollowUp?: ChannelGateFollowUp;
   /** Set on a message that a bridge brought from another platform, such as Discord. */
   externalAuthor?: ChannelExternalAuthor;
+  /**
+   * On an agent's answer that the host condensed: the agent's own text. The same value as
+   * `message.condensed`, here so that it rides the workspace wire.
+   */
+  condensed?: { original: string };
   /** The message is pinned to its channel: who pinned it, and when. */
   pinned?: ChannelPin;
   /**
@@ -480,6 +485,10 @@ export function hasValidChannelMessageWorkspaceFields(value: DynamicRecord): boo
         value.gateDecisions.every(isChannelGateDecision))) &&
     (value.gateFollowUp === undefined || isChannelGateFollowUp(value.gateFollowUp)) &&
     (value.externalAuthor === undefined || isChannelExternalAuthor(value.externalAuthor)) &&
+    (value.condensed === undefined ||
+      (isDynamicRecord(value.condensed) &&
+        isBoundedString(value.condensed.original, 100_000) &&
+        value.condensed.original.trim().length > 0)) &&
     (value.pinned === undefined || isChannelPin(value.pinned)) &&
     (value.agentNote === undefined || isChannelAgentNote(value.agentNote))
   );
@@ -568,6 +577,35 @@ export interface WorkspaceSettings {
    * a client shows the default.
    */
   appearance?: WorkspaceAppearance;
+  /**
+   * The condensing of long agent answers to people. Absent from a client or a host that does not know
+   * the field; the host then keeps what it has, and reads the defaults.
+   */
+  condense?: WorkspaceCondenseSettings;
+}
+
+/** The word counts past which an agent's answer to people is condensed. */
+export const CONDENSE_WORD_THRESHOLDS = [60, 90, 120, 150, 200] as const;
+const CONDENSE_WORD_LIMITS = { minimum: 30, maximum: 1_000 } as const;
+
+/**
+ * A cheap model rewrites an agent's answer to people that is long or shaped like a report, before
+ * people read it, as a colleague would text it. The agent's own text stays on the message.
+ */
+export interface WorkspaceCondenseSettings {
+  enabled: boolean;
+  /** An answer with more words than this is condensed. */
+  words: number;
+}
+
+export const DEFAULT_WORKSPACE_CONDENSE: WorkspaceCondenseSettings = { enabled: true, words: 90 };
+
+function isWorkspaceCondense(value: unknown): value is WorkspaceCondenseSettings {
+  return (
+    isDynamicRecord(value) &&
+    isBoolean(value.enabled) &&
+    integerInRange(value.words, CONDENSE_WORD_LIMITS.minimum, CONDENSE_WORD_LIMITS.maximum)
+  );
 }
 
 /** The Atelier workspace themes: Craft Studio, Modern Atelier and Riso Press. */
@@ -679,6 +717,7 @@ export function isWorkspaceSettings(value: unknown): value is WorkspaceSettings 
         value.handsOffChannelIds.length <= WORKSPACE_HANDS_OFF_LIMIT &&
         value.handsOffChannelIds.every(isIdentifier))) &&
     (value.learning === undefined || isWorkspaceLearning(value.learning)) &&
+    (value.condense === undefined || isWorkspaceCondense(value.condense)) &&
     // A theme or a family of a newer build reads as the default (`workspaceAppearanceOf`).
     (value.appearance === undefined || isDynamicRecord(value.appearance))
   );
@@ -709,6 +748,9 @@ export function decodeWorkspaceSettings(value: unknown): WorkspaceSettings {
           },
         }),
     ...(value.appearance === undefined ? {} : { appearance: workspaceAppearanceOf(value.appearance) }),
+    ...(value.condense === undefined
+      ? {}
+      : { condense: { enabled: value.condense.enabled, words: value.condense.words } }),
   };
 }
 
@@ -749,9 +791,14 @@ export function withKeptAgentChannelDefaults(current: WorkspaceSettings, next: W
       ? keptHandsOff
       : { ...keptHandsOff, learning: current.learning };
   // And the appearance.
-  return keptLearning.appearance !== undefined || current.appearance === undefined
-    ? keptLearning
-    : { ...keptLearning, appearance: current.appearance };
+  const keptAppearance =
+    keptLearning.appearance !== undefined || current.appearance === undefined
+      ? keptLearning
+      : { ...keptLearning, appearance: current.appearance };
+  // And the condensing of long answers.
+  return keptAppearance.condense !== undefined || current.condense === undefined
+    ? keptAppearance
+    : { ...keptAppearance, condense: current.condense };
 }
 
 export const CHANNEL_TYPING_STATES = ["typing", "thinking", "working", "routing", "waiting"] as const;

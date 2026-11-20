@@ -139,6 +139,9 @@ export function toAgentMessage(message: ConversationMessage, ownerAgentId?: stri
     ...(subagents?.length ? { subagents } : {}),
     ...(memoryChanges && message.memoryChanges ? { memoryChanges: message.memoryChanges } : {}),
     ...(message.trace === undefined ? {} : { trace: message.trace }),
+    ...(message.condensed && message.author !== "user"
+      ? { condensedOriginal: cleanAgentMessageText(message.condensed.original) }
+      : {}),
     ...(status === undefined ? {} : { status }),
   };
 }
@@ -683,6 +686,7 @@ export function agentMessagesEqual(left: AgentMessage, right: AgentMessage): boo
     left.turnId === right.turnId &&
     left.author === right.author &&
     left.body === right.body &&
+    left.condensedOriginal === right.condensedOriginal &&
     left.time === right.time &&
     left.kind === right.kind &&
     left.streaming === right.streaming &&

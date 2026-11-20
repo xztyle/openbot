@@ -190,6 +190,26 @@ export function conversationMessageSender(id: string, name: string): Conversatio
   return isIdentifier(id) ? { id, name: name.slice(0, INPUT_LIMITS.accountName) } : undefined;
 }
 
+/** The most characters of the original text that a condensed answer keeps. */
+export const CONDENSED_ORIGINAL_LIMIT = 100_000;
+
+/**
+ * The agent's own text of an answer that the host condensed for the people who read it: the message
+ * text is then the short version. Absent on every other message and from an older host.
+ */
+export interface ConversationMessageCondensed {
+  original: string;
+}
+
+export function isConversationMessageCondensed(value: unknown): value is ConversationMessageCondensed {
+  return (
+    isDynamicRecord(value) &&
+    isBoundedString(value.original, CONDENSED_ORIGINAL_LIMIT) &&
+    value.original.trim().length > 0 &&
+    Object.keys(value).length === 1
+  );
+}
+
 export interface ConversationMessage {
   id: string;
   turnId?: string | undefined;
@@ -236,6 +256,11 @@ export interface ConversationMessage {
    * `ipc-conversation-trace.ts`). It stays on this computer: the Team API projections drop it.
    */
   trace?: ConversationTurnTrace | undefined;
+  /**
+   * Set on an agent's answer to people that the host made shorter: the text is the condensed one,
+   * and this keeps what the agent wrote. See `reply-condenser.ts`.
+   */
+  condensed?: ConversationMessageCondensed | undefined;
 }
 
 export function isConversationMessage(value: unknown): value is ConversationMessage {
@@ -283,7 +308,8 @@ export function isConversationMessage(value: unknown): value is ConversationMess
     (value.subagents === undefined || isConversationSubagents(value.subagents)) &&
     (value.memoryChanges === undefined || isConversationMemoryChanges(value.memoryChanges)) &&
     (value.uiBlock === undefined || isConversationUiBlock(value.uiBlock)) &&
-    (value.trace === undefined || isConversationTurnTrace(value.trace))
+    (value.trace === undefined || isConversationTurnTrace(value.trace)) &&
+    (value.condensed === undefined || isConversationMessageCondensed(value.condensed))
   );
 }
 

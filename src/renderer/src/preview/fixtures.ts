@@ -451,6 +451,11 @@ export const STORY_CONVERSATION_MESSAGES: ConversationMessage[] = [
     text: "I’ll keep the final plan concise, with owners and a clear next action for each milestone.",
     createdAt: "2026-08-19T09:45:00.000Z",
     status: "completed",
+    // The host condensed this answer; the agent's own report stays behind "Show original".
+    condensed: {
+      original:
+        "I’ll keep the final plan concise, with owners and a clear next action for each milestone.\n\n**Status:** Research finished the market scan; Sales is still collecting quotes.\n\n**Pending:**\n- Owners for milestones 3 and 4\n- Budget sign-off",
+    },
   },
 ];
 

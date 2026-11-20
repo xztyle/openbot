@@ -118,6 +118,12 @@ export const messages = defineMessages("workspace", {
   "workspace.debug.on": "On",
   "workspace.debug.off": "Off",
   "workspace.message.edited": "(edited)",
+  "workspace.message.condensed": "Condensed",
+  "workspace.message.original": "Original",
+  "workspace.message.showOriginal": "Show original",
+  "workspace.message.showCondensed": "Show condensed",
+  "workspace.message.condensedHint":
+    "A smaller model shortened this long reply for you. The agent's full text is kept, and the agent still has it.",
   "workspace.message.actions": "Message actions",
   "workspace.message.react": "Add reaction",
   "workspace.message.reply": "Reply in thread",

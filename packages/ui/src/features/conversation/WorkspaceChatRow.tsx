@@ -8,6 +8,7 @@ import { LongMessageFold } from "../workspace/LongMessageFold";
 import { MessageRow, type ReactionEmojiPicker } from "../workspace/MessageRow";
 import type { WorkspaceMember, WorkspaceMenuItem, WorkspaceReaction } from "../workspace/workspace-types";
 import type { AttachmentMediaSource } from "./AttachmentCards";
+import { CondensedNote, createCondensedView } from "./CondensedNote";
 import { formatChatTimestamp } from "./chat-timestamp";
 import { MessageBody } from "./MessageRendering";
 
@@ -74,6 +75,12 @@ export function WorkspaceChatRow(props: WorkspaceChatRowProps): JSX.Element {
     !props.message.actionMarker &&
     !props.message.exchange;
   const sentAt = () => (props.message.createdAt ? Date.parse(props.message.createdAt) : Number.NaN);
+  /** A condensed answer shows its short text, or the agent's own one when the reader opens it. */
+  const condensed = createCondensedView(() => props.message.condensedOriginal);
+  const shown = (): AgentMessage => {
+    const original = props.message.condensedOriginal;
+    return original !== undefined && condensed.showingOriginal() ? { ...props.message, body: original } : props.message;
+  };
   return (
     <MessageRow
       class={["ws-chat-row", props.animate ? "message-entry-animated" : undefined, props.class]
@@ -104,7 +111,7 @@ export function WorkspaceChatRow(props: WorkspaceChatRowProps): JSX.Element {
         <div class="ws-message-content" data-author={props.message.author === "you" ? "user" : "assistant"}>
           <MessageBody
             animate={props.animate}
-            message={props.message}
+            message={shown()}
             referencedMessage={props.referencedMessage}
             referencedAuthorName={props.referencedAuthorName}
             onOpenReference={props.onOpenReference}
@@ -123,6 +130,9 @@ export function WorkspaceChatRow(props: WorkspaceChatRowProps): JSX.Element {
           />
         </div>
       </LongMessageFold>
+      <Show when={condensed.condensed()}>
+        <CondensedNote showingOriginal={condensed.showingOriginal()} onToggle={condensed.toggle} />
+      </Show>
       {props.children}
     </MessageRow>
   );

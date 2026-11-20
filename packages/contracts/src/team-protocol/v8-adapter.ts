@@ -17,9 +17,9 @@ import {
   isBrowserViewSessionRoute,
   isBrowserViewSessionsRoute,
 } from "./browser-view-v1";
+import { withConversationSendersAndCondensed } from "./conversation-condensed-v1";
 import { withExchangeExpectsReply } from "./conversation-exchange-v7";
 import { withConversationPlans } from "./conversation-plan-v4";
-import { withConversationSenders } from "./conversation-sender-v5";
 import {
   isAgentAnalyticsRoute,
   isAgentCreateRoute,
@@ -299,7 +299,7 @@ function encodeFrozenResponse(
     );
   if (isConversationRoute(method, path) && status < 400)
     return JSON.stringify(
-      withConversationSenders(
+      withConversationSendersAndCondensed(
         withConversationPlans(
           withExchangeExpectsReply(
             JSON.parse(encodeTeamProtocolV8BaseCurrentHttpResponse(method, path, status, value, options)),
@@ -378,7 +378,7 @@ function decodeFrozenResponse(
   if (isQueueSnapshotRoute(method, path) && status < 400)
     return withQueueMarks(decodeTeamProtocolV8BaseCurrentHttpResponse(method, path, status, value), value);
   if (isConversationRoute(method, path) && status < 400)
-    return withConversationSenders(
+    return withConversationSendersAndCondensed(
       withConversationPlans(
         withExchangeExpectsReply(decodeTeamProtocolV8BaseCurrentHttpResponse(method, path, status, value), value),
         value,

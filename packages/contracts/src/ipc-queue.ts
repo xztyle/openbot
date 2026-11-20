@@ -92,6 +92,20 @@ export function isQueuedAgentReply(delivery: QueueDelivery): boolean {
   );
 }
 
+/**
+ * A new message from another agent that asks for no answer: information that nobody must act on
+ * now. The host holds it in the queue. It starts no turn, and joins the next turn of the agent's own
+ * chat that something else starts. A host too old to hold it starts a turn for it.
+ */
+export function isAgentNote(delivery: Pick<QueueDelivery, "sender" | "replyToMessageId" | "expectsReply">): boolean {
+  return delivery.sender.kind === "agent" && delivery.replyToMessageId === null && delivery.expectsReply === false;
+}
+
+/** A held note that still waits for a turn. A client labels it, because it waits for no reason it shows. */
+export function isQueuedAgentNote(delivery: QueueDelivery): boolean {
+  return delivery.status === "queued" && isAgentNote(delivery);
+}
+
 export function isQueueDelivery(value: unknown): value is QueueDelivery {
   return (
     isDynamicRecord(value) &&

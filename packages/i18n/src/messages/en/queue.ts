@@ -17,6 +17,9 @@ export const messages = defineMessages("queue", {
   "queue.item.steerFallback.providerUnsupported":
     "This provider cannot steer a running turn, so the message waits in the queue.",
   "queue.item.steerFallback.steerFailed": "Steering did not succeed, so the message waits in the queue.",
+  "queue.item.heldNote": "Waits for the next turn",
+  "queue.item.heldNoteReason":
+    "Information from a teammate. It starts no turn: the agent reads it with its next message.",
   "queue.item.moveUpLabel": "Move queued message {position} up",
   "queue.item.moveDownLabel": "Move queued message {position} down",
   "queue.item.runAsTask": "Run as task",

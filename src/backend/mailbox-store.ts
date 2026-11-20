@@ -1232,8 +1232,10 @@ export class MailboxStore {
     };
     const running = new Map<string, StoredDelivery>();
     for (const delivery of this.#state.deliveries) {
-      if (delivery.status === "queued") entry(delivery.recipientAgentId).queued += 1;
-      else if (
+      if (delivery.status === "queued") {
+        // A held note starts no turn, so it does not make the agent read as queued.
+        if (!this.#isHeldNote(delivery)) entry(delivery.recipientAgentId).queued += 1;
+      } else if (
         (delivery.status === "starting" || delivery.status === "running") &&
         !running.has(delivery.recipientAgentId)
       )
@@ -1565,9 +1567,54 @@ export class MailboxStore {
     const now = Date.now();
     const messages = this.#messagesById();
     const delivery = this.#queuedFor(agentId).find(
-      (candidate) => this.#taskIdOf(candidate, messages) === taskId && !this.#holdsReply(candidate, now),
+      (candidate) =>
+        this.#taskIdOf(candidate, messages) === taskId &&
+        !this.#holdsReply(candidate, now) &&
+        !this.#isHeldNote(candidate, messages),
     );
     return delivery && this.#mayStart(delivery) ? this.#context(delivery, undefined, messages) : null;
+  }
+
+  /**
+   * The held notes that join the turn of this delivery: every queued note to the same agent. Only a
+   * turn of the agent's own chat takes them, so a task message starts alone. The drain decides for
+   * channel, messaging and routine-session turns, which do not run in that chat either.
+   */
+  notesToStartWith(deliveryId: string): DeliveryContext[] {
+    const next = this.#index().deliveryById.get(deliveryId);
+    if (!next) return [];
+    const messages = this.#messagesById();
+    if (this.#taskIdOf(next, messages)) return [];
+    return this.#contexts(
+      this.#queuedFor(next.recipientAgentId).filter(
+        (candidate) => candidate.id !== next.id && this.#mayStart(candidate) && this.#isHeldNote(candidate, messages),
+      ),
+    );
+  }
+
+  /**
+   * Information from a teammate that nobody must act on now: a new message from another agent that
+   * asks for no answer. It starts no turn of its own. It waits in the queue and joins the next turn
+   * of the agent's own chat that something else starts, so a status update does not cost a turn.
+   * No time limit releases it: it waits, and stays stored, until such a turn starts.
+   */
+  #isHeldNote(delivery: StoredDelivery, messages?: ReadonlyMap<string, StoredMessage>): boolean {
+    if (delivery.status !== "queued" || delivery.resumeAfterUsageLimit) return false;
+    const message = (messages ?? this.#index().messageById).get(delivery.messageId);
+    return message !== undefined && isNote(message, delivery.recipientAgentId);
+  }
+
+  /**
+   * The deliveries of one turn, the one that started it first. A held note is older than the message
+   * that it joined, and a reader of the first delivery, such as the turn's origin, means that message.
+   */
+  #leadFirst(deliveries: StoredDelivery[]): StoredDelivery[] {
+    const messages = this.#index().messageById;
+    const joined = (delivery: StoredDelivery) => {
+      const message = messages.get(delivery.messageId);
+      return message !== undefined && isNote(message, delivery.recipientAgentId) ? 1 : 0;
+    };
+    return [...deliveries].sort((left, right) => joined(left) - joined(right));
   }
 
   /**
@@ -1875,18 +1922,22 @@ export class MailboxStore {
 
   findDeliveriesByTurn(agentId: string, turnId: string): DeliveryContext[] {
     return this.#contexts(
-      this.#state.deliveries.filter(
-        (delivery) =>
-          delivery.recipientAgentId === agentId &&
-          delivery.turnId === turnId &&
-          (delivery.status === "starting" || delivery.status === "running"),
+      this.#leadFirst(
+        this.#state.deliveries.filter(
+          (delivery) =>
+            delivery.recipientAgentId === agentId &&
+            delivery.turnId === turnId &&
+            (delivery.status === "starting" || delivery.status === "running"),
+        ),
       ),
     );
   }
 
   /** Without `taskId`, any lane of the agent; with it, only that lane (null: the agent's own chat). */
   startingDeliveryForAgent(agentId: string, taskId?: string | null): DeliveryContext | null {
-    const delivery = this.#state.deliveries.find((candidate) => this.#startingIn(candidate, agentId, taskId));
+    const [delivery] = this.#leadFirst(
+      this.#state.deliveries.filter((candidate) => this.#startingIn(candidate, agentId, taskId)),
+    );
     return delivery ? this.#context(delivery) : null;
   }
 
@@ -1895,7 +1946,9 @@ export class MailboxStore {
    * Without `taskId`, any lane of the agent; with it, only that lane (null: the agent's own chat).
    */
   startingDeliveriesForAgent(agentId: string, taskId?: string | null): DeliveryContext[] {
-    return this.#contexts(this.#state.deliveries.filter((candidate) => this.#startingIn(candidate, agentId, taskId)));
+    return this.#contexts(
+      this.#leadFirst(this.#state.deliveries.filter((candidate) => this.#startingIn(candidate, agentId, taskId))),
+    );
   }
 
   #startingIn(delivery: StoredDelivery, agentId: string, taskId: string | null | undefined): boolean {
@@ -2655,12 +2708,15 @@ export class MailboxStore {
    * messages. `queued` counts: one agent runs at most one work turn across all chats, so a normal
    * request can wait behind another agent's channel work for as long as that work runs, and
    * deletion would take its message and files away while it waited.
+   *
+   * A held note does not count: it can wait for days, and it starts no work. A restart and a provider
+   * switch keep it queued; only the deletion of the agent drops it.
    */
   hasUnfinishedDelivery(agentId: string): boolean {
-    return this.#state.deliveries.some(
+    return this.#deliveriesTo(agentId).some(
       (delivery) =>
-        delivery.recipientAgentId === agentId &&
-        (delivery.status === "queued" || delivery.status === "starting" || delivery.status === "running"),
+        (delivery.status === "queued" || delivery.status === "starting" || delivery.status === "running") &&
+        !this.#isHeldNote(delivery),
     );
   }
 
@@ -3519,6 +3575,24 @@ function queueSaveHash(text: string, keepAttachmentIds: string[], attachmentDraf
  */
 function recordFinishedQueueEdit(delivery: StoredDelivery, editId: string, outcome: StoredFinishedEdit): void {
   delivery.finishedEditOutcomes = { ...(delivery.finishedEditOutcomes ?? {}), [editId]: outcome };
+}
+
+/**
+ * A new message from another agent that asks for no answer, outside channel, messaging and task work.
+ * See `MailboxStore.#isHeldNote`.
+ */
+function isNote(message: StoredMessage, recipientAgentId: string): boolean {
+  return (
+    message.sender.kind === "agent" &&
+    message.sender.agentId !== recipientAgentId &&
+    message.expectsReply === false &&
+    message.replyToMessageId === null &&
+    !message.channelId &&
+    !message.messaging &&
+    !message.taskId &&
+    !message.notice &&
+    !message.eventCheck
+  );
 }
 
 /** An agent's answer to a request. A linked message that asks for a reply is a new request. */

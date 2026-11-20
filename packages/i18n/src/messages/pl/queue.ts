@@ -18,6 +18,9 @@ export const messages = {
   "queue.item.steerFallback.providerUnsupported":
     "Ten dostawca nie może pokierować trwającą turą, więc wiadomość czeka w kolejce.",
   "queue.item.steerFallback.steerFailed": "Pokierowanie nie powiodło się, więc wiadomość czeka w kolejce.",
+  "queue.item.heldNote": "Czeka na następną turę",
+  "queue.item.heldNoteReason":
+    "Informacja od członka zespołu. Nie rozpoczyna tury: agent przeczyta ją przy następnej wiadomości.",
   "queue.item.runAsTask": "Uruchom jako zadanie",
   "queue.item.runAsTaskLabel": "Uruchom wiadomość nr {position} z kolejki jako zadanie",
   "queue.item.deleteLabel": "Usuń wiadomość z kolejki {position}",

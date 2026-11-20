@@ -416,9 +416,10 @@ files a turn changed. `openbot.interrupt_agent` (`src/backend/agent/agent-interr
 refuses the caller itself, a channel turn, and a turn that any delivery other than the caller's
 started, so an agent cannot stop work from the user, a routine, or another agent. It cancels the
 caller's queued requests to the target before it sends `turn/interrupt`, because the interrupted
-turn drains the queue as it completes. It keeps the caller's answers, because the target can hold
-them (see below). Then it queues a notice from the caller with `expectsReply` false. The notice
-starts one short turn on an idle target, so the provider thread records why the work stopped.
+turn drains the queue as it completes. It keeps the caller's answers and held notes, because the
+target can hold them (see below). Then it queues a notice from the caller with `expectsReply` false.
+The notice is a held note: it joins the target's next turn ahead of its message, so that turn does
+not pick the stopped work up again.
 
 An answer to a request that went to two or more teammates waits in the requester's queue while
 another teammate's copy of that request is queued, starting or running (`MailboxStore.nextQueued`).
@@ -430,6 +431,18 @@ from the time of the answer). After it, the answer starts a turn with the other 
 and the prompt names the teammates that are still outstanding. Their answers start later turns.
 `HeldReplyTimer` (`src/backend/agent/held-reply-timer.ts`) is the one timer that wakes the requester,
 because a silent teammate sends nothing that would.
+
+A held note is a new message from another agent with `expectsReply` false and no
+`replyToMessageId`, outside channel, messaging and task work (`MailboxStore.#isHeldNote`). It starts
+no turn: `nextQueued` passes over it, so it never holds back the messages behind it. The next turn of
+the agent's own chat that something else starts (a message from the person, a request, an answer)
+takes every held note with it, ahead of that message (`MailboxStore.notesToStartWith`). A channel,
+messaging or task turn and a routine run in its own session leave the notes queued. A failed start
+puts them back. The notes are ordinary queued rows, so a restart keeps them, and no timer releases
+them: they wait until a turn starts. A busy agent that steers messages takes a note into its running
+turn at once. A held note does not make the agent busy (`hasUnfinishedDelivery`, `fleetWork`,
+`list_agents`), and clients label it with `isQueuedAgentNote`. A host before this change starts a
+turn for each such message, so a client connected to it shows the label on a message that runs.
 
 ### Guards on agent-to-agent traffic
 

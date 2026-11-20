@@ -18,6 +18,9 @@ export const messages = {
   "queue.item.steerFallback.providerUnsupported":
     "Questo provider non può indirizzare un turno in corso, quindi il messaggio resta in coda.",
   "queue.item.steerFallback.steerFailed": "L'indirizzamento non è riuscito, quindi il messaggio resta in coda.",
+  "queue.item.heldNote": "Attende il prossimo turno",
+  "queue.item.heldNoteReason":
+    "Informazione da un collega. Non avvia un turno: l'agente la legge con il suo prossimo messaggio.",
   "queue.item.runAsTask": "Esegui come attività",
   "queue.item.runAsTaskLabel": "Esegui il messaggio in coda {position} come attività",
   "queue.item.deleteLabel": "Elimina il messaggio in coda {position}",

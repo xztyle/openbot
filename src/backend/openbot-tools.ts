@@ -733,7 +733,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "send_message",
     description:
-      "Queue an asynchronous message and optional local files for one or more OpenBot agents. When replying, pass the original message id as replyToMessageId. Set expectsReply false to pass information on without asking the recipient for an answer.",
+      "Queue an asynchronous message and optional local files for one or more OpenBot agents. Send it only to agents that must act or decide. When replying, pass the original message id as replyToMessageId. Never send acknowledgements or thanks.",
     shape: {
       recipientAgentIds: z.array(z.string()).min(1).max(32),
       text: z.string().min(1).max(100_000),
@@ -749,7 +749,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
       expectsReply: z
         .boolean()
         .describe(
-          "True, the default, for a request, question, or delegated task: the recipient answers you and OpenBot sends its result back. False for information the recipient may act on but must not answer, such as a status update, a heads-up, or your own reply to a task. A false message ends the exchange.",
+          "True, the default, for a request, question, or delegated task: the message starts the recipient's turn, and OpenBot sends its result back. False for your reply to a message, or for information that nobody must act on now: a new false message does not wake the recipient, which reads it in its next turn. A false message ends the exchange.",
         )
         .optional(),
     },

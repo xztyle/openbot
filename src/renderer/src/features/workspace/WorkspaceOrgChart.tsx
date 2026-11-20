@@ -1,5 +1,5 @@
 import { agentManagers } from "@openbot/contracts/agent-org";
-import type { AgentReasoningEffort } from "@openbot/contracts/ipc";
+import { type AgentReasoningEffort, isQueuedAgentNote } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
 import { toast } from "@openbot/ui";
 import { type OrgChartAgent, type OrgChartMessage, OrgChartView } from "@openbot/ui/features/org-chart/OrgChartView";
@@ -39,7 +39,9 @@ export function WorkspaceOrgChart() {
       const work = fleet.get(profile.id);
       const status = work?.status ?? { state: "idle" as const };
       const failed = status.state === "idle" && Boolean(runtime?.failedTurns[profile.id]);
-      const queued = runtime?.queues[profile.id]?.deliveries.filter((delivery) => delivery.status === "queued").length;
+      const queued = runtime?.queues[profile.id]?.deliveries.filter(
+        (delivery) => delivery.status === "queued" && !isQueuedAgentNote(delivery),
+      ).length;
       return {
         member: agentMember(profile, status.state === "working"),
         title: profile.title || undefined,

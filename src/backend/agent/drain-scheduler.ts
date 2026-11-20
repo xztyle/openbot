@@ -569,7 +569,15 @@ export class DrainScheduler {
       channelDelivery || ownSession || (messagingDelivery && delivery.sender.kind !== "agent")
         ? []
         : this.#mailbox.repliesToStartWith(delivery.id);
-    let batch = delivery.sender.kind === "user" ? [...companions, context] : [context, ...companions];
+    // The held notes of teammates join a turn of the agent's own chat, ahead of the message that
+    // starts it: they start no turn of their own. A channel, messaging or task turn, and a routine
+    // run in its own session, leave them in the queue for the next turn of that chat.
+    const notes =
+      channelDelivery || ownSession || messagingDelivery || taskId !== null
+        ? []
+        : this.#mailbox.notesToStartWith(delivery.id);
+    const joined = [...notes, ...companions];
+    let batch = [...notes, ...(delivery.sender.kind === "user" ? [...companions, context] : [context, ...companions])];
     let confirmedTurnId: string | null = null;
     // The session of a routine run in its own session. Closed here when no turn starts on it.
     let routineThreadId: string | null = null;
@@ -591,9 +599,9 @@ export class DrainScheduler {
       for (const item of batch) yield* this.#mailbox.markStarting(item.delivery.id).pipe(toDeliveryStartFailed);
       this.#mailboxSync.emitQueue(delivery.recipientAgentId);
       yield* this.#mailbox.verifyDeliveryAttachments(delivery.id).pipe(toDeliveryStartFailed);
-      // An answer whose attachment changed fails alone. The message that starts the turn still runs.
+      // An answer or a note whose attachment changed fails alone. The message that starts the turn still runs.
       const failedCompanions = new Set<string>();
-      for (const { delivery: companion } of companions) {
+      for (const { delivery: companion } of joined) {
         const verified = yield* Effect.result(
           this.#mailbox.verifyDeliveryAttachments(companion.id).pipe(toDeliveryStartFailed),
         );
@@ -688,9 +696,11 @@ export class DrainScheduler {
         ),
       );
       // Teammates that got the same request and have not answered. A released hold, or the person's
-      // message, starts this turn without them.
+      // message, starts this turn without them. A teammate's held note is no answer.
       const answeredBy = new Set(
-        batch.flatMap(({ delivery: item }) => (item.sender.kind === "agent" ? [item.sender.agentId] : [])),
+        batch.flatMap(({ delivery: item }) =>
+          item.sender.kind === "agent" && item.replyToMessageId ? [item.sender.agentId] : [],
+        ),
       );
       const outstanding = [
         ...new Set(

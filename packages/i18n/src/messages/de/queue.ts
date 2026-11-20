@@ -19,6 +19,9 @@ export const messages = {
     "Dieser Anbieter kann einen laufenden Durchlauf nicht steuern. Die Nachricht wartet daher in der Warteschlange.",
   "queue.item.steerFallback.steerFailed":
     "Die Nachricht konnte nicht gesteuert werden und wartet daher in der Warteschlange.",
+  "queue.item.heldNote": "Wartet auf den nächsten Durchlauf",
+  "queue.item.heldNoteReason":
+    "Information von einem Teammitglied. Sie startet keinen Durchlauf: Der Agent liest sie mit seiner nächsten Nachricht.",
   "queue.item.runAsTask": "Als Aufgabe ausführen",
   "queue.item.runAsTaskLabel": "Nachricht {position} aus der Warteschlange als Aufgabe ausführen",
   "queue.item.deleteLabel": "Nachricht {position} aus der Warteschlange löschen",

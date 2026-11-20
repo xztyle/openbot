@@ -5,6 +5,7 @@ import {
   agentPermissionUpdate,
   type CentralAuthUser,
   DEFAULT_AGENT_ACCESS,
+  isQueuedAgentNote,
   MCP_SERVERS_CAPABILITY,
   sameAgentModelChoice,
   type UpdateAgentAdminSettingsInput,
@@ -427,7 +428,11 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
     if (!(agent.id in limits)) return undefined;
     const resetsAt = limits[agent.id] ?? null;
     if (waitedUsageLimits()[agent.id] === resetsAt && agent.id in waitedUsageLimits()) return undefined;
-    if (!queues()[agent.id]?.deliveries.some((delivery) => delivery.status === "queued")) return undefined;
+    // A held note starts no turn, so it does not wait for the limit.
+    if (
+      !queues()[agent.id]?.deliveries.some((delivery) => delivery.status === "queued" && !isQueuedAgentNote(delivery))
+    )
+      return undefined;
     const source: BackupModelSource = {
       modelOptions: modelOptions(),
       providers: agentStatus().providers,

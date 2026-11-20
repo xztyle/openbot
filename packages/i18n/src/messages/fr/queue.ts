@@ -18,6 +18,9 @@ export const messages = {
   "queue.item.steerFallback.providerUnsupported":
     "Ce fournisseur ne peut pas orienter un tour en cours : le message attend dans la file.",
   "queue.item.steerFallback.steerFailed": "L’orientation a échoué : le message attend dans la file.",
+  "queue.item.heldNote": "Attend le prochain tour",
+  "queue.item.heldNoteReason":
+    "Information d’un coéquipier. Elle ne lance aucun tour : l’agent la lit avec son prochain message.",
   "queue.item.runAsTask": "Exécuter comme tâche",
   "queue.item.runAsTaskLabel": "Exécuter le message {position} de la file comme tâche",
   "queue.item.deleteLabel": "Supprimer le message en attente {position}",

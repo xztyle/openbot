@@ -18,6 +18,9 @@ export const messages = {
   "queue.item.steerFallback.providerUnsupported":
     "このプロバイダーは実行中のターンの方向を修正できないため、メッセージはキューで待ちます。",
   "queue.item.steerFallback.steerFailed": "方向の修正に失敗したため、メッセージはキューで待ちます。",
+  "queue.item.heldNote": "次のターンを待機",
+  "queue.item.heldNoteReason":
+    "チームメイトからの情報です。ターンは開始せず、エージェントは次のメッセージと一緒に読みます。",
   "queue.item.runAsTask": "タスクとして実行",
   "queue.item.runAsTaskLabel": "キューのメッセージ {position} をタスクとして実行",
   "queue.item.deleteLabel": "キューのメッセージ {position} を削除",

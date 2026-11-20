@@ -1,5 +1,5 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
-import type { AgentSummary } from "@openbot/contracts/ipc";
+import { type AgentSummary, isAgentNote } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -143,7 +143,8 @@ export class AgentInterruptTool {
   /**
    * `listQueue` leaves channel work out, and channel work is not the caller's to cancel. An answer
    * (linked, and expecting no reply) is not work that the caller gave, and the target may hold it
-   * until its other teammates answer. A linked follow-up request is work, so it is cancelled.
+   * until its other teammates answer. A held note is information, not work, so it stays too. A linked
+   * follow-up request is work, so it is cancelled.
    */
   #cancelQueuedFrom(agentId: string, callerAgentId: string): number {
     const deliveryIds = this.#mailbox
@@ -153,7 +154,7 @@ export class AgentInterruptTool {
           delivery.status === "queued" &&
           delivery.sender.kind === "agent" &&
           delivery.sender.agentId === callerAgentId &&
-          !(delivery.replyToMessageId && delivery.expectsReply === false),
+          delivery.expectsReply !== false,
       )
       .map((delivery) => delivery.id);
     try {
@@ -165,10 +166,9 @@ export class AgentInterruptTool {
   }
 
   /**
-   * Tells the interrupted agent why its turn stopped. The notice is a normal message that expects no
-   * reply, so it starts one short turn when the agent has nothing else queued: the provider thread
-   * then records the stop, and a later turn does not pick the abandoned work up again. It queues
-   * after work that others sent, as every message does.
+   * Tells the interrupted agent why its turn stopped. The notice is a held note: it starts no turn,
+   * and joins the next turn of the agent's own chat ahead of its message, so that turn does not pick
+   * the abandoned work up again.
    */
   readonly #notifyEffect = Effect.fn("AgentInterruptTool.notify")(function* (
     this: AgentInterruptTool,
@@ -202,10 +202,14 @@ export class AgentInterruptTool {
   });
 }
 
-/** Every delivery the turn runs came from the caller, and it runs at least one. */
+/**
+ * Every delivery the turn runs came from the caller, and it runs at least one. A held note that
+ * joined the turn is no work of its own, so a note from another agent does not count.
+ */
 function ownedBy(deliveries: readonly DeliveryContext[], callerAgentId: string): boolean {
+  const work = deliveries.filter(({ delivery }) => !isAgentNote(delivery));
   return (
-    deliveries.length > 0 &&
-    deliveries.every(({ delivery }) => delivery.sender.kind === "agent" && delivery.sender.agentId === callerAgentId)
+    work.length > 0 &&
+    work.every(({ delivery }) => delivery.sender.kind === "agent" && delivery.sender.agentId === callerAgentId)
   );
 }

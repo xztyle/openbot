@@ -1,5 +1,5 @@
 import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references";
-import type { QueueDelivery, QueueHold, QueueSteerFallback } from "@openbot/contracts/ipc";
+import { isQueuedAgentNote, type QueueDelivery, type QueueHold, type QueueSteerFallback } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
 import { Button, ChevronDown, ChevronUp, ConfirmDialog, LabelTooltip, LabelTooltipTrigger, Plus } from "@openbot/ui";
 import { prefersReducedMotion } from "@openbot/ui/utils";
@@ -523,13 +523,26 @@ export function QueuePanel(props: QueuePanelProps) {
                       <Show when={editing}>
                         <span class="agent-queue-editing-badge">{t("queue.item.editing")}</span>
                       </Show>
-                      <Show when={!editing && delivery.status === "queued" && delivery.steerFallback}>
+                      <Show
+                        when={
+                          !editing &&
+                          delivery.status === "queued" &&
+                          !isQueuedAgentNote(delivery) &&
+                          delivery.steerFallback
+                        }
+                      >
                         {(fallback) => (
                           <span class="agent-queue-editing-badge" title={t(STEER_FALLBACK_REASON[fallback()])}>
                             {t("queue.item.notSteered")}
                             <span class="sr-only"> {t(STEER_FALLBACK_REASON[fallback()])}</span>
                           </span>
                         )}
+                      </Show>
+                      <Show when={!editing && isQueuedAgentNote(delivery)}>
+                        <span class="agent-queue-editing-badge" title={t("queue.item.heldNoteReason")}>
+                          {t("queue.item.heldNote")}
+                          <span class="sr-only"> {t("queue.item.heldNoteReason")}</span>
+                        </span>
                       </Show>
                       <LabelTooltip content={t("queue.item.steerTooltip")}>
                         <LabelTooltipTrigger

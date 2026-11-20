@@ -21,6 +21,7 @@ import {
   CONNECTOR_IDS,
   isBackgroundAgent,
   isMessageReaction,
+  isQueuedAgentNote,
   marketplaceSuggestionItemType,
   mcpSignInItemType,
   skillConversationEventItemType,
@@ -1021,7 +1022,10 @@ export class OpenBotToolRouter {
         .filter((agent) => agent.hiddenAt === undefined)
         .map((agent) => {
           const deliveries = this.#mailbox.listQueue(agent.id).deliveries;
-          const queuedMessages = deliveries.filter((delivery) => delivery.status === "queued").length;
+          // A held note starts no turn, so an agent with only notes reads as ready.
+          const queuedMessages = deliveries.filter(
+            (delivery) => delivery.status === "queued" && !isQueuedAgentNote(delivery),
+          ).length;
           const working = this.#hooks.runsTurn(agent.id) || unresolved.has(agent.id);
           const activeTurnId = this.#conversation.workingSnapshot(agent.id)?.activeTurnId ?? null;
           const { startedAt, lastEventAt } = this.#hooks.turnActivity(agent.id, activeTurnId);
@@ -1981,10 +1985,11 @@ export class OpenBotToolRouter {
       const snapshot = this.#conversation.ensureSnapshot(senderAgentId, params.threadId);
       this.#mailboxSync.syncMailboxMessages(snapshot);
       this.#conversation.emitConversation(snapshot);
-      return {
-        success: true,
-        contentItems: [{ type: "inputText", text: JSON.stringify(receipt) }],
-      };
+      // A held note starts no turn. The sender learns it here, so work it meant to start is sent again
+      // as a request.
+      if (expectsReply === false && !replyToMessageId?.trim())
+        return openBotToolResult({ ...receipt, note: sourceText("status.agent.messageHeld") });
+      return openBotToolResult(receipt);
     },
     Effect.catchDefect((cause) => Effect.fail(new ToolOperationFailed({ cause }))),
     Effect.uninterruptible,

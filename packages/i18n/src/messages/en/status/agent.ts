@@ -11,6 +11,8 @@ export const messages = defineMessages("status.agent", {
   "status.agent.marketplaceSuggested": "Suggested a Marketplace app: {app}.",
   "status.agent.messageDuplicate":
     "An identical message to this agent is still queued or running. OpenBot did not send it again.",
+  "status.agent.messageHeld":
+    "The recipients read this message in their next turn; it does not start one. When a recipient must act on it now, send it again with expectsReply true.",
   "status.agent.toolFailed": "A tool step failed: {tool}. {reason}",
   "status.agent.toolFailedNoReason": "A tool step failed ({tool}). Deciding what to try next…",
   "status.agent.channelMemberAdded": "{agent} added {member} to the channel. {person} asked for it.",

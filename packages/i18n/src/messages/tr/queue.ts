@@ -18,6 +18,8 @@ export const messages = {
   "queue.item.steerFallback.providerUnsupported":
     "Bu sağlayıcı çalışan bir turu yönlendiremez, bu yüzden mesaj kuyrukta bekler.",
   "queue.item.steerFallback.steerFailed": "Yönlendirme başarısız oldu, bu yüzden mesaj kuyrukta bekler.",
+  "queue.item.heldNote": "Sonraki turu bekliyor",
+  "queue.item.heldNoteReason": "Bir ekip arkadaşından bilgi. Tur başlatmaz: ajan bunu bir sonraki mesajla okur.",
   "queue.item.runAsTask": "Görev olarak çalıştır",
   "queue.item.runAsTaskLabel": "Kuyruktaki {position}. mesajı görev olarak çalıştır",
   "queue.item.deleteLabel": "Kuyruktaki mesajı sil {position}",

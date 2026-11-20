@@ -93,6 +93,7 @@ export const messages = defineMessages("error.team", {
   "error.team.routineResultsUnsupported": "Routine destinations are not supported by this connection.",
   "error.team.agentMemoryLimitUnsupported": "The agent memory limit is not supported by this connection.",
   "error.team.promptCacheTtlUnsupported": "The prompt cache time is not supported by this connection.",
+  "error.team.claudeContextUnsupported": "The Claude context settings are not supported by this connection.",
   "error.team.workspaceUnsupported": "Workspace channels are not supported by this connection.",
   "error.team.workspaceThumbnailNotFound": "The image of this artifact is not available.",
   "error.team.agentAccessUnsupported": "Roles are not supported by this connection.",

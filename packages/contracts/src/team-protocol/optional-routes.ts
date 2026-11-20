@@ -22,6 +22,7 @@ import { BROWSER_PAGE_STATE_CODECS } from "./browser-page-state-v1";
 import { BROWSER_PROFILES_CODECS } from "./browser-profiles-v1";
 import { BROWSER_SIGN_IN_CODECS } from "./browser-sign-in-v1";
 import { BROWSER_USER_CONTROL_CODECS } from "./browser-user-control-v1";
+import { CLAUDE_CONTEXT_CODECS } from "./claude-context-v1";
 import { CONNECTORS_CODECS } from "./connectors-v1";
 import { CONTEXT_RESET_CODECS } from "./context-reset-v1";
 import { CONVERSATION_FILE_SEARCH_CODECS } from "./conversation-file-search-v1";
@@ -109,6 +110,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...HOST_TIMEZONE_CODECS,
   ...AGENT_MEMORY_LIMIT_CODECS,
   ...PROMPT_CACHE_TTL_CODECS,
+  ...CLAUDE_CONTEXT_CODECS,
   ...DISCORD_ACCESS_CODECS,
   ...DISCORD_CHANNELS_CODECS,
   ...HOST_RELEASE_CODECS,

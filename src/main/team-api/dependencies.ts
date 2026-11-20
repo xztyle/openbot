@@ -12,6 +12,7 @@ import type { AgentMemoryLimitSetting } from "../agent-memory-limit-preference-s
 import type { AgentTemplateService } from "../agent-template-service";
 import type { BrowserProfileService } from "../browser-profile-service";
 import type { ChatMcpService } from "../chat-mcp-service";
+import type { ClaudeContextPreferenceStore } from "../claude-context-preference-store";
 import type { PeerCustomProviderChanges } from "../custom-provider-changes";
 import type { HostEventsApi } from "../host-events-api";
 import type { HostEventsService } from "../host-events-service";
@@ -375,6 +376,8 @@ export interface TeamApiAdmin {
   memoryLimit?: AgentMemoryLimitSetting;
   /** `prompt-cache-ttl-v1`: how long the provider keeps the prompt cache of this computer's agents. */
   promptCacheTtl?: Pick<PromptCacheTtlPreferenceStore, "get" | "set">;
+  /** `claude-context-v1`: the user's Claude Code setup and the compaction size of this computer's Claude agents. */
+  claudeContext?: Pick<ClaudeContextPreferenceStore, "get" | "set">;
   /** workspace-v1 (`fork-host-v1`): the workspace settings of this server. */
   workspaceSettings?: WorkspaceSettingsStore;
   /** `routine-results-v1`: the place where an agent routine sends its answers. */

@@ -234,6 +234,7 @@ import type {
   WorkspaceDmAgents,
 } from "./ipc-chat-channels";
 import type { WorkspaceSettings } from "./ipc-chat-workspace";
+import type { ClaudeContextSetting } from "./ipc-claude-context";
 import type {
   CancelMessageLinkInput,
   ConversationFileSearchPage,
@@ -1163,6 +1164,11 @@ export const IPC_ENDPOINTS = {
     getPromptCacheTtl: scopedQuery<PromptCacheTtlSetting, "required">()("host-admin:get-prompt-cache-ttl"),
     setPromptCacheTtl: scopedRequest<PromptCacheTtl, PromptCacheTtlSetting, "required">()(
       "host-admin:set-prompt-cache-ttl",
+    ),
+    // What the server's Claude agents load into each request: the user's setup and the compaction size.
+    getClaudeContext: scopedQuery<ClaudeContextSetting, "required">()("host-admin:get-claude-context"),
+    setClaudeContext: scopedRequest<ClaudeContextSetting, ClaudeContextSetting, "required">()(
+      "host-admin:set-claude-context",
     ),
     // The workspace settings of the server: the answer gate model and the default answer mode.
     getWorkspaceSettings: scopedQuery<WorkspaceSettings, "required">()("host-admin:get-workspace-settings"),

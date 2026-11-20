@@ -91,6 +91,7 @@ export const messages = {
   "error.team.routineResultsUnsupported": "Esta conexión no admite destinos de rutinas.",
   "error.team.agentMemoryLimitUnsupported": "Esta conexión no admite el límite de recuerdos de los agentes.",
   "error.team.promptCacheTtlUnsupported": "Esta conexión no admite la duración de la caché de prompts.",
+  "error.team.claudeContextUnsupported": "Esta conexión no admite los ajustes de contexto de Claude.",
   "error.team.workspaceUnsupported": "Esta conexión no admite los canales del espacio de trabajo.",
   "error.team.workspaceThumbnailNotFound": "La imagen de este artefacto no está disponible.",
   "error.team.attachmentNameRequired": "Se requiere un nombre seguro para el archivo adjunto.",

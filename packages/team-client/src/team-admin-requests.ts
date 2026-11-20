@@ -25,6 +25,7 @@ import { AGENT_ACCESS_ROUTES } from "@openbot/contracts/team-protocol/agent-acce
 import { AGENT_HIDDEN_ROUTES } from "@openbot/contracts/team-protocol/agent-hidden-v1";
 import { AGENT_MEMORY_LIMIT_ROUTES } from "@openbot/contracts/team-protocol/agent-memory-limit-v1";
 import { AGENT_SESSION_SETTINGS_ROUTES } from "@openbot/contracts/team-protocol/agent-session-settings-v1";
+import { CLAUDE_CONTEXT_ROUTES } from "@openbot/contracts/team-protocol/claude-context-v1";
 import { DISCORD_ACCESS_ROUTES } from "@openbot/contracts/team-protocol/discord-access-v1";
 import { DISCORD_CHANNELS_ROUTES } from "@openbot/contracts/team-protocol/discord-channels-v1";
 import { HOST_MEMBER_UPDATE_ROUTES } from "@openbot/contracts/team-protocol/host-member-update-v1";
@@ -55,6 +56,7 @@ import {
   type BitwardenConnectorStatus,
   type BitwardenHostConnectInput,
   type CancelMcpSignInInput,
+  type ClaudeContextSetting,
   type ClearStorageInput,
   type ConnectProviderAccountInput,
   type CustomProviderResult,
@@ -62,6 +64,7 @@ import {
   type DeleteCustomProviderInput,
   type DeleteStoredFileInput,
   decodeAgentAdminSettings,
+  decodeClaudeContextSetting,
   decodeCustomProviderResult,
   decodeCustomProviderSummaries,
   decodeHostAddedAgent,
@@ -609,6 +612,24 @@ export function setHostPromptCacheTtl(
   ttl: PromptCacheTtl,
 ): Effect.Effect<PromptCacheTtlSetting, TeamAdminRequestError> {
   return adminCall(() => request("POST", PROMPT_CACHE_TTL_ROUTES.update, decodePromptCacheTtlSetting, { ttl }));
+}
+
+export function getHostClaudeContext(
+  request: TeamApiRequest,
+): Effect.Effect<ClaudeContextSetting, TeamAdminRequestError> {
+  return adminCall(() => request("POST", CLAUDE_CONTEXT_ROUTES.settings, decodeClaudeContextSetting, {}));
+}
+
+export function setHostClaudeContext(
+  request: TeamApiRequest,
+  setting: ClaudeContextSetting,
+): Effect.Effect<ClaudeContextSetting, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", CLAUDE_CONTEXT_ROUTES.update, decodeClaudeContextSetting, {
+      userSetup: setting.userSetup,
+      compactWindow: setting.compactWindow,
+    }),
+  );
 }
 
 /** The one MCP read route, and the only one the host answers to a GET. */

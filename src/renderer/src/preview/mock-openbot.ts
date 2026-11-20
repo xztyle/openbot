@@ -45,6 +45,7 @@ import {
   type BrowserProfileSummary,
   type BusyMessageModePreference,
   type CentralAuthState,
+  type ClaudeContextSetting,
   type ClientAgentModelOption,
   type ClientAgentSummary,
   CONTEXT_RESET_ITEM_TYPE,
@@ -67,6 +68,7 @@ import {
   DEFAULT_APP_LOGO_COLOR,
   DEFAULT_APPROVAL_AUTOMATION_PREFERENCE,
   DEFAULT_BUSY_MESSAGE_MODE,
+  DEFAULT_CLAUDE_CONTEXT,
   DEFAULT_DYNAMIC_ISLAND_PREFERENCE,
   DEFAULT_EXTERNAL_LINK_PREFERENCE,
   DEFAULT_PROMPT_CACHE_TTL,
@@ -81,6 +83,7 @@ import {
   type DirectTypingRealtimeEvent,
   type DynamicIslandPreference,
   type DynamicIslandPresentation,
+  decodeClaudeContextSetting,
   decodeWorkspaceSettings,
   defaultProviderModel,
   type ExternalLinkBrowsers,
@@ -428,6 +431,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
   let agentMemoryLimit: AgentMemoryLimitPreference = { limit: DEFAULT_AGENT_MEMORY_LIMIT };
   let agentCreationLimit: AgentCreationLimitPreference = { limit: DEFAULT_AGENT_CREATION_LIMIT };
   let promptCacheTtl: PromptCacheTtlSetting = { ...DEFAULT_PROMPT_CACHE_TTL };
+  let claudeContext: ClaudeContextSetting = { ...DEFAULT_CLAUDE_CONTEXT };
   let workspaceSettings: WorkspaceSettings = clone(DEFAULT_WORKSPACE_SETTINGS);
   let agentAccess: AgentAccessChange = { revision: 0, everyone: {}, roles: [] };
   const agentMemoryLimitListeners = new Set<(preference: AgentMemoryLimitPreference) => void>();
@@ -3066,6 +3070,11 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         if (!isPromptCacheTtl(ttl)) throw new Error("Prompt cache time is required.");
         promptCacheTtl = { ttl };
         return clone(promptCacheTtl);
+      },
+      getClaudeContext: async () => clone(claudeContext),
+      setClaudeContext: async (setting) => {
+        claudeContext = decodeClaudeContextSetting(setting);
+        return clone(claudeContext);
       },
       getWorkspaceSettings: async () => clone(workspaceSettings),
       setWorkspaceSettings: async (settings) => {

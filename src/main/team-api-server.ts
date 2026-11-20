@@ -45,6 +45,7 @@ import { BROWSER_PAGE_STATE_CAPABILITY } from "@openbot/contracts/team-protocol/
 import { BROWSER_PROFILES_CAPABILITY } from "@openbot/contracts/team-protocol/browser-profiles-v1";
 import { BROWSER_USER_CONTROL_CAPABILITY } from "@openbot/contracts/team-protocol/browser-user-control-v1";
 import { CLAUDE_API_KEY_CAPABILITY } from "@openbot/contracts/team-protocol/claude-api-key-v1";
+import { CLAUDE_CONTEXT_CAPABILITY } from "@openbot/contracts/team-protocol/claude-context-v1";
 import {
   AGENT_ADMIN_CAPABILITY,
   AGENT_HOST_SETTINGS_CAPABILITY,
@@ -209,6 +210,7 @@ import { routeBitwardenConnector } from "./team-api/route-bitwarden-connector";
 import { routeBrowser } from "./team-api/route-browser";
 import { routeBrowserProfiles } from "./team-api/route-browser-profiles";
 import { routeChannels } from "./team-api/route-channels";
+import { routeClaudeContext } from "./team-api/route-claude-context";
 import { routeConnectors } from "./team-api/route-connectors";
 import { routeContextReset } from "./team-api/route-context-reset";
 import { routeConversationFiles } from "./team-api/route-conversation-files";
@@ -995,6 +997,7 @@ export class TeamApiServer {
       if ((await routeHostTimezone(context, this.#options.admin)) === "handled") return;
       if ((await routeAgentMemoryLimit(context, this.#options.admin)) === "handled") return;
       if ((await routePromptCacheTtl(context, this.#options.admin)) === "handled") return;
+      if ((await routeClaudeContext(context, this.#options.admin)) === "handled") return;
       if (
         (await routeAgentAccess(
           context,
@@ -2155,6 +2158,7 @@ export class TeamApiServer {
         if (capability === HOST_TIMEZONE_CAPABILITY) return this.#options.admin?.timezone !== undefined;
         if (capability === AGENT_MEMORY_LIMIT_CAPABILITY) return this.#options.admin?.memoryLimit !== undefined;
         if (capability === PROMPT_CACHE_TTL_CAPABILITY) return this.#options.admin?.promptCacheTtl !== undefined;
+        if (capability === CLAUDE_CONTEXT_CAPABILITY) return this.#options.admin?.claudeContext !== undefined;
         if (capability === AGENT_ACCESS_CAPABILITY) return this.#options.agentAccess !== undefined;
         if (capability === HOST_UPDATE_CAPABILITY || capability === HOST_MEMBER_UPDATE_CAPABILITY)
           return this.#options.admin?.update !== undefined;

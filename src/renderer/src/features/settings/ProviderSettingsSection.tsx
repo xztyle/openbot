@@ -44,6 +44,7 @@ import {
   type ProviderKeyApi,
 } from "@openbot/ui/features/settings/OpenCodeKeyDialog";
 import {
+  type ProviderClaudeContext,
   type ProviderDefaultChoice,
   type ProviderPromptCache,
   type ProviderSettingsDetail,
@@ -56,6 +57,7 @@ import { ProviderSignInDialogs } from "../../components/ProviderSignInDialogs";
 import type { ProviderConnectionApi } from "../../components/provider-connection-api";
 import { createCustomProviderHostState } from "../custom-providers/custom-provider-host-state";
 import { savedCustomModel } from "../onboarding/SetupProviderPicker";
+import { createProviderClaudeContext } from "./provider-claude-context";
 import { createProviderPromptCache, type ProviderPromptCacheSource } from "./provider-prompt-cache";
 import { createSettingsGeneralStore, type SettingsGeneralStore } from "./stores/general-store";
 
@@ -105,6 +107,7 @@ interface ProviderSettingsSectionProps {
   usage?: readonly AccountUsageProviderRow[] | undefined;
   onDetailChange?: ((detail: ProviderSettingsDetail | null) => void) | undefined;
   promptCache?: ProviderPromptCache | undefined;
+  claudeContext?: ProviderClaudeContext | undefined;
 }
 
 /** The provider list of the computer the agents run on, with its custom endpoint dialogs. */
@@ -257,6 +260,7 @@ function ProviderSettingsSection(props: ProviderSettingsSectionProps) {
         menuMount={props.selectMount}
         onDetailChange={props.onDetailChange}
         promptCache={props.promptCache}
+        claudeContext={props.claudeContext}
         footer={
           <>
             <Show when={props.providerDetection}>
@@ -492,9 +496,12 @@ export function HostProviderSettingsPanel(
     onDetailChange?: ((detail: ProviderSettingsDetail | null) => void) | undefined;
     /** The Claude page's prompt cache time, for a host with `prompt-cache-ttl-v1` that this account administers. */
     promptCache?: ProviderPromptCacheSource | undefined;
+    /** The Claude page's context settings, for a host with `claude-context-v1` that this account administers. */
+    claudeContext?: ProviderPromptCacheSource | undefined;
   },
 ) {
   const promptCache = createProviderPromptCache(() => props.promptCache);
+  const claudeContext = createProviderClaudeContext(() => props.claudeContext);
   const keys = createProviderKeyState({
     open: true,
     get providerKeys() {
@@ -556,6 +563,7 @@ export function HostProviderSettingsPanel(
         usage={props.usage}
         onDetailChange={props.onDetailChange}
         promptCache={promptCache()}
+        claudeContext={claudeContext()}
         detectionSettings={
           <Show when={props.detectionSettings}>
             {(value) => (

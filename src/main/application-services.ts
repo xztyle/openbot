@@ -171,6 +171,7 @@ import { BrowserViewClient } from "./browser-view-client";
 import { BusyMessageModePreferenceStore } from "./busy-message-mode-preference-store";
 import { CentralAuthManager, readCentralAuthApiUrl, readMobileConnectApiUrl } from "./central-auth-manager";
 import { ChatVisualPreviewer } from "./chat-visual-preview";
+import { ClaudeContextPreferenceStore } from "./claude-context-preference-store";
 import { ComputerUseHighlightController } from "./computer-use-highlight-window";
 import { applicationBundlePath, applicationIconName } from "./computer-use-permission-app";
 import { ComputerUsePermissionHelpWindowController } from "./computer-use-permission-help-window";
@@ -379,6 +380,7 @@ const AGENT_MEMORY_LIMIT_PREFERENCE_FILE = "openbot-agent-memory-limit-v1.json";
 const AGENT_CREATION_LIMIT_PREFERENCE_FILE = "openbot-agent-creation-limit-v1.json";
 const SERVER_TIMEZONE_PREFERENCE_FILE = "openbot-server-timezone-v1.json";
 const PROMPT_CACHE_TTL_PREFERENCE_FILE = "openbot-prompt-cache-ttl-v1.json";
+const CLAUDE_CONTEXT_PREFERENCE_FILE = "openbot-claude-context-v1.json";
 const WORKSPACE_SETTINGS_FILE = "openbot-workspace-v1.json";
 /** The sidebar order and mutes of each member. Only this host reads it. */
 const WORKSPACE_SIDEBAR_FILE = "openbot-workspace-sidebar-v1.json";
@@ -607,6 +609,7 @@ export interface ApplicationServices {
   agentAccess: AgentAccessStore;
   serverTimezone: ServerTimezonePreferenceStore;
   promptCacheTtl: PromptCacheTtlPreferenceStore;
+  claudeContext: ClaudeContextPreferenceStore;
   workspaceSettings: WorkspaceSettingsStore;
   workspaceSidebar: WorkspaceSidebarStore;
   agentCreationLimit: AgentCreationLimitPreferenceStore;
@@ -1214,6 +1217,8 @@ export async function createApplicationServices({
     join(app.getPath("userData"), PROMPT_CACHE_TTL_PREFERENCE_FILE),
   );
   await runCauseEffect(promptCacheTtl.load());
+  const claudeContext = new ClaudeContextPreferenceStore(join(app.getPath("userData"), CLAUDE_CONTEXT_PREFERENCE_FILE));
+  await runCauseEffect(claudeContext.load());
   const workspaceSettings = createWorkspaceSettingsStore(join(app.getPath("userData"), WORKSPACE_SETTINGS_FILE));
   await runCauseEffect(workspaceSettings.load());
   const workspaceSidebar = new WorkspaceSidebarStore(join(app.getPath("userData"), WORKSPACE_SIDEBAR_FILE));
@@ -1800,6 +1805,8 @@ export async function createApplicationServices({
       apiKey: (provider) => providerCredentials.get(provider),
       // Read at each Claude spawn, so a change from Server settings applies to the next process.
       promptCacheTtl: () => promptCacheTtl.get().ttl,
+      claudeUserSetup: () => claudeContext.get().userSetup,
+      claudeCompactWindow: () => claudeContext.get().compactWindow,
       // `configs()`, not `list()`: this is the one path the API keys travel, and it ends at the
       // spawned provider process. The IPC handlers are given `list()`.
       customProviders: () => customProviders.configs(),
@@ -2545,6 +2552,7 @@ export async function createApplicationServices({
       timezone: serverTimezone,
       memoryLimit: agentMemoryLimitSetting,
       promptCacheTtl,
+      claudeContext,
       workspaceSettings,
       routineResults: routineResultRuntime,
     },
@@ -3284,6 +3292,7 @@ export async function createApplicationServices({
     agentAccess,
     serverTimezone,
     promptCacheTtl,
+    claudeContext,
     workspaceSettings,
     workspaceSidebar,
     agentCreationLimit,

@@ -59,6 +59,7 @@ import {
   getAgentAdminSettings,
   getHostAgentAccess,
   getHostAgentMemoryLimit,
+  getHostClaudeContext,
   getHostPromptCacheTtl,
   getHostReleaseStatus,
   getHostTimezone,
@@ -67,6 +68,7 @@ import {
   listHostedSites,
   setHostAgentAccess,
   setHostAgentMemoryLimit,
+  setHostClaudeContext,
   setHostPromptCacheTtl,
   setHostTimezone,
   setHostUpdateSettings,
@@ -1307,6 +1309,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       runTeamEffect(getHostPromptCacheTtl(hostRequest(serverId)).pipe(Effect.mapError((error) => error.cause))),
     setPromptCacheTtl: async (ttl, serverId) =>
       runTeamEffect(setHostPromptCacheTtl(hostRequest(serverId), ttl).pipe(Effect.mapError((error) => error.cause))),
+    getClaudeContext: async (serverId) =>
+      runTeamEffect(getHostClaudeContext(hostRequest(serverId)).pipe(Effect.mapError((error) => error.cause))),
+    setClaudeContext: async (setting, serverId) =>
+      runTeamEffect(setHostClaudeContext(hostRequest(serverId), setting).pipe(Effect.mapError((error) => error.cause))),
   };
   const hostAgentAccessCalls: HostAgentAccessCalls = {
     getAgentAccess: async (serverId) =>

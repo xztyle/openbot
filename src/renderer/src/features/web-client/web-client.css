@@ -103,6 +103,29 @@ body {
    * Dialogs, sheets and toasts render outside the app. While the keyboard is open, they also take
    * the visible part: a sheet sits on the keyboard, and the field of a dialog stays in view.
    */
+  /* An empty box is one line high, and grows with the draft. */
+  .web-app :is(.composer-input-label, .composer-editor-root, .composer-editor-surface) {
+    min-height: 34px;
+  }
+
+  .web-app .ws-composer-attachments:not(:has(*)) {
+    display: none;
+  }
+
+  /*
+   * The buttons of the box and the saved replies over it are as large as a finger, as in Slack's
+   * app. Their icons keep their size.
+   */
+  .web-app :is(.composer-toolbar, .ws-composer-footer) :is(.ui-button, .composer-button) {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .web-app .saved-replies .ui-button {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
   html[data-web-keyboard] .ui-dialog-overlay {
     top: var(--web-viewport-top, 0px);
     bottom: auto;

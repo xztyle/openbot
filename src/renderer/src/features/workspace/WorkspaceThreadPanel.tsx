@@ -258,7 +258,8 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
             placeholder={t("workspace.app.composer.reply")}
             label={t("workspace.app.composer.replyLabel", { name: name() })}
             alsoSendTo={isChannel() ? name() : undefined}
-            focusRequest={1}
+            // A phone opens the keyboard only on a tap in the box, as Slack's app does.
+            focusRequest={ws.env.phone() ? 0 : 1}
             disabled={!ws.env.connectionReady() || archived()}
           />
         }

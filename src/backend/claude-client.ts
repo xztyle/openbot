@@ -239,6 +239,8 @@ export interface ClaudeAgentQueryConfig {
   ownSkills?: ReadonlySet<string>;
   /** Whether the user's settings already choose a commit attribution: then OpenBot leaves it. */
   ownAttribution?: boolean;
+  /** The Claude config folder of the agent's account, which holds the user-level CLAUDE.md. */
+  configDirectory?: string;
 }
 
 /**
@@ -258,6 +260,11 @@ export function claudeAgentQueryOptions(config: ClaudeAgentQueryConfig) {
     ...(config.ownAttribution ? {} : { attribution: { commit: "", pr: "" } }),
     disableRemoteControl: true,
     skillOverrides: Object.fromEntries(overrides.filter(([skill]) => !ownSkills.has(skill))),
+    // Without the user's setup, a workspace under the home folder still loaded `~/.claude/CLAUDE.md` and
+    // its rules as project files, on each turn.
+    ...(config.userSetup || config.workspaceOnly
+      ? {}
+      : { claudeMdExcludes: claudeHomeMemoryFiles(config.configDirectory) }),
   };
   return {
     // A call without tools, such as a title, a channel summary, a routing turn or a side question, gets
@@ -1021,6 +1028,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       userSetup,
       ownSkills,
       ownAttribution: ownSettings.some((file) => "attribution" in file || "includeCoAuthoredBy" in file),
+      configDirectory,
     });
     const skillPlugin =
       config.workspaceOnly && stateDirectory ? yield* claudeWorkspaceSkillPlugin(stateDirectory, config.cwd) : null;
@@ -2190,6 +2198,12 @@ const NPM_WRAPPER_TARGET = /"%dp0%\\([^"%]+\.(?:exe|js))"\s+%\*/i;
  * `cmd.exe` limits the length or the quoting of the arguments. Another wrapper starts through
  * `cmd.exe`, as `cliSpawnTarget` says.
  */
+/** The user-level memory files of Claude Code, its CLAUDE.md and rules, in the config folder and in `~/.claude`. */
+function claudeHomeMemoryFiles(configDirectory: string | undefined): string[] {
+  const folders = new Set([configDirectory ?? join(homedir(), ".claude"), join(homedir(), ".claude")]);
+  return [...folders].flatMap((folder) => [join(folder, "CLAUDE.md"), join(folder, "rules", "**")]);
+}
+
 /** A Claude settings file as a record; a missing or broken file reads as empty. */
 const readClaudeSettingsFile = Effect.fn("ClaudeAgentClient.readSettingsFile")(function* (path: string) {
   const text = yield* Effect.tryPromise(() => readFile(path, "utf8")).pipe(Effect.orElseSucceed(() => ""));

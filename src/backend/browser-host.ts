@@ -294,7 +294,8 @@ export interface PreparedBrowserSecret {
    * chose for something else, such as a search box, could put the value in a URL the agent reads.
    */
   vaultFillable: boolean;
-  submit(secret: string): Effect.Effect<"submitted" | "takeover", BrowserOperationError>;
+  /** `saved`: OpenBot filled a saved value (Vault login or Secrets key), not the user's card. */
+  submit(secret: string, saved?: boolean): Effect.Effect<"submitted" | "takeover", BrowserOperationError>;
   cancel(): void;
 }
 
@@ -1375,13 +1376,16 @@ export class BrowserHost {
             this.#emitChanged();
           }
         },
-        submit: (secret: string) =>
+        submit: (secret: string, saved = false) =>
           Effect.gen({ self: this }, function* (): Effect.fn.Return<"submitted" | "takeover", BrowserOperationError> {
             if (tab.secret !== protection || protection.submitted)
               return yield* browserFailure(new Error(sourceText("error.backend.authExpired")));
             // A connected page can navigate to the secret's site while the card is open.
             yield* browserSync(() => this.#requireIsolatedFromConnectedTabs(tab, url.origin));
-            if (args.method !== "password" && !new RegExp(`^[0-9]{${args.digits}}$`, "u").test(secret))
+            // A saved authenticator code has the length of its key, which a page often does not state.
+            // One field takes the whole code; digit fields keep their count.
+            const length = saved && args.method === "authenticator" && args.targets.length === 1 ? "4,12" : args.digits;
+            if (args.method !== "password" && !new RegExp(`^[0-9]{${length}}$`, "u").test(secret))
               return yield* browserFailure(new Error(sourceText("error.backend.authDigitsRequired")));
             protection.submitted = true;
             this.#invalidateViews(tab);

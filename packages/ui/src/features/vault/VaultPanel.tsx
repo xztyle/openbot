@@ -12,6 +12,7 @@ import type {
   VaultState,
 } from "@openbot/contracts/ipc";
 import { cardBrand, VAULT_NOTES_LIMIT, VAULT_PASSWORD_LIMIT, VAULT_TEXT_LIMIT } from "@openbot/contracts/ipc";
+import { TWO_STEP_KEY_LIMIT } from "@openbot/contracts/two-step-code";
 import type { AppTextKey } from "@openbot/i18n";
 import {
   Alert,
@@ -156,7 +157,17 @@ function parseExpiry(text: string): { month: number; year: number } | null {
   return month >= 1 && month <= 12 ? { month, year } : null;
 }
 
-type LoginDraft = { kind: "login"; website: string; username: string; notes: string; password: string };
+type LoginDraft = {
+  kind: "login";
+  website: string;
+  username: string;
+  notes: string;
+  password: string;
+  /** A new two-step setup key. Empty keeps the saved one. */
+  twoStepKey: string;
+  /** The user removed the saved two-step key. */
+  removeTwoStepKey: boolean;
+};
 type CardDraft = {
   kind: "card";
   label: string;
@@ -188,8 +199,16 @@ const EMPTY_CONTACT: VaultContactFields = {
 function draftOf(kind: VaultItemKind, item: VaultItemSummary | null): Draft {
   if (kind === "login")
     return item?.kind === "login"
-      ? { kind, website: item.website, username: item.username, notes: item.notes, password: "" }
-      : { kind, website: "", username: "", notes: "", password: "" };
+      ? {
+          kind,
+          website: item.website,
+          username: item.username,
+          notes: item.notes,
+          password: "",
+          twoStepKey: "",
+          removeTwoStepKey: false,
+        }
+      : { kind, website: "", username: "", notes: "", password: "", twoStepKey: "", removeTwoStepKey: false };
   if (kind === "card")
     return item?.kind === "card"
       ? {
@@ -243,6 +262,12 @@ function saveInput(draft: Draft, id: string | null): VaultSaveInput {
       username: draft.username.trim(),
       notes: draft.notes,
       password: draft.password === "" ? null : draft.password,
+      // Omitted keeps the saved key, and "" removes it.
+      ...(draft.removeTwoStepKey
+        ? { twoStepKey: "" }
+        : draft.twoStepKey.trim()
+          ? { twoStepKey: draft.twoStepKey.trim() }
+          : {}),
     };
   if (draft.kind === "card") {
     const expiry = parseExpiry(draft.expiry) ?? { month: 0, year: 0 };
@@ -941,6 +966,7 @@ function ItemDialog(props: {
     if (field === "password") return item?.kind === "login" && item.hasPassword;
     return item?.kind === "card";
   };
+  const savedTwoStepKey = () => props.item?.kind === "login" && props.item.hasTwoStepKey === true;
   const secretProps = (field: VaultSecretField) => ({
     field,
     saved: saved(field),
@@ -994,6 +1020,32 @@ function ItemDialog(props: {
                 value={login().password}
                 onChange={(password) => set(login(), { password })}
               />
+            </Field>
+            <Field label={t("vault.field.twoStepKey")} description={t("vault.twoStepKeyHint")} class="vault-wide">
+              <div class="vault-secret">
+                <Input
+                  type="password"
+                  autocomplete="off"
+                  spellcheck={false}
+                  maxlength={TWO_STEP_KEY_LIMIT}
+                  placeholder={
+                    savedTwoStepKey() && !login().removeTwoStepKey
+                      ? t("vault.placeholder.saved")
+                      : t("vault.placeholder.twoStepKey")
+                  }
+                  value={login().twoStepKey}
+                  onValueChange={(twoStepKey) => set(login(), { twoStepKey })}
+                />
+                <Show when={savedTwoStepKey() && !login().removeTwoStepKey}>
+                  <IconButton
+                    label={t("vault.removeTwoStepKey")}
+                    variant="ghost"
+                    onClick={() => set(login(), { twoStepKey: "", removeTwoStepKey: true })}
+                  >
+                    <Trash2 />
+                  </IconButton>
+                </Show>
+              </div>
             </Field>
             <Field label={t("vault.field.notes")} class="vault-wide">
               <Textarea

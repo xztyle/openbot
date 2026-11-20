@@ -59,6 +59,7 @@ function vaultItem(item: DynamicRecord): VaultItemSummary {
         username: requiredString(item, "username"),
         notes: requiredString(item, "notes"),
         hasPassword: requiredBoolean(item, "hasPassword"),
+        ...(item.hasTwoStepKey === true ? { hasTwoStepKey: true } : {}),
       };
     case "card": {
       const brand = item.brand;

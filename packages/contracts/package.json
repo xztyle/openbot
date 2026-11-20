@@ -40,6 +40,7 @@
     "./selection-instruction": "./src/selection-instruction.ts",
     "./agent-memory-context": "./src/agent-memory-context.ts",
     "./ipc": "./src/ipc.ts",
+    "./two-step-code": "./src/two-step-code.ts",
     "./mcp-connect-flows": "./src/mcp-connect-flows.ts",
     "./ipc-events": "./src/ipc-events.ts",
     "./ipc-skills": "./src/ipc-skills.ts",

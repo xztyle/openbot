@@ -31,6 +31,8 @@ export interface VaultLoginSummary extends VaultItemOrigin {
   username: string;
   notes: string;
   hasPassword: boolean;
+  /** Whether the login keeps a two-step (TOTP) setup key. Absent from a server that keeps none. */
+  hasTwoStepKey?: boolean;
 }
 
 export interface VaultCardSummary extends VaultItemOrigin {
@@ -91,6 +93,8 @@ export type VaultSaveInput =
       username: string;
       notes: string;
       password: string | null;
+      /** A TOTP setup key or `otpauth://totp/` link. Omitted keeps the saved key, and "" removes it. */
+      twoStepKey?: string | undefined;
     }
   | {
       kind: "card";

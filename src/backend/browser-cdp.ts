@@ -283,8 +283,14 @@ export class BrowserCdpEngine {
       /**
        * Which secret the fields are built for, so a fill that no user approves goes only there: every
        * field is a password field, or every field asks for a one-time code, and no native submission of
-       * them or of the submit button is GET, which would put the value in a URL. The fingerprint check
-       * of `enter` keeps this true until the fill.
+       * them or of the submit button is GET. A code field has `autocomplete="one-time-code"`, or is a
+       * text, tel or number input with a code word (otp, totp, authentication code, verification code)
+       * in its id, name, aria-label, placeholder, title or label, as older Keycloak, Okta and other
+       * sign-in pages have; a field named only "code" or "passcode" counts when the visible text of its
+       * form names an authenticator app and no email or SMS. A name with backup, recovery, mail, phone,
+       * sms, or a promo, address or card word is not one (upstream 49ba8db56, 569260c9b). A GET
+       * submission would put the value in a URL. The fingerprint check of `enter` keeps this true until
+       * the fill; the label text is read here only.
        */
       fields: { password: boolean; oneTimeCode: boolean };
     },
@@ -338,7 +344,13 @@ export class BrowserCdpEngine {
               const form = this.form;
               const overrides = (element) => element.hasAttribute('formmethod') && element.getAttribute('formmethod').trim().toLowerCase() !== 'post';
               const posts = !form || (form.method === 'post' && ![...form.elements].some(overrides));
-              return { password: this.type === 'password', oneTimeCode: (this.getAttribute('autocomplete') ?? '').toLowerCase().split(/\\s+/).includes('one-time-code'), posts };
+              const words = (text) => text.replace(/([a-z])([A-Z0-9])/g, '$1 $2').toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+              const labelledBy = (this.getAttribute('aria-labelledby') ?? '').split(/\\s+/).map((id) => (id && this.getRootNode().getElementById?.(id)?.textContent) || '');
+              const named = words([this.id, this.name, this.getAttribute('aria-label') ?? '', this.getAttribute('placeholder') ?? '', this.title, ...[...(this.labels ?? [])].map((label) => label.textContent ?? ''), ...labelledBy].join(' '));
+              const codeWord = /totp|\\b(?:otp|2fa|mfa)+(?:code|token|pin)?\\b|\\bauthenticator\\b|\\bauthentication ?(?:app|code)\\b|\\bone ?time ?(?:code|password|passcode|pin)\\b|\\bverification ?code\\b|\\btwo ?(?:factor|step)\\b|\\bmulti ?factor\\b/;
+              const authenticatorForm = () => { const text = words(this.form?.innerText ?? ''); return /\\bauthenticator\\b|\\bauthentication ?app\\b|\\btotp\\b/.test(text) && !/\\be ?mail(?:ed)?\\b|\\bsms\\b|\\btext (?:message|messaged)\\b|\\btexted\\b/.test(text); };
+              const oneTimeCode = (this.getAttribute('autocomplete') ?? '').toLowerCase().split(/\\s+/).includes('one-time-code') || (['text', 'tel', 'number'].includes(this.type) && (codeWord.test(named) || (/\\b(?:pass)?code\\b/.test(named) && authenticatorForm())) && !/backup|recovery|mail|phone|sms|name|label|promo|coupon|voucher|discount|gift|invite|referral|zip|postal|country|card|cvc|cvv|csc/.test(named));
+              return { password: this.type === 'password', oneTimeCode, posts };
             }`,
             [],
           );

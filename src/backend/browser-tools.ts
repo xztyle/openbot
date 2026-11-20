@@ -168,14 +168,14 @@ const BROWSER_TOOL_DEFINITIONS = [
       loginId: identifier
         .optional()
         .describe(
-          "For password or authenticator: the id of a saved login from list_logins. OpenBot fills its password or current code without asking the user.",
+          "For password or authenticator: the id of a saved login from list_logins. OpenBot fills its password or current code without asking the user. With it and one code field, omit digits: the saved code sets the length.",
         ),
       secretKey: z
         .string()
         .regex(API_KEY_NAME_PATTERN)
         .optional()
         .describe(
-          "For password, instead of loginId: the name of a saved key from openbot.list_api_keys, such as SITE_PASSWORD. OpenBot fills its value; you never see it. The first fill of a key on a site waits for the owner's approval.",
+          "For password or authenticator, instead of loginId: the name of a saved key from openbot.list_api_keys, such as SITE_PASSWORD, or for authenticator a two-step setup key such as SITE_TOTP. OpenBot fills the password or the current code; you never see it. The first fill of a key on a site waits for the owner's approval.",
         ),
       username: z
         .string()
@@ -195,7 +195,7 @@ const BROWSER_TOOL_DEFINITIONS = [
   browserTool({
     name: "list_vault_items",
     description:
-      "List what the user saved in the OpenBot Vault. A login shows id, website and username; its password and notes are never returned, so sign in with list_logins and submit_secret. A card shows id, label, nameOnCard, brand, last4, expiry and hasSecurityCode; its number and security code are never returned, so fill card fields with fill_card. A contact shows every field: type them with fill_fields, type, or select_option. addedBy names the agent that added an item; it is absent when the user added it.",
+      "List what the user saved in the OpenBot Vault. A login shows id, website, username and hasTwoStepKey; its password, two-step key and notes are never returned, so sign in with list_logins and submit_secret. A card shows id, label, nameOnCard, brand, last4, expiry and hasSecurityCode; its number and security code are never returned, so fill card fields with fill_card. A contact shows every field: type them with fill_fields, type, or select_option. addedBy names the agent that added an item; it is absent when the user added it.",
     shape: {},
   }),
   browserTool({

@@ -22,6 +22,7 @@ import {
   BROWSER_TAKEOVER_REASONS,
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isOneOf } from "@openbot/contracts/runtime-values";
+import { parseTwoStepKey, twoStepCode } from "@openbot/contracts/two-step-code";
 import {
   type ConversationUiBlock,
   normalizeConversationUiBlock,
@@ -945,7 +946,7 @@ export class AttentionRegistry {
       secret.cancel();
     } else {
       pending.submitting = true;
-      const outcome = yield* secret.submit(input.secret).pipe(
+      const outcome = yield* secret.submit(input.secret, Boolean(pending.vaultLoginId || pending.filledSecretKey)).pipe(
         Effect.catch(() => Effect.succeed("takeover")),
         Effect.ensuring(
           Effect.sync(() => {
@@ -2031,17 +2032,22 @@ export class AttentionRegistry {
    * exists, as from `list_api_keys`, never its value.
    */
   #secretKeyRefusal(args: DynamicRecord | null, agentId: string, name: string): string | null {
-    if (getString(args, "method") !== "password") return "secretKey works only with method=password.";
+    const method = getString(args, "method");
+    if (method !== "password" && method !== "authenticator")
+      return "secretKey works only with method=password or method=authenticator.";
     if (getString(args, "loginId")) return "Pass loginId or secretKey, not both.";
     if (!this.#apiKeys) return "No key store is available. Use submit_secret without secretKey.";
-    if (!this.#apiKeys.resolveNow(agentId, name))
-      return `No saved key is named ${name}. Call openbot.list_api_keys for the names of the saved keys, or use submit_secret without secretKey, and the user types the password.`;
+    const key = this.#apiKeys.resolveNow(agentId, name);
+    if (!key)
+      return `No saved key is named ${name}. Call openbot.list_api_keys for the names of the saved keys, or use submit_secret without secretKey, and the user types the ${method === "password" ? "password" : "code"}.`;
+    if (method === "authenticator" && !parseTwoStepKey(key.value))
+      return `${name} is not an authenticator setup key (base32, at least 16 characters, or an otpauth://totp/ link). Use submit_secret without secretKey.`;
     return null;
   }
 
   /**
-   * Fills a password from a Secrets key, without a card. True when the request was answered this
-   * way. The checks are those of a Vault fill: with a script of the agent on the site or a field that
+   * Fills a password from a Secrets key, or the current code of an authenticator setup key kept in
+   * Secrets, without a card. True when the request was answered this way. The checks are those of a Vault fill: with a script of the agent on the site or a field that
    * is not a password field, the card opens. A key has no site of its own, so the first fill of a key
    * on a site waits for the owner's approval, with Full access too: a page can tell an agent to fill
    * a password into a form that sends it away. The value goes to the browser only.
@@ -2056,7 +2062,7 @@ export class AttentionRegistry {
     const keys = this.#apiKeys;
     const name = pending.secretKey;
     const request = pending.secret?.request;
-    if (!keys || !name || request?.method !== "password") return false;
+    if (!keys || !name || (request?.method !== "password" && request?.method !== "authenticator")) return false;
     if (pending.secret?.agentScriptedOrigin !== false || pending.secret.vaultFillable !== true) return false;
     const { agentId, threadId, turnId } = pending.request;
     const { origin } = request;
@@ -2081,7 +2087,10 @@ export class AttentionRegistry {
           kind: "permissions",
           command: null,
           cwd: null,
-          reason: sourceText("status.agent.secretKeyFill", { name, site: origin }),
+          reason: sourceText(
+            request.method === "authenticator" ? "status.agent.secretKeyCodeFill" : "status.agent.secretKeyFill",
+            { name, site: origin },
+          ),
           grantRoot: null,
           permissions: null,
         },
@@ -2102,9 +2111,13 @@ export class AttentionRegistry {
       if (Result.isFailure(kept))
         logger.warn("Unable to keep the approval to fill a saved key", { error: toLogValue(kept.failure.cause) });
     }
+    // An authenticator key fills its current code, made after any approval wait so it is fresh.
+    const twoStepKey = request.method === "authenticator" ? parseTwoStepKey(key.value) : null;
+    if (request.method === "authenticator" && !twoStepKey) return false;
+    const value = twoStepKey ? yield* Effect.promise(() => twoStepCode(twoStepKey, Date.now())) : key.value;
     pending.filledSecretKey = name;
     const submitted = yield* Effect.result(
-      this.respondToBrowserSecret({ requestId, agentId, decision: "submit", secret: key.value }),
+      this.respondToBrowserSecret({ requestId, agentId, decision: "submit", secret: value }),
     );
     if (Result.isFailure(submitted)) {
       logger.warn("Unable to submit the saved key", { error: toLogValue(submitted.failure.cause) });

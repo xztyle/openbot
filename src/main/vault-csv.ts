@@ -8,6 +8,8 @@ export interface CsvLogin {
   username: string;
   password: string;
   notes: string;
+  /** The two-step key or `otpauth:` link, or "" when the export has none. */
+  twoStepKey: string;
 }
 
 const COLUMNS = {
@@ -15,6 +17,8 @@ const COLUMNS = {
   username: ["username", "login_username", "user name", "login", "email"],
   password: ["password", "login_password"],
   notes: ["notes", "note", "extra", "comments"],
+  // Bitwarden, Proton Pass, and 1Password or Apple Passwords.
+  twoStepKey: ["login_totp", "totp", "otpauth"],
   type: ["type"],
 } as const;
 
@@ -64,6 +68,7 @@ export function parseLoginCsv(source: string): { logins: CsvLogin[]; otherRows: 
   if (website < 0 || password < 0) throw new Error(sourceText("error.vault.csvInvalid"));
   const username = column(COLUMNS.username);
   const notes = column(COLUMNS.notes);
+  const twoStepKey = column(COLUMNS.twoStepKey);
   const type = column(COLUMNS.type);
   const logins: CsvLogin[] = [];
   let otherRows = 0;
@@ -77,6 +82,7 @@ export function parseLoginCsv(source: string): { logins: CsvLogin[]; otherRows: 
       username: username < 0 ? "" : (cells[username]?.trim() ?? ""),
       password: cells[password] ?? "",
       notes: notes < 0 ? "" : (cells[notes]?.trim() ?? ""),
+      twoStepKey: twoStepKey < 0 ? "" : (cells[twoStepKey]?.trim() ?? ""),
     });
   }
   return { logins, otherRows };

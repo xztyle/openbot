@@ -17,6 +17,8 @@ export interface AgentFaceProps {
   /** The agent's own skin tone, `1` to `8`. Absent: the workspace default. */
   faceSkin?: string | undefined;
   state?: FaceState | undefined;
+  /** False: the end of work does not smile, as on a screen whose faces only act out a wait. */
+  celebrate?: boolean | undefined;
   class?: string | undefined;
   style?: Record<string, string> | undefined;
 }
@@ -138,7 +140,7 @@ export function AgentFace(props: AgentFaceProps) {
     () => props.state ?? "idle",
     (next, previous) => {
       clearTimeout(celebration);
-      const ended = (previous === "working" || previous === "talking") && next === "idle";
+      const ended = props.celebrate !== false && (previous === "working" || previous === "talking") && next === "idle";
       setCelebrating(ended);
       if (ended) celebration = setTimeout(() => setCelebrating(false), SUCCESS_MS);
     },

@@ -28,7 +28,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** The crew hops while the app loads, then jumps out of the screen. */
+/** The crew works while the app loads, then jumps out of the screen. */
 export const Sequence: Story = {};
 
 /** The app is ready at once, so the screen only fades. */
@@ -37,6 +37,21 @@ export const FastLoad: Story = { args: { readyAfterMs: 300 } };
 /** The screen never finishes, so the loop and every status line can be inspected. */
 export const Loading: Story = {
   render: () => <AppLoadingScreen />,
+};
+
+/** The crew dozes while a server sleeps. */
+export const Dozing: Story = {
+  render: () => <AppLoadingScreen mood="dozing" title="My server is asleep" />,
+};
+
+/** The crew looks worried after a failure. */
+export const Worried: Story = {
+  render: () => <AppLoadingScreen mood="worried" title="My server could not start" />,
+};
+
+/** The crew rests while the app waits to try again. */
+export const Resting: Story = {
+  render: () => <AppLoadingScreen mood="idle" title="My server is offline" />,
 };
 
 /** One frame of the loop. The same time always shows the same frame. */

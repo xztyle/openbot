@@ -20,8 +20,8 @@ const WebApp = lazy(() =>
 export const Route = createLazyFileRoute("/app")({ component: BrowserAppPage });
 function BrowserAppPage() {
   const [mounted, setMounted] = createSignal(false);
-  // The Bloub library, which draws the loading crew, runs only in the browser, so the Worker must never
-  // import it. The Worker sends the screen's background, and the browser adds the crew after hydration.
+  // The loading crew's faces run only in the browser, so the Worker does not import them. The Worker
+  // sends the screen's background, and the browser adds the crew after hydration.
   // The web client shows its own crew on the same clock, so the crew does not start again.
   const [crew, setCrew] = createSignal<Component>();
   // The loading screen takes the saved theme at once. The public pages stay dark after the user leaves.

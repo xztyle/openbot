@@ -3,7 +3,7 @@ import { createEffect, createSignal, Show, untrack } from "solid-js";
 import { Button } from "../../button";
 import { ErrorReference } from "../../error-reference";
 import { useText } from "../../text";
-import { AppLoadingScreen } from "../account/AppLoadingScreen";
+import { type AppLoadingMood, AppLoadingScreen } from "../account/AppLoadingScreen";
 import { ServerStatusDialog } from "./ServerStatusDialog";
 
 export type ServerWorkspacePhase =
@@ -92,6 +92,14 @@ export function ServerConnectionNotice(props: ServerConnectionNoticeProps) {
       default:
         return t("server.connection.reconnecting", { name: props.name });
     }
+  };
+  // The crew of the full screen acts the state out: it works while the app connects, dozes while
+  // the server sleeps, looks worried at a failure, and rests while the app waits to try again.
+  const mood = (): AppLoadingMood => {
+    if (props.issue || props.phase === "blocked") return "worried";
+    if (props.phase === "sleeping") return "dozing";
+    if (props.phase === "waiting") return "idle";
+    return "working";
   };
   const [now, setNow] = createSignal(Date.now());
   createEffect(
@@ -184,6 +192,7 @@ export function ServerConnectionNotice(props: ServerConnectionNoticeProps) {
       }
     >
       <AppLoadingScreen
+        mood={mood()}
         label={title()}
         title={title()}
         detail={detail()}

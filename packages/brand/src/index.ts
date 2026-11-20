@@ -1,4 +1,5 @@
 export { AppLogo, type AppLogoAnimation, type AppLogoProps, type AppLogoVariant } from "./AppLogo";
+export { AtelierSymbol, type AtelierSymbolProps } from "./AtelierSymbol";
 export {
   type MobilePlatformLogoVariant,
   PlatformLogo,

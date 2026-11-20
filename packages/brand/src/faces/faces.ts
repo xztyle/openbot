@@ -17,7 +17,8 @@
  * Orchestrators wear a gold rosette (character: the conductor's star) and a blazer.
  *
  * States: idle (blink + breathing) · working (focused, eyes scan, small nod) · talking (mouth moves)
- * · waiting (raised brows + amber speech bubble) · success (smile) · failed (worried / X eyes).
+ * · waiting (raised brows + amber speech bubble) · success (smile) · failed (worried / X eyes)
+ * · sleeping (closed eyes, slow breath, a "z" that floats up).
  * Animation is SMIL inside the SVG (works in iOS Safari, needs no stylesheet); pass animate:false for
  * prefers-reduced-motion. Same input → same SVG.
  */
@@ -38,9 +39,9 @@ export type { AgentRole, Brand, Theme } from "./agent-hue";
 
 export const BRANDS: Brand[] = ["craft", "modern", "riso"];
 export type FaceStyle = "portrait" | "sketch" | "flat" | "clay" | "character";
-export type FaceState = "idle" | "working" | "talking" | "waiting" | "success" | "failed";
+export type FaceState = "idle" | "working" | "talking" | "waiting" | "success" | "failed" | "sleeping";
 export const FACE_STYLES: FaceStyle[] = ["portrait", "sketch", "flat", "clay", "character"];
-export const FACE_STATES: FaceState[] = ["idle", "working", "talking", "waiting", "success", "failed"];
+export const FACE_STATES: FaceState[] = ["idle", "working", "talking", "waiting", "success", "failed", "sleeping"];
 
 export interface FaceOptions {
   /** Stable agent id. Drives the hue (team colour) and, unless `seed` is set, the face. */
@@ -574,7 +575,7 @@ interface FeatureCtx {
 }
 
 function blinkWrap(inner: string, c: FeatureCtx): string {
-  if (!c.anim || c.state === "success" || c.state === "failed") return inner;
+  if (!c.anim || c.state === "success" || c.state === "failed" || c.state === "sleeping") return inner;
   const dur = c.state === "waiting" ? 3.4 : 4.8;
   return `<g>${inner}<animateTransform attributeName="transform" type="scale" values="1 1;1 1;1 .08;1 1" keyTimes="0;.93;.96;1" dur="${dur}s" begin="-${c.t.blinkDelay}s" repeatCount="indefinite"/></g>`;
 }
@@ -587,6 +588,11 @@ function eye(c: FeatureCtx, side: -1 | 1): string {
     return `<path d="M-1.7-1.7l3.4 3.4M1.7-1.7l-3.4 3.4" stroke="${ink}" stroke-width="${small ? 2.4 : 1.3}" stroke-linecap="round"/>`;
   if (state === "success")
     return `<path d="M${-1.9 * k} ${0.7 * k}Q0 ${-1.7 * k} ${1.9 * k} ${0.7 * k}" fill="none" stroke="${ink}" stroke-width="${small ? 2.2 : 1.25}" stroke-linecap="round"/>`;
+  // A closed lid: the arc sags, with a short lash at the outer corner.
+  if (state === "sleeping")
+    return `<path d="M${-2 * k} ${-0.1 * k}Q0 ${1.5 * k} ${2 * k} ${-0.1 * k}" fill="none" stroke="${ink}" stroke-width="${small ? 2.2 : 1.2}" stroke-linecap="round"/>${
+      small ? "" : `<path d="M1.9 .1l.9 .7" stroke="${ink}" stroke-width=".8" stroke-linecap="round"/>`
+    }`;
   const gloss = !small && (c.style === "clay" || c.style === "portrait");
   const rx = (t.eyes === 1 ? 1.45 : 1.25) * k * wide;
   const ry = (t.eyes === 1 ? 1.45 : 1.65) * k * wide;
@@ -617,6 +623,7 @@ function brow(c: FeatureCtx): string {
   else if (state === "working") tr = "translate(0 .5) rotate(-7)";
   else if (state === "failed") tr = "translate(0 -.6) rotate(13)";
   else if (state === "success") tr = "translate(0 -1)";
+  else if (state === "sleeping") tr = "translate(0 .7) rotate(-3)";
   const color =
     c.style === "sketch"
       ? c.ink
@@ -661,6 +668,9 @@ function mouth(c: FeatureCtx): string {
       return st("M-1.7.4Q0 .9 1.8.2");
     case "waiting":
       return `${st("M-2.2 0Q0 1.6 2.2 0")}`;
+    case "sleeping":
+      // A slack mouth, a little open.
+      return `<ellipse cx=".2" cy=".7" rx="1.1" ry="1.3" fill="${dark}"/>`;
   }
   switch (t.mouth) {
     case 0:
@@ -995,6 +1005,17 @@ function sweat(anim: boolean, x = 47.6, y = 18.4): string {
   return `<path d="M${x} ${y}c0 0-2.4 3.1-2.4 4.7a2.4 2.4 0 0 0 4.8 0c0-1.6-2.4-4.7-2.4-4.7z" fill="${BR.role.sweat}" stroke="${INK}" stroke-width=".7">${a}</path>`;
 }
 
+/** Two "z" marks by the head of a sleeping face. With motion, they rise and fade one after the other. */
+function snore(anim: boolean, theme: Theme): string {
+  const mark = (x: number, y: number, s: number, delay: number) => {
+    const d = `M${x} ${y}h${s}l${-s} ${s}h${s}`;
+    const path = `<path d="${d}" fill="none" stroke="${tok(theme).ink}" stroke-width="${n(s * 0.34)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+    if (!anim) return path;
+    return `<g opacity="0">${path}<animateTransform attributeName="transform" type="translate" values="0 2;2 -4" dur="3s" begin="${delay}s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.2;.65;1" dur="3s" begin="${delay}s" repeatCount="indefinite"/></g>`;
+  };
+  return mark(50, 8, 5, 0) + mark(57, 1, 3.6, 1.5);
+}
+
 function sparkles(anim: boolean, theme: Theme): string {
   const star = (x: number, y: number, s: number, d: number) =>
     `<path d="M${x} ${y - s}Q${x} ${y} ${x + s} ${y}Q${x} ${y} ${x} ${y + s}Q${x} ${y} ${x - s} ${y}Q${x} ${y} ${x} ${y - s}Z" fill="${WARN[theme]}">${
@@ -1030,6 +1051,8 @@ function figureMotion(inner: string, c: Ctx): string {
   if (c.state === "success")
     return `<g>${inner}<animateTransform attributeName="transform" type="translate" values="0 0;0 -1.2;0 0;0 0" keyTimes="0;.15;.32;1" dur="2.2s" repeatCount="indefinite"/></g>`;
   if (c.state === "failed") return inner;
+  if (c.state === "sleeping")
+    return `<g>${inner}<animateTransform attributeName="transform" type="translate" values="0 0;0 .8;0 0" dur="4.2s" repeatCount="indefinite"/></g>`;
   return `<g>${inner}<animateTransform attributeName="transform" type="translate" values="0 0;0 -.55;0 0" dur="${c.t.breathe}s" repeatCount="indefinite"/></g>`;
 }
 
@@ -1382,6 +1405,7 @@ export function agentFaceSVG(opts: FaceOptions): string {
   // overlays outside the clip
   if (state === "waiting" && !small) body += bubble(theme, anim);
   if (state === "success" && !small) body += sparkles(anim, theme);
+  if (state === "sleeping" && !small) body += snore(anim, theme);
   if (small || state === "failed" || state === "success" || state === "working")
     body += badge(state, theme, anim, small);
   const label = `${opts.name ?? opts.id}${state === "idle" ? "" : ` — ${state}`}`.replace(/[<&"]/g, "");

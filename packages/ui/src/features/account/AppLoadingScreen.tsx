@@ -1,28 +1,30 @@
-import { type Block, BloubBot, type BloubBotRef, type StateId } from "@norbert_bodziony/bloub";
-import type { AvatarHue } from "@openbot/contracts/ipc";
+import { AtelierSymbol } from "@openbot/brand";
+import { atelierTheme } from "@openbot/brand/atelier-appearance";
+import type { FaceState } from "@openbot/brand/faces";
 import type { AppTextKey } from "@openbot/i18n";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createSignal, For, onSettled, untrack } from "solid-js";
-import { bloubAvatarProfile } from "../../bloub-avatar";
 import { ErrorReference } from "../../error-reference";
 import { useText } from "../../text";
-import { prefersReducedMotion } from "../../utils";
+import { AgentFace } from "../agents/AgentFace";
 
 /*
- * One clock drives the whole screen, so each run shows the same frames. Each frame is a function of
- * the elapsed time: the faces and the status line. The bots are frozen and drawn with `renderAt`, so
- * they have no clock of their own that can drift. The CSS animations start at the same time as the
- * clock: `--app-loading-at` moves them back to the clock's time when the screen mounts.
+ * The Atelier crew: the workspace's symbol over three agent faces, drawn in the workspace's theme,
+ * face family and skin tone (Craft, portrait and the light tone before a workspace answered). The
+ * faces act out the wait: they work while the app connects, doze while a server sleeps, look
+ * worried when it failed, and rest while the app waits to try again. Their expressions are the
+ * faces' own SMIL animation; the CSS bobs them in a wave and lifts them out when the app is ready.
+ * Reduced motion holds both still.
+ *
+ * One clock drives the screen, so each run shows the same frames: the status line is a function of
+ * the elapsed time. The CSS animations start at the same time as the clock: `--app-loading-at`
+ * moves them back to the clock's time when the screen mounts.
  */
 const CREW_FPS = 30;
 const WAVE_S = 1.6;
-const HOP_STAGGER_S = 0.14;
-// Three waves: each hopper makes a face in its own wave.
+const BOB_STAGGER_S = 0.18;
 const LOOP_S = WAVE_S * 3;
 const STATUS_EVERY_S = LOOP_S / 2;
-// One cycle holds 2 blocks per loop and at most 200 blocks, so it lasts about 7 minutes before it
-// starts again.
-const LOOPS = 90;
 // When the app is ready before this time, the screen only fades. The crew does not jump out.
 const QUICK_EXIT_S = 0.6;
 // The longest exit is 760ms of jumps and the fade. If no `animationend` comes, the screen ends after
@@ -39,38 +41,22 @@ const STATUS_LINES = [
   "webClient.loadingLine.almost",
 ] as const satisfies readonly AppTextKey[];
 
-// Only states that keep the body. The others, such as `orbit`, `burst`, `sleep` and `alert`, replace
-// it with dots or a mark.
-const HOPPER_LOOKS: ReadonlyArray<{ seed: string; hue: AvatarHue; face: StateId }> = [
-  { seed: "crew-hopper-one", hue: 215, face: "wink" },
-  { seed: "crew-hopper-two", hue: 320, face: "wide" },
-  { seed: "crew-hopper-three", hue: 55, face: "wink" },
-];
+/** What the crew acts out: the app connects or loads, a server sleeps, a failure, or a wait to retry. */
+export type AppLoadingMood = "working" | "dozing" | "worried" | "idle";
 
-/** Idle, and one face while this hopper is in the air in its own wave. */
-function hopperCycle(index: number, face: StateId): Block[] {
-  const lead = index * (WAVE_S + HOP_STAGGER_S);
-  const blocks: Block[] = lead > 0 ? [{ state: "idle", duration: lead }] : [];
-  for (let loop = 0; loop < LOOPS; loop += 1) {
-    blocks.push({ state: face, duration: WAVE_S }, { state: "idle", duration: LOOP_S - WAVE_S });
-  }
-  return blocks;
-}
+const MOOD_FACES: Readonly<Record<AppLoadingMood, FaceState>> = {
+  working: "working",
+  dozing: "sleeping",
+  worried: "failed",
+  idle: "idle",
+};
 
-const HOPPERS = HOPPER_LOOKS.map((look, index) => ({
-  index,
-  profile: bloubAvatarProfile(look.seed, look.hue),
-  cycle: hopperCycle(index, look.face),
-}));
-const SLEEPER = bloubAvatarProfile("crew-sleeper", 185);
-
-function cycleLength(blocks: readonly Block[]): number {
-  return blocks.reduce((total, block) => total + block.duration, 0);
-}
-
-// Three small scribbled "z" marks that float up from the sleeper's head, one after the other.
-const Z_POINTS = "1.5 1.5 8.5 1.5 1.5 8.5 8.5 8.5";
-const SNORE_MARKS = [0, 1, 2];
+// Three different people in three hues. The names choose the hats, such as the designer's beret.
+const CREW = [
+  { id: "atelier-crew-3", name: "Designer" },
+  { id: "atelier-crew-4", name: "Researcher" },
+  { id: "atelier-crew-14", name: "Writer" },
+] as const;
 
 /*
  * The screens on one page share one clock. The `/app` page shows a screen while the web client's code
@@ -102,6 +88,8 @@ function snapToFrame(seconds: number): number {
 export interface AppLoadingScreenProps {
   /** The app is ready: the crew jumps out and the screen fades. Remove the screen in `onExited`. */
   ready?: boolean;
+  /** What the crew acts out. Default: `working`. */
+  mood?: AppLoadingMood;
   onExited?: () => void;
   /** Stop the clock and show the frame at this time, in seconds. */
   at?: number;
@@ -122,8 +110,6 @@ export function AppLoadingScreen(props: AppLoadingScreenProps) {
   const scrub = untrack(() => props.at !== undefined);
   const mountedAt = scrub ? 0 : snapToFrame(clockTime(performance.now()));
   const [clock, setClock] = createSignal(mountedAt);
-  const reducedMotion = prefersReducedMotion();
-  const bots: Array<{ ref: BloubBotRef; length: number }> = [];
   const seconds = () => props.at ?? clock();
   const status = () => STATUS_LINES[Math.floor(seconds() / STATUS_EVERY_S) % STATUS_LINES.length] ?? STATUS_LINES[0];
   // The clock stops when the app is ready, so the exit that it selects cannot change.
@@ -149,14 +135,8 @@ export function AppLoadingScreen(props: AppLoadingScreenProps) {
     cancelAnimationFrame(frameRequest);
   }
 
-  function addBot(cycle: readonly Block[]) {
-    return (ref: BloubBotRef) => bots.push({ ref, length: cycleLength(cycle) });
-  }
-
-  createEffect(seconds, (time) => {
-    if (reducedMotion) return;
-    for (const bot of bots) bot.ref.renderAt(time % bot.length);
-  });
+  const mood = (): AppLoadingMood => props.mood ?? "working";
+  const brand = () => atelierTheme() ?? "craft";
 
   createEffect(
     () => props.ready,
@@ -198,10 +178,11 @@ export function AppLoadingScreen(props: AppLoadingScreenProps) {
       class="app-loading"
       style={{
         "--app-loading-wave": `${WAVE_S}s`,
-        "--app-loading-stagger": `${HOP_STAGGER_S}s`,
+        "--app-loading-stagger": `${BOB_STAGGER_S}s`,
         "--app-loading-at": `${props.at ?? mountedAt}s`,
       }}
       data-phase={phase()}
+      data-mood={mood()}
       data-scrub={scrub ? "true" : undefined}
       role="status"
       aria-live="polite"
@@ -210,52 +191,23 @@ export function AppLoadingScreen(props: AppLoadingScreenProps) {
     >
       <span class="sr-only">{props.label ?? t("webClient.loading")}</span>
       <div class="app-loading-stage">
+        <AtelierSymbol theme={brand()} class="app-loading-symbol" />
         <div class="app-loading-row" aria-hidden="true">
-          <For each={HOPPERS}>
-            {(hopper) => (
-              <div class="app-loading-agent" style={{ "--app-loading-index": hopper.index }}>
+          <For each={CREW}>
+            {(member, index) => (
+              <div class="app-loading-agent" style={{ "--app-loading-index": index() }}>
                 <div class="app-loading-body">
-                  <BloubBot
-                    size={100}
-                    shape={hopper.profile.shape}
-                    color={hopper.profile.color}
-                    expression={hopper.profile.expression}
-                    cycle={hopper.cycle}
-                    frozenAt={0}
-                    ref={addBot(hopper.cycle)}
-                    ariaLabel=""
-                    class="app-loading-bot"
+                  <AgentFace
+                    id={member.id}
+                    name={member.name}
+                    state={MOOD_FACES[mood()]}
+                    celebrate={false}
+                    class="app-loading-face"
                   />
                 </div>
               </div>
             )}
           </For>
-          <div class="app-loading-agent" data-sleeper="true">
-            <div class="app-loading-snore">
-              <For each={SNORE_MARKS}>
-                {(mark) => (
-                  <span class="app-loading-z" style={{ "--app-loading-z-index": mark }}>
-                    <svg class="app-loading-z-mark" viewBox="0 0 10 10" aria-hidden="true">
-                      <polyline points={Z_POINTS} />
-                    </svg>
-                  </span>
-                )}
-              </For>
-            </div>
-            {/* The clock does not draw the sleeper: `idle` blinks, and a blink on a sleepy face looks
-                like a twitch. It keeps its first pose, and only its CSS breath moves it. */}
-            <div class="app-loading-body">
-              <BloubBot
-                size={100}
-                shape={SLEEPER.shape}
-                color={SLEEPER.color}
-                expression="somnolent"
-                frozenAt={0}
-                ariaLabel=""
-                class="app-loading-bot"
-              />
-            </div>
-          </div>
         </div>
         <p class="app-loading-status">
           {props.title ?? <For each={[status()]}>{(line) => <span class="app-loading-line">{t(line)}</span>}</For>}

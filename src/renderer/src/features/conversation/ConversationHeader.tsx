@@ -12,7 +12,7 @@ import { reasoningLabel } from "@openbot/ui/components/ProviderModelPicker";
 import { providerAccountName } from "@openbot/ui/components/provider-accounts";
 import { ConversationHeader as SharedConversationHeader } from "@openbot/ui/features/conversation/ConversationHeader";
 import { Portal } from "@solidjs/web";
-import { Show } from "solid-js";
+import { createEffect, onCleanup, Show } from "solid-js";
 import { useConversationViewScope } from "./conversation-scope";
 import { useConversationWorkspaceLayout } from "./conversation-workspace-layout";
 
@@ -55,6 +55,10 @@ export function ConversationHeader() {
   } = useConversationViewScope();
   // In the owner's DM with an agent, the controls stand in the DM's header, so one row holds both.
   const layout = channel ? null : useConversationWorkspaceLayout();
+  createEffect(sidePanelOpen, (open) => {
+    layout?.setPanelBack?.(open ? toggleSidePanel : null);
+  });
+  onCleanup(() => layout?.setPanelBack?.(null));
   const runningTasks = () => props.tasks?.snapshot?.tasks.filter(isAgentTaskActive).length ?? 0;
   const working = () => agentActivity() === "Working";
   const providerName = (provider: AgentProviderRef) =>

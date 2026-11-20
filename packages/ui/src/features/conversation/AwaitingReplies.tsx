@@ -2,6 +2,7 @@ import { Button, IconButton, X } from "@openbot/ui";
 import { createSignal, createUniqueId, For, Show, untrack } from "solid-js";
 import type { AgentProfile } from "../../data";
 import { useText } from "../../text";
+import { usesPhoneLayout } from "../../utils";
 import { AgentAvatar } from "../agents/AgentAvatar";
 import type { SidebarAgentWait } from "../sidebar/sidebar-agent-states";
 import { SIDEBAR_WAIT_ACTION, SIDEBAR_WAIT_TITLE, sidebarUsageResetTime } from "../sidebar/sidebar-filtering";
@@ -73,7 +74,8 @@ function AwaitingReplyList(props: AwaitingReplyListProps) {
   const { t, format } = useText();
   const panelId = createUniqueId();
   const playState = createTaskListPlayState();
-  const [open, setOpen] = createSignal(untrack(() => props.defaultOpen ?? true));
+  // A phone has little room over the message box: the block starts as its one header row there.
+  const [open, setOpen] = createSignal(untrack(() => props.defaultOpen ?? !usesPhoneLayout()));
   const total = () => props.items.length;
   const done = () => props.items.filter((item) => item.state === "replied").length;
   // A wait comes before work, because the work cannot go on until the wait ends.

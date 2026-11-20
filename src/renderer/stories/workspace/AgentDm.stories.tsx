@@ -7,6 +7,7 @@ import {
 } from "../../src/features/conversation/conversation-workspace-layout";
 import * as Chat from "../Conversation.stories";
 import { STORY_AGENTS } from "../fixtures";
+import { SPANISH_DM_MESSAGES } from "./agent-dm-spanish";
 
 /*
  * The owner's DM with an agent is the agent's chat, drawn with the workspace's rows: faces, names
@@ -77,3 +78,17 @@ export const QueuedDuringApproval: Story = { ...Chat.QueuedDuringApproval };
 export const PlanInProgress: Story = { ...Chat.PlanInProgress };
 export const MarkdownReplyQuote: Story = { ...Chat.MarkdownReplyQuote };
 export const ActionMarkerHistory: Story = { ...Chat.ActionMarkerHistory };
+
+/** A long Spanish DM with inline code, a long path and link, lists, a table and a note to two agents. Check it at phone width. */
+export const SpanishLongMessages: Story = {
+  ...Chat.RichConversation,
+  name: "Spanish long messages",
+  args: { messages: SPANISH_DM_MESSAGES },
+};
+
+/** The same DM while the agent works: the working line under the newest message. */
+export const SpanishWorking: Story = {
+  ...Chat.RichConversation,
+  name: "Spanish while the agent works",
+  args: { messages: SPANISH_DM_MESSAGES, activeTurnId: "es-turn" },
+};

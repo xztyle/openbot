@@ -1,5 +1,5 @@
 import type { ChannelMessage } from "@openbot/contracts/ipc";
-import { ArrowUp, Button, ChevronDown } from "@openbot/ui";
+import { ArrowUp, Button, CheckCheck, ChevronDown } from "@openbot/ui";
 import {
   calculateChatScrollMargin,
   chatHistoryBoundaryReached,
@@ -360,12 +360,20 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
         <div class="ws-unread-banner" role="status">
           <Button variant="ghost" size="xs" class="ws-unread-banner-jump" onClick={jumpToUnread}>
             <ArrowUp aria-hidden="true" />
-            {unreadLabel()}
+            <span class="ws-unread-banner-label">{unreadLabel()}</span>
           </Button>
           <Show when={props.onMarkRead}>
             {(markRead) => (
-              <Button variant="ghost" size="xs" onClick={() => markRead()()}>
-                {t("workspace.app.channel.markRead")}
+              <Button
+                variant="ghost"
+                size="xs"
+                class="ws-unread-banner-read"
+                aria-label={t("workspace.app.channel.markRead")}
+                title={t("workspace.app.channel.markRead")}
+                onClick={() => markRead()()}
+              >
+                <CheckCheck aria-hidden="true" />
+                <span class="ws-unread-banner-read-label">{t("workspace.app.channel.markRead")}</span>
               </Button>
             )}
           </Show>

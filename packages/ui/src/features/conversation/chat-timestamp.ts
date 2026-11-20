@@ -10,6 +10,6 @@ export function formatChatTimestamp(date: Date, format: AppFormat = currentText(
     date.getDate() === today.getDate();
   return format.date(
     date,
-    isToday ? { hour: "2-digit", minute: "2-digit" } : { dateStyle: "medium", timeStyle: "short" },
+    isToday ? { hour: "numeric", minute: "2-digit" } : { dateStyle: "medium", timeStyle: "short" },
   );
 }

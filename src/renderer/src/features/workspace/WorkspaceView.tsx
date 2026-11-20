@@ -121,6 +121,8 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
   const agent = () => ws.env.agents().find((candidate) => candidate.id === props.agentId);
   const toolbar = composerToolbar("main");
   const [headerSlot, setHeaderSlot] = createSignal<HTMLElement>();
+  // The chat's open side panel covers it on a phone: Back closes the panel before it leaves the DM.
+  const [panelBack, setPanelBack] = createSignal<(() => void) | null>(null);
   const rows: ConversationWorkspaceLayout = {
     reader: () => {
       const reader = ws.env.reader();
@@ -139,6 +141,7 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
     quickReactions: () => ws.quickReactions(),
     emojiPicker: ws.reactionPicker,
     headerSlot,
+    setPanelBack: (close) => setPanelBack(() => close),
     messageLink: (messageId) => ws.env.agentMessageLink?.(props.agentId, messageId) ?? null,
     composer: {
       toolbarShown: () => toolbar.shown(),
@@ -166,7 +169,11 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
                 members={[]}
                 memberCount={1}
                 onShowDetails={() => ws.env.openAgentSettings(current().id)}
-                onBack={() => ws.back()}
+                onBack={() => {
+                  const close = panelBack();
+                  if (close) close();
+                  else ws.back();
+                }}
                 search={<div class="ws-agent-dm-controls" ref={setHeaderSlot} />}
               />
             )}

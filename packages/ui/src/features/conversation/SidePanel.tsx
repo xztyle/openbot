@@ -214,6 +214,7 @@ export function SidePanelHeader(props: SidePanelHeaderProps) {
           <Button
             variant="ghost"
             size="icon-sm"
+            class="side-panel-maximize"
             aria-label={t(props.maximized ? "conversation.sidePanel.restore" : "conversation.sidePanel.maximize")}
             title={t(props.maximized ? "conversation.sidePanel.restore" : "conversation.sidePanel.maximize")}
             aria-pressed={props.maximized ? "true" : "false"}

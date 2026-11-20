@@ -115,6 +115,11 @@
     white-space: nowrap;
   }
 
+  /* A list right under the header keeps a gap from its line, as one under a toolbar. */
+  .ws-view > .ws-pane-header + .ws-view-scroll {
+    padding-top: var(--openbot-space-2);
+  }
+
   /* Toolbar: tabs, search and filters. ---------------------------------------------------------- */
 
   .ws-view-toolbar {

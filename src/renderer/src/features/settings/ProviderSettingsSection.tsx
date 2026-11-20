@@ -45,6 +45,7 @@ import {
 } from "@openbot/ui/features/settings/OpenCodeKeyDialog";
 import {
   type ProviderDefaultChoice,
+  type ProviderEnvironmentControl,
   type ProviderPromptCache,
   type ProviderSettingsDetail,
   ProviderSettingsPage,
@@ -56,6 +57,7 @@ import { ProviderSignInDialogs } from "../../components/ProviderSignInDialogs";
 import type { ProviderConnectionApi } from "../../components/provider-connection-api";
 import { createCustomProviderHostState } from "../custom-providers/custom-provider-host-state";
 import { savedCustomModel } from "../onboarding/SetupProviderPicker";
+import { createProviderEnvironment, type ProviderEnvironmentSource } from "./provider-environment";
 import { createProviderPromptCache, type ProviderPromptCacheSource } from "./provider-prompt-cache";
 import { createSettingsGeneralStore, type SettingsGeneralStore } from "./stores/general-store";
 
@@ -105,6 +107,7 @@ interface ProviderSettingsSectionProps {
   usage?: readonly AccountUsageProviderRow[] | undefined;
   onDetailChange?: ((detail: ProviderSettingsDetail | null) => void) | undefined;
   promptCache?: ProviderPromptCache | undefined;
+  environment?: ((provider: AgentProviderId) => ProviderEnvironmentControl | undefined) | undefined;
 }
 
 /** The provider list of the computer the agents run on, with its custom endpoint dialogs. */
@@ -257,6 +260,7 @@ function ProviderSettingsSection(props: ProviderSettingsSectionProps) {
         menuMount={props.selectMount}
         onDetailChange={props.onDetailChange}
         promptCache={props.promptCache}
+        environment={props.environment}
         footer={
           <>
             <Show when={props.providerDetection}>
@@ -492,9 +496,15 @@ export function HostProviderSettingsPanel(
     onDetailChange?: ((detail: ProviderSettingsDetail | null) => void) | undefined;
     /** The Claude page's prompt cache time, for a host with `prompt-cache-ttl-v1` that this account administers. */
     promptCache?: ProviderPromptCacheSource | undefined;
+    /** The Environment section of each provider page, for a host with `provider-environment-v1` that this account administers. */
+    providerEnvironment?: ProviderEnvironmentSource | undefined;
   },
 ) {
   const promptCache = createProviderPromptCache(() => props.promptCache);
+  const environment = createProviderEnvironment(
+    () => props.providerEnvironment,
+    () => props.agentStatus,
+  );
   const keys = createProviderKeyState({
     open: true,
     get providerKeys() {
@@ -556,6 +566,7 @@ export function HostProviderSettingsPanel(
         usage={props.usage}
         onDetailChange={props.onDetailChange}
         promptCache={promptCache()}
+        environment={environment()}
         detectionSettings={
           <Show when={props.detectionSettings}>
             {(value) => (

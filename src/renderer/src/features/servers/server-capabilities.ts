@@ -83,7 +83,9 @@ export function serverSupportsCapability(
       capability === "instance-transfer-v1" ||
       capability === "agent-hidden-v1" ||
       capability === "agent-tasks-v1" ||
-      capability === "side-question-v1") &&
+      capability === "side-question-v1" ||
+      capability === "provider-account-pool-v1" ||
+      capability === "provider-environment-v1") &&
     server?.kind === "remote"
   ) {
     return server.compatibility?.capabilities.includes(capability) === true;

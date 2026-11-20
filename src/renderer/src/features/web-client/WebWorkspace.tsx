@@ -62,6 +62,7 @@ import {
   getHostAgentAccess,
   getHostAgentMemoryLimit,
   getHostPromptCacheTtl,
+  getHostProviderEnvironment,
   getHostReleaseStatus,
   getHostTimezone,
   getHostUpdateStatus,
@@ -70,6 +71,7 @@ import {
   setHostAgentAccess,
   setHostAgentMemoryLimit,
   setHostPromptCacheTtl,
+  setHostProviderEnvironment,
   setHostTimezone,
   setHostUpdateSettings,
   startHostUpdate,
@@ -233,6 +235,7 @@ import {
   showServerUpdate,
 } from "../servers/server-update-flow";
 import { licenseContactUs, trackLicenseEvent } from "../settings/license-analytics";
+import type { HostProviderEnvironmentCalls } from "../settings/provider-environment";
 import type { HostPromptCacheTtlCalls } from "../settings/provider-prompt-cache";
 import { createCommunityCardVisibility } from "../sidebar/community-card";
 import { hostStorageHygieneCalls, serverHasStorageHygiene } from "../storage-hygiene/storage-hygiene-port";
@@ -1319,6 +1322,16 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       runTeamEffect(getHostPromptCacheTtl(hostRequest(serverId)).pipe(Effect.mapError((error) => error.cause))),
     setPromptCacheTtl: async (ttl, serverId) =>
       runTeamEffect(setHostPromptCacheTtl(hostRequest(serverId), ttl).pipe(Effect.mapError((error) => error.cause))),
+  };
+  const hostProviderEnvironmentCalls: HostProviderEnvironmentCalls = {
+    getProviderEnvironment: async (provider, serverId) =>
+      runTeamEffect(
+        getHostProviderEnvironment(hostRequest(serverId), provider).pipe(Effect.mapError((error) => error.cause)),
+      ),
+    setProviderEnvironment: async (update, serverId) =>
+      runTeamEffect(
+        setHostProviderEnvironment(hostRequest(serverId), update).pipe(Effect.mapError((error) => error.cause)),
+      ),
   };
   const hostAgentAccessCalls: HostAgentAccessCalls = {
     getAgentAccess: async (serverId) =>
@@ -3409,6 +3422,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       hostMemoryLimit={{ calls: hostMemoryLimitCalls }}
                       hostTurnLimits={{ calls: hostTurnLimitsCalls }}
                       hostPromptCacheTtl={{ calls: hostPromptCacheTtlCalls }}
+                      providerEnvironment={{ calls: hostProviderEnvironmentCalls }}
                       agentAccess={{ calls: hostAgentAccessCalls, listAgents: () => workspace.runtime.listAgents() }}
                       workspaceSettings={{
                         calls: serverSettings.workspaceSettings,

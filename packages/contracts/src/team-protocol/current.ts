@@ -57,8 +57,10 @@ import { TEAM_MESSAGE_CLIENT_ID_CAPABILITY } from "./message-client-id-v1";
 import { ONEPASSWORD_CONNECTOR_CAPABILITY } from "./onepassword-connector-v1";
 import { PROMPT_CACHE_TTL_CAPABILITY } from "./prompt-cache-ttl-v1";
 import { TEAM_PROMPT_MULTI_SELECT_CAPABILITY } from "./prompt-multi-select-v1";
+import { PROVIDER_ACCOUNT_POOL_CAPABILITY } from "./provider-account-pool-v1";
 import { PROVIDER_ACCOUNT_RELAY_CAPABILITY } from "./provider-account-relay-v1";
 import { PROVIDER_ACCOUNTS_CAPABILITY } from "./provider-accounts-v1";
+import { PROVIDER_ENVIRONMENT_CAPABILITY } from "./provider-environment-v1";
 import { PROVIDER_HOST_SIGN_IN_CAPABILITY } from "./provider-host-sign-in-v1";
 import { PROVIDER_USAGE_RESET_CAPABILITY } from "./provider-usage-reset-v1";
 import { PROVIDERS_ADMIN_CAPABILITY } from "./providers-v1";
@@ -310,6 +312,8 @@ export const TEAM_CURRENT_CAPABILITIES = [
   CLAUDE_API_KEY_CAPABILITY,
   WORKFLOWS_CAPABILITY,
   HOST_TURN_LIMITS_CAPABILITY,
+  PROVIDER_ACCOUNT_POOL_CAPABILITY,
+  PROVIDER_ENVIRONMENT_CAPABILITY,
 ] as const;
 
 export type TeamCurrentCapability = (typeof TEAM_CURRENT_CAPABILITIES)[number];
@@ -427,7 +431,9 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== PROMPT_CACHE_TTL_CAPABILITY &&
     capability !== CLAUDE_API_KEY_CAPABILITY &&
     capability !== WORKFLOWS_CAPABILITY &&
-    capability !== HOST_TURN_LIMITS_CAPABILITY,
+    capability !== HOST_TURN_LIMITS_CAPABILITY &&
+    capability !== PROVIDER_ACCOUNT_POOL_CAPABILITY &&
+    capability !== PROVIDER_ENVIRONMENT_CAPABILITY,
 );
 // A v7 host does not know the v8 markers, so a client sends them only after it negotiates protocol 8.
 const TEAM_PROTOCOL_V7_CURRENT_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
@@ -488,6 +494,8 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== PROMPT_CACHE_TTL_CAPABILITY &&
       capability !== CLAUDE_API_KEY_CAPABILITY &&
       capability !== WORKFLOWS_CAPABILITY &&
-      capability !== HOST_TURN_LIMITS_CAPABILITY,
+      capability !== HOST_TURN_LIMITS_CAPABILITY &&
+      capability !== PROVIDER_ACCOUNT_POOL_CAPABILITY &&
+      capability !== PROVIDER_ENVIRONMENT_CAPABILITY,
   );
 }

@@ -60,6 +60,7 @@ import { ConnectorsPanel, type ConnectorsPanelDetail } from "../connectors/Conne
 import type { ConnectorRegistry } from "../connectors/connector-registry";
 import { type ServerStorageOptions, ServerStoragePanel } from "../files/ServerStoragePanel";
 import { type HostProviderSettings, HostProviderSettingsPanel } from "../settings/ProviderSettingsSection";
+import type { HostProviderEnvironmentOptions, ProviderEnvironmentSource } from "../settings/provider-environment";
 import type { HostPromptCacheTtlOptions, ProviderPromptCacheSource } from "../settings/provider-prompt-cache";
 import { type ServerVaultOptions, ServerVaultPanel } from "../vault/ServerVaultPanel";
 import { registerSettingsLeaveGuard } from "../window/settings-leave-guard";
@@ -218,6 +219,11 @@ export interface ServerSettingsModalProps {
    */
   hostPromptCacheTtl?: HostPromptCacheTtlOptions | undefined;
   /**
+   * The provider pages show their Environment section only when a caller supplies this, and only for
+   * the local server or a remote host with `provider-environment-v1` that this member administers.
+   */
+  providerEnvironment?: HostProviderEnvironmentOptions | undefined;
+  /**
    * The Roles section appears only when a caller supplies this, and only for the local server or a
    * remote host with `agent-access-v1` that this member administers.
    */
@@ -375,6 +381,12 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
     const requested = props.initialSection;
     return requested && sectionAvailable(requested) ? requested : null;
   };
+  function providerEnvironmentSource(): ProviderEnvironmentSource | undefined {
+    const options = props.providerEnvironment;
+    if (!options || !actionsAvailable() || !serverCanAdminister(props.server, "provider-environment-v1"))
+      return undefined;
+    return { ...options, serverId: props.server.id };
+  }
   const published = () => (local() ? props.hostStatus?.phase === "online" : props.server.state === "online");
 
   async function run(key: string, action: () => Promise<void>): Promise<boolean> {
@@ -892,6 +904,7 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
                   selectMount={modalElement()}
                   onDetailChange={setProviderDetail}
                   promptCache={promptCacheSource()}
+                  providerEnvironment={providerEnvironmentSource()}
                 />
               )}
             </Show>

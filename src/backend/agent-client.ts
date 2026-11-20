@@ -35,6 +35,11 @@ export interface AgentClient {
    */
   releaseThread?(externalThreadId: string): Effect.Effect<void, ProviderClientOperationError>;
   /**
+   * Whether the thread still runs work that outlives its turn, such as Claude's background subagents
+   * and commands, which end with the process. Optional: a client without such work never holds any.
+   */
+  holdsBackgroundWork?(externalThreadId: string): Effect.Effect<boolean, ProviderClientOperationError>;
+  /**
    * Hides a thread that a replacement session took over from the provider's own thread list, and
    * keeps its history readable. Optional, because only a provider that shows its threads to the user
    * in another app has a list to keep clean.

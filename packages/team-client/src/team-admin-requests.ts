@@ -16,6 +16,9 @@ import {
   isDiscordChannelList,
   isDiscordRoleList,
   isHiddenAgentsSnapshot,
+  type ProviderEnvironment,
+  type ProviderEnvironmentProvider,
+  type ProviderEnvironmentUpdate,
   type ResetAgentSessionSettingInput,
   type SetAgentHiddenInput,
   type SetAgentSessionSettingInput,
@@ -31,6 +34,10 @@ import { HOST_MEMBER_UPDATE_ROUTES } from "@openbot/contracts/team-protocol/host
 import { HOST_RELEASE_ROUTES } from "@openbot/contracts/team-protocol/host-release-v1";
 import { HOST_TIMEZONE_ROUTES } from "@openbot/contracts/team-protocol/host-timezone-v1";
 import { PROMPT_CACHE_TTL_ROUTES } from "@openbot/contracts/team-protocol/prompt-cache-ttl-v1";
+import {
+  decodeProviderEnvironmentResponse,
+  PROVIDER_ENVIRONMENT_ROUTES,
+} from "@openbot/contracts/team-protocol/provider-environment-v1";
 import type { PROVIDERS_V5_ROUTES } from "@openbot/contracts/team-protocol/providers-v5";
 import { PROVIDERS_V8_ROUTES } from "@openbot/contracts/team-protocol/providers-v8";
 // Admin requests to one host: agent settings and skills, shared tables, agent share links, the server name and logo,
@@ -73,6 +80,7 @@ import {
   decodeHostGitHubConnectorStatus,
   decodeHostMessagingOverview,
   decodeHostOnePasswordConnectorStatus,
+  decodeHostProviderAccountPools,
   decodeHostProviderAccounts,
   decodeHostProviderAccountUsage,
   decodeHostReleaseStatus,
@@ -149,6 +157,7 @@ import {
   type SetAgentProviderAccountInput,
   type SetEnabledSkillInput,
   type SetMcpServerEnabledInput,
+  type SetProviderAccountPoolInput,
   type SetProviderApiKeyInput,
   type SetRoutineResultDestinationInput,
   type SharedTable,
@@ -198,6 +207,7 @@ import { MCP_SIGN_IN_APP_ROUTES } from "@openbot/contracts/team-protocol/mcp-sig
 import { MCP_SIGN_IN_ROUTES } from "@openbot/contracts/team-protocol/mcp-sign-in-v1";
 import { MCP_ROUTES } from "@openbot/contracts/team-protocol/mcp-v1";
 import { ONEPASSWORD_CONNECTOR_ROUTES } from "@openbot/contracts/team-protocol/onepassword-connector-v1";
+import { PROVIDER_ACCOUNT_POOL_ROUTES } from "@openbot/contracts/team-protocol/provider-account-pool-v1";
 import {
   type PROVIDER_ACCOUNT_RELAY_PROVIDERS,
   PROVIDER_ACCOUNT_RELAY_ROUTES,
@@ -611,6 +621,28 @@ export function setHostPromptCacheTtl(
   return adminCall(() => request("POST", PROMPT_CACHE_TTL_ROUTES.update, decodePromptCacheTtlSetting, { ttl }));
 }
 
+/** `provider-environment-v1`: the variables of one provider of the host. A sensitive value has an empty `value`. */
+export function getHostProviderEnvironment(
+  request: TeamApiRequest,
+  provider: ProviderEnvironmentProvider,
+): Effect.Effect<ProviderEnvironment, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", PROVIDER_ENVIRONMENT_ROUTES.settings, decodeProviderEnvironmentResponse, { provider }),
+  );
+}
+
+/** `provider-environment-v1`: replaces the variables of one provider. `value: null` keeps a stored sensitive value. */
+export function setHostProviderEnvironment(
+  request: TeamApiRequest,
+  update: ProviderEnvironmentUpdate,
+): Effect.Effect<ProviderEnvironment, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", PROVIDER_ENVIRONMENT_ROUTES.update, decodeProviderEnvironmentResponse, {
+      provider: update.provider,
+      variables: update.variables.map(({ name, value, sensitive }) => ({ name, value, sensitive })),
+    }),
+  );
+}
 /** The one MCP read route, and the only one the host answers to a GET. */
 export function listMcpServers(request: TeamApiRequest): Effect.Effect<McpServerConfig[], TeamAdminRequestError> {
   return adminCall(() => request("GET", MCP_ROUTES.list, decodeMcpServerConfigs));
@@ -895,6 +927,33 @@ export function listProviderAccounts(
   return adminCall(() => request("POST", PROVIDER_ACCOUNTS_ROUTES.list, decodeHostProviderAccounts, {}));
 }
 
+/**
+ * `listProviderAccounts` with, on a host with `provider-account-pool-v1`, the pools that are on. When
+ * the pool read fails, the accounts come without it, as from an older host.
+ */
+export function listProviderAccountsWithPools(
+  request: TeamApiRequest,
+  withPools: boolean,
+): Effect.Effect<HostProviderAccounts, TeamAdminRequestError> {
+  if (!withPools) return listProviderAccounts(request);
+  return Effect.all(
+    [
+      listProviderAccounts(request),
+      adminCall(() => request("POST", PROVIDER_ACCOUNT_POOL_ROUTES.list, decodeHostProviderAccountPools, {})).pipe(
+        Effect.orElseSucceed(() => null),
+      ),
+    ],
+    { concurrency: "unbounded" },
+  ).pipe(Effect.map(([accounts, pools]) => (pools ? { ...accounts, pools } : accounts)));
+}
+
+/** `provider-account-pool-v1`: turns the pool of a provider's accounts on the host on or off. */
+export function setProviderAccountPool(
+  request: TeamApiRequest,
+  input: SetProviderAccountPoolInput,
+): Effect.Effect<void, TeamAdminRequestError> {
+  return adminCall(() => request("POST", PROVIDER_ACCOUNT_POOL_ROUTES.update, ignoreResponse, { ...input }));
+}
 /** The readings of the accounts after the first. */
 export function providerAccountUsage(request: TeamApiRequest): Effect.Effect<AccountUsage, TeamAdminRequestError> {
   return adminCall(() => request("POST", PROVIDER_ACCOUNTS_ROUTES.usage, decodeHostProviderAccountUsage, {}));

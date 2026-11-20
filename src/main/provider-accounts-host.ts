@@ -20,6 +20,7 @@ export interface ProviderAccountsHostDependencies {
     | "signInProviderAccountOnHost"
     | "renameProviderAccount"
     | "removeProviderAccount"
+    | "setProviderAccountPool"
   >;
   browser: Pick<BrowserHost, "openPrivate" | "privateTab" | "close">;
 }
@@ -68,6 +69,17 @@ export class ProviderAccountsHost {
     return { providers, agents };
   }
 
+  /** The providers whose account pool is on, with the accounts left out and the account in use (`provider-account-pool-v1`). */
+  pools() {
+    const pools = (this.#dependencies.service.getStatus().providers ?? []).flatMap((row) =>
+      row.accounts && row.accountPool ? [{ provider: row.id, ...row.accountPool }] : [],
+    );
+    return { pools };
+  }
+
+  setPool(provider: AgentProviderId, enabled: boolean, leftOut: readonly string[]) {
+    return this.#dependencies.service.setProviderAccountPool(provider, enabled, leftOut).pipe(Effect.asVoid);
+  }
   /** The readings of the accounts after the first. The released usage routes give the provider's own. */
   readonly usage = Effect.fn("ProviderAccountsHost.usage")(function* (this: ProviderAccountsHost) {
     return yield* this.#dependencies.service.getProviderAccountUsage();

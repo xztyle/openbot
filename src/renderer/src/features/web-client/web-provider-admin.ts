@@ -8,6 +8,7 @@ import type {
 import { decodeRegistryEntries, decodeRegistryInstallResult, decodeRegistryOperations } from "@openbot/contracts/ipc";
 import { ACP_REGISTRY_ROUTES } from "@openbot/contracts/team-protocol/acp-registry-v1";
 import { CLAUDE_API_KEY_CAPABILITY } from "@openbot/contracts/team-protocol/claude-api-key-v1";
+import { PROVIDER_ACCOUNT_POOL_CAPABILITY } from "@openbot/contracts/team-protocol/provider-account-pool-v1";
 import {
   PROVIDER_ACCOUNT_RELAY_CAPABILITY,
   PROVIDER_ACCOUNT_RELAY_PROVIDERS,
@@ -39,7 +40,7 @@ import {
   getProviderApiKeyState,
   getProviderRuntimes,
   listCustomProviders,
-  listProviderAccounts,
+  listProviderAccountsWithPools,
   type ProviderCodeLoginRoutes,
   type ProviderRuntimeRoutes,
   providerAccountSignInStatus,
@@ -50,6 +51,7 @@ import {
   renameProviderAccount,
   resetProviderUsage,
   saveCustomProvider,
+  setProviderAccountPool,
   setProviderApiKey,
   startProviderAccountSignIn,
   startProviderCodeLogin,
@@ -109,6 +111,8 @@ function webProviderAdmin(
   runtimeRoutes: () => ProviderRuntimeRoutes,
   signInRoutes: () => ProviderCodeLoginRoutes,
   keyRoutes: () => typeof PROVIDERS_ADMIN_ROUTES | typeof PROVIDERS_V5_ROUTES | typeof PROVIDERS_V8_ROUTES,
+  /** Whether the host has `provider-account-pool-v1`. */
+  accountPools: () => boolean,
 ): ProviderAdminDesktopApi {
   return {
     startCodeLogin: async (provider, serverId) =>
@@ -182,7 +186,9 @@ function webProviderAdmin(
     deleteCustomProvider: async (input, serverId) =>
       runTeamEffect(deleteCustomProvider(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
     accounts: async (serverId) =>
-      runTeamEffect(listProviderAccounts(request(serverId)).pipe(Effect.mapError((error) => error.cause))),
+      runTeamEffect(
+        listProviderAccountsWithPools(request(serverId), accountPools()).pipe(Effect.mapError((error) => error.cause)),
+      ),
     accountUsage: async (serverId) =>
       runTeamEffect(providerAccountUsage(request(serverId)).pipe(Effect.mapError((error) => error.cause))),
     startAccountSignIn: async (input, serverId) =>
@@ -199,6 +205,8 @@ function webProviderAdmin(
       runTeamEffect(renameProviderAccount(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
     removeAccount: async (input, serverId) =>
       runTeamEffect(removeProviderAccount(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
+    setAccountPool: async (input, serverId) =>
+      runTeamEffect(setProviderAccountPool(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
     usageResets: async (provider, serverId) =>
       runTeamEffect(providerUsageResets(request(serverId), provider).pipe(Effect.mapError((error) => error.cause))),
     resetUsage: async (input, serverId) =>
@@ -253,6 +261,7 @@ export function createWebProviderSettings(options: WebProviderSettingsOptions) {
         : serverSupportsCapability(options.server(), PROVIDERS_V5_CAPABILITY)
           ? PROVIDERS_V5_ROUTES
           : PROVIDERS_ADMIN_ROUTES,
+    () => serverSupportsCapability(options.server(), PROVIDER_ACCOUNT_POOL_CAPABILITY),
   );
   const serverId = createMemo(() => remoteAdminServer(options.server(), "providers-v1")?.id);
   const runtimes = createProviderRuntimeStore(
@@ -402,6 +411,12 @@ export function createWebProviderSettings(options: WebProviderSettingsOptions) {
               await hostAccounts.refreshUsage().catch(() => undefined);
               return outcome;
             },
+          }
+        : {}),
+      ...(remoteAdminServer(options.server(), PROVIDER_ACCOUNT_POOL_CAPABILITY)?.id === id
+        ? {
+            setPool: (provider: AgentProviderId, enabled: boolean, leftOut: readonly string[]) =>
+              changed(admin.setAccountPool({ provider, enabled, leftOut: [...leftOut] }, id)),
           }
         : {}),
     };

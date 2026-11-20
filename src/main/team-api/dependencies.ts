@@ -20,6 +20,7 @@ import type { HostService } from "../host-service";
 import type { HostTurnLimitsPreferenceStore } from "../host-turn-limits-preference-store";
 import type { PromptCacheTtlPreferenceStore } from "../prompt-cache-ttl-preference-store";
 import type { ProviderCredentialStore } from "../provider-credential-store";
+import type { ProviderEnvironmentControl } from "../provider-environment-store";
 import type { ProviderRuntimeManager } from "../provider-runtime-manager";
 import type { RemoteMcpSignIn } from "../remote-mcp-sign-in";
 import type { RemoteWorkflowError } from "../remote-service-effects";
@@ -248,7 +249,16 @@ export type TeamApiProviderHostSignIns = Pick<ProviderHostSignIns, "start" | "st
 /** Its presence is what `#protocolSupport` advertises `provider-accounts-v1` on. The routes are admin-only. */
 export type TeamApiProviderAccounts = Pick<
   ProviderAccountsHost,
-  "list" | "usage" | "startSignIn" | "signInStatus" | "cancelSignIn" | "rename" | "remove" | "setAgentAccount"
+  | "list"
+  | "pools"
+  | "setPool"
+  | "usage"
+  | "startSignIn"
+  | "signInStatus"
+  | "cancelSignIn"
+  | "rename"
+  | "remove"
+  | "setAgentAccount"
 >;
 
 /** Its presence is what `#protocolSupport` advertises `provider-usage-reset-v1` on. The routes are admin-only. */
@@ -380,6 +390,8 @@ export interface TeamApiAdmin {
   promptCacheTtl?: Pick<PromptCacheTtlPreferenceStore, "get" | "set">;
   /** workspace-v1 (`fork-host-v1`): the workspace settings of this server. */
   workspaceSettings?: WorkspaceSettingsStore;
+  /** `provider-environment-v1`: the variables that each process of a provider of this computer starts with. */
+  providerEnvironment?: Pick<ProviderEnvironmentControl, "get" | "set">;
   /** `routine-results-v1`: the place where an agent routine sends its answers. */
   routineResults?: TeamApiRoutineResults;
 }

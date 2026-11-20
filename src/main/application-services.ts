@@ -262,6 +262,11 @@ import { createProviderCliAppVersionStore } from "./provider-cli-app-version-sto
 import { ProviderCredentialStore } from "./provider-credential-store";
 import { createProviderDetection, type ProviderDetection } from "./provider-detection";
 import { PROVIDER_DETECTION_SETTINGS_FILE, ProviderDetectionSettingsStore } from "./provider-detection-settings-store";
+import {
+  createProviderEnvironmentPreferenceStore,
+  type ProviderEnvironmentControl,
+  providerEnvironmentControl,
+} from "./provider-environment-store";
 import { ProviderHostSignIns } from "./provider-host-sign-ins";
 import { startAccountLog, startAgentLog, startProviderLog } from "./provider-log";
 import { toProviderRuntimeFailure } from "./provider-runtime-effects";
@@ -391,6 +396,7 @@ const CHANNEL_BRIDGE_FILE = "openbot-channel-bridge-v1.json";
 // The artifact index of the workspace and the images of its pages. Host only, never sent whole.
 const WORKSPACE_ARTIFACTS_FILE = "openbot-workspace-artifacts-v1.json";
 const WORKSPACE_THUMBNAILS_DIRECTORY = "workspace-thumbnails";
+const PROVIDER_ENVIRONMENT_PREFERENCE_FILE = "openbot-provider-environment-v1.json";
 const REMOTE_SESSION_REUSE_PREFERENCE_FILE = "openbot-remote-session-reuse-preference-v1.json";
 const EXTERNAL_LINK_PREFERENCE_FILE = "openbot-external-link-preference-v1.json";
 const REMOTE_NETWORK_ROUTE_PREFERENCE_FILE = "openbot-remote-network-route-v1.json";
@@ -614,6 +620,7 @@ export interface ApplicationServices {
   workspaceSettings: WorkspaceSettingsStore;
   workspaceSidebar: WorkspaceSidebarStore;
   agentCreationLimit: AgentCreationLimitPreferenceStore;
+  providerEnvironment: ProviderEnvironmentControl;
   remoteSessionReuse: RemoteSessionReusePreferenceStore;
   externalLinkPreference: ExternalLinkPreferenceStore;
   externalLinks: ExternalLinkOpener;
@@ -1228,6 +1235,10 @@ export async function createApplicationServices({
   await runCauseEffect(workspaceSettings.load());
   const workspaceSidebar = new WorkspaceSidebarStore(join(app.getPath("userData"), WORKSPACE_SIDEBAR_FILE));
   await runCauseEffect(workspaceSidebar.load());
+  const providerEnvironment = createProviderEnvironmentPreferenceStore(
+    join(app.getPath("userData"), PROVIDER_ENVIRONMENT_PREFERENCE_FILE),
+  );
+  await runCauseEffect(providerEnvironment.load());
   const remoteSessionReuse = createRemoteSessionReusePreferenceStore(
     join(app.getPath("userData"), REMOTE_SESSION_REUSE_PREFERENCE_FILE),
   );
@@ -1374,6 +1385,19 @@ export async function createApplicationServices({
   if (credentialLoadError) {
     logger.warn(`OpenBot could not read the provider key file (${credentialLoadError.name}). It was left unchanged.`);
   }
+  // The sensitive values are in the provider key file. A change restarts the provider when its turns
+  // end; the service exists by the time a change can come.
+  const providerEnvironmentSetting = providerEnvironmentControl(providerEnvironment, providerCredentials, (provider) =>
+    service.providerSpawnSettingsChanged(provider).pipe(
+      Effect.catch((failure) =>
+        Effect.sync(() =>
+          logger.warn(`${provider} did not restart after its variables changed.`, toLogValue(failure.cause)),
+        ),
+      ),
+      Effect.tap(() => Effect.sync(() => service.notifyProviderSettingsChanged())),
+      Effect.asVoid,
+    ),
+  );
   /*
    * The MCP sign-ins, in their own file with the same cipher. `mcp-remote` used to keep these where
    * OpenBot could not redact them; here they are covered by the same rule as every other secret.
@@ -1811,6 +1835,8 @@ export async function createApplicationServices({
       apiKey: (provider) => providerCredentials.get(provider),
       // Read at each Claude spawn, so a change from Server settings applies to the next process.
       promptCacheTtl: () => promptCacheTtl.get().ttl,
+      // Also read at each spawn of Claude, Codex and Gemini: the provider's variables, with their values.
+      providerEnvironment: (provider) => providerEnvironmentSetting.resolve(provider),
       // `configs()`, not `list()`: this is the one path the API keys travel, and it ends at the
       // spawned provider process. The IPC handlers are given `list()`.
       customProviders: () => customProviders.configs(),
@@ -2569,6 +2595,7 @@ export async function createApplicationServices({
       memoryLimit: agentMemoryLimitSetting,
       promptCacheTtl,
       workspaceSettings,
+      providerEnvironment: providerEnvironmentSetting,
       routineResults: routineResultRuntime,
     },
     // The host's Team API routes share the IPC handlers' runtime preparation: a first server
@@ -3316,6 +3343,7 @@ export async function createApplicationServices({
     workspaceSettings,
     workspaceSidebar,
     agentCreationLimit,
+    providerEnvironment: providerEnvironmentSetting,
     remoteSessionReuse,
     externalLinkPreference,
     externalLinks,

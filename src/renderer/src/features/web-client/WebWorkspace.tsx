@@ -84,6 +84,7 @@ import {
   ChartArea,
   CheckCheck,
   hasVisibleToasts,
+  IconButton,
   ListChecks,
   MessageCircle,
   MessageCircleQuestionMark,
@@ -2602,15 +2603,18 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     <Conversation
       headerActions={
         <Show when={chatAppsSupported()}>
-          <Button
+          {/* An icon, as the header's other controls: the name is its tooltip, and a narrow header keeps the agent's name. */}
+          <IconButton
             variant="ghost"
+            class="header-panel-toggle"
+            label={t("mcp.chat.title")}
             onClick={() => {
               const id = workspace.state.selectedId;
               if (id) void chatApps.open({ kind: "agent", id });
             }}
           >
-            {t("mcp.chat.title")}
-          </Button>
+            <Blocks />
+          </IconButton>
         </Show>
       }
       headerMenuActions={
@@ -3560,15 +3564,17 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                     <Conversation
                       headerActions={
                         <Show when={chatAppsSupported()}>
-                          <Button
+                          <IconButton
                             variant="ghost"
+                            class="header-panel-toggle"
+                            label={t("mcp.chat.title")}
                             onClick={() => {
                               const id = channels.state.selectedId;
                               if (id) void chatApps.open({ kind: "channel", id });
                             }}
                           >
-                            {t("mcp.chat.title")}
-                          </Button>
+                            <Blocks />
+                          </IconButton>
                         </Show>
                       }
                       runtime={runtime}

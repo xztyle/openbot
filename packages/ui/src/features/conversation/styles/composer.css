@@ -64,6 +64,11 @@
   .image-generation-meta {
     width: 100%;
   }
+
+  /* An attached tall image keeps its height cap on a phone too. */
+  .image-generation-stage {
+    width: min(100%, var(--image-generation-height-width, 100%));
+  }
 }
 
 .composer-reply-preview {

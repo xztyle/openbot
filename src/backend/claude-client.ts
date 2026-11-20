@@ -447,6 +447,10 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
    * thread: a turn that still runs would end with the query that carries it.
    */
 
+  holdsBackgroundWork(threadId: string): Effect.Effect<boolean, ProviderClientOperationError> {
+    return Effect.sync(() => (this.#threads.get(threadId)?.backgroundTasks ?? 0) > 0);
+  }
+
   readonly releaseThread = Effect.fn("ClaudeAgentClient.releaseThread")(function* (
     this: ClaudeAgentClient,
     threadId: string,

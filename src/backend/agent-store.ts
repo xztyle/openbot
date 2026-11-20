@@ -124,6 +124,8 @@ type PersistedStoredAgent = Omit<StoredAgent, "avatarUrl" | "provider" | "access
   usageLimitReturn?: AgentUsageLimitReturn;
   // Present only while a turn or task still runs on the previous provider.
   pendingRuntime?: AgentPendingRuntime;
+  // Present only after an agent chose the account. Absent on every agent stored before the pin existed.
+  pinnedAccountId?: string;
   // Present only while a user hides the agent. Absent on every agent stored before hiding existed.
   hiddenAt?: string;
   // Written only as `true`. Absent on every agent stored before the setting existed, which keeps it
@@ -760,6 +762,8 @@ export class AgentStore {
       usageLimitReturn?: AgentUsageLimitReturn | null;
       /** The provider to use from the next turn. `null` removes it. */
       pendingRuntime?: AgentPendingRuntime | null;
+      /** The account that an agent chose, which the pool keeps. `null` removes it. */
+      pinnedAccountId?: string | null;
       /** The shared or the agent's own session. It replaces a named profile. */
       ownBrowserSession?: boolean;
       /** The named browser profile. `null` removes it. The caller checks that the profile exists. */
@@ -904,6 +908,18 @@ export class AgentStore {
         // A handover that landed ends the queued change.
         delete next.pendingRuntime;
       }
+      if (input.pinnedAccountId === null) delete next.pinnedAccountId;
+      else if (input.pinnedAccountId !== undefined) {
+        if (!isProviderAccountId(input.pinnedAccountId)) throw new Error("Invalid pinned account.");
+        next.pinnedAccountId = input.pinnedAccountId;
+      } else if (
+        (next.provider !== agent.provider || next.providerAccountId !== agent.providerAccountId) &&
+        (next.providerAccountId ?? DEFAULT_PROVIDER_ACCOUNT_ID) !== next.pinnedAccountId
+      ) {
+        // A move to another account, such as the pool's, ends the pin. A queued change that lands on
+        // the pinned account keeps it, also when it changes the provider.
+        delete next.pinnedAccountId;
+      }
       next.updatedAt = new Date().toISOString();
       const previous = { ...agent };
       const modelChanged =
@@ -929,6 +945,7 @@ export class AgentStore {
       if (next.backupModels === undefined) delete agent.backupModels;
       if (next.usageLimitReturn === undefined) delete agent.usageLimitReturn;
       if (next.pendingRuntime === undefined) delete agent.pendingRuntime;
+      if (next.pinnedAccountId === undefined) delete agent.pinnedAccountId;
       if (next.browserProfileId === undefined) delete agent.browserProfileId;
       if (next.allowAutomation === undefined) delete agent.allowAutomation;
       if (next.allowNewChat === undefined) delete agent.allowNewChat;
@@ -945,6 +962,7 @@ export class AgentStore {
         if (previous.backupModels === undefined) delete agent.backupModels;
         if (previous.usageLimitReturn === undefined) delete agent.usageLimitReturn;
         if (previous.pendingRuntime === undefined) delete agent.pendingRuntime;
+        if (previous.pinnedAccountId === undefined) delete agent.pinnedAccountId;
         if (previous.browserProfileId === undefined) delete agent.browserProfileId;
         if (previous.allowAutomation === undefined) delete agent.allowAutomation;
         if (previous.allowNewChat === undefined) delete agent.allowNewChat;
@@ -1963,6 +1981,7 @@ function isStoredAgent(value: unknown): value is PersistedStoredAgent {
     (record.backupModels === undefined || isAgentBackupModels(record.backupModels)) &&
     (record.usageLimitReturn === undefined || isAgentUsageLimitReturn(record.usageLimitReturn)) &&
     (record.pendingRuntime === undefined || isAgentPendingRuntime(record.pendingRuntime)) &&
+    (record.pinnedAccountId === undefined || isProviderAccountId(record.pinnedAccountId)) &&
     (record.hiddenAt === undefined || isHiddenAt(record.hiddenAt)) &&
     (record.background === undefined || isBoolean(record.background)) &&
     (record.reportsToAgentId === undefined || isAgentManagerValue(record.reportsToAgentId)) &&
@@ -2068,6 +2087,10 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     value.pendingRuntime === undefined || isAgentPendingRuntime(value.pendingRuntime)
       ? value.pendingRuntime
       : reset("pendingRuntime", undefined);
+  const pinnedAccountId =
+    value.pinnedAccountId === undefined || isProviderAccountId(value.pinnedAccountId)
+      ? value.pinnedAccountId
+      : reset("pinnedAccountId", undefined);
   // A time this build cannot read keeps the agent hidden, at the time of the read: a user hid it,
   // and showing it again would run its routines without a decision of the user.
   const hiddenAt =
@@ -2139,6 +2162,7 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     ...(backupModels === undefined ? {} : { backupModels }),
     ...(usageLimitReturn === undefined ? {} : { usageLimitReturn }),
     ...(pendingRuntime === undefined ? {} : { pendingRuntime }),
+    ...(pinnedAccountId === undefined ? {} : { pinnedAccountId }),
     ...(hiddenAt === undefined ? {} : { hiddenAt }),
     ...(background === true ? { background } : {}),
     ...(createdBy === undefined ? {} : { createdBy }),

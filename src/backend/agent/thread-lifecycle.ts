@@ -1312,6 +1312,25 @@ export class ThreadLifecycle {
   }
 
   /**
+   * Whether a session of the agent's main thread still runs background work, such as Claude's
+   * background subagents, which a move to another account would end with the process.
+   */
+  readonly mainRunsBackgroundWork = Effect.fn("ThreadLifecycle.mainRunsBackgroundWork")(function* (
+    this: ThreadLifecycle,
+    agent: AgentSummary,
+  ) {
+    if (agent.threadId === null) return false;
+    for (const session of this.#store.database.listProviderSessions(agent.threadId)) {
+      if (session.state !== "active" || !RUNTIME_RELOADED_ON_RESUME.has(session.provider)) continue;
+      const client = this.#conversation.openClientFor(session.externalSessionId);
+      if (!client?.holdsBackgroundWork) continue;
+      const background = yield* Effect.result(client.holdsBackgroundWork(session.externalSessionId));
+      if (Result.isFailure(background) || background.success) return true;
+    }
+    return false;
+  });
+
+  /**
    * Drops the provider-side state of one thread and keeps the thread itself. The public thread row
    * and its messages stay, so the next turn starts a new provider session with the same history.
    *

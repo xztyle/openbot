@@ -20,10 +20,11 @@ import {
   decodeAgentBackgroundRequest,
   withAgentBackground,
 } from "./agent-background-v1";
+import { AGENT_FACE_UPDATE_KEYS, decodeAgentFaceRequest, withAgentFace } from "./agent-face-v1";
 import type { TeamProtocolV6BaseJsonObject, TeamProtocolV6BaseJsonValue } from "./v6-base";
 
 /** The fields of an agent update request that ride beside the frozen update projection. */
-const SIDE_UPDATE_KEYS = ["background", "reportsToAgentId"] as const;
+const SIDE_UPDATE_KEYS = ["background", "reportsToAgentId", ...AGENT_FACE_UPDATE_KEYS] as const;
 
 /**
  * The `reportsToAgentId` field of an agent update request. A present value must be an id or null:
@@ -35,9 +36,16 @@ export function decodeAgentReportsToRequest(value: unknown): TeamProtocolV6BaseJ
   return { reportsToAgentId: value.reportsToAgentId };
 }
 
-/** The fields of an agent update request that ride beside the frozen projection: `background` and the manager. */
+/**
+ * The fields of an agent update request that ride beside the frozen projection: `background`, the
+ * manager, and the face (`agent-face-v1.ts`).
+ */
 export function decodeAgentSideFieldsRequest(value: unknown): TeamProtocolV6BaseJsonObject {
-  return { ...decodeAgentBackgroundRequest(value), ...decodeAgentReportsToRequest(value) };
+  return {
+    ...decodeAgentBackgroundRequest(value),
+    ...decodeAgentReportsToRequest(value),
+    ...decodeAgentFaceRequest(value),
+  };
 }
 
 /**
@@ -93,10 +101,10 @@ export function withAgentReportsTo(
   return result;
 }
 
-/** The background mark, the manager and the creator of each agent, beside the frozen projection. */
+/** The background mark, the manager, the creator and the face of each agent, beside the frozen projection. */
 export function withAgentSideFields(
   projected: TeamProtocolV6BaseJsonValue,
   source: unknown,
 ): TeamProtocolV6BaseJsonValue {
-  return withAgentReportsTo(withAgentBackground(projected, source), source);
+  return withAgentFace(withAgentReportsTo(withAgentBackground(projected, source), source), source);
 }

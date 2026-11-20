@@ -113,10 +113,17 @@ export async function routeWorkspace(
           agentAccessRank(context.agentLevel(agent.id)) >= agentAccessRank("chat"),
       )
       .map((agent) => agent.id);
-    const defaults = admin?.workspaceSettings?.get().defaults.agents ?? {};
+    const workspace = admin?.workspaceSettings?.get();
+    const defaults = workspace?.defaults.agents ?? {};
     const mainChatAgentIds = agentIds.filter((id) => Object.hasOwn(defaults, id) && defaults[id]?.shareMainChat);
     const recent = new Set(recentAgentIds?.() ?? []);
-    return json(200, { agentIds, mainChatAgentIds, recentAgentIds: agentIds.filter((id) => recent.has(id)) });
+    return json(200, {
+      agentIds,
+      mainChatAgentIds,
+      recentAgentIds: agentIds.filter((id) => recent.has(id)),
+      // Every member reads the look of the workspace here; only an admin reads the settings.
+      ...(workspace?.appearance ? { appearance: workspace.appearance } : {}),
+    });
   }
   if (url.pathname === WORKSPACE_ROUTES.thread) {
     const input = parseChannelRead(body);

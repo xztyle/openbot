@@ -809,6 +809,7 @@ function registerIpcHandlers({
       service,
       sidebarLayout,
       workspaceSidebar,
+      workspaceSettings,
       host,
       remoteServers,
       skills,

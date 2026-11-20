@@ -17,6 +17,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { type AgentFaceStyle, isAgentFaceSeed, isAgentFaceStyle } from "@openbot/contracts/agent-face";
 import { type AgentManagerRefusal, agentManagerRefusal, isAgentManagerValue } from "@openbot/contracts/agent-org";
 import { avatarFileExtension, isAvatarMimeType, isValidAvatarImage } from "@openbot/contracts/avatar-images";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
@@ -136,6 +137,10 @@ type PersistedStoredAgent = Omit<StoredAgent, "avatarUrl" | "provider" | "access
   // Written only when someone sets the manager; `null` is the top level. Absent on every agent stored
   // before the org chart existed, which reports to `createdBy`. An older build drops it on its next read.
   reportsToAgentId?: string | null;
+  // Written only when someone picks the agent's face family or re-rolls its face. Absent on every agent
+  // stored before faces existed, which wears the workspace default. An older build drops them.
+  faceStyle?: AgentFaceStyle;
+  faceSeed?: string;
 };
 type StoredAgentBase = Omit<PersistedStoredAgent, "avatarSeed" | "avatarHue"> & DynamicRecord;
 
@@ -869,6 +874,16 @@ export class AgentStore {
         if (refusal) throw new Error(sourceText(MANAGER_REFUSAL[refusal]));
         next.reportsToAgentId = input.reportsToAgentId;
       }
+      if (input.faceStyle === null) delete next.faceStyle;
+      else if (input.faceStyle !== undefined) {
+        if (!isAgentFaceStyle(input.faceStyle)) throw new Error("Invalid face style.");
+        next.faceStyle = input.faceStyle;
+      }
+      if (input.faceSeed === null) delete next.faceSeed;
+      else if (input.faceSeed !== undefined) {
+        if (!isAgentFaceSeed(input.faceSeed)) throw new Error("Invalid face seed.");
+        next.faceSeed = input.faceSeed;
+      }
       if (input.taskLimit === null) delete next.taskLimit;
       else if (input.taskLimit !== undefined) {
         if (!isAgentTaskLimit(input.taskLimit)) throw new Error("Invalid task limit.");
@@ -950,6 +965,8 @@ export class AgentStore {
       if (next.allowAutomation === undefined) delete agent.allowAutomation;
       if (next.allowNewChat === undefined) delete agent.allowNewChat;
       if (next.quickAcknowledgement === undefined) delete agent.quickAcknowledgement;
+      if (next.faceStyle === undefined) delete agent.faceStyle;
+      if (next.faceSeed === undefined) delete agent.faceSeed;
       try {
         this.#persist(modelChange ? "agent.model-changed" : "agent.updated", modelChange);
       } catch (error) {
@@ -957,6 +974,8 @@ export class AgentStore {
         if (previous.busyMessageMode === undefined) delete agent.busyMessageMode;
         if (previous.background === undefined) delete agent.background;
         if (previous.reportsToAgentId === undefined) delete agent.reportsToAgentId;
+        if (previous.faceStyle === undefined) delete agent.faceStyle;
+        if (previous.faceSeed === undefined) delete agent.faceSeed;
         if (previous.taskLimit === undefined) delete agent.taskLimit;
         if (previous.providerAccountId === undefined) delete agent.providerAccountId;
         if (previous.backupModels === undefined) delete agent.backupModels;
@@ -1985,6 +2004,8 @@ function isStoredAgent(value: unknown): value is PersistedStoredAgent {
     (record.hiddenAt === undefined || isHiddenAt(record.hiddenAt)) &&
     (record.background === undefined || isBoolean(record.background)) &&
     (record.reportsToAgentId === undefined || isAgentManagerValue(record.reportsToAgentId)) &&
+    (record.faceStyle === undefined || isAgentFaceStyle(record.faceStyle)) &&
+    (record.faceSeed === undefined || isAgentFaceSeed(record.faceSeed)) &&
     isAvatarSeed(record.avatarSeed) &&
     (record.avatarHue === null || isAvatarHue(record.avatarHue)) &&
     isMarketplaceSource(record.marketplaceSource)
@@ -2111,6 +2132,17 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     : value.reportsToAgentId === undefined
       ? undefined
       : reset("reportsToAgentId", undefined);
+  // Dropped when unreadable: the agent then wears the workspace default and the face of its seed.
+  const faceStyle = isAgentFaceStyle(value.faceStyle)
+    ? value.faceStyle
+    : value.faceStyle === undefined
+      ? undefined
+      : reset("faceStyle", undefined);
+  const faceSeed = isAgentFaceSeed(value.faceSeed)
+    ? value.faceSeed
+    : value.faceSeed === undefined
+      ? undefined
+      : reset("faceSeed", undefined);
   let marketplaceSource: StoredAgent["marketplaceSource"];
   if (value.marketplaceSource !== undefined) {
     if (isMarketplaceSource(value.marketplaceSource)) {
@@ -2167,6 +2199,8 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     ...(background === true ? { background } : {}),
     ...(createdBy === undefined ? {} : { createdBy }),
     ...(reportsToAgentId === undefined ? {} : { reportsToAgentId }),
+    ...(faceStyle === undefined ? {} : { faceStyle }),
+    ...(faceSeed === undefined ? {} : { faceSeed }),
     ...(sessionSettingOverrides === undefined ? {} : { sessionSettingOverrides }),
     ...(sessionSettingResets === undefined ? {} : { sessionSettingResets }),
     ...(marketplaceSource === undefined ? {} : { marketplaceSource }),

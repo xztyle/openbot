@@ -121,6 +121,7 @@ import {
 import { acceptEmpty, decodeVoid, type ResponseDecoder } from "../remote-host-decoding";
 import type { RemoteServerManager } from "../remote-server-manager";
 import type { SkillMarketplaceService } from "../skill-marketplace-service";
+import type { WorkspaceSettingsStore } from "../workspace-settings-store";
 import type { WorkspaceSidebarStore } from "../workspace-sidebar-store";
 import {
   parseAcknowledgeFailedTurn,
@@ -200,6 +201,8 @@ export interface AgentIpcDependencies {
   service: AgentService;
   sidebarLayout: SidebarLayoutStore;
   workspaceSidebar: Pick<WorkspaceSidebarStore, "get" | "set" | "revision">;
+  /** The look of the workspace that the DM list answers with. */
+  workspaceSettings: Pick<WorkspaceSettingsStore, "get">;
   host: HostService;
   remoteServers: RemoteServerManager;
   skills: SkillMarketplaceService;
@@ -211,6 +214,7 @@ export function agentIpcHandlers({
   service,
   sidebarLayout,
   workspaceSidebar,
+  workspaceSettings,
   host,
   remoteServers,
   skills,
@@ -453,7 +457,12 @@ export function agentIpcHandlers({
             .filter((agent) => agent.hiddenAt === undefined)
             .map((agent) => agent.id);
           const recent = new Set(service.workspace.recentDmAgentIds());
-          return { agentIds, recentAgentIds: agentIds.filter((id) => recent.has(id)) };
+          const appearance = workspaceSettings.get().appearance;
+          return {
+            agentIds,
+            recentAgentIds: agentIds.filter((id) => recent.has(id)),
+            ...(appearance ? { appearance } : {}),
+          };
         },
         remote: (serverId) => {
           if (!remoteServers.supportsCapability(serverId, WORKSPACE_CAPABILITY))

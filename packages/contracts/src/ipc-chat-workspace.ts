@@ -6,6 +6,7 @@
 // `ipc-chat-channels.ts` owns the channel types and calls the guards here. This file imports no
 // value from it, so the two modules do not form an import cycle.
 
+import { AGENT_FACE_STYLES } from "./agent-face";
 import { chatTagReferences } from "./chat-tag-references";
 import { INPUT_LIMITS } from "./input-limits";
 import { integerInRange, isBoundedString, isIdentifier } from "./ipc-bounded-values";
@@ -537,6 +538,38 @@ export interface WorkspaceSettings {
    * does not know the field; the host then keeps what it has, and reads the defaults.
    */
   learning?: WorkspaceLearningSettings;
+  /**
+   * The look of the workspace for every member: the Atelier theme and the default face of the agents.
+   * Absent from a client or a host that does not know the field; the host then keeps what it has, and
+   * a client shows the default.
+   */
+  appearance?: WorkspaceAppearance;
+}
+
+/** The Atelier workspace themes: Craft Studio, Modern Atelier and Riso Press. */
+export const WORKSPACE_THEMES = ["craft", "modern", "riso"] as const;
+export type WorkspaceTheme = (typeof WORKSPACE_THEMES)[number];
+/** The default face family of a workspace. `mixed` gives each agent a family from its id. */
+export const WORKSPACE_FACE_DEFAULTS = [...AGENT_FACE_STYLES, "mixed"] as const;
+export type WorkspaceFaceDefault = (typeof WORKSPACE_FACE_DEFAULTS)[number];
+
+export interface WorkspaceAppearance {
+  theme: WorkspaceTheme;
+  faces: WorkspaceFaceDefault;
+}
+
+export const DEFAULT_WORKSPACE_APPEARANCE: WorkspaceAppearance = { theme: "craft", faces: "portrait" };
+
+/**
+ * The appearance that a value names, field by field. A theme or a family that this build does not
+ * know, from a newer host, shows the default instead of failing the answer that carries it.
+ */
+export function workspaceAppearanceOf(value: unknown): WorkspaceAppearance {
+  if (!isDynamicRecord(value)) return DEFAULT_WORKSPACE_APPEARANCE;
+  return {
+    theme: isOneOf(WORKSPACE_THEMES, value.theme) ? value.theme : DEFAULT_WORKSPACE_APPEARANCE.theme,
+    faces: isOneOf(WORKSPACE_FACE_DEFAULTS, value.faces) ? value.faces : DEFAULT_WORKSPACE_APPEARANCE.faces,
+  };
 }
 
 /** How many counted turns of an agent's own chat start a memory review. 0 turns the reviews off. */
@@ -614,7 +647,9 @@ export function isWorkspaceSettings(value: unknown): value is WorkspaceSettings 
       (Array.isArray(value.handsOffChannelIds) &&
         value.handsOffChannelIds.length <= WORKSPACE_HANDS_OFF_LIMIT &&
         value.handsOffChannelIds.every(isIdentifier))) &&
-    (value.learning === undefined || isWorkspaceLearning(value.learning))
+    (value.learning === undefined || isWorkspaceLearning(value.learning)) &&
+    // A theme or a family of a newer build reads as the default (`workspaceAppearanceOf`).
+    (value.appearance === undefined || isDynamicRecord(value.appearance))
   );
 }
 
@@ -642,6 +677,7 @@ export function decodeWorkspaceSettings(value: unknown): WorkspaceSettings {
             dailyReviewLimit: value.learning.dailyReviewLimit,
           },
         }),
+    ...(value.appearance === undefined ? {} : { appearance: workspaceAppearanceOf(value.appearance) }),
   };
 }
 
@@ -677,9 +713,14 @@ export function withKeptAgentChannelDefaults(current: WorkspaceSettings, next: W
       ? keptAgents
       : { ...keptAgents, handsOffChannelIds: current.handsOffChannelIds };
   // And the learning settings.
-  return keptHandsOff.learning !== undefined || current.learning === undefined
-    ? keptHandsOff
-    : { ...keptHandsOff, learning: current.learning };
+  const keptLearning =
+    keptHandsOff.learning !== undefined || current.learning === undefined
+      ? keptHandsOff
+      : { ...keptHandsOff, learning: current.learning };
+  // And the appearance.
+  return keptLearning.appearance !== undefined || current.appearance === undefined
+    ? keptLearning
+    : { ...keptLearning, appearance: current.appearance };
 }
 
 export const CHANNEL_TYPING_STATES = ["typing", "thinking", "working"] as const;
@@ -751,6 +792,11 @@ export interface WorkspaceDmAgents {
    * Absent from an older host: the list shows every agent.
    */
   recentAgentIds?: string[];
+  /**
+   * The look of the workspace that the owner chose (`WorkspaceSettings.appearance`), for every member.
+   * Absent from an older host, or before the owner chose one: the client shows the default.
+   */
+  appearance?: WorkspaceAppearance;
 }
 
 export function decodeWorkspaceDmAgents(value: unknown): WorkspaceDmAgents {
@@ -765,5 +811,6 @@ export function decodeWorkspaceDmAgents(value: unknown): WorkspaceDmAgents {
     agentIds: [...value.agentIds],
     ...(value.mainChatAgentIds === undefined ? {} : { mainChatAgentIds: [...value.mainChatAgentIds] }),
     ...(value.recentAgentIds === undefined ? {} : { recentAgentIds: [...value.recentAgentIds] }),
+    ...(value.appearance === undefined ? {} : { appearance: workspaceAppearanceOf(value.appearance) }),
   };
 }

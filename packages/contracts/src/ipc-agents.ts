@@ -1,3 +1,4 @@
+import { type AgentFaceStyle, isAgentFaceSeed, isAgentFaceStyle } from "./agent-face";
 import { isAgentManagerValue } from "./agent-org";
 import { type AgentProviderRef, isAgentProviderRef } from "./agent-providers";
 import { INPUT_LIMITS } from "./input-limits";
@@ -308,6 +309,13 @@ export interface AgentSummary {
   reportsToAgentId?: string | null;
   /** The agent that created this one with the `create_agent` tool, and when. Absent for one a person made. */
   createdBy?: AgentCreator;
+  /**
+   * The agent's own face family. Absent: the workspace default. A remote host sends it beside the
+   * frozen agent projection; see `agent-face-v1.ts`.
+   */
+  faceStyle?: AgentFaceStyle;
+  /** A re-rolled face. Absent: the face of the agent's avatar seed. */
+  faceSeed?: string;
   threadId: string | null;
   workspacePath: string;
   preview: string;
@@ -378,6 +386,8 @@ function hasAgentSummaryFields(value: DynamicRecord): boolean {
     (value.background === undefined || isBoolean(value.background)) &&
     (value.reportsToAgentId === undefined || isAgentManagerValue(value.reportsToAgentId)) &&
     (value.createdBy === undefined || isAgentCreator(value.createdBy)) &&
+    (value.faceStyle === undefined || isAgentFaceStyle(value.faceStyle)) &&
+    (value.faceSeed === undefined || isAgentFaceSeed(value.faceSeed)) &&
     (value.threadId === null || isIdentifier(value.threadId)) &&
     isBoundedString(value.workspacePath, INPUT_LIMITS.path) &&
     isBoundedString(value.preview, INPUT_LIMITS.messageText) &&
@@ -449,6 +459,10 @@ export interface UpdateAgentInput {
   background?: boolean;
   /** The agent's manager in the org chart, or `null` for the top level. The host refuses a loop. */
   reportsToAgentId?: string | null;
+  /** The agent's own face family, or `null` for the workspace default. */
+  faceStyle?: AgentFaceStyle | null;
+  /** A re-rolled face, or `null` for the face of the avatar seed. */
+  faceSeed?: string | null;
   avatarSeed?: string;
   avatarHue?: AvatarHue | null;
 }

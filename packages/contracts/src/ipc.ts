@@ -1,5 +1,6 @@
 export * from "./acp-agent-presets";
 export * from "./acp-registry-boundary";
+export * from "./agent-face";
 export * from "./agent-providers";
 export * from "./app-appearance";
 export * from "./app-interface-size";

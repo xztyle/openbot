@@ -134,6 +134,7 @@ import {
   type UpdatePreference,
   type UpdateQueuedMessageInput,
   type UpdateStatus,
+  type WorkspaceAppearance,
   type WorkspaceArtifactRecord,
   type WorkspaceDirectory,
   type WorkspaceFleetAgent,
@@ -227,6 +228,8 @@ export interface MockOpenBotOptions
     MockHostUpdateOptions,
     MockRoutineResultsOptions {
   appInfo?: AppInfo;
+  /** The look of the preview's workspace, as the owner chose it in Server settings. */
+  workspaceAppearance?: WorkspaceAppearance;
   analyticsPreference?: AnalyticsPreference;
   languagePreference?: AppLanguagePreference;
   setupState?: AppSetupState;
@@ -435,7 +438,10 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
   let agentCreationLimit: AgentCreationLimitPreference = { limit: DEFAULT_AGENT_CREATION_LIMIT };
   let promptCacheTtl: PromptCacheTtlSetting = { ...DEFAULT_PROMPT_CACHE_TTL };
   let claudeContext: ClaudeContextSetting = { ...DEFAULT_CLAUDE_CONTEXT };
-  let workspaceSettings: WorkspaceSettings = clone(DEFAULT_WORKSPACE_SETTINGS);
+  let workspaceSettings: WorkspaceSettings = {
+    ...clone(DEFAULT_WORKSPACE_SETTINGS),
+    ...(options.workspaceAppearance ? { appearance: { ...options.workspaceAppearance } } : {}),
+  };
   let agentAccess: AgentAccessChange = { revision: 0, everyone: {}, roles: [] };
   const agentMemoryLimitListeners = new Set<(preference: AgentMemoryLimitPreference) => void>();
   let remoteSessionReuse: RemoteSessionReusePreference = { ...DEFAULT_REMOTE_SESSION_REUSE_PREFERENCE };
@@ -970,6 +976,12 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     () => agents.filter((entry) => entry.hiddenAt === undefined && entry.background !== true).map((entry) => entry.id),
     threadReads,
   );
+  // The host answers the look of the workspace with the DM list, so every member reads it.
+  const channelDmAgents = mockChannels.workspaceDmAgents;
+  mockChannels.workspaceDmAgents = async () => ({
+    ...(await channelDmAgents()),
+    ...(workspaceSettings.appearance ? { appearance: { ...workspaceSettings.appearance } } : {}),
+  });
   const { threadPosition, ...mockWorkspaceState } = createMockWorkspaceState(
     emitAgentEvent,
     mockChannels,
@@ -2354,9 +2366,16 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
           allowNewChat,
           quickAcknowledgement,
           background,
+          faceStyle,
+          faceSeed,
           ...updates
         } = input;
         const updated: ClientAgentSummary = { ...current, ...updates };
+        // `null` returns the agent to the default face.
+        if (faceStyle === null) delete updated.faceStyle;
+        else if (faceStyle !== undefined) updated.faceStyle = faceStyle;
+        if (faceSeed === null) delete updated.faceSeed;
+        else if (faceSeed !== undefined) updated.faceSeed = faceSeed;
         // `null` returns the agent to the account default, which an agent records by having no value.
         const flags = { allowAutomation, allowNewChat, quickAcknowledgement };
         for (const key of AGENT_DEFAULT_KEYS) {

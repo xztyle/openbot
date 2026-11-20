@@ -10,6 +10,7 @@ import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-
 // property of the reader, not something ~50 routes each have to remember.
 
 import type { IncomingMessage } from "node:http";
+import { isAgentFaceSeed, isAgentFaceStyle } from "@openbot/contracts/agent-face";
 import { isAgentManagerValue } from "@openbot/contracts/agent-org";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
@@ -412,6 +413,19 @@ export function agentUpdate(value: DynamicRecord, agentId: string): UpdateAgentI
       throw new HttpError(400, sourceText("error.team.agentSettingInvalid"));
     }
     result.reportsToAgentId = value.reportsToAgentId;
+  }
+  // `null` returns the agent to the workspace's face family, or to the face of its avatar seed.
+  if (value.faceStyle !== undefined) {
+    if (value.faceStyle !== null && !isAgentFaceStyle(value.faceStyle)) {
+      throw new HttpError(400, sourceText("error.team.agentSettingInvalid"));
+    }
+    result.faceStyle = value.faceStyle;
+  }
+  if (value.faceSeed !== undefined) {
+    if (value.faceSeed !== null && !isAgentFaceSeed(value.faceSeed)) {
+      throw new HttpError(400, sourceText("error.team.agentSettingInvalid"));
+    }
+    result.faceSeed = value.faceSeed;
   }
   if (value.provider !== undefined) {
     if (!isAgentProvider(value.provider)) {

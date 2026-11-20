@@ -1,3 +1,4 @@
+import { isAgentFaceSeed, isAgentFaceStyle } from "@openbot/contracts/agent-face";
 import { isAgentManagerValue } from "@openbot/contracts/agent-org";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
@@ -653,6 +654,15 @@ export function parseUpdateAgent(value: unknown): UpdateAgentInput {
   if (value.reportsToAgentId !== undefined) {
     if (!isAgentManagerValue(value.reportsToAgentId)) throw new Error("Invalid agent manager.");
     result.reportsToAgentId = value.reportsToAgentId;
+  }
+  // `null` returns the agent to the workspace's face family, or to the face of its avatar seed.
+  if (value.faceStyle !== undefined) {
+    if (value.faceStyle !== null && !isAgentFaceStyle(value.faceStyle)) throw new Error("Invalid face style.");
+    result.faceStyle = value.faceStyle;
+  }
+  if (value.faceSeed !== undefined) {
+    if (value.faceSeed !== null && !isAgentFaceSeed(value.faceSeed)) throw new Error("Invalid face seed.");
+    result.faceSeed = value.faceSeed;
   }
   if (value.allowNewChat !== undefined) {
     if (value.allowNewChat !== null && !isBoolean(value.allowNewChat)) throw new Error("Invalid new chat value.");

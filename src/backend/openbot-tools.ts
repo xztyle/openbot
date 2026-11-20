@@ -8,6 +8,7 @@ import {
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { isUiBlockId, UI_BLOCK_LIMITS } from "@openbot/contracts/ui-blocks";
 import { z } from "zod";
+import { advertisedJsonSchema } from "./agent/advertised-json-schema";
 import { interruptAgentToolSchema } from "./agent/agent-interrupt-tool";
 import { CHANNEL_ADMIN_TOOL_DEFINITIONS } from "./agent/channel-admin-tools";
 import { DATA_TOOL_DEFINITIONS } from "./agent/data-tools";
@@ -765,6 +766,6 @@ export const OPENBOT_DYNAMIC_TOOLS = {
     type: "function" as const,
     name: definition.name,
     description: definition.description,
-    inputSchema: z.toJSONSchema(z.strictObject(definition.shape), { target: "draft-7" }),
+    inputSchema: advertisedJsonSchema(z.strictObject(definition.shape)),
   })),
 } as const;

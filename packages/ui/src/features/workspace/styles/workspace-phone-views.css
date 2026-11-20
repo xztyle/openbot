@@ -273,3 +273,45 @@
     justify-self: end;
   }
 }
+
+/* Server notices on a phone ---------------------------------------------------------------------- */
+
+/* Over the tabs: a bar under the status bar, as Slack's "Connecting…". */
+.ws-phone-shell-banner {
+  display: contents;
+}
+
+/* A narrow screen gives the text the full width; the buttons go under it, at the end. */
+@media (max-width: 720px) {
+  .server-connection-notice {
+    flex-wrap: wrap;
+    gap: var(--openbot-space-2) var(--openbot-space-3);
+    padding: var(--openbot-space-2) var(--openbot-space-4);
+    background: var(--openbot-bg-surface);
+    font-size: var(--openbot-text-lg);
+  }
+
+  .server-connection-notice > :first-child {
+    min-width: min(100%, 220px);
+    flex: 1 1 220px;
+  }
+
+  .server-connection-notice .server-connection-detail {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: var(--openbot-text-md);
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .server-connection-notice > .server-connection-actions,
+  .server-connection-notice > .ui-button {
+    margin-left: auto;
+  }
+}
+
+@media (pointer: coarse) {
+  .server-connection-notice .ui-button {
+    min-height: var(--openbot-touch-target);
+  }
+}

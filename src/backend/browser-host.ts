@@ -140,6 +140,13 @@ import {
   parseBrowserToolCall,
 } from "./browser-tools";
 import { runCauseEffect } from "./effect-boundary";
+import {
+  BROWSER_STRING_MORE,
+  BROWSER_VALUE_MORE,
+  BROWSER_VALUE_TEXT_LIMIT,
+  cutModelText,
+  jsonStringFit,
+} from "./model-text-limit";
 import type { DynamicToolCallParams, DynamicToolResult } from "./protocol";
 import { isRecord } from "./protocol";
 import type { VaultCardSecret } from "./vault-items";
@@ -2025,7 +2032,7 @@ export class BrowserHost {
     evaluate: ({ args }, params) =>
       Effect.gen({ self: this }, function* () {
         yield* browserSync(() => this.#requireToolTab(params, args.tabId));
-        return textResult(
+        return valueTextResult(
           yield* this.#runEvaluation(
             args.tabId,
             args.expression,
@@ -3374,6 +3381,25 @@ function textResult(value: unknown): DynamicToolResult {
     success: true,
     contentItems: [{ type: "inputText", text: JSON.stringify(value) }],
   };
+}
+
+/**
+ * An evaluated value as JSON text. Text past the model limit is cut, with a note that says how to read
+ * more: the result stays in the agent's context for each later request. A string is cut in its own
+ * characters, so that the note counts what the model returned.
+ */
+function valueTextResult(value: BrowserJsonValue): DynamicToolResult {
+  let shown = JSON.stringify(value);
+  if (isString(value)) {
+    if (shown.length > BROWSER_VALUE_TEXT_LIMIT) {
+      const cut = cutModelText(value, jsonStringFit(value, BROWSER_VALUE_TEXT_LIMIT), BROWSER_STRING_MORE);
+      if (cut) shown = `${JSON.stringify(cut.text)}\n${cut.note}`;
+    }
+  } else {
+    const cut = cutModelText(shown, BROWSER_VALUE_TEXT_LIMIT, BROWSER_VALUE_MORE);
+    if (cut) shown = `${cut.text}\n${cut.note}`;
+  }
+  return { success: true, contentItems: [{ type: "inputText", text: shown }] };
 }
 
 function uniqueDownloadPath(root: string, name: string, reserved: Set<string>): string {

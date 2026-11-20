@@ -362,6 +362,8 @@ button.ws-profile-trigger.ws-message-author:hover {
 .ws-message:hover > .ws-message-actions,
 .ws-message:focus-within > .ws-message-actions,
 .ws-message[data-menu-open] > .ws-message-actions {
+  /* Over the day pill stuck at the top, as in Slack: the first message of a day can be acted on. */
+  z-index: 4;
   opacity: 1;
   pointer-events: auto;
 }

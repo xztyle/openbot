@@ -134,6 +134,8 @@ export const messages = {
   "workspace.typing.several": "여러 사람이 입력 중…",
   "workspace.typing.thinking": "{name}이(가) 생각 중…",
   "workspace.typing.working": "{name}이(가) 작업 중…",
+  "workspace.typing.routing": "{name}이(가) 답변할 사람을 고르는 중…",
+  "workspace.typing.waiting": "{name}이(가) 이전 작업 후에 답변합니다…",
 
   "workspace.steps.count": { other: "{count}단계" },
   "workspace.steps.summary": "{steps} · {time}",

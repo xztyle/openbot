@@ -730,10 +730,14 @@ export function withKeptAgentChannelDefaults(current: WorkspaceSettings, next: W
     : { ...keptLearning, appearance: current.appearance };
 }
 
-export const CHANNEL_TYPING_STATES = ["typing", "thinking", "working"] as const;
+export const CHANNEL_TYPING_STATES = ["typing", "thinking", "working", "routing", "waiting"] as const;
+/** The states that every released client reads. A peer without `workspace-typing-states-v1` gets only these. */
+export const CHANNEL_TYPING_BASE_STATES = ["typing", "thinking", "working"] as const;
 /**
  * What a member of a channel does now. `typing`: a person writes a message. `thinking`: the answer
- * gate considers an agent for a message. `working`: an agent runs a task of the channel.
+ * gate considers an agent for a message. `working`: an agent runs a task of the channel. `routing`:
+ * the lead chooses who answers a person's message. `waiting`: an agent has the task, but its turn
+ * waits for earlier work: its other turns, or a free slot on the host.
  */
 export type ChannelTypingState = (typeof CHANNEL_TYPING_STATES)[number];
 

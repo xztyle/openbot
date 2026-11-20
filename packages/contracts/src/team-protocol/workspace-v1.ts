@@ -67,6 +67,11 @@
 //   `{ kind: "member" | "agent", id, state: "typing" | "thinking" | "working", threadRootId? }`.
 //   It replaces the last list of the channel. The host sends it only to a peer that can see the
 //   channel, without the agents that are hidden from the peer.
+//   Later, under `workspace-typing-states-v1`: the states `routing` (the lead chooses who answers a
+//   person's message) and `waiting` (the agent has the task, and its turn waits for earlier work). A
+//   peer without that string gets `thinking` for `routing` and `working` for `waiting`. Also later,
+//   for every peer: when the event stream opens, the host sends the list of each channel that the
+//   peer can see and that has one, so a client that reconnects does not keep a stale list.
 //
 // The host adds the fields only for a peer that advertises `fork-host-v1`, so the wire of every
 // released client stays as it was. A client accepts them whenever they are present. A present
@@ -98,6 +103,8 @@ import { FORK_HOST_CAPABILITY } from "./fork-host-v1";
 import type { TeamProtocolV2Json } from "./v2";
 
 export const WORKSPACE_CAPABILITY = FORK_HOST_CAPABILITY;
+/** A peer that reads the `routing` and `waiting` typing states. Without it, the host sends the base states only. */
+export const WORKSPACE_TYPING_STATES_CAPABILITY = "workspace-typing-states-v1";
 
 export const WORKSPACE_ROUTES = {
   command: "/v1/workspace/channels/commands",
@@ -395,7 +402,11 @@ const activity = fields({ items: list(activityItem, 200), threads: list(activity
 
 const typingRequest = fields({ channelId: identifier, typing: boolean }, { threadRootId: identifier });
 const typingEntry = fields(
-  { kind: oneOf("member", "agent"), id: identifier, state: oneOf("typing", "thinking", "working") },
+  {
+    kind: oneOf("member", "agent"),
+    id: identifier,
+    state: oneOf("typing", "thinking", "working", "routing", "waiting"),
+  },
   { threadRootId: identifier },
 );
 const dmAgents = fields(

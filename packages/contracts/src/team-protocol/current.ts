@@ -89,6 +89,7 @@ import { TEAM_OPEN_PROVIDERS_CAPABILITY, TEAM_PROTOCOL_V8_CAPABILITIES } from ".
 import { WEBHOOK_TESTS_CAPABILITY } from "./webhook-tests-v1";
 import { WORKFLOWS_CAPABILITY } from "./workflows-v1";
 import { WORKSPACE_DIRECTORY_CAPABILITY } from "./workspace-directory-v1";
+import { WORKSPACE_TYPING_STATES_CAPABILITY } from "./workspace-v1";
 
 export const TEAM_SEMANTIC_TAGS_CAPABILITY = "installed-skills";
 export const TEAM_AGENT_ACTIVITY_CAPABILITY = "agent-activity";
@@ -317,6 +318,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   HOST_TURN_LIMITS_CAPABILITY,
   PROVIDER_ACCOUNT_POOL_CAPABILITY,
   PROVIDER_ENVIRONMENT_CAPABILITY,
+  WORKSPACE_TYPING_STATES_CAPABILITY,
 ] as const;
 
 export type TeamCurrentCapability = (typeof TEAM_CURRENT_CAPABILITIES)[number];
@@ -437,7 +439,8 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== WORKFLOWS_CAPABILITY &&
     capability !== HOST_TURN_LIMITS_CAPABILITY &&
     capability !== PROVIDER_ACCOUNT_POOL_CAPABILITY &&
-    capability !== PROVIDER_ENVIRONMENT_CAPABILITY,
+    capability !== PROVIDER_ENVIRONMENT_CAPABILITY &&
+    capability !== WORKSPACE_TYPING_STATES_CAPABILITY,
 );
 // A v7 host does not know the v8 markers, so a client sends them only after it negotiates protocol 8.
 const TEAM_PROTOCOL_V7_CURRENT_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
@@ -501,6 +504,7 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== WORKFLOWS_CAPABILITY &&
       capability !== HOST_TURN_LIMITS_CAPABILITY &&
       capability !== PROVIDER_ACCOUNT_POOL_CAPABILITY &&
-      capability !== PROVIDER_ENVIRONMENT_CAPABILITY,
+      capability !== PROVIDER_ENVIRONMENT_CAPABILITY &&
+      capability !== WORKSPACE_TYPING_STATES_CAPABILITY,
   );
 }

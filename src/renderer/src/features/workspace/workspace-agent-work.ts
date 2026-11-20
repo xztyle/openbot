@@ -15,6 +15,9 @@ const STOP_SETTLE_MS = 15_000;
 
 const ACTIVE_TASK_STATES: ReadonlySet<string> = new Set(["queued", "running", "waiting"]);
 
+/** When the page and the host disagree, the later step of an answer wins: working over waiting over routing. */
+const STATE_RANK: Record<TypingAgent["state"], number> = { thinking: 0, routing: 1, waiting: 2, working: 3 };
+
 /**
  * The tasks to stop so that one agent stops its work in a place: its active tasks there, without
  * the ones under another of them, because a stop holds the whole run below a task. `inPlace` says
@@ -44,10 +47,11 @@ export function agentRunsToStop(
 }
 
 /**
- * Who works, thinks and types in a channel or in one of its threads, for the line over the
- * composer: the host's typing list once it sent one, else the running tasks and streaming answers
- * of the page. A working agent gets what it does now, its steps so far, and Stop. The channel and
- * the thread panel use this one model, so the line reads the same in both.
+ * Who works, waits, routes, thinks and types in a channel or in one of its threads, for the line
+ * over the composer: the host's typing list once it sent one, else the tasks and the gate of the
+ * page, and in both cases the running tasks and streaming answers of the page. A working agent gets
+ * what it does now, its steps so far, and Stop. The channel and the thread panel use this one model,
+ * so the line reads the same in both.
  */
 export function createAgentWork(input: {
   channelId: string;
@@ -89,26 +93,58 @@ export function createAgentWork(input: {
     return thread === undefined || thread === null;
   };
   const live = createMemo(() => ws.typingIn(input.channelId, input.threadRootId));
+  const leadAgentId = (): string | null => {
+    const page = ws.channels.state.page;
+    return page?.channel.id === input.channelId ? (page.channel.leadAgentId ?? null) : null;
+  };
   const humans = createMemo(() => (live()?.humans ?? []).map((id) => memberById(ws.directory(), id)));
+  /**
+   * What each agent does here. The host's list says it once the host sent one. Without it, the page
+   * shows it: the gate's pending agents think, a queued request waits for its owner, and a request
+   * without an owner is the lead's to route, and an agent whose answer streams works. Either way,
+   * an agent whose task runs here works: the page reads its tasks again on each change, so a typing
+   * event that the connection lost does not hide the agent.
+   */
   const ids = createMemo(() => {
     const host = live();
     const entries = input.entries();
-    const thinking = host
-      ? host.agents.filter((agent) => agent.state === "thinking").map((agent) => agent.id)
-      : thinkingAgents([...entries]);
+    const here = tasks().filter(inPlace);
+    const states = new Map<string, TypingAgent["state"]>();
+    const put = (id: string, state: TypingAgent["state"]) => {
+      const known = states.get(id);
+      if (!known || STATE_RANK[state] > STATE_RANK[known]) states.set(id, state);
+    };
+    if (host) for (const agent of host.agents) put(agent.id, agent.state);
+    else {
+      for (const id of thinkingAgents([...entries])) put(id, "thinking");
+      const lead = leadAgentId();
+      for (const task of here)
+        if (task.state === "queued")
+          if (task.ownerAgentId) put(task.ownerAgentId, "waiting");
+          else if (lead) put(lead, "routing");
+    }
+    // Beside the host's list, only a running task whose request the page has: one of a thread reply
+    // that the channel page does not hold would show in the channel too.
+    const known = threadOf();
+    const replies = input.threadRootId ? entries.filter((entry) => entry.id !== input.threadRootId) : entries;
     const working = host
-      ? host.agents.filter((agent) => agent.state === "working").map((agent) => agent.id)
-      : workingAgents(
-          input.threadRootId ? entries.filter((entry) => entry.id !== input.threadRootId) : entries,
-          tasks().filter(inPlace),
-        );
-    return { thinking, working: working.filter((id) => !thinking.includes(id)) };
+      ? workingAgents(
+          [],
+          here.filter((task) => known.has(task.requestMessageId)),
+        )
+      : workingAgents(replies, here);
+    for (const id of working) put(id, "working");
+    return states;
   });
+  /** The agents that may be stopped here: their turn runs, or waits for earlier work. */
+  const stoppable = createMemo(() =>
+    [...ids()].flatMap(([id, state]) => (state === "working" || state === "waiting" ? [id] : [])),
+  );
 
   /** The steps so far of each working agent, read every 2 s while it works. */
   const [liveSteps, setLiveSteps] = createSignal<Record<string, WorkspaceSteps>>({});
   createEffect(
-    () => ids().working.join(" "),
+    () => [...ids()].flatMap(([id, state]) => (state === "working" ? [id] : [])).join(" "),
     (key) => {
       const read = ws.channels.port().agent.workspaceSteps;
       if (!key || !read) {
@@ -143,14 +179,11 @@ export function createAgentWork(input: {
 
   /** The agents whose stop was sent. Each one leaves the set when its work ends or the stop fails. */
   const [stopping, setStopping] = createSignal<ReadonlySet<string>>(new Set());
-  createEffect(
-    () => ids().working,
-    (working) => {
-      const current = stopping();
-      if ([...current].some((id) => !working.includes(id)))
-        setStopping(new Set([...current].filter((id) => working.includes(id))));
-    },
-  );
+  createEffect(stoppable, (working) => {
+    const current = stopping();
+    if ([...current].some((id) => !working.includes(id)))
+      setStopping(new Set([...current].filter((id) => working.includes(id))));
+  });
   async function stop(agentId: string, name: string) {
     if (stopping().has(agentId)) return;
     const taskIds = agentRunsToStop(tasks(), agentId, inPlace);
@@ -180,27 +213,29 @@ export function createAgentWork(input: {
   }
 
   const agents = createMemo((): TypingAgent[] => {
-    const { thinking, working } = ids();
     const directory = ws.directory();
     const fleet = ws.fleet.agents();
     const steps = liveSteps();
     const halting = stopping();
     const canStop = input.canStop();
-    return [
-      ...thinking.map((id) => ({ member: memberById(directory, id), state: "thinking" as const })),
-      ...working.map((id) => {
+    // The agents that think or route first, then the ones that wait, then the ones at work.
+    return [...ids()]
+      .sort(([, left], [, right]) => STATE_RANK[left] - STATE_RANK[right])
+      .map(([id, state]): TypingAgent => {
         const member = memberById(directory, id);
+        if (state === "thinking" || state === "routing") return { member, state };
+        const onStop = canStop ? () => void stop(id, member.name) : undefined;
+        if (state === "waiting") return { member, state, onStop, stopping: halting.has(id) };
         const trail = steps[id];
         return {
           member,
-          state: "working" as const,
+          state,
           label: fleet.find((agent) => agent.member.id === id)?.currentStep,
           trail: trail ? { steps: trail.steps, durationMs: trail.durationMs || undefined } : undefined,
-          onStop: canStop ? () => void stop(id, member.name) : undefined,
+          onStop,
           stopping: halting.has(id),
         };
-      }),
-    ];
+      });
   });
   return { agents, humans };
 }

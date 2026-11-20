@@ -134,6 +134,8 @@ export const messages = {
   "workspace.typing.several": "複数の人が入力中…",
   "workspace.typing.thinking": "{name} が考え中…",
   "workspace.typing.working": "{name} が作業中…",
+  "workspace.typing.routing": "{name} が回答者を選んでいます…",
+  "workspace.typing.waiting": "{name} は前の作業の後に回答します…",
 
   "workspace.steps.count": { other: "{count} ステップ" },
   "workspace.steps.summary": "{steps} · {time}",

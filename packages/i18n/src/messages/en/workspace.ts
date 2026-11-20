@@ -144,6 +144,8 @@ export const messages = defineMessages("workspace", {
   "workspace.typing.several": "Several people are typing…",
   "workspace.typing.thinking": "{name} is thinking…",
   "workspace.typing.working": "{name} is working…",
+  "workspace.typing.routing": "{name} is choosing who answers…",
+  "workspace.typing.waiting": "{name} will answer after earlier work…",
 
   "workspace.steps.count": { one: "{count} step", other: "{count} steps" },
   "workspace.steps.summary": "{steps} · {time}",

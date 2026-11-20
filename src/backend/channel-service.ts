@@ -89,7 +89,7 @@ import { type ChannelGateOutcome, ChannelResponders, memberAnswerMode, usesAnswe
 import { ChannelSaved } from "./channel-saved";
 import { ChannelSearch } from "./channel-search";
 import { type ChannelAssignment, type ChannelContext, type ChannelMessageChange, ChannelStore } from "./channel-store";
-import { ChannelTyping } from "./channel-typing";
+import { type ChannelAgentWork, ChannelTyping } from "./channel-typing";
 import { type ChannelViewer, canSeeChannel } from "./channel-visibility";
 import {
   createdChannel,
@@ -262,6 +262,9 @@ export const HANDS_OFF_INSTRUCTION =
 const channelLogger = createOpenBotLogger("channel-service");
 /** How long a channel stays unchanged before its history summary is brought up to date in the background. */
 const SUMMARY_DELAY_MS = 5_000;
+/** A started assignment whose delivery is still queued after this long shows as waiting, not working. */
+const TYPING_WAIT_GRACE_MS = 2_000;
+
 /** How long the gate model may take for one channel history summary before the member's model writes it. */
 const SUMMARY_GATE_TIMEOUT_MS = 45_000;
 
@@ -341,30 +344,7 @@ export class ChannelService {
     this.#activity = new ChannelActivity(this.store, this.readState);
     this.#typing = new ChannelTyping({
       emit: (channelId, typing) => hooks.typingChanged?.(channelId, typing),
-      working: (channelId) =>
-        this.store.exists(channelId)
-          ? [
-              ...this.store
-                .assignments(channelId)
-                .filter((assignment) => assignment.state === "starting" || assignment.state === "running")
-                .map((assignment) => ({ agentId: assignment.agentId, threadRootId: assignment.threadRootId })),
-              // A person's request that waits for its agent's other work: the channel shows the agent
-              // working, not silence, until the request starts.
-              ...this.store
-                .tasks(channelId)
-                .filter(
-                  (task): task is ChannelTask & { ownerAgentId: string } =>
-                    task.state === "queued" &&
-                    task.ownerAgentId !== null &&
-                    this.hooks.busy(task.ownerAgentId) &&
-                    this.#personRequest(task),
-                )
-                .map((task) => ({
-                  agentId: task.ownerAgentId,
-                  threadRootId: this.store.message(channelId, task.requestMessageId)?.threadRootId ?? null,
-                })),
-            ]
-          : [],
+      working: (channelId) => (this.store.exists(channelId) ? this.#agentWork(channelId) : { agents: [] }),
     });
     this.memories = new ChannelMemoryStore(database);
     this.#history = new ChannelHistory(this.store, (lead, prompt) => this.#summaryText(lead, prompt), this.memories);
@@ -655,6 +635,58 @@ export class ChannelService {
   });
 
   /**
+   * Who works for the channel now, for the typing list. A started assignment works once its turn
+   * runs; before that it works too for a moment, and after `TYPING_WAIT_GRACE_MS` with its delivery
+   * still queued it waits: the agent runs other turns, or the host has no free slot. A person's
+   * queued request waits while its agent is busy, and works while the agent is free: its assignment
+   * comes next. A person's request without an owner is the lead's to route while the lead can: the
+   * lead shows as routing in the request's place.
+   */
+  #agentWork(channelId: string): { agents: ChannelAgentWork[]; recheckInMs?: number } {
+    const agents: ChannelAgentWork[] = [];
+    let recheckInMs: number | undefined;
+    const now = Date.now();
+    const threadOf = (messageId: string) => this.store.message(channelId, messageId)?.threadRootId ?? null;
+    for (const assignment of this.store.assignments(channelId)) {
+      if (assignment.state !== "starting" && assignment.state !== "running") continue;
+      const delivery = assignment.deliveryId ? this.mailbox.getDelivery(assignment.deliveryId)?.delivery : undefined;
+      let state: ChannelAgentWork["state"] = "working";
+      if (assignment.state === "starting" && delivery?.status === "queued") {
+        const waitedMs = now - Date.parse(delivery.createdAt);
+        if (waitedMs >= TYPING_WAIT_GRACE_MS) state = "waiting";
+        else recheckInMs = Math.min(recheckInMs ?? Number.POSITIVE_INFINITY, TYPING_WAIT_GRACE_MS - waitedMs);
+      }
+      agents.push({ agentId: assignment.agentId, threadRootId: assignment.threadRootId, state });
+    }
+    const tasks = this.store.tasks(channelId).filter((task) => task.state === "queued" && this.#personRequest(task));
+    // A routed request is about to get its assignment, so its agent shows as working from the
+    // dispatch on, not as nobody for the moment until the assignment exists.
+    // An agent held by its plan's limit answers after the reset, not after earlier work: it shows nothing.
+    for (const task of tasks)
+      if (task.ownerAgentId && !(this.hooks.usageLimited?.(task.ownerAgentId) ?? false))
+        agents.push({
+          agentId: task.ownerAgentId,
+          threadRootId: threadOf(task.requestMessageId),
+          state: this.hooks.busy(task.ownerAgentId) ? "waiting" : "working",
+        });
+    const unowned = tasks.filter((task) => task.ownerAgentId === null);
+    if (unowned.length) {
+      const channel = this.store.get(channelId);
+      const lead = channel.leadAgentId;
+      if (
+        lead &&
+        !channel.archived &&
+        !this.unavailable(lead, channel) &&
+        !(this.hooks.usageLimited?.(lead) ?? false) &&
+        this.eligibleMembers(channel).length > 1
+      )
+        for (const task of unowned)
+          agents.push({ agentId: lead, threadRootId: threadOf(task.requestMessageId), state: "routing" });
+    }
+    return recheckInMs === undefined ? { agents } : { agents, recheckInMs };
+  }
+
+  /**
    * A person types in a channel they can see, or stopped. It changes only the typing list in memory;
    * a channel that does not exist, or that the person cannot see, answers as not found.
    */
@@ -669,6 +701,11 @@ export class ChannelService {
   /** Who types, thinks or works in a channel now. */
   typingList(channelId: string): ChannelTypingEntry[] {
     return this.#typing.list(channelId);
+  }
+
+  /** Every channel whose typing list is not empty now, for a client whose event stream opens. */
+  typingLists(): { channelId: string; typing: ChannelTypingEntry[] }[] {
+    return this.#typing.active();
   }
 
   readonly deleteChannel = Effect.fn("ChannelService.deleteChannel")((channelId: string) =>

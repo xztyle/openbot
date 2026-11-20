@@ -9,12 +9,16 @@ import type { AgentStepView, WorkspaceMember } from "./workspace-types";
 
 export interface TypingAgent {
   member: WorkspaceMember;
-  state: "thinking" | "working";
+  /**
+   * `thinking`: the answer gate considers it. `routing`: the lead chooses who answers. `waiting`: it
+   * has the task, and its turn waits for earlier work. `working`: its turn runs.
+   */
+  state: "thinking" | "routing" | "waiting" | "working";
   /** What it works on, such as "Running the level tests". */
   label?: string | undefined;
   /** The steps of its turn so far. They open from the line, so a person can see what it does. */
   trail?: { steps: readonly AgentStepView[]; durationMs?: number | undefined } | undefined;
-  /** Stops the agent's work here, as Slack's Stop on an agent that works. Only a working agent has it. */
+  /** Stops the agent's work here, as Slack's Stop on an agent that works. A working or waiting agent has it. */
   onStop?: (() => void) | undefined;
   /** The stop was sent and the work has not ended yet. */
   stopping?: boolean | undefined;
@@ -27,8 +31,16 @@ export interface TypingIndicatorProps {
   agents: readonly TypingAgent[];
 }
 
+const STATE_TEXT = {
+  thinking: "workspace.typing.thinking",
+  routing: "workspace.typing.routing",
+  waiting: "workspace.typing.waiting",
+  working: "workspace.typing.working",
+} as const satisfies Record<TypingAgent["state"], string>;
+
 /**
- * The line over the composer: "Fonikad is typing…" and "QA is working… Running the level tests",
+ * The line over the composer: "Fonikad is typing…", "Lead is choosing who answers…", "QA will answer
+ * after earlier work…" and "QA is working… Running the level tests",
  * with the steps of the agent's turn so far behind "Working · 5 steps" and a Stop button. It keeps
  * its height when nobody types, so the messages do not jump.
  */
@@ -47,15 +59,11 @@ export function TypingIndicator(props: TypingIndicatorProps): JSX.Element {
         {(agent) => (
           <span class="ws-typing-agent" data-state={agent().state}>
             <MemberAvatar member={agent().member} size="xs" mood="working" />
-            <span class="ws-typing-agent-text">
-              {t(agent().state === "working" ? "workspace.typing.working" : "workspace.typing.thinking", {
-                name: agent().member.name,
-              })}
-            </span>
+            <span class="ws-typing-agent-text">{t(STATE_TEXT[agent().state], { name: agent().member.name })}</span>
             <Show when={agent().label}>
               <span class="ws-typing-agent-label">{agent().label}</span>
             </Show>
-            <Show when={agent().state === "working" ? agent().onStop : undefined}>
+            <Show when={agent().state === "working" || agent().state === "waiting" ? agent().onStop : undefined}>
               {(stop) => (
                 <Button
                   variant="outline"

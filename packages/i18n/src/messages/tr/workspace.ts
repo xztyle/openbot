@@ -135,6 +135,8 @@ export const messages = {
   "workspace.typing.several": "Birkaç kişi yazıyor…",
   "workspace.typing.thinking": "{name} düşünüyor…",
   "workspace.typing.working": "{name} çalışıyor…",
+  "workspace.typing.routing": "{name} kimin yanıtlayacağını seçiyor…",
+  "workspace.typing.waiting": "{name} önceki işten sonra yanıtlayacak…",
 
   "workspace.steps.count": { one: "{count} adım", other: "{count} adım" },
   "workspace.steps.summary": "{steps} · {time}",

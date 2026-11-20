@@ -126,6 +126,8 @@ export const messages = {
   "workspace.typing.several": "Plusieurs personnes écrivent…",
   "workspace.typing.thinking": "{name} réfléchit…",
   "workspace.typing.working": "{name} travaille…",
+  "workspace.typing.routing": "{name} choisit qui répond…",
+  "workspace.typing.waiting": "{name} répondra après le travail en cours…",
   "workspace.steps.count": { one: "{count} étape", other: "{count} étapes" },
   "workspace.steps.summary": "{steps} · {time}",
   "workspace.steps.working": "Au travail · {steps}",

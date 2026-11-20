@@ -18,6 +18,7 @@ import {
   type ChannelPage,
   type ChannelSummary,
   type ChannelTypingEntry,
+  type ChannelTypingState,
   channelKind,
   channelVisibility,
   type DraftAttachment,
@@ -1633,18 +1634,31 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     ownTyping.clear();
   });
 
+  // A list that a lost connection left can be stale: an agent that ended stays, or one that started
+  // never shows. The host sends every list again when the event stream opens, so the lists go with
+  // the connection, and the page's own tasks show the work until then.
+  createEffect(
+    () => env.connectionReady(),
+    (ready) => {
+      if (!ready && Object.keys(state.typing).length)
+        setState((draft) => {
+          draft.typing = {};
+        });
+    },
+  );
+
   /**
-   * The people who type and the agents that think or work in a channel, or in one of its threads,
-   * as the host last said. Null until the host says anything about the channel.
+   * The people who type and the agents that think, route, wait or work in a channel, or in one of its
+   * threads, as the host last said. Null until the host says anything about the channel.
    */
   function typingIn(
     channelId: string,
     threadRootId: string | null,
-  ): { humans: string[]; agents: { id: string; state: "thinking" | "working" }[] } | null {
+  ): { humans: string[]; agents: { id: string; state: Exclude<ChannelTypingState, "typing"> }[] } | null {
     const entries = state.typing[channelId];
     if (!entries) return null;
     const humans: string[] = [];
-    const agents: { id: string; state: "thinking" | "working" }[] = [];
+    const agents: { id: string; state: Exclude<ChannelTypingState, "typing"> }[] = [];
     for (const entry of entries) {
       if ((entry.threadRootId ?? null) !== threadRootId) continue;
       if (entry.kind === "member") {

@@ -6,8 +6,22 @@ const TYPING_REPEAT_MS = 1_000;
 export interface ChannelTypingOptions {
   /** Sends the whole list of a channel after it changed. */
   emit(channelId: string, typing: ChannelTypingEntry[]): void;
-  /** The agents that run a task of the channel now, with the thread each one answers in. */
-  working(channelId: string): readonly { agentId: string; threadRootId: string | null }[];
+  /**
+   * The agents at work in the channel now, with the thread each one answers in: `working` runs a
+   * task, `waiting` has one whose turn waits for earlier work, and `routing` is the lead that chooses
+   * who answers. `recheckInMs` asks for the list again after that time, when an entry changes then
+   * without a store change, such as a turn that starts late and becomes `waiting`.
+   */
+  working(channelId: string): {
+    agents: readonly ChannelAgentWork[];
+    recheckInMs?: number | undefined;
+  };
+}
+
+export interface ChannelAgentWork {
+  agentId: string;
+  threadRootId: string | null;
+  state: "working" | "waiting" | "routing";
 }
 
 interface PersonTyping {
@@ -31,7 +45,9 @@ export class ChannelTyping {
   /** By channel, by message: the agents its gate considers now. */
   readonly #gates = new Map<string, Map<string, { agentIds: readonly string[]; threadRootId: string | undefined }>>();
   /** The last list sent for each channel, so an unchanged list is not sent again. */
-  readonly #sent = new Map<string, string>();
+  readonly #sent = new Map<string, { key: string; list: ChannelTypingEntry[] }>();
+  /** By channel: the timer that reads the list again, as `working` asked. */
+  readonly #rechecks = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(options: ChannelTypingOptions) {
     this.#options = options;
@@ -105,15 +121,20 @@ export class ChannelTyping {
         state: "typing",
         ...(entry.threadRootId ? { threadRootId: entry.threadRootId } : {}),
       });
-    // An agent that works and is also considered for a message shows as working.
-    for (const work of this.#options.working(channelId))
-      add({
-        kind: "agent",
-        id: work.agentId,
-        state: "working",
-        ...(work.threadRootId ? { threadRootId: work.threadRootId } : {}),
-      });
-    const working = new Set(entries.filter((entry) => entry.state === "working").map((entry) => entry.id));
+    // An agent that works and is also considered for a message shows as working. One that works in a
+    // place shows there once: working before waiting, and both before routing.
+    const work = this.#options.working(channelId);
+    this.#recheck(channelId, work.recheckInMs);
+    for (const state of ["working", "waiting", "routing"] as const)
+      for (const item of work.agents)
+        if (item.state === state)
+          add({
+            kind: "agent",
+            id: item.agentId,
+            state,
+            ...(item.threadRootId ? { threadRootId: item.threadRootId } : {}),
+          });
+    const working = new Set(entries.filter((entry) => entry.kind === "agent").map((entry) => entry.id));
     for (const gate of this.#gates.get(channelId)?.values() ?? [])
       for (const agentId of gate.agentIds)
         if (!working.has(agentId))
@@ -126,6 +147,26 @@ export class ChannelTyping {
     return entries;
   }
 
+  /** The lists that are not empty now, as they were last sent: for a client that connects. */
+  active(): { channelId: string; typing: ChannelTypingEntry[] }[] {
+    return [...this.#sent].map(([channelId, sent]) => ({ channelId, typing: sent.list }));
+  }
+
+  #recheck(channelId: string, inMs: number | undefined): void {
+    clearTimeout(this.#rechecks.get(channelId));
+    this.#rechecks.delete(channelId);
+    if (inMs === undefined) return;
+    const timer = setTimeout(
+      () => {
+        this.#rechecks.delete(channelId);
+        this.changed(channelId);
+      },
+      Math.max(0, inMs),
+    );
+    timer.unref?.();
+    this.#rechecks.set(channelId, timer);
+  }
+
   /** Sends the list of a channel if it is not the one sent last. */
   changed(channelId: string): void {
     let list: ChannelTypingEntry[];
@@ -136,8 +177,8 @@ export class ChannelTyping {
       list = [];
     }
     const key = JSON.stringify(list);
-    if ((this.#sent.get(channelId) ?? "[]") === key) return;
-    if (list.length) this.#sent.set(channelId, key);
+    if ((this.#sent.get(channelId)?.key ?? "[]") === key) return;
+    if (list.length) this.#sent.set(channelId, { key, list });
     else this.#sent.delete(channelId);
     this.#options.emit(channelId, list);
   }
@@ -148,6 +189,8 @@ export class ChannelTyping {
     this.#people.delete(channelId);
     this.#gates.delete(channelId);
     this.#sent.delete(channelId);
+    clearTimeout(this.#rechecks.get(channelId));
+    this.#rechecks.delete(channelId);
   }
 
   dispose(): void {
@@ -155,5 +198,7 @@ export class ChannelTyping {
     this.#people.clear();
     this.#gates.clear();
     this.#sent.clear();
+    for (const timer of this.#rechecks.values()) clearTimeout(timer);
+    this.#rechecks.clear();
   }
 }

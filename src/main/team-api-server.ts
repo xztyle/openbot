@@ -151,7 +151,10 @@ import { WORKSPACE_READ_STATE_CAPABILITY } from "@openbot/contracts/team-protoco
 import { WORKSPACE_SAVED_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-saved-v1";
 import { WORKSPACE_SIDEBAR_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-sidebar-v1";
 import { WORKSPACE_SPACES_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-spaces-v1";
-import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
+import {
+  WORKSPACE_CAPABILITY,
+  WORKSPACE_TYPING_STATES_CAPABILITY,
+} from "@openbot/contracts/team-protocol/workspace-v1";
 import { isFixedSourceText, sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { Deferred, Effect, Exit, Scope } from "effect";
@@ -304,6 +307,11 @@ interface EventClientState {
   snapshotResponsePending: boolean;
   snapshotRequestQueued: boolean;
   nextSnapshotRequestAt: number;
+  /**
+   * The channels whose typing list this connection got not empty at least once. A resent snapshot
+   * empties the ones that have no list now, so a client that lost the emptying event recovers.
+   */
+  typingChannels: Set<string>;
 }
 
 type ConversationEventAudience = "all" | "modern" | "legacy";
@@ -1369,18 +1377,9 @@ export class TeamApiServer {
         !this.#memberSeesChannel(member, event.channelId)
       )
         continue;
-      // An agent that this peer cannot see does not think or work for it either.
       if (event.type === "channel-typing") {
-        const hidden = hiddenProviderAgentIds(
-          this.#options.agents.listAgents(),
-          eventProtocol(connection.capabilities),
-        );
-        event = {
-          ...event,
-          typing: event.typing.filter(
-            (entry) => entry.kind !== "agent" || (!blocked.has(entry.id) && !hidden.has(entry.id)),
-          ),
-        };
+        event = this.#channelTypingFor(connection, blocked, event);
+        if (event.typing.length) connection.typingChannels.add(event.channelId);
       }
       // A member's sidebar is theirs: only their own sessions hear of a change, and not whose it was.
       if (event.type === "workspace-sidebar-changed") {
@@ -1550,6 +1549,63 @@ export class TeamApiServer {
     }
   }
 
+  /**
+   * A channel's typing list as one peer reads it. An agent that this peer cannot see does not think or
+   * work for it either. A peer without `workspace-typing-states-v1` reads the lead that routes as
+   * thinking and the agent that waits as working: its decoder knows only the base states.
+   */
+  #channelTypingFor(
+    connection: EventClientState,
+    blocked: ReadonlySet<string>,
+    event: Extract<AgentEvent, { type: "channel-typing" }>,
+  ): Extract<AgentEvent, { type: "channel-typing" }> {
+    const hidden = hiddenProviderAgentIds(this.#options.agents.listAgents(), eventProtocol(connection.capabilities));
+    const states = connection.capabilities.has(WORKSPACE_TYPING_STATES_CAPABILITY);
+    return {
+      ...event,
+      typing: event.typing
+        .filter((entry) => entry.kind !== "agent" || (!blocked.has(entry.id) && !hidden.has(entry.id)))
+        .map((entry) =>
+          states || (entry.state !== "routing" && entry.state !== "waiting")
+            ? entry
+            : { ...entry, state: entry.state === "routing" ? ("thinking" as const) : ("working" as const) },
+        ),
+    };
+  }
+
+  /**
+   * The typing list of each channel that has one, when a peer's event stream opens, starts to take
+   * workspace events, or asks for the runtime snapshot again. The host sends a list only when it
+   * changes, so a peer that lost an event would otherwise keep the list it had: it would miss an
+   * agent that started to work, or keep one that ended. A channel that this peer got a list for and
+   * that has none now gets an empty list.
+   */
+  #sendChannelTyping(client: Ws.WebSocket, connection: EventClientState): void {
+    const channels = this.#options.channels;
+    if (!channels || !connection.capabilities.has(WORKSPACE_CAPABILITY)) return;
+    if (client.readyState !== webSockets.WebSocket.OPEN) return;
+    const member = this.#connectionMember(connection);
+    const blocked = this.#blockedAgentIds(member);
+    const active = channels.typingLists();
+    const lists = [
+      ...active,
+      ...[...connection.typingChannels]
+        .filter((channelId) => !active.some((list) => list.channelId === channelId))
+        .map((channelId) => ({ channelId, typing: [] })),
+    ];
+    for (const list of lists) {
+      if (!this.#memberSeesChannel(member, list.channelId)) continue;
+      const event = this.#channelTypingFor(connection, blocked, { type: "channel-typing", ...list });
+      if (event.typing.length) connection.typingChannels.add(event.channelId);
+      try {
+        const optional = optionalTeamEvent(event);
+        if (optional) client.send(JSON.stringify(optional));
+      } catch (error) {
+        (this.#options.logger ?? logger).warn("Team API event could not be encoded:", toLogValue(error));
+      }
+    }
+  }
+
   #sendBrowserPageState(client: Ws.WebSocket, connection: EventClientState): void {
     const tabs = this.#options.browser.listTabs().map((tab) => ({
       tabId: tab.id,
@@ -1623,6 +1679,7 @@ export class TeamApiServer {
       snapshotResponsePending: false,
       snapshotRequestQueued: false,
       nextSnapshotRequestAt: 0,
+      typingChannels: new Set(),
     };
     this.#eventClients.set(client, connection);
     client.on("error", () => {
@@ -1632,6 +1689,7 @@ export class TeamApiServer {
     if (connection.capabilities.has("agent-runtime-snapshots")) {
       this.#sendRuntimeSnapshot(client, connection, false);
     }
+    this.#sendChannelTyping(client, connection);
     client.on("message", (data, isBinary) => {
       if (isBinary) {
         client.close(1003, "Text events are required");
@@ -1647,6 +1705,8 @@ export class TeamApiServer {
         const event = decodeTeamProtocolV1CurrentClientEvent(JSON.parse(text));
         if (event.type === "runtime-snapshot-request" && connection.capabilities.has("agent-runtime-snapshots")) {
           this.#sendRuntimeSnapshot(client, connection, true);
+          // A client asks after a reconnect or a silent turn: the typing lists may be lost too.
+          this.#sendChannelTyping(client, connection);
           return;
         }
         if (event.type === "agent-event-scope" && supportsSnapshotTransport) {
@@ -1658,6 +1718,7 @@ export class TeamApiServer {
               connection.capabilities.has(HOST_MEMBER_UPDATE_CAPABILITY);
             const userControlWasSent = connection.capabilities.has(BROWSER_USER_CONTROL_CAPABILITY);
             const pageStateWasSent = connection.capabilities.has(BROWSER_PAGE_STATE_CAPABILITY);
+            const typingWasSent = connection.capabilities.has(WORKSPACE_CAPABILITY);
             connection.capabilities = new Set(event.capabilities.filter(isTeamCurrentCapability));
             if (connection.capabilities.has("agent-runtime-snapshots") && !snapshotsWereEnabled) {
               this.#sendRuntimeSnapshot(client, connection, false);
@@ -1669,6 +1730,7 @@ export class TeamApiServer {
               this.#sendBrowserUserControl(client, connection);
             if (!pageStateWasSent && connection.capabilities.has(BROWSER_PAGE_STATE_CAPABILITY))
               this.#sendBrowserPageState(client, connection);
+            if (!typingWasSent) this.#sendChannelTyping(client, connection);
           }
           connection.includeConversationEvents = event.includeConversations;
           return;

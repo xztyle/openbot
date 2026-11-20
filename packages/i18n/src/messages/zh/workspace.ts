@@ -133,6 +133,8 @@ export const messages = {
   "workspace.typing.several": "多人正在输入…",
   "workspace.typing.thinking": "{name} 正在思考…",
   "workspace.typing.working": "{name} 正在工作…",
+  "workspace.typing.routing": "{name} 正在选择由谁回答…",
+  "workspace.typing.waiting": "{name} 将在之前的工作完成后回答…",
 
   "workspace.steps.count": { one: "{count} 个步骤", other: "{count} 个步骤" },
   "workspace.steps.summary": "{steps} · {time}",

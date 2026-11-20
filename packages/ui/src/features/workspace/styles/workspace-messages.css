@@ -664,8 +664,14 @@ button.ws-profile-trigger.ws-message-author:hover {
   font-weight: var(--openbot-weight-medium);
 }
 
-.ws-typing-agent[data-state="thinking"] .ws-typing-agent-text {
+.ws-typing-agent[data-state="thinking"] .ws-typing-agent-text,
+.ws-typing-agent[data-state="routing"] .ws-typing-agent-text {
   animation: ws-pulse 1.6s var(--openbot-ease-in-out) infinite;
+}
+
+/* An agent whose turn waits for earlier work: it has the task, and it does not answer yet. */
+.ws-typing-agent[data-state="waiting"] .ws-typing-agent-text {
+  color: var(--openbot-text-muted);
 }
 
 .ws-typing-agent-label {

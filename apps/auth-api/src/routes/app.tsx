@@ -8,10 +8,12 @@ export const Route = createFileRoute("/app")({
       { name: "robots", content: "noindex, nofollow" },
       // The keyboard shrinks the layout on Android, so the composer stays above it instead of under it.
       // The page takes the full screen of a phone; the tab bar and the composer keep clear of the home
-      // indicator and the notch with the safe-area insets.
+      // indicator and the notch with the safe-area insets. `maximum-scale=1` stops iOS zooming into a
+      // field on focus, as an app does; iOS still lets the reader pinch-zoom.
       {
         name: "viewport",
-        content: "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
+        content:
+          "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
       },
       // The app can be added to the home screen. Safari reads these, and not the manifest, for its own mode.
       { name: "mobile-web-app-capable", content: "yes" },

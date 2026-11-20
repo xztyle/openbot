@@ -41,9 +41,18 @@ body {
     line-height: var(--openbot-leading-xl);
   }
 
-  /* A form or a settings panel sets its own field size with a class (`.settings-field textarea`,
-   * `.ui-form-dialog .ui-textarea`), which beats the rule above. `:root` puts the rule over them. */
-  :root :is(input:not([type="checkbox"], [type="radio"], [type="range"]), textarea, select) {
+  /* A form, a settings panel or the message box sets its own text size with a class
+   * (`.settings-field textarea`, `.composer[data-layout="workspace"] .composer-editor-surface`),
+   * which beats the rule above. `:root` puts the rule over them. */
+  :root
+  :is(
+    input:not([type="checkbox"], [type="radio"], [type="range"]),
+    textarea,
+    select,
+    [contenteditable="true"],
+    .composer-editor-surface,
+    .composer-editor-placeholder
+  ) {
     font-size: var(--openbot-text-xl);
   }
 }

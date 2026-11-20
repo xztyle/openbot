@@ -4,7 +4,7 @@ import { ServerMark } from "@openbot/ui/features/servers/ServerRail";
 import type { SettingsPagePlacement } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
-import { onSettled } from "solid-js";
+import { createEffect, createSignal, onSettled } from "solid-js";
 import { requestSettingsLeave } from "./settings-leave-guard";
 
 /**
@@ -20,13 +20,38 @@ export function SettingsPageFrame(props: {
   onMounts: (mounts: SettingsPagePlacement | undefined) => void;
   /** Escape outside a popup or a text field of the window, and the Close or Back button. */
   onEscape: () => void;
+  /**
+   * The section that the opener asked for, such as `members` of an address. On a phone the page then
+   * opens on that section, not on the list of sections.
+   */
+  section?: string | null;
 }) {
   const { t } = useText();
+  /**
+   * On a phone the page is two screens, as iOS Settings and Slack's app: the list of sections, and
+   * the section that a tap on the list opens. Back on a section goes to the list; Back on the list
+   * closes the page. A wider window shows both side by side and ignores this.
+   */
+  const [phoneView, setPhoneView] = createSignal<"list" | "section">("list");
+  createEffect(
+    () => props.section ?? null,
+    (section) => {
+      if (section) setPhoneView("section");
+    },
+  );
   /** Close, Back and Escape: unsaved changes of the open form ask first. */
   const leave = () => requestSettingsLeave(() => props.onEscape());
+  /** Back of the phone: the list from a section, or out of the page from the list. */
+  const back = () => (phoneView() === "section" ? setPhoneView("list") : leave());
+  /** A tap on a section or on a search result opens it over the list. */
+  const openSection = (event: MouseEvent) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("button") && !target.closest(".settings-page-heading")) setPhoneView("section");
+  };
   let nav!: HTMLDivElement;
   let content!: HTMLDivElement;
   let root!: HTMLDivElement;
+  let navColumn!: HTMLDivElement;
 
   onSettled(() => {
     props.onMounts({ nav, content });
@@ -46,18 +71,21 @@ export function SettingsPageFrame(props: {
       leave();
     };
     document.addEventListener("keydown", closeOnEscape);
+    // In the capture phase: a section is a tab trigger that may stop the click.
+    navColumn.addEventListener("click", openSection, true);
     return () => {
       document.removeEventListener("keydown", closeOnEscape);
+      navColumn.removeEventListener("click", openSection, true);
       props.onMounts(undefined);
     };
   });
 
   return (
-    <div class="settings-page" ref={root}>
-      <div class="settings-page-nav">
+    <div class="settings-page" ref={root} data-phone-view={phoneView()}>
+      <div class="settings-page-nav" ref={navColumn}>
         {/* A visible way out: Close on a computer, Back on a phone (docs/ux/standard.md § 5). Escape too. */}
         <div class="settings-page-heading">
-          <IconButton variant="ghost" class="settings-page-back" label={t("common.back")} onClick={leave}>
+          <IconButton variant="ghost" class="settings-page-back" label={t("common.back")} onClick={back}>
             <ChevronLeft />
           </IconButton>
           {props.heading}

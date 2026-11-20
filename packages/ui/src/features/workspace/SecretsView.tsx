@@ -2,7 +2,8 @@ import type { JSX } from "@solidjs/web";
 import { createSignal, For, onCleanup, Show } from "solid-js";
 import { Button, IconButton } from "../../button";
 import { ConfirmDialog } from "../../confirm-dialog";
-import { Input } from "../../form";
+import { Field, Input } from "../../form";
+import { FormDialog } from "../../form-dialog";
 import { Copy, Eye, EyeOff, KeyRound, Pencil, Trash2 } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
@@ -80,83 +81,9 @@ export function SecretsView(props: SecretsViewProps): JSX.Element {
         title={t("workspace.view.secrets")}
         subtitle={t("workspace.secrets.description")}
         onBack={props.onBack}
-        actions={
-          <Show when={!adding()}>
-            <PaneHeaderAction label={t("workspace.secrets.add")} onClick={() => setAdding(true)} />
-          </Show>
-        }
+        actions={<PaneHeaderAction label={t("workspace.secrets.add")} onClick={() => setAdding(true)} />}
       />
       <div class="ws-view-scroll">
-        <Show when={adding()}>
-          <form
-            class="ws-secrets-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void add();
-            }}
-          >
-            <label class="ws-secrets-field">
-              <span>{t("workspace.secrets.name")}</span>
-              <Input
-                value={draft().name}
-                autocomplete="off"
-                spellcheck={false}
-                class="ws-secrets-mono"
-                onInput={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    name: event.currentTarget.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_"),
-                  }))
-                }
-              />
-              <Show when={draft().name !== "" && !nameValid()}>
-                <small class="ws-secrets-error">{t("workspace.secrets.invalidName")}</small>
-              </Show>
-            </label>
-            <div class="ws-secrets-field">
-              <span>{t("workspace.secrets.scope")}</span>
-              <WorkspaceSelect
-                value={draft().scope}
-                options={props.scopes}
-                label={t("workspace.secrets.scope")}
-                onChange={(scope) => setDraft((current) => ({ ...current, scope }))}
-              />
-            </div>
-            <label class="ws-secrets-field">
-              <span>{t("workspace.secrets.value")}</span>
-              <Input
-                type="password"
-                value={draft().value}
-                autocomplete="new-password"
-                class="ws-secrets-mono"
-                onInput={(event) => setDraft((current) => ({ ...current, value: event.currentTarget.value }))}
-              />
-            </label>
-            <Show when={formError()}>
-              {(message) => (
-                <p class="ws-secrets-error" role="alert">
-                  {message()}
-                </p>
-              )}
-            </Show>
-            <div class="ws-secrets-form-actions">
-              <Button
-                variant="ghost"
-                size="sm"
-                type="button"
-                onClick={() => {
-                  setAdding(false);
-                  setFormError(null);
-                }}
-              >
-                {t("common.cancel")}
-              </Button>
-              <Button size="sm" type="submit" loading={busy()} disabled={!nameValid() || draft().value.trim() === ""}>
-                {t("workspace.secrets.save")}
-              </Button>
-            </div>
-          </form>
-        </Show>
         <Show
           when={props.groups?.some((group) => group.secrets.length > 0)}
           fallback={
@@ -171,14 +98,12 @@ export function SecretsView(props: SecretsViewProps): JSX.Element {
               }
             >
               <Show when={props.groups !== null} fallback={<LoadingState label={t("workspace.view.secrets")} />}>
-                <Show when={!adding()}>
-                  <EmptyState
-                    icon={<KeyRound />}
-                    title={t("workspace.secrets.empty")}
-                    description={t("workspace.secrets.emptyHint")}
-                    action={<PaneHeaderAction label={t("workspace.secrets.add")} onClick={() => setAdding(true)} />}
-                  />
-                </Show>
+                <EmptyState
+                  icon={<KeyRound />}
+                  title={t("workspace.secrets.empty")}
+                  description={t("workspace.secrets.emptyHint")}
+                  action={<PaneHeaderAction label={t("workspace.secrets.add")} onClick={() => setAdding(true)} />}
+                />
               </Show>
             </Show>
           }
@@ -216,6 +141,61 @@ export function SecretsView(props: SecretsViewProps): JSX.Element {
           </For>
         </Show>
       </div>
+      {/* A create flow is the shared form dialog: a sheet on a phone (docs/ux/standard.md § 2). */}
+      <FormDialog
+        open={adding()}
+        onOpenChange={(open) => {
+          if (open) return;
+          setAdding(false);
+          setFormError(null);
+          setDraft({ scope: "shared", name: "", value: "" });
+        }}
+        title={t("workspace.secrets.add")}
+        description={t("workspace.secrets.description")}
+        size="sm"
+        busy={busy()}
+        error={formError()}
+        submitLabel={t("workspace.secrets.add")}
+        submitDisabled={!nameValid() || draft().value.trim() === ""}
+        onSubmit={() => void add()}
+      >
+        <Field
+          label={t("workspace.secrets.name")}
+          required
+          error={draft().name !== "" && !nameValid() ? t("workspace.secrets.invalidName") : undefined}
+        >
+          <Input
+            value={draft().name}
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck={false}
+            class="ws-secrets-mono"
+            onInput={(event) =>
+              setDraft((current) => ({
+                ...current,
+                name: event.currentTarget.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_"),
+              }))
+            }
+          />
+        </Field>
+        <Field label={t("workspace.secrets.scope")}>
+          <WorkspaceSelect
+            value={draft().scope}
+            options={props.scopes}
+            label={t("workspace.secrets.scope")}
+            onChange={(scope) => setDraft((current) => ({ ...current, scope }))}
+          />
+        </Field>
+        <Field label={t("workspace.secrets.value")} required>
+          <Input
+            type="password"
+            value={draft().value}
+            autocomplete="new-password"
+            class="ws-secrets-mono"
+            onInput={(event) => setDraft((current) => ({ ...current, value: event.currentTarget.value }))}
+          />
+        </Field>
+      </FormDialog>
       <ConfirmDialog
         open={removing() !== null}
         tone="destructive"

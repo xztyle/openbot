@@ -295,6 +295,16 @@ try {
     await page.getByRole("button", { name: /Preview User/u }).tap();
     await page.getByRole("heading", { name: english("app.settingsPage.title") }).waitFor({ timeout: UI_WAIT_MS });
     await shot(page, "07-settings");
+    // Two screens, as iOS Settings: a section opens over the list, and Back goes to the list first.
+    const preferences = page.getByRole("tab", { name: english("webClient.settings.preferences.title") });
+    await preferences.tap();
+    assert.equal(await preferences.isVisible(), false);
+    await shot(page, "07b-settings-section");
+    await page
+      .getByRole("button", { name: english("common.back") })
+      .first()
+      .tap();
+    await preferences.waitFor({ timeout: UI_WAIT_MS });
     // The page's own back button, as a phone has no rail.
     await page
       .getByRole("button", { name: english("workspace.layout.back") })

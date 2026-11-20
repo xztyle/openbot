@@ -328,3 +328,56 @@
 .ui-view-state-skeleton-line:last-child {
   width: 60%;
 }
+
+/* Touch scale ----------------------------------------------------------------------------------- */
+
+/*
+ * A phone: settings, forms, confirmations, pickers and the management screens take the size of a
+ * native app (docs/ux/standard.md § 7d). The scope redefines the size tokens with their touch steps
+ * (`--openbot-touch-*` in the brand tokens), so every rule that reads a token follows: body text
+ * 16px, hints 14px, controls and rows 44px, a switch a thumb can drag. A computer keeps the dense
+ * scale, also in a narrow window, because the query asks for a coarse pointer.
+ */
+@media (max-width: 720px) and (pointer: coarse) {
+  :is(
+    .settings-page,
+    .settings-panel,
+    .ui-form-dialog,
+    .ui-confirm-dialog,
+    .ui-select-content,
+    .ws-secrets,
+    .schedule-pane,
+    .agent-usage,
+    .tasks-page
+  ) {
+    --openbot-text-sm: var(--openbot-touch-text-sm);
+    --openbot-text-md: var(--openbot-touch-text-md);
+    --openbot-text-lg: var(--openbot-touch-text-lg);
+    --openbot-text-xl: var(--openbot-touch-text-xl);
+    --openbot-text-2xl: var(--openbot-touch-text-2xl);
+    --openbot-leading-sm: var(--openbot-touch-leading-sm);
+    --openbot-leading-md: var(--openbot-touch-leading-md);
+    --openbot-leading-lg: var(--openbot-touch-leading-lg);
+    --openbot-leading-xl: var(--openbot-touch-leading-xl);
+    --openbot-leading-2xl: var(--openbot-touch-leading-2xl);
+    --openbot-control-xs: var(--openbot-touch-control-xs);
+    --openbot-control-sm: var(--openbot-touch-control-sm);
+    --openbot-control-md: var(--openbot-touch-control-md);
+    --openbot-control-lg: var(--openbot-touch-control-lg);
+    --openbot-control-xl: var(--openbot-touch-control-xl);
+    --openbot-switch-width: var(--openbot-touch-switch-width);
+    --openbot-switch-height: var(--openbot-touch-switch-height);
+    --openbot-switch-thumb: var(--openbot-touch-switch-thumb);
+    --openbot-switch-sm-width: var(--openbot-touch-switch-width);
+    --openbot-switch-sm-height: var(--openbot-touch-switch-height);
+    --openbot-switch-sm-thumb: var(--openbot-touch-switch-thumb);
+    --openbot-switch-sm-inset: var(--openbot-switch-inset);
+    --openbot-icon-sm: var(--openbot-touch-icon-sm);
+    --openbot-icon-md: var(--openbot-touch-icon-md);
+  }
+
+  /* A picker's options are rows a finger hits. */
+  .ui-select-content .ui-select-item {
+    min-height: var(--openbot-touch-target);
+  }
+}

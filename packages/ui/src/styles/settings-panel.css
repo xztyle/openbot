@@ -82,9 +82,20 @@
   /* The weight is left to .ui-glyph-20 on the icons themselves, as in .message-action-button. */
 }
 
-.settings-panel-nav-button:hover {
-  background: var(--openbot-hover);
-  color: var(--openbot-text-primary);
+/* A tap leaves no hover colour on a touch screen. */
+@media (hover: hover) and (pointer: fine) {
+  .settings-panel-nav-button:hover {
+    background: var(--openbot-hover);
+    color: var(--openbot-text-primary);
+  }
+}
+
+/* A finger hits the full 44px around the glyph. */
+@media (pointer: coarse) {
+  .settings-panel-nav-button::before {
+    width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
+  }
 }
 
 /* The chevron reads a hair right of centre in its box, so it is nudged back onto the axis. */

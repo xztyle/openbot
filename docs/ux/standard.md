@@ -114,6 +114,9 @@ Source: `packages/ui/src/features/workspace/WorkspacePaneHeader.tsx`, `.ws-view*
   changes (Back, close, another tab, another server, the browser tab) asks first.
 - A destructive area is the last section, `DangerZone`, with a confirm.
 - The page has a visible close (a computer) or Back (a phone). Escape closes it.
+- On a phone the page is two screens, as iOS Settings and Slack's app: the list of sections, then the
+  section that a tap opens. Back on a section goes to the list; Back on the list closes the page. An
+  address that names a section (`?section=members`) opens that section.
 
 ## 6. Confirmations
 
@@ -204,6 +207,14 @@ sign-in and browser secret of every agent. Each surface reads that one list:
   secret send a web push, as a question and an approval do.
 - A new card in the open chat brings the chat to its end. A takeover card that this client cannot
   open (a web client without the browser view) says where to finish the step.
+
+## 7d. Touch scale (phone)
+
+On a screen 720 px wide or less with a touch pointer, settings pages, the agent settings panel, form
+and confirm dialogs, select pickers, Secrets, Usage, Schedule and Tasks read the size tokens at their
+touch steps (`--openbot-touch-*` in the brand tokens; the scope is at the end of `patterns.css`):
+body text 16 px, hints 14 px, controls and rows 44 px, a larger switch. No field is under 16 px, so
+iOS does not zoom into it. A new management screen joins the scope list; do not hand-size its controls.
 
 ## 8. Copy
 

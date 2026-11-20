@@ -1,5 +1,6 @@
 import { readdir, readFile, readlink, writeFile } from "node:fs/promises";
 import { getPriority, setPriority } from "node:os";
+import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { Deferred, Effect, Schema } from "effect";
 import { causeHelpers } from "../backend/effect-boundary";
 import type { HostMemory, HostMemoryLevel } from "../backend/host-memory";
@@ -18,6 +19,9 @@ const TURN_RESERVE_BYTES = 300 * MIB;
 const TURN_RESERVE_MS = 60_000;
 /** A low level goes back to "ok" only this far above the low threshold, so it does not flap. */
 const RECOVER_MARGIN_BYTES = 256 * MIB;
+/** A server with less memory than this, such as a 4 GB VPS, allows fewer open tabs in each chat. */
+const SMALL_SERVER_BYTES = 7 * GIB;
+const SMALL_SERVER_BROWSER_TABS = 5;
 /**
  * `openbot.service` starts main at -500, and a container starts it at 0. Each process that main starts
  * gets this value, so the OOM killer picks a provider CLI, an MCP server or an agent tool before main.
@@ -141,6 +145,12 @@ export class ServerMemory implements HostMemory {
     if (total <= 10 * GIB) return 8;
     if (total <= 40 * GIB) return 16;
     return 24;
+  }
+
+  /** How many browser tabs each chat can have open: fewer on a small server, where each tab is about 300 MB. */
+  browserTabLimit(): typeof SMALL_SERVER_BROWSER_TABS | typeof INPUT_LIMITS.browserTabs {
+    const total = this.#sample?.total;
+    return total !== undefined && total < SMALL_SERVER_BYTES ? SMALL_SERVER_BROWSER_TABS : INPUT_LIMITS.browserTabs;
   }
 
   reserveTurn(): () => void {

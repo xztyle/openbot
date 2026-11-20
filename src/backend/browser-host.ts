@@ -237,6 +237,10 @@ function viewContextMenu(
  *
  * The live agent tabs also have limits: `perOwner` for one agent, and `total` for all agents. Above a
  * limit, the tabs that nobody used for `limitIdleMs` sleep, the oldest first.
+ *
+ * Each loaded tab is its own renderer process, about 300 MB on a typical page. Of the tabs that can
+ * sleep and are not in use, only the `idleAwake` most recently used stay loaded; an older one sleeps
+ * after `limitIdleMs`, so an agent that moves between a few tabs in one task does not reload them.
  */
 export interface BrowserTabSleepLimits {
   idleMs: number;
@@ -244,13 +248,15 @@ export interface BrowserTabSleepLimits {
   perOwner: number;
   total: number;
   limitIdleMs: number;
+  idleAwake: number;
 }
 const TAB_SLEEP_LIMITS: BrowserTabSleepLimits = {
-  idleMs: 30 * 60_000,
+  idleMs: 15 * 60_000,
   sweepMs: 60_000,
   perOwner: 4,
   total: 24,
   limitIdleMs: 2 * 60_000,
+  idleAwake: 3,
 };
 const LOW_MEMORY_TAB_SLEEP_MS = 5 * 60_000;
 /** The back and forward history that a sleeping tab keeps, with the scroll position and form values of each page. */
@@ -400,6 +406,7 @@ export class BrowserHost {
   #destroying: Deferred.Deferred<void, BrowserOperationError> | null = null;
   /** Whether the machine is too low on memory for one more tab. Only a server has a reading. */
   readonly #memoryLow: () => boolean;
+  readonly #tabLimit: () => number;
   readonly #idleTabSweep: NodeJS.Timeout;
   readonly #sleepLimits: BrowserTabSleepLimits;
   /**
@@ -418,6 +425,8 @@ export class BrowserHost {
       recordingMaxConcurrent?: number;
       recordingMaxAggregateBytes?: number;
       memoryLow?: () => boolean;
+      /** How many tabs each chat can have open. A server with little memory gives fewer. */
+      tabLimit?: () => number;
       /** The session that the new tabs of this agent open in. */
       browserProfile?: (agentId: string) => AgentBrowserProfile;
       /** Whether a named profile still exists. A tab never opens in a deleted profile. */
@@ -431,6 +440,7 @@ export class BrowserHost {
     this.#window = window;
     this.#sleepLimits = { ...TAB_SLEEP_LIMITS, ...options.tabSleep };
     this.#memoryLow = options.memoryLow ?? (() => false);
+    this.#tabLimit = options.tabLimit ?? (() => INPUT_LIMITS.browserTabs);
     this.#browserProfile = options.browserProfile ?? (() => ({ kind: "shared" }));
     this.#profileExists = options.profileExists ?? (() => false);
     this.#apiKeys = options.apiKeys ?? null;
@@ -554,10 +564,16 @@ export class BrowserHost {
     const idleMs = this.#memoryLow()
       ? Math.min(LOW_MEMORY_TAB_SLEEP_MS, this.#sleepLimits.idleMs)
       : this.#sleepLimits.idleMs;
+    const awake: BrowserHostTab[] = [];
     for (const tab of this.#tabs.values()) {
       if (tab.pendingRestore || !this.#maySleep(tab)) continue;
       if (this.#tabInUse(tab)) tab.lastUsedAt = now;
       else if (now - tab.lastUsedAt >= idleMs) yield* this.#sleep(tab);
+      else awake.push(tab);
+    }
+    awake.sort((left, right) => right.lastUsedAt - left.lastUsedAt);
+    for (const tab of awake.slice(this.#sleepLimits.idleAwake)) {
+      if (!tab.pendingRestore && now - tab.lastUsedAt >= this.#sleepLimits.limitIdleMs) yield* this.#sleep(tab);
     }
     for (const tab of this.#tabsAboveLiveLimits(now)) yield* this.#sleep(tab);
   });
@@ -839,9 +855,7 @@ export class BrowserHost {
     privateSession?: Session,
   ): Effect.fn.Return<BrowserTab, BrowserOperationError> {
     if (!this.#hasTabCapacity(ownerThreadId, ownerAgentId)) {
-      return yield* browserFailure(
-        new Error(sourceText("error.backend.browserTabLimit", { limit: INPUT_LIMITS.browserTabs })),
-      );
+      return yield* browserFailure(new Error(sourceText("error.backend.browserTabLimit", { limit: this.#tabLimit() })));
     }
     // Each tab is its own renderer process.
     if (this.#memoryLow()) return yield* browserFailure(new Error(sourceText("error.backend.browserLowMemory")));
@@ -913,7 +927,7 @@ export class BrowserHost {
       if (tab.ownerThreadId) return tab.ownerThreadId === ownerThreadId;
       return tab.ownerAgentId === null && ownerAgentId === null && ownerThreadId === null;
     });
-    return tabs.length < INPUT_LIMITS.browserTabs;
+    return tabs.length < this.#tabLimit();
   }
 
   readonly activate = Effect.fn("BrowserHost.activate")(function* (

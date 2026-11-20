@@ -247,7 +247,7 @@ interface ThreadRuntime {
  * its MCP servers, and the SDK resumes the same session from disk, so an idle thread costs only a
  * slower first message when the user comes back.
  */
-const CLAUDE_THREAD_IDLE_RELEASE_MS = 10 * 60_000;
+const CLAUDE_THREAD_IDLE_RELEASE_MS = 5 * 60_000;
 
 /** The start slot of the last Claude process; each start waits for the one before it, then one macrotask. */
 let lastProcessStart: Promise<void> = Promise.resolve();
@@ -261,9 +261,9 @@ function nextProcessStart(): Promise<void> {
 
 /**
  * How many idle threads keep their `claude` process before the timeout. A user who runs one turn on
- * each of five agents otherwise holds five processes of about 140 MB each for ten minutes.
+ * each of five agents otherwise holds five processes of about 140 MB each for five minutes.
  */
-const CLAUDE_IDLE_THREAD_LIMIT = 2;
+const CLAUDE_IDLE_THREAD_LIMIT = 1;
 
 /**
  * How long a turn can send nothing, with no tool call or compaction open, before OpenBot ends it. A

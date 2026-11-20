@@ -38,6 +38,11 @@
   --atelier-symbol-blend: normal;
 }
 
+/* The sidebar is a surface of its own in each theme (paper, gallery stone, riso navy). */
+:root[data-atelier-theme] :is(.ws-frame-sidebar, .ws-sidebar) {
+  background-color: var(--atelier-sidebar);
+}
+
 /* The open conversation: a row in the accent, as in Slack's selected row. */
 :root[data-atelier-theme] :is(.ws-layout, .ws-frame-sidebar, .ws-agent-dm) {
   --ws-active: var(--openbot-accent);

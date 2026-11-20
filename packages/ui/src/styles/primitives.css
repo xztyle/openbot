@@ -2296,7 +2296,25 @@
 .ui-button.ui-sheet-item > svg {
   width: var(--openbot-icon-md);
   height: var(--openbot-icon-md);
+  flex: none;
   color: var(--openbot-text-muted);
+}
+
+/* A long label, such as the title of a browser tab, ends in an ellipsis inside the sheet. */
+.ui-sheet-item-row {
+  min-width: 0;
+}
+
+.ui-button.ui-sheet-item {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ui-button.ui-sheet-item > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ui-button.ui-sheet-item[data-danger],

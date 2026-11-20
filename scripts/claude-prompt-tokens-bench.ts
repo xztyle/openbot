@@ -8,11 +8,14 @@
 //   --config     a Claude config folder to copy (settings.json, skills, CLAUDE.md), such as a copy of
 //                the server's ~/.claude without its credentials and projects
 //   --workspace  an agent workspace to copy (its .claude/skills, CLAUDE.md)
+//   --user-setup load the copied config folder as the user's Claude Code setup ("Use my Claude Code setup")
 // Writes .openbot-build/claude-prompt-tokens-bench/report.json and prints a summary.
 //
 // Tokens are estimated: Claude's tokenizer is not public. The estimate is bytes / 3.6 for prose and
-// bytes / 3.0 for JSON schemas, which matched the first-turn cache writes of the server's Sonnet
-// agents within about 5%. The bytes are exact.
+// bytes / 3.0 for JSON schemas. The bytes are exact. Calibration on 2026-11-20 with CLI 2.1.310: before
+// the token cuts the bench estimated 32.6k tokens, and the first request of new Sonnet sessions on the
+// server read 31.9k to 37.2k input tokens (the rest is the agent's own CLAUDE.md, MCP servers and turn).
+// Results on that day, same agent: 32.6k -> 23.1k estimated tokens (-29%).
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -182,7 +185,11 @@ async function main() {
     ),
   );
   try {
-    const options = claudeAgentQueryOptions({ developerInstructions: instructions });
+    const options = claudeAgentQueryOptions({
+      developerInstructions: instructions,
+      userSetup: process.argv.includes("--user-setup"),
+      configDirectory: config,
+    });
     const run = query({
       prompt: `${memories}\n\nHi, what can you do?`,
       options: {

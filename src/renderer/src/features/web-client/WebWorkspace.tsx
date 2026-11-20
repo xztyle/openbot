@@ -2526,6 +2526,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           if (phoneShell() && (target.view === "dms" || target.view === "activity")) {
             setPhoneTab(target.view);
             setMobilePane("workspace");
+          } else if (phone()) {
+            // The view pushes over the list. A space that the address chose showed its list first, and
+            // the pane that the view asks for can come in the same update, before the list's.
+            setMobilePane("conversation");
           }
         }
       }

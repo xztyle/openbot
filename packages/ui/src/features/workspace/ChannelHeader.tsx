@@ -66,7 +66,12 @@ export function ChannelHeader(props: ChannelHeaderProps): JSX.Element {
     <header class={cx("ws-channel-header", props.class)}>
       <Show when={props.onBack}>
         {(back) => (
-          <IconButton class="ws-phone-only" variant="ghost" label={t("workspace.layout.back")} onClick={() => back()()}>
+          <IconButton
+            class="ws-phone-only ws-channel-header-back"
+            variant="ghost"
+            label={t("workspace.layout.back")}
+            onClick={() => back()()}
+          >
             <ChevronLeft />
           </IconButton>
         )}
@@ -193,6 +198,7 @@ export function ChannelHeader(props: ChannelHeaderProps): JSX.Element {
           {(open) => (
             <IconButton
               variant="ghost"
+              class="ws-channel-header-details"
               label={t("workspace.header.details")}
               aria-pressed={pressed("details")}
               onClick={() => open()()}

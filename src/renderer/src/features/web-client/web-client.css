@@ -65,9 +65,23 @@ body {
 }
 
 @media (max-width: 720px) {
-  /* `WebMobileNavigation` sets the property while the on-screen keyboard is open. */
+  /*
+   * `WebMobileNavigation` sets the properties: the visible height, and the height left while the
+   * on-screen keyboard is open. The app is fixed to the top of the screen and the page cannot
+   * scroll, so the header stays clear of the status bar and the box sits on the bottom edge.
+   */
+  html:has(.web-app),
+  html:has(.web-app) body {
+    height: 100%;
+    overflow: hidden;
+  }
+
   .web-app {
-    height: var(--web-keyboard-visible-height, 100dvh);
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: var(--web-keyboard-visible-height, min(100dvh, var(--web-viewport-height, 100dvh)));
   }
 
   .web-app-window {

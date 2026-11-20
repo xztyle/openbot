@@ -221,6 +221,17 @@
   padding: 0 var(--openbot-space-4) var(--openbot-space-3);
 }
 
+/* A phone's box takes the width of the screen, as Slack's; the home indicator's inset is under it. */
+@media (max-width: 720px) {
+  .ws-channel-bottom {
+    padding: 0 var(--openbot-space-2) var(--openbot-space-2);
+  }
+
+  .ws-channel-bottom > .ws-composer {
+    padding: 0;
+  }
+}
+
 .ws-interaction {
   display: flex;
   max-height: 50vh;
@@ -657,10 +668,46 @@
   }
 }
 
-/* The owner's agent DM sits outside the workspace layout, so its back button needs its own rule. */
+/*
+ * The owner's agent DM sits outside the workspace layout, so its back button needs its own rule. A
+ * phone's header holds Back, the agent and the model and More of the chat: the name opens the
+ * details, so the details button gives its room to the name.
+ */
 @media (max-width: 720px) {
   .ws-agent-dm .ws-phone-only {
     display: inline-flex;
+  }
+
+  .ws-agent-dm-header {
+    height: auto;
+    min-height: 52px;
+  }
+
+  .ws-agent-dm-header .ws-channel-header-details {
+    display: none;
+  }
+
+  .ws-agent-dm-header .ws-channel-header-search {
+    margin-right: 0;
+  }
+
+  .ws-agent-dm-controls > .conversation-header {
+    gap: 0;
+  }
+
+  .ws-agent-dm-controls .conversation-header-actions {
+    gap: var(--openbot-space-1);
+  }
+
+  /* The model shows as its provider's mark in a round button. */
+  .ws-agent-dm-controls .provider-model-trigger {
+    height: 36px;
+    padding: 0 var(--openbot-space-2);
+  }
+
+  /* The box takes the width of the screen, as Slack's; the home indicator's inset is under it. */
+  .ws-agent-dm .conversation-panel > .composer-wrap {
+    padding: 0 var(--openbot-space-2) var(--openbot-space-2);
   }
 }
 

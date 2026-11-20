@@ -2,9 +2,10 @@
 // its messages are workspace rows with the author's name and time; one header row names the agent
 // and holds the chat's controls; the action bar's Reply quotes the message in the box; the message
 // menu has Copy text and Copy link; the box has the channel's formatting toolbar, and Bold wraps the
-// selection; a link to a message opens the DM there, in view. On a phone: a long press opens the
-// actions in a sheet with the quick reactions, the header keeps one row, and the formatting toolbar
-// shows only after "Aa". It serves the web client on a mock host
+// selection; a link to a message opens the DM there, in view. On a phone: the header keeps one row
+// with Back and More at a finger's size, More opens the chat's controls in a sheet, a long press
+// opens the actions in a sheet with the quick reactions, and the formatting toolbar shows only
+// after "Aa". It serves the web client on a mock host
 // (`src/renderer/stories/web-client-inbox-harness.tsx`) and drives it in Chromium. No account
 // service, host or provider is needed.
 //
@@ -152,6 +153,17 @@ async function oneRow(page: Page, names: readonly string[]): Promise<void> {
   assert.ok(top < bottom, `The header's controls are not in one row: ${JSON.stringify(boxes)}`);
 }
 
+/** Back and More are at least as large as a finger, 44px. */
+async function fingerSized(page: Page, names: readonly string[]): Promise<void> {
+  for (const name of names) {
+    const found = await button(header(page), name).first().boundingBox();
+    assert.ok(
+      found && found.width >= 44 && found.height >= 44,
+      `"${name}" is smaller than 44px: ${JSON.stringify(found)}`,
+    );
+  }
+}
+
 /** A long press as a finger makes it: the touch stays down until the sheet shows. */
 async function longPress(context: BrowserContext, page: Page, target: Locator, until: Locator): Promise<void> {
   const found = await target.boundingBox();
@@ -250,12 +262,20 @@ async function phone(browser: Browser, origin: string): Promise<void> {
 
   await step(page, viewport, "the DM draws rows, and the header keeps one row", async () => {
     await load(page, origin, DM_PATH, lastAnswer(page));
-    await oneRow(page, [
-      english("workspace.layout.back"),
-      english("chat.search.label"),
-      english("conversation.sidePanel.open"),
-    ]);
+    await oneRow(page, [english("workspace.layout.back"), english("workspace.message.more")]);
+    await fingerSized(page, [english("workspace.layout.back"), english("workspace.message.more")]);
     await shot(page, "phone-dm");
+  });
+
+  await step(page, viewport, "More opens the chat's other controls in a sheet", async () => {
+    await button(header(page), english("workspace.message.more")).first().tap();
+    const sheet = page.getByRole("dialog");
+    await button(sheet, english("chat.search.label")).waitFor({ timeout: UI_WAIT_MS });
+    await button(sheet, english("conversation.sidePanel.open")).waitFor({ timeout: UI_WAIT_MS });
+    await shot(page, "phone-more");
+    await button(sheet, english("chat.search.label")).tap();
+    await sheet.waitFor({ state: "detached", timeout: UI_WAIT_MS });
+    await page.keyboard.press("Escape");
   });
 
   await step(page, viewport, "a long press opens the actions in a sheet, and Reply quotes", async () => {

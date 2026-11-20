@@ -3,9 +3,9 @@
 // Storybook side by side at common desktop widths: default state, the pane list, the Agent settings
 // tab and pane, Maximize and Restore, a resize, and Delete on a tab. Both stories open on the
 // workspace, so each step first opens the owner's DM with an agent, which is the agent's chat. At a
-// phone width the web client alone is checked: an open pane takes the full width under the DM
-// header, which holds the chat's controls and keeps its panel button, and the tab row does not
-// cover it.
+// phone width the web client alone is checked: More in the DM header opens the panel, an open pane
+// takes the full width under the DM header, which keeps the panel button while the panel is open, and
+// the tab row does not cover it.
 //
 // `bun scripts/web-side-panel-e2e.ts --storybook=<url> [--browser-executable=<path>]`
 // Writes .openbot-build/web-side-panel-e2e/report.json and a screenshot of each client, width and
@@ -213,7 +213,10 @@ async function phone(browser: Browser) {
   const page = await open(browser, "web", PHONE_WIDTH);
   const toggle = page.locator(".side-panel-toggle").first();
   try {
-    await toggle.click();
+    // A phone's header keeps the model and More: More's sheet opens the panel, and the open panel's
+    // button shows in the header to close it.
+    await page.getByRole("button", { name: "More actions" }).first().click();
+    await page.getByRole("dialog").getByRole("button", { name: "Open side panel" }).click();
     await page.locator(".side-panel-launcher").waitFor();
     const launcher = await measure(page);
     const toggleReachable = await reachable(toggle);

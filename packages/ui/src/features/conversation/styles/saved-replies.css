@@ -23,6 +23,20 @@
   scrollbar-width: none;
 }
 
+/* On a phone, a chip that runs past the edge fades out, so the row shows that it scrolls. The mask
+   uses only the alpha of the colour, and the canvas colour is opaque. */
+@media (max-width: 720px) {
+  .saved-replies-chips {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      var(--openbot-bg-canvas) calc(100% - var(--openbot-space-6)),
+      transparent
+    );
+    mask-image: linear-gradient(to right, var(--openbot-bg-canvas) calc(100% - var(--openbot-space-6)), transparent);
+    padding-right: var(--openbot-space-6);
+  }
+}
+
 .saved-replies-chips::-webkit-scrollbar {
   display: none;
 }

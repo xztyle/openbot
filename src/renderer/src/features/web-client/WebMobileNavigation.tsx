@@ -35,6 +35,14 @@ const PANES: ReadonlyArray<PaneButton> = [
 const KEYBOARD_MIN_HEIGHT = 150;
 /** The visible height while the keyboard is open. `web-client.css` sizes the app with it. */
 const VISIBLE_HEIGHT_PROPERTY = "--web-keyboard-visible-height";
+/**
+ * The visible height at all times. Safari's `100dvh` can be taller than the part of the page that
+ * shows between its bars, and the page then scrolls under the status bar, so the app takes the
+ * smaller of the two.
+ */
+const VIEWPORT_HEIGHT_PROPERTY = "--web-viewport-height";
+/** The width up to which the app is the phone layout, as in `web-client.css`. */
+const PHONE_QUERY = "(max-width: 720px)";
 
 /**
  * Whether an on-screen keyboard covers the page. iOS shrinks only the visual viewport, and Android
@@ -61,6 +69,7 @@ function createKeyboardOpen() {
       const covered = typing && tallest - viewport.height > KEYBOARD_MIN_HEIGHT;
       setOpen(covered);
       const root = document.documentElement.style;
+      root.setProperty(VIEWPORT_HEIGHT_PROPERTY, `${Math.round(viewport.height)}px`);
       if (covered) {
         root.setProperty(VISIBLE_HEIGHT_PROPERTY, `${viewport.height}px`);
         window.scrollTo(0, 0);
@@ -80,13 +89,26 @@ function createKeyboardOpen() {
         measure();
       });
     };
+    /*
+     * The app scrolls inside its own panes, never as a page. iOS can leave the page scrolled after
+     * the keyboard closes, or after a drag past the end of a pane, which put the header under the
+     * status bar; the page goes back to the top.
+     */
+    const phone = window.matchMedia?.(PHONE_QUERY);
+    const pageScrolled = () => {
+      if (phone?.matches && (window.scrollY !== 0 || window.scrollX !== 0) && !open()) window.scrollTo(0, 0);
+    };
+    measure();
     viewport.addEventListener("resize", measure);
+    window.addEventListener("scroll", pageScrolled, { passive: true });
     document.addEventListener("focusout", focusChanged);
     return () => {
       if (focusFrame !== undefined) cancelAnimationFrame(focusFrame);
       viewport.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", pageScrolled);
       document.removeEventListener("focusout", focusChanged);
       document.documentElement.style.removeProperty(VISIBLE_HEIGHT_PROPERTY);
+      document.documentElement.style.removeProperty(VIEWPORT_HEIGHT_PROPERTY);
     };
   });
   return open;

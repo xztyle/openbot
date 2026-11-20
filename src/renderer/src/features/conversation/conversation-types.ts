@@ -32,6 +32,7 @@ import type {
   WorkspaceDirectory,
 } from "@openbot/contracts/ipc";
 import type { ConversationUiBlock } from "@openbot/contracts/ui-blocks";
+import type { ActionSheetItem } from "@openbot/ui";
 import type { AgentMessage, AgentProfile } from "@openbot/ui/data";
 import type { BrowserViewRuntime } from "@openbot/ui/features/browser/BrowserLiveView";
 import type { ChannelWorker } from "@openbot/ui/features/channels/ChannelActivityIndicator";
@@ -151,6 +152,8 @@ export interface ConversationChannelSettingsPaneProps {
 
 export interface ConversationProps {
   headerActions?: JSX.Element | undefined;
+  /** The choices of `headerActions` for the More sheet of a phone's header. */
+  headerMenuActions?: readonly ActionSheetItem[] | undefined;
   /** A channel, in place of an agent. Read once, when the view opens. */
   channel?: ConversationChannelSource | undefined;
   contextState?: AgentContextState | undefined;

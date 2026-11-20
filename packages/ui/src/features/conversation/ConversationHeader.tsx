@@ -1,4 +1,19 @@
-import { Badge, Button, buttonVariants, Clock3, DropdownMenu, Globe2, Lock, Search } from "@openbot/ui";
+import {
+  ActionSheet,
+  type ActionSheetItem,
+  Badge,
+  Button,
+  buttonVariants,
+  Clock3,
+  DropdownMenu,
+  Ellipsis,
+  Globe2,
+  IconButton,
+  Lock,
+  PanelRight,
+  Search,
+  Settings,
+} from "@openbot/ui";
 import { ProviderModelPicker } from "@openbot/ui/components/ProviderModelPicker";
 import type { AgentProfile } from "@openbot/ui/data";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
@@ -7,10 +22,15 @@ import { RemoteDesktopIcon } from "@openbot/ui/features/conversation/Conversatio
 import { SidePanelToggle, type SidePanelToggleProps } from "@openbot/ui/features/conversation/SidePanel";
 import { useText } from "@openbot/ui/text";
 import type { ComponentProps, JSX } from "@solidjs/web";
-import { For, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 
 export interface ConversationHeaderProps {
   actions?: JSX.Element;
+  /**
+   * The choices of `actions` for the More sheet of a phone, where the header keeps only the model and
+   * More. Left out when `actions` has nothing a phone needs.
+   */
+  menuActions?: readonly ActionSheetItem[] | undefined;
   agent: AgentProfile | null | undefined;
   /** The title of a chat that has no one agent, such as a channel. It shows when `agent` is missing. */
   title?: JSX.Element | undefined;
@@ -157,8 +177,81 @@ export function ConversationHeader(props: ConversationHeaderProps) {
           )}
         </Show>
         <Show when={props.sidePanel}>{(sidePanel) => <SidePanelToggle {...sidePanel()} />}</Show>
+        <Show when={props.agent}>{(agent) => <PhoneMoreMenu {...props} agentName={agent().name} />}</Show>
       </div>
     </header>
+  );
+}
+
+/**
+ * A phone has room for the model and one button in the header row, as Slack's DM header: More opens
+ * the other controls (apps, search, the browser, remote control, the side panel and the agent's
+ * settings) in a sheet. The CSS shows it, and hides those controls, only on a narrow screen.
+ */
+function PhoneMoreMenu(props: ConversationHeaderProps & { agentName: string }) {
+  const { t } = useText();
+  const [open, setOpen] = createSignal(false);
+  const items = (): ActionSheetItem[] => {
+    const list: ActionSheetItem[] = [...(props.menuActions ?? [])];
+    const search = props.onOpenSearch;
+    if (search)
+      list.push({
+        id: "search",
+        label: t("chat.search.label"),
+        icon: <Search aria-hidden="true" />,
+        onSelect: search,
+      });
+    for (const tab of props.browser?.tabs ?? [])
+      list.push({
+        id: `browser:${tab.id}`,
+        label: `${t("conversation.header.browser", { name: props.agentName })}: ${tab.title || pageHost(tab.url)}`,
+        icon: <Globe2 aria-hidden="true" />,
+        onSelect: () => props.browser?.onOpen(tab.id),
+      });
+    const remote = props.remoteControl;
+    if (remote)
+      list.push({
+        id: "remote",
+        label: t(remote.active ? "conversation.header.resumeRemote" : "conversation.header.openRemote"),
+        icon: <RemoteDesktopIcon />,
+        disabled: !remote.enabled,
+        onSelect: () => {
+          const trigger = document.querySelector<HTMLButtonElement>(".conversation-header .remote-desktop-button");
+          if (trigger) remote.onOpen(trigger);
+        },
+      });
+    const panel = props.sidePanel;
+    if (panel)
+      list.push({
+        id: "side-panel",
+        label: t(panel.open ? "conversation.sidePanel.close" : "conversation.sidePanel.open"),
+        icon: <PanelRight aria-hidden="true" />,
+        onSelect: () => panel.onToggle(),
+      });
+    list.push({
+      id: "settings",
+      label: t("conversation.header.settings"),
+      icon: <Settings aria-hidden="true" />,
+      onSelect: () => props.onOpenSettings(),
+    });
+    return list;
+  };
+  return (
+    <>
+      <IconButton
+        variant="ghost"
+        class="conversation-header-more"
+        label={t("workspace.message.more")}
+        aria-haspopup="dialog"
+        aria-expanded={open() ? "true" : "false"}
+        onClick={() => setOpen(true)}
+      >
+        <Ellipsis />
+      </IconButton>
+      <Show when={open()}>
+        <ActionSheet open onOpenChange={setOpen} title={t("workspace.message.more")} items={items()} />
+      </Show>
+    </>
   );
 }
 

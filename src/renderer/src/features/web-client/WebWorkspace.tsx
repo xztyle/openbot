@@ -76,6 +76,7 @@ import {
 import { clearAgentContext, type TeamApiRequest } from "@openbot/team-client/team-api-requests";
 import { classifyFailure } from "@openbot/telemetry";
 import {
+  Blocks,
   BookOpen,
   Bot,
   Button,
@@ -2209,7 +2210,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     else paneHistory.stop();
   });
   createEffect(phoneLevel, (level) => paneHistory.sync(level));
-  // The app on the Home Screen has no Safari edge swipe: the left edge swipe goes back one screen.
+  // A swipe from the left edge goes back one screen on a phone, in Safari and on the Home Screen.
   createWebSwipeBack({
     enabled: () => phone() && mobilePane() === "conversation",
     surface: () => document.querySelector<HTMLElement>(".web-app-frame > .app-frame-panes"),
@@ -2611,6 +2612,21 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
             {t("mcp.chat.title")}
           </Button>
         </Show>
+      }
+      headerMenuActions={
+        chatAppsSupported()
+          ? [
+              {
+                id: "chat-apps",
+                label: t("mcp.chat.title"),
+                icon: <Blocks aria-hidden="true" />,
+                onSelect: () => {
+                  const id = workspace.state.selectedId;
+                  if (id) void chatApps.open({ kind: "agent", id });
+                },
+              },
+            ]
+          : undefined
       }
       runtime={runtime}
       onOpenMarketplace={() => setMarketplaceOpen(true)}

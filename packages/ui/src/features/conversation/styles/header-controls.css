@@ -813,6 +813,35 @@
   }
 }
 
+/* More: the phone's sheet of the header's other controls. */
+.conversation-header-more {
+  display: none;
+}
+
+/*
+ * A phone keeps the model and More in an agent's header, as Slack's DM header keeps one or two
+ * buttons. The other controls are in More's sheet. An open side panel keeps its button, which
+ * closes it.
+ */
+@media (max-width: 720px) {
+  .conversation-header-actions > .conversation-header-more {
+    display: inline-flex;
+    width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
+    flex: none;
+  }
+
+  .conversation-header-actions:has(> .conversation-header-more)
+    > :not(.provider-model-picker, .conversation-header-more, .side-panel-toggle[aria-expanded="true"]) {
+    display: none;
+  }
+
+  .conversation-header-actions:has(> .conversation-header-more) > .side-panel-toggle[aria-expanded="true"] {
+    width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .provider-model-chevron,
   .provider-model-trigger,

@@ -110,6 +110,48 @@
   }
 }
 
+/*
+ * A phone's header, as Slack's app: Back at the left edge, then the name, which takes the free room,
+ * and the buttons at the right. Back and the buttons are as large as a finger.
+ */
+@media (max-width: 720px) {
+  .ws-channel-header {
+    min-height: 52px;
+    gap: 0;
+    padding: var(--openbot-space-1) var(--openbot-space-1) var(--openbot-space-1) 0;
+  }
+
+  .ws-channel-header-back.ui-button {
+    width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
+    flex: none;
+  }
+
+  .ws-channel-header-back.ui-button > svg {
+    width: var(--openbot-icon-lg);
+    height: var(--openbot-icon-lg);
+  }
+
+  .ws-channel-header-heading {
+    flex: 0 1 auto;
+  }
+
+  .ws-channel-header-name.ui-button {
+    height: var(--openbot-touch-target);
+    padding: 0 var(--openbot-space-1);
+    font-size: var(--openbot-text-lg);
+  }
+
+  .ws-channel-header-actions {
+    gap: 0;
+  }
+
+  .ws-channel-header-actions > .ui-icon-button {
+    width: 40px;
+    height: var(--openbot-touch-target);
+  }
+}
+
 /* Message rows ---------------------------------------------------------------------------------- */
 
 .ws-message {
@@ -1298,4 +1340,23 @@ button.ws-profile-trigger.ws-message-author:hover {
   position: static;
   pointer-events: auto;
   transform: none;
+}
+
+/* "Jump to latest" floats over the messages, so it has a solid face and an edge, as Slack's. */
+.ws-jump-latest-dock > .ws-jump-latest.ui-button-variant-secondary {
+  border: 1px solid var(--openbot-border-strong);
+  background: var(--openbot-bg-surface-raised);
+}
+
+@media (max-width: 720px) {
+  .ws-jump-latest-dock {
+    top: calc(100% - var(--openbot-touch-target) - var(--openbot-space-2));
+    height: var(--openbot-touch-target);
+    margin-bottom: calc(-1 * var(--openbot-touch-target));
+  }
+
+  .ws-jump-latest-dock > .ws-jump-latest.ui-button {
+    height: 36px;
+    padding-inline: var(--openbot-space-3);
+  }
 }

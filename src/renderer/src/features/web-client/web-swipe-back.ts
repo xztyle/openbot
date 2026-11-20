@@ -10,20 +10,13 @@ const BACK_SHARE = 0.3;
 const BACK_MIN_PX = 64;
 
 /**
- * Whether the page runs as an app from the Home Screen. Safari then has no edge swipe for Back, as it
- * has in a tab, where it already steps through the history entries of the screens.
- */
-export function isStandaloneDisplay(): boolean {
-  return (
-    window.matchMedia?.("(display-mode: standalone)").matches === true ||
-    ("standalone" in navigator && navigator.standalone === true)
-  );
-}
-
-/**
- * The iOS swipe from the left edge that goes back one screen, for the app on the Home Screen. The
- * screen follows the finger; a swipe past a third of the width goes back (`onBack`, which steps the
- * history back), a shorter one springs back. A vertical move stays a scroll.
+ * The iOS swipe from the left edge that goes back one screen. The screen follows the finger; a swipe
+ * past a third of the width goes back (`onBack`, which steps the history back), a shorter one springs
+ * back. A vertical move stays a scroll.
+ *
+ * The app on the Home Screen has no Safari edge swipe. In a Safari tab, Safari's own swipe does not
+ * always reach the app's screens, so the app has its swipe there too. When Safari takes the swipe,
+ * the page gets `touchcancel`, and the screen springs back while Safari goes back.
  */
 export function createWebSwipeBack(options: {
   /** Whether a screen to go back to shows, such as a conversation over the list. */
@@ -33,7 +26,6 @@ export function createWebSwipeBack(options: {
   onBack: () => void;
 }): void {
   onSettled(() => {
-    if (!isStandaloneDisplay()) return;
     let start: { x: number; y: number; id: number } | null = null;
     let surface: HTMLElement | null = null;
     let distance = 0;
@@ -47,6 +39,7 @@ export function createWebSwipeBack(options: {
       element.style.transition =
         animate && !prefersReducedMotion() ? "transform var(--openbot-duration-normal) var(--openbot-ease-out)" : "";
       element.style.transform = "";
+      element.style.boxShadow = "";
       if (animate) element.addEventListener("transitionend", () => (element.style.transition = ""), { once: true });
     }
 
@@ -66,6 +59,8 @@ export function createWebSwipeBack(options: {
           start = null;
           return;
         }
+        // A move that is more sideways than down keeps the pane from starting a scroll first.
+        if (dx > 0 && dx >= Math.abs(dy) && event.cancelable) event.preventDefault();
         if (dx < SLOP_PX) return;
         surface = options.surface();
         if (!surface) {
@@ -73,8 +68,9 @@ export function createWebSwipeBack(options: {
           return;
         }
         surface.style.transition = "";
+        surface.style.boxShadow = "-8px 0 24px var(--openbot-shadow-dialog)";
       }
-      event.preventDefault();
+      if (event.cancelable) event.preventDefault();
       distance = Math.max(0, dx);
       if (!prefersReducedMotion()) surface.style.transform = `translateX(${distance}px)`;
     };

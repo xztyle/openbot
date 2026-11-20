@@ -16,6 +16,7 @@ import { useText } from "../../text";
 import { LabelTooltip, LabelTooltipTrigger } from "../../tooltip";
 import { cx, usesTouchLayout } from "../../utils";
 import { EmojiPicker, type EmojiPickerProps } from "./EmojiPicker";
+import { LongMessageFold } from "./LongMessageFold";
 import { MemberProfilePopover } from "./MemberProfileCard";
 import { AvatarStack, MemberAvatar, MemberName } from "./WorkspaceAvatar";
 import { WorkspaceContextMenu, type WorkspaceSheetControls } from "./WorkspaceContextMenu";
@@ -88,6 +89,8 @@ export interface MessageRowProps {
    * Slack's "Show more". Reactions and the thread summary still show under the line.
    */
   note?: MessageRowNote | undefined;
+  /** A long text folds to its first lines with "Show more": the message, and whether it may fold and still streams. */
+  fold?: { id: string; enabled: boolean; live: boolean } | undefined;
   class?: string;
 }
 
@@ -247,12 +250,18 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
             }
           >
             <Show when={!folded() && props.text?.length}>
-              <p class="ws-message-text">
-                <MessageText segments={props.text ?? []} />
-                <Show when={props.edited}>
-                  <span class="ws-message-edited">{t("workspace.message.edited")}</span>
-                </Show>
-              </p>
+              <LongMessageFold
+                id={props.fold?.id ?? ""}
+                enabled={props.fold?.enabled === true}
+                live={props.fold?.live === true}
+              >
+                <p class="ws-message-text">
+                  <MessageText segments={props.text ?? []} />
+                  <Show when={props.edited}>
+                    <span class="ws-message-edited">{t("workspace.message.edited")}</span>
+                  </Show>
+                </p>
+              </LongMessageFold>
             </Show>
             <Show when={!folded()}>{props.children}</Show>
             {/* A message drawn by the content renderer has no text run: the mark goes under it. */}

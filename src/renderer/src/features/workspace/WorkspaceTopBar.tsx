@@ -4,6 +4,7 @@
  * reader. A phone has no top bar; its search is a view, and its Home has the "Needs you" chip.
  */
 
+import { Bug, Button } from "@openbot/ui";
 import {
   type SearchSuggestion,
   WorkspaceSearchBar,
@@ -15,6 +16,7 @@ import { currentDevicePlatform } from "../../send-shortcut-preference";
 import { WorkspaceNeedsYouButton } from "./WorkspaceNeedsYou";
 import { useJumpEntries } from "./WorkspaceSwitcher";
 import { useWorkspace } from "./workspace-context";
+import { debugMode, setDebugMode } from "./workspace-debug";
 import { shortcutKeys } from "./workspace-shortcuts";
 
 export function WorkspaceTopBar() {
@@ -43,32 +45,59 @@ export function WorkspaceTopBar() {
         member: entry.member,
       }));
   return (
-    <Show when={!ws.env.phone() && (ws.search.supported() || ws.needsYou().length > 0)}>
-      <div class="ws-topbar" ref={(div) => (element = div)}>
-        <Show when={ws.search.supported()}>
-          <WorkspaceSearchBar
-            ref={(next) => (api = next)}
-            placeholder={t("workspace.search.placeholderIn", { name: scope() })}
-            shortcut={shortcutKeys(["mod"], "G", currentDevicePlatform() === "darwin").join(
-              currentDevicePlatform() === "darwin" ? "" : "+",
-            )}
-            query={(() => {
-              const route = ws.route();
-              return route.kind === "view" && route.view === "search" ? ws.search.state.query : "";
-            })()}
-            recent={ws.search.state.recent}
-            suggestions={suggestions}
-            onSubmit={(query) => ws.openSearch(query)}
-            onOpenSuggestion={(id) => {
-              if (id.startsWith("person:")) ws.messageMember(id.slice("person:".length));
-              else ws.openConversation(id);
-            }}
-            onShortcuts={() => ws.openDialog({ kind: "shortcuts" })}
-            shortcutsLabel={t("workspace.shortcuts.title")}
-          />
-        </Show>
-        <WorkspaceNeedsYouButton />
-      </div>
-    </Show>
+    <>
+      <Show when={ws.env.phone() && debugMode()}>
+        <WorkspaceDebugBadge floating />
+      </Show>
+      <Show when={!ws.env.phone() && (ws.search.supported() || ws.needsYou().length > 0 || debugMode())}>
+        <div class="ws-topbar" ref={(div) => (element = div)}>
+          <Show when={ws.search.supported()}>
+            <WorkspaceSearchBar
+              ref={(next) => (api = next)}
+              placeholder={t("workspace.search.placeholderIn", { name: scope() })}
+              shortcut={shortcutKeys(["mod"], "G", currentDevicePlatform() === "darwin").join(
+                currentDevicePlatform() === "darwin" ? "" : "+",
+              )}
+              query={(() => {
+                const route = ws.route();
+                return route.kind === "view" && route.view === "search" ? ws.search.state.query : "";
+              })()}
+              recent={ws.search.state.recent}
+              suggestions={suggestions}
+              onSubmit={(query) => ws.openSearch(query)}
+              onOpenSuggestion={(id) => {
+                if (id.startsWith("person:")) ws.messageMember(id.slice("person:".length));
+                else ws.openConversation(id);
+              }}
+              onShortcuts={() => ws.openDialog({ kind: "shortcuts" })}
+              shortcutsLabel={t("workspace.shortcuts.title")}
+            />
+          </Show>
+          <WorkspaceNeedsYouButton />
+          <Show when={debugMode()}>
+            <WorkspaceDebugBadge />
+          </Show>
+        </div>
+      </Show>
+    </>
+  );
+}
+
+/** "Debug" while debug mode is on, so it is obvious; a click turns it off. */
+function WorkspaceDebugBadge(props: { floating?: boolean }) {
+  const { t } = useText();
+  const mac = currentDevicePlatform() === "darwin";
+  return (
+    <Button
+      variant="outline"
+      size="xs"
+      class="ws-debug-badge"
+      data-floating={props.floating ? "" : undefined}
+      title={t("workspace.debug.badgeTitle", { keys: shortcutKeys(["mod", "shift"], "D", mac).join(mac ? "" : "+") })}
+      onClick={() => setDebugMode(false)}
+    >
+      <Bug aria-hidden="true" />
+      {t("workspace.debug.badge")}
+    </Button>
   );
 }

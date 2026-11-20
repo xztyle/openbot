@@ -18,6 +18,7 @@ import type { AgentMessage } from "@openbot/ui/data";
 import { FilePreviewDialog, type FilePreviewDialogState } from "@openbot/ui/features/conversation/FilePreviewDialog";
 import { MessageBody } from "@openbot/ui/features/conversation/MessageRendering";
 import { ArtifactCard } from "@openbot/ui/features/workspace/ArtifactCard";
+import { LongMessageFold } from "@openbot/ui/features/workspace/LongMessageFold";
 import { DayDivider, NewMessagesDivider } from "@openbot/ui/features/workspace/MessageDividers";
 import { MessageRow } from "@openbot/ui/features/workspace/MessageRow";
 import { StepTrail } from "@openbot/ui/features/workspace/StepTrail";
@@ -29,6 +30,7 @@ import { attachmentFilePreview } from "../conversation/attachment-preview";
 import { WorkspaceMessageEditor } from "./WorkspaceMessageEditor";
 import { MemberProfile } from "./WorkspaceProfile";
 import { useWorkspace } from "./workspace-context";
+import { debugMode } from "./workspace-debug";
 import {
   memberById,
   mentionsReader,
@@ -163,6 +165,8 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
   );
   /** The host's steps of the turn, with tools and searches; the folded thinking of the messages until then. */
   const trail = createMemo((): WorkspaceStepTrailView | null => {
+    // A channel and a thread show the people the answers, not the tools: the steps show in debug mode.
+    if (!debugMode()) return null;
     const current = entry();
     if (current.author.kind !== "agent" || current.deletedAt || !current.message.turnId) return props.row.steps;
     const host = ws.steps(props.channelId, current.id);
@@ -190,6 +194,22 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
       expandable: current.expandable,
     };
   });
+  /** A long answer of an agent to the people folds to its first lines, as Slack's long posts. */
+  const fold = () => {
+    const current = entry();
+    return {
+      id: `${props.channelId}:${current.id}`,
+      enabled:
+        !debugMode() &&
+        current.author.kind === "agent" &&
+        !props.row.pending &&
+        !deleted() &&
+        !note() &&
+        !current.message.questionPrompt &&
+        !editingHere(),
+      live: current.message.status === "streaming",
+    };
+  };
   /** A plain line takes the light row; Markdown, files and questions take the chat's renderer. */
   const plain = createMemo(() => (props.row.pending ? null : plainMessageSegments(ws.directory(), entry())));
   const threadRootId = () => (props.inThread ? (entry().threadRootId ?? null) : null);
@@ -367,6 +387,7 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
         }
         menuItems={menuItems()}
         note={note()}
+        fold={fold()}
         profile={() => <MemberProfile member={author()} />}
         editor={
           editingHere() ? (
@@ -385,7 +406,9 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
           )}
         </Show>
         <Show when={!props.row.pending && !plain()}>
-          <WorkspaceMessageBody entry={entry()} />
+          <LongMessageFold id={fold().id} enabled={fold().enabled} live={fold().live}>
+            <WorkspaceMessageBody entry={entry()} />
+          </LongMessageFold>
         </Show>
         <Show when={artifacts().length}>
           <div class="ws-message-artifacts">

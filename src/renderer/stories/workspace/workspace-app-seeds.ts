@@ -322,16 +322,27 @@ export function agentTalkSeeds(reader = "local"): MockChannelSeed[] {
       ),
       taskId: "cocina-research",
     },
+    // The steps of the lead's turn: a channel shows them only in debug mode.
+    message("nicho-cocina", 7, chief, "Leyendo el inventario en COC-19.", {
+      threadRootId: rootId,
+      itemType: "commentary",
+      turnId: "cocina-turn",
+    }),
+    message("nicho-cocina", 8, chief, "Actualizando COC-34 con el formato.", {
+      threadRootId: rootId,
+      itemType: "commentary",
+      turnId: "cocina-turn",
+    }),
     message(
       "nicho-cocina",
       8,
       chief,
       "Será **imagen única** con link directo a la landing. La pieza está lista el sábado 21; te aviso para que la apruebes.",
-      { threadRootId: rootId },
+      { threadRootId: rootId, turnId: "cocina-turn" },
     ),
   ];
   root.threadSummary = {
-    replyCount: replies.length,
+    replyCount: replies.filter((reply) => reply.message.itemType !== "commentary").length,
     lastReplyAt: replies.at(-1)?.message.createdAt ?? root.message.createdAt,
     participantIds: ["chief", "research", "sales"],
   };
@@ -340,5 +351,24 @@ export function agentTalkSeeds(reader = "local"): MockChannelSeed[] {
     { task: task("cocina-research", "research", rootId, "cocina-task"), threadRootId: rootId },
     { task: task("cocina-sales", "sales", rootId, "cocina-task"), threadRootId: rootId },
   ];
-  return [{ channel: room, messages: [root, ...replies], work }, ...base];
+  // A long report to the people: it folds to its first lines, above the table.
+  const report = message(
+    "nicho-cocina",
+    20,
+    research,
+    [
+      "Resumen de la semana para la Cena Navideña. Los 11 copys tienen OK de Cumplimiento y las cuatro fotos de la landing se pueden usar con el crédito en el texto del anuncio.",
+      "La imagen única de 1080×1350 está en revisión; el carrusel de tres piezas queda como plan B si la imagen no rinde en los primeros tres días.",
+      "El presupuesto queda en 7 USD por día del 10 al 23 de diciembre, con el tope acumulado de 98 USD en la cuenta publicitaria.",
+      "",
+      "| Pieza | Estado | Responsable |",
+      "| --- | --- | --- |",
+      "| Imagen 1080×1350 | En revisión | Diseñador de Landing |",
+      "| Carrusel | Plan B | Diseñador de Landing |",
+      "| Copys | Aprobados | Creativo de Anuncios |",
+      "",
+      "Pendiente de Alejandro: aprobar la imagen el sábado 21 y confirmar si el anuncio corre también el 24.",
+    ].join("\n"),
+  );
+  return [{ channel: room, messages: [root, ...replies, report], work }, ...base];
 }

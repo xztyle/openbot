@@ -355,6 +355,59 @@ button.ws-profile-trigger.ws-message-author:hover {
   font-size: var(--openbot-text-md);
 }
 
+/* A long message of an agent, folded to its first lines with a fade, as Slack's "Show more". */
+/*
+ * No scroll anchor inside a fold: a change of its height would stop the browser from keeping the
+ * reader's place for that frame, while the rows around it take their real size.
+ */
+.ws-fold {
+  position: relative;
+  overflow-anchor: none;
+}
+
+/* Clip, not hidden: a hidden box scrolls, and a centred scroll to a message would move the text in it. */
+.ws-fold-body {
+  overflow: clip;
+}
+
+/*
+ * Folded, "Show more" lies over the faded last line, so the fold takes the same height before and
+ * after it is measured, and the rows around it do not move.
+ */
+.ws-fold[data-folded] > .ws-fold-actions {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+}
+
+.ws-fold[data-folded] > .ws-fold-body {
+  -webkit-mask-image: linear-gradient(to bottom, currentColor max(40%, calc(100% - 3em)), transparent 100%);
+  mask-image: linear-gradient(to bottom, currentColor max(40%, calc(100% - 3em)), transparent 100%);
+}
+
+/* A code block or a table that crosses the fold hides until the message opens. */
+.ws-fold[data-folded] [data-fold-hidden] {
+  visibility: hidden;
+}
+
+.ws-fold-toggle.ui-button {
+  height: auto;
+  gap: var(--openbot-space-1);
+  padding: var(--openbot-space-0-5) 0;
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.ws-fold-chevron {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+  transition: transform var(--openbot-duration-fast) var(--openbot-ease-out);
+}
+
+.ws-fold-toggle[aria-expanded="true"] .ws-fold-chevron {
+  transform: rotate(180deg);
+}
+
 .ws-message-text {
   margin: 0;
   overflow-wrap: anywhere;

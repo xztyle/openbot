@@ -13,6 +13,7 @@ import { WorkspaceComposer } from "./WorkspaceComposer";
 import { WorkspaceMessage } from "./WorkspaceMessage";
 import { createAgentWork } from "./workspace-agent-work";
 import { useWorkspace } from "./workspace-context";
+import { debugMode } from "./workspace-debug";
 import { agentNotes, conversationName, messageRows, readerJoined } from "./workspace-model";
 import { savedScrollPlace, saveScrollPlace } from "./workspace-scroll-places";
 
@@ -64,7 +65,9 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
       thread: true,
       firstUnreadId: firstUnreadId(),
       membersAnswer: current ? channelMembersAnswer(current) : false,
-      note: agentNotes(ws.directory().agents, thread()?.page?.tasks ?? []),
+      note: debugMode() ? undefined : agentNotes(ws.directory().agents, thread()?.page?.tasks ?? []),
+      steps: debugMode(),
+      everything: debugMode(),
     });
   });
   const root = () => rows().find((row) => row.entry.id === props.rootId && !row.pending);
@@ -251,7 +254,7 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
             )}
           </For>
         }
-        typing={<TypingIndicator humans={work.humans()} agents={work.agents()} />}
+        typing={<TypingIndicator humans={work.humans()} agents={work.agents()} group={!debugMode()} />}
         composer={
           <WorkspaceComposer
             channelId={props.channelId}

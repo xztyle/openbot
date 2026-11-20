@@ -63,6 +63,9 @@ export const messages = {
   "settings.showAgentSteps.title": "Pokazuj kroki agenta",
   "settings.showAgentSteps.description":
     "Domyślnie otwiera myślenie, kroki narzędzi i zmiany wspomnień z każdej tury na tym urządzeniu i w tej przeglądarce.",
+  "settings.debugMode.title": "Tryb debugowania",
+  "settings.debugMode.description":
+    "Pokazuje wszystko na tym urządzeniu: kroki i narzędzia agentów w kanałach, wiadomości między agentami i długie wiadomości w całości oraz ukryte notatki.",
   "settings.busyMessage.title": "Kieruj agentami podczas pracy",
   "settings.busyMessage.description":
     "Nowe wiadomości dołączają do bieżącej pracy agenta, a nie do kolejki. Działa z ChatGPT i Claude.",

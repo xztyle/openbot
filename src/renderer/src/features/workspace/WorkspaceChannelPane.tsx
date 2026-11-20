@@ -27,6 +27,7 @@ import { WorkspaceMessageList } from "./WorkspaceMessageList";
 import { AnswerModesHint } from "./WorkspaceWelcome";
 import { createAgentWork } from "./workspace-agent-work";
 import { useWorkspace } from "./workspace-context";
+import { debugMode } from "./workspace-debug";
 import {
   channelMembers,
   conversationName,
@@ -406,7 +407,7 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
         <Show when={showModesHint()}>
           <AnswerModesHint channelId={props.channelId} />
         </Show>
-        <TypingIndicator humans={work.humans()} agents={work.agents()} />
+        <TypingIndicator humans={work.humans()} agents={work.agents()} group={!debugMode()} />
         <Show when={!archived()} fallback={<p class="ws-channel-notice">{t("workspace.app.channel.archived")}</p>}>
           <Show
             when={joined()}

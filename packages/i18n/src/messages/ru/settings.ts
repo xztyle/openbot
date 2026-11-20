@@ -64,6 +64,9 @@ export const messages = {
   "settings.showAgentSteps.title": "Показывать шаги агента",
   "settings.showAgentSteps.description":
     "По умолчанию раскрывать размышления, шаги инструментов и изменения памяти в каждом ходе на этом устройстве и в этом браузере.",
+  "settings.debugMode.title": "Режим отладки",
+  "settings.debugMode.description":
+    "Показывает всё на этом устройстве: шаги и инструменты агентов в каналах, сообщения между агентами и длинные сообщения целиком, а также скрытые заметки.",
   "settings.busyMessage.title": "Направлять агентов, пока они работают",
   "settings.busyMessage.description":
     "Новые сообщения присоединяются к текущей работе агента, а не встают в очередь. Работает с ChatGPT и Claude.",

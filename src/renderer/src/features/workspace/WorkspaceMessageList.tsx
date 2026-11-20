@@ -6,6 +6,7 @@ import type { JSX } from "@solidjs/web";
 import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
 import { WorkspaceMessage } from "./WorkspaceMessage";
 import { useWorkspace } from "./workspace-context";
+import { debugMode } from "./workspace-debug";
 import { agentNotes, keepUnchangedRows, messageRows, type WorkspaceMessageRowModel } from "./workspace-model";
 import { savedScrollPlace, saveScrollPlace } from "./workspace-scroll-places";
 
@@ -64,7 +65,9 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
         firstUnreadId: props.firstUnreadId,
         working: props.working,
         membersAnswer: props.membersAnswer === true,
-        note: agentNotes(ws.directory().agents, props.tasks ?? []),
+        note: debugMode() ? undefined : agentNotes(ws.directory().agents, props.tasks ?? []),
+        steps: debugMode(),
+        everything: debugMode(),
       }),
       previous,
     ),

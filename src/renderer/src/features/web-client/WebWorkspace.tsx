@@ -85,6 +85,7 @@ import {
   Blocks,
   BookOpen,
   Bot,
+  Bug,
   Button,
   CalendarClock,
   ChartArea,
@@ -250,6 +251,7 @@ import { WorkspaceAgentFrame, WorkspaceChrome, WorkspaceMain } from "../workspac
 import { workspaceAttention } from "../workspace/workspace-attention";
 import { WorkspaceProvider } from "../workspace/workspace-context";
 import { createWorkspaceController, type WorkspaceController } from "../workspace/workspace-controller";
+import { debugMode, toggleDebugMode } from "../workspace/workspace-debug";
 import { AGENT_DM_PREFIX, conversationName, memberById, workspacePersonName } from "../workspace/workspace-model";
 import { createWorkspaceSupport } from "../workspace/workspace-support";
 import { workspaceViewLabel } from "../workspace/workspace-view-labels";
@@ -2411,6 +2413,14 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
             label: t("account.menu.sendFeedback"),
             icon: <MessageCircleQuestionMark />,
             onSelect: () => void openWebDestination("feedback"),
+          },
+          {
+            // Shows the steps, the messages between agents and long messages whole on this device.
+            id: "debug",
+            label: t("settings.debugMode.title"),
+            icon: <Bug />,
+            detail: t(debugMode() ? "workspace.debug.on" : "workspace.debug.off"),
+            onSelect: () => toggleDebugMode(),
           },
         ],
       },

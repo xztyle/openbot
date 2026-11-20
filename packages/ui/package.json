@@ -441,6 +441,7 @@
     "./features/workspace/MemberProfileCard": "./src/features/workspace/MemberProfileCard.tsx",
     "./features/workspace/MessageComposer": "./src/features/workspace/MessageComposer.tsx",
     "./features/workspace/MessageDividers": "./src/features/workspace/MessageDividers.tsx",
+    "./features/workspace/LongMessageFold": "./src/features/workspace/LongMessageFold.tsx",
     "./features/workspace/MessageRow": "./src/features/workspace/MessageRow.tsx",
     "./features/workspace/NewMessageDialog": "./src/features/workspace/NewMessageDialog.tsx",
     "./features/workspace/StepTrail": "./src/features/workspace/StepTrail.tsx",

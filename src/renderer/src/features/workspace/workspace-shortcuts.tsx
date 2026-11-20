@@ -13,6 +13,7 @@ import { createSignal, onSettled } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { currentDevicePlatform } from "../../send-shortcut-preference";
 import { useWorkspace } from "./workspace-context";
+import { toggleDebugMode } from "./workspace-debug";
 
 /** Whether a key press comes from a field the reader types in. */
 export function typingTarget(target: EventTarget | null): boolean {
@@ -74,6 +75,7 @@ export function workspaceShortcutGroups(t: ReturnType<typeof useText>["t"], mac:
         { label: t("workspace.shortcuts.closePanel"), keys: ["Esc"] },
         { label: t("workspace.shortcuts.editLast"), keys: ["↑"] },
         { label: t("workspace.shortcuts.sheet"), keys: keys(["mod"], "/") },
+        { label: t("workspace.debug.toggle"), keys: keys(["mod", "shift"], "D") },
       ],
     },
   ];
@@ -179,6 +181,7 @@ export function WorkspaceKeyboard() {
                     : null;
         if (view) return take(() => ws.openView(view));
         if (key === "l") return take(() => ws.openDialog({ kind: "browse" }));
+        if (key === "d") return take(() => toggleDebugMode());
         if (key === "i" && route.kind === "channel") return take(() => ws.openDetails(route.channelId));
         return;
       }

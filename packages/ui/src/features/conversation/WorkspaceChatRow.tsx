@@ -4,6 +4,7 @@ import { createSignal, Show } from "solid-js";
 import type { AgentMessage, AgentProfile, MessageEventCheckOrigin } from "../../data";
 import { Bell } from "../../icons";
 import { useText } from "../../text";
+import { LongMessageFold } from "../workspace/LongMessageFold";
 import { MessageRow, type ReactionEmojiPicker } from "../workspace/MessageRow";
 import type { WorkspaceMember, WorkspaceMenuItem, WorkspaceReaction } from "../workspace/workspace-types";
 import type { AttachmentMediaSource } from "./AttachmentCards";
@@ -12,6 +13,8 @@ import { MessageBody } from "./MessageRendering";
 
 export interface WorkspaceChatRowProps {
   message: AgentMessage;
+  /** A long answer of the agent folds to "Show more". False: every message shows whole (debug mode). */
+  fold?: boolean | undefined;
   /** The face and the name of the row: the reader, the agent, or another person of the chat. */
   author: WorkspaceMember;
   /** A follow-up by the same author within minutes: no face and no name, the time in the gutter. */
@@ -61,6 +64,15 @@ export interface WorkspaceChatRowProps {
  */
 export function WorkspaceChatRow(props: WorkspaceChatRowProps): JSX.Element {
   const { t } = useText();
+  /** A long answer of the agent folds; a question, a card, a plan or a marker stays whole. */
+  const foldable = () =>
+    props.fold !== false &&
+    props.message.author === "agent" &&
+    !props.message.questionPrompt &&
+    !props.message.uiBlock &&
+    !props.message.plan &&
+    !props.message.actionMarker &&
+    !props.message.exchange;
   const sentAt = () => (props.message.createdAt ? Date.parse(props.message.createdAt) : Number.NaN);
   return (
     <MessageRow
@@ -88,27 +100,29 @@ export function WorkspaceChatRow(props: WorkspaceChatRowProps): JSX.Element {
         {(origin) => <EventCheckMark origin={origin()} iconUrl={props.eventCheckIconUrl} />}
       </Show>
       {props.before}
-      <div class="ws-message-content" data-author={props.message.author === "you" ? "user" : "assistant"}>
-        <MessageBody
-          animate={props.animate}
-          message={props.message}
-          referencedMessage={props.referencedMessage}
-          referencedAuthorName={props.referencedAuthorName}
-          onOpenReference={props.onOpenReference}
-          referenceState={props.referenceState}
-          agents={props.agents}
-          skills={props.skills}
-          onSelectAgent={props.onSelectAgent}
-          onOpenLink={props.onOpenLink}
-          onPreview={props.onPreview}
-          onAttachmentAction={props.onAttachmentAction}
-          onOpenSharedFile={props.onOpenSharedFile}
-          onOpenWorkspaceFile={props.onOpenWorkspaceFile}
-          onOpenQuote={props.onOpenQuote}
-          onDownload={props.onDownload}
-          mediaSource={props.mediaSource}
-        />
-      </div>
+      <LongMessageFold id={`chat:${props.message.id}`} enabled={foldable()} live={props.message.streaming === true}>
+        <div class="ws-message-content" data-author={props.message.author === "you" ? "user" : "assistant"}>
+          <MessageBody
+            animate={props.animate}
+            message={props.message}
+            referencedMessage={props.referencedMessage}
+            referencedAuthorName={props.referencedAuthorName}
+            onOpenReference={props.onOpenReference}
+            referenceState={props.referenceState}
+            agents={props.agents}
+            skills={props.skills}
+            onSelectAgent={props.onSelectAgent}
+            onOpenLink={props.onOpenLink}
+            onPreview={props.onPreview}
+            onAttachmentAction={props.onAttachmentAction}
+            onOpenSharedFile={props.onOpenSharedFile}
+            onOpenWorkspaceFile={props.onOpenWorkspaceFile}
+            onOpenQuote={props.onOpenQuote}
+            onDownload={props.onDownload}
+            mediaSource={props.mediaSource}
+          />
+        </div>
+      </LongMessageFold>
       {props.children}
     </MessageRow>
   );

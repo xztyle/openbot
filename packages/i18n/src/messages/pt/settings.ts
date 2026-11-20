@@ -64,6 +64,9 @@ export const messages = {
   "settings.showAgentSteps.title": "Mostrar etapas do agente",
   "settings.showAgentSteps.description":
     "Abre por padrão o raciocínio, as etapas de ferramentas e as mudanças de memória de cada turno neste dispositivo e navegador.",
+  "settings.debugMode.title": "Modo de depuração",
+  "settings.debugMode.description":
+    "Mostra tudo neste dispositivo: os passos e ferramentas dos agentes nos canais, as mensagens entre agentes e as mensagens longas completas, e as notas ocultas.",
   "settings.busyMessage.title": "Orientar agentes enquanto trabalham",
   "settings.busyMessage.description":
     "Novas mensagens entram no trabalho atual do agente, não na fila. Funciona com ChatGPT e Claude.",

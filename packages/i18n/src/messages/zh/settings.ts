@@ -64,6 +64,9 @@ export const messages = {
   "settings.sendShortcut.modEnterWin": "按 Ctrl+Enter 发送",
   "settings.showAgentSteps.title": "显示助手步骤",
   "settings.showAgentSteps.description": "在这台设备和浏览器上，默认展开每一轮的思考、工具步骤和记忆变更。",
+  "settings.debugMode.title": "调试模式",
+  "settings.debugMode.description":
+    "在此设备上显示全部内容：频道中智能体的步骤和工具、智能体之间的消息和长消息全文，以及隐藏的备注。",
   "settings.busyMessage.title": "助手工作时的消息处理方式",
   "settings.busyMessage.description": "新消息会并入助手当前的工作，而不是进入队列。支持 ChatGPT 和 Claude。",
   // The Agents tab: the defaults of the agents on this computer.

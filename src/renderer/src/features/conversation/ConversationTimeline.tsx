@@ -63,6 +63,7 @@ import {
   toggleRecording,
   toggleSpokenReply,
 } from "../speech/speech-replies";
+import { debugMode } from "../workspace/workspace-debug";
 import { agentMessageThread } from "./agent-message-thread";
 import { groupedMessageIds } from "./agent-message-timeline";
 import { continuesSenderRun } from "./chat-grouping";
@@ -1399,6 +1400,7 @@ export function ConversationTimeline() {
                   return (
                     <div class="ws-chat-row-frame" data-chat-search-message={message()?.id}>
                       <WorkspaceChatRow
+                        fold={!debugMode()}
                         message={message() ?? initialMessage}
                         author={member()}
                         grouped={continuesRun()}

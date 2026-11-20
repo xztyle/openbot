@@ -71,6 +71,9 @@ export const messages = {
   "settings.showAgentSteps.title": "Afficher les étapes de l’agent",
   "settings.showAgentSteps.description":
     "Ouvre par défaut la réflexion, les étapes d’outils et les changements de souvenirs de chaque tour sur cet appareil et ce navigateur.",
+  "settings.debugMode.title": "Mode débogage",
+  "settings.debugMode.description":
+    "Affiche tout sur cet appareil : les étapes et outils des agents dans les canaux, les messages entre agents et les longs messages en entier, et les notes masquées.",
   "settings.busyMessage.title": "Orienter les agents pendant leur travail",
   "settings.busyMessage.description":
     "Les nouveaux messages rejoignent le travail en cours de l’agent, pas la file. Fonctionne avec ChatGPT et Claude.",

@@ -62,6 +62,9 @@ export const messages = {
   "settings.showAgentSteps.title": "에이전트 단계 표시",
   "settings.showAgentSteps.description":
     "이 기기와 브라우저에서 각 턴의 생각, 도구 단계, 메모리 변경을 기본으로 펼쳐서 보여줘요.",
+  "settings.debugMode.title": "디버그 모드",
+  "settings.debugMode.description":
+    "이 기기에서 모든 것을 표시해요: 채널의 에이전트 단계와 도구, 에이전트 간 메시지와 긴 메시지 전체, 숨긴 메모.",
   "settings.busyMessage.title": "작업 중인 에이전트에 방향 지시",
   "settings.busyMessage.description":
     "새 메시지가 대기열이 아니라 에이전트의 현재 작업에 반영돼요. ChatGPT와 Claude에서 사용할 수 있어요.",

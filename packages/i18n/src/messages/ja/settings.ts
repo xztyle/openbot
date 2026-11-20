@@ -62,6 +62,9 @@ export const messages = {
   "settings.showAgentSteps.title": "エージェントのステップを表示",
   "settings.showAgentSteps.description":
     "このデバイスとこのブラウザーで、各ターンの思考、ツールのステップ、メモリーの変更を既定で開きます。",
+  "settings.debugMode.title": "デバッグモード",
+  "settings.debugMode.description":
+    "このデバイスですべてを表示します: チャンネル内のエージェントのステップとツール、エージェント間のメッセージと長いメッセージの全文、非表示のメモ。",
   "settings.busyMessage.title": "作業中のエージェントの方向を修正",
   "settings.busyMessage.description":
     "新しいメッセージはキューに入らず、エージェントの現在の作業に加わります。ChatGPT と Claude で使えます。",

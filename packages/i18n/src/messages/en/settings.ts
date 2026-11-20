@@ -76,6 +76,9 @@ export const messages = defineMessages("settings", {
   "settings.showAgentMessages.title": "Show messages between agents",
   "settings.showAgentMessages.description":
     "Show each message between agents as its own row, with its files. When off, the messages stay in the chat as one collapsed row, and you can still open each one. This setting is for this device only.",
+  "settings.debugMode.title": "Debug mode",
+  "settings.debugMode.description":
+    "Show everything on this device: the steps and tools of agents in channels, messages between agents and long messages in full, and hidden notes.",
   "settings.agentCreationLimit.title": "Agents that agents can create",
   "settings.agentCreationLimit.description":
     "How many new agents your agents can create in 24 hours. Agents that you create do not count.",

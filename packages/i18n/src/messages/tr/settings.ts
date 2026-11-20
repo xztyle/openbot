@@ -63,6 +63,9 @@ export const messages = {
   "settings.showAgentSteps.title": "Ajan adımlarını göster",
   "settings.showAgentSteps.description":
     "Bu cihazda ve tarayıcıda her turun düşünme sürecini, araç adımlarını ve bellek değişikliklerini varsayılan olarak açar.",
+  "settings.debugMode.title": "Hata ayıklama modu",
+  "settings.debugMode.description":
+    "Bu cihazda her şeyi gösterir: kanallardaki ajan adımları ve araçları, ajanlar arası mesajlar ve uzun mesajların tamamı ile gizli notlar.",
   "settings.busyMessage.title": "Ajanları çalışırken yönlendir",
   "settings.busyMessage.description":
     "Yeni mesajlar kuyruğa değil, ajanın mevcut işine eklenir. ChatGPT ve Claude ile çalışır.",

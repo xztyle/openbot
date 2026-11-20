@@ -31,6 +31,7 @@ import { useAppearanceChoice } from "../../appearance-choice";
 import { useI18n } from "../../i18n-context";
 import { useInterfaceSizeChoice } from "../../interface-size";
 import { useLogoColorChoice } from "../../logo-color";
+import { debugMode, setDebugMode } from "../workspace/workspace-debug";
 import { ExternalLinkSelect } from "./ExternalLinkSelect";
 
 const interfaceSizeOptions = [...APP_INTERFACE_SIZES];
@@ -168,6 +169,13 @@ export function SettingsGeneralTab(props: SettingsGeneralTabProps) {
             onChange={(checked) => props.onUpdateSetting("showAgentMessages", checked)}
             label={i18n.t("settings.showAgentMessages.title")}
             description={i18n.t("settings.showAgentMessages.description")}
+          />
+          <SwitchField
+            data-settings-row="settings.debugMode.title"
+            checked={debugMode()}
+            onChange={(checked) => setDebugMode(checked)}
+            label={i18n.t("settings.debugMode.title")}
+            description={i18n.t("settings.debugMode.description")}
           />
           <Item data-settings-row="settings.agentCreationLimit.title" class="settings-modal-row">
             <ItemContent>

@@ -64,6 +64,9 @@ export const messages = {
   "settings.showAgentSteps.title": "Agentenschritte anzeigen",
   "settings.showAgentSteps.description":
     "Öffnet Denken, Werkzeugschritte und Erinnerungsänderungen jedes Durchlaufs standardmäßig auf diesem Gerät und in diesem Browser.",
+  "settings.debugMode.title": "Debug-Modus",
+  "settings.debugMode.description":
+    "Zeigt auf diesem Gerät alles: Schritte und Tools der Agenten in Kanälen, Nachrichten zwischen Agenten und lange Nachrichten ganz, und versteckte Notizen.",
   "settings.busyMessage.title": "Agenten während der Arbeit steuern",
   "settings.busyMessage.description":
     "Neue Nachrichten fließen in die aktuelle Arbeit des Agenten ein, nicht in die Warteschlange. Funktioniert mit ChatGPT und Claude.",

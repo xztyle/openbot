@@ -30,6 +30,8 @@ export interface TypingIndicatorProps {
   humans: readonly WorkspaceMember[];
   /** Agents that think or work on an answer now. */
   agents: readonly TypingAgent[];
+  /** Several agents share one line that opens their lines. False: each has its line (debug mode). */
+  group?: boolean | undefined;
 }
 
 const STATE_TEXT = {
@@ -56,7 +58,7 @@ export function TypingIndicator(props: TypingIndicatorProps): JSX.Element {
   };
   // Several agents at work fold into one line of faces that opens their lines.
   const [groupOpen, setGroupOpen] = createSignal(false);
-  const grouped = () => props.agents.length >= 2;
+  const grouped = () => props.group !== false && props.agents.length >= 2;
   return (
     <div class="ws-typing" aria-live="polite" data-grouped={grouped() ? (groupOpen() ? "open" : "folded") : undefined}>
       <Show when={grouped()}>

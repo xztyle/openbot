@@ -331,6 +331,11 @@ export function visibleEntry(entry: ChannelMessage): boolean {
   );
 }
 
+/** In debug mode, a routing receipt of a lead shows too. */
+function debugVisibleEntry(entry: ChannelMessage): boolean {
+  return Boolean(parseChannelRoutingConversationEventItemType(entry.message.itemType) && entry.message.text.trim());
+}
+
 export interface WorkspaceStepTrailView {
   steps: AgentStepView[];
   durationMs?: number | undefined;
@@ -544,10 +549,15 @@ export function messageRows(
     membersAnswer?: boolean;
     /** Which messages are agents talking to each other (`agentNoteOf`): those rows fold to one line. */
     note?: (entry: ChannelMessage) => WorkspaceAgentNoteView | null;
+    /** The steps of the agents' turns: on an answer, and a turn that works as a row of its own. */
+    steps?: boolean;
+    /** Debug mode: the notes that the transcript hides show too, such as routing receipts. */
+    everything?: boolean;
   } = {},
 ): WorkspaceMessageRowModel[] {
   const listed = options.thread ? entries : entries.filter((entry) => !isChannelThreadReply(entry));
-  const shown = options.membersAnswer ? withoutRestatedResults(listed) : listed;
+  const shown = options.membersAnswer && !options.everything ? withoutRestatedResults(listed) : listed;
+  const withSteps = options.steps !== false;
   const turns = new Map<string, ChannelMessage[]>();
   for (const entry of shown) {
     if (!isStepEntry(entry)) continue;
@@ -595,9 +605,9 @@ export function messageRows(
   };
   for (const entry of shown) {
     if (isStepEntry(entry)) continue;
-    if (!visibleEntry(entry)) continue;
+    if (!visibleEntry(entry) && !(options.everything && debugVisibleEntry(entry))) continue;
     let steps: WorkspaceStepTrailView | null = null;
-    if (entry.author.kind === "agent") {
+    if (withSteps && entry.author.kind === "agent") {
       const key = `${entry.author.id}:${entry.message.turnId ?? entry.taskId ?? entry.id}`;
       const turn = turns.get(key);
       if (turn && !answered.has(key)) {
@@ -611,6 +621,7 @@ export function messageRows(
     push(entry, false, steps);
   }
   // A turn that has thought but not answered yet shows at the end, with its steps streaming.
+  if (!withSteps) return rows;
   const newestTurn = new Map<string, string>();
   for (const [key, turn] of turns) {
     const last = turn.at(-1);

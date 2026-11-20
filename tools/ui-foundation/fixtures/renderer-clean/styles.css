@@ -11,3 +11,28 @@
 .panel:focus-within {
   z-index: calc(var(--openbot-layer-dropdown) - 1);
 }
+
+/* The phone queries that include a touch phone on its side. */
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
+  .panel {
+    padding: 0;
+  }
+}
+
+@media (max-width: 720px) and (pointer: coarse), (max-height: 520px) and (pointer: coarse) {
+  .panel {
+    gap: 0;
+  }
+}
+
+@media (min-width: 721px) and (not ((max-height: 520px) and (pointer: coarse))) {
+  .panel {
+    margin: 0;
+  }
+}
+
+@container ws-layout (max-width: 720px) or style(--ws-phone-landscape: 1) {
+  .panel {
+    inset: 0;
+  }
+}

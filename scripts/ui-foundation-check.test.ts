@@ -81,6 +81,9 @@ describe("ui foundation check", () => {
         budget("untokenized transition durations", 2),
         // One, in .legacy-scrim. The clean tree's `calc()` on the dropdown layer must stay uncounted.
         budget("z-index arithmetic on the overlay layer", 1),
+        // Three in styles/legacy.css: a max-width, a min-width and a ws-layout container query
+        // without the clause of a touch phone on its side. The clean tree's forms stay uncounted.
+        budget("phone media queries that leave out a phone on its side", 3),
         // Six: five in branches/TestHooks.tsx and the sixth in components/ui/Button.tsx. That
         // sixth is why this budget reads its own source join rather than the one the composite
         // scan uses - exempt components/ui and the count reads 5. The hook in Bad.test.tsx is

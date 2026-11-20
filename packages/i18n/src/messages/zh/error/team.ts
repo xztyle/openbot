@@ -84,6 +84,7 @@ export const messages = {
   "error.team.hostIdentityUnsupported": "当前连接不支持更改服务器身份。",
   "error.team.hostUpdateUnsupported": "当前连接不支持主机更新。",
   "error.team.hostTimezoneUnsupported": "当前连接不支持服务器时区。",
+  "error.team.hostTurnLimitsUnsupported": "此连接无法显示或更改服务器的话题数限制。",
   "error.team.routineResultsUnsupported": "当前连接不支持自动化任务的结果去向。",
   "error.team.agentMemoryLimitUnsupported": "当前连接不支持助手记忆上限。",
   "error.team.promptCacheTtlUnsupported": "当前连接不支持提示缓存时间。",

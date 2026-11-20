@@ -131,13 +131,16 @@ export class ServerMemory implements HostMemory {
     return this.#sample;
   }
 
-  turnLimit(): 2 | 8 | 16 {
+  turnLimit(): 2 | 8 | 16 | 24 {
     // A margin over the plan sizes of 4 and 8 GB: the kernel keeps some memory for itself. On 4 GB,
     // four turns that start together reserve enough `TURN_RESERVE_BYTES` to reach the low level.
+    // A turn with its CLI, MCP servers and a browser tab can hold 1 to 1.5 GB, so 24 turns need about
+    // 36 GB: only a unit or container with more than 40 GB gets them.
     const total = this.#sample?.total ?? 0;
     if (total <= 5 * GIB) return 2;
     if (total <= 10 * GIB) return 8;
-    return 16;
+    if (total <= 40 * GIB) return 16;
+    return 24;
   }
 
   reserveTurn(): () => void {

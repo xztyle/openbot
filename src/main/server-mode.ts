@@ -94,7 +94,7 @@ export interface ServerModeOptions {
   >;
   host: Pick<HostService, "getStatus" | "configure" | "start" | "updateIdentity" | "getMobileConnectHost">;
   /** The memory guard, so that `status` shows the memory ceiling and the turn limit. */
-  memory: Pick<ServerMemory, "level" | "sample" | "turnLimit"> | null;
+  memory: (Pick<ServerMemory, "level" | "sample"> & { turnLimit(): number | "unlimited" }) | null;
   /** The security audit file, newest rows first. Absent where nothing records one. */
   audit?: Pick<SecurityAuditLog, "read">;
   onError: (message: string, error: unknown) => void;

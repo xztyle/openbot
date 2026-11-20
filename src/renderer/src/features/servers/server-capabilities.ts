@@ -67,6 +67,7 @@ export function serverSupportsCapability(
       capability === "host-member-update-v1" ||
       capability === "host-release-v1" ||
       capability === "host-timezone-v1" ||
+      capability === "host-turn-limits-v1" ||
       capability === "agent-memory-limit-v1" ||
       capability === "prompt-cache-ttl-v1" ||
       capability === "claude-api-key-v1" ||

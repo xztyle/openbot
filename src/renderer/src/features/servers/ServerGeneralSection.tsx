@@ -35,6 +35,7 @@ import { type Accessor, createStore, Show, snapshot } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { ServerMemoryLimitSetting } from "./ServerMemoryLimitSetting";
 import { ServerTimezoneSetting } from "./ServerTimezoneSetting";
+import { ServerTurnLimitsSetting } from "./ServerTurnLimitsSetting";
 import { serverCanAdminister } from "./server-capabilities";
 import type { ServerSettingsSectionHost } from "./server-settings-section";
 
@@ -113,6 +114,7 @@ export function createServerGeneralSection(host: ServerSettingsSectionHost): Ser
   const canEditIdentity = () => serverCanAdminister(props.server, "host-admin-v1") && actionsAvailable();
   const canSetTimezone = () => serverCanAdminister(props.server, "host-timezone-v1") && actionsAvailable();
   const canSetMemoryLimit = () => serverCanAdminister(props.server, "agent-memory-limit-v1") && actionsAvailable();
+  const canSetTurnLimits = () => serverCanAdminister(props.server, "host-turn-limits-v1") && actionsAvailable();
   const trimmedName = () => panels.identity.name.trim();
   const nameError = () => {
     if (!canEditIdentity()) return null;
@@ -394,12 +396,29 @@ export function createServerGeneralSection(host: ServerSettingsSectionHost): Ser
             </Item>
           </ItemGroup>
         </SettingsSection>
-        <Show when={(canSetTimezone() && props.hostTimezone) || (canSetMemoryLimit() && props.hostMemoryLimit)}>
+        <Show
+          when={
+            (canSetTimezone() && props.hostTimezone) ||
+            (canSetTurnLimits() && props.hostTurnLimits) ||
+            (canSetMemoryLimit() && props.hostMemoryLimit)
+          }
+        >
           <SettingsSection title={t("server.settings.agents")}>
             <ItemGroup class="settings-modal-card">
               <Show when={canSetTimezone() && props.hostTimezone}>
                 {(options) => (
                   <ServerTimezoneSetting
+                    {...options()}
+                    serverId={props.server.id}
+                    disabled={Boolean(busy())}
+                    menuMount={host.menuMount()}
+                    run={run}
+                  />
+                )}
+              </Show>
+              <Show when={canSetTurnLimits() && props.hostTurnLimits}>
+                {(options) => (
+                  <ServerTurnLimitsSetting
                     {...options()}
                     serverId={props.server.id}
                     disabled={Boolean(busy())}

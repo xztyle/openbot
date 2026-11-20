@@ -86,6 +86,7 @@ export const messages = {
   "error.team.hostIdentityUnsupported": "이 연결에서는 서버 ID 변경을 지원하지 않아요.",
   "error.team.hostUpdateUnsupported": "이 연결에서는 호스트 업데이트를 지원하지 않아요.",
   "error.team.hostTimezoneUnsupported": "이 연결에서는 서버 시간대를 지원하지 않아요.",
+  "error.team.hostTurnLimitsUnsupported": "이 연결에서는 서버의 스레드 제한을 표시하거나 변경할 수 없습니다.",
   "error.team.routineResultsUnsupported": "이 연결에서는 루틴 결과 전송 위치를 지원하지 않아요.",
   "error.team.agentMemoryLimitUnsupported": "이 연결에서는 에이전트 메모리 한도를 지원하지 않아요.",
   "error.team.workspaceUnsupported": "이 연결은 워크스페이스 채널을 지원하지 않습니다.",

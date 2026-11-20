@@ -1406,4 +1406,27 @@ button.ws-profile-trigger.ws-message-author:hover {
   :is(.ws-message-scroll, .ws-thread-scroll, .ws-agent-dm .conversation-scroll) .message-copy {
     line-height: var(--openbot-leading-lg);
   }
+
+  /* A file card had 256px, so a phone cut its name after a dozen letters; it takes the column now. */
+  :is(.ws-message-scroll, .ws-thread-scroll, .ws-agent-dm .conversation-scroll)
+  :is(.message-attachments, .message-attachments-group) {
+    width: min(100%, 360px);
+  }
+}
+
+/* A finger's size for the reaction pills and the add button, which were 24px high on a phone. */
+@media (hover: none), (pointer: coarse) {
+  .ws-reactions {
+    gap: var(--openbot-space-1-5);
+  }
+
+  .ws-reaction.ui-button {
+    height: 32px;
+    padding: 0 var(--openbot-space-2);
+  }
+
+  .ws-reaction-add.ui-button {
+    width: 40px;
+    height: 32px;
+  }
 }

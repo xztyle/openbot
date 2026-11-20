@@ -701,6 +701,26 @@
   }
 }
 
+/*
+ * A narrow computer window (the pane under 720px, the window over it) shows one workspace pane at a
+ * time, but the sidebar stays in view. Back of the main pane led to that sidebar and did nothing.
+ * A thread or the details keep Back: it returns to the conversation.
+ */
+@media (min-width: 721px) {
+  .web-app-frame .ws-layout-main .ws-channel-header-back {
+    display: none;
+  }
+
+  /* The topic (it shortens) and the member faces stay, as in Slack's narrow window. */
+  .web-app-frame .ws-layout-main .ws-channel-header-topic {
+    display: block;
+  }
+
+  .web-app-frame .ws-layout-main .ws-face-pile.ui-button {
+    display: inline-flex;
+  }
+}
+
 /* The messages take the pane's width, as a channel's: no centered column that the box does not follow. */
 .ws-agent-dm .conversation-panel {
   --conversation-column-width: 100vw;

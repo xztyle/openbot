@@ -53,6 +53,12 @@
   color: inherit;
 }
 
+/* The phone's home list has no selected row (its conversation is a screen of its own), so the row
+   keeps the sidebar's ink. */
+:root[data-atelier-theme] .ws-phone-home-list {
+  --ws-active-text: var(--openbot-text-primary);
+}
+
 /* Modern Atelier: the open row is a surface with an accent edge, and the open space is ink. */
 :root[data-atelier-theme="modern"] :is(.ws-layout, .ws-frame-sidebar, .ws-agent-dm) {
   --ws-active: var(--openbot-bg-surface);
@@ -77,4 +83,9 @@
 :root[data-atelier-theme="riso"] .composer[data-layout="workspace"] {
   border: 1.5px solid var(--openbot-text-primary);
   box-shadow: 3px 3px 0 color-mix(in srgb, var(--openbot-accent) 60%, transparent);
+}
+
+/* On the navy sidebar of Riso Press light, the accent text marks (the AI badge, initials) go lighter. */
+:root[data-atelier-theme="riso"][data-openbot-color-scheme="light"] :is(.ws-sidebar, .ws-frame-sidebar) {
+  --openbot-accent-text: color-mix(in srgb, var(--atelier-accent) 45%, var(--atelier-sidebar-text));
 }

@@ -1,9 +1,11 @@
-// Checks that a held note is not lost. A note is a new message from another agent that asks for no
-// answer: it starts no turn, waits in the queue, and joins the next turn that something else starts.
-// Runs the real mailbox store and SQLite on a temporary profile. Checks that the note waits without
-// holding back the messages behind it, that it stays queued over a restart, that it joins the next
-// turn after the message that starts it, that a failed start puts it back, and that an answer still
-// starts a turn. No app, provider, account or network is started.
+// Checks that a held note is not lost, and that only a note is held. A note is a new message from
+// another agent marked fyi: it starts no turn, waits in the queue, and joins the next turn that
+// something else starts. Runs the real mailbox store and SQLite on a temporary profile. Checks that
+// the note waits without holding back the messages behind it, that it stays queued over a restart,
+// that it joins the next turn after the message that starts it, that a failed start puts it back,
+// that an answer still starts a turn, and that an order that asks for no answer (expectsReply false,
+// not fyi) starts a turn, also when a message held before fyi existed is read back from SQLite.
+// No app, provider, account or network is started.
 //
 // Run: bun scripts/held-note-e2e.ts
 // Writes .openbot-build/held-note-e2e/report.json and exits non-zero on a failure.
@@ -48,7 +50,7 @@ try {
     sender: { kind: "agent", agentId: PEER },
     recipientAgentIds: [AGENT],
     text: "Status: the landing page is live.",
-    expectsReply: false,
+    fyi: true,
   });
   assert.equal(mailbox.nextQueued(AGENT), null, "A note alone starts no turn.");
   assert.equal(mailbox.hasUnfinishedDelivery(AGENT), false, "A note alone is no unfinished work.");
@@ -120,6 +122,32 @@ try {
   assert.equal(mailbox.nextQueued(AGENT)?.delivery.id, answer);
   assert.equal(isQueuedAgentNote(queued(mailbox, answer)), false);
   report.checks.push("an answer to the agent's own request still starts a turn");
+  await runCauseEffect(mailbox.markStarting(answer));
+  await runCauseEffect(mailbox.markRunning(answer, "turn-answer"));
+  await runCauseEffect(mailbox.markTerminal(answer, "completed"));
+
+  // An order that asks for no answer is work: it wakes the recipient. Models send orders this way.
+  const order = await deliveryTo(mailbox, {
+    sender: { kind: "agent", agentId: LEAD },
+    recipientAgentIds: [AGENT],
+    text: "Top priority: review the branch now.",
+    expectsReply: false,
+  });
+  assert.equal(mailbox.nextQueued(AGENT)?.delivery.id, order, "An order without fyi starts a turn.");
+  assert.equal(mailbox.hasUnfinishedDelivery(AGENT), true, "The order is unfinished work.");
+  assert.equal(isQueuedAgentNote(queued(mailbox, order)), false, "A client shows the order as ordinary work.");
+  assert.equal(queued(mailbox, order).expectsReply, false, "The order still asks for no answer.");
+  assert.deepEqual(mailbox.notesToStartWith(order), [], "No note waits for the order's turn.");
+  report.checks.push("an order with expectsReply false and no fyi starts a turn and is no note");
+
+  // A message that the previous rule held (expectsReply false, no fyi) is read back from SQLite after
+  // the upgrade and starts a turn, so the orders held before the deploy run.
+  database.close();
+  database = new OpenBotDatabase(path);
+  mailbox = new MailboxStore(path, join(root, "shared"), database);
+  await runCauseEffect(mailbox.initialize());
+  assert.equal(mailbox.nextQueued(AGENT)?.delivery.id, order, "After a restart the old held order starts a turn.");
+  report.checks.push("after a restart a queued expectsReply-false order without fyi is released, not held");
   report.passed = true;
 } finally {
   database.close();

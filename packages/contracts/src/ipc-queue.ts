@@ -70,6 +70,12 @@ export interface QueueDelivery {
    */
   expectsReply?: boolean;
   /**
+   * The sender marked the message as information that nobody needs to act on now. Only an agent
+   * sender sets it, and only to `true`; such a message also expects no reply. Absent means an
+   * ordinary message, which starts a turn: what every message stored before this field existed meant.
+   */
+  fyi?: boolean;
+  /**
    * The message was sent to steer the running turn and waits in the queue instead. Absent on a
    * released Team API response: the shipped adapters project a fixed key list.
    */
@@ -93,12 +99,12 @@ export function isQueuedAgentReply(delivery: QueueDelivery): boolean {
 }
 
 /**
- * A new message from another agent that asks for no answer: information that nobody must act on
- * now. The host holds it in the queue. It starts no turn, and joins the next turn of the agent's own
- * chat that something else starts. A host too old to hold it starts a turn for it.
+ * A new message from another agent marked `fyi`: information that nobody must act on now. The host
+ * holds it in the queue. It starts no turn, and joins the next turn of the agent's own chat that
+ * something else starts. A host too old to hold it starts a turn for it.
  */
-export function isAgentNote(delivery: Pick<QueueDelivery, "sender" | "replyToMessageId" | "expectsReply">): boolean {
-  return delivery.sender.kind === "agent" && delivery.replyToMessageId === null && delivery.expectsReply === false;
+export function isAgentNote(delivery: Pick<QueueDelivery, "sender" | "replyToMessageId" | "fyi">): boolean {
+  return delivery.sender.kind === "agent" && delivery.replyToMessageId === null && delivery.fyi === true;
 }
 
 /** A held note that still waits for a turn. A client labels it, because it waits for no reason it shows. */
@@ -126,6 +132,7 @@ export function isQueueDelivery(value: unknown): value is QueueDelivery {
     isBoundedString(value.createdAt, 160) &&
     (value.editing === undefined || isBoolean(value.editing)) &&
     (value.expectsReply === undefined || isBoolean(value.expectsReply)) &&
+    (value.fyi === undefined || isBoolean(value.fyi)) &&
     (value.steerFallback === undefined || isOneOf(QUEUE_STEER_FALLBACKS, value.steerFallback))
   );
 }

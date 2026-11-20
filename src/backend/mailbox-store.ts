@@ -119,6 +119,11 @@ interface StoredMessage {
    * what every message stored before this field existed meant.
    */
   expectsReply?: false;
+  /**
+   * Written only on a message from an agent that marked it as information nobody must act on now.
+   * Such a message expects no reply. See `isNote`.
+   */
+  fyi?: true;
   createdAt: string;
 }
 
@@ -198,6 +203,8 @@ interface EnqueueInput {
   replyToMessageId?: string | null;
   /** False marks information the recipient must not answer. Defaults to an expected answer. */
   expectsReply?: boolean | undefined;
+  /** True marks information from an agent that nobody must act on now. It wakes nobody and expects no reply. */
+  fyi?: boolean | undefined;
   draftIds?: string[];
   /** An audio draft of what the user said. Kept with the message, not sent to the recipient. */
   voiceRecordingDraftId?: string;
@@ -748,6 +755,8 @@ export class MailboxStore {
         throw new Error(sourceText("error.backend.attachLimit", { limit: MAX_ATTACHMENTS }));
       }
 
+      // Only an agent marks information that wakes nobody; it expects no reply either.
+      const fyi = input.fyi === true && input.sender.kind === "agent";
       const createdAt = new Date().toISOString();
       const messageId = randomUUID();
       const attachments = yield* this.#files
@@ -796,7 +805,8 @@ export class MailboxStore {
         attachments,
         ...(voiceRecording ? { voiceRecording } : {}),
         replyToMessageId: input.replyToMessageId ?? null,
-        ...(input.expectsReply === false ? { expectsReply: false as const } : {}),
+        ...(input.expectsReply === false || fyi ? { expectsReply: false as const } : {}),
+        ...(fyi ? { fyi: true as const } : {}),
         createdAt,
       };
       const deliveries = recipients.map<StoredDelivery>((recipientAgentId) => ({
@@ -1594,7 +1604,7 @@ export class MailboxStore {
 
   /**
    * Information from a teammate that nobody must act on now: a new message from another agent that
-   * asks for no answer. It starts no turn of its own. It waits in the queue and joins the next turn
+   * it marked `fyi`. It starts no turn of its own. It waits in the queue and joins the next turn
    * of the agent's own chat that something else starts, so a status update does not cost a turn.
    * No time limit releases it: it waits, and stays stored, until such a turn starts.
    */
@@ -1653,6 +1663,7 @@ export class MailboxStore {
     text: string;
     replyToMessageId: string | null;
     expectsReply: boolean;
+    fyi: boolean;
   }): QueuedMessageReceipt | null {
     const [first, ...others] = input.recipientAgentIds;
     if (!first) return null;
@@ -1669,7 +1680,8 @@ export class MailboxStore {
         message.text !== text ||
         message.attachments.length > 0 ||
         message.replyToMessageId !== input.replyToMessageId ||
-        (message.expectsReply === false) !== !input.expectsReply ||
+        (message.expectsReply === false) !== !(input.expectsReply && !input.fyi) ||
+        (message.fyi === true) !== input.fyi ||
         !otherActive.every((active) => active.has(message.id))
       )
         continue;
@@ -3157,6 +3169,7 @@ export class MailboxStore {
       attachments: message.attachments.map(toAttachmentSummary),
       replyToMessageId: message.replyToMessageId,
       ...(message.expectsReply === false ? { expectsReply: false } : {}),
+      ...(message.fyi ? { fyi: true } : {}),
       position:
         delivery.status === "queued"
           ? positions
@@ -3522,6 +3535,7 @@ function isStoredMessage(value: unknown): value is StoredMessage {
     (value.voiceRecording === undefined || isStoredAttachment(value.voiceRecording)) &&
     (isString(value.replyToMessageId) || value.replyToMessageId === null) &&
     (value.expectsReply === undefined || value.expectsReply === false) &&
+    (value.fyi === undefined || value.fyi === true) &&
     isString(value.createdAt)
   );
 }
@@ -3620,14 +3634,15 @@ function recordFinishedQueueEdit(delivery: StoredDelivery, editId: string, outco
 }
 
 /**
- * A new message from another agent that asks for no answer, outside channel, messaging and task work.
+ * A new message from another agent marked `fyi`, outside channel, messaging and task work. A message
+ * that only asks for no answer is no note: agents send orders that way, so it wakes the recipient.
  * See `MailboxStore.#isHeldNote`.
  */
 function isNote(message: StoredMessage, recipientAgentId: string): boolean {
   return (
     message.sender.kind === "agent" &&
     message.sender.agentId !== recipientAgentId &&
-    message.expectsReply === false &&
+    message.fyi === true &&
     message.replyToMessageId === null &&
     !message.channelId &&
     !message.messaging &&

@@ -750,7 +750,13 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
       expectsReply: z
         .boolean()
         .describe(
-          "True, the default, for a request, question, or delegated task: the message starts the recipient's turn, and Atelier sends its result back. False for your reply to a message, or for information that nobody must act on now: a new false message does not wake the recipient, which reads it in its next turn. A false message ends the exchange.",
+          "True, the default, for a request, question, or task: Atelier sends the result back. False for your reply, or when you need no answer; it still wakes the recipient. False ends the exchange.",
+        )
+        .optional(),
+      fyi: z
+        .boolean()
+        .describe(
+          "True only for information nobody acts on now, such as a status update: it does not wake the recipient and joins its next turn. Never for an order or review request.",
         )
         .optional(),
     },

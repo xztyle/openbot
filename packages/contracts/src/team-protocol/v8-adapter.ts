@@ -74,7 +74,13 @@ import {
  * unchecked `expectsReply` would reach it as a question. Fail closed instead; an absent mark still
  * means an older host that never sends one: no hold, and an answer expected.
  */
-const QUEUE_MARKS = { editing: "Invalid queue edit mark.", expectsReply: "Invalid queue reply mark." } as const;
+const QUEUE_MARKS = {
+  editing: "Invalid queue edit mark.",
+  expectsReply: "Invalid queue reply mark.",
+  // A teammate's information that waits for the next turn. A client on an older protocol shows it as
+  // an ordinary queued message.
+  fyi: "Invalid queue fyi mark.",
+} as const;
 
 function withQueueMarks(projected: TeamProtocolV8BaseJsonValue, source: unknown): TeamProtocolV8BaseJsonValue {
   if (!isDynamicRecord(projected) || !Array.isArray(projected.deliveries)) return projected;

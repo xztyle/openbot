@@ -1912,6 +1912,10 @@ export class OpenBotToolRouter {
       if (expectsReply !== undefined && typeof expectsReply !== "boolean") {
         throw new Error("expectsReply must be a boolean.");
       }
+      const fyiValue = params.arguments.fyi;
+      if (fyiValue !== undefined && typeof fyiValue !== "boolean") throw new Error("fyi must be a boolean.");
+      // A reply is never held, so fyi marks only a new message.
+      const fyi = fyiValue === true && !replyToMessageId?.trim();
 
       // A retried call finds its own message by the tool call id, so the guards below never turn the
       // retry of a send that worked into a failure.
@@ -1926,6 +1930,7 @@ export class OpenBotToolRouter {
                 text: params.arguments.text,
                 replyToMessageId: replyToMessageId ?? null,
                 expectsReply: expectsReply !== false,
+                fyi,
               })
             : null;
         if (duplicate) {
@@ -1970,6 +1975,7 @@ export class OpenBotToolRouter {
           // An agent can send "" for no reply. Every reader rejects an empty id.
           replyToMessageId: replyToMessageId?.trim() || null,
           ...(expectsReply === undefined ? {} : { expectsReply }),
+          ...(fyi ? { fyi } : {}),
           ...(messagingReturn ? { messagingReturn } : {}),
           idempotencyKey,
         })
@@ -1986,9 +1992,8 @@ export class OpenBotToolRouter {
       this.#mailboxSync.syncMailboxMessages(snapshot);
       this.#conversation.emitConversation(snapshot);
       // A held note starts no turn. The sender learns it here, so work it meant to start is sent again
-      // as a request.
-      if (expectsReply === false && !replyToMessageId?.trim())
-        return openBotToolResult({ ...receipt, note: sourceText("status.agent.messageHeld") });
+      // without fyi.
+      if (fyi) return openBotToolResult({ ...receipt, note: sourceText("status.agent.messageHeld") });
       return openBotToolResult(receipt);
     },
     Effect.catchDefect((cause) => Effect.fail(new ToolOperationFailed({ cause }))),

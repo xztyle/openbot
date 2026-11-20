@@ -506,33 +506,6 @@
 
 /* Secrets -------------------------------------------------------------------------------------- */
 
-.ws-secrets-form {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: var(--openbot-space-3);
-  margin: var(--openbot-space-3) 0;
-  border: 1px solid var(--openbot-border);
-  border-radius: var(--openbot-radius-lg);
-  background: var(--openbot-bg-surface);
-  padding: var(--openbot-space-3);
-}
-
-.ws-secrets-field {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--openbot-space-1);
-  color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-sm);
-}
-
-.ws-secrets-form-actions {
-  display: flex;
-  grid-column: 1 / -1;
-  justify-content: flex-end;
-  gap: var(--openbot-space-2);
-}
-
 .ws-secrets-mono,
 .ws-secret-name,
 .ws-secret-value {
@@ -556,6 +529,21 @@
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
+}
+
+/* A phone: the title keeps the header (the add dialog says what a secret is), and the row actions,
+ * which a touch screen always shows, are finger-sized. */
+@media (max-width: 720px) {
+  .ws-secrets .ws-pane-header-subtitle {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) and (pointer: coarse) {
+  .ws-secrets .ws-row-actions .ui-icon-button {
+    width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
+  }
 }
 
 .ws-secret-value {

@@ -156,6 +156,15 @@
     height: var(--openbot-touch-target);
   }
 
+  /* The search keeps its row beside the select-all box; what acts on the chosen agents goes under. */
+  .space-agents .ws-view-search {
+    flex-basis: calc(100% - 20px - var(--openbot-space-2));
+  }
+
+  .ws-view-toolbar > .ui-button {
+    min-height: var(--openbot-touch-target);
+  }
+
   .ws-inline-switch {
     min-height: var(--openbot-touch-target);
   }
@@ -181,6 +190,33 @@
 
   .ws-fleet-card-actions .ui-icon-button.ui-button {
     width: var(--openbot-touch-target);
+  }
+
+  /* A row's own buttons, such as Open chat and Move of an agent in the space's list. */
+  .ws-row-actions {
+    gap: 0;
+  }
+
+  .ws-row-actions .ui-icon-button.ui-button {
+    width: 40px;
+    height: var(--openbot-touch-target);
+  }
+
+  .ws-row-actions .ui-icon-button.ui-button > svg {
+    width: var(--openbot-icon-lg);
+    height: var(--openbot-icon-lg);
+  }
+
+  /* A check box is a little larger, and the space around it takes the tap. */
+  .ws-view .ui-checkbox {
+    width: 20px;
+    height: 20px;
+  }
+
+  .ws-view .ui-checkbox-input {
+    inset: -12px;
+    width: auto;
+    height: auto;
   }
 }
 

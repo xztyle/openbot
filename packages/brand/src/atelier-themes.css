@@ -1,0 +1,266 @@
+/*
+ * The Atelier workspace themes: Craft Studio (craft, the default), Modern Atelier (modern) and
+ * Riso Press (riso). The owner of a server picks one in Server settings; every member sees it in
+ * light or dark, from their own appearance choice.
+ *
+ * The app writes `data-atelier-theme` on the root element. Without it nothing here applies, so
+ * the public site keeps its own look. Each theme declares its brand tokens (`--atelier-*`, one
+ * semantic set: canvas, surface, text, accent ...) for dark, and again for light under
+ * `data-openbot-color-scheme="light"`, which tokens-light.css also reads. One mapping block then
+ * points the product's `--openbot-*` tokens at them. It only changes values, as tokens-light.css
+ * does; it declares no `--openbot-*` token of its own.
+ *
+ * The values come from the approved brand (atelier-brand/final/THEMES.md). Every text token passes
+ * WCAG AA on canvas and surface in its theme. `warn-fill` is the amber "needs you" fill, never
+ * text; `sidebar-text` is the text on `sidebar` (the light Riso sidebar is navy).
+ */
+
+/* Craft Studio: paper canvas, ink, terracotta. */
+:root[data-atelier-theme="craft"] {
+  color-scheme: dark;
+  --atelier-canvas: #171411;
+  --atelier-surface: #211d19;
+  --atelier-surface2: #2b2620;
+  --atelier-border: #3a332b;
+  --atelier-text: #f3ece1;
+  --atelier-text2: #a99d8d;
+  --atelier-accent: #ec8358;
+  --atelier-accent-text: #ec8358;
+  --atelier-on-accent: #1a120d;
+  --atelier-success: #7cc48f;
+  --atelier-warn: #e7b04f;
+  --atelier-danger: #f07b6e;
+  --atelier-sidebar: #100e0c;
+  --atelier-sidebar-text: #e9e0d2;
+  --atelier-warn-fill: #e7b04f;
+  --atelier-font-display: "Fraunces Variable", Georgia, serif;
+  --atelier-font-display-variation: "SOFT" 100, "WONK" 1;
+  --atelier-font-ui: "Instrument Sans Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --atelier-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --atelier-display-weight: 600;
+  --atelier-display-stretch: 100%;
+  --atelier-display-tracking: -0.01em;
+  --atelier-radius: 12px;
+  --atelier-radius-md: 8px;
+  --atelier-radius-sm: 6px;
+  --atelier-radius-xs: 4px;
+  --atelier-radius-card: 14px;
+  --atelier-radius-xl: 18px;
+}
+
+:root[data-atelier-theme="craft"][data-openbot-color-scheme="light"] {
+  color-scheme: light;
+  --atelier-canvas: #f6f1e7;
+  --atelier-surface: #fffdf8;
+  --atelier-surface2: #efe8da;
+  --atelier-border: #e3d9c7;
+  --atelier-text: #1f1a15;
+  --atelier-text2: #6a5e50;
+  --atelier-accent: #b4441f;
+  --atelier-accent-text: #b4441f;
+  --atelier-on-accent: #ffffff;
+  --atelier-success: #2f7a47;
+  --atelier-warn: #935708;
+  --atelier-danger: #b3261e;
+  --atelier-sidebar: #ede4d3;
+  --atelier-sidebar-text: #2a231c;
+  --atelier-warn-fill: #c8811a;
+}
+
+/* Modern Atelier: gallery white and black, one ultramarine accent. */
+:root[data-atelier-theme="modern"] {
+  color-scheme: dark;
+  --atelier-canvas: #0b0b0c;
+  --atelier-surface: #141416;
+  --atelier-surface2: #1c1c1f;
+  --atelier-border: #2a2a2e;
+  --atelier-text: #f4f4f5;
+  --atelier-text2: #9b9ba3;
+  --atelier-accent: #8a93ff;
+  --atelier-accent-text: #8a93ff;
+  --atelier-on-accent: #0b0b0c;
+  --atelier-success: #4ade80;
+  --atelier-warn: #f5b544;
+  --atelier-danger: #ff6b6b;
+  --atelier-sidebar: #060607;
+  --atelier-sidebar-text: #e8e8ea;
+  --atelier-warn-fill: #f5b544;
+  --atelier-font-display: "Geist Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --atelier-font-display-variation: normal;
+  --atelier-font-ui: "Geist Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --atelier-font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --atelier-display-weight: 640;
+  --atelier-display-stretch: 100%;
+  --atelier-display-tracking: -0.02em;
+  --atelier-radius: 10px;
+  --atelier-radius-md: 7px;
+  --atelier-radius-sm: 5px;
+  --atelier-radius-xs: 4px;
+  --atelier-radius-card: 12px;
+  --atelier-radius-xl: 16px;
+}
+
+:root[data-atelier-theme="modern"][data-openbot-color-scheme="light"] {
+  color-scheme: light;
+  --atelier-canvas: #fafaf9;
+  --atelier-surface: #ffffff;
+  --atelier-surface2: #f1f1ef;
+  --atelier-border: #e4e4e1;
+  --atelier-text: #0b0b0c;
+  --atelier-text2: #66666c;
+  --atelier-accent: #2e3bff;
+  --atelier-accent-text: #2e3bff;
+  --atelier-on-accent: #ffffff;
+  --atelier-success: #157f4a;
+  --atelier-warn: #a35e00;
+  --atelier-danger: #d12c2c;
+  --atelier-sidebar: #f2f2f0;
+  --atelier-sidebar-text: #0b0b0c;
+  --atelier-warn-fill: #d97a00;
+}
+
+/* Riso Press: newsprint, riso navy, fluoro pink. */
+:root[data-atelier-theme="riso"] {
+  color-scheme: dark;
+  --atelier-canvas: #121428;
+  --atelier-surface: #1a1d38;
+  --atelier-surface2: #232748;
+  --atelier-border: #33385e;
+  --atelier-text: #f3efe6;
+  --atelier-text2: #a9aacb;
+  --atelier-accent: #ff5aae;
+  --atelier-accent-text: #ff7dbe;
+  --atelier-on-accent: #121428;
+  --atelier-success: #5fd3a0;
+  --atelier-warn: #f2b84b;
+  --atelier-danger: #ff6b7a;
+  --atelier-sidebar: #0b0d1d;
+  --atelier-sidebar-text: #e9e6f2;
+  --atelier-warn-fill: #f2b84b;
+  --atelier-font-display: "Archivo Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --atelier-font-display-variation: normal;
+  --atelier-font-ui: "Archivo Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --atelier-font-mono: "Space Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --atelier-display-weight: 800;
+  --atelier-display-stretch: 118%;
+  --atelier-display-tracking: -0.01em;
+  --atelier-radius: 4px;
+  --atelier-radius-md: 4px;
+  --atelier-radius-sm: 3px;
+  --atelier-radius-xs: 2px;
+  --atelier-radius-card: 6px;
+  --atelier-radius-xl: 8px;
+}
+
+:root[data-atelier-theme="riso"][data-openbot-color-scheme="light"] {
+  color-scheme: light;
+  --atelier-canvas: #f3efe6;
+  --atelier-surface: #fbf9f4;
+  --atelier-surface2: #eae4d6;
+  --atelier-border: #dcd3c1;
+  --atelier-text: #1d2a6b;
+  --atelier-text2: #4e557e;
+  --atelier-accent: #d81b74;
+  --atelier-accent-text: #b3135f;
+  --atelier-on-accent: #ffffff;
+  --atelier-success: #1e7a55;
+  --atelier-warn: #8e5a00;
+  --atelier-danger: #c42b36;
+  --atelier-sidebar: #1d2a6b;
+  --atelier-sidebar-text: #f3efe6;
+  --atelier-warn-fill: #f2b23a;
+}
+
+/* The product tokens, from the brand tokens of the theme. */
+:root[data-atelier-theme] {
+  --openbot-font-sans: var(--atelier-font-ui);
+  --openbot-font-mono: var(--atelier-font-mono);
+  --openbot-font-display: var(--atelier-font-display);
+
+  --openbot-radius-xs: var(--atelier-radius-xs);
+  --openbot-radius-sm: var(--atelier-radius-sm);
+  --openbot-radius-md: var(--atelier-radius-md);
+  --openbot-radius-lg: var(--atelier-radius);
+  --openbot-radius-card: var(--atelier-radius-card);
+  --openbot-radius-xl: var(--atelier-radius-xl);
+
+  --openbot-bg-canvas: var(--atelier-canvas);
+  --openbot-bg-canvas-clear: color-mix(in srgb, var(--atelier-canvas) 0%, transparent);
+  --openbot-bg-frame: var(--atelier-sidebar);
+  --openbot-bg-sidebar: var(--atelier-sidebar);
+  --openbot-bg-native-canvas: var(--atelier-canvas);
+  --openbot-bg-native-sidebar: var(--atelier-sidebar);
+  --openbot-bg-sheet: var(--atelier-surface);
+  --openbot-bg-sheet-inset: var(--atelier-surface2);
+  --openbot-bg-grouped: var(--atelier-surface);
+  --openbot-border-grouped: var(--atelier-border);
+  --openbot-text-grouped-secondary: var(--atelier-text2);
+  --openbot-marketplace-detail-bg: var(--atelier-surface2);
+  --openbot-bg-surface: var(--atelier-surface);
+  --openbot-bg-surface-raised: var(--atelier-surface);
+  --openbot-bg-control: var(--atelier-surface);
+  --openbot-bg-control-hover: var(--atelier-surface2);
+  --openbot-bg-control-active: color-mix(in srgb, var(--atelier-surface2) 90%, var(--atelier-text));
+  --openbot-tabs-bar-bg: var(--atelier-surface2);
+  --openbot-tabs-pill-bg: var(--atelier-surface);
+  --openbot-bg-overlay: color-mix(in srgb, var(--atelier-canvas) 92%, transparent);
+  --openbot-bg-glass: color-mix(in srgb, var(--atelier-surface) 80%, transparent);
+  --openbot-scroll-edge-overlay: color-mix(in srgb, var(--atelier-canvas) 72%, transparent);
+  --openbot-queue-surface: var(--atelier-surface);
+
+  --openbot-border: var(--atelier-border);
+  --openbot-border-strong: color-mix(in srgb, var(--atelier-border) 86%, var(--atelier-text));
+  --openbot-image-outline: color-mix(in srgb, var(--atelier-text) 10%, transparent);
+  --openbot-hover: color-mix(in srgb, var(--atelier-text) 6%, transparent);
+  --openbot-dialog-ring: color-mix(in srgb, var(--atelier-text) 10%, transparent);
+
+  --openbot-text-primary: var(--atelier-text);
+  --openbot-text-secondary: color-mix(in srgb, var(--atelier-text) 70%, var(--atelier-text2));
+  --openbot-text-muted: var(--atelier-text2);
+  --openbot-text-dim: color-mix(in srgb, var(--atelier-text2) 72%, var(--atelier-canvas));
+  --openbot-text-placeholder: var(--atelier-text2);
+  --openbot-text-readable: var(--atelier-text2);
+  --openbot-settings-text-muted: var(--atelier-text2);
+  --openbot-data-table-border: var(--atelier-border);
+  --openbot-data-table-header-text: var(--atelier-text2);
+  --openbot-data-table-text: var(--atelier-text);
+
+  /* The inverted element (the default button, the user's bubble) is ink on paper. */
+  --openbot-surface-light: var(--atelier-text);
+  --openbot-text-on-light: var(--atelier-canvas);
+  --openbot-text-muted-on-light: color-mix(in srgb, var(--atelier-canvas) 64%, transparent);
+  --openbot-text-dim-on-light: color-mix(in srgb, var(--atelier-canvas) 40%, transparent);
+  --openbot-border-on-light: color-mix(in srgb, var(--atelier-canvas) 16%, transparent);
+
+  --openbot-accent: var(--atelier-accent);
+  --openbot-accent-hover: color-mix(in srgb, var(--atelier-accent) 86%, var(--atelier-text));
+  --openbot-accent-text: var(--atelier-accent-text);
+  --openbot-accent-soft: color-mix(in srgb, var(--atelier-accent) 14%, transparent);
+  --openbot-accent-strong: color-mix(in srgb, var(--atelier-accent) 28%, transparent);
+  --openbot-text-on-accent: var(--atelier-on-accent);
+  --openbot-unread-surface: var(--atelier-accent);
+  --openbot-unread-text: var(--atelier-on-accent);
+  --openbot-badge-new: var(--atelier-accent);
+  --openbot-badge-new-soft: color-mix(in srgb, var(--atelier-accent) 14%, transparent);
+  --openbot-message-badge-text: var(--atelier-accent-text);
+  --openbot-message-badge-soft: color-mix(in srgb, var(--atelier-accent) 14%, transparent);
+  --openbot-file-default: var(--atelier-accent-text);
+  --openbot-file-default-soft: color-mix(in srgb, var(--atelier-accent) 14%, transparent);
+  --openbot-beam-blue: var(--atelier-accent-text);
+
+  --openbot-success: var(--atelier-success);
+  --openbot-success-text: var(--atelier-success);
+  --openbot-success-soft: color-mix(in srgb, var(--atelier-success) 14%, transparent);
+  --openbot-success-wash: color-mix(in srgb, var(--atelier-success) 6%, transparent);
+  --openbot-warning: var(--atelier-warn-fill);
+  --openbot-warning-text: var(--atelier-warn);
+  --openbot-warning-soft: color-mix(in srgb, var(--atelier-warn-fill) 16%, transparent);
+  --openbot-approval-badge-soft: color-mix(in srgb, var(--atelier-warn-fill) 20%, transparent);
+  --openbot-danger: var(--atelier-danger);
+  --openbot-danger-hover: color-mix(in srgb, var(--atelier-danger) 84%, var(--atelier-canvas));
+  --openbot-danger-text: var(--atelier-danger);
+  --openbot-danger-soft: color-mix(in srgb, var(--atelier-danger) 14%, transparent);
+  --openbot-danger-soft-hover: color-mix(in srgb, var(--atelier-danger) 24%, transparent);
+  --openbot-danger-focus: color-mix(in srgb, var(--atelier-danger) 38%, transparent);
+  --openbot-danger-border: color-mix(in srgb, var(--atelier-danger) 48%, transparent);
+}

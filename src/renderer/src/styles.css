@@ -1,8 +1,20 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/inter/wght-italic.css";
+/* The type of the Atelier workspace themes. A browser downloads a face only when the page uses it,
+   so a member downloads the fonts of their server's theme alone. */
+@import "@fontsource-variable/instrument-sans";
+@import "@fontsource-variable/fraunces/full.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/archivo/wdth.css";
+@import "@fontsource/space-mono/400.css";
+@import "@fontsource/space-mono/700.css";
 @import "tailwindcss";
 @import "@openbot/brand/tokens.css";
 @import "@openbot/brand/tokens-light.css";
+@import "@openbot/brand/atelier-themes.css";
 @import "@openbot/brand/logo.css";
 @import "@openbot/ui/styles.css";
 @import "@openbot/ui/features/account/otp-input.css";

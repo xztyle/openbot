@@ -22,7 +22,14 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
+    "@fontsource-variable/archivo": "catalog:",
+    "@fontsource-variable/fraunces": "catalog:",
+    "@fontsource-variable/geist": "catalog:",
+    "@fontsource-variable/geist-mono": "catalog:",
+    "@fontsource-variable/instrument-sans": "catalog:",
     "@fontsource-variable/inter": "catalog:",
+    "@fontsource/ibm-plex-mono": "catalog:",
+    "@fontsource/space-mono": "catalog:",
     "@kobalte/core": "catalog:",
     "@openbot/brand": "workspace:*",
     "@openbot/contracts": "workspace:*",

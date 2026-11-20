@@ -1,4 +1,5 @@
 import type { AppAppearance } from "@openbot/contracts/app-appearance";
+import { clearAtelierTheme, showCachedAtelierTheme } from "./atelier-theme";
 
 const LIGHT_QUERY = "(prefers-color-scheme: light)";
 
@@ -23,12 +24,15 @@ export function syncColorScheme(choice: () => AppAppearance) {
     applyColorScheme(appearance === "system" ? (query.matches ? "light" : "dark") : appearance);
   };
   refresh();
+  // The Atelier theme of the last workspace, until the workspace of this window answers with its own.
+  if (!document.documentElement.dataset.atelierTheme) showCachedAtelierTheme();
   query.addEventListener("change", refresh);
   return {
     refresh,
     stop() {
       query.removeEventListener("change", refresh);
       delete document.documentElement.dataset.openbotColorScheme;
+      clearAtelierTheme();
     },
   };
 }

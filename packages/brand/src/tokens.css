@@ -264,6 +264,8 @@
   --openbot-border-on-light: rgba(20, 20, 20, 0.14);
   --openbot-hover: rgba(255, 255, 255, 0.06);
   --openbot-font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Names and titles. The Atelier themes give it a face of its own (atelier-themes.css). */
+  --openbot-font-display: var(--openbot-font-sans);
   --openbot-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
   /* Six steps, one line-height each, named for the step it pairs with. The scale had
    * sixteen sizes and eight line-heights, four of them a single call site, which is how

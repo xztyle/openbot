@@ -9,7 +9,14 @@
         "@agentclientprotocol/sdk": "1.9.0",
         "@anthropic-ai/claude-agent-sdk": "0.3.309",
         "@anthropic-ai/sdk": "0.137.0",
+        "@fontsource-variable/archivo": "catalog:",
+        "@fontsource-variable/fraunces": "catalog:",
+        "@fontsource-variable/geist": "catalog:",
+        "@fontsource-variable/geist-mono": "catalog:",
+        "@fontsource-variable/instrument-sans": "catalog:",
         "@fontsource-variable/inter": "catalog:",
+        "@fontsource/ibm-plex-mono": "catalog:",
+        "@fontsource/space-mono": "catalog:",
         "@kobalte/core": "catalog:",
         "@modelcontextprotocol/sdk": "1.32.1",
         "@muse-code/sdk": "1.4.12",
@@ -79,7 +86,14 @@
       "name": "@openbot/auth-api",
       "version": "0.0.0",
       "dependencies": {
+        "@fontsource-variable/archivo": "catalog:",
+        "@fontsource-variable/fraunces": "catalog:",
+        "@fontsource-variable/geist": "catalog:",
+        "@fontsource-variable/geist-mono": "catalog:",
+        "@fontsource-variable/instrument-sans": "catalog:",
         "@fontsource-variable/inter": "catalog:",
+        "@fontsource/ibm-plex-mono": "catalog:",
+        "@fontsource/space-mono": "catalog:",
         "@kobalte/core": "catalog:",
         "@openbot/brand": "workspace:*",
         "@openbot/contracts": "workspace:*",
@@ -391,7 +405,14 @@
   },
   "catalog": {
     "@cloudflare/workers-types": "5.20261023.1",
+    "@fontsource-variable/archivo": "5.3.0",
+    "@fontsource-variable/fraunces": "5.3.0",
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
+    "@fontsource-variable/instrument-sans": "5.3.0",
     "@fontsource-variable/inter": "5.3.0",
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@fontsource/space-mono": "5.3.0",
     "@kobalte/core": "2.0.0-alpha.0",
     "@noble/hashes": "2.4.0",
     "@norbert_bodziony/bloub": "0.4.1",
@@ -854,7 +875,21 @@
 
     "@floating-ui/utils": ["@floating-ui/utils@0.2.12", "", {}, "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww=="],
 
+    "@fontsource-variable/archivo": ["@fontsource-variable/archivo@5.3.0", "", {}, "sha512-HogK8FJelrD1o7TlZlkIVtHgc20bO5PZRWE7mUeUTdMN055alznQV6/00J00IBeu8FQAH4s3zW9UJNvKExXf+g=="],
+
+    "@fontsource-variable/fraunces": ["@fontsource-variable/fraunces@5.3.0", "", {}, "sha512-9BYGySn4AHEJdgp9Z28tQ3X+laJMEOITXkQarZXeloWQZDq5oOvXJ3kDA8c7MGIfpogIaZfjrQBqmda8POOCKA=="],
+
+    "@fontsource-variable/geist": ["@fontsource-variable/geist@5.3.0", "", {}, "sha512-j0m+vLQuG5XAYoHtGCVu0spvlGreR3EzpECUVzkFmI1mTVnAO38l/NEPDCFgZ177JxzYJCLSmTQibIiYPilGrA=="],
+
+    "@fontsource-variable/geist-mono": ["@fontsource-variable/geist-mono@5.3.0", "", {}, "sha512-vBbuwDEo9AkrqADMXOrlAR3DFcJi4/JxeuU43FoiQERnNwsfXNnvxvReZG02cQKmyk4DZkZdBZX3oTDvy2zBAw=="],
+
+    "@fontsource-variable/instrument-sans": ["@fontsource-variable/instrument-sans@5.3.0", "", {}, "sha512-u4gKbDBTNFGkg997tfQn3eHOhHuquWUFTRT/rwzuKtrxX5P2ekfs2x+LgBPP4P32+cC+vUwF1Cr+IdRoPQbrGw=="],
+
     "@fontsource-variable/inter": ["@fontsource-variable/inter@5.3.0", "", {}, "sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA=="],
+
+    "@fontsource/ibm-plex-mono": ["@fontsource/ibm-plex-mono@5.3.0", "", {}, "sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q=="],
+
+    "@fontsource/space-mono": ["@fontsource/space-mono@5.3.0", "", {}, "sha512-FrpBMOVWn3PRdRHlrZWC55X3kZG/2BTH7SM5ZyS/bky3iKya2BturI5lk+t0RoDQL2JyHzURsVq/EisCsxpI5A=="],
 
     "@hono/node-server": ["@hono/node-server@2.1.0", "", { "peerDependencies": { "hono": "^4" } }, "sha512-XovyyCCnBzW+zKu+z/zq8hwNs4KOR5rEMAOxo2f40Q5xoOI37IMm6MIg2COOUtUApo0i6850MTBKH2u4QLGIqg=="],
 

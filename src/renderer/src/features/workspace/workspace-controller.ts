@@ -49,6 +49,7 @@ import type { JSX } from "@solidjs/web";
 import { createEffect, createMemo, createSignal, createStore, flush, onCleanup, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { setActiveSpaces } from "../../active-space";
+import { applyWorkspaceAppearance } from "../../atelier-theme";
 import type { ChannelsController } from "../channels/channels-controller";
 import type { MessagingApi } from "../connectors/messaging-connector";
 import type { StorageHygieneCalls } from "../storage-hygiene/storage-hygiene-port";
@@ -763,13 +764,15 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (!read || !channels.supported() || !env.connectionReady()) return;
     const run = ++dmAgentsRun;
     try {
-      const { agentIds, mainChatAgentIds, recentAgentIds } = await read();
-      if (run === dmAgentsRun)
-        setState((draft) => {
-          draft.dmAgentIds = agentIds;
-          draft.mainChatAgentIds = mainChatAgentIds ?? [];
-          draft.recentAgentIds = recentAgentIds ?? null;
-        });
+      const { agentIds, mainChatAgentIds, recentAgentIds, appearance } = await read();
+      if (run !== dmAgentsRun) return;
+      setState((draft) => {
+        draft.dmAgentIds = agentIds;
+        draft.mainChatAgentIds = mainChatAgentIds ?? [];
+        draft.recentAgentIds = recentAgentIds ?? null;
+      });
+      // The look that the owner chose for the workspace; a host that predates it shows the default.
+      applyWorkspaceAppearance(appearance);
     } catch {
       // A host without the route lets the reader message each agent the list shows.
     }

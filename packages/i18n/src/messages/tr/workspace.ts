@@ -427,7 +427,7 @@ export const messages = {
   "workspace.app.discord.title": "Discord",
   "workspace.app.discord.notLinked": "Bir Discord kanalına bağlı değil.",
   "workspace.app.discord.linkedWebhook": "#{name} ile bağlı. Gönderilerde her yazar görünür.",
-  "workspace.app.discord.linkedBot": "#{name} ile bağlı. OpenBot botu, yazarın adıyla paylaşır.",
+  "workspace.app.discord.linkedBot": "#{name} ile bağlı. Atelier botu, yazarın adıyla paylaşır.",
   "workspace.app.discord.unlink": "Bağlantıyı kes",
   "workspace.app.discord.loading": "Discord sunucuları yükleniyor…",
   "workspace.app.discord.noServers": "Önce Sunucu ayarları → Bağlayıcılar bölümünden bir Discord sunucusu bağlayın.",

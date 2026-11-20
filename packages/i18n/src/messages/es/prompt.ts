@@ -72,7 +72,7 @@ export const messages = {
   "prompt.browser.expand": "Abrir en la vista completa",
   "prompt.browser.stopWatching": "Mostrar la vista previa",
   "prompt.browser.openUnavailable":
-    "Esta página no se puede abrir aquí. Abre el chat de {name} en la app de OpenBot en un ordenador conectado a este servidor, completa el paso allí y pulsa He terminado.",
+    "Esta página no se puede abrir aquí. Abre el chat de {name} en la app de Atelier en un ordenador conectado a este servidor, completa el paso allí y pulsa He terminado.",
   "prompt.browser.cancelling": "Cancelando…",
   "prompt.browser.pageFallback": "Página del navegador",
   "prompt.browser.hostFallback": "el navegador",
@@ -80,7 +80,7 @@ export const messages = {
   "prompt.browser.signInBlocked.title": "{host} bloqueó el inicio de sesión desde {server}",
   "prompt.browser.signInBlocked.cancelledTitle": "Inicio de sesión en {host} cancelado",
   "prompt.browser.signInBlocked.body":
-    "Inicia sesión en este ordenador. OpenBot envía solo el inicio de sesión de {host} a {server}, y {name} continúa.",
+    "Inicia sesión en este ordenador. Atelier envía solo el inicio de sesión de {host} a {server}, y {name} continúa.",
   "prompt.browser.signInBlocked.cancelledBody": "El inicio de sesión se canceló.",
   "prompt.browser.signInBlocked.waiting": "Esperando el inicio de sesión",
   "prompt.browser.signInBlocked.waitingButton": "Esperando el inicio de sesión…",

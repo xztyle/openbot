@@ -323,9 +323,9 @@ export const messages = {
   "workflow.canvas.version.restore": "복원 전",
   "workflow.canvas.version.run": "실행 전",
   "workflow.canvas.deleteUndo.title": "{name}을(를) 삭제했어요",
-  "workflow.page.failed": "OpenBot이 이 작업을 할 수 없었어요. 다시 시도해 주세요.",
+  "workflow.page.failed": "Atelier가 이 작업을 할 수 없었어요. 다시 시도해 주세요.",
   "workflow.page.conflict": "다른 기기에서 변경됐어요. 실행 취소하면 내 편집 내용이 돌아와요.",
   "workflow.page.needsNewerApp":
-    "이 워크플로에는 최신 버전 OpenBot의 단계가 있어요. 변경하려면 OpenBot을 업데이트하세요.",
+    "이 워크플로에는 최신 버전 Atelier의 단계가 있어요. 변경하려면 Atelier를 업데이트하세요.",
   "workflow.page.manageOnly": "이 워크플로를 변경하려면 각 에이전트에 대해 ‘관리 가능’ 권한이 있어야 해요.",
 } as const satisfies PartialTranslation<typeof source>;

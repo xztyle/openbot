@@ -21,7 +21,7 @@ export const messages = {
   "notification.threadReply": "フォロー中のスレッドで返信しました。",
   "notification.newMessages": { other: "{count} 件の新しいメッセージ。" },
   "notification.usageLimit.title": "{provider} のアカウントが上限に達しました",
-  "notification.usageLimit.body": { other: "エージェント {count} 件が待機中です。OpenBot は後でもう一度試します。" },
+  "notification.usageLimit.body": { other: "エージェント {count} 件が待機中です。Atelier は後でもう一度試します。" },
   "notification.usageLimit.bodyResets": { other: "エージェント {count} 件が待機中です。{reset} にリセットされます。" },
   "notification.test": "通知は正常に動作しています。",
   "notification.welcome": "エージェントが対応を必要とするときは、ここでお知らせします。",

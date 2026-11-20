@@ -99,7 +99,7 @@ export const messages = {
   "agentSettings.runtime.fullAccessNote":
     "L'agente gira con accesso completo al computer dal suo workspace e dalla cartella condivisa.",
   "agentSettings.runtime.askNote":
-    "Ti chiede prima di usare un tool di OpenBot o pubblicare un sito, e quando il suo provider chiede un'approvazione.",
+    "Ti chiede prima di usare un tool di Atelier o pubblicare un sito, e quando il suo provider chiede un'approvazione.",
   "agentSettings.runtime.fullNote": "Agisce senza chiedere, tranne per le domande che ti pone.",
 
   "agentSettings.access.workspace": "Solo workspace",
@@ -151,7 +151,7 @@ export const messages = {
   "agentSettings.runtime.workspaceEnforcedClaude":
     "Una modifica a un file all'esterno te la chiede prima. Un comando non può scrivere all'esterno.",
   "agentSettings.runtime.workspaceUnlimited":
-    "Il controllo del computer e il browser di OpenBot non sono limitati; puoi disattivare il controllo del computer qui sotto.",
+    "Il controllo del computer e il browser di Atelier non sono limitati; puoi disattivare il controllo del computer qui sotto.",
   "agentSettings.computerUse.title": "Controllo del computer",
   "agentSettings.computerUse.description": "Permetti a questo agente di controllare le app su questo computer",
   "agentSettings.automation.title": "Script locali",

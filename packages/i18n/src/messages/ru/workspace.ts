@@ -534,7 +534,7 @@ export const messages = {
   "workspace.app.discord.title": "Discord",
   "workspace.app.discord.notLinked": "Не связан с каналом Discord.",
   "workspace.app.discord.linkedWebhook": "Связан с #{name}. У каждого сообщения виден автор.",
-  "workspace.app.discord.linkedBot": "Связан с #{name}. Бот OpenBot публикует сообщения с именем автора.",
+  "workspace.app.discord.linkedBot": "Связан с #{name}. Бот Atelier публикует сообщения с именем автора.",
   "workspace.app.discord.unlink": "Отвязать",
   "workspace.app.discord.loading": "Загрузка серверов Discord…",
   "workspace.app.discord.noServers": "Сначала подключите сервер Discord в разделе «Настройки сервера» → «Коннекторы».",

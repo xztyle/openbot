@@ -63,15 +63,15 @@ export const messages = {
   "error.agent.changedWhileDuplicating": "L’agent a changé pendant sa duplication. Réessayez.",
   "error.agent.duplicatedAgentGone": "L’agent dupliqué n’existe plus.",
   "error.agent.stateCorrupt":
-    "L’état des agents est corrompu ou provient d’une version plus récente d’OpenBot ; il ne sera pas écrasé.",
+    "L’état des agents est corrompu ou provient d’une version plus récente d’Atelier ; il ne sera pas écrasé.",
   "error.agent.oldRoleField":
-    "Les profils d’agent enregistrés utilisent l’ancien champ de rôle ; mettez à jour les données avant de démarrer OpenBot.",
+    "Les profils d’agent enregistrés utilisent l’ancien champ de rôle ; mettez à jour les données avant de démarrer Atelier.",
   "error.agent.duplicateIds": "L’état des agents contient des ID d’agent en double ; il ne sera pas écrasé.",
-  "error.agent.copyNameFailed": "OpenBot n’a pas pu créer un nom unique pour la copie de l’agent.",
+  "error.agent.copyNameFailed": "Atelier n’a pas pu créer un nom unique pour la copie de l’agent.",
   "error.agent.endpointRemoved":
     "Le point de terminaison utilisé par cet agent a été supprimé. Choisissez un autre modèle pour lui.",
   "error.agent.turnStalled":
-    "{provider} ne répond plus, donc OpenBot a terminé ce tour. Renvoyez le message ou choisissez un autre modèle.",
+    "{provider} ne répond plus, donc Atelier a terminé ce tour. Renvoyez le message ou choisissez un autre modèle.",
   "error.agent.selectedGone": "L’agent sélectionné n’existe plus.",
   "error.agent.profileEndpointsChanged":
     "Les points de terminaison personnalisés ont changé pendant la génération. Réessayez.",
@@ -94,9 +94,9 @@ export const messages = {
   "error.agent.saveOtherAgent": "Cet enregistrement appartient à un autre agent.",
   "error.agent.savedGone": "L’agent enregistré n’existe plus.",
   "error.agent.storedProfileUnreadable":
-    "Un profil d’agent enregistré a une valeur « {field} » illisible ; mettez à jour les données avant de démarrer OpenBot.",
+    "Un profil d’agent enregistré a une valeur « {field} » illisible ; mettez à jour les données avant de démarrer Atelier.",
   "error.agent.storedProfileUnreadableId":
-    "Le profil d’agent enregistré {id} a une valeur « {field} » illisible ; mettez à jour les données avant de démarrer OpenBot.",
+    "Le profil d’agent enregistré {id} a une valeur « {field} » illisible ; mettez à jour les données avant de démarrer Atelier.",
   "error.agent.queueEditRejected": "Modification de la file d’attente refusée : {reason}",
   "error.agent.computerUseLocalOnly": "Computer Use ne peut être modifié que sur l’ordinateur qui exécute l’agent.",
   "error.agent.automationLocalOnly":
@@ -125,7 +125,7 @@ export const messages = {
   "error.agent.lowMemoryServer":
     "Ce serveur manque de mémoire. Votre message attend dans la file et démarre quand la mémoire est libre.",
   "error.agent.workspaceOnlyToolMissing":
-    "« Espace de travail uniquement » nécessite {tool}, qu’OpenBot n’a pas trouvé. Installez-le, ou choisissez « Accès complet » dans les réglages de l’agent.",
+    "« Espace de travail uniquement » nécessite {tool}, qu’Atelier n’a pas trouvé. Installez-le, ou choisissez « Accès complet » dans les réglages de l’agent.",
   "error.agent.screenCaptureOff":
     "La capture d’écran est désactivée pour cet agent. L’utilisateur peut activer Computer Use dans les réglages de l’agent.",
   "error.agent.screenCaptureUnavailable": "La capture d’écran n’est pas disponible sur cet ordinateur.",
@@ -139,7 +139,7 @@ export const messages = {
   "error.agent.screenCaptureRegionOutside":
     "La zone n’est pas entièrement dans un seul écran. Utilisez des points du bureau situés dans les limites d’un écran renvoyées par list_capture_sources.",
   "error.agent.screenCapturePermissionMissing":
-    "OpenBot n’a pas l’autorisation « Enregistrement de l’écran ». Demandez à l’utilisateur d’ouvrir Réglages Système > Confidentialité et sécurité > Enregistrement de l’écran et de l’audio du système, d’activer OpenBot, puis de quitter et de rouvrir OpenBot.",
+    "Atelier n’a pas l’autorisation « Enregistrement de l’écran ». Demandez à l’utilisateur d’ouvrir Réglages Système > Confidentialité et sécurité > Enregistrement de l’écran et de l’audio du système, d’activer Atelier, puis de quitter et de rouvrir Atelier.",
   "error.agent.screenCaptureEmptyWindows":
     "Windows a renvoyé une image vide. Demandez à l’utilisateur de déverrouiller l’ordinateur et de fermer le contenu protégé. Une stratégie de l’organisation peut aussi bloquer la capture d’écran.",
   "error.agent.screenCaptureFailed": "La capture d’écran a échoué. Réessayez.",

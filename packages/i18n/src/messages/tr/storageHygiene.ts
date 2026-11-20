@@ -32,7 +32,7 @@ export const messages = {
   "storageHygiene.folders.title": "En büyük klasörler",
   "storageHygiene.plan.title": "Temizlik planı",
   "storageHygiene.plan.description":
-    "OpenBot her öğeyi silmeden önce yeniden denetler. Kullanımda olan veya son {minutes} dakikada değişen her şeyi tutar.",
+    "Atelier her öğeyi silmeden önce yeniden denetler. Kullanımda olan veya son {minutes} dakikada değişen her şeyi tutar.",
   "storageHygiene.plan.empty": "Temizlenecek bir şey yok.",
   "storageHygiene.plan.items": { one: "{count} öğe", other: "{count} öğe" },
   "storageHygiene.plan.more": { one: "{count} öğe daha", other: "{count} öğe daha" },
@@ -65,9 +65,9 @@ export const messages = {
   "storageHygiene.cleanup.button": "{size} temizle",
   "storageHygiene.cleanup.confirmTitle": "{size} temizlensin mi?",
   "storageHygiene.cleanup.confirmDescription": {
-    one: "OpenBot {count} öğeyi siler. Önce öğeyi yeniden denetler; kullanımdaysa veya son {minutes} dakikada değiştiyse tutar. Denetim günlüğü silme işlemini kaydeder.",
+    one: "Atelier {count} öğeyi siler. Önce öğeyi yeniden denetler; kullanımdaysa veya son {minutes} dakikada değiştiyse tutar. Denetim günlüğü silme işlemini kaydeder.",
     other:
-      "OpenBot {count} öğeyi siler. Önce her birini yeniden denetler; kullanımda olan veya son {minutes} dakikada değişen her şeyi tutar. Denetim günlüğü her silme işlemini kaydeder.",
+      "Atelier {count} öğeyi siler. Önce her birini yeniden denetler; kullanımda olan veya son {minutes} dakikada değişen her şeyi tutar. Denetim günlüğü her silme işlemini kaydeder.",
   },
   "storageHygiene.cleanup.confirm": "Temizle",
   "storageHygiene.cleanup.pending": "Temizleniyor…",

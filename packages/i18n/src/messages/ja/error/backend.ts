@@ -3,7 +3,7 @@ import type { messages as source } from "../../en/error/backend";
 
 export const messages = {
   "error.backend.eventsUnavailable": "このホストではイベントを利用できません。",
-  "error.backend.databaseIntegrity": "OpenBot のデータベースが整合性チェックに失敗しました。",
+  "error.backend.databaseIntegrity": "Atelier のデータベースが整合性チェックに失敗しました。",
   "error.backend.webhookRouteLimit": "1 つのホストの Webhook ルーティンは最大 {limit} 個です。",
   "error.backend.webhookSettingsInvalid": "Webhook の設定を確認して、もう一度お試しください。",
   "error.backend.webhookRouteUnavailable":
@@ -13,8 +13,8 @@ export const messages = {
   "error.backend.browserViewLimit": "このホストで開いているブラウザービューが多すぎます。",
   "error.backend.browserViewEnded": "このページのライブビューは終了しました。",
   "error.backend.browserViewFailed": "このページのライブビューは失敗しました。",
-  "error.backend.windowTemporarilyUnavailable": "OpenBot ウィンドウは一時的に使用できません。",
-  "error.backend.windowUnavailable": "OpenBot ウィンドウを使用できません。",
+  "error.backend.windowTemporarilyUnavailable": "Atelier ウィンドウは一時的に使用できません。",
+  "error.backend.windowUnavailable": "Atelier ウィンドウを使用できません。",
   "error.backend.sunshineApiHttp": "Sunshine API が HTTP {status} で失敗しました。",
   "error.backend.sunshinePortsUnavailable":
     "リモートデスクトップ用に空いている Sunshine のポート群を確保できませんでした。",
@@ -31,7 +31,7 @@ export const messages = {
   "error.backend.moonlightRejectedPairing": "Moonlight が Sunshine とのペアリングを拒否しました。",
   "error.backend.moonlightNoPin": "Moonlight がペアリング PIN を返しませんでした。",
   "error.backend.moonlightPairingIncomplete": "Moonlight のペアリングが完了しませんでした。",
-  "error.backend.moonlightWebNotEmbedded": "Moonlight Web は OpenBot 組み込みビルドではありません。",
+  "error.backend.moonlightWebNotEmbedded": "Moonlight Web は Atelier 組み込みビルドではありません。",
   "error.backend.moonlightEmptyResponse": "Moonlight が空の応答を返しました。",
   "error.backend.remoteDesktopTimeout": "リモートデスクトップの要求がタイムアウトしました。",
   "error.backend.moonlightApiHttp": "Moonlight API が HTTP {status} で失敗しました。",
@@ -48,8 +48,8 @@ export const messages = {
   "error.backend.browserUserControlUnsupported":
     "このリモートホストは、ブラウザーのタブの操作の引き継ぎに対応していません。",
   "error.backend.browserSignInUnsupported": "このリモートホストはこのコンピューターからのサインインを受け取れません。",
-  "error.backend.browserSignInOpenFailed": "OpenBot はサインインウィンドウを開けませんでした。",
-  "error.backend.browserSignInReadFailed": "OpenBot はウィンドウからサインインを読み取れませんでした。",
+  "error.backend.browserSignInOpenFailed": "Atelier はサインインウィンドウを開けませんでした。",
+  "error.backend.browserSignInReadFailed": "Atelier はウィンドウからサインインを読み取れませんでした。",
   "error.backend.browserStopUnsupported": "このリモートホストはページの読み込みを停止できません。",
   "error.backend.sharedDataLocalOnly": "共有データは、これらのエージェントを実行しているコンピューターで管理されます。",
   "error.backend.browserUrlProtocol": "HTTP(S) のブラウザー URL のみ使用できます。",
@@ -57,7 +57,7 @@ export const messages = {
   "error.backend.sunshineNotReadyReason": "Sunshine の準備ができませんでした。{reason}",
   "error.backend.channelLeadModelUnavailable": "チャンネルリードのモデルを使用できません。",
   "error.backend.sharedDataUnavailable": "共有データを使用できません。",
-  "error.backend.shuttingDown": "OpenBot を終了しています。",
+  "error.backend.shuttingDown": "Atelier を終了しています。",
   "error.backend.channelUnconfirmedStart":
     "チャンネルに開始が未確認の割り当てがあります。削除する前に結果を確認してください。",
   "error.backend.channelNotFound": "チャンネルが見つかりません。",
@@ -92,7 +92,7 @@ export const messages = {
     "Discord サーバーが接続されていないか、動作していません。サーバー設定 > コネクタ > Discord で接続してから、もう一度お試しください。",
   "error.backend.channelDiscordTaken": "この Discord チャンネルは、すでに別のチャンネルとつながっています。",
   "error.backend.channelDiscordChannelMissing":
-    "OpenBot はこの Discord チャンネルに投稿できません。OpenBot が見えるテキストチャンネルを選んでください。",
+    "Atelier はこの Discord チャンネルに投稿できません。Atelier が見えるテキストチャンネルを選んでください。",
   "error.backend.channelMessageNotFound": "このメッセージは利用できません。",
   "error.backend.channelPersonUnavailable": "選択した人はこのサーバーの有効なメンバーではありません。",
   "error.backend.channelDirectParticipants": "ダイレクトメッセージの参加者は 2 人、グループは 3〜9 人です。",
@@ -155,14 +155,14 @@ export const messages = {
   "error.backend.fileGone": "ファイルが存在しないか、すでに削除されています。",
   "error.backend.managedAttachmentChanged": "管理対象の添付ファイルが見つからないか、変更されています: {name}",
   "error.backend.mailboxStateCorrupt":
-    "メールボックスの状態が破損しているか、新しいバージョンの OpenBot のものです。上書きしません。",
+    "メールボックスの状態が破損しているか、新しいバージョンの Atelier のものです。上書きしません。",
   "error.backend.recipientDeleting": "受信者を削除中です。削除が終わってから再試行してください。",
   "error.backend.recipientHidden": "このエージェントは非表示です。メッセージを送るには元に戻してください。",
   "error.backend.attachBetween": "1 〜 {limit} 個のファイルを添付してください。",
   "error.backend.attachmentNotFile": "添付ファイルがファイルではありません: {path}",
   "error.backend.generatedImageTooLarge": "生成された画像が 100 MB の上限を超えています。",
   "error.backend.attachmentNotRegularFile": "添付できるのは通常のファイルだけです: {name}",
-  "error.backend.attachmentCopyFailed": "OpenBot は {name} をコピーできませんでした。",
+  "error.backend.attachmentCopyFailed": "Atelier は {name} をコピーできませんでした。",
   "error.backend.routineNameRequired": "ルーティン名が必要です。",
   "error.backend.routineNameTooLong": "ルーティン名が長すぎます。",
   "error.backend.routineInstructionRequired": "ルーティンの指示が必要です。",
@@ -186,14 +186,14 @@ export const messages = {
   "error.backend.routineRunStarting":
     "このルーティンの実行はまだ開始中です。ターンが始まってからもう一度お試しください。",
   "error.backend.routineRunNoSession":
-    "プロバイダーのセッションを使用できないため、OpenBot は実行中のルーティンを中断できません。",
+    "プロバイダーのセッションを使用できないため、Atelier は実行中のルーティンを中断できません。",
   "error.backend.interruptSelf": "エージェントは自分自身を中断できません。",
   "error.backend.interruptOtherWork":
     "このエージェントは、あなたのメッセージで開始されていないタスクを実行中です。そのタスクを停止できるのは、ユーザーまたはそのタスクの送信者だけです。",
   "error.backend.interruptStarting":
     "このエージェントはまだターンを開始中です。ターンが始まってからもう一度お試しください。",
   "error.backend.interruptNoSession":
-    "プロバイダーのセッションを使用できないため、OpenBot はこのエージェントを中断できません。",
+    "プロバイダーのセッションを使用できないため、Atelier はこのエージェントを中断できません。",
   "error.backend.memoryTextRequired": "メモリーのテキストが必要です。",
   "error.backend.memoryTextTooLong": "メモリーのテキストが長すぎます。",
   "error.backend.mcpServerGone": "この MCP サーバーはもう存在しません。",
@@ -219,13 +219,13 @@ export const messages = {
   "error.backend.agentWaitRemoteUnsupported":
     "開いている待機は、このコンピューター上のエージェントでのみ使用できます。",
   "error.backend.routineFlowHandoffFailed": "ルーティンはこのエージェントに作業を渡せませんでした。",
-  "error.backend.mcpServerLimit": "OpenBot に保存できる MCP サーバーは {limit} 個までです。",
+  "error.backend.mcpServerLimit": "Atelier に保存できる MCP サーバーは {limit} 個までです。",
   "error.backend.mcpServerNameTaken": "{name} という名前の MCP サーバーはすでに存在します。",
   "error.backend.mcpServerNoAnswer": "サーバーは {seconds} 秒以内に応答しませんでした。",
   "error.backend.mcpSignInNotAccepted": "サーバーはそのサインインを受け付けませんでした。",
   "error.backend.mcpCommandNotFound": "コマンドが見つかりません: {command}",
   "error.backend.mcpRegistrationRefused":
-    "サインインサーバーはまだ OpenBot をアプリとして受け付けていません。原因はお使いのアカウントではありません。ローカル MCP サーバーなど、別の方法で接続してください。",
+    "サインインサーバーはまだ Atelier をアプリとして受け付けていません。原因はお使いのアカウントではありません。ローカル MCP サーバーなど、別の方法で接続してください。",
   "error.backend.mcpSignInAbandonedGeneric": "サインインは中止されました。",
   "error.backend.mcpSignInForgotten": "MCP のサインインは実行中に破棄されました。",
   "error.backend.mcpSignInAbandoned": "MCP のサインインは中止されました。",
@@ -234,22 +234,22 @@ export const messages = {
   "error.backend.mcpSignInRequired":
     "このサーバーはサインインを求めています。「サインイン」を選んでブラウザーで続けてください。",
   "error.backend.mcpSignInOnHost":
-    "このサーバーはサインインを求めています。ホストコンピューターの OpenBot でサインインしてください。",
+    "このサーバーはサインインを求めています。ホストコンピューターの Atelier でサインインしてください。",
   "error.backend.mcpSignInNeedsHttps":
-    "このサーバーはサインインを求めていますが、OpenBot は https でのみサインインします。URL を {url} に変更してください。",
+    "このサーバーはサインインを求めていますが、Atelier は https でのみサインインします。URL を {url} に変更してください。",
   "error.backend.mcpSignInCancelled": "サインインはキャンセルされました。",
   "error.backend.mcpSignInTimedOut": "ブラウザーでサインインが完了しませんでした。",
   "error.backend.mcpSignInResponseTimedOut": "サインインの応答が時間内に届きませんでした。",
   "error.backend.mcpSignInMetadataUnreadable":
-    "OpenBot はこのサーバーのサインイン情報を読み取れませんでした。サーバーアドレスを確認して再試行してください。",
+    "Atelier はこのサーバーのサインイン情報を読み取れませんでした。サーバーアドレスを確認して再試行してください。",
   "error.backend.mcpServerExited":
     "サーバーは応答する前に停止しました。ターミナルでコマンドを実行してエラーを確認してください。",
   "error.backend.mcpOAuthProxyUnavailable":
-    "OpenBot はこのサーバーのローカルサインイン接続を開始できませんでした。OpenBot を再起動してから、もう一度お試しください。",
+    "Atelier はこのサーバーのローカルサインイン接続を開始できませんでした。Atelier を再起動してから、もう一度お試しください。",
   "error.backend.mcpOAuthSignInNeeded":
-    "この MCP サーバーへのサインインは終了しました。ユーザーは OpenBot でもう一度サインインする必要があります。",
+    "この MCP サーバーへのサインインは終了しました。ユーザーは Atelier でもう一度サインインする必要があります。",
   "error.backend.mcpServerUnreachable":
-    "OpenBot はサーバーに接続できませんでした。URL とネットワークを確認してください。",
+    "Atelier はサーバーに接続できませんでした。URL とネットワークを確認してください。",
   "error.backend.mcpLocalServerOff":
     "このコンピューターの {address} で応答するサーバーがありません。サーバーを起動するか、サーバーを実行するアプリでオンにしてから、もう一度お試しください。",
   "error.backend.mcpServerBlocked":
@@ -257,7 +257,7 @@ export const messages = {
   "error.backend.mcpServerIncompatible":
     "このアドレスで応答がありましたが、Streamable HTTP の MCP サーバーではありません。URL を確認し、サーバーを実行するアプリを更新してください。",
   "error.backend.mcpRemoteBridge":
-    "{reason} このコマンドは mcp-remote ブリッジを実行します。代わりに URL {url} で Streamable HTTP を選ぶと、OpenBot がサインインします。",
+    "{reason} このコマンドは mcp-remote ブリッジを実行します。代わりに URL {url} で Streamable HTTP を選ぶと、Atelier がサインインします。",
   "error.backend.oauthNotHttps": "OAuth エンドポイント {origin} は https ではないため、認証情報を送信しませんでした。",
   "error.backend.oauthTooManyRedirects": "OAuth エンドポイントのリダイレクトが多すぎます。",
   "error.backend.oauthRedirectOrigin":
@@ -342,7 +342,7 @@ export const messages = {
   "error.backend.mcpSignInAppUrl": "サインインアプリには有効なサーバー URL が必要です。",
   "error.backend.mcpSignInAppClientId": "サインインアプリのクライアント ID を入力してください。",
   "error.backend.mcpSignInAppIssuerChanged":
-    "この MCP サーバーのサインインサーバーが変わったため、OpenBot はサインインアプリを送信しませんでした。この変更が正しい場合は、サインインアプリを削除してからもう一度追加してください。",
+    "この MCP サーバーのサインインサーバーが変わったため、Atelier はサインインアプリを送信しませんでした。この変更が正しい場合は、サインインアプリを削除してからもう一度追加してください。",
   "error.backend.mcpSignInAppNoServer":
     "サインインアプリを追加する前に、この MCP サーバーを URL サーバーとして保存してください。",
   "error.backend.mcpSignInAppUnavailable": "このコンピューターではサインインアプリを保存できません。",
@@ -359,5 +359,5 @@ export const messages = {
   "error.backend.taskOpenLimitReached":
     "このエージェントには {count} 件の開いているタスクがあります。タスクを閉じてから、別のタスクを開始するか開いてください。",
   "error.backend.taskRemoteUnsupported": "タスクは、このコンピューター上のエージェントでのみ利用できます。",
-  "error.backend.taskStartFailed": "OpenBot はタスクを開始できませんでした。代わりにこのターンで作業してください。",
+  "error.backend.taskStartFailed": "Atelier はタスクを開始できませんでした。代わりにこのターンで作業してください。",
 } as const satisfies PartialTranslation<typeof source>;

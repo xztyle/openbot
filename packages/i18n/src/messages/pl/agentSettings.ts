@@ -102,7 +102,7 @@ export const messages = {
   "agentSettings.runtime.fullAccessNote":
     "Agent działa z pełnym dostępem do komputera ze swojego obszaru roboczego i folderu współdzielonego.",
   "agentSettings.runtime.askNote":
-    "Pyta cię, zanim użyje narzędzia OpenBot lub opublikuje witrynę, oraz gdy jego dostawca prosi o zgodę.",
+    "Pyta cię, zanim użyje narzędzia Atelier lub opublikuje witrynę, oraz gdy jego dostawca prosi o zgodę.",
   "agentSettings.runtime.fullNote": "Działa bez pytania, z wyjątkiem pytań, które ci zadaje.",
   "agentSettings.access.workspace": "Tylko obszar roboczy",
   "agentSettings.access.ask": "Najpierw pytaj",
@@ -170,7 +170,7 @@ export const messages = {
   "agentSettings.runtime.workspaceEnforcedClaude":
     "Edycja pliku poza tymi folderami najpierw zapyta cię o zgodę. Polecenie nie może zapisać poza nimi.",
   "agentSettings.runtime.workspaceUnlimited":
-    "Sterowanie komputerem i przeglądarka OpenBot nie są ograniczone; Sterowanie komputerem możesz wyłączyć poniżej.",
+    "Sterowanie komputerem i przeglądarka Atelier nie są ograniczone; Sterowanie komputerem możesz wyłączyć poniżej.",
   "agentSettings.computerUse.title": "Sterowanie komputerem",
   "agentSettings.computerUse.description": "Pozwól temu agentowi sterować aplikacjami na tym komputerze",
   "agentSettings.automation.title": "Lokalne skrypty",

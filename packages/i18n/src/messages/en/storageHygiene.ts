@@ -31,7 +31,7 @@ export const messages = defineMessages("storageHygiene", {
   "storageHygiene.folders.title": "Largest folders",
   "storageHygiene.plan.title": "Cleanup plan",
   "storageHygiene.plan.description":
-    "OpenBot checks each item again before it deletes it. It keeps anything in use or changed in the last {minutes} minutes.",
+    "Atelier checks each item again before it deletes it. It keeps anything in use or changed in the last {minutes} minutes.",
   "storageHygiene.plan.empty": "Nothing to clean up.",
   "storageHygiene.plan.items": { one: "{count} item", other: "{count} items" },
   "storageHygiene.plan.more": { one: "{count} more item", other: "{count} more items" },
@@ -62,9 +62,9 @@ export const messages = defineMessages("storageHygiene", {
   "storageHygiene.cleanup.button": "Clean up {size}",
   "storageHygiene.cleanup.confirmTitle": "Clean up {size}?",
   "storageHygiene.cleanup.confirmDescription": {
-    one: "OpenBot deletes {count} item. It checks it again first and keeps it if it is in use or changed in the last {minutes} minutes. The audit log records the deletion.",
+    one: "Atelier deletes {count} item. It checks it again first and keeps it if it is in use or changed in the last {minutes} minutes. The audit log records the deletion.",
     other:
-      "OpenBot deletes {count} items. It checks each one again first and keeps anything in use or changed in the last {minutes} minutes. The audit log records every deletion.",
+      "Atelier deletes {count} items. It checks each one again first and keeps anything in use or changed in the last {minutes} minutes. The audit log records every deletion.",
   },
   "storageHygiene.cleanup.confirm": "Clean up",
   "storageHygiene.cleanup.pending": "Cleaning up…",

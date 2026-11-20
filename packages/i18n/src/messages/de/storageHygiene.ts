@@ -32,7 +32,7 @@ export const messages = {
   "storageHygiene.folders.title": "Größte Ordner",
   "storageHygiene.plan.title": "Bereinigungsplan",
   "storageHygiene.plan.description":
-    "OpenBot prüft jedes Element vor dem Löschen erneut. Alles, was in Gebrauch ist oder in den letzten {minutes} Minuten geändert wurde, bleibt erhalten.",
+    "Atelier prüft jedes Element vor dem Löschen erneut. Alles, was in Gebrauch ist oder in den letzten {minutes} Minuten geändert wurde, bleibt erhalten.",
   "storageHygiene.plan.empty": "Nichts zu bereinigen.",
   "storageHygiene.plan.items": { one: "{count} Element", other: "{count} Elemente" },
   "storageHygiene.plan.more": { one: "{count} weiteres Element", other: "{count} weitere Elemente" },
@@ -63,9 +63,9 @@ export const messages = {
   "storageHygiene.cleanup.button": "{size} bereinigen",
   "storageHygiene.cleanup.confirmTitle": "{size} bereinigen?",
   "storageHygiene.cleanup.confirmDescription": {
-    one: "OpenBot löscht {count} Element. Es prüft es vorher erneut und behält es, wenn es in Gebrauch ist oder in den letzten {minutes} Minuten geändert wurde. Das Audit-Log hält das Löschen fest.",
+    one: "Atelier löscht {count} Element. Es prüft es vorher erneut und behält es, wenn es in Gebrauch ist oder in den letzten {minutes} Minuten geändert wurde. Das Audit-Log hält das Löschen fest.",
     other:
-      "OpenBot löscht {count} Elemente. Es prüft jedes vorher erneut und behält alles, was in Gebrauch ist oder in den letzten {minutes} Minuten geändert wurde. Das Audit-Log hält jedes Löschen fest.",
+      "Atelier löscht {count} Elemente. Es prüft jedes vorher erneut und behält alles, was in Gebrauch ist oder in den letzten {minutes} Minuten geändert wurde. Das Audit-Log hält jedes Löschen fest.",
   },
   "storageHygiene.cleanup.confirm": "Bereinigen",
   "storageHygiene.cleanup.pending": "Wird bereinigt…",

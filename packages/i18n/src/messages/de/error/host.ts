@@ -11,14 +11,14 @@ export const messages = {
   "error.host.setupUnavailable": "Die Einrichtung der Berechtigungen ist nicht verfügbar.",
   "error.host.accountChangedDuringUpdate":
     "Das angemeldete Konto wurde während der Aktualisierung dieses Servers geändert.",
-  "error.host.nameBeforePublish": "Gib diesem OpenBot einen Namen, bevor du ihn veröffentlichst.",
+  "error.host.nameBeforePublish": "Gib diesem Atelier einen Namen, bevor du ihn veröffentlichst.",
   "error.host.memberNotFound": "Das Remote-Mitglied existiert nicht.",
-  "error.host.publishBeforeInvite": "Mache diesen OpenBot öffentlich, bevor du eine Einladung erstellst.",
+  "error.host.publishBeforeInvite": "Mache diesen Atelier öffentlich, bevor du eine Einladung erstellst.",
   "error.host.teamAccessUnavailable": "Dein Teamzugriff ist nicht verfügbar.",
   "error.host.ownerIdentityUnavailable": "Die Identität des Host-Eigentümers ist nicht verfügbar.",
   "error.host.reserveAddressFailed": "Die öffentliche Adresse konnte nicht reserviert werden.",
-  "error.host.publishFailed": "Dieser OpenBot konnte nicht veröffentlicht werden.",
-  "error.host.mobileConnectPublishFailed": "Dieser OpenBot konnte nicht für die Mobilverbindung veröffentlicht werden.",
+  "error.host.publishFailed": "Dieser Atelier konnte nicht veröffentlicht werden.",
+  "error.host.mobileConnectPublishFailed": "Dieser Atelier konnte nicht für die Mobilverbindung veröffentlicht werden.",
   "error.host.mobileConnectHostChanged": "Der Host der Mobilverbindung wurde geändert. Versuche es erneut.",
   "error.host.noServer": "Dieser Computer hat keinen Server, der geändert werden kann.",
   "error.host.identityLocalOnly":

@@ -2,7 +2,7 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/webClient";
 
 export const messages = {
-  "webClient.loading": "Загрузка OpenBot…",
+  "webClient.loading": "Загрузка Atelier…",
   "webClient.loadingLine.wake": "Будим агентов…",
   "webClient.loadingLine.coffee": "Наливаем агентам кофе…",
   "webClient.loadingLine.tokens": "Считаем токены на пальцах…",
@@ -23,13 +23,13 @@ export const messages = {
   "webClient.notice.hostsFailed": "Не удалось загрузить ваши серверы",
   "webClient.notice.connectComputer": "Подключите сервер",
   "webClient.connect.description":
-    "Запустите OpenBot на своём компьютере, чтобы общаться с агентами из этого браузера. Также можно присоединиться к серверу по приглашению.",
+    "Запустите Atelier на своём компьютере, чтобы общаться с агентами из этого браузера. Также можно присоединиться к серверу по приглашению.",
   "webClient.connect.descriptionHosted":
-    "Создайте размещённый сервер, чтобы общаться с агентами из этого браузера. Также можно запустить OpenBot на своём компьютере или присоединиться к серверу по приглашению.",
-  "webClient.connect.stepInstall": "Установите и откройте OpenBot на своём компьютере.",
+    "Создайте размещённый сервер, чтобы общаться с агентами из этого браузера. Также можно запустить Atelier на своём компьютере или присоединиться к серверу по приглашению.",
+  "webClient.connect.stepInstall": "Установите и откройте Atelier на своём компьютере.",
   "webClient.connect.stepSignIn": "Войдите с помощью адреса электронной почты.",
   "webClient.connect.stepRemote": "Включите удалённый доступ.",
-  "webClient.notice.download": "Скачать OpenBot",
+  "webClient.notice.download": "Скачать Atelier",
   "webClient.notice.createServer": "Создать облачный сервер",
   "webClient.notice.join": "Войти по приглашению",
   "webClient.notice.refreshHosts": "Обновить серверы",
@@ -41,7 +41,7 @@ export const messages = {
   "webClient.error.usageOffline": "Подключитесь к серверу, чтобы посмотреть использование.",
   "webClient.error.desktopOnly": "Это действие доступно в приложении для компьютера.",
   "webClient.settings.preferences.title": "Настройки",
-  "webClient.settings.preferences.description": "Выберите язык и звуки OpenBot в этом браузере.",
+  "webClient.settings.preferences.description": "Выберите язык и звуки Atelier в этом браузере.",
   "webClient.error.checkConversation": "Проверьте диалог, прежде чем отправлять снова.",
   "webClient.error.hostReported": "Сервер сообщил об ошибке. Проверьте диалог и состояние сервера.",
   "webClient.error.requestFailed": "Запрос не удался.",
@@ -65,14 +65,14 @@ export const messages = {
   "webClient.error.hostChanged": "Выбранный сервер изменился.",
   "webClient.error.requestIncomplete": "Сервер не смог выполнить этот запрос. Обновите страницу, прежде чем повторять.",
   "webClient.error.connectionInterrupted":
-    "Соединение с сервером прервалось. OpenBot подключается заново. Повторите попытку через минуту.",
+    "Соединение с сервером прервалось. Atelier подключается заново. Повторите попытку через минуту.",
   "webClient.error.viewEnded": "Вид браузера завершён.",
   "webClient.error.viewChanged": "Вид браузера изменился.",
   "webClient.error.connectionChanging": "Подключение к серверу меняется.",
   "webClient.error.identityChanged": "Идентификатор сервера изменился. Подключение отклонено.",
   "webClient.error.connectionUnavailable": "Подключение к серверу недоступно.",
   "webClient.error.incompatible":
-    "Этот сервер несовместим с веб-версией OpenBot. Обновите сервер и перезагрузите страницу.",
+    "Этот сервер несовместим с веб-версией Atelier. Обновите сервер и перезагрузите страницу.",
   "webClient.error.sendUnconfirmed":
     "Доставка сообщения не подтверждена. Обновите страницу, прежде чем отправлять снова.",
   "webClient.error.fileType": "Обновите сервер, чтобы прикреплять файлы этого типа.",
@@ -80,7 +80,7 @@ export const messages = {
   "webClient.error.duplication": "Этот сервер не поддерживает дублирование агентов.",
   "webClient.error.connectServerFirst": "Сначала подключитесь к этому серверу.",
   "webClient.error.agentInstallNotAllowed":
-    "Добавлять агента здесь может только владелец или администратор, а на сервере должна работать актуальная версия OpenBot.",
+    "Добавлять агента здесь может только владелец или администратор, а на сервере должна работать актуальная версия Atelier.",
   "webClient.error.linkDesktopOnly": "Эта ссылка открывается только в приложении для компьютера.",
   "webClient.error.saveEndpointOffline": "Подключитесь к серверу, чтобы сохранить эндпоинт.",
   "webClient.error.removeEndpointOffline": "Подключитесь к серверу, чтобы удалить эндпоинт.",

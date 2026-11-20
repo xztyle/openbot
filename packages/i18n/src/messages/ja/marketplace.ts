@@ -24,7 +24,7 @@ export const messages = {
   "marketplace.tab.agents": "エージェント",
   "marketplace.tab.skills": "スキル",
 
-  "marketplace.plugins.missing": "このプラグインは OpenBot のカタログにありません。",
+  "marketplace.plugins.missing": "このプラグインは Atelier のカタログにありません。",
 
   "marketplace.agents.loadingDetail": "エージェントの詳細を読み込んでいます…",
   "marketplace.agents.skills": "スキル",
@@ -34,7 +34,7 @@ export const messages = {
 
   "marketplace.skill.loading": "スキルを読み込んでいます",
   "marketplace.skill.update": "スキルをアップデート",
-  "marketplace.try.readFailed": "OpenBot はこのエージェントのスキルを読み取れませんでした。もう一度お試しください。",
+  "marketplace.try.readFailed": "Atelier はこのエージェントのスキルを読み取れませんでした。もう一度お試しください。",
   "marketplace.try.enable": "試すには、エージェントの設定でこのスキルを有効にしてください。",
   "marketplace.try.repair": "試すには、エージェントの設定でこのスキルを修復してください。",
   "marketplace.try.update": "このバージョンを試すには、スキルをアップデートしてください。",
@@ -164,7 +164,7 @@ export const messages = {
   "marketplace.plugin.figma.prompt.assets": "アプリバンドル用に、マーケティングアイコンを 2x で書き出してください。",
   "marketplace.plugin.paper.tagline": "HTML と CSS で作られたデザインキャンバス",
   "marketplace.plugin.paper.description":
-    "Paper を使うと、エージェントは Paper Desktop で開いているデザインファイルを読み書きできます。アートボード、選択範囲、計算済みのスタイル、JSX、トークンを調べ、フレーム、テキスト、スタイルを作成・変更できます。Paper Desktop をインストールして一度開き、始める前にファイルを開いてください。OpenBot は Paper Desktop がインストールする Paper CLI を起動します。Paper にキーは不要です。書き込みツールは開いているファイルを変更するので、承認する前に各書き込みを確認してください。",
+    "Paper を使うと、エージェントは Paper Desktop で開いているデザインファイルを読み書きできます。アートボード、選択範囲、計算済みのスタイル、JSX、トークンを調べ、フレーム、テキスト、スタイルを作成・変更できます。Paper Desktop をインストールして一度開き、始める前にファイルを開いてください。Atelier は Paper Desktop がインストールする Paper CLI を起動します。Paper にキーは不要です。書き込みツールは開いているファイルを変更するので、承認する前に各書き込みを確認してください。",
   "marketplace.plugin.paper.app":
     "開いている Paper Desktop のファイルを、Paper CLI が中継するローカルの MCP サーバーで読み書きします。ファイルを開いた Paper Desktop が必要です。",
   "marketplace.plugin.paper.prompt.implement":
@@ -175,7 +175,7 @@ export const messages = {
     "開いている Paper のファイルにあるデザイントークンを一覧にして、私たちのテーマと比較してください。",
   "marketplace.plugin.appleApps.tagline": "Mac のメール、カレンダーなど",
   "marketplace.plugin.appleApps.description":
-    "Apple apps を使うと、エージェントはこの Mac のメール、カレンダー、連絡先、リマインダー、メモ、メッセージ、Safari を使えます。macOS でのみ動作します。OpenBot は mcp-icloud を起動します。これは Apple や OpenBot が作ったものではない、コミュニティのサーバーです。サーバーはこのコンピューター上で AppleScript を使ってアプリを操作し、アカウントもキーも不要です。エージェントが初めてアプリを使うとき、macOS は OpenBot にそのアプリの操作を許可するか確認します。後で変更するには、システム設定 › プライバシーとセキュリティ › オートメーション を開いてください。エージェントはメールや iMessage を送信し、イベント、連絡先、リマインダーを変更・削除できるので、承認する前に各書き込みを確認してください。ツールが読んだ内容（メールの本文など）は、エージェントのモデルプロバイダーに送られます。",
+    "Apple apps を使うと、エージェントはこの Mac のメール、カレンダー、連絡先、リマインダー、メモ、メッセージ、Safari を使えます。macOS でのみ動作します。Atelier は mcp-icloud を起動します。これは Apple や Atelier が作ったものではない、コミュニティのサーバーです。サーバーはこのコンピューター上で AppleScript を使ってアプリを操作し、アカウントもキーも不要です。エージェントが初めてアプリを使うとき、macOS は Atelier にそのアプリの操作を許可するか確認します。後で変更するには、システム設定 › プライバシーとセキュリティ › オートメーション を開いてください。エージェントはメールや iMessage を送信し、イベント、連絡先、リマインダーを変更・削除できるので、承認する前に各書き込みを確認してください。ツールが読んだ内容（メールの本文など）は、エージェントのモデルプロバイダーに送られます。",
   "marketplace.plugin.appleApps.app":
     "メール、カレンダー、連絡先、リマインダー、メモ、メッセージ、Safari を、ローカルの mcp-icloud サーバーで操作します。macOS とオートメーションの許可が必要です。",
   "marketplace.plugin.appleApps.prompt.unread": "Apple のメールで、今日の未読メールを要約してください。",

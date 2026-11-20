@@ -9,11 +9,11 @@ export const messages = {
   "mobile.server.drawer.editOrder": "Zmień kolejność",
   "mobile.server.drawer.leaveFailed": "Nie udało się opuścić serwera {name}",
   "mobile.server.drawer.removeFailed": "Nie udało się usunąć serwera {name}",
-  "mobile.server.drawer.actionFailed": "OpenBot nie mógł wykonać tej czynności. Spróbuj ponownie.",
+  "mobile.server.drawer.actionFailed": "Atelier nie mógł wykonać tej czynności. Spróbuj ponownie.",
   "mobile.server.drawer.moveUp": "Przenieś w górę",
   "mobile.server.drawer.moveDown": "Przenieś w dół",
   "mobile.server.drawer.orderHint":
-    "OpenBot otwiera się na pierwszym serwerze. Kolejność jest zapisana na tym urządzeniu.",
+    "Atelier otwiera się na pierwszym serwerze. Kolejność jest zapisana na tym urządzeniu.",
   "mobile.server.drawer.title": "Serwery",
   "mobile.server.drawer.serverSettings": "Ustawienia serwera",
   "mobile.server.drawer.serverListHint": "Pokazuje lub ukrywa serwery",
@@ -82,13 +82,13 @@ export const messages = {
   "mobile.server.hosted.join": "Dołącz do serwera",
   "mobile.server.hosted.intro.title": "Twoi agenci zawsze aktywni",
   "mobile.server.hosted.intro.description":
-    "Serwer w chmurze uruchamia agentów i rutyny, gdy komputer jest wyłączony. OpenBot go konfiguruje i utrzymuje.",
+    "Serwer w chmurze uruchamia agentów i rutyny, gdy komputer jest wyłączony. Atelier go konfiguruje i utrzymuje.",
   "mobile.server.hosted.planFacts": "{members} · {storage} · {speed}",
   "mobile.server.hosted.computer.title": "Na komputerze",
   "mobile.server.hosted.computer.add": "Dodaj serwer w chmurze",
-  "mobile.server.hosted.computer.addHint": "W OpenBot otwórz Ustawienia → Hostowane serwery i wybierz „Dodaj serwer”.",
+  "mobile.server.hosted.computer.addHint": "W Atelier otwórz Ustawienia → Hostowane serwery i wybierz „Dodaj serwer”.",
   "mobile.server.hosted.computer.change": "Zmień plan",
-  "mobile.server.hosted.computer.changeHint": "W OpenBot otwórz Ustawienia → Rozliczenia.",
+  "mobile.server.hosted.computer.changeHint": "W Atelier otwórz Ustawienia → Rozliczenia.",
   "mobile.server.hosted.yourServers": "Twoje serwery",
   "mobile.server.hosted.plans": "Plany",
   "mobile.server.hosted.currentPlan": "Twój plan",
@@ -105,7 +105,7 @@ export const messages = {
   "mobile.server.hosted.paymentTitle": "Oczekiwanie na płatność",
   "mobile.server.hosted.paymentDescription": "Konfiguracja zacznie się, gdy płatność zostanie potwierdzona.",
   "mobile.server.hosted.progressTitle": "Konfigurowanie: {name}",
-  "mobile.server.hosted.progressDescription": "OpenBot przygotowuje dla ciebie prywatną maszynę.",
+  "mobile.server.hosted.progressDescription": "Atelier przygotowuje dla ciebie prywatną maszynę.",
   "mobile.server.hosted.closeHint":
     "Możesz zamknąć ten panel. Konfiguracja trwa dalej, a serwer pojawi się na liście, gdy będzie gotowy.",
   "mobile.server.hosted.readyTitle": "Serwer {name} jest gotowy",
@@ -114,21 +114,21 @@ export const messages = {
   "mobile.server.hosted.open": "Otwórz serwer",
   "mobile.server.hosted.failedTitle": "Nie udało się uruchomić serwera",
   "mobile.server.hosted.failedDescription":
-    "Spróbuj ponownie. Jeśli znowu się nie uda, usuń serwer w Ustawieniach OpenBot na komputerze.",
+    "Spróbuj ponownie. Jeśli znowu się nie uda, usuń serwer w Ustawieniach Atelier na komputerze.",
   "mobile.server.hosted.retrying": "Uruchamianie…",
   "mobile.server.hosted.expiredTitle": "Strona płatności wygasła",
   "mobile.server.hosted.expiredDescription": "Serwer nie został opłacony, więc został usunięty.",
   "mobile.server.hosted.step.payment": "Potwierdzenie płatności",
   "mobile.server.hosted.step.create": "Tworzenie maszyny",
-  "mobile.server.hosted.step.start": "Uruchomienie OpenBot",
+  "mobile.server.hosted.step.start": "Uruchomienie Atelier",
   "mobile.server.hosted.step.connect": "Połączenie z kontem",
   "mobile.server.hosted.detail.payment": "Oczekiwanie na Stripe",
   "mobile.server.hosted.detail.reserve": "Rezerwowanie prywatnej maszyny",
-  "mobile.server.hosted.detail.copy": "Kopiowanie OpenBot na maszynę",
+  "mobile.server.hosted.detail.copy": "Kopiowanie Atelier na maszynę",
   "mobile.server.hosted.detail.key": "Dodawanie jednorazowego klucza logowania",
   "mobile.server.hosted.detail.boot": "Włączanie maszyny",
-  "mobile.server.hosted.detail.app": "Uruchamianie OpenBot",
-  "mobile.server.hosted.detail.wait": "Oczekiwanie na odpowiedź OpenBot",
+  "mobile.server.hosted.detail.app": "Uruchamianie Atelier",
+  "mobile.server.hosted.detail.wait": "Oczekiwanie na odpowiedź Atelier",
   "mobile.server.hosted.detail.signIn": "Logowanie na twoje konto",
   "mobile.server.hosted.detail.publish": "Dodawanie serwera do konta",
   "mobile.server.hosted.detail.check": "Sprawdzanie połączenia",
@@ -136,7 +136,7 @@ export const messages = {
   "mobile.server.hosted.stepActive": "w toku",
   "mobile.server.hosted.stepPending": "nierozpoczęte",
   "mobile.server.hosted.stepFailed": "niepowodzenie",
-  "mobile.server.scan.notInvitation": "Ten kod QR nie jest zaproszeniem OpenBot.",
+  "mobile.server.scan.notInvitation": "Ten kod QR nie jest zaproszeniem Atelier.",
   "mobile.server.scan.title": "Skanuj zaproszenie",
   "mobile.server.role.owner": "właściciel",
   "mobile.server.role.admin": "administrator",
@@ -188,7 +188,7 @@ export const messages = {
   "mobile.server.routines.status.paused": "Wstrzymana",
   "mobile.server.routines.status.failed": "Niepowodzenie",
   "mobile.server.routines.status.completed": "Ukończona",
-  "mobile.server.tasks.unsupported": "Ten host nie obsługuje zadań. Zaktualizuj OpenBot na hoście.",
+  "mobile.server.tasks.unsupported": "Ten host nie obsługuje zadań. Zaktualizuj Atelier na hoście.",
   "mobile.server.tasks.ask": "Co ma zostać zrobione?",
   "mobile.server.tasks.chooseAgent": "Przekaż zadanie",
   "mobile.server.tasks.agentLabel": "Przekaż zadanie: {name}",
@@ -279,7 +279,7 @@ export const messages = {
   "mobile.server.settings.identitySaveFailed": "Nie udało się zapisać nazwy i logo serwera. Spróbuj ponownie.",
   "mobile.server.settings.identityNotAllowed": "Tylko właściciel lub administrator może zmienić nazwę i logo serwera.",
   "mobile.server.settings.identityUnsupported":
-    "Zaktualizuj OpenBot na tym serwerze, aby zmienić tutaj jego nazwę i logo.",
+    "Zaktualizuj Atelier na tym serwerze, aby zmienić tutaj jego nazwę i logo.",
   "mobile.server.settings.identityOffline": "Połącz się z tym serwerem, aby zmienić jego nazwę i logo.",
   "mobile.server.route.cropLogo": "Przytnij logo",
   "mobile.server.members.remove": "Usuń członka",
@@ -338,7 +338,7 @@ export const messages = {
   "mobile.server.storage.category.caches": "Pliki serwera w pamięci podręcznej",
   "mobile.server.storage.category.runtimes": "Środowiska dostawców",
   "mobile.server.storage.category.logs": "Logi",
-  "mobile.server.storage.total": "OpenBot na serwerze {name}",
+  "mobile.server.storage.total": "Atelier na serwerze {name}",
   "mobile.server.storage.used": "Zajęte",
   "mobile.server.storage.byType": "Miejsce według typu",
   "mobile.server.storage.free": "Wolne na tym dysku: {size}",
@@ -364,10 +364,10 @@ export const messages = {
   "mobile.server.storage.clearCategory": "Wyczyść: {category}",
   "mobile.server.storage.clearTitle.caches": "Wyczyścić pliki serwera z pamięci podręcznej?",
   "mobile.server.storage.clearTitle.logs": "Wyczyścić logi?",
-  "mobile.server.storage.clearBody.caches": "Kopie plików serwera. OpenBot pobierze je ponownie, gdy je otworzysz.",
+  "mobile.server.storage.clearBody.caches": "Kopie plików serwera. Atelier pobierze je ponownie, gdy je otworzysz.",
   "mobile.server.storage.clearBody.logs": "Logi diagnostyczne. Nowe logi są tworzone od razu.",
   "mobile.server.storage.clearFailed": "Nie udało się wyczyścić danych",
-  "mobile.server.storage.clearFailedBody": "OpenBot nie mógł wyczyścić tych danych na serwerze.",
+  "mobile.server.storage.clearFailedBody": "Atelier nie mógł wyczyścić tych danych na serwerze.",
   "mobile.server.storage.noFiles": "Na tym serwerze nie ma zapisanych plików.",
   "mobile.server.route.providers": "Dostawcy",
   "mobile.server.route.provider": "Dostawca",
@@ -420,18 +420,18 @@ export const messages = {
   "mobile.server.settings.timezoneUnavailable":
     "Połącz się z tym serwerem jako właściciel lub administrator, aby zmienić jego strefę czasową.",
   "mobile.server.settings.timezoneUnsupported":
-    "Zaktualizuj OpenBot na tym serwerze, aby zmienić tu jego strefę czasową.",
+    "Zaktualizuj Atelier na tym serwerze, aby zmienić tu jego strefę czasową.",
   "mobile.server.settings.memoryLimit": "Wspomnienia na agenta",
   "mobile.server.settings.memoryLimitDescription": "Ile wspomnień może przechowywać każdy agent na tym serwerze.",
   "mobile.server.settings.memoryLimitLoadFailed": "Nie udało się wczytać limitu wspomnień tego serwera.",
   "mobile.server.settings.memoryLimitSaveFailed": "Nie udało się zapisać limitu wspomnień. Spróbuj ponownie.",
   "mobile.server.settings.memoryLimitUnsupported":
-    "Zaktualizuj OpenBot na tym serwerze, aby zmienić tu jego limit wspomnień.",
+    "Zaktualizuj Atelier na tym serwerze, aby zmienić tu jego limit wspomnień.",
   "mobile.server.route.connectors": "Konektory",
   "mobile.server.settings.connectors": "Konektory",
   "mobile.server.connectors.unavailable":
     "Połącz się z tym serwerem jako właściciel lub administrator, aby zarządzać jego konektorami.",
-  "mobile.server.connectors.unsupported": "Zaktualizuj OpenBot na tym serwerze, aby zarządzać tutaj jego konektorami.",
+  "mobile.server.connectors.unsupported": "Zaktualizuj Atelier na tym serwerze, aby zarządzać tutaj jego konektorami.",
   "mobile.server.connectors.loading": "Wczytywanie konektorów…",
   "mobile.server.connectors.onServer": "Na serwerze {name}",
   "mobile.server.connectors.notSetUp": "Nieskonfigurowany",
@@ -461,7 +461,7 @@ export const messages = {
   "mobile.server.connectors.github.summary": "Repozytoria, zgłoszenia i pull requesty dla każdego agenta",
   "mobile.server.connectors.github.description":
     "Każdy agent na serwerze {host} może używać twoich repozytoriów, zgłoszeń i pull requestów z GitHub oraz gh i git.",
-  "mobile.server.connectors.github.unavailable": "OpenBot na tym serwerze nie może połączyć z GitHub.",
+  "mobile.server.connectors.github.unavailable": "Atelier na tym serwerze nie może połączyć z GitHub.",
   "mobile.server.connectors.github.connect": "Połącz GitHub",
   "mobile.server.connectors.github.codeTitle": "Wpisz ten kod w GitHub",
   "mobile.server.connectors.github.codeFooter":
@@ -474,7 +474,7 @@ export const messages = {
     "Agenci mogą używać tylko repozytoriów, w których zainstalowano OpenBot GitHub App.",
   "mobile.server.connectors.github.repositoriesTitle": "Repozytoria",
   "mobile.server.connectors.github.repositoriesLoading": "Odczytywanie repozytoriów z GitHub",
-  "mobile.server.connectors.github.repositoriesFailed": "OpenBot nie mógł odczytać repozytoriów z GitHub.",
+  "mobile.server.connectors.github.repositoriesFailed": "Atelier nie mógł odczytać repozytoriów z GitHub.",
   "mobile.server.connectors.github.noRepositories":
     "OpenBot GitHub App nie jest jeszcze zainstalowana w żadnym repozytorium.",
   "mobile.server.connectors.github.moreRepositories": {
@@ -492,11 +492,11 @@ export const messages = {
   "mobile.server.connectors.github.disconnect": "Odłącz GitHub",
   "mobile.server.connectors.github.disconnectTitle": "Odłączyć GitHub?",
   "mobile.server.connectors.github.disconnectBody":
-    "To usunie logowanie @{login} z serwera {host}, a każdy agent straci narzędzia GitHub, gh i git. Potem otworzy się GitHub, gdzie możesz cofnąć dostęp dla OpenBot.",
+    "To usunie logowanie @{login} z serwera {host}, a każdy agent straci narzędzia GitHub, gh i git. Potem otworzy się GitHub, gdzie możesz cofnąć dostęp dla Atelier.",
   "mobile.server.connectors.onePassword.title": "1Password",
-  "mobile.server.connectors.onePassword.summary": "Udostępniony sejf do logowania w przeglądarce OpenBot",
+  "mobile.server.connectors.onePassword.summary": "Udostępniony sejf do logowania w przeglądarce Atelier",
   "mobile.server.connectors.onePassword.description":
-    "Udostępnij OpenBot na serwerze {host} osobny sejf 1Password przez konto usługi, aby agenci na serwerze {host} mogli logować się na strony w jego przeglądarce.",
+    "Udostępnij Atelier na serwerze {host} osobny sejf 1Password przez konto usługi, aby agenci na serwerze {host} mogli logować się na strony w jego przeglądarce.",
   "mobile.server.connectors.onePassword.howItWorks":
     "Na 1Password.com utwórz konto usługi, które może odczytywać tylko sejf udostępniany OpenBot, a potem wklej tutaj jego token. {host} sprawdza token i go przechowuje; ten telefon go nie przechowuje. Agenci nigdy nie widzą hasła.",
   "mobile.server.connectors.onePassword.token": "Token konta usługi",
@@ -538,7 +538,7 @@ export const messages = {
   },
   "mobile.server.connectors.slack.connect": "Połącz Slack",
   "mobile.server.connectors.slack.connectFooter":
-    "Slack otworzy się w przeglądarce. Wybierz obszar roboczy w prawym górnym rogu, a potem Allow. OpenBot instaluje jedną aplikację o nazwie OpenBot, która dołącza do każdego publicznego kanału.",
+    "Slack otworzy się w przeglądarce. Wybierz obszar roboczy w prawym górnym rogu, a potem Allow. Atelier instaluje jedną aplikację o nazwie Atelier, która dołącza do każdego publicznego kanału.",
   "mobile.server.connectors.slack.add": "Dodaj obszar roboczy",
   "mobile.server.connectors.slack.limit": {
     one: "Możesz połączyć maksymalnie {count} obszar roboczy.",
@@ -550,14 +550,14 @@ export const messages = {
   "mobile.server.connectors.slack.workspaceDescription":
     "Ludzie oznaczają @OpenBot lub wysyłają mu wiadomość prywatną.",
   "mobile.server.connectors.slack.missingScopes":
-    "OpenBot nie ma tych uprawnień w Slacku: {scopes}. Odłącz obszar roboczy, a potem połącz go ponownie.",
-  "mobile.server.connectors.slack.retryAt": "Slack poprosił OpenBot o czekanie. Kolejna próba o {time}.",
+    "Atelier nie ma tych uprawnień w Slacku: {scopes}. Odłącz obszar roboczy, a potem połącz go ponownie.",
+  "mobile.server.connectors.slack.retryAt": "Slack poprosił Atelier o czekanie. Kolejna próba o {time}.",
   "mobile.server.connectors.slack.helpInvalidToken":
-    "Slack nie akceptuje już OpenBot w tym obszarze roboczym. Mógł zostać odinstalowany. Połącz obszar roboczy ponownie.",
+    "Slack nie akceptuje już Atelier w tym obszarze roboczym. Mógł zostać odinstalowany. Połącz obszar roboczy ponownie.",
   "mobile.server.connectors.slack.helpSecretStorage":
-    "OpenBot nie może odczytać zapisanych tokenów na serwerze {host}. Odłącz obszar roboczy, a potem połącz go ponownie.",
+    "Atelier nie może odczytać zapisanych tokenów na serwerze {host}. Odłącz obszar roboczy, a potem połącz go ponownie.",
   "mobile.server.connectors.slack.helpRelay":
-    "OpenBot na serwerze {host} nie może odbierać zdarzeń Slack. Na serwerze {host} zaloguj się, nadaj serwerowi nazwę w ustawieniach serwera i nie zamykaj OpenBot.",
+    "Atelier na serwerze {host} nie może odbierać zdarzeń Slack. Na serwerze {host} zaloguj się, nadaj serwerowi nazwę w ustawieniach serwera i nie zamykaj Atelier.",
   "mobile.server.connectors.slack.orchestratorTitle": "Slack Orchestrator",
   "mobile.server.connectors.slack.orchestratorDescription":
     "Ten agent odbiera każdą prośbę ze Slacka. Na krótkie odpowiada sam, inną pracę przekazuje odpowiedniemu agentowi i publikuje odpowiedź w wątku.",
@@ -567,9 +567,9 @@ export const messages = {
     "OpenBot sam dołącza do każdego publicznego kanału, także do nowych. Do kanału prywatnego zaproś go: /invite @OpenBot.",
   "mobile.server.connectors.slack.disconnectTitle": "Odłączyć {workspace}?",
   "mobile.server.connectors.slack.disconnectBody":
-    "OpenBot przestaje odpowiadać w obszarze roboczym {workspace} i usuwa swój token Slack z serwera {host}.",
-  "mobile.server.connectors.slack.disconnectKept": "Rozmowy i Slack Orchestrator zostają w OpenBot.",
-  "mobile.server.connectors.slack.disconnectDeleted": "Slack Orchestrator i jego rozmowy zostaną usunięte z OpenBot.",
+    "Atelier przestaje odpowiadać w obszarze roboczym {workspace} i usuwa swój token Slack z serwera {host}.",
+  "mobile.server.connectors.slack.disconnectKept": "Rozmowy i Slack Orchestrator zostają w Atelier.",
+  "mobile.server.connectors.slack.disconnectDeleted": "Slack Orchestrator i jego rozmowy zostaną usunięte z Atelier.",
   "mobile.server.connectors.slack.agentPromptTitle": "Dodać Slack Orchestrator?",
   "mobile.server.connectors.slack.agentPromptBody":
     "Ten nowy agent odpowiada na wszystko, co ludzie wysyłają do @OpenBot w obszarze roboczym {workspace}.",
@@ -594,7 +594,7 @@ export const messages = {
   },
   "mobile.server.connectors.discord.connect": "Połącz Discord",
   "mobile.server.connectors.discord.connectFooter":
-    "Discord otworzy się w przeglądarce. Wybierz serwer Discord, a potem Authorize. OpenBot dodaje jednego bota o nazwie OpenBot.",
+    "Discord otworzy się w przeglądarce. Wybierz serwer Discord, a potem Authorize. Atelier dodaje jednego bota o nazwie Atelier.",
   "mobile.server.connectors.discord.add": "Dodaj serwer Discord",
   "mobile.server.connectors.discord.limit": {
     one: "Możesz połączyć maksymalnie {count} serwer Discord.",
@@ -606,35 +606,35 @@ export const messages = {
   "mobile.server.connectors.discord.workspaceDescription":
     "Oznacz @OpenBot na kanale. Odpowiedz na wiadomość OpenBot, aby kontynuować.",
   "mobile.server.connectors.discord.missingScopes":
-    "OpenBot nie ma tych uprawnień w Discordzie: {scopes}. Odłącz serwer Discord, a potem połącz go ponownie.",
-  "mobile.server.connectors.discord.retryAt": "Discord poprosił OpenBot o czekanie. Kolejna próba o {time}.",
+    "Atelier nie ma tych uprawnień w Discordzie: {scopes}. Odłącz serwer Discord, a potem połącz go ponownie.",
+  "mobile.server.connectors.discord.retryAt": "Discord poprosił Atelier o czekanie. Kolejna próba o {time}.",
   "mobile.server.connectors.discord.helpInvalidToken":
-    "Discord nie akceptuje już OpenBot na tym serwerze Discord. Mógł zostać usunięty. Połącz serwer Discord ponownie.",
+    "Discord nie akceptuje już Atelier na tym serwerze Discord. Mógł zostać usunięty. Połącz serwer Discord ponownie.",
   "mobile.server.connectors.discord.helpSecretStorage":
-    "OpenBot nie może odczytać zapisanych tokenów na serwerze {host}. Odłącz serwer Discord, a potem połącz go ponownie.",
+    "Atelier nie może odczytać zapisanych tokenów na serwerze {host}. Odłącz serwer Discord, a potem połącz go ponownie.",
   "mobile.server.connectors.discord.helpRelay":
-    "OpenBot na serwerze {host} nie może odbierać zdarzeń Discord. Na serwerze {host} zaloguj się, nadaj serwerowi nazwę w ustawieniach serwera i nie zamykaj OpenBot.",
+    "Atelier na serwerze {host} nie może odbierać zdarzeń Discord. Na serwerze {host} zaloguj się, nadaj serwerowi nazwę w ustawieniach serwera i nie zamykaj Atelier.",
   "mobile.server.connectors.discord.orchestratorTitle": "Discord Orchestrator",
   "mobile.server.connectors.discord.orchestratorDescription":
     "Ten agent odbiera każdą prośbę z Discorda. Na krótkie odpowiada sam, inną pracę przekazuje odpowiedniemu agentowi i odpowiada na kanale.",
   "mobile.server.connectors.discord.orchestratorNone":
     "Dodaj Discord Orchestrator, inaczej Discord nie dostanie odpowiedzi.",
   "mobile.server.connectors.discord.addAgent": "Dodaj Discord Orchestrator",
-  "mobile.server.connectors.discord.note": "OpenBot widzi kanały, które może wyświetlać jego rola.",
+  "mobile.server.connectors.discord.note": "Atelier widzi kanały, które może wyświetlać jego rola.",
   "mobile.server.connectors.discord.disconnectTitle": "Odłączyć {workspace}?",
   "mobile.server.connectors.discord.disconnectBody":
-    "OpenBot przestaje odpowiadać na serwerze {workspace} i usuwa połączenie z Discord z serwera {host}.",
-  "mobile.server.connectors.discord.disconnectKept": "Rozmowy i Discord Orchestrator zostają w OpenBot.",
+    "Atelier przestaje odpowiadać na serwerze {workspace} i usuwa połączenie z Discord z serwera {host}.",
+  "mobile.server.connectors.discord.disconnectKept": "Rozmowy i Discord Orchestrator zostają w Atelier.",
   "mobile.server.connectors.discord.disconnectDeleted":
-    "Discord Orchestrator i jego rozmowy zostaną usunięte z OpenBot.",
+    "Discord Orchestrator i jego rozmowy zostaną usunięte z Atelier.",
   "mobile.server.connectors.discord.agentPromptTitle": "Dodać Discord Orchestrator?",
   "mobile.server.connectors.discord.agentPromptBody":
     "Ten nowy agent odpowiada na wszystko, co ludzie wysyłają do @OpenBot w obszarze roboczym {workspace}.",
   "mobile.server.connectors.discord.installFailed": "Discord nie ukończył autoryzacji. Spróbuj ponownie.",
   "mobile.server.connectors.telegram.title": "Telegram",
-  "mobile.server.connectors.telegram.summary": "Dodaj bota OpenBot do czatu Telegram",
+  "mobile.server.connectors.telegram.summary": "Dodaj bota Atelier do czatu Telegram",
   "mobile.server.connectors.telegram.description":
-    "Dodaj bota OpenBot do grupy Telegram lub otwórz z nim czat prywatny. Telegram Orchestrator pyta odpowiedniego agenta i odpowiada.",
+    "Dodaj bota Atelier do grupy Telegram lub otwórz z nim czat prywatny. Telegram Orchestrator pyta odpowiedniego agenta i odpowiada.",
   "mobile.server.connectors.telegram.connected": {
     one: "{count} czat · odpowiada Telegram Orchestrator",
     few: "{count} czaty · odpowiada Telegram Orchestrator",
@@ -659,12 +659,12 @@ export const messages = {
   "mobile.server.connectors.telegram.directDescription":
     "Każda wiadomość w tym czacie trafia do Telegram Orchestrator.",
   "mobile.server.connectors.telegram.helpRemoved":
-    "Bota OpenBot nie ma już w tym czacie. Odłącz czat, a potem dodaj bota ponownie.",
+    "Bota Atelier nie ma już w tym czacie. Odłącz czat, a potem dodaj bota ponownie.",
   "mobile.server.connectors.telegram.helpRelay":
-    "OpenBot na serwerze {host} nie może odbierać wiadomości z Telegram. Na serwerze {host} zaloguj się, nadaj serwerowi nazwę w ustawieniach serwera i nie zamykaj OpenBot.",
+    "Atelier na serwerze {host} nie może odbierać wiadomości z Telegram. Na serwerze {host} zaloguj się, nadaj serwerowi nazwę w ustawieniach serwera i nie zamykaj Atelier.",
   "mobile.server.connectors.telegram.helpError":
-    "OpenBot nie może połączyć się z tym czatem. Połącz ponownie lub odłącz czat.",
-  "mobile.server.connectors.telegram.retryAt": "Telegram poprosił OpenBot o czekanie. Kolejna próba o {time}.",
+    "Atelier nie może połączyć się z tym czatem. Połącz ponownie lub odłącz czat.",
+  "mobile.server.connectors.telegram.retryAt": "Telegram poprosił Atelier o czekanie. Kolejna próba o {time}.",
   "mobile.server.connectors.telegram.linkTitle": "Połącz czat",
   "mobile.server.connectors.telegram.linkAnother": "Połącz kolejny czat",
   "mobile.server.connectors.telegram.linkFooter":
@@ -679,16 +679,16 @@ export const messages = {
   "mobile.server.connectors.telegram.openDirectChat": "Otwórz czat prywatny",
   "mobile.server.connectors.telegram.orchestratorTitle": "Telegram Orchestrator",
   "mobile.server.connectors.telegram.orchestratorDescription":
-    "Ten agent odbiera wiadomości do OpenBot ze wszystkich twoich czatów Telegram. Na krótkie odpowiada sam, inną pracę przekazuje odpowiedniemu agentowi i publikuje odpowiedź w czacie.",
+    "Ten agent odbiera wiadomości do Atelier ze wszystkich twoich czatów Telegram. Na krótkie odpowiada sam, inną pracę przekazuje odpowiedniemu agentowi i publikuje odpowiedź w czacie.",
   "mobile.server.connectors.telegram.orchestratorNone":
     "Dodaj Telegram Orchestrator, inaczej Telegram nie dostanie odpowiedzi.",
   "mobile.server.connectors.telegram.addAgent": "Dodaj Telegram Orchestrator",
   "mobile.server.connectors.telegram.disconnectTitle": "Odłączyć {chat}?",
   "mobile.server.connectors.telegram.disconnectBody":
-    "Bot OpenBot opuści czat {chat}, a OpenBot przestanie tam odpowiadać.",
-  "mobile.server.connectors.telegram.disconnectKept": "Rozmowy i Telegram Orchestrator zostają w OpenBot.",
+    "Bot Atelier opuści czat {chat}, a Atelier przestanie tam odpowiadać.",
+  "mobile.server.connectors.telegram.disconnectKept": "Rozmowy i Telegram Orchestrator zostają w Atelier.",
   "mobile.server.connectors.telegram.disconnectDeleted":
-    "To ostatni czat, więc Telegram Orchestrator i jego rozmowy zostaną usunięte z OpenBot.",
+    "To ostatni czat, więc Telegram Orchestrator i jego rozmowy zostaną usunięte z Atelier.",
   "mobile.server.settings.providers": "Dostawcy",
   "mobile.server.settings.providersConnected": {
     one: "{count} połączony",
@@ -702,9 +702,9 @@ export const messages = {
   "mobile.server.providers.runtimesFailed": "Nie udało się wczytać pobrań tego serwera.",
   "mobile.server.providers.unavailable":
     "Połącz się z tym serwerem jako właściciel lub administrator, aby zarządzać jego dostawcami.",
-  "mobile.server.providers.unsupported": "Zaktualizuj OpenBot na tym serwerze, aby zarządzać tu jego dostawcami.",
+  "mobile.server.providers.unsupported": "Zaktualizuj Atelier na tym serwerze, aby zarządzać tu jego dostawcami.",
   "mobile.server.providers.signInUnsupported": "Ten serwer nie może zalogować tego dostawcy z telefonu.",
-  "mobile.server.providers.actionFailed": "OpenBot nie mógł wykonać tej czynności. Spróbuj ponownie.",
+  "mobile.server.providers.actionFailed": "Atelier nie mógł wykonać tej czynności. Spróbuj ponownie.",
   "mobile.server.providers.openFailed": "Nie udało się otworzyć strony logowania.",
   "mobile.server.providers.copyFailed": "Nie udało się skopiować kodu.",
   "mobile.server.providers.onHost": "Ten dostawca działa na komputerze tego serwera.",
@@ -715,15 +715,15 @@ export const messages = {
   "mobile.server.providers.reconnect": "Połącz ponownie",
   "mobile.server.providers.connectHint": "Serwer otrzymuje logowanie od dostawcy. Kończysz je na tym telefonie.",
   "mobile.server.providers.relayHint": "Logujesz się na stronie dostawcy na tym telefonie. Serwer otrzymuje logowanie.",
-  "mobile.server.providers.connectOnComputer": "Połącz tego dostawcę w OpenBot na komputerze.",
+  "mobile.server.providers.connectOnComputer": "Połącz tego dostawcę w Atelier na komputerze.",
   "mobile.server.providers.signIn": "Zaloguj się",
   "mobile.server.providers.starting": "Rozpoczynanie logowania na serwerze…",
   "mobile.server.providers.openPage": "Otwórz stronę logowania",
   "mobile.server.providers.copy": "Kopiuj",
   "mobile.server.providers.copyCode": "Kopiuj kod",
-  "mobile.server.providers.codeHint": "Skopiuj kod, otwórz stronę i wpisz kod. OpenBot sam kontynuuje.",
+  "mobile.server.providers.codeHint": "Skopiuj kod, otwórz stronę i wpisz kod. Atelier sam kontynuuje.",
   "mobile.server.providers.pasteHint": "Zaloguj się na stronie, a potem wklej kod, który ona pokazuje.",
-  "mobile.server.providers.linkHint": "Zaloguj się na stronie. OpenBot sam kontynuuje.",
+  "mobile.server.providers.linkHint": "Zaloguj się na stronie. Atelier sam kontynuuje.",
   "mobile.server.providers.relayWaiting": "Oczekiwanie na stronę logowania z serwera…",
   "mobile.server.providers.relayPasteHint":
     "Zaloguj się na stronie. Potem strona się nie wczyta. Stuknij pasek adresu, skopiuj adres i wklej go tutaj.",
@@ -779,7 +779,7 @@ export const messages = {
     many: "{count} serwerów",
     other: "{count} serwera",
   },
-  "mobile.server.mcp.unsupported": "Zaktualizuj OpenBot na tym serwerze, aby zarządzać tutaj jego serwerami MCP.",
+  "mobile.server.mcp.unsupported": "Zaktualizuj Atelier na tym serwerze, aby zarządzać tutaj jego serwerami MCP.",
   "mobile.server.mcp.unavailable":
     "Połącz się z tym serwerem jako właściciel lub administrator, aby zarządzać jego serwerami MCP.",
   "mobile.server.mcp.description":
@@ -798,7 +798,7 @@ export const messages = {
   "mobile.server.mcp.addConfirm": "Dodaj",
   "mobile.server.mcp.name": "Nazwa",
   "mobile.server.mcp.namePlaceholder": "Nazwa serwera MCP",
-  "mobile.server.mcp.nameReserved": "OpenBot już używa nazwy {name}.",
+  "mobile.server.mcp.nameReserved": "Atelier już używa nazwy {name}.",
   "mobile.server.mcp.transport": "Transport",
   "mobile.server.mcp.stdio": "Polecenie (STDIO)",
   "mobile.server.mcp.http": "URL (HTTP)",
@@ -808,12 +808,12 @@ export const messages = {
   "mobile.server.mcp.command": "Polecenie",
   "mobile.server.mcp.commandHint": "Tylko program. Każde następne słowo wpisz w Argumentach.",
   "mobile.server.mcp.arguments": "Argumenty",
-  "mobile.server.mcp.argumentsHint": "OpenBot przekazuje programowi każdy argument jako jedno słowo.",
+  "mobile.server.mcp.argumentsHint": "Atelier przekazuje programowi każdy argument jako jedno słowo.",
   "mobile.server.mcp.addArgument": "Dodaj argument",
   "mobile.server.mcp.argument": "Argument {position}",
   "mobile.server.mcp.removeArgument": "Usuń argument {position}",
   "mobile.server.mcp.environment": "Zmienne środowiskowe",
-  "mobile.server.mcp.environmentHint": "OpenBot przekazuje te zmienne serwerowi MCP, gdy się uruchamia.",
+  "mobile.server.mcp.environmentHint": "Atelier przekazuje te zmienne serwerowi MCP, gdy się uruchamia.",
   "mobile.server.mcp.addVariable": "Dodaj zmienną",
   "mobile.server.mcp.variableKey": "Nazwa zmiennej {position}",
   "mobile.server.mcp.variableValue": "Wartość zmiennej {position}",
@@ -828,7 +828,7 @@ export const messages = {
   "mobile.server.mcp.url": "URL serwera",
   "mobile.server.mcp.urlInvalid": "Wpisz adres http lub https.",
   "mobile.server.mcp.headers": "Nagłówki",
-  "mobile.server.mcp.headersHint": "OpenBot wysyła te nagłówki z każdym żądaniem.",
+  "mobile.server.mcp.headersHint": "Atelier wysyła te nagłówki z każdym żądaniem.",
   "mobile.server.mcp.addHeader": "Dodaj nagłówek",
   "mobile.server.mcp.headerName": "Nazwa nagłówka {position}",
   "mobile.server.mcp.headerValue": "Wartość nagłówka {position}",
@@ -850,7 +850,7 @@ export const messages = {
     other: "Połączono · {count} narzędzia",
   },
   "mobile.server.mcp.signInOnComputer":
-    "Ten serwer MCP prosi o zalogowanie. Zaloguj się w OpenBot na komputerze, a potem przetestuj ponownie.",
+    "Ten serwer MCP prosi o zalogowanie. Zaloguj się w Atelier na komputerze, a potem przetestuj ponownie.",
   "mobile.server.mcp.signedInDescription": "{server} jest zalogowany do tego serwera MCP.",
   "mobile.server.mcp.signOut": "Wyloguj",
   "mobile.server.mcp.saveFailed": "Nie udało się zapisać zmiany. Spróbuj ponownie.",
@@ -887,8 +887,8 @@ export const messages = {
   "mobile.server.settings.updates": "Aktualizacje",
   "mobile.server.settings.updateAvailable": "Dostępna aktualizacja",
   "mobile.server.route.updates": "Aktualizacje",
-  "mobile.server.update.hostTitle": "OpenBot na serwerze {name}",
-  "mobile.server.update.version": "OpenBot {version}",
+  "mobile.server.update.hostTitle": "Atelier na serwerze {name}",
+  "mobile.server.update.version": "Atelier {version}",
   "mobile.server.update.status.idle": "Sprawdź aktualizacje, aby znaleźć najnowsze wydanie.",
   "mobile.server.update.status.checking": "Sprawdzanie aktualizacji…",
   "mobile.server.update.status.available": "Dostępna jest wersja {version}.",
@@ -896,28 +896,28 @@ export const messages = {
   "mobile.server.update.status.downloadingUnknown": "Pobieranie {version}…",
   "mobile.server.update.status.ready": "Pobrano wersję {version}.",
   "mobile.server.update.status.installing": "{name} uruchamia się ponownie, aby zainstalować aktualizację.",
-  "mobile.server.update.status.upToDate": "OpenBot na serwerze {name} jest aktualny.",
+  "mobile.server.update.status.upToDate": "Atelier na serwerze {name} jest aktualny.",
   "mobile.server.update.status.checkFailed": "{name}: nie udało się sprawdzić aktualizacji. Spróbuj ponownie.",
   "mobile.server.update.status.downloadFailed": "{name}: nie udało się pobrać aktualizacji. Spróbuj ponownie.",
   "mobile.server.update.status.installFailed":
-    "{name}: nie udało się zainstalować aktualizacji. Upewnij się, że żaden inny użytkownik tego komputera nie uruchamia OpenBot, i spróbuj ponownie.",
+    "{name}: nie udało się zainstalować aktualizacji. Upewnij się, że żaden inny użytkownik tego komputera nie uruchamia Atelier, i spróbuj ponownie.",
   "mobile.server.update.releaseCheckFailed":
     "{name}: nie udało się odczytać kanału wydań. Sprawdź połączenie sieciowe hosta i spróbuj ponownie.",
   "mobile.server.update.releaseUnavailable":
     "Sprawdzanie wydań jest niedostępne dla tej kompilacji. Poproś administratora hosta o sprawdzenie zgodnego wydania.",
   "mobile.server.update.externalTitle": "Instalacją zarządza host",
   "mobile.server.update.path.hostManager":
-    "OpenBot Host Manager instaluje aktualizacje, gdy wszyscy użytkownicy są bezczynni. Jeśli aktualizacja się nie zaczyna, poproś administratora hosta o sprawdzenie stanu Host Managera.",
+    "Atelier Host Manager instaluje aktualizacje, gdy wszyscy użytkownicy są bezczynni. Jeśli aktualizacja się nie zaczyna, poproś administratora hosta o sprawdzenie stanu Host Managera.",
   "mobile.server.update.path.hosted":
     "Usługa hostingu pobiera aktualizacje w tle. Pobrana aktualizacja zostanie zastosowana przy następnym uruchomieniu serwera. Poczekaj na zakończenie aktywnej pracy, zanim zatrzymasz i wznowisz serwer. Jeśli serwer pozostaje na starej wersji, skontaktuj się z administratorem hosta.",
   "mobile.server.update.path.system":
-    "Na hoście uruchom sudo openbot update, aby zainstalować najnowsze wydanie. To polecenie zatrzymuje OpenBot. Najpierw poczekaj na zakończenie aktywnej pracy. Automatycznie pobrane aktualizacje instalują się przy następnym rozruchu.",
+    "Na hoście uruchom sudo openbot update, aby zainstalować najnowsze wydanie. To polecenie zatrzymuje Atelier. Najpierw poczekaj na zakończenie aktywnej pracy. Automatycznie pobrane aktualizacje instalują się przy następnym rozruchu.",
   "mobile.server.update.path.container":
-    "Na hoście Docker pobierz nowy obraz OpenBot i utwórz kontener ponownie z tymi samymi woluminami danych. Najpierw poczekaj na zakończenie aktywnej pracy. Zachowaj istniejące woluminy, aby nie stracić danych.",
+    "Na hoście Docker pobierz nowy obraz Atelier i utwórz kontener ponownie z tymi samymi woluminami danych. Najpierw poczekaj na zakończenie aktywnej pracy. Zachowaj istniejące woluminy, aby nie stracić danych.",
   "mobile.server.update.path.manual":
-    "Ta instalacja nie może sama się zastąpić. Poproś administratora hosta o zainstalowanie zgodnego wydania z github.com/nightly-labs/openbot/releases. Zachowaj istniejące dane OpenBot.",
+    "Ta instalacja nie może sama się zastąpić. Poproś administratora hosta o zainstalowanie zgodnego wydania z github.com/nightly-labs/openbot/releases. Zachowaj istniejące dane Atelier.",
   "mobile.server.update.path.unavailable":
-    "To jest kompilacja deweloperska. Użyj zainstalowanego wydania OpenBot, aby sprawdzać aktualizacje.",
+    "To jest kompilacja deweloperska. Użyj zainstalowanego wydania Atelier, aby sprawdzać aktualizacje.",
   "mobile.server.update.check": "Sprawdź aktualizacje",
   "mobile.server.update.start": "Zaktualizuj, gdy bezczynny",
   "mobile.server.update.restartNow": "Uruchom ponownie teraz",
@@ -927,27 +927,27 @@ export const messages = {
   "mobile.server.update.requestedBy": "O tę aktualizację prosi: {member}.",
   "mobile.server.update.automatic": "{name} instaluje aktualizacje automatycznie.",
   "mobile.server.update.autoDownloadTitle": "Pobieraj aktualizacje automatycznie",
-  "mobile.server.update.autoDownloadDescription": "{name} pobiera każdą nową wersję OpenBot, gdy tylko się ukaże.",
+  "mobile.server.update.autoDownloadDescription": "{name} pobiera każdą nową wersję Atelier, gdy tylko się ukaże.",
   "mobile.server.update.autoInstallTitle": "Instaluj aktualizacje automatycznie",
   "mobile.server.update.autoInstallDescription":
     "{name} uruchamia się ponownie z pobraną aktualizacją, gdy agenci są bezczynni. Członkowie zostają na chwilę rozłączeni i łączą się ponownie automatycznie.",
   "mobile.server.update.waitingFor": "Oczekiwanie na: {reasons}.",
   "mobile.server.update.disabledTitle": "Zdalne aktualizacje są wyłączone",
   "mobile.server.update.disabledDescription":
-    "Użytkownik serwera {name} wyłączył aktualizacje od członków serwera. Poproś go o zaktualizowanie OpenBot lub włączenie tego ustawienia.",
+    "Użytkownik serwera {name} wyłączył aktualizacje od członków serwera. Poproś go o zaktualizowanie Atelier lub włączenie tego ustawienia.",
   "mobile.server.update.managedTitle": "Aktualizacjami zarządza Host Manager",
   "mobile.server.update.managedDescription":
-    "OpenBot Host Manager aktualizuje serwer {name}. Skontaktuj się z administratorem hosta.",
+    "Atelier Host Manager aktualizuje serwer {name}. Skontaktuj się z administratorem hosta.",
   "mobile.server.update.unsupportedTitle": "{name} nie może się sam zaktualizować",
   "mobile.server.update.unsupportedDescription":
-    "Ta kompilacja OpenBot nie ma aktualizatora. Zainstaluj nową wersję na serwerze {name}.",
+    "Ta kompilacja Atelier nie ma aktualizatora. Zainstaluj nową wersję na serwerze {name}.",
   "mobile.server.update.restarting": "Restartowanie…",
   "mobile.server.update.loadFailed": "Nie udało się wczytać stanu aktualizacji serwera {name}.",
-  "mobile.server.update.dialog.offerTitle": "Zaktualizuj serwer {name} do OpenBot {version}",
+  "mobile.server.update.dialog.offerTitle": "Zaktualizuj serwer {name} do Atelier {version}",
   "mobile.server.update.dialog.offerDescription":
-    "{name} używa OpenBot {current}. Najpierw pobierze aktualizację, a potem uruchomi się ponownie.",
+    "{name} używa Atelier {current}. Najpierw pobierze aktualizację, a potem uruchomi się ponownie.",
   "mobile.server.update.dialog.offerReadyDescription":
-    "{name} używa OpenBot {current}. Aktualizacja jest pobrana. {name} uruchomi się ponownie, aby ją zainstalować.",
+    "{name} używa Atelier {current}. Aktualizacja jest pobrana. {name} uruchomi się ponownie, aby ją zainstalować.",
   "mobile.server.update.dialog.waitIdleDescription":
     "Restart czeka, aż zakończą się tury agentów i uruchomienia rutyn.",
   "mobile.server.update.dialog.updateNow": "Zaktualizuj teraz",
@@ -963,10 +963,10 @@ export const messages = {
   "mobile.server.update.reason.fileTransfer": "transfer pliku",
   "mobile.server.update.reason.browserControl": "sterowanie przeglądarką przez agenta",
   "mobile.server.update.reason.updateOperation": "inny krok aktualizacji",
-  "mobile.server.update.reason.initialization": "uruchomienie OpenBot",
+  "mobile.server.update.reason.initialization": "uruchomienie Atelier",
   "mobile.server.update.reason.other": "inną pracę",
   "mobile.server.update.actionFailed": "Działanie serwera nie powiodło się.",
-  "mobile.server.update.unavailable": "Połącz się z tym serwerem, aby zobaczyć jego aktualizacje OpenBot.",
+  "mobile.server.update.unavailable": "Połącz się z tym serwerem, aby zobaczyć jego aktualizacje Atelier.",
   "mobile.server.update.loading": "Wczytywanie aktualizacji…",
   "mobile.server.route.sites": "Witryny",
   "mobile.server.settings.sites": "Witryny",
@@ -995,13 +995,13 @@ export const messages = {
   "mobile.server.sites.deleteDescription": "Ten adres natychmiast zacznie zwracać 410 Gone.",
   "mobile.server.sites.deleteFailed": "Nie udało się usunąć witryny.",
   "mobile.server.sites.openFailed": "Nie udało się otworzyć witryny.",
-  "mobile.server.sites.unsupported": "Zaktualizuj OpenBot na tym serwerze, aby zobaczyć tutaj jego witryny.",
+  "mobile.server.sites.unsupported": "Zaktualizuj Atelier na tym serwerze, aby zobaczyć tutaj jego witryny.",
   "mobile.server.sites.offline": "Połącz się z tym serwerem, aby zobaczyć jego witryny.",
   "mobile.server.route.roles": "Role",
   "mobile.server.route.role": "Rola",
   "mobile.server.roles.description":
     "Wybierz agentów, z których mogą korzystać członkowie. Właściciele i administratorzy mogą korzystać ze wszystkich agentów.",
-  "mobile.server.roles.unsupported": "Zaktualizuj OpenBot na tym serwerze, aby zarządzać rolami.",
+  "mobile.server.roles.unsupported": "Zaktualizuj Atelier na tym serwerze, aby zarządzać rolami.",
   "mobile.server.roles.unavailable": "Rolami może zarządzać tylko właściciel lub administrator serwera online.",
   "mobile.server.roles.loading": "Wczytywanie ról…",
   "mobile.server.roles.loadFailed": "Nie udało się wczytać ról tego serwera.",

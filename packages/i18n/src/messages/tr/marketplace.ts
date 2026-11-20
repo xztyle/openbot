@@ -27,7 +27,7 @@ export const messages = {
   "marketplace.tab.skills": "Beceriler",
 
   // A plugin link.
-  "marketplace.plugins.missing": "Bu eklenti OpenBot kataloğunda yok.",
+  "marketplace.plugins.missing": "Bu eklenti Atelier kataloğunda yok.",
 
   // The agent page.
   "marketplace.agents.loadingDetail": "Ajan ayrıntıları yükleniyor…",
@@ -39,7 +39,7 @@ export const messages = {
   // The skill page, and why Try is off.
   "marketplace.skill.loading": "Beceri yükleniyor",
   "marketplace.skill.update": "Beceriyi güncelle",
-  "marketplace.try.readFailed": "OpenBot bu ajanın becerilerini okuyamadı. Tekrar deneyin.",
+  "marketplace.try.readFailed": "Atelier bu ajanın becerilerini okuyamadı. Tekrar deneyin.",
   "marketplace.try.enable": "Bu beceriyi denemek için ajan ayarlarından etkinleştirin.",
   "marketplace.try.repair": "Bu beceriyi denemek için ajan ayarlarından onarın.",
   "marketplace.try.update": "Bu sürümü denemek için bu beceriyi güncelleyin.",
@@ -188,7 +188,7 @@ export const messages = {
   "marketplace.plugin.figma.prompt.assets": "Pazarlama simgelerini uygulama paketi için 2x boyutunda dışa aktar.",
   "marketplace.plugin.paper.tagline": "HTML ve CSS üzerine kurulu tasarım tuvali",
   "marketplace.plugin.paper.description":
-    "Paper, ajanların Paper Desktop'ta açık olan tasarım dosyasını okuyup yazmasına olanak tanır: çizim yüzeylerini, seçimleri, hesaplanan stilleri, JSX'i ve token'ları inceler; çerçeveler, metinler ve stiller oluşturur veya değiştirir. Başlamadan önce Paper Desktop'u yükleyin, bir kez açın ve bir dosya açın. OpenBot, Paper Desktop'un yüklediği Paper CLI'yi başlatır. Paper anahtar gerektirmez. Yazma araçları açık dosyayı değiştirir, bu yüzden her yazmayı onaylamadan önce inceleyin.",
+    "Paper, ajanların Paper Desktop'ta açık olan tasarım dosyasını okuyup yazmasına olanak tanır: çizim yüzeylerini, seçimleri, hesaplanan stilleri, JSX'i ve token'ları inceler; çerçeveler, metinler ve stiller oluşturur veya değiştirir. Başlamadan önce Paper Desktop'u yükleyin, bir kez açın ve bir dosya açın. Atelier, Paper Desktop'un yüklediği Paper CLI'yi başlatır. Paper anahtar gerektirmez. Yazma araçları açık dosyayı değiştirir, bu yüzden her yazmayı onaylamadan önce inceleyin.",
   "marketplace.plugin.paper.app":
     "Açık Paper Desktop dosyasını, Paper CLI'nin aktardığı yerel MCP sunucusu üzerinden okur ve yazar. Bir dosyası açık Paper Desktop gerektirir.",
   "marketplace.plugin.paper.prompt.implement":
@@ -199,7 +199,7 @@ export const messages = {
     "Açık Paper dosyasındaki tasarım token'larını listele ve temamızla karşılaştır.",
   "marketplace.plugin.appleApps.tagline": "Mac'inizde Mail, Takvim ve daha fazlası",
   "marketplace.plugin.appleApps.description":
-    "Apple apps, ajanların bu Mac'te Mail, Takvim, Kişiler, Anımsatıcılar, Notlar, Mesajlar ve Safari'yi kullanmasını sağlar. Yalnızca macOS'te çalışır. OpenBot, Apple veya OpenBot tarafından yapılmamış bir topluluk sunucusu olan mcp-icloud'u başlatır. Sunucu uygulamaları bu bilgisayarda AppleScript ile kontrol eder ve hesap ya da anahtar gerektirmez. Bir ajan bir uygulamayı ilk kez kullandığında macOS, OpenBot'un onu kontrol edip edemeyeceğini sorar. Bunu daha sonra değiştirmek için Sistem Ayarları › Gizlilik ve Güvenlik › Otomasyon'u açın. Ajanlar e-posta ve iMessage gönderebilir, etkinlikleri, kişileri ve anımsatıcıları değiştirebilir veya silebilir; bu yüzden her yazma işlemini onaylamadan önce gözden geçirin. Araçların okuduğu içerik, örneğin e-posta metni, ajanın model sağlayıcısına gider.",
+    "Apple apps, ajanların bu Mac'te Mail, Takvim, Kişiler, Anımsatıcılar, Notlar, Mesajlar ve Safari'yi kullanmasını sağlar. Yalnızca macOS'te çalışır. Atelier, Apple veya Atelier tarafından yapılmamış bir topluluk sunucusu olan mcp-icloud'u başlatır. Sunucu uygulamaları bu bilgisayarda AppleScript ile kontrol eder ve hesap ya da anahtar gerektirmez. Bir ajan bir uygulamayı ilk kez kullandığında macOS, Atelier'nin onu kontrol edip edemeyeceğini sorar. Bunu daha sonra değiştirmek için Sistem Ayarları › Gizlilik ve Güvenlik › Otomasyon'u açın. Ajanlar e-posta ve iMessage gönderebilir, etkinlikleri, kişileri ve anımsatıcıları değiştirebilir veya silebilir; bu yüzden her yazma işlemini onaylamadan önce gözden geçirin. Araçların okuduğu içerik, örneğin e-posta metni, ajanın model sağlayıcısına gider.",
   "marketplace.plugin.appleApps.app":
     "Yerel mcp-icloud sunucusu üzerinden Mail, Takvim, Kişiler, Anımsatıcılar, Notlar, Mesajlar ve Safari. macOS ve Otomasyon izni gerekir.",
   "marketplace.plugin.appleApps.prompt.unread": "Apple Mail'deki bugünkü okunmamış e-postalarımı özetle.",

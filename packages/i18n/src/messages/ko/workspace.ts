@@ -419,7 +419,7 @@ export const messages = {
   "workspace.app.discord.title": "Discord",
   "workspace.app.discord.notLinked": "Discord 채널과 연결되어 있지 않아요.",
   "workspace.app.discord.linkedWebhook": "#{name}와(과) 연결됨. 게시물에 각 작성자가 표시돼요.",
-  "workspace.app.discord.linkedBot": "#{name}와(과) 연결됨. OpenBot 봇이 작성자 이름으로 게시해요.",
+  "workspace.app.discord.linkedBot": "#{name}와(과) 연결됨. Atelier 봇이 작성자 이름으로 게시해요.",
   "workspace.app.discord.unlink": "연결 해제",
   "workspace.app.discord.loading": "Discord 서버 불러오는 중…",
   "workspace.app.discord.noServers": "먼저 서버 설정 → 커넥터에서 Discord 서버를 연결해 주세요.",

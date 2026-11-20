@@ -323,10 +323,10 @@ export const messages = {
   "workflow.canvas.version.restore": "Prima di un ripristino",
   "workflow.canvas.version.run": "Prima di un'esecuzione",
   "workflow.canvas.deleteUndo.title": "Eliminato: {name}",
-  "workflow.page.failed": "OpenBot non è riuscito a completare l'operazione. Riprova.",
+  "workflow.page.failed": "Atelier non è riuscito a completare l'operazione. Riprova.",
   "workflow.page.conflict": "Modificato su un altro dispositivo. Annulla per recuperare le tue modifiche.",
   "workflow.page.needsNewerApp":
-    "Questo flusso di lavoro ha passaggi di una versione più recente di OpenBot. Aggiorna OpenBot per modificarlo.",
+    "Questo flusso di lavoro ha passaggi di una versione più recente di Atelier. Aggiorna Atelier per modificarlo.",
   "workflow.page.manageOnly":
     "Per modificare questo flusso di lavoro, ti serve l'accesso Gestione a ciascuno dei suoi agenti.",
 } as const satisfies PartialTranslation<typeof source>;

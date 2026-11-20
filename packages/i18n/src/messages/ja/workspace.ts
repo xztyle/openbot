@@ -423,7 +423,7 @@ export const messages = {
   "workspace.app.discord.title": "Discord",
   "workspace.app.discord.notLinked": "Discord チャンネルと連携していません。",
   "workspace.app.discord.linkedWebhook": "#{name} と連携中です。投稿にはそれぞれの投稿者が表示されます。",
-  "workspace.app.discord.linkedBot": "#{name} と連携中です。OpenBot のボットが投稿者の名前で投稿します。",
+  "workspace.app.discord.linkedBot": "#{name} と連携中です。Atelier のボットが投稿者の名前で投稿します。",
   "workspace.app.discord.unlink": "連携を解除",
   "workspace.app.discord.loading": "Discord サーバーを読み込み中…",
   "workspace.app.discord.noServers": "先に「サーバーの設定」→「コネクター」で Discord サーバーを接続してください。",

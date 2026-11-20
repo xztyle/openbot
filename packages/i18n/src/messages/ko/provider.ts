@@ -32,7 +32,7 @@ export const messages = {
   "provider.status.checking": "확인 중",
   "provider.status.off": "꺼짐",
   "provider.gemini.hostSignIn":
-    "Gemini를 연결하려면 호스트에서 OpenBot을 열고 설정 > 제공자에서 연결을 선택하세요. Google 로그인에는 해당 호스트의 브라우저가 필요해요. 원격 로그인은 지원하지 않아요.",
+    "Gemini를 연결하려면 호스트에서 Atelier를 열고 설정 > 제공자에서 연결을 선택하세요. Google 로그인에는 해당 호스트의 브라우저가 필요해요. 원격 로그인은 지원하지 않아요.",
 
   "provider.key.free": "무료",
 
@@ -59,13 +59,13 @@ export const messages = {
   "provider.aria.cancelSignIn": "{name} 로그인 취소",
   "provider.aria.apiKey": "{name} API 키",
   "provider.connecting.browserHint": "브라우저 페이지가 열리면 로그인을 마치세요.",
-  "provider.connecting.cancelFailed": "OpenBot이 {name} 로그인을 취소하지 못했어요. 다시 시도해 주세요.",
+  "provider.connecting.cancelFailed": "Atelier가 {name} 로그인을 취소하지 못했어요. 다시 시도해 주세요.",
   "provider.aria.install": "{name} 설치",
   "provider.aria.signIn": "{name}에 로그인",
   "provider.aria.codeFallback": "코드로 {name}에 로그인",
   "provider.aria.moreActions": "{name} 추가 작업",
 
-  "provider.aria.use": "OpenBot에서 {name} 사용",
+  "provider.aria.use": "Atelier에서 {name} 사용",
   "provider.use.inUseOne":
     "{agent}이(가) {name}을(를) 사용 중이에요. 이 에이전트의 모델을 변경한 후 {name}을(를) 끄세요.",
   "provider.use.inUse": {
@@ -73,7 +73,7 @@ export const messages = {
   },
 
   "provider.codeLogin.title": "코드로 {name}에 로그인",
-  "provider.codeLogin.description": "휴대폰이나 다른 브라우저에서 마치세요. OpenBot은 여기서 기다려요.",
+  "provider.codeLogin.description": "휴대폰이나 다른 브라우저에서 마치세요. Atelier는 여기서 기다려요.",
   "provider.codeLogin.starting": "{name}에서 코드를 받는 중…",
   "provider.codeLogin.qrLabel": "{name} 로그인 페이지 QR 코드",
   "provider.codeLogin.open": "열기",
@@ -94,11 +94,11 @@ export const messages = {
   "provider.codeLogin.pageDescription": "이 페이지는 {host}의 브라우저에서 열려 있어요. 여기서 로그인하세요.",
   "provider.codeLogin.relayStarting": "{host}에서 {name} 로그인을 시작하는 중…",
   "provider.codeLogin.pageOpening": "{host}에서 {name} 로그인 페이지를 여는 중…",
-  "provider.codeLogin.linkStep": "{name}에 로그인하세요. OpenBot이 알아서 이어서 진행해요.",
+  "provider.codeLogin.linkStep": "{name}에 로그인하세요. Atelier가 알아서 이어서 진행해요.",
 
-  "provider.useApp.title": "OpenBot 앱에서 {name} 연결",
+  "provider.useApp.title": "Atelier 앱에서 {name} 연결",
   "provider.useApp.description":
-    "{name} 로그인은 시작한 컴퓨터로 돌아오는데, 브라우저 탭은 이를 받을 수 없어요. OpenBot 앱에서 {name}을(를) 연결하세요. 앱이 로그인을 알아서 마무리해요.",
+    "{name} 로그인은 시작한 컴퓨터로 돌아오는데, 브라우저 탭은 이를 받을 수 없어요. Atelier 앱에서 {name}을(를) 연결하세요. 앱이 로그인을 알아서 마무리해요.",
   "provider.useApp.download": "앱 받기",
 
   "provider.picker.noEndpoints": "아직 엔드포인트가 없어요",
@@ -109,7 +109,7 @@ export const messages = {
   "provider.picker.providers": "모델 제공자",
   "provider.picker.downloading": "{percent} 다운로드 중",
   "provider.picker.unavailable": "{name}을(를) 사용할 수 없어요.",
-  "provider.picker.updateToUse": "{name}을(를) 사용하려면 OpenBot을 업데이트하세요",
+  "provider.picker.updateToUse": "{name}을(를) 사용하려면 Atelier를 업데이트하세요",
   "provider.picker.models": "{name} 모델",
   "provider.picker.addProvider": "제공자 추가",
   "provider.picker.download": "{name} 다운로드",
@@ -148,15 +148,15 @@ export const messages = {
   "provider.claudeKey.label": "Anthropic API 키",
   "provider.inceptionKey.title": "Inception API 키",
   "provider.inceptionKey.description":
-    "Mercury 모델을 사용하려면 이 컴퓨터에 Inception API 키를 저장하세요. OpenBot은 다운로드한 Pi CLI에서 모델을 실행해요.",
+    "Mercury 모델을 사용하려면 이 컴퓨터에 Inception API 키를 저장하세요. Atelier는 다운로드한 Pi CLI에서 모델을 실행해요.",
   "provider.inceptionKey.label": "Inception API 키",
   "provider.deepseekKey.title": "DeepSeek API 키",
   "provider.deepseekKey.description":
-    "DeepSeek 모델을 사용하려면 이 컴퓨터에 DeepSeek API 키를 저장하세요. OpenBot은 다운로드한 Pi CLI에서 모델을 실행해요.",
+    "DeepSeek 모델을 사용하려면 이 컴퓨터에 DeepSeek API 키를 저장하세요. Atelier는 다운로드한 Pi CLI에서 모델을 실행해요.",
   "provider.deepseekKey.label": "DeepSeek API 키",
   "provider.openrouterKey.title": "OpenRouter API 키",
   "provider.openrouterKey.description":
-    "OpenRouter 모델을 사용하려면 이 컴퓨터에 OpenRouter API 키를 저장하세요. OpenBot은 다운로드한 Pi CLI에서 모델을 실행해요.",
+    "OpenRouter 모델을 사용하려면 이 컴퓨터에 OpenRouter API 키를 저장하세요. Atelier는 다운로드한 Pi CLI에서 모델을 실행해요.",
   "provider.openrouterKey.label": "OpenRouter API 키",
 
   "provider.openCodeKey.title": "OpenCode Go에 로그인",
@@ -223,7 +223,7 @@ export const messages = {
   "provider.settings.removeTitle": "{name}을(를) 제거할까요?",
   "provider.settings.removeMoves": "{agents}이(가) {name}을(를) 사용하게 돼요.",
   "provider.settings.removeUnused": "이 계정을 사용하는 에이전트가 없어요.",
-  "provider.settings.removeCredentials": "OpenBot이 이 컴퓨터에서 이 계정의 로그인 정보를 삭제해요.",
+  "provider.settings.removeCredentials": "Atelier가 이 컴퓨터에서 이 계정의 로그인 정보를 삭제해요.",
   "provider.settings.usageLow": "{percent} 남음 · {window}",
   "provider.settings.usageOf": "{name} 사용량",
   "provider.settings.signIn": "로그인",

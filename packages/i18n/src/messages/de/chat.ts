@@ -415,7 +415,7 @@ export const messages = {
   "chat.suggestion.detailsNamed": "{name} im Marketplace öffnen",
   "chat.suggestion.dismissNamed": "{name} ausblenden",
   "chat.suggestion.dismissed": "Vorschlag für {name} ausgeblendet.",
-  "chat.suggestion.localOnly": "Verbinde {name} in OpenBot auf deinem eigenen Computer.",
+  "chat.suggestion.localOnly": "Verbinde {name} in Atelier auf deinem eigenen Computer.",
   "chat.suggestion.unavailable": "Dieser Server kann {name} nicht verbinden.",
   "chat.compaction.running": "Kontext wird komprimiert",
   "chat.compaction.completed": "Kontext komprimiert",

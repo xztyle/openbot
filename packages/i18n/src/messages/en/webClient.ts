@@ -1,7 +1,7 @@
 import { defineMessages } from "../../message";
 
 export const messages = defineMessages("webClient", {
-  "webClient.loading": "Loading OpenBot…",
+  "webClient.loading": "Loading Atelier…",
   "webClient.loadingLine.wake": "Waking up the agents…",
   "webClient.loadingLine.coffee": "Pouring coffee for the agents…",
   "webClient.loadingLine.tokens": "Counting tokens on fingers…",
@@ -22,14 +22,14 @@ export const messages = defineMessages("webClient", {
     other: "{count} agents need you or have new replies",
   },
   "webClient.title.attention": "({count}) {title}",
-  "webClient.title.place": "{place} - {workspace} - OpenBot",
+  "webClient.title.place": "{place} - {workspace} - Atelier",
   "webClient.push.title": "Push notifications",
   "webClient.push.description":
-    "Get a notification on this device when an agent of {host} finishes, needs your input or approval, or a scheduled run fails. It also works when OpenBot is closed. The computer sends it to the push service of your browser (Google, Apple, Mozilla or Microsoft), encrypted. It holds the name of the agent and the kind of event, not the text of a message. OpenBot accounts do not see it.",
+    "Get a notification on this device when an agent of {host} finishes, needs your input or approval, or a scheduled run fails. It also works when Atelier is closed. The computer sends it to the push service of your browser (Google, Apple, Mozilla or Microsoft), encrypted. It holds the name of the agent and the kind of event, not the text of a message. Atelier accounts do not see it.",
   "webClient.push.noHost": "Connect to a computer first.",
   "webClient.push.browserUnsupported":
-    "This browser cannot receive push notifications. On an iPhone or iPad, add OpenBot to the Home Screen first.",
-  "webClient.push.hostUnsupported": "This computer cannot send push notifications. Update OpenBot on it.",
+    "This browser cannot receive push notifications. On an iPhone or iPad, add Atelier to the Home Screen first.",
+  "webClient.push.hostUnsupported": "This computer cannot send push notifications. Update Atelier on it.",
   "webClient.push.denied": "This site is blocked from showing notifications. Allow it in the settings of your browser.",
   "webClient.push.failed": "Could not turn on push notifications. Try again.",
   "webClient.pane.routines": "Routines",
@@ -38,13 +38,13 @@ export const messages = defineMessages("webClient", {
   "webClient.notice.hostsFailed": "Could not load your servers",
   "webClient.notice.connectComputer": "Connect a server",
   "webClient.connect.description":
-    "Run OpenBot on your computer to chat with your agents from this browser. You can also join a server with an invitation.",
+    "Run Atelier on your computer to chat with your agents from this browser. You can also join a server with an invitation.",
   "webClient.connect.descriptionHosted":
-    "Create a hosted server to chat with your agents from this browser. You can also run OpenBot on your computer, or join a server with an invitation.",
-  "webClient.connect.stepInstall": "Install and open OpenBot on your computer.",
+    "Create a hosted server to chat with your agents from this browser. You can also run Atelier on your computer, or join a server with an invitation.",
+  "webClient.connect.stepInstall": "Install and open Atelier on your computer.",
   "webClient.connect.stepSignIn": "Sign in with your email.",
   "webClient.connect.stepRemote": "Turn on remote access.",
-  "webClient.notice.download": "Download OpenBot",
+  "webClient.notice.download": "Download Atelier",
   "webClient.notice.createServer": "Create a hosted server",
   "webClient.notice.join": "Join with invitation",
   "webClient.notice.refreshHosts": "Refresh servers",
@@ -59,7 +59,7 @@ export const messages = defineMessages("webClient", {
   "webClient.error.usageOffline": "Connect to your server to view usage.",
   "webClient.error.desktopOnly": "This action is available in the desktop app.",
   "webClient.settings.preferences.title": "Preferences",
-  "webClient.settings.preferences.description": "Choose the language and sounds of OpenBot in this browser.",
+  "webClient.settings.preferences.description": "Choose the language and sounds of Atelier in this browser.",
   "webClient.error.checkConversation": "Check the conversation before sending again.",
   "webClient.error.hostReported": "The server reported an error. Check the conversation and server status.",
   "webClient.error.requestFailed": "The request failed.",
@@ -84,14 +84,14 @@ export const messages = defineMessages("webClient", {
   "webClient.error.hostChanged": "The selected server changed.",
   "webClient.error.requestIncomplete": "The server could not complete this request. Refresh before trying again.",
   "webClient.error.connectionInterrupted":
-    "The connection to the server dropped. OpenBot is reconnecting. Try again in a moment.",
+    "The connection to the server dropped. Atelier is reconnecting. Try again in a moment.",
   "webClient.error.viewEnded": "The browser view ended.",
   "webClient.error.viewChanged": "The browser view changed.",
   "webClient.error.connectionChanging": "The server connection is changing.",
   "webClient.error.identityChanged": "The server identity changed. Connection refused.",
   "webClient.error.connectionUnavailable": "The server connection is not available.",
   "webClient.error.incompatible":
-    "This server is not compatible with OpenBot web. Update the server and reload this page.",
+    "This server is not compatible with Atelier web. Update the server and reload this page.",
   "webClient.error.sendUnconfirmed": "Message delivery is not confirmed. Refresh before sending it again.",
   "webClient.error.fileType": "Update the server to attach this file type.",
   "webClient.upload.busy": "Wait for the current upload to finish.",
@@ -105,7 +105,7 @@ export const messages = defineMessages("webClient", {
   "webClient.error.duplication": "This server does not support agent duplication.",
   "webClient.error.connectServerFirst": "Connect to this server first.",
   "webClient.error.agentInstallNotAllowed":
-    "Only an owner or admin can add an agent here, and the server must run a current OpenBot.",
+    "Only an owner or admin can add an agent here, and the server must run a current Atelier.",
   "webClient.error.linkDesktopOnly": "This link opens only in the desktop app.",
   "webClient.error.saveEndpointOffline": "Connect to your server to save an endpoint.",
   "webClient.error.removeEndpointOffline": "Connect to your server to remove an endpoint.",

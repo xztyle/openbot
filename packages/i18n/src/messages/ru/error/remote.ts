@@ -15,10 +15,10 @@ export const messages = {
   "error.remote.sessionCapacity": "На хосте уже четыре активные сессии.",
   "error.remote.linuxNeedsX11": "Для удалённого рабочего стола в Linux нужна сессия X11. Wayland не поддерживается.",
   "error.remote.runtimeMissing":
-    "Среда Sunshine и Moonlight Web отсутствует или не поддерживается на этом хосте. Установите полный релиз OpenBot на Mac, хост Windows x64 или хост Linux x64 и перезапустите OpenBot.",
+    "Среда Sunshine и Moonlight Web отсутствует или не поддерживается на этом хосте. Установите полный релиз Atelier на Mac, хост Windows x64 или хост Linux x64 и перезапустите Atelier.",
   "error.remote.testActive": "Идёт проверка удалённого рабочего стола. Повторите попытку, когда она закончится.",
   "error.remote.screenRecordingDenied":
-    "Хост не разрешил OpenBot записывать экран. Разрешите запись экрана на хосте и повторите попытку.",
+    "Хост не разрешил Atelier записывать экран. Разрешите запись экрана на хосте и повторите попытку.",
   "error.remote.teamSessionExpired": "Сессия команды истекла.",
   "error.remote.finishTestBeforeSwitch": "Завершите проверку удалённого рабочего стола, прежде чем переключать экраны.",
   "error.remote.displayNotFound": "Удалённый экран не найден.",
@@ -31,7 +31,7 @@ export const messages = {
   "error.remote.moonlightStartFailed":
     "Moonlight Web не запустился на хосте. Проверьте журналы удалённого рабочего стола на хосте и повторите попытку.",
   "error.remote.pairingFailed":
-    "Moonlight не удалось выполнить сопряжение с Sunshine на хосте. Повторите попытку. Если проблема не исчезает, перезапустите OpenBot на хосте.",
+    "Moonlight не удалось выполнить сопряжение с Sunshine на хосте. Повторите попытку. Если проблема не исчезает, перезапустите Atelier на хосте.",
   "error.remote.runtimeStartFailed":
     "Среда удалённого рабочего стола не запустилась на хосте. Проверьте журналы удалённого рабочего стола на хосте и повторите попытку.",
   "error.remote.hostUnreachable": "Хост недоступен.",
@@ -39,7 +39,7 @@ export const messages = {
   "error.remote.invalidData": "Хост вернул некорректные данные.",
   "error.remote.unsafeData": "Хост вернул данные, которые приложение не смогло безопасно использовать.",
   "error.remote.requestFailedStatus": "Запрос к удалённому серверу не удался ({status}).",
-  "error.remote.appUpdateRequired": "Обновите это приложение OpenBot, прежде чем подключаться к хосту.",
+  "error.remote.appUpdateRequired": "Обновите это приложение Atelier, прежде чем подключаться к хосту.",
   "error.remote.identityNotVerified": "Не удалось проверить идентификатор сервера.",
   "error.remote.webRtcUnavailable": "Транспорт WebRTC недоступен.",
   "error.remote.invalidCompatibility": "Хост вернул некорректные сведения о совместимости.",
@@ -58,9 +58,9 @@ export const messages = {
   "error.remote.inviteIdentityChanged": "Идентификатор хоста приглашения изменился во время принятия.",
   "error.remote.localServerRemove": "Локальный сервер нельзя удалить.",
   "error.remote.desktopSetupHostUpdate":
-    "Обновите OpenBot на хосте, чтобы проверить настройку удалённого рабочего стола.",
+    "Обновите Atelier на хосте, чтобы проверить настройку удалённого рабочего стола.",
   "error.remote.desktopTestHostUpdate":
-    "Обновите OpenBot на хосте, чтобы проверить настройку удалённого рабочего стола.",
+    "Обновите Atelier на хосте, чтобы проверить настройку удалённого рабочего стола.",
   "error.remote.viewerProxyUnavailable": "Локальный прокси просмотра удалённого рабочего стола недоступен.",
   "error.remote.viewerTransportInvalid": "Транспорт просмотра удалённого рабочего стола некорректен.",
   "error.remote.viewerProxyNoPort": "Локальный прокси просмотра удалённого рабочего стола не получил порт.",
@@ -129,11 +129,11 @@ export const messages = {
   "error.remote.permanentInviteNoEmail": "Постоянные приглашения нельзя отправить по электронной почте.",
   "error.remote.selfHostedInviteNoEmail":
     "Приглашение от собственной службы аккаунтов нельзя отправить по электронной почте. Скопируйте ссылку.",
-  "error.remote.inviteOtherService": "Это приглашение относится к другой службе OpenBot.",
+  "error.remote.inviteOtherService": "Это приглашение относится к другой службе Atelier.",
   "error.remote.inviteFingerprintMismatch": "Идентификатор хоста приглашения не соответствует его отпечатку.",
   "error.remote.inviteHostKeyMissing": "Ключ хоста приглашения отсутствует.",
   "error.remote.inviteKeyConflict": "Приглашение противоречит доверенному ключу хоста.",
-  "error.remote.serviceRequestFailed": "Запрос к службе OpenBot не удался.",
+  "error.remote.serviceRequestFailed": "Запрос к службе Atelier не удался.",
   "error.remote.downloadTimeout": "Время загрузки вложения истекло. Повторите попытку.",
   "error.remote.attachmentConnectionClosed": "Подключение для вложений закрыто.",
   "error.remote.tooManyDownloads": "Слишком много загрузок вложений.",
@@ -167,9 +167,9 @@ export const messages = {
   "error.remote.dataChannelFailed": "Сбой канала {kind}.",
   "error.remote.hostBusy": "Хост занят другим подключением. Повторите попытку чуть позже.",
   "error.remote.signalPermissionDenied": "У вашего аккаунта нет доступа к этому хосту. Попросите доступ у владельца.",
-  "error.remote.signalRateLimited": "Слишком много попыток подключения. OpenBot повторит попытку через {seconds} с.",
+  "error.remote.signalRateLimited": "Слишком много попыток подключения. Atelier повторит попытку через {seconds} с.",
   "error.remote.signalProtocolError":
-    "Signal и это приложение используют несовместимые протоколы подключения. Обновите OpenBot и повторите попытку.",
+    "Signal и это приложение используют несовместимые протоколы подключения. Обновите Atelier и повторите попытку.",
   "error.remote.signalRefused": "Signal отклонил подключение.",
   "error.remote.signalClosed": "Подключение к Signal закрылось до ответа хоста.",
   "error.remote.relayUnavailable":
@@ -177,18 +177,18 @@ export const messages = {
   "error.remote.iceFailed":
     "Не удалось установить прямое подключение к хосту. Его может блокировать брандмауэр, VPN или прокси.",
   "error.remote.iceDisconnected": "Прямое подключение к хосту потеряно.",
-  "error.remote.directoryUnreachable": "OpenBot не смог связаться со службой OpenBot. Проверьте подключение.",
-  "error.remote.directoryTimeout": "Служба OpenBot не ответила вовремя. Повторите попытку.",
+  "error.remote.directoryUnreachable": "Atelier не смог связаться со службой Atelier. Проверьте подключение.",
+  "error.remote.directoryTimeout": "Служба Atelier не ответила вовремя. Повторите попытку.",
   "error.remote.inviteAlreadyUsed": "Это приглашение уже использовано. Попросите новое приглашение.",
   "error.remote.inviteNotFound": "Это приглашение не существует или истекло. Попросите новое приглашение.",
   "error.remote.licenseUsersFull":
     "В лицензии владельца сервера нет свободных пользователей. Попросите владельца добавить пользователя в лицензию.",
   "error.remote.memberLimitReached": "На этом хосте достигнут лимит участников. Попросите владельца освободить место.",
-  "error.remote.hostNotRegistered": "Этот хост больше не зарегистрирован в службе OpenBot.",
+  "error.remote.hostNotRegistered": "Этот хост больше не зарегистрирован в службе Atelier.",
   "error.remote.membershipEnded": "Вы больше не участник этого хоста. Попросите у владельца новое приглашение.",
   "error.remote.accountSessionInactive": "Ваш вход больше не активен. Войдите снова.",
   "error.remote.hostOtherAccount": "Этот хост принадлежит другому аккаунту.",
-  "error.remote.remoteNotConfigured": "Удалённые подключения не настроены в этой службе OpenBot.",
+  "error.remote.remoteNotConfigured": "Удалённые подключения не настроены в этой службе Atelier.",
   "error.remote.hostRefused": "Хост отклонил запрос ({status}).",
   "error.remote.formUnavailable": "Эта форма больше недоступна.",
   "error.remote.hostedServerRemoval": "Чтобы удалить размещённый сервер, используйте раздел «Оплата».",

@@ -20,7 +20,7 @@ export const messages = {
     "Agenten können nur Repositories verwenden, in denen die OpenBot GitHub App installiert ist.",
   "connector.github.chooseRepositories": "Repositories auswählen",
   "connector.github.repositoriesLoading": "Repositories werden von GitHub gelesen",
-  "connector.github.repositoriesFailed": "OpenBot konnte die Repositories von GitHub nicht lesen.",
+  "connector.github.repositoriesFailed": "Atelier konnte die Repositories von GitHub nicht lesen.",
   "connector.github.noRepositories": "Die OpenBot GitHub App ist noch in keinem Repository installiert.",
   "connector.github.moreRepositories": {
     one: "Und {count} weiteres Repository",
@@ -35,7 +35,7 @@ export const messages = {
   "connector.github.expiredDescription":
     "Verbinde dich erneut als @{login}, damit Agenten wieder auf GitHub zugreifen können.",
   "connector.github.reconnect": "Neu verbinden",
-  "connector.github.actionFailed": "OpenBot konnte die GitHub-Verbindung nicht ändern.",
+  "connector.github.actionFailed": "Atelier konnte die GitHub-Verbindung nicht ändern.",
   "connector.github.statusConnected": "Verbunden",
   "connector.github.statusConnecting": "Wird verbunden",
   "connector.github.statusExpired": "Abgelaufen",
@@ -49,7 +49,7 @@ export const messages = {
   "connector.github.noMatch": "Kein Repository entspricht „{query}“.",
   "connector.github.stepSignIn": "Anmelden",
   "connector.github.stepConnected": "Verbunden",
-  "connector.github.requestingCode": "OpenBot fordert einen Code von GitHub an.",
+  "connector.github.requestingCode": "Atelier fordert einen Code von GitHub an.",
   "connector.github.codeLabel": "Code {code}",
   "connector.github.failedTitle": "GitHub wurde nicht verbunden",
   "connector.github.cancelConnecting": "GitHub-Verbindung abbrechen",
@@ -64,7 +64,7 @@ export const messages = {
     "Beim Trennen wird die Anmeldung von @{login} von diesem Computer entfernt.",
   "connector.github.disconnectEffectTools": "Alle Agenten verlieren die GitHub-Werkzeuge, gh und git.",
   "connector.github.disconnectEffectRevoke":
-    "Danach öffnet sich GitHub. Dort kannst du den Zugriff von OpenBot widerrufen.",
+    "Danach öffnet sich GitHub. Dort kannst du den Zugriff von Atelier widerrufen.",
   "connector.github.disconnectEffectKept": "Chats, Dateien und Agentenspeicher bleiben auf diesem Computer erhalten.",
   // The same text for the connection of a joined server. {host} is the server name, such as Studio.
   "connector.github.descriptionHost":
@@ -80,7 +80,7 @@ export const messages = {
   "connector.github.close": "Schließen",
   "connector.dangerZone": "Gefahrenbereich",
   "connector.statusUnknown": "Unbekannt",
-  "connector.readFailed": "OpenBot konnte den Status dieser Verbindung nicht lesen.",
+  "connector.readFailed": "Atelier konnte den Status dieser Verbindung nicht lesen.",
   "connector.hub.onThisComputer": "Auf diesem Computer",
   "connector.hub.onHost": "Auf {host}",
   "connector.hub.notSetUp": "Nicht eingerichtet",
@@ -109,8 +109,8 @@ export const messages = {
   "connector.slack.workspaceDescription": "Personen erwähnen @OpenBot oder senden ihm eine Direktnachricht.",
   "connector.slack.disconnectWorkspace": "Trennen",
   "connector.slack.missingScopes":
-    "OpenBot hat diese Berechtigungen in Slack nicht: {scopes}. Trenne den Arbeitsbereich und verbinde ihn erneut.",
-  "connector.slack.retryAt": "Slack hat OpenBot gebeten zu warten. OpenBot versucht es um {time} erneut.",
+    "Atelier hat diese Berechtigungen in Slack nicht: {scopes}. Trenne den Arbeitsbereich und verbinde ihn erneut.",
+  "connector.slack.retryAt": "Slack hat Atelier gebeten zu warten. Atelier versucht es um {time} erneut.",
   "connector.slack.reconnect": "Neu verbinden",
   "connector.slack.pause": "Pausieren",
   "connector.slack.resume": "Fortsetzen",
@@ -126,7 +126,7 @@ export const messages = {
   "connector.slack.stepAgent": "Agent",
   "connector.slack.connectTitle": "Slack-Arbeitsbereich verbinden",
   "connector.slack.connectDescription":
-    "OpenBot installiert eine App namens OpenBot im Arbeitsbereich. Sie tritt allen öffentlichen Kanälen bei.",
+    "Atelier installiert eine App namens Atelier im Arbeitsbereich. Sie tritt allen öffentlichen Kanälen bei.",
   "connector.slack.connectStepBrowser": "Slack öffnet sich in deinem Browser",
   "connector.slack.connectStepAllow": "Wähle den Arbeitsbereich oben rechts und dann „Zulassen“",
   "connector.slack.connectStepReturn": "Dieser Dialog wird fortgesetzt, sobald Slack fertig ist",
@@ -141,19 +141,19 @@ export const messages = {
   "connector.slack.orchestratorDoesDelegate": "Gibt jede Aufgabe an den am besten geeigneten Agenten weiter",
   "connector.slack.orchestratorDoesAnswer": "Veröffentlicht die Antwort im Slack-Thread",
   "connector.slack.orchestratorModel": "Modell",
-  "connector.slack.doneTitle": "OpenBot ist in {workspace}",
+  "connector.slack.doneTitle": "Atelier ist in {workspace}",
   "connector.slack.doneDescription":
     "Erwähne @OpenBot in einem öffentlichen Kanal oder sende ihm eine Direktnachricht.",
   "connector.slack.done": "Fertig",
   "connector.slack.disconnectTitle": "{workspace} trennen?",
   "connector.slack.disconnectDescription":
-    "OpenBot antwortet nicht mehr in {workspace} und entfernt sein Slack-Token von diesem Computer.",
+    "Atelier antwortet nicht mehr in {workspace} und entfernt sein Slack-Token von diesem Computer.",
   "connector.slack.disconnectDescriptionHost":
-    "OpenBot antwortet nicht mehr in {workspace} und entfernt sein Slack-Token von {host}.",
+    "Atelier antwortet nicht mehr in {workspace} und entfernt sein Slack-Token von {host}.",
   "connector.slack.disconnectEffect":
     "Personen in {workspace} können deine Agenten nicht mehr über @OpenBot erreichen.",
-  "connector.slack.removeEffectKept": "Die Unterhaltungen und der Slack Orchestrator bleiben in OpenBot erhalten.",
-  "connector.slack.removeEffectDeleted": "Der Slack Orchestrator und seine Unterhaltungen werden aus OpenBot gelöscht.",
+  "connector.slack.removeEffectKept": "Die Unterhaltungen und der Slack Orchestrator bleiben in Atelier erhalten.",
+  "connector.slack.removeEffectDeleted": "Der Slack Orchestrator und seine Unterhaltungen werden aus Atelier gelöscht.",
   "connector.slack.keep": "Verbunden lassen",
   "connector.slack.close": "Schließen",
   "connector.slack.addWorkspace": "Arbeitsbereich hinzufügen",
@@ -185,8 +185,8 @@ export const messages = {
   "connector.discord.workspaceDescription": "Erwähne @OpenBot in einem Kanal. Antworte OpenBot, um fortzufahren.",
   "connector.discord.disconnectWorkspace": "Trennen",
   "connector.discord.missingScopes":
-    "OpenBot hat diese Berechtigungen in Discord nicht: {scopes}. Trenne den Discord-Server und verbinde ihn erneut.",
-  "connector.discord.retryAt": "Discord hat OpenBot gebeten zu warten. OpenBot versucht es um {time} erneut.",
+    "Atelier hat diese Berechtigungen in Discord nicht: {scopes}. Trenne den Discord-Server und verbinde ihn erneut.",
+  "connector.discord.retryAt": "Discord hat Atelier gebeten zu warten. Atelier versucht es um {time} erneut.",
   "connector.discord.reconnect": "Neu verbinden",
   "connector.discord.pause": "Pausieren",
   "connector.discord.resume": "Fortsetzen",
@@ -197,11 +197,11 @@ export const messages = {
   "connector.discord.orchestratorNone": "Noch kein Agent antwortet",
   "connector.discord.orchestratorNoneDescription":
     "Füge den Discord Orchestrator hinzu, sonst erhält Discord keine Antwort.",
-  "connector.discord.channelsNote": "OpenBot sieht die Kanäle, die seine Rolle sehen darf.",
+  "connector.discord.channelsNote": "Atelier sieht die Kanäle, die seine Rolle sehen darf.",
   "connector.discord.stepWorkspace": "Discord-Server",
   "connector.discord.stepAgent": "Agent",
   "connector.discord.connectTitle": "Discord-Server verbinden",
-  "connector.discord.connectDescription": "OpenBot fügt dem Discord-Server einen Bot namens OpenBot hinzu.",
+  "connector.discord.connectDescription": "Atelier fügt dem Discord-Server einen Bot namens Atelier hinzu.",
   "connector.discord.connectStepBrowser": "Discord öffnet sich in deinem Browser",
   "connector.discord.connectStepAllow": "Wähle den Server und dann „Autorisieren“",
   "connector.discord.connectStepReturn": "Dieser Dialog wird fortgesetzt, sobald Discord fertig ist",
@@ -216,19 +216,19 @@ export const messages = {
   "connector.discord.orchestratorDoesDelegate": "Gibt jede Aufgabe an den am besten geeigneten Agenten weiter",
   "connector.discord.orchestratorDoesAnswer": "Sendet die Antwort im Discord-Kanal",
   "connector.discord.orchestratorModel": "Modell",
-  "connector.discord.doneTitle": "OpenBot ist in {workspace}",
+  "connector.discord.doneTitle": "Atelier ist in {workspace}",
   "connector.discord.doneDescription": "Erwähne @OpenBot in einem Kanal. Antworte OpenBot, um fortzufahren.",
   "connector.discord.done": "Fertig",
   "connector.discord.disconnectTitle": "{workspace} trennen?",
   "connector.discord.disconnectDescription":
-    "OpenBot antwortet nicht mehr in {workspace} und entfernt die Discord-Verbindung von diesem Computer.",
+    "Atelier antwortet nicht mehr in {workspace} und entfernt die Discord-Verbindung von diesem Computer.",
   "connector.discord.disconnectDescriptionHost":
-    "OpenBot antwortet nicht mehr in {workspace} und entfernt die Discord-Verbindung von {host}.",
+    "Atelier antwortet nicht mehr in {workspace} und entfernt die Discord-Verbindung von {host}.",
   "connector.discord.disconnectEffect":
     "Personen in {workspace} können deine Agenten nicht mehr über @OpenBot erreichen.",
-  "connector.discord.removeEffectKept": "Die Unterhaltungen und der Discord Orchestrator bleiben in OpenBot erhalten.",
+  "connector.discord.removeEffectKept": "Die Unterhaltungen und der Discord Orchestrator bleiben in Atelier erhalten.",
   "connector.discord.removeEffectDeleted":
-    "Der Discord Orchestrator und seine Unterhaltungen werden aus OpenBot gelöscht.",
+    "Der Discord Orchestrator und seine Unterhaltungen werden aus Atelier gelöscht.",
   "connector.discord.keep": "Verbunden lassen",
   "connector.discord.close": "Schließen",
   "connector.discord.addWorkspace": "Discord-Server hinzufügen",
@@ -240,15 +240,15 @@ export const messages = {
     one: "{count} Discord-Server · Discord Orchestrator antwortet",
     other: "{count} Discord-Server · Discord Orchestrator antwortet",
   },
-  "connector.discord.accessTitle": "Wer OpenBot nutzen kann",
-  "connector.discord.accessDescription": "OpenBot antwortet nur diesen Personen. Erwähnungen von anderen ignoriert es.",
+  "connector.discord.accessTitle": "Wer Atelier nutzen kann",
+  "connector.discord.accessDescription": "Atelier antwortet nur diesen Personen. Erwähnungen von anderen ignoriert es.",
   "connector.discord.accessEveryone": "Alle auf dem Server",
   "connector.discord.accessEveryoneDescription":
-    "Jeder, der in einem Kanal schreiben kann, den OpenBot sieht, kann es erwähnen.",
+    "Jeder, der in einem Kanal schreiben kann, den Atelier sieht, kann es erwähnen.",
   "connector.discord.accessRoles": "Mitglieder mit {roles}",
   "connector.discord.accessChoose": "Rollen wählen",
-  "connector.discord.accessDialogTitle": "Wer kann OpenBot in {workspace} nutzen?",
-  "connector.discord.accessDialogDescription": "Ohne ausgewählte Rolle können alle OpenBot erwähnen.",
+  "connector.discord.accessDialogTitle": "Wer kann Atelier in {workspace} nutzen?",
+  "connector.discord.accessDialogDescription": "Ohne ausgewählte Rolle können alle Atelier erwähnen.",
   "connector.discord.accessLoading": "Rollen werden geladen…",
   "connector.discord.accessLoadFailed": "Discord-Rollen wurden nicht geladen",
   "connector.discord.accessNoRoles": "Dieser Server hat keine Rollen zur Auswahl.",
@@ -269,13 +269,13 @@ export const messages = {
     "Nachrichten hier landen im eigenen Chat des Agenten mit dir, und seine Antwort wird hier gepostet.",
   "connector.discord.channelsLoading": "Kanäle werden geladen …",
   "connector.discord.channelsLoadFailed": "Discord-Kanäle wurden nicht geladen",
-  "connector.discord.channelsNone": "Dieser Server hat keine Textkanäle, die OpenBot sieht.",
+  "connector.discord.channelsNone": "Dieser Server hat keine Textkanäle, die Atelier sieht.",
   "connector.discord.channelsSave": "Speichern",
   "connector.discord.channelsSaveFailed": "Die Discord-Einstellungen wurden nicht gespeichert",
-  "connector.discord.accessHostUpdate": "Aktualisiere OpenBot auf {host}, um Rollen zu wählen.",
+  "connector.discord.accessHostUpdate": "Aktualisiere Atelier auf {host}, um Rollen zu wählen.",
   "connector.telegram.title": "Telegram",
   "connector.telegram.description":
-    "Füge den OpenBot-Bot zu einer Telegram-Gruppe hinzu oder öffne einen direkten Chat mit ihm. Der Telegram-Orchestrator fragt den passenden Agenten und antwortet.",
+    "Füge den Atelier-Bot zu einer Telegram-Gruppe hinzu oder öffne einen direkten Chat mit ihm. Der Telegram-Orchestrator fragt den passenden Agenten und antwortet.",
   "connector.telegram.statusNotSetUp": "Nicht eingerichtet",
   "connector.telegram.statusConnected": "Verbunden",
   "connector.telegram.statusAttention": "Handlungsbedarf",
@@ -299,13 +299,13 @@ export const messages = {
   "connector.telegram.groupDescription": "Personen erwähnen den Bot oder antworten auf seine Nachrichten.",
   "connector.telegram.directDescription": "Jede Nachricht in diesem Chat geht an den Telegram-Orchestrator.",
   "connector.telegram.helpRemoved":
-    "Der OpenBot-Bot ist nicht mehr in diesem Chat. Trenne den Chat und füge den Bot dann erneut hinzu.",
+    "Der Atelier-Bot ist nicht mehr in diesem Chat. Trenne den Chat und füge den Bot dann erneut hinzu.",
   "connector.telegram.helpRelayUnavailable":
-    "OpenBot kann auf diesem Computer keine Telegram-Nachrichten empfangen. Melde dich an, gib diesem Computer in den Servereinstellungen einen Namen und lass OpenBot geöffnet.",
+    "Atelier kann auf diesem Computer keine Telegram-Nachrichten empfangen. Melde dich an, gib diesem Computer in den Servereinstellungen einen Namen und lass Atelier geöffnet.",
   "connector.telegram.helpRelayUnavailableHost":
-    "OpenBot auf {host} kann keine Telegram-Nachrichten empfangen. Melde dich auf {host} an, gib dem Server in den Servereinstellungen einen Namen und lass OpenBot geöffnet.",
-  "connector.telegram.helpError": "OpenBot kann diesen Chat nicht erreichen. Verbinde ihn erneut oder trenne den Chat.",
-  "connector.telegram.retryAt": "Telegram hat OpenBot gebeten zu warten. Neuer Versuch um {time}.",
+    "Atelier auf {host} kann keine Telegram-Nachrichten empfangen. Melde dich auf {host} an, gib dem Server in den Servereinstellungen einen Namen und lass Atelier geöffnet.",
+  "connector.telegram.helpError": "Atelier kann diesen Chat nicht erreichen. Verbinde ihn erneut oder trenne den Chat.",
+  "connector.telegram.retryAt": "Telegram hat Atelier gebeten zu warten. Neuer Versuch um {time}.",
   "connector.telegram.pause": "Pausieren",
   "connector.telegram.resume": "Fortsetzen",
   "connector.telegram.reconnect": "Neu verbinden",
@@ -319,7 +319,7 @@ export const messages = {
   "connector.telegram.openDirectChat": "Direkten Chat öffnen",
   "connector.telegram.orchestratorTitle": "Telegram-Orchestrator",
   "connector.telegram.orchestratorDescription":
-    "Dieser Agent empfängt die Nachrichten für OpenBot aus all deinen Telegram-Chats. Kurze beantwortet er selbst, andere Aufgaben gibt er an den passenden Agenten weiter und postet die Antwort im Chat.",
+    "Dieser Agent empfängt die Nachrichten für Atelier aus all deinen Telegram-Chats. Kurze beantwortet er selbst, andere Aufgaben gibt er an den passenden Agenten weiter und postet die Antwort im Chat.",
   "connector.telegram.orchestratorNone": "Noch kein Agent antwortet",
   "connector.telegram.orchestratorNoneDescription":
     "Füge den Telegram-Orchestrator hinzu, sonst bekommt Telegram keine Antwort.",
@@ -329,36 +329,36 @@ export const messages = {
   "connector.telegram.stepAgent": "Agent",
   "connector.telegram.connectTitle": "Telegram-Chat verknüpfen",
   "connector.telegram.connectDescription":
-    "Füge den OpenBot-Bot zu einer Gruppe hinzu oder öffne einen direkten Chat mit ihm. Ein Bot bedient all deine Chats.",
+    "Füge den Atelier-Bot zu einer Gruppe hinzu oder öffne einen direkten Chat mit ihm. Ein Bot bedient all deine Chats.",
   "connector.telegram.connectStepBrowser": "Telegram wird in deinem Browser geöffnet",
   "connector.telegram.connectStepPick": "Wähle die Gruppe aus oder tippe im direkten Chat auf „Starten“",
   "connector.telegram.connectStepReturn": "Dieser Dialog geht weiter, sobald der Chat verknüpft ist",
   "connector.telegram.connectWaiting": "Warten auf Telegram. Wähle den Chat in Telegram aus.",
   "connector.telegram.agentStepTitle": "Telegram-Orchestrator hinzufügen",
   "connector.telegram.agentStepDescription":
-    "Dieser neue Agent beantwortet die Nachrichten für OpenBot in {chat} und in jedem Chat, den du später verknüpfst.",
+    "Dieser neue Agent beantwortet die Nachrichten für Atelier in {chat} und in jedem Chat, den du später verknüpfst.",
   "connector.telegram.orchestratorName": "Telegram-Orchestrator",
   "connector.telegram.orchestratorRole": "Antwortet in Telegram und fragt das Team",
-  "connector.telegram.orchestratorDoesReceive": "Empfängt jede Telegram-Nachricht für OpenBot zuerst",
+  "connector.telegram.orchestratorDoesReceive": "Empfängt jede Telegram-Nachricht für Atelier zuerst",
   "connector.telegram.orchestratorDoesDelegate": "Gibt jede Aufgabe an den am besten passenden Agenten weiter",
   "connector.telegram.orchestratorDoesAnswer": "Postet die Antwort im Telegram-Chat",
   "connector.telegram.orchestratorModel": "Modell",
-  "connector.telegram.doneTitle": "OpenBot ist in {chat}",
+  "connector.telegram.doneTitle": "Atelier ist in {chat}",
   "connector.telegram.done": "Fertig",
   "connector.telegram.disconnectTitle": "{chat} trennen?",
-  "connector.telegram.leaveDescription": "Der OpenBot-Bot verlässt {chat}, und OpenBot antwortet dort nicht mehr.",
+  "connector.telegram.leaveDescription": "Der Atelier-Bot verlässt {chat}, und Atelier antwortet dort nicht mehr.",
   "connector.telegram.disconnectEffect":
-    "Personen in {chat} können deine Agenten nicht mehr über den OpenBot-Bot erreichen.",
-  "connector.telegram.removeEffectKept": "Die Unterhaltungen und der Telegram-Orchestrator bleiben in OpenBot.",
+    "Personen in {chat} können deine Agenten nicht mehr über den Atelier-Bot erreichen.",
+  "connector.telegram.removeEffectKept": "Die Unterhaltungen und der Telegram-Orchestrator bleiben in Atelier.",
   "connector.telegram.removeEffectDeleted":
-    "Das ist der letzte Chat, daher werden der Telegram-Orchestrator und seine Unterhaltungen aus OpenBot gelöscht.",
+    "Das ist der letzte Chat, daher werden der Telegram-Orchestrator und seine Unterhaltungen aus Atelier gelöscht.",
   "connector.telegram.keep": "Verbunden lassen",
   "connector.telegram.close": "Schließen",
   "connector.onePassword.title": "1Password",
   "connector.onePassword.description":
-    "Teile einen eigenen 1Password-Tresor über ein Dienstkonto mit OpenBot. So können sich Agenten im OpenBot-Browser auf Websites anmelden.",
+    "Teile einen eigenen 1Password-Tresor über ein Dienstkonto mit Atelier. So können sich Agenten im Atelier-Browser auf Websites anmelden.",
   "connector.onePassword.howItWorks":
-    "Beim Verbinden werden in deinem 1Password-Konto ein Tresor „Shared with OpenBot“ und ein Dienstkonto erstellt, das nur diesen Tresor lesen kann. OpenBot füllt gespeicherte Anmeldedaten in seinem Browser auf diesem Computer aus. Nur Einträge, die du in diesen Tresor verschiebst, werden geteilt. Agenten sehen niemals ein Passwort.",
+    "Beim Verbinden werden in deinem 1Password-Konto ein Tresor „Shared with OpenBot“ und ein Dienstkonto erstellt, das nur diesen Tresor lesen kann. Atelier füllt gespeicherte Anmeldedaten in seinem Browser auf diesem Computer aus. Nur Einträge, die du in diesen Tresor verschiebst, werden geteilt. Agenten sehen niemals ein Passwort.",
   "connector.onePassword.connect": "1Password verbinden",
   "connector.onePassword.setupTitle": "Einrichten",
   "connector.onePassword.stepCliTitle": "1Password CLI installieren",
@@ -366,20 +366,20 @@ export const messages = {
   "connector.onePassword.stepCliInstalling": "1Password CLI wird von 1Password heruntergeladen",
   "connector.onePassword.stepCliReady": "Version {version} ist installiert.",
   "connector.onePassword.stepCliMissing":
-    "OpenBot lädt sie von 1Password in seinen eigenen Ordner herunter. Dafür ist kein Administratorpasswort erforderlich.",
+    "Atelier lädt sie von 1Password in seinen eigenen Ordner herunter. Dafür ist kein Administratorpasswort erforderlich.",
   "connector.onePassword.stepCliManual":
-    "OpenBot kann sie auf diesem Computer nicht installieren. Installiere sie über 1Password und kehre dann zu dieser Seite zurück.",
+    "Atelier kann sie auf diesem Computer nicht installieren. Installiere sie über 1Password und kehre dann zu dieser Seite zurück.",
   "connector.onePassword.installCli": "Installieren",
   "connector.onePassword.stepAppTitle": "CLI-Integration aktivieren",
   "connector.onePassword.stepAppDescription":
     "Öffne in der 1Password-App Einstellungen > Entwickler und aktiviere „In 1Password CLI integrieren“.",
   "connector.onePassword.stepAppReady": "Die 1Password-App erlaubt der CLI, den geteilten Tresor zu erstellen.",
   "connector.onePassword.openApp": "1Password öffnen",
-  "connector.onePassword.openAppFailed": "OpenBot konnte 1Password nicht öffnen.",
+  "connector.onePassword.openAppFailed": "Atelier konnte 1Password nicht öffnen.",
   "connector.onePassword.checkAgain": "Erneut prüfen",
   "connector.onePassword.stepVaultTitle": "Geteilten Tresor erstellen",
   "connector.onePassword.stepVaultDescription":
-    "OpenBot erstellt den Tresor „Shared with OpenBot“ und ein Dienstkonto, das ihn nur lesen kann. 1Password bittet dich um Bestätigung.",
+    "Atelier erstellt den Tresor „Shared with OpenBot“ und ein Dienstkonto, das ihn nur lesen kann. 1Password bittet dich um Bestätigung.",
   "connector.onePassword.useToken": "Stattdessen ein Dienstkonto-Token verwenden",
   "connector.onePassword.tokenLabel": "Dienstkonto-Token",
   "connector.onePassword.tokenPlaceholder": "ops_…",
@@ -388,7 +388,7 @@ export const messages = {
   "connector.onePassword.cancel": "Abbrechen",
   "connector.onePassword.chooseAccountTitle": "Konto auswählen",
   "connector.onePassword.chooseAccountDescription":
-    "OpenBot erstellt den geteilten Tresor in dem Konto, das du auswählst.",
+    "Atelier erstellt den geteilten Tresor in dem Konto, das du auswählst.",
   "connector.onePassword.useAccount": "Dieses Konto verwenden",
   "connector.onePassword.vaultTitle": "Geteilter Tresor",
   "connector.onePassword.vaultDescription":
@@ -401,13 +401,13 @@ export const messages = {
   "connector.onePassword.disconnect": "Trennen",
   "connector.onePassword.disconnectTitle": "1Password trennen",
   "connector.onePassword.disconnectSummary":
-    "OpenBot entfernt das Token. Der Tresor und das Dienstkonto bleiben in 1Password erhalten. Entferne sie dort, wenn du sie nicht mehr benötigst.",
-  "connector.onePassword.actionFailed": "OpenBot konnte die 1Password-Verbindung nicht ändern.",
+    "Atelier entfernt das Token. Der Tresor und das Dienstkonto bleiben in 1Password erhalten. Entferne sie dort, wenn du sie nicht mehr benötigst.",
+  "connector.onePassword.actionFailed": "Atelier konnte die 1Password-Verbindung nicht ändern.",
   "connector.onePassword.statusConnected": "Verbunden",
   "connector.onePassword.statusConnecting": "Wird verbunden",
   "connector.onePassword.statusNotSetUp": "Nicht eingerichtet",
   "connector.onePassword.descriptionHost":
-    "Teile einen eigenen 1Password-Tresor über ein Dienstkonto mit OpenBot auf {host}, damit Agenten auf {host} sich in seinem Browser bei Websites anmelden können.",
+    "Teile einen eigenen 1Password-Tresor über ein Dienstkonto mit Atelier auf {host}, damit Agenten auf {host} sich in seinem Browser bei Websites anmelden können.",
   "connector.onePassword.howItWorksHost":
     "{host} verbindet sich mit einem Dienstkonto-Token. Erstelle auf 1Password.com ein Dienstkonto, das nur den Tresor lesen kann, den du mit OpenBot teilst, und füge sein Token hier ein. {host} prüft das Token und speichert es; dieser Computer speichert es nicht. Agenten sehen nie ein Passwort.",
   "connector.onePassword.disconnectSummaryHost":
@@ -417,20 +417,20 @@ export const messages = {
   "connector.bitwarden.setup":
     "Installiere die Bitwarden CLI und melde dich mit bw login an. Erstelle einen Ordner namens Shared with OpenBot und lege dort nur Anmeldedaten ab, die Agenten verwenden dürfen. Führe bw unlock --raw aus und füge den Sitzungsschlüssel unten ein. Füge nicht dein Master-Passwort ein.",
   "connector.bitwarden.scope":
-    "Alle Agenten auf diesem Computer können passende Anmeldedaten in Shared with OpenBot verwenden. OpenBot verwendet exakte HTTPS-Ursprünge. Einträge, die eine Master-Passwort-Abfrage oder eine eigene URI-Abgleichsregel erfordern, werden nicht verwendet.",
+    "Alle Agenten auf diesem Computer können passende Anmeldedaten in Shared with OpenBot verwenden. Atelier verwendet exakte HTTPS-Ursprünge. Einträge, die eine Master-Passwort-Abfrage oder eine eigene URI-Abgleichsregel erfordern, werden nicht verwendet.",
   "connector.bitwarden.session":
-    "Der Sitzungsschlüssel bleibt im Arbeitsspeicher. Verbinde dich erneut, wenn der Tresor 8 Stunden nicht verwendet wurde oder OpenBot beendet wurde. Trennen beendet den Zugriff von OpenBot. Andere Bitwarden-Clients werden dadurch nicht gesperrt.",
+    "Der Sitzungsschlüssel bleibt im Arbeitsspeicher. Verbinde dich erneut, wenn der Tresor 8 Stunden nicht verwendet wurde oder Atelier beendet wurde. Trennen beendet den Zugriff von Atelier. Andere Bitwarden-Clients werden dadurch nicht gesperrt.",
   "connector.bitwarden.sessionKey": "Bitwarden-Sitzungsschlüssel",
   "connector.bitwarden.connect": "Bitwarden verbinden",
   "connector.bitwarden.disconnect": "Bitwarden trennen",
   "connector.bitwarden.connected": "Verbunden",
   "connector.bitwarden.disconnected": "Nicht verbunden",
-  "connector.bitwarden.actionFailed": "OpenBot konnte die Bitwarden-Verbindung nicht ändern.",
+  "connector.bitwarden.actionFailed": "Atelier konnte die Bitwarden-Verbindung nicht ändern.",
   "connector.bitwarden.descriptionHost": "Browser-Anmeldungen auf {host} aus Bitwarden oder Vaultwarden ausfüllen.",
   "connector.bitwarden.setupHost":
     "{host} meldet sich mit seiner eigenen Bitwarden CLI an. Erstelle in deinem Tresor einen Ordner mit dem Namen Shared with OpenBot und lege nur die Anmeldungen hinein, die Agenten verwenden dürfen. Öffne im Web-Tresor Einstellungen › Sicherheit › Schlüssel und zeige deinen API-Schlüssel an. Gib unten die Serveradresse, client_id, client_secret und dein Master-Passwort ein.",
   "connector.bitwarden.scopeHost":
-    "Alle Agenten auf {host} können passende Anmeldungen in Shared with OpenBot verwenden. OpenBot verwendet exakte HTTPS-Ursprünge. Einträge mit Master-Passwort-Abfrage oder eigener URI-Erkennungsregel werden nicht verwendet.",
+    "Alle Agenten auf {host} können passende Anmeldungen in Shared with OpenBot verwenden. Atelier verwendet exakte HTTPS-Ursprünge. Einträge mit Master-Passwort-Abfrage oder eigener URI-Erkennungsregel werden nicht verwendet.",
   "connector.bitwarden.sessionHost":
     "{host} speichert den API-Schlüssel und das Master-Passwort verschlüsselt, damit es nach einem Neustart wieder entsperren kann. Dieser Computer speichert sie nicht. Trennen entfernt sie von {host}. {host} muss die Serveradresse über HTTPS erreichen.",
   "connector.bitwarden.serverUrl": "Serveradresse",

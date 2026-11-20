@@ -3,7 +3,7 @@ import type { messages as source } from "../../en/error/backend";
 
 export const messages = {
   "error.backend.eventsUnavailable": "Auf diesem Host sind keine Ereignisse verfügbar.",
-  "error.backend.databaseIntegrity": "Die OpenBot-Datenbank hat die Integritätsprüfung nicht bestanden.",
+  "error.backend.databaseIntegrity": "Die Atelier-Datenbank hat die Integritätsprüfung nicht bestanden.",
   "error.backend.webhookRouteLimit": "Ein Host kann höchstens {limit} Webhook-Routinen haben.",
   "error.backend.webhookSettingsInvalid": "Prüfe die Webhook-Einstellungen und versuche es erneut.",
   "error.backend.webhookRouteUnavailable":
@@ -13,8 +13,8 @@ export const messages = {
   "error.backend.browserViewLimit": "Auf diesem Host sind zu viele Browseransichten geöffnet.",
   "error.backend.browserViewEnded": "Die Live-Ansicht dieser Seite wurde beendet.",
   "error.backend.browserViewFailed": "Die Live-Ansicht dieser Seite ist fehlgeschlagen.",
-  "error.backend.windowTemporarilyUnavailable": "Das OpenBot-Fenster ist vorübergehend nicht verfügbar.",
-  "error.backend.windowUnavailable": "Das OpenBot-Fenster ist nicht verfügbar.",
+  "error.backend.windowTemporarilyUnavailable": "Das Atelier-Fenster ist vorübergehend nicht verfügbar.",
+  "error.backend.windowUnavailable": "Das Atelier-Fenster ist nicht verfügbar.",
   "error.backend.sunshineApiHttp": "Die Sunshine-API ist mit HTTP {status} fehlgeschlagen.",
   "error.backend.sunshinePortsUnavailable":
     "Für den Remote-Desktop konnte keine freie Sunshine-Portfamilie reserviert werden.",
@@ -31,7 +31,7 @@ export const messages = {
   "error.backend.moonlightRejectedPairing": "Moonlight hat die Kopplung mit Sunshine abgelehnt.",
   "error.backend.moonlightNoPin": "Moonlight hat keine Kopplungs-PIN zurückgegeben.",
   "error.backend.moonlightPairingIncomplete": "Die Moonlight-Kopplung wurde nicht abgeschlossen.",
-  "error.backend.moonlightWebNotEmbedded": "Moonlight Web ist keine in OpenBot eingebettete Version.",
+  "error.backend.moonlightWebNotEmbedded": "Moonlight Web ist keine in Atelier eingebettete Version.",
   "error.backend.moonlightEmptyResponse": "Moonlight hat eine leere Antwort zurückgegeben.",
   "error.backend.remoteDesktopTimeout": "Die Zeit für die Remote-Desktop-Anfrage ist abgelaufen.",
   "error.backend.moonlightApiHttp": "Die Moonlight-API ist mit HTTP {status} fehlgeschlagen.",
@@ -49,8 +49,8 @@ export const messages = {
     "Dieser entfernte Host unterstützt die Übernahme eines Browser-Tabs nicht.",
   "error.backend.browserSignInUnsupported":
     "Dieser entfernte Host kann keine Anmeldung von diesem Computer übernehmen.",
-  "error.backend.browserSignInOpenFailed": "OpenBot konnte das Anmeldefenster nicht öffnen.",
-  "error.backend.browserSignInReadFailed": "OpenBot konnte die Anmeldung im Fenster nicht lesen.",
+  "error.backend.browserSignInOpenFailed": "Atelier konnte das Anmeldefenster nicht öffnen.",
+  "error.backend.browserSignInReadFailed": "Atelier konnte die Anmeldung im Fenster nicht lesen.",
   "error.backend.browserStopUnsupported": "Dieser entfernte Host kann das Laden einer Seite nicht stoppen.",
   "error.backend.sharedDataLocalOnly":
     "Geteilte Daten werden auf dem Computer verwaltet, auf dem diese Agenten laufen.",
@@ -59,7 +59,7 @@ export const messages = {
   "error.backend.sunshineNotReadyReason": "Sunshine wurde nicht bereit. {reason}",
   "error.backend.channelLeadModelUnavailable": "Das Modell der Kanalleitung ist nicht verfügbar.",
   "error.backend.sharedDataUnavailable": "Geteilte Daten sind nicht verfügbar.",
-  "error.backend.shuttingDown": "OpenBot wird beendet.",
+  "error.backend.shuttingDown": "Atelier wird beendet.",
   "error.backend.channelUnconfirmedStart":
     "Im Kanal gibt es einen unbestätigten Auftragsstart. Prüfe das Ergebnis, bevor du den Kanal löschst.",
   "error.backend.channelNotFound": "Kanal nicht gefunden.",
@@ -111,7 +111,7 @@ export const messages = {
     "Der Discord-Server ist nicht verbunden oder läuft nicht. Verbinde ihn unter Servereinstellungen > Connectors > Discord und versuche es erneut.",
   "error.backend.channelDiscordTaken": "Dieser Discord-Kanal ist bereits mit einem anderen Kanal verbunden.",
   "error.backend.channelDiscordChannelMissing":
-    "OpenBot kann in diesem Discord-Kanal nicht posten. Wähle einen Textkanal, den OpenBot sieht.",
+    "Atelier kann in diesem Discord-Kanal nicht posten. Wähle einen Textkanal, den Atelier sieht.",
   "error.backend.channelMessageNotFound": "Diese Nachricht ist nicht verfügbar.",
   "error.backend.channelPersonUnavailable": "Eine gewählte Person ist kein aktives Mitglied dieses Servers.",
   "error.backend.channelDirectParticipants": "Eine Direktnachricht hat 2 Teilnehmende, eine Gruppe 3 bis 9.",
@@ -181,7 +181,7 @@ export const messages = {
   "error.backend.fileGone": "Die Datei existiert nicht oder wurde bereits gelöscht.",
   "error.backend.managedAttachmentChanged": "Der verwaltete Anhang fehlt oder wurde geändert: {name}",
   "error.backend.mailboxStateCorrupt":
-    "Der Postfachzustand ist beschädigt oder stammt aus einer neueren OpenBot-Version. Er wird nicht überschrieben.",
+    "Der Postfachzustand ist beschädigt oder stammt aus einer neueren Atelier-Version. Er wird nicht überschrieben.",
   "error.backend.recipientDeleting":
     "Der Empfänger wird gelöscht. Versuche es nach Abschluss des Löschvorgangs erneut.",
   "error.backend.recipientHidden": "Dieser Agent ist ausgeblendet. Stelle ihn wieder her, um Nachrichten zu senden.",
@@ -189,7 +189,7 @@ export const messages = {
   "error.backend.attachmentNotFile": "Der Anhang ist keine Datei: {path}",
   "error.backend.generatedImageTooLarge": "Das erstellte Bild überschreitet die Grenze von 100 MB.",
   "error.backend.attachmentNotRegularFile": "Nur reguläre Dateien können angehängt werden: {name}",
-  "error.backend.attachmentCopyFailed": "OpenBot konnte {name} nicht kopieren.",
+  "error.backend.attachmentCopyFailed": "Atelier konnte {name} nicht kopieren.",
   "error.backend.routineNameRequired": "Ein Name für die Routine ist erforderlich.",
   "error.backend.routineNameTooLong": "Der Name der Routine ist zu lang.",
   "error.backend.routineInstructionRequired": "Eine Anweisung für die Routine ist erforderlich.",
@@ -215,14 +215,14 @@ export const messages = {
   "error.backend.routineRunStarting":
     "Diese Routine wird noch gestartet. Versuche es erneut, sobald ihr Durchlauf beginnt.",
   "error.backend.routineRunNoSession":
-    "OpenBot kann die aktive Routinen-Ausführung nicht unterbrechen, da ihre Anbietersitzung nicht verfügbar ist.",
+    "Atelier kann die aktive Routinen-Ausführung nicht unterbrechen, da ihre Anbietersitzung nicht verfügbar ist.",
   "error.backend.interruptSelf": "Ein Agent kann sich nicht selbst unterbrechen.",
   "error.backend.interruptOtherWork":
     "Dieser Agent arbeitet an einer Aufgabe, die nicht durch deine Nachricht gestartet wurde. Nur der Benutzer oder der Absender dieser Aufgabe kann ihn stoppen.",
   "error.backend.interruptStarting":
     "Dieser Agent startet noch einen Durchlauf. Versuche es erneut, sobald der Durchlauf beginnt.",
   "error.backend.interruptNoSession":
-    "OpenBot kann diesen Agenten nicht unterbrechen, da seine Anbietersitzung nicht verfügbar ist.",
+    "Atelier kann diesen Agenten nicht unterbrechen, da seine Anbietersitzung nicht verfügbar ist.",
   "error.backend.memoryTextRequired": "Ein Erinnerungstext ist erforderlich.",
   "error.backend.memoryTextTooLong": "Der Erinnerungstext ist zu lang.",
   "error.backend.mcpServerGone": "Dieser MCP-Server existiert nicht mehr.",
@@ -250,13 +250,13 @@ export const messages = {
   "error.backend.agentWaitRemoteUnsupported":
     "Offene Wartevorgänge sind nur für Agenten auf diesem Computer verfügbar.",
   "error.backend.routineFlowHandoffFailed": "Die Routine konnte die Arbeit nicht an diesen Agenten übergeben.",
-  "error.backend.mcpServerLimit": "OpenBot verwaltet bis zu {limit} MCP-Server.",
+  "error.backend.mcpServerLimit": "Atelier verwaltet bis zu {limit} MCP-Server.",
   "error.backend.mcpServerNameTaken": "Ein MCP-Server mit dem Namen {name} existiert bereits.",
   "error.backend.mcpServerNoAnswer": "Der Server hat innerhalb von {seconds} Sekunden nicht geantwortet.",
   "error.backend.mcpSignInNotAccepted": "Der Server hat diese Anmeldung nicht akzeptiert.",
   "error.backend.mcpCommandNotFound": "Befehl nicht gefunden: {command}",
   "error.backend.mcpRegistrationRefused":
-    "Der Anmeldeserver akzeptiert OpenBot noch nicht als Anwendung. Dein Konto ist nicht die Ursache. Verwende eine andere Verbindungsmethode, etwa einen lokalen MCP-Server.",
+    "Der Anmeldeserver akzeptiert Atelier noch nicht als Anwendung. Dein Konto ist nicht die Ursache. Verwende eine andere Verbindungsmethode, etwa einen lokalen MCP-Server.",
   "error.backend.mcpSignInAbandonedGeneric": "Die Anmeldung wurde abgebrochen.",
   "error.backend.mcpSignInForgotten": "Die MCP-Anmeldung wurde während ihrer Ausführung verworfen.",
   "error.backend.mcpSignInAbandoned": "Die MCP-Anmeldung wurde abgebrochen.",
@@ -265,21 +265,21 @@ export const messages = {
   "error.backend.mcpSignInRequired":
     "Dieser Server verlangt eine Anmeldung. Wähle „Anmelden“, um im Browser fortzufahren.",
   "error.backend.mcpSignInOnHost":
-    "Dieser Server verlangt eine Anmeldung. Melde dich in OpenBot auf dem Host-Computer bei ihm an.",
+    "Dieser Server verlangt eine Anmeldung. Melde dich in Atelier auf dem Host-Computer bei ihm an.",
   "error.backend.mcpSignInNeedsHttps":
-    "Dieser Server verlangt eine Anmeldung, und OpenBot meldet sich nur über https an. Ändere die URL in {url}.",
+    "Dieser Server verlangt eine Anmeldung, und Atelier meldet sich nur über https an. Ändere die URL in {url}.",
   "error.backend.mcpSignInCancelled": "Die Anmeldung wurde abgebrochen.",
   "error.backend.mcpSignInTimedOut": "Die Anmeldung wurde im Browser nicht abgeschlossen.",
   "error.backend.mcpSignInResponseTimedOut": "Die Antwort auf die Anmeldung kam nicht rechtzeitig an.",
   "error.backend.mcpSignInMetadataUnreadable":
-    "OpenBot konnte die Anmeldeinformationen dieses Servers nicht lesen. Prüfe die Serveradresse und versuche es erneut.",
+    "Atelier konnte die Anmeldeinformationen dieses Servers nicht lesen. Prüfe die Serveradresse und versuche es erneut.",
   "error.backend.mcpServerExited":
     "Der Server wurde beendet, bevor er geantwortet hat. Führe den Befehl in einem Terminal aus, um seinen Fehler zu sehen.",
   "error.backend.mcpOAuthProxyUnavailable":
-    "OpenBot konnte die lokale Anmeldeverbindung für diesen Server nicht starten. Starte OpenBot neu und versuche es dann erneut.",
+    "Atelier konnte die lokale Anmeldeverbindung für diesen Server nicht starten. Starte Atelier neu und versuche es dann erneut.",
   "error.backend.mcpOAuthSignInNeeded":
-    "Die Anmeldung bei diesem MCP-Server ist beendet. Der Benutzer muss sich in OpenBot erneut anmelden.",
-  "error.backend.mcpServerUnreachable": "OpenBot konnte den Server nicht erreichen. Prüfe die URL und dein Netzwerk.",
+    "Die Anmeldung bei diesem MCP-Server ist beendet. Der Benutzer muss sich in Atelier erneut anmelden.",
+  "error.backend.mcpServerUnreachable": "Atelier konnte den Server nicht erreichen. Prüfe die URL und dein Netzwerk.",
   "error.backend.mcpLocalServerOff":
     "Unter {address} antwortet auf diesem Computer kein Server. Starte den Server oder schalte ihn in der App ein, die ihn ausführt, und versuche es dann erneut.",
   "error.backend.mcpServerBlocked":
@@ -287,7 +287,7 @@ export const messages = {
   "error.backend.mcpServerIncompatible":
     "Unter dieser Adresse hat etwas geantwortet, aber nicht als MCP-Server über Streamable HTTP. Prüfe die URL und aktualisiere die App, die den Server ausführt.",
   "error.backend.mcpRemoteBridge":
-    "{reason} Dieser Befehl startet die mcp-remote-Brücke. Wähle stattdessen Streamable HTTP mit der URL {url}, dann meldet OpenBot dich an.",
+    "{reason} Dieser Befehl startet die mcp-remote-Brücke. Wähle stattdessen Streamable HTTP mit der URL {url}, dann meldet Atelier dich an.",
   "error.backend.oauthNotHttps":
     "Der OAuth-Endpunkt {origin} verwendet kein https. Die Zugangsdaten wurden daher nicht gesendet.",
   "error.backend.oauthTooManyRedirects": "Der OAuth-Endpunkt hat zu oft weitergeleitet.",
@@ -334,7 +334,7 @@ export const messages = {
   "error.backend.approvalInactive": "Diese Genehmigung ist nicht mehr aktiv.",
   "error.backend.takeoverInactive": "Diese Browserübernahme ist nicht mehr aktiv.",
   "error.backend.authSubmitting": "Die Authentifizierung wird bereits übermittelt.",
-  "error.backend.apiKeySaveFailed": "OpenBot konnte den API-Schlüssel nicht speichern. Versuche es erneut.",
+  "error.backend.apiKeySaveFailed": "Atelier konnte den API-Schlüssel nicht speichern. Versuche es erneut.",
   "error.backend.apiKeyNotAllowed": "Nur der Serverinhaber oder ein Admin kann einen API-Schlüssel eingeben.",
   "error.backend.apiKeySaving": "Der API-Schlüssel wird bereits gespeichert.",
   "error.backend.authRequestInactive": "Diese sichere Authentifizierungsanfrage ist nicht mehr aktiv.",
@@ -380,7 +380,7 @@ export const messages = {
   "error.backend.mcpSignInAppUrl": "Die Anmelde-App braucht eine gültige Server-URL.",
   "error.backend.mcpSignInAppClientId": "Gib die Client-ID der Anmelde-App ein.",
   "error.backend.mcpSignInAppIssuerChanged":
-    "Der Anmeldeserver dieses MCP-Servers hat sich geändert, daher hat OpenBot ihm die Anmelde-App nicht gesendet. Wenn die Änderung korrekt ist, entferne die Anmelde-App und füge sie erneut hinzu.",
+    "Der Anmeldeserver dieses MCP-Servers hat sich geändert, daher hat Atelier ihm die Anmelde-App nicht gesendet. Wenn die Änderung korrekt ist, entferne die Anmelde-App und füge sie erneut hinzu.",
   "error.backend.mcpSignInAppNoServer":
     "Speichere diesen MCP-Server als URL-Server, bevor du eine Anmelde-App hinzufügst.",
   "error.backend.mcpSignInAppUnavailable": "Dieser Computer kann keine Anmelde-App speichern.",
@@ -400,5 +400,5 @@ export const messages = {
     "Dieser Agent hat {count} offene Aufgaben. Schließe eine Aufgabe und starte oder öffne dann eine andere.",
   "error.backend.taskRemoteUnsupported": "Aufgaben sind nur für Agenten auf diesem Computer verfügbar.",
   "error.backend.taskStartFailed":
-    "OpenBot konnte die Aufgabe nicht starten. Erledige die Arbeit stattdessen in diesem Durchlauf.",
+    "Atelier konnte die Aufgabe nicht starten. Erledige die Arbeit stattdessen in diesem Durchlauf.",
 } as const satisfies PartialTranslation<typeof source>;

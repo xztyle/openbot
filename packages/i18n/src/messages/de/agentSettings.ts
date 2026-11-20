@@ -99,7 +99,7 @@ export const messages = {
   "agentSettings.runtime.fullAccessNote":
     "Der Agent läuft von seinem Arbeitsbereich und dem gemeinsamen Ordner aus mit vollem Computerzugriff.",
   "agentSettings.runtime.askNote":
-    "Er fragt dich, bevor er ein OpenBot-Tool nutzt oder eine Website veröffentlicht, und wenn sein Anbieter eine Freigabe anfordert.",
+    "Er fragt dich, bevor er ein Atelier-Tool nutzt oder eine Website veröffentlicht, und wenn sein Anbieter eine Freigabe anfordert.",
   "agentSettings.runtime.fullNote": "Er handelt ohne Rückfrage, außer bei Fragen, die er dir stellt.",
   "agentSettings.access.workspace": "Nur Arbeitsbereich",
   "agentSettings.access.ask": "Erst fragen",
@@ -158,7 +158,7 @@ export const messages = {
   "agentSettings.runtime.workspaceEnforcedClaude":
     "Eine Dateibearbeitung außerhalb fragt dich zuerst. Ein Befehl kann nicht außerhalb schreiben.",
   "agentSettings.runtime.workspaceUnlimited":
-    "Computersteuerung und der OpenBot-Browser sind nicht beschränkt. Du kannst Computersteuerung unten deaktivieren.",
+    "Computersteuerung und der Atelier-Browser sind nicht beschränkt. Du kannst Computersteuerung unten deaktivieren.",
   "agentSettings.computerUse.title": "Computersteuerung",
   "agentSettings.computerUse.description": "Diesem Agenten erlauben, Apps auf diesem Computer zu steuern",
   "agentSettings.automation.title": "Lokale Skripte",

@@ -22,7 +22,7 @@ export const messages = {
   "marketplace.kinds": "Tipos de contenido del marketplace",
   "marketplace.tab.agents": "Agentes",
   "marketplace.tab.skills": "Habilidades",
-  "marketplace.plugins.missing": "Este plugin no está en el catálogo de OpenBot.",
+  "marketplace.plugins.missing": "Este plugin no está en el catálogo de Atelier.",
   "marketplace.agents.loadingDetail": "Cargando detalles del agente…",
   "marketplace.agents.skills": "Habilidades",
   "marketplace.agents.routines": "Rutinas",
@@ -30,7 +30,7 @@ export const messages = {
   "marketplace.agents.routineInactive": "Inactiva",
   "marketplace.skill.loading": "Cargando habilidad",
   "marketplace.skill.update": "Actualizar habilidad",
-  "marketplace.try.readFailed": "OpenBot no pudo leer las habilidades de este agente. Inténtalo de nuevo.",
+  "marketplace.try.readFailed": "Atelier no pudo leer las habilidades de este agente. Inténtalo de nuevo.",
   "marketplace.try.enable": "Activa esta habilidad en los ajustes del agente para probarla.",
   "marketplace.try.repair": "Repara esta habilidad en los ajustes del agente para probarla.",
   "marketplace.try.update": "Actualiza esta habilidad para probar esta versión.",
@@ -170,7 +170,7 @@ export const messages = {
   "marketplace.plugin.figma.prompt.assets": "Extrae los iconos de marketing a 2x para el paquete de la aplicación.",
   "marketplace.plugin.paper.tagline": "Lienzo de diseño basado en HTML y CSS",
   "marketplace.plugin.paper.description":
-    "Paper permite a los agentes leer y escribir el archivo de diseño abierto en Paper Desktop: inspeccionar mesas de trabajo, selecciones, estilos calculados, JSX y tokens, y crear o cambiar marcos, texto y estilos. Instala Paper Desktop, ábrelo una vez y abre un archivo antes de empezar. OpenBot inicia la CLI de Paper que instala Paper Desktop. Paper no necesita clave. Las herramientas de escritura cambian el archivo abierto, así que revisa cada escritura antes de aprobarla.",
+    "Paper permite a los agentes leer y escribir el archivo de diseño abierto en Paper Desktop: inspeccionar mesas de trabajo, selecciones, estilos calculados, JSX y tokens, y crear o cambiar marcos, texto y estilos. Instala Paper Desktop, ábrelo una vez y abre un archivo antes de empezar. Atelier inicia la CLI de Paper que instala Paper Desktop. Paper no necesita clave. Las herramientas de escritura cambian el archivo abierto, así que revisa cada escritura antes de aprobarla.",
   "marketplace.plugin.paper.app":
     "Lee y escribe el archivo abierto de Paper Desktop, mediante el servidor MCP local que retransmite la CLI de Paper. Necesita Paper Desktop con un archivo abierto.",
   "marketplace.plugin.paper.prompt.implement":
@@ -181,7 +181,7 @@ export const messages = {
     "Lista los tokens de diseño del archivo abierto de Paper y compáralos con nuestro tema.",
   "marketplace.plugin.appleApps.tagline": "Mail, Calendario y más en tu Mac",
   "marketplace.plugin.appleApps.description":
-    "Apple apps permite a los agentes usar Mail, Calendario, Contactos, Recordatorios, Notas, Mensajes y Safari en este Mac. Solo funciona en macOS. OpenBot inicia mcp-icloud, un servidor de la comunidad que no es de Apple ni de OpenBot. El servidor controla las apps con AppleScript, en este equipo, y no necesita cuenta ni clave. La primera vez que un agente usa una app, macOS pregunta si OpenBot puede controlarla. Para cambiarlo después, abre Ajustes del Sistema › Privacidad y seguridad › Automatización. Los agentes pueden enviar correos e iMessages, y cambiar o eliminar eventos, contactos y recordatorios, así que revisa cada escritura antes de aprobarla. Lo que leen las herramientas, como el texto de los correos, va al proveedor del modelo del agente.",
+    "Apple apps permite a los agentes usar Mail, Calendario, Contactos, Recordatorios, Notas, Mensajes y Safari en este Mac. Solo funciona en macOS. Atelier inicia mcp-icloud, un servidor de la comunidad que no es de Apple ni de Atelier. El servidor controla las apps con AppleScript, en este equipo, y no necesita cuenta ni clave. La primera vez que un agente usa una app, macOS pregunta si Atelier puede controlarla. Para cambiarlo después, abre Ajustes del Sistema › Privacidad y seguridad › Automatización. Los agentes pueden enviar correos e iMessages, y cambiar o eliminar eventos, contactos y recordatorios, así que revisa cada escritura antes de aprobarla. Lo que leen las herramientas, como el texto de los correos, va al proveedor del modelo del agente.",
   "marketplace.plugin.appleApps.app":
     "Mail, Calendario, Contactos, Recordatorios, Notas, Mensajes y Safari, mediante el servidor local mcp-icloud. Necesita macOS y acceso de Automatización.",
   "marketplace.plugin.appleApps.prompt.unread": "Resume mis correos no leídos de hoy en Apple Mail.",

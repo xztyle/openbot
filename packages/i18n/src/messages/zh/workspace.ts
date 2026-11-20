@@ -411,7 +411,7 @@ export const messages = {
   "workspace.app.discord.title": "Discord",
   "workspace.app.discord.notLinked": "未与 Discord 频道关联。",
   "workspace.app.discord.linkedWebhook": "已与 #{name} 关联。消息会显示各自的作者。",
-  "workspace.app.discord.linkedBot": "已与 #{name} 关联。OpenBot 机器人会以作者的名字发消息。",
+  "workspace.app.discord.linkedBot": "已与 #{name} 关联。Atelier 机器人会以作者的名字发消息。",
   "workspace.app.discord.unlink": "取消关联",
   "workspace.app.discord.loading": "正在加载 Discord 服务器…",
   "workspace.app.discord.noServers": "请先在“服务器设置 → 连接器”中连接 Discord 服务器。",

@@ -3,12 +3,12 @@ import type { messages as source } from "../../en/error/provider";
 
 export const messages = {
   "error.provider.mcpConfig":
-    "OpenBot n’a pas pu enregistrer les serveurs MCP dans la configuration de Codex. Vérifiez que votre fichier config.toml de Codex est valide et accessible en écriture, puis redémarrez OpenBot.",
+    "Atelier n’a pas pu enregistrer les serveurs MCP dans la configuration de Codex. Vérifiez que votre fichier config.toml de Codex est valide et accessible en écriture, puis redémarrez Atelier.",
   "error.provider.computerUseConfig":
-    "OpenBot n’a pas pu enregistrer Computer Use dans la configuration de Codex. Vérifiez que votre fichier config.toml de Codex est valide et accessible en écriture, puis redémarrez OpenBot. Vous pouvez désactiver Computer Use dans les réglages du coéquipier pour continuer sans.",
-  "error.provider.codexUnresponsive": "Codex ne répondait plus, OpenBot a donc arrêté son processus.",
+    "Atelier n’a pas pu enregistrer Computer Use dans la configuration de Codex. Vérifiez que votre fichier config.toml de Codex est valide et accessible en écriture, puis redémarrez Atelier. Vous pouvez désactiver Computer Use dans les réglages du coéquipier pour continuer sans.",
+  "error.provider.codexUnresponsive": "Codex ne répondait plus, Atelier a donc arrêté son processus.",
   "error.provider.endpointsReadOnly":
-    "Les points de terminaison enregistrés ont été écrits par une version plus récente d’OpenBot, ou le fichier est illisible. Mettez à jour OpenBot pour les modifier.",
+    "Les points de terminaison enregistrés ont été écrits par une version plus récente d’Atelier, ou le fichier est illisible. Mettez à jour Atelier pour les modifier.",
   "error.provider.endpointNoSecureStorage":
     "Cet ordinateur n’a pas de stockage sécurisé : impossible d’enregistrer une clé d’API ou un en-tête. Supprimez-les, ou utilisez un point de terminaison sans identifiants.",
   "error.provider.endpointDuplicate":
@@ -19,14 +19,14 @@ export const messages = {
   "error.provider.endpointSecretUnreadable":
     "Cet ordinateur ne peut pas lire la clé d’API et les en-têtes enregistrés. Saisissez de nouveau la clé d’API et les en-têtes, pour qu’aucun ne soit perdu.",
   "error.provider.discoveryTimeout": "{host} n’a pas répondu à temps.",
-  "error.provider.discoveryUnreachable": "OpenBot n’a pas pu se connecter à {host}.",
+  "error.provider.discoveryUnreachable": "Atelier n’a pas pu se connecter à {host}.",
   "error.provider.discoveryRedirect": "{host} a envoyé une redirection. Saisissez l’adresse finale du serveur.",
   "error.provider.discoveryRefused": "{host} a refusé la requête. Vérifiez la clé d’API et les en-têtes.",
   "error.provider.discoveryHttp": "{host} a répondu avec HTTP {status}.",
   "error.provider.discoveryTooLarge": "La liste des modèles de {host} est trop volumineuse.",
   "error.provider.discoveryInvalid": "{host} n’a pas envoyé de liste de modèles compatible OpenAI.",
   "error.provider.detectionSettingsReadOnly":
-    "Les réglages de détection ont été écrits par une version plus récente d’OpenBot, ou le fichier est illisible. Mettez à jour OpenBot pour les modifier.",
+    "Les réglages de détection ont été écrits par une version plus récente d’Atelier, ou le fichier est illisible. Mettez à jour Atelier pour les modifier.",
   "error.provider.detectionEntryInvalid":
     "Une adresse doit être une URL http:// ou https:// sans mot de passe, et un dossier doit être un chemin absolu.",
   "error.provider.detectionEntriesTooMany": "Il y a trop d’adresses ou de dossiers.",
@@ -57,11 +57,11 @@ export const messages = {
   "error.provider.bunLicenseChecksum": "La somme de contrôle de la licence Bun ne correspond pas.",
   "error.provider.bunxDamaged": "L’exécuteur du gestionnaire de paquets Bun est manquant ou endommagé.",
   "error.provider.releaseSourcesUnreachable":
-    "OpenBot n’a pas pu joindre les sources de versions du fournisseur. Vérifiez la connexion et réessayez.",
+    "Atelier n’a pas pu joindre les sources de versions du fournisseur. Vérifiez la connexion et réessayez.",
   "error.provider.runtimesUnsupported":
     "Les environnements d’exécution des fournisseurs ne sont pas disponibles sur cette plateforme.",
-  "error.provider.closing": "OpenBot se ferme.",
-  "error.provider.cliOverride": "Supprimez le chemin CLI explicite avant de mettre à jour dans OpenBot.",
+  "error.provider.closing": "Atelier se ferme.",
+  "error.provider.cliOverride": "Supprimez le chemin CLI explicite avant de mettre à jour dans Atelier.",
   "error.provider.runtimeUpdateIncomplete": "La mise à jour de l’environnement d’exécution ne s’est pas terminée.",
   "error.provider.downloadHttp": "Le téléchargement de l’environnement d’exécution a échoué avec HTTP {status}.",
   "error.provider.downloadNoData": "Le téléchargement de l’environnement d’exécution n’a renvoyé aucune donnée.",
@@ -81,7 +81,7 @@ export const messages = {
   "error.provider.metadataNoData":
     "Le téléchargement des métadonnées de l’environnement d’exécution n’a renvoyé aucune donnée.",
   "error.provider.metadataTooLarge": "Les métadonnées de l’environnement d’exécution sont trop volumineuses.",
-  "error.provider.requestFailed": "OpenBot n’a pas pu télécharger {url}. {reason}",
+  "error.provider.requestFailed": "Atelier n’a pas pu télécharger {url}. {reason}",
   "error.provider.installRecordMismatch":
     "L’enregistrement d’installation de l’environnement d’exécution ne correspond pas.",
   "error.provider.runtimeChecksum":
@@ -120,17 +120,17 @@ export const messages = {
   "error.provider.noModel": "Le fournisseur sélectionné n’a aucun modèle disponible.",
   "error.provider.noModelNamed": "{provider} n’a aucun modèle disponible.",
   "error.provider.acpNoModels":
-    "La CLI ACP n’a annoncé aucun modèle ACP. OpenBot ne choisira pas de modèle de secours au hasard.",
+    "La CLI ACP n’a annoncé aucun modèle ACP. Atelier ne choisira pas de modèle de secours au hasard.",
   "error.provider.endpointRemoveBusy":
     "Attendez la fin du tour actif et de la file d’attente avant de supprimer ce point de terminaison.",
   "error.provider.codexOutdated":
-    "La CLI Codex {version} est trop ancienne. OpenBot nécessite la version 0.156.0 ou plus récente.",
+    "La CLI Codex {version} est trop ancienne. Atelier nécessite la version 0.156.0 ou plus récente.",
   "error.provider.codexNotStarted": "La CLI Codex a été trouvée mais n’a pas pu démarrer.",
   "error.provider.codexNotStartedHint":
     "La CLI Codex a été trouvée mais n’a pas pu démarrer. Exécutez `codex --version` dans un nouveau terminal.",
   "error.provider.codexManagedNotStarted":
-    "ChatGPT a été téléchargé mais n’a pas pu démarrer. Téléchargez-le à nouveau dans OpenBot.",
-  "error.provider.codexMissing": "ChatGPT n’est pas téléchargé. Téléchargez-le dans OpenBot pour continuer.",
+    "ChatGPT a été téléchargé mais n’a pas pu démarrer. Téléchargez-le à nouveau dans Atelier.",
+  "error.provider.codexMissing": "ChatGPT n’est pas téléchargé. Téléchargez-le dans Atelier pour continuer.",
   "error.provider.codexConfigIgnored": {
     one: "Codex a ignoré {count} paramètre de sa configuration : {settings}. Corrigez-le ou supprimez-le, ou mettez Codex à jour.",
     other:
@@ -142,21 +142,21 @@ export const messages = {
       "Codex a ignoré {count} paramètres de sa configuration. Corrigez-les ou supprimez-les, ou mettez Codex à jour.",
   },
   "error.provider.claudeOutdated":
-    "Claude Code {version} est trop ancien. OpenBot nécessite la version 2.1.232 ou plus récente.",
+    "Claude Code {version} est trop ancien. Atelier nécessite la version 2.1.232 ou plus récente.",
   "error.provider.claudeNotStarted": "La CLI Claude a été trouvée mais n’a pas pu démarrer.",
   "error.provider.claudeNotStartedHint":
     "La CLI Claude a été trouvée mais n’a pas pu démarrer. Exécutez `claude --version` dans un nouveau terminal.",
   "error.provider.claudeManagedNotStarted":
-    "Claude a été téléchargé mais n’a pas pu démarrer. Téléchargez-le à nouveau dans OpenBot.",
-  "error.provider.claudeMissing": "Claude n’est pas téléchargé. Téléchargez-le dans OpenBot pour continuer.",
+    "Claude a été téléchargé mais n’a pas pu démarrer. Téléchargez-le à nouveau dans Atelier.",
+  "error.provider.claudeMissing": "Claude n’est pas téléchargé. Téléchargez-le dans Atelier pour continuer.",
   "error.provider.grokOutdated":
-    "La CLI Grok {version} est trop ancienne. OpenBot nécessite la version 1.0.5 ou plus récente.",
+    "La CLI Grok {version} est trop ancienne. Atelier nécessite la version 1.0.5 ou plus récente.",
   "error.provider.grokNotStarted": "La CLI Grok a été trouvée mais n’a pas pu démarrer.",
   "error.provider.grokNotStartedHint":
     "La CLI Grok a été trouvée mais n’a pas pu démarrer. Exécutez `grok --version` dans un nouveau terminal.",
-  "error.provider.grokMissing": "Grok n’est pas téléchargé. Téléchargez-le dans OpenBot pour continuer.",
+  "error.provider.grokMissing": "Grok n’est pas téléchargé. Téléchargez-le dans Atelier pour continuer.",
   "error.provider.opencodeNotStarted": "OpenCode n’a pas pu démarrer. Exécutez `opencode --version` dans un terminal.",
-  "error.provider.opencodeMissing": "OpenCode n’est pas téléchargé. Téléchargez-le dans OpenBot pour continuer.",
+  "error.provider.opencodeMissing": "OpenCode n’est pas téléchargé. Téléchargez-le dans Atelier pour continuer.",
   "error.provider.codexVersionUnreadable": "Impossible de lire la version de la CLI Codex.",
   "error.provider.claudeVersionUnreadable": "Impossible de lire la version de la CLI Claude.",
   "error.provider.grokVersionUnreadable": "Impossible de lire la version de la CLI Grok.",
@@ -165,7 +165,7 @@ export const messages = {
   "error.provider.connectBeforeProfile": "Connectez le fournisseur sélectionné avant de générer un profil.",
   "error.provider.cliNotReady": "La CLI {provider} n’est pas prête ou n’est pas connectée.",
   "error.provider.cliTimedOut":
-    "{provider} n’a pas répondu à temps. L’ordinateur est peut-être occupé. OpenBot va réessayer.",
+    "{provider} n’a pas répondu à temps. L’ordinateur est peut-être occupé. Atelier va réessayer.",
   "error.provider.cliTimedOutRefresh":
     "{provider} n’a pas répondu à temps. L’ordinateur est peut-être occupé. Actualisez les fournisseurs pour réessayer.",
   "error.provider.acpStartTimedOut":
@@ -173,7 +173,7 @@ export const messages = {
   "error.provider.acpModelsTimedOut":
     "{provider} n’a pas listé ses modèles en {seconds} s. L’ordinateur est peut-être occupé.",
   "error.provider.startStopped":
-    "{provider} n’a pas démarré plusieurs fois de suite, OpenBot a donc arrêté d’essayer. Actualisez les fournisseurs pour réessayer.",
+    "{provider} n’a pas démarré plusieurs fois de suite, Atelier a donc arrêté d’essayer. Actualisez les fournisseurs pour réessayer.",
   "error.provider.tempDiskSpace":
     "{provider} a besoin d’au moins 1 Go d’espace disque libre pour démarrer. Libérez de l’espace, puis actualisez les fournisseurs.",
   "error.provider.noCodeSignIn": "{provider} ne permet pas de se connecter avec un code.",
@@ -188,10 +188,10 @@ export const messages = {
   "error.provider.cliSigningIn":
     "La CLI {provider} est en cours de connexion. Terminez ou annulez la connexion, puis mettez à jour.",
   "error.provider.cliBusyUpdate": "La CLI {provider} traite un tour. Attendez la fin, puis mettez à jour.",
-  "error.provider.cliSelectFailed": "OpenBot n’a pas pu sélectionner la CLI gérée installée.",
+  "error.provider.cliSelectFailed": "Atelier n’a pas pu sélectionner la CLI gérée installée.",
   "error.provider.noAuthenticatedAccount": "{provider} n’a renvoyé aucun compte authentifié.",
   "error.provider.signInExpired": "Votre connexion à {provider} a expiré. Reconnectez-vous pour continuer.",
-  "error.provider.cliActivateFailed": "OpenBot n’a pas pu activer la CLI gérée.",
+  "error.provider.cliActivateFailed": "Atelier n’a pas pu activer la CLI gérée.",
   "error.provider.cliBusyReconnect": "La CLI {provider} traite un tour. Attendez la fin, puis reconnectez-vous.",
   "error.provider.opencodeCredentialsRejected":
     "Le fournisseur du modèle a refusé la clé d’API. Corrigez la clé OpenCode dans les réglages, ou la clé du fournisseur avec `opencode auth login`. Réessayez ensuite ou choisissez un autre modèle.\n{detail}",
@@ -216,19 +216,19 @@ export const messages = {
   "error.provider.opencodeProviderFailed":
     "Le fournisseur du modèle a échoué de son côté. Votre connexion n’en est pas la cause. Réessayez plus tard ou choisissez un autre modèle.\n{detail}",
   "error.provider.opencodeNetwork":
-    "OpenCode n’a pas pu se connecter au fournisseur du modèle. Vérifiez la connexion réseau de l’ordinateur qui exécute OpenBot, puis réessayez.\n{detail}",
+    "OpenCode n’a pas pu se connecter au fournisseur du modèle. Vérifiez la connexion réseau de l’ordinateur qui exécute Atelier, puis réessayez.\n{detail}",
   "error.provider.opencodeDatabaseNewer":
     "OpenCode n’a pas pu ouvrir sa base de données, car une version plus récente d’OpenCode l’a modifiée. Mettez OpenCode à jour vers la version 2 ou ultérieure, puis réessayez.",
   "error.provider.opencodeNoAnswer":
     "Le modèle OpenCode a terminé le tour sans réponse. Réessayez ou choisissez un autre modèle.",
   "error.provider.opencodeReasoningWithoutAnswer":
     "Le modèle OpenCode a terminé le tour après son raisonnement, sans réponse. Réessayez ou choisissez un autre modèle.",
-  "error.provider.chatgptPageFailed": "OpenBot n’a pas pu ouvrir la page de connexion ChatGPT.",
+  "error.provider.chatgptPageFailed": "Atelier n’a pas pu ouvrir la page de connexion ChatGPT.",
   "error.provider.noneReady": "Aucun fournisseur d’agent n’est prêt.",
   "error.provider.claudeTurnActive": "Attendez la fin du tour Claude actif avant d’actualiser son contexte.",
   "error.provider.codexLoginRequired":
     "Codex nécessite une connexion avec un abonnement ChatGPT. Exécutez `codex login`.",
-  "error.provider.cliUpdateFailed": "OpenBot n’a pas pu mettre à jour la CLI {provider}. {reason}",
+  "error.provider.cliUpdateFailed": "Atelier n’a pas pu mettre à jour la CLI {provider}. {reason}",
   "error.provider.tryAgain": "Réessayez.",
   "error.provider.noAgentProcess": "{provider} n’a aucun processus en cours pour cet agent.",
   "error.provider.stoppedBeforeAgentProcess": "{provider} s’est arrêté avant le démarrage du processus de l’agent.",
@@ -237,7 +237,7 @@ export const messages = {
   "error.provider.antigravityArchivePath": "L’archive Gemini contient un fichier inattendu.",
   "error.provider.antigravityChecksum": "La somme de contrôle de l’environnement d’exécution Gemini ne correspond pas.",
   "error.provider.antigravityReleaseShape": "La version Gemini a une forme inattendue.",
-  "error.provider.antigravityMissing": "Gemini n’est pas téléchargé. Téléchargez-le dans OpenBot pour continuer.",
+  "error.provider.antigravityMissing": "Gemini n’est pas téléchargé. Téléchargez-le dans Atelier pour continuer.",
   "error.provider.antigravityNotStarted": "Le serveur Gemini a été trouvé, mais sa version est illisible.",
   "error.provider.antigravityVersionUnreadable": "Impossible de lire la version du serveur Gemini.",
   "error.provider.antigravitySignIn": "Connectez-vous avec Google pour utiliser Gemini.",
@@ -252,7 +252,7 @@ export const messages = {
   "error.provider.cursorArchivePath": "L’archive Cursor contient un fichier inattendu.",
   "error.provider.cursorChecksum": "La somme de contrôle de l’environnement d’exécution Cursor ne correspond pas.",
   "error.provider.cursorReleaseShape": "La version Cursor a une forme inattendue.",
-  "error.provider.cursorMissing": "Cursor n’est pas téléchargé. Téléchargez-le dans OpenBot pour continuer.",
+  "error.provider.cursorMissing": "Cursor n’est pas téléchargé. Téléchargez-le dans Atelier pour continuer.",
   "error.provider.cursorNotStarted": "L’agent Cursor a été trouvé, mais sa version est illisible.",
   "error.provider.cursorVersionUnreadable": "Impossible de lire la version de l’agent Cursor.",
   "error.provider.cursorSignIn": "Connectez-vous avec Cursor ou définissez CURSOR_API_KEY pour utiliser Cursor.",
@@ -261,19 +261,19 @@ export const messages = {
     "Le paquet Cline ne correspond pas au catalogue des environnements d’exécution.",
   "error.provider.clineChecksum": "La somme de contrôle de l’environnement d’exécution Cline ne correspond pas.",
   "error.provider.clineLicenseChecksum": "La somme de contrôle de la licence Cline ne correspond pas.",
-  "error.provider.clineMissing": "Cline n’est pas téléchargé. Téléchargez-le dans OpenBot pour continuer.",
+  "error.provider.clineMissing": "Cline n’est pas téléchargé. Téléchargez-le dans Atelier pour continuer.",
   "error.provider.clineOutdated":
-    "La CLI Cline {version} est trop ancienne. OpenBot nécessite la version 3.0.68 ou plus récente.",
+    "La CLI Cline {version} est trop ancienne. Atelier nécessite la version 3.0.68 ou plus récente.",
   "error.provider.clineNotStarted": "Cline n’a pas pu démarrer. Exécutez `cline --version` dans un terminal.",
   "error.provider.clineVersionUnreadable": "Impossible de lire la version de la CLI Cline.",
   "error.provider.clineSignIn": "Connectez-vous avec Cline ou définissez CLINE_API_KEY pour utiliser Cline.",
   "error.provider.usageLimitReached": "Le compte a atteint sa limite d’utilisation.",
   "error.provider.foreignReasoning":
-    "{provider} n’a pas accepté le raisonnement précédent de cette conversation, car un autre compte ou une autre clé API l’a reçu. OpenBot a ouvert une nouvelle session {provider} avec l’historique de la conversation. Réessayez.",
+    "{provider} n’a pas accepté le raisonnement précédent de cette conversation, car un autre compte ou une autre clé API l’a reçu. Atelier a ouvert une nouvelle session {provider} avec l’historique de la conversation. Réessayez.",
   "error.provider.opencodeSessionRejected":
-    "OpenCode a refusé la requête sans en donner la cause. Cela peut arriver dans une longue conversation ou après un changement de modèle. OpenBot a démarré une nouvelle session OpenCode avec l’historique de la conversation. Réessayez. Si l’erreur continue, choisissez un autre modèle ou un effort plus faible.",
+    "OpenCode a refusé la requête sans en donner la cause. Cela peut arriver dans une longue conversation ou après un changement de modèle. Atelier a démarré une nouvelle session OpenCode avec l’historique de la conversation. Réessayez. Si l’erreur continue, choisissez un autre modèle ou un effort plus faible.",
   "error.provider.museMcpStartupFault":
-    "Muse n’a pas pu démarrer un serveur MCP et a bloqué MCP dans cette session. OpenBot a démarré une nouvelle session Muse avec l’historique de la conversation. Réessayez. Si l’erreur persiste, désactivez Computer Use ou le serveur MCP en échec pour cet agent.",
+    "Muse n’a pas pu démarrer un serveur MCP et a bloqué MCP dans cette session. Atelier a démarré une nouvelle session Muse avec l’historique de la conversation. Réessayez. Si l’erreur persiste, désactivez Computer Use ou le serveur MCP en échec pour cet agent.",
   "error.provider.grokSignIn": "Exécutez `grok login` ou définissez XAI_API_KEY pour utiliser Grok.",
   "error.provider.acpSignInTimedOut": "La connexion a expiré.",
   "error.provider.acpSignInStopped": "La connexion s’est arrêtée avant la fin.",
@@ -290,7 +290,7 @@ export const messages = {
     "{provider} a refusé la clé d’API enregistrée. Remplacez ou supprimez la clé dans les Réglages, puis réessayez.",
   "error.provider.keyProviderNoBalance":
     "Le compte {provider} de la clé d’API enregistrée n’a pas de solde. Ajoutez du crédit au compte, puis réessayez.",
-  "error.provider.messageTooLarge": "OpenBot a arrêté {provider}, car il a envoyé un message de plus de {limit} Mo.",
+  "error.provider.messageTooLarge": "Atelier a arrêté {provider}, car il a envoyé un message de plus de {limit} Mo.",
   "error.provider.customAgentIdInvalid":
     "Un ID d’agent ne peut contenir que des lettres minuscules, des chiffres ou `-`, et ne peut pas être l’ID d’un fournisseur intégré.",
   "error.provider.customAgentEnvInvalid":
@@ -303,11 +303,11 @@ export const messages = {
     "Un argument ne peut pas contenir de saut de ligne. Utilisez au plus 32 arguments.",
   "error.provider.customAgentWindowsScript":
     "Une commande .cmd ou .bat n’accepte que des lettres, des chiffres et - _ . , : = @ + / \\ dans ses arguments.",
-  "error.provider.customAgentNotFound": "OpenBot ne trouve pas {command}. Saisissez le chemin complet de la commande.",
+  "error.provider.customAgentNotFound": "Atelier ne trouve pas {command}. Saisissez le chemin complet de la commande.",
   "error.provider.customAgentCheckTimedOut": "L’agent n’a pas répondu en 20 secondes.",
   "error.provider.customAgentCheckStopped": "L’agent s’est arrêté avant de répondre.",
   "error.provider.customAgentProtocolVersion":
-    "L’agent utilise la version {version} d’ACP. OpenBot utilise la version 1.",
+    "L’agent utilise la version {version} d’ACP. Atelier utilise la version 1.",
   "error.provider.customAgentCheckFailed": "L’agent n’a pas répondu comme un agent ACP.",
   "error.provider.customAgentRemoveBusy":
     "Attendez la fin du tour actif et de la file d’attente avant de supprimer cet agent personnalisé.",
@@ -315,19 +315,19 @@ export const messages = {
   "error.provider.customAgentMissing": "Cet agent personnalisé n’est plus enregistré. Choisissez un autre modèle.",
   "error.provider.customAgentSignIn": "Connectez-vous avec la commande propre à l’agent, puis réessayez.",
   "error.provider.customAgentsReadOnly":
-    "Les agents personnalisés enregistrés ont été écrits par une version plus récente d’OpenBot, ou le fichier est illisible. Mettez à jour OpenBot pour les modifier.",
+    "Les agents personnalisés enregistrés ont été écrits par une version plus récente d’Atelier, ou le fichier est illisible. Mettez à jour Atelier pour les modifier.",
   "error.provider.customAgentNoSecureStorage":
     "Cet ordinateur n’a pas de stockage sécurisé : impossible d’enregistrer les valeurs d’environnement. Supprimez-les et réessayez.",
   "error.provider.customAgentNotSaved":
     "Cet agent personnalisé n’est pas enregistré. Actualisez la liste et réessayez.",
   "error.provider.customAgentTooMany": "Vous pouvez enregistrer au plus {count} agents personnalisés.",
   "error.provider.customAgentEnvValueMissing": "Saisissez une valeur pour {name}.",
-  "error.provider.off": "{provider} est désactivé dans OpenBot. Activez-le d’abord dans les réglages des fournisseurs.",
+  "error.provider.off": "{provider} est désactivé dans Atelier. Activez-le d’abord dans les réglages des fournisseurs.",
   "error.provider.inUse": "Un agent utilise {provider}. Changez son modèle avant de désactiver ce fournisseur.",
   "error.provider.useBusy": "Attendez la fin de la vérification du fournisseur ou de la connexion, puis réessayez.",
   "error.provider.useSettingsReadOnly":
-    "Les réglages enregistrés du fournisseur sont illisibles. Mettez à jour OpenBot avant de les modifier.",
-  "error.provider.useChangeFailed": "OpenBot n’a pas pu modifier le réglage du fournisseur.",
+    "Les réglages enregistrés du fournisseur sont illisibles. Mettez à jour Atelier avant de les modifier.",
+  "error.provider.useChangeFailed": "Atelier n’a pas pu modifier le réglage du fournisseur.",
   "error.provider.accountsUnsupported": "{provider} ne peut avoir qu’un seul compte.",
   "error.provider.accountNeedsConnection": "Connectez {provider} avant d’ajouter un autre compte.",
   "error.provider.usageResetUnsupported": "{provider} ne peut pas réinitialiser les limites d’usage.",
@@ -340,7 +340,7 @@ export const messages = {
     "Ce compte {provider} utilise la clé API enregistrée et n'a pas de connexion. Changez la clé dans Réglages du serveur → Fournisseurs.",
   "error.provider.accountInUse": "Un agent qui utilise ce compte est au travail. Réessayez quand l’agent s’arrête.",
   "error.provider.accountsReadOnly":
-    "Les comptes enregistrés du fournisseur sont illisibles. Mettez à jour OpenBot avant de les modifier.",
+    "Les comptes enregistrés du fournisseur sont illisibles. Mettez à jour Atelier avant de les modifier.",
   "error.provider.accountSignedOut": "Ce compte {provider} est déconnecté. Reconnectez-vous.",
   "error.provider.sessionSettingUnavailable":
     "Ce réglage n’est pas disponible dans la session actuelle du fournisseur.",
@@ -374,7 +374,7 @@ export const messages = {
   "error.provider.museConnectionFailed":
     "La connexion à Muse a échoué. Reprenez la conversation pour récupérer son historique enregistré.",
   "error.provider.museUnknownSession": "Session Muse inconnue.",
-  "error.provider.museInvalidToolResult": "Résultat d’outil OpenBot non valide.",
+  "error.provider.museInvalidToolResult": "Résultat d’outil Atelier non valide.",
   "error.provider.museMcpRequired": "Muse doit prendre en charge les serveurs MCP de session.",
   "error.provider.museSessionMismatch": "Muse a renvoyé une autre session.",
   "error.provider.museCompactRejected": "Muse n’a pas accepté le compactage.",

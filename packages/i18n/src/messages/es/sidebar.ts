@@ -128,7 +128,7 @@ export const messages = {
   "sidebar.state.usageLimitChip": "Límite",
   "sidebar.delete.title": "¿Eliminar {name}?",
   "sidebar.delete.agentDescription":
-    "Esto elimina de la aplicación el agente y su conversación de OpenBot. Se eliminan su cola, recuerdos, rutinas y espacio de trabajo. El historial guardado por separado por el proveedor CLI conectado no se elimina. No se puede deshacer.",
+    "Esto elimina de la aplicación el agente y su conversación de Atelier. Se eliminan su cola, recuerdos, rutinas y espacio de trabajo. El historial guardado por separado por el proveedor CLI conectado no se elimina. No se puede deshacer.",
   "sidebar.delete.channelDescription":
     "Esto detiene el canal. Su historial permanece en Canales eliminados solo para consulta. Puedes restaurarlo desde allí. Los agentes miembros se conservan.",
   "sidebar.delete.sectionDescription":
@@ -142,7 +142,7 @@ export const messages = {
   "sidebar.announce.movedPinned": "Se movió el chat fijado a la posición {position} de {total}.",
   "sidebar.announce.personFallback": "persona",
   "sidebar.announce.chatFallback": "chat",
-  "sidebar.mobileApp.title": "OpenBot para móviles",
+  "sidebar.mobileApp.title": "Atelier para móviles",
   "sidebar.mobileApp.body": "La aplicación ya está disponible para iPhone y Android.",
   "sidebar.mobileApp.howToInstall": "Cómo instalar",
   "sidebar.mobileApp.dismiss": "Cerrar el anuncio de la aplicación móvil",
@@ -157,6 +157,6 @@ export const messages = {
   "sidebar.community.title": "Toma asiento.",
   "sidebar.community.body": "Hay un lugar para ti en el futuro de la IA. Únete a la comunidad en Discord y X.",
   "sidebar.community.joinDiscord": "Unirse a Discord",
-  "sidebar.community.followX": "Seguir a OpenBot en X",
+  "sidebar.community.followX": "Seguir a Atelier en X",
   "sidebar.community.dismiss": "Cerrar la invitación a la comunidad",
 } as const satisfies PartialTranslation<typeof source>;

@@ -2,7 +2,7 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/webClient";
 
 export const messages = {
-  "webClient.loading": "OpenBot を読み込んでいます…",
+  "webClient.loading": "Atelier を読み込んでいます…",
   "webClient.loadingLine.wake": "エージェントを起こしています…",
   "webClient.loadingLine.coffee": "エージェントにコーヒーを淹れています…",
   "webClient.loadingLine.tokens": "トークンを指で数えています…",
@@ -23,13 +23,13 @@ export const messages = {
   "webClient.notice.hostsFailed": "サーバーを読み込めませんでした",
   "webClient.notice.connectComputer": "サーバーを接続してください",
   "webClient.connect.description":
-    "コンピューターで OpenBot を実行すると、このブラウザーからエージェントとチャットできます。招待でサーバーに参加することもできます。",
+    "コンピューターで Atelier を実行すると、このブラウザーからエージェントとチャットできます。招待でサーバーに参加することもできます。",
   "webClient.connect.descriptionHosted":
-    "ホスト型サーバーを作成すると、このブラウザーからエージェントとチャットできます。コンピューターで OpenBot を実行するか、招待でサーバーに参加することもできます。",
-  "webClient.connect.stepInstall": "コンピューターに OpenBot をインストールして開きます。",
+    "ホスト型サーバーを作成すると、このブラウザーからエージェントとチャットできます。コンピューターで Atelier を実行するか、招待でサーバーに参加することもできます。",
+  "webClient.connect.stepInstall": "コンピューターに Atelier をインストールして開きます。",
   "webClient.connect.stepSignIn": "メールアドレスでサインインします。",
   "webClient.connect.stepRemote": "リモートアクセスをオンにします。",
-  "webClient.notice.download": "OpenBot をダウンロード",
+  "webClient.notice.download": "Atelier をダウンロード",
   "webClient.notice.createServer": "ホスト型サーバーを作成",
   "webClient.notice.join": "招待で参加",
   "webClient.notice.refreshHosts": "サーバーを更新",
@@ -41,7 +41,7 @@ export const messages = {
   "webClient.error.usageOffline": "使用量を表示するには、サーバーに接続してください。",
   "webClient.error.desktopOnly": "この操作はデスクトップアプリで使えます。",
   "webClient.settings.preferences.title": "環境設定",
-  "webClient.settings.preferences.description": "このブラウザーでの OpenBot の言語とサウンドを選びます。",
+  "webClient.settings.preferences.description": "このブラウザーでの Atelier の言語とサウンドを選びます。",
   "webClient.error.checkConversation": "もう一度送信する前に会話を確認してください。",
   "webClient.error.hostReported": "サーバーがエラーを報告しました。会話とサーバーの状態を確認してください。",
   "webClient.error.requestFailed": "リクエストに失敗しました。",
@@ -66,21 +66,21 @@ export const messages = {
   "webClient.error.requestIncomplete":
     "サーバーはこのリクエストを完了できませんでした。再試行する前に更新してください。",
   "webClient.error.connectionInterrupted":
-    "サーバーとの接続が切れました。OpenBot が再接続しています。少ししてからもう一度お試しください。",
+    "サーバーとの接続が切れました。Atelier が再接続しています。少ししてからもう一度お試しください。",
   "webClient.error.viewEnded": "ブラウザーのビューが終了しました。",
   "webClient.error.viewChanged": "ブラウザーのビューが変わりました。",
   "webClient.error.connectionChanging": "サーバーへの接続が切り替わっています。",
   "webClient.error.identityChanged": "サーバーの ID が変わりました。接続を拒否しました。",
   "webClient.error.connectionUnavailable": "サーバーへの接続を利用できません。",
   "webClient.error.incompatible":
-    "このサーバーは OpenBot web に対応していません。サーバーをアップデートして、このページを再読み込みしてください。",
+    "このサーバーは Atelier web に対応していません。サーバーをアップデートして、このページを再読み込みしてください。",
   "webClient.error.sendUnconfirmed": "メッセージの配信が確認できません。もう一度送信する前に更新してください。",
   "webClient.error.fileType": "この種類のファイルを添付するには、サーバーをアップデートしてください。",
   "webClient.error.uploadCancelled": "添付ファイルのアップロードはキャンセルされました。",
   "webClient.error.duplication": "このサーバーはエージェントの複製に対応していません。",
   "webClient.error.connectServerFirst": "先にこのサーバーに接続してください。",
   "webClient.error.agentInstallNotAllowed":
-    "ここにエージェントを追加できるのはオーナーまたは管理者のみで、サーバーでは最新の OpenBot が動作している必要があります。",
+    "ここにエージェントを追加できるのはオーナーまたは管理者のみで、サーバーでは最新の Atelier が動作している必要があります。",
   "webClient.error.linkDesktopOnly": "このリンクはデスクトップアプリでのみ開けます。",
   "webClient.error.saveEndpointOffline": "エンドポイントを保存するには、サーバーに接続してください。",
   "webClient.error.removeEndpointOffline": "エンドポイントを削除するには、サーバーに接続してください。",

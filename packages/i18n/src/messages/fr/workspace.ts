@@ -413,7 +413,7 @@ export const messages = {
   "workspace.app.discord.title": "Discord",
   "workspace.app.discord.notLinked": "Non relié à un canal Discord.",
   "workspace.app.discord.linkedWebhook": "Relié à #{name}. Les messages affichent chaque auteur.",
-  "workspace.app.discord.linkedBot": "Relié à #{name}. Le bot OpenBot publie avec le nom de l’auteur.",
+  "workspace.app.discord.linkedBot": "Relié à #{name}. Le bot Atelier publie avec le nom de l’auteur.",
   "workspace.app.discord.unlink": "Dissocier",
   "workspace.app.discord.loading": "Chargement des serveurs Discord…",
   "workspace.app.discord.noServers": "Connectez d’abord un serveur Discord dans Réglages du serveur → Connecteurs.",

@@ -8,10 +8,10 @@ export const messages = {
   "error.attachment.unavailable": "Diese Datei ist nicht mehr verfügbar.",
   "error.attachment.tooMany": "Wähle höchstens {limit} Dateien.",
   "error.attachment.mediaUnsupported":
-    "Dieser Server unterstützt keine MP3- oder MOV-Anhänge. Aktualisiere OpenBot auf dem Host und versuche es erneut.",
+    "Dieser Server unterstützt keine MP3- oder MOV-Anhänge. Aktualisiere Atelier auf dem Host und versuche es erneut.",
   "error.attachment.emlUnsupported":
-    "Dieser Server unterstützt keine EML-Anhänge. Aktualisiere OpenBot auf dem Host und versuche es erneut.",
+    "Dieser Server unterstützt keine EML-Anhänge. Aktualisiere Atelier auf dem Host und versuche es erneut.",
   "error.attachment.zipUnsupported":
-    "Dieser Server unterstützt keine ZIP-Anhänge. Aktualisiere OpenBot auf dem Host und versuche es erneut.",
+    "Dieser Server unterstützt keine ZIP-Anhänge. Aktualisiere Atelier auf dem Host und versuche es erneut.",
   "error.attachment.previewTooLarge": "Die Datei überschreitet die Grenze von 100 MB.",
 } as const satisfies PartialTranslation<typeof source>;

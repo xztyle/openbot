@@ -5,20 +5,20 @@ export const messages = {
   "error.messaging.notConnected": "Este espacio de trabajo de Slack no está conectado.",
   "error.messaging.unsupported": "Este equipo no puede conectarse a Slack.",
   "error.messaging.relayUnavailable":
-    "OpenBot no puede recibir eventos de Slack en este equipo. Inicia sesión, ponle un nombre a este equipo e inténtalo de nuevo.",
+    "Atelier no puede recibir eventos de Slack en este equipo. Inicia sesión, ponle un nombre a este equipo e inténtalo de nuevo.",
   "error.messaging.discordNotConnected": "Este servidor de Discord no está conectado.",
   "error.messaging.discordUnsupported": "Este equipo no puede conectarse a Discord.",
   "error.messaging.discordRelayUnavailable":
-    "OpenBot no puede recibir eventos de Discord en este equipo. Inicia sesión, ponle un nombre a este equipo e inténtalo de nuevo.",
+    "Atelier no puede recibir eventos de Discord en este equipo. Inicia sesión, ponle un nombre a este equipo e inténtalo de nuevo.",
   "error.messaging.discordRolesUnsupported":
-    "OpenBot todavía no puede mostrar los roles de Discord. Inténtalo más tarde.",
+    "Atelier todavía no puede mostrar los roles de Discord. Inténtalo más tarde.",
   "error.messaging.discordAgentMissing": "El agente elegido ya no existe. Elige otro.",
   "error.messaging.telegramNotConnected": "Este chat de Telegram no está conectado.",
   "error.messaging.telegramUnsupported": "Este equipo no puede conectarse a Telegram.",
   "error.messaging.telegramRelayUnavailable":
-    "OpenBot no puede acceder a Telegram en este equipo. Inicia sesión, ponle un nombre a este equipo e inténtalo de nuevo.",
+    "Atelier no puede acceder a Telegram en este equipo. Inicia sesión, ponle un nombre a este equipo e inténtalo de nuevo.",
   "error.messaging.telegramServiceUnavailable":
-    "OpenBot no puede conectar Telegram ahora. Inténtalo de nuevo más tarde.",
+    "Atelier no puede conectar Telegram ahora. Inténtalo de nuevo más tarde.",
   "error.messaging.memoryLimit":
     "Un espacio de trabajo conectado puede tener hasta {limit} recuerdos. Borra uno primero.",
 } as const satisfies PartialTranslation<typeof source>;

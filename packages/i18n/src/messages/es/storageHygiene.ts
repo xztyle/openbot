@@ -32,7 +32,7 @@ export const messages = {
   "storageHygiene.folders.title": "Carpetas más grandes",
   "storageHygiene.plan.title": "Plan de limpieza",
   "storageHygiene.plan.description":
-    "OpenBot vuelve a comprobar cada elemento antes de eliminarlo. Conserva todo lo que esté en uso o haya cambiado en los últimos {minutes} minutos.",
+    "Atelier vuelve a comprobar cada elemento antes de eliminarlo. Conserva todo lo que esté en uso o haya cambiado en los últimos {minutes} minutos.",
   "storageHygiene.plan.empty": "No hay nada que limpiar.",
   "storageHygiene.plan.items": { one: "{count} elemento", other: "{count} elementos" },
   "storageHygiene.plan.more": { one: "{count} elemento más", other: "{count} elementos más" },
@@ -64,9 +64,9 @@ export const messages = {
   "storageHygiene.cleanup.button": "Limpiar {size}",
   "storageHygiene.cleanup.confirmTitle": "¿Limpiar {size}?",
   "storageHygiene.cleanup.confirmDescription": {
-    one: "OpenBot elimina {count} elemento. Antes lo vuelve a comprobar y lo conserva si está en uso o cambió en los últimos {minutes} minutos. El registro de auditoría guarda la eliminación.",
+    one: "Atelier elimina {count} elemento. Antes lo vuelve a comprobar y lo conserva si está en uso o cambió en los últimos {minutes} minutos. El registro de auditoría guarda la eliminación.",
     other:
-      "OpenBot elimina {count} elementos. Antes vuelve a comprobar cada uno y conserva todo lo que esté en uso o haya cambiado en los últimos {minutes} minutos. El registro de auditoría guarda cada eliminación.",
+      "Atelier elimina {count} elementos. Antes vuelve a comprobar cada uno y conserva todo lo que esté en uso o haya cambiado en los últimos {minutes} minutos. El registro de auditoría guarda cada eliminación.",
   },
   "storageHygiene.cleanup.confirm": "Limpiar",
   "storageHygiene.cleanup.pending": "Limpiando…",

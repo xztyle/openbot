@@ -32,7 +32,7 @@ export const messages = {
   "storageHygiene.folders.title": "Maiores pastas",
   "storageHygiene.plan.title": "Plano de limpeza",
   "storageHygiene.plan.description":
-    "O OpenBot verifica cada item de novo antes de excluí-lo. Ele mantém tudo o que está em uso ou foi alterado nos últimos {minutes} minutos.",
+    "O Atelier verifica cada item de novo antes de excluí-lo. Ele mantém tudo o que está em uso ou foi alterado nos últimos {minutes} minutos.",
   "storageHygiene.plan.empty": "Nada para limpar.",
   "storageHygiene.plan.items": { one: "{count} item", other: "{count} itens" },
   "storageHygiene.plan.more": { one: "Mais {count} item", other: "Mais {count} itens" },
@@ -63,9 +63,9 @@ export const messages = {
   "storageHygiene.cleanup.button": "Limpar {size}",
   "storageHygiene.cleanup.confirmTitle": "Limpar {size}?",
   "storageHygiene.cleanup.confirmDescription": {
-    one: "O OpenBot exclui {count} item. Antes, ele o verifica de novo e o mantém se estiver em uso ou tiver sido alterado nos últimos {minutes} minutos. O log de auditoria registra a exclusão.",
+    one: "O Atelier exclui {count} item. Antes, ele o verifica de novo e o mantém se estiver em uso ou tiver sido alterado nos últimos {minutes} minutos. O log de auditoria registra a exclusão.",
     other:
-      "O OpenBot exclui {count} itens. Antes, ele verifica cada um de novo e mantém tudo o que estiver em uso ou tiver sido alterado nos últimos {minutes} minutos. O log de auditoria registra cada exclusão.",
+      "O Atelier exclui {count} itens. Antes, ele verifica cada um de novo e mantém tudo o que estiver em uso ou tiver sido alterado nos últimos {minutes} minutos. O log de auditoria registra cada exclusão.",
   },
   "storageHygiene.cleanup.confirm": "Limpar",
   "storageHygiene.cleanup.pending": "Limpando…",

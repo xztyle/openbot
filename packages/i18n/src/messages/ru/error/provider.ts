@@ -3,12 +3,12 @@ import type { messages as source } from "../../en/error/provider";
 
 export const messages = {
   "error.provider.mcpConfig":
-    "OpenBot не удалось зарегистрировать серверы MCP в конфигурации Codex. Проверьте, что файл config.toml Codex корректен и доступен для записи, затем перезапустите OpenBot.",
+    "Atelier не удалось зарегистрировать серверы MCP в конфигурации Codex. Проверьте, что файл config.toml Codex корректен и доступен для записи, затем перезапустите Atelier.",
   "error.provider.computerUseConfig":
-    "OpenBot не смог зарегистрировать управление компьютером в конфигурации Codex. Убедитесь, что ваш config.toml для Codex корректен и доступен для записи, затем перезапустите OpenBot. Чтобы продолжить без него, отключите управление компьютером в настройках агента.",
-  "error.provider.codexUnresponsive": "Codex перестал отвечать, поэтому OpenBot завершил его процесс.",
+    "Atelier не смог зарегистрировать управление компьютером в конфигурации Codex. Убедитесь, что ваш config.toml для Codex корректен и доступен для записи, затем перезапустите Atelier. Чтобы продолжить без него, отключите управление компьютером в настройках агента.",
+  "error.provider.codexUnresponsive": "Codex перестал отвечать, поэтому Atelier завершил его процесс.",
   "error.provider.endpointsReadOnly":
-    "Сохранённые эндпоинты записаны более новой версией OpenBot, либо файл не читается. Чтобы изменить их, обновите OpenBot.",
+    "Сохранённые эндпоинты записаны более новой версией Atelier, либо файл не читается. Чтобы изменить их, обновите Atelier.",
   "error.provider.endpointNoSecureStorage":
     "На этом компьютере нет защищённого хранилища, поэтому API-ключ или заголовок сохранить нельзя. Удалите их или используйте эндпоинт без учётных данных.",
   "error.provider.endpointDuplicate":
@@ -19,14 +19,14 @@ export const messages = {
   "error.provider.endpointSecretUnreadable":
     "Этот компьютер не может прочитать сохранённые API-ключ и заголовки. Введите их заново, чтобы ничего не потерять.",
   "error.provider.discoveryTimeout": "{host} не ответил вовремя.",
-  "error.provider.discoveryUnreachable": "OpenBot не смог подключиться к {host}.",
+  "error.provider.discoveryUnreachable": "Atelier не смог подключиться к {host}.",
   "error.provider.discoveryRedirect": "{host} прислал перенаправление. Введите конечный адрес сервера.",
   "error.provider.discoveryRefused": "{host} отклонил запрос. Проверьте API-ключ и заголовки.",
   "error.provider.discoveryHttp": "{host} ответил с HTTP {status}.",
   "error.provider.discoveryTooLarge": "Список моделей от {host} слишком большой.",
   "error.provider.discoveryInvalid": "{host} не прислал список моделей, совместимый с OpenAI.",
   "error.provider.detectionSettingsReadOnly":
-    "Настройки обнаружения записаны более новой версией OpenBot, либо файл не читается. Чтобы изменить их, обновите OpenBot.",
+    "Настройки обнаружения записаны более новой версией Atelier, либо файл не читается. Чтобы изменить их, обновите Atelier.",
   "error.provider.detectionEntryInvalid":
     "Адрес должен быть URL http:// или https:// без пароля, а папка — абсолютным путём.",
   "error.provider.detectionEntriesTooMany": "Слишком много адресов или папок.",
@@ -54,10 +54,10 @@ export const messages = {
   "error.provider.bunLicenseChecksum": "Контрольная сумма лицензии Bun не совпадает.",
   "error.provider.bunxDamaged": "Запуск менеджера пакетов Bun отсутствует или повреждён.",
   "error.provider.releaseSourcesUnreachable":
-    "OpenBot не смог связаться с источниками релизов провайдеров. Проверьте соединение и повторите попытку.",
+    "Atelier не смог связаться с источниками релизов провайдеров. Проверьте соединение и повторите попытку.",
   "error.provider.runtimesUnsupported": "Среды выполнения провайдеров недоступны на этой платформе.",
-  "error.provider.closing": "OpenBot закрывается.",
-  "error.provider.cliOverride": "Удалите явно заданный путь к CLI, прежде чем обновлять в OpenBot.",
+  "error.provider.closing": "Atelier закрывается.",
+  "error.provider.cliOverride": "Удалите явно заданный путь к CLI, прежде чем обновлять в Atelier.",
   "error.provider.runtimeUpdateIncomplete": "Обновление среды выполнения не завершено.",
   "error.provider.downloadHttp": "Загрузка среды выполнения не удалась: HTTP {status}.",
   "error.provider.downloadNoData": "Загрузка среды выполнения не вернула данных.",
@@ -72,7 +72,7 @@ export const messages = {
   "error.provider.unexpectedVersion": "Среда выполнения провайдера вернула неожиданную версию.",
   "error.provider.metadataNoData": "Загрузка метаданных среды выполнения не вернула данных.",
   "error.provider.metadataTooLarge": "Метаданные среды выполнения слишком большие.",
-  "error.provider.requestFailed": "OpenBot не удалось загрузить {url}. {reason}",
+  "error.provider.requestFailed": "Atelier не удалось загрузить {url}. {reason}",
   "error.provider.installRecordMismatch": "Запись об установке среды выполнения не совпадает.",
   "error.provider.runtimeChecksum": "Контрольная сумма среды выполнения провайдера не совпадает.",
   "error.provider.codexReleaseShape": "У релиза Codex неожиданная структура.",
@@ -107,16 +107,16 @@ export const messages = {
   "error.provider.noModel": "У выбранного провайдера нет доступной модели.",
   "error.provider.noModelNamed": "У {provider} нет доступной модели.",
   "error.provider.acpNoModels":
-    "ACP CLI не сообщил ни одной модели ACP. OpenBot не будет подбирать запасную модель наугад.",
+    "ACP CLI не сообщил ни одной модели ACP. Atelier не будет подбирать запасную модель наугад.",
   "error.provider.endpointRemoveBusy":
     "Дождитесь, пока завершатся текущий ход и очередь, прежде чем удалять этот эндпоинт.",
-  "error.provider.codexOutdated": "Codex CLI {version} слишком старый. OpenBot требует версию 0.156.0 или новее.",
+  "error.provider.codexOutdated": "Codex CLI {version} слишком старый. Atelier требует версию 0.156.0 или новее.",
   "error.provider.codexNotStarted": "Codex CLI найден, но запустить его не удалось.",
   "error.provider.codexNotStartedHint":
     "Codex CLI найден, но запустить его не удалось. Выполните `codex --version` в новом терминале.",
   "error.provider.codexManagedNotStarted":
-    "ChatGPT загружен, но запустить его не удалось. Загрузите его заново в OpenBot.",
-  "error.provider.codexMissing": "ChatGPT не загружен. Загрузите его в OpenBot, чтобы продолжить.",
+    "ChatGPT загружен, но запустить его не удалось. Загрузите его заново в Atelier.",
+  "error.provider.codexMissing": "ChatGPT не загружен. Загрузите его в Atelier, чтобы продолжить.",
   "error.provider.codexConfigIgnored": {
     one: "Codex проигнорировал {count} настройку в своей конфигурации: {settings}. Исправьте или удалите её либо обновите Codex.",
     few: "Codex проигнорировал {count} настройки в своей конфигурации: {settings}. Исправьте или удалите их либо обновите Codex.",
@@ -130,20 +130,20 @@ export const messages = {
     many: "Codex проигнорировал {count} настроек в своей конфигурации. Исправьте или удалите их либо обновите Codex.",
     other: "Codex проигнорировал {count} настройки в своей конфигурации. Исправьте или удалите их либо обновите Codex.",
   },
-  "error.provider.claudeOutdated": "Claude Code {version} слишком старый. OpenBot требует версию 2.1.232 или новее.",
+  "error.provider.claudeOutdated": "Claude Code {version} слишком старый. Atelier требует версию 2.1.232 или новее.",
   "error.provider.claudeNotStarted": "Claude CLI найден, но запустить его не удалось.",
   "error.provider.claudeNotStartedHint":
     "Claude CLI найден, но запустить его не удалось. Выполните `claude --version` в новом терминале.",
   "error.provider.claudeManagedNotStarted":
-    "Claude загружен, но запустить его не удалось. Загрузите его заново в OpenBot.",
-  "error.provider.claudeMissing": "Claude не загружен. Загрузите его в OpenBot, чтобы продолжить.",
-  "error.provider.grokOutdated": "Grok CLI {version} слишком старый. OpenBot требует версию 1.0.5 или новее.",
+    "Claude загружен, но запустить его не удалось. Загрузите его заново в Atelier.",
+  "error.provider.claudeMissing": "Claude не загружен. Загрузите его в Atelier, чтобы продолжить.",
+  "error.provider.grokOutdated": "Grok CLI {version} слишком старый. Atelier требует версию 1.0.5 или новее.",
   "error.provider.grokNotStarted": "Grok CLI найден, но запустить его не удалось.",
   "error.provider.grokNotStartedHint":
     "Grok CLI найден, но запустить его не удалось. Выполните `grok --version` в новом терминале.",
-  "error.provider.grokMissing": "Grok не загружен. Загрузите его в OpenBot, чтобы продолжить.",
+  "error.provider.grokMissing": "Grok не загружен. Загрузите его в Atelier, чтобы продолжить.",
   "error.provider.opencodeNotStarted": "OpenCode не удалось запустить. Выполните `opencode --version` в терминале.",
-  "error.provider.opencodeMissing": "OpenCode не загружен. Загрузите его в OpenBot, чтобы продолжить.",
+  "error.provider.opencodeMissing": "OpenCode не загружен. Загрузите его в Atelier, чтобы продолжить.",
   "error.provider.codexVersionUnreadable": "Не удалось прочитать версию Codex CLI.",
   "error.provider.claudeVersionUnreadable": "Не удалось прочитать версию Claude CLI.",
   "error.provider.grokVersionUnreadable": "Не удалось прочитать версию Grok CLI.",
@@ -151,13 +151,13 @@ export const messages = {
   "error.provider.bunVersionUnreadable": "Не удалось прочитать версию среды выполнения Bun.",
   "error.provider.connectBeforeProfile": "Подключите выбранного провайдера, прежде чем создавать профиль.",
   "error.provider.cliNotReady": "{provider} CLI не готов или в нём не выполнен вход.",
-  "error.provider.cliTimedOut": "{provider} не ответил вовремя. Возможно, компьютер занят. OpenBot повторит попытку.",
+  "error.provider.cliTimedOut": "{provider} не ответил вовремя. Возможно, компьютер занят. Atelier повторит попытку.",
   "error.provider.cliTimedOutRefresh":
     "{provider} не ответил вовремя. Возможно, компьютер занят. Обновите провайдеров, чтобы повторить попытку.",
   "error.provider.acpStartTimedOut": "{provider} не завершил запуск за {seconds} с. Возможно, компьютер занят.",
   "error.provider.acpModelsTimedOut": "{provider} не вывел список моделей за {seconds} с. Возможно, компьютер занят.",
   "error.provider.startStopped":
-    "{provider} несколько раз подряд не запустился, поэтому OpenBot перестал пытаться. Обновите провайдеров, чтобы повторить попытку.",
+    "{provider} несколько раз подряд не запустился, поэтому Atelier перестал пытаться. Обновите провайдеров, чтобы повторить попытку.",
   "error.provider.tempDiskSpace":
     "Для запуска {provider} нужно не меньше 1 ГБ свободного места на диске. Освободите место, затем обновите провайдеров.",
   "error.provider.noCodeSignIn": "В {provider} нельзя войти с помощью кода.",
@@ -171,10 +171,10 @@ export const messages = {
   "error.provider.cliBusyRetry": "{provider} CLI обрабатывает ход. Дождитесь его завершения и повторите попытку.",
   "error.provider.cliSigningIn": "{provider} CLI выполняет вход. Завершите или отмените вход, затем обновите.",
   "error.provider.cliBusyUpdate": "{provider} CLI обрабатывает ход. Дождитесь его завершения, затем обновите.",
-  "error.provider.cliSelectFailed": "OpenBot не смог выбрать установленный управляемый CLI.",
+  "error.provider.cliSelectFailed": "Atelier не смог выбрать установленный управляемый CLI.",
   "error.provider.noAuthenticatedAccount": "{provider} не вернул аккаунт с выполненным входом.",
   "error.provider.signInExpired": "Срок входа в {provider} истёк. Войдите снова, чтобы продолжить.",
-  "error.provider.cliActivateFailed": "OpenBot не смог активировать управляемый CLI.",
+  "error.provider.cliActivateFailed": "Atelier не смог активировать управляемый CLI.",
   "error.provider.cliBusyReconnect":
     "{provider} CLI обрабатывает ход. Дождитесь его завершения, затем подключитесь заново.",
   "error.provider.opencodeCredentialsRejected":
@@ -200,18 +200,18 @@ export const messages = {
   "error.provider.opencodeProviderFailed":
     "У провайдера моделей произошёл сбой на его стороне. Дело не в вашем соединении. Повторите попытку позже или выберите другую модель.\n{detail}",
   "error.provider.opencodeNetwork":
-    "OpenCode не смог подключиться к провайдеру моделей. Проверьте сетевое подключение компьютера, где работает OpenBot, и повторите попытку.\n{detail}",
+    "OpenCode не смог подключиться к провайдеру моделей. Проверьте сетевое подключение компьютера, где работает Atelier, и повторите попытку.\n{detail}",
   "error.provider.opencodeDatabaseNewer":
     "OpenCode не смог открыть свою базу данных, потому что её изменила более новая версия OpenCode. Обновите OpenCode до версии 2 или новее и повторите попытку.",
   "error.provider.opencodeNoAnswer":
     "Модель OpenCode завершила ход без ответа. Повторите попытку или выберите другую модель.",
   "error.provider.opencodeReasoningWithoutAnswer":
     "Модель OpenCode завершила ход после рассуждения, без ответа. Повторите попытку или выберите другую модель.",
-  "error.provider.chatgptPageFailed": "OpenBot не смог открыть страницу подключения ChatGPT.",
+  "error.provider.chatgptPageFailed": "Atelier не смог открыть страницу подключения ChatGPT.",
   "error.provider.noneReady": "Ни один провайдер агентов не готов.",
   "error.provider.claudeTurnActive": "Дождитесь завершения текущего хода Claude, прежде чем обновлять его контекст.",
   "error.provider.codexLoginRequired": "Codex требует входа с подпиской ChatGPT. Выполните `codex login`.",
-  "error.provider.cliUpdateFailed": "OpenBot не смог обновить {provider} CLI. {reason}",
+  "error.provider.cliUpdateFailed": "Atelier не смог обновить {provider} CLI. {reason}",
   "error.provider.tryAgain": "Повторите попытку.",
   "error.provider.noAgentProcess": "У {provider} нет запущенного процесса для этого агента.",
   "error.provider.stoppedBeforeAgentProcess": "{provider} остановился до запуска процесса агента.",
@@ -219,7 +219,7 @@ export const messages = {
   "error.provider.antigravityArchivePath": "В архиве Gemini неожиданный файл.",
   "error.provider.antigravityChecksum": "Контрольная сумма среды выполнения Gemini не совпадает.",
   "error.provider.antigravityReleaseShape": "У релиза Gemini неожиданная структура.",
-  "error.provider.antigravityMissing": "Gemini не загружен. Загрузите его в OpenBot, чтобы продолжить.",
+  "error.provider.antigravityMissing": "Gemini не загружен. Загрузите его в Atelier, чтобы продолжить.",
   "error.provider.antigravityNotStarted": "Сервер Gemini найден, но его версию прочитать не удаётся.",
   "error.provider.antigravityVersionUnreadable": "Не удалось прочитать версию сервера Gemini.",
   "error.provider.antigravitySignIn": "Войдите через Google, чтобы использовать Gemini.",
@@ -234,7 +234,7 @@ export const messages = {
   "error.provider.cursorArchivePath": "В архиве Cursor неожиданный файл.",
   "error.provider.cursorChecksum": "Контрольная сумма среды выполнения Cursor не совпадает.",
   "error.provider.cursorReleaseShape": "У релиза Cursor неожиданная структура.",
-  "error.provider.cursorMissing": "Cursor не загружен. Загрузите его в OpenBot, чтобы продолжить.",
+  "error.provider.cursorMissing": "Cursor не загружен. Загрузите его в Atelier, чтобы продолжить.",
   "error.provider.cursorNotStarted": "Агент Cursor найден, но его версию прочитать не удаётся.",
   "error.provider.cursorVersionUnreadable": "Не удалось прочитать версию агента Cursor.",
   "error.provider.cursorSignIn": "Войдите через Cursor или задайте CURSOR_API_KEY, чтобы использовать Cursor.",
@@ -242,18 +242,18 @@ export const messages = {
   "error.provider.clinePackageMismatch": "Пакет Cline не соответствует каталогу сред выполнения.",
   "error.provider.clineChecksum": "Контрольная сумма среды выполнения Cline не совпадает.",
   "error.provider.clineLicenseChecksum": "Контрольная сумма лицензии Cline не совпадает.",
-  "error.provider.clineMissing": "Cline не загружен. Загрузите его в OpenBot, чтобы продолжить.",
-  "error.provider.clineOutdated": "Cline CLI {version} слишком старый. OpenBot требует версию 3.0.68 или новее.",
+  "error.provider.clineMissing": "Cline не загружен. Загрузите его в Atelier, чтобы продолжить.",
+  "error.provider.clineOutdated": "Cline CLI {version} слишком старый. Atelier требует версию 3.0.68 или новее.",
   "error.provider.clineNotStarted": "Cline не удалось запустить. Выполните `cline --version` в терминале.",
   "error.provider.clineVersionUnreadable": "Не удалось прочитать версию Cline CLI.",
   "error.provider.clineSignIn": "Войдите через Cline или задайте CLINE_API_KEY, чтобы использовать Cline.",
   "error.provider.usageLimitReached": "Аккаунт достиг лимита использования.",
   "error.provider.foreignReasoning":
-    "{provider} не принял предыдущие рассуждения в этом чате, потому что их получил другой аккаунт или API-ключ. OpenBot начал новую сессию {provider} с историей чата. Повторите попытку.",
+    "{provider} не принял предыдущие рассуждения в этом чате, потому что их получил другой аккаунт или API-ключ. Atelier начал новую сессию {provider} с историей чата. Повторите попытку.",
   "error.provider.opencodeSessionRejected":
-    "OpenCode отклонил запрос и не указал причину. Это может произойти в длинном чате или после смены модели. OpenBot начал новый сеанс OpenCode с историей чата. Повторите попытку. Если ошибка не исчезнет, выберите другую модель или меньший уровень усилий.",
+    "OpenCode отклонил запрос и не указал причину. Это может произойти в длинном чате или после смены модели. Atelier начал новый сеанс OpenCode с историей чата. Повторите попытку. Если ошибка не исчезнет, выберите другую модель или меньший уровень усилий.",
   "error.provider.museMcpStartupFault":
-    "Muse не удалось запустить сервер MCP, и он заблокировал MCP в этом сеансе. OpenBot начал новый сеанс Muse с историей чата. Повторите попытку. Если ошибка повторяется, отключите Управление компьютером или неисправный сервер MCP для этого агента.",
+    "Muse не удалось запустить сервер MCP, и он заблокировал MCP в этом сеансе. Atelier начал новый сеанс Muse с историей чата. Повторите попытку. Если ошибка повторяется, отключите Управление компьютером или неисправный сервер MCP для этого агента.",
   "error.provider.grokSignIn": "Выполните `grok login` или задайте XAI_API_KEY, чтобы использовать Grok.",
   "error.provider.acpSignInTimedOut": "Время входа истекло.",
   "error.provider.acpSignInStopped": "Вход прервался, не завершившись.",
@@ -270,7 +270,7 @@ export const messages = {
     "{provider} отклонил сохранённый ключ API. Замените или удалите ключ в настройках, затем повторите попытку.",
   "error.provider.keyProviderNoBalance":
     "На аккаунте {provider} для сохранённого ключа API нет средств. Пополните баланс аккаунта, затем повторите попытку.",
-  "error.provider.messageTooLarge": "OpenBot остановил {provider}, потому что он отправил сообщение больше {limit} МБ.",
+  "error.provider.messageTooLarge": "Atelier остановил {provider}, потому что он отправил сообщение больше {limit} МБ.",
   "error.provider.customAgentIdInvalid":
     "ID агента должен состоять из строчных букв, цифр или `-` и не может совпадать с ID встроенного провайдера.",
   "error.provider.customAgentEnvInvalid":
@@ -283,10 +283,10 @@ export const messages = {
     "Аргумент не может содержать перевод строки. Используйте не более 32 аргументов.",
   "error.provider.customAgentWindowsScript":
     "В аргументах команды .cmd или .bat допустимы только буквы, цифры и символы - _ . , : = @ + / \\.",
-  "error.provider.customAgentNotFound": "OpenBot не находит {command}. Введите полный путь к команде.",
+  "error.provider.customAgentNotFound": "Atelier не находит {command}. Введите полный путь к команде.",
   "error.provider.customAgentCheckTimedOut": "Агент не ответил за 20 секунд.",
   "error.provider.customAgentCheckStopped": "Агент остановился, не ответив.",
-  "error.provider.customAgentProtocolVersion": "Агент использует ACP версии {version}. OpenBot использует версию 1.",
+  "error.provider.customAgentProtocolVersion": "Агент использует ACP версии {version}. Atelier использует версию 1.",
   "error.provider.customAgentCheckFailed": "Агент не ответил как агент ACP.",
   "error.provider.customAgentRemoveBusy":
     "Дождитесь, пока завершатся текущий ход и очередь, прежде чем удалять этого своего агента.",
@@ -294,18 +294,18 @@ export const messages = {
   "error.provider.customAgentMissing": "Этот свой агент сейчас не сохранён. Выберите другую модель.",
   "error.provider.customAgentSignIn": "Войдите собственной командой агента и повторите попытку.",
   "error.provider.customAgentsReadOnly":
-    "Сохранённые свои агенты записаны более новой версией OpenBot, либо файл не читается. Чтобы изменить их, обновите OpenBot.",
+    "Сохранённые свои агенты записаны более новой версией Atelier, либо файл не читается. Чтобы изменить их, обновите Atelier.",
   "error.provider.customAgentNoSecureStorage":
     "На этом компьютере нет защищённого хранилища, поэтому значения среды сохранить нельзя. Удалите их и повторите попытку.",
   "error.provider.customAgentNotSaved": "Этот свой агент не сохранён. Обновите список и повторите попытку.",
   "error.provider.customAgentTooMany": "Можно сохранить не более {count} своих агентов.",
   "error.provider.customAgentEnvValueMissing": "Введите значение для {name}.",
-  "error.provider.off": "{provider} выключен в OpenBot. Сначала включите его в настройках провайдеров.",
+  "error.provider.off": "{provider} выключен в Atelier. Сначала включите его в настройках провайдеров.",
   "error.provider.inUse": "{provider} использует агент. Смените его модель, прежде чем выключать этого провайдера.",
   "error.provider.useBusy": "Дождитесь окончания проверки провайдера или входа и повторите попытку.",
   "error.provider.useSettingsReadOnly":
-    "Не удаётся прочитать сохранённые настройки провайдеров. Обновите OpenBot, прежде чем их менять.",
-  "error.provider.useChangeFailed": "OpenBot не удалось изменить настройку провайдера.",
+    "Не удаётся прочитать сохранённые настройки провайдеров. Обновите Atelier, прежде чем их менять.",
+  "error.provider.useChangeFailed": "Atelier не удалось изменить настройку провайдера.",
   "error.provider.accountsUnsupported": "{provider} поддерживает только один аккаунт.",
   "error.provider.accountNeedsConnection": "Подключите {provider}, прежде чем добавлять ещё один аккаунт.",
   "error.provider.usageResetUnsupported": "{provider} не может сбрасывать лимиты использования.",
@@ -320,7 +320,7 @@ export const messages = {
     "Этот аккаунт {provider} использует сохранённый API-ключ и не имеет входа. Измените ключ в Настройки сервера → Провайдеры.",
   "error.provider.accountInUse": "Агент с этим аккаунтом сейчас работает. Попробуйте ещё раз, когда агент остановится.",
   "error.provider.accountsReadOnly":
-    "Не удаётся прочитать сохранённые аккаунты провайдеров. Обновите OpenBot, прежде чем их менять.",
+    "Не удаётся прочитать сохранённые аккаунты провайдеров. Обновите Atelier, прежде чем их менять.",
   "error.provider.accountSignedOut": "Выполнен выход из аккаунта {provider}. Войдите снова.",
   "error.provider.sessionSettingUnavailable": "Этот параметр недоступен в текущей сессии провайдера.",
   "error.provider.sessionSettingInvalid": "Это значение недоступно для параметра.",
@@ -353,7 +353,7 @@ export const messages = {
   "error.provider.museConnectionFailed":
     "Не удалось подключиться к Muse. Возобновите диалог, чтобы восстановить его сохранённую историю.",
   "error.provider.museUnknownSession": "Неизвестная сессия Muse.",
-  "error.provider.museInvalidToolResult": "Некорректный результат инструмента OpenBot.",
+  "error.provider.museInvalidToolResult": "Некорректный результат инструмента Atelier.",
   "error.provider.museMcpRequired": "Muse должен поддерживать серверы MCP для сессии.",
   "error.provider.museSessionMismatch": "Muse вернул другую сессию.",
   "error.provider.museCompactRejected": "Muse не принял сжатие контекста.",

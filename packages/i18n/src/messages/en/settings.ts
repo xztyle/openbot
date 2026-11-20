@@ -3,7 +3,7 @@ import { defineMessages } from "../../message";
 export const messages = defineMessages("settings", {
   // The language setting itself.
   "settings.language.title": "Language",
-  "settings.language.description": "OpenBot shows menus, buttons and messages in this language.",
+  "settings.language.description": "Atelier shows menus, buttons and messages in this language.",
   "settings.language.system": "System default",
   // The logo color setting, General tab.
   "settings.appearance.title": "Appearance",
@@ -16,7 +16,7 @@ export const messages = defineMessages("settings", {
   "settings.appearance.transparentWindow.description":
     "Show the blurred desktop behind the window. Websites and menus then use the app theme.",
   "settings.interfaceSize.title": "Interface size",
-  "settings.interfaceSize.description": "The size of text and controls in OpenBot.",
+  "settings.interfaceSize.description": "The size of text and controls in Atelier.",
   "settings.logoColor.title": "Logo color",
   "settings.logoColor.description": "Shown in the Dock, the taskbar and the Dynamic Island.",
   "settings.logoColor.buildNote": "This build keeps its own logo color. The choice applies to the release app.",
@@ -33,9 +33,9 @@ export const messages = defineMessages("settings", {
   // The Settings window, General tab.
   "settings.appBehavior.title": "App behavior",
   "settings.conversations.title": "Conversations",
-  "settings.launchAtLogin.title": "Launch OpenBot at login",
+  "settings.launchAtLogin.title": "Launch Atelier at login",
   "settings.launchAtLogin.description": "Open the app when you sign in to this computer.",
-  "settings.keepRunning.title": "Keep OpenBot running in the background",
+  "settings.keepRunning.title": "Keep Atelier running in the background",
   "settings.keepRunning.description": "Keep active tasks running after you close the window.",
   "settings.keepAwake.title": "Keep this computer awake",
   "settings.keepAwake.description":
@@ -49,7 +49,7 @@ export const messages = defineMessages("settings", {
   "settings.externalLinks.description": "Links in chats, sign-in pages and billing pages open here.",
   // The two link targets. The saved value stays in English; only the label is translated.
   "settings.externalLinks.defaultBrowser": "Default browser",
-  "settings.externalLinks.openbot": "OpenBot",
+  "settings.externalLinks.openbot": "Atelier",
   "settings.externalLinks.defaultBrowserNamed": "Default browser ({name})",
   "settings.externalLinks.otherApp": "Other app…",
   "settings.externalLinks.command": "Command…",
@@ -99,7 +99,7 @@ export const messages = defineMessages("settings", {
   "settings.agentDefaults.loadFailed": "The agents could not be read.",
   "settings.keepRemoteSessions.title": "Fast connection to servers",
   "settings.keepRemoteSessions.description":
-    "Keep the connection to your joined servers between launches. OpenBot starts about a second faster. When you quit OpenBot, the OpenBot service does not close the connection.",
+    "Keep the connection to your joined servers between launches. Atelier starts about a second faster. When you quit Atelier, the Atelier service does not close the connection.",
   "settings.permissions.title": "Permissions",
   "settings.notifications.title": "Notifications",
   "settings.alerts.title": "Alerts",
@@ -109,7 +109,7 @@ export const messages = defineMessages("settings", {
   "settings.notificationPreview.description": "Show the start of the agent's reply or question in notifications.",
   "settings.testNotification.title": "Test notification",
   "settings.testNotification.description":
-    "Show one now. If it does not appear, allow OpenBot notifications in your system settings.",
+    "Show one now. If it does not appear, allow Atelier notifications in your system settings.",
   "settings.testNotification.action": "Send test",
   "settings.testNotification.failed": "Could not show a notification.",
   "settings.testNotification.openSettings": "Open system settings",
@@ -134,7 +134,7 @@ export const messages = defineMessages("settings", {
   "settings.notch.show.title": "Show status in the MacBook notch",
   "settings.notch.show.description": "Show agent activity and items that need attention at the top of each display.",
   "settings.notch.idle.title": "Show idle island",
-  "settings.notch.idle.description": "Show the OpenBot logo and greeting when no status is active.",
+  "settings.notch.idle.description": "Show the Atelier logo and greeting when no status is active.",
   "settings.notch.displays.title": "Show on additional displays",
   "settings.notch.displays.description": "Show Dynamic Island on connected external displays.",
   "settings.notch.haptics.title": "Haptic feedback",
@@ -151,35 +151,35 @@ export const messages = defineMessages("settings", {
   "settings.notch.size.previewIsland": "External display",
   "settings.analytics.title": "Share product analytics",
   "settings.analytics.description":
-    "Send usage and reliability metadata with your account ID and email to OpenBot’s self-hosted analytics.",
+    "Send usage and reliability metadata with your account ID and email to Atelier’s self-hosted analytics.",
   "settings.analytics.webDescription":
-    "Send usage and reliability metadata with your account ID and email to OpenBot’s self-hosted analytics. This setting applies to this browser.",
+    "Send usage and reliability metadata with your account ID and email to Atelier’s self-hosted analytics. This setting applies to this browser.",
   // The Settings window shell: its tab list, headers and save bar.
   "settings.tab.general.title": "General",
-  "settings.tab.general.description": "Control how OpenBot behaves on this computer.",
+  "settings.tab.general.description": "Control how Atelier behaves on this computer.",
   "settings.tab.agents.title": "Agents",
   "settings.tab.agents.description":
     "Choose what the agents on this computer can do when you do not set it for an agent.",
   "settings.tab.notifications.title": "Notifications",
-  "settings.tab.notifications.description": "Choose how OpenBot alerts you.",
+  "settings.tab.notifications.description": "Choose how Atelier alerts you.",
   "settings.tab.voice.title": "Voice",
   "settings.tab.voice.description":
     "Dictation in the message box. Local models run on this computer; ElevenLabs runs in the cloud.",
   "settings.tab.computerUse.title": "Computer Use",
   "settings.tab.computerUse.description":
-    "Let agents on this computer's OpenBot see and use its apps. Agents on another server use that server's computer.",
+    "Let agents on this computer's Atelier see and use its apps. Agents on another server use that server's computer.",
   "settings.tab.profile.title": "Profile",
-  "settings.tab.profile.description": "Manage how you appear in OpenBot.",
+  "settings.tab.profile.description": "Manage how you appear in Atelier.",
   "settings.tab.mobileConnect.title": "Mobile Connect",
   "settings.tab.mobileConnect.description": "Sign in securely on your phone.",
   "settings.tab.dynamicIsland.title": "Dynamic Island",
   "settings.tab.dynamicIsland.description": "Choose when the island shows and how large it is.",
   "settings.tab.updates.title": "Updates",
-  "settings.tab.updates.description": "Keep OpenBot current on this computer.",
+  "settings.tab.updates.description": "Keep Atelier current on this computer.",
   "settings.tab.billing.title": "Billing",
   "settings.tab.billing.description": "License, server plans, payment method and invoices.",
   "settings.tab.hostedServers.title": "Hosted servers",
-  "settings.tab.hostedServers.description": "Create OpenBot servers that run when this computer is off.",
+  "settings.tab.hostedServers.description": "Create Atelier servers that run when this computer is off.",
   "settings.sections.label": "Settings sections",
   "settings.panel.resize": "Resize right panel",
   // A failed read or save of the app preferences on the General, Notifications, Dynamic Island and Updates tabs.
@@ -199,7 +199,7 @@ export const messages = defineMessages("settings", {
   "settings.mobileConnect.install.platformLabel": "Phone",
   "settings.mobileConnect.app.copyLink": "Copy link",
   "settings.mobileConnect.app.linkCopied": "Link copied",
-  "settings.mobileConnect.iosApp.title": "OpenBot for iPhone",
+  "settings.mobileConnect.iosApp.title": "Atelier for iPhone",
   "settings.mobileConnect.iosApp.badge": "Beta",
   "settings.mobileConnect.iosApp.description": "Public beta on TestFlight. For iOS 16.4 or later.",
   "settings.mobileConnect.iosApp.qrLabel": "TestFlight invite QR code",
@@ -207,7 +207,7 @@ export const messages = defineMessages("settings", {
   "settings.mobileConnect.iosApp.step.invite":
     "Scan this QR code with the iPhone camera, or copy the invite link and open it on your iPhone.",
   "settings.mobileConnect.iosApp.step.install": "In TestFlight, tap Accept, then Install.",
-  "settings.mobileConnect.androidApp.title": "OpenBot for Android",
+  "settings.mobileConnect.androidApp.title": "Atelier for Android",
   "settings.mobileConnect.androidApp.badge": "Available",
   "settings.mobileConnect.androidApp.description": "On Google Play. For Android 7.0 or later.",
   "settings.mobileConnect.androidApp.qrLabel": "Google Play QR code",
@@ -215,10 +215,10 @@ export const messages = defineMessages("settings", {
     "Scan this QR code with the phone camera, or copy the link and open it on your phone.",
   "settings.mobileConnect.androidApp.step.install": "On Google Play, tap Install.",
   "settings.mobileConnect.description":
-    "Scan a one-time code with the OpenBot mobile app to use this account on your phone.",
+    "Scan a one-time code with the Atelier mobile app to use this account on your phone.",
   "settings.mobileConnect.signIn.title": "Sign in on your phone",
   "settings.mobileConnect.signIn.description":
-    "Open OpenBot on your phone and scan a one-time code. The code expires after two minutes and works only once.",
+    "Open Atelier on your phone and scan a one-time code. The code expires after two minutes and works only once.",
   "settings.mobileConnect.generating": "Generating…",
   "settings.mobileConnect.generate": "Generate QR code",
   "settings.mobileConnect.generateNew": "Generate new code",
@@ -227,12 +227,12 @@ export const messages = defineMessages("settings", {
   "settings.mobileConnect.expired.title": "This code has expired",
   "settings.mobileConnect.expired.description": "Generate a new code to connect your phone.",
   "settings.mobileConnect.qrLabel": "Mobile Connect sign-in QR code",
-  "settings.mobileConnect.scan.title": "Open OpenBot on your phone",
+  "settings.mobileConnect.scan.title": "Open Atelier on your phone",
   "settings.mobileConnect.scan.description": "Choose Scan QR code and point your camera at this code.",
   // {time} is a countdown such as 1:59.
   "settings.mobileConnect.expiresIn": "Expires in {time}",
   "settings.mobileConnect.connected.title": "Phone connected",
-  "settings.mobileConnect.connected.description": "{name} is ready to use OpenBot.",
+  "settings.mobileConnect.connected.description": "{name} is ready to use Atelier.",
   "settings.mobileConnect.link.title": "Permanent link",
   "settings.mobileConnect.link.description":
     "Sign in on a phone at any time with the same link. It works until you revoke it or sign out on this computer. Anyone with the link can sign in to your account, so keep it private.",
@@ -258,14 +258,14 @@ export const messages = defineMessages("settings", {
   "settings.mobileConnect.route.title": "How devices connect",
   "settings.mobileConnect.route.description":
     "For phones, other computers and team members that connect to this computer.",
-  "settings.mobileConnect.route.openbot.title": "Through OpenBot",
+  "settings.mobileConnect.route.openbot.title": "Through Atelier",
   "settings.mobileConnect.route.openbot.badge": "Recommended",
   "settings.mobileConnect.route.openbot.description":
     "Works on any network. Chats and files are encrypted between your devices.",
   "settings.mobileConnect.route.private.title": "Private network",
   "settings.mobileConnect.route.private.tailscale": "Tailscale found",
   "settings.mobileConnect.route.private.description":
-    "Tailscale or this Wi-Fi. Devices still sign in with OpenBot. Chats and files never go through OpenBot servers, and devices connect only on that network.",
+    "Tailscale or this Wi-Fi. Devices still sign in with Atelier. Chats and files never go through Atelier servers, and devices connect only on that network.",
   "settings.mobileConnect.route.error.load": "Could not load how devices connect.",
   "settings.mobileConnect.route.error.save": "Could not change how devices connect.",
   "settings.mobileConnect.disconnectInfo.title": "Disconnecting a device",
@@ -310,7 +310,7 @@ export const messages = defineMessages("settings", {
   "settings.profile.edit.title": "Edit profile",
   "settings.profile.share.action": "Share",
   "settings.profile.share.title": "Share your activity",
-  "settings.profile.share.imageAlt": "Your OpenBot activity in the past six months",
+  "settings.profile.share.imageAlt": "Your Atelier activity in the past six months",
   "settings.profile.share.copy": "Copy image",
   "settings.profile.share.save": "Save image",
   "settings.profile.share.copied": "Image copied",
@@ -318,7 +318,7 @@ export const messages = defineMessages("settings", {
   "settings.profile.share.createFailed": "Could not make the image.",
   "settings.profile.share.fileName": "openbot-activity.png",
   // The text in the image to share.
-  "settings.profile.share.caption": "My last six months with OpenBot",
+  "settings.profile.share.caption": "My last six months with Atelier",
   "settings.profile.activity.title": "Activity",
   "settings.profile.activity.activeDays": {
     one: "{count} active day in the past year",
@@ -354,7 +354,7 @@ export const messages = defineMessages("settings", {
   "settings.profile.models.title": "Model usage",
   "settings.profile.account.title": "Account",
   "settings.profile.email.title": "Email",
-  "settings.profile.email.description": "Used to sign in to OpenBot.",
+  "settings.profile.email.description": "Used to sign in to Atelier.",
   "settings.profile.sessions.title": "Account sessions",
   "settings.profile.sessions.description":
     "Sessions stay signed in until you log out or disconnect them. Disconnecting also ends this account's active remote connections.",
@@ -375,9 +375,9 @@ export const messages = defineMessages("settings", {
   "settings.profile.sessions.disconnectConfirm.description":
     "This device is signed out of your account. It must sign in again to connect.",
   // The Updates tab. {target} is "OpenBot v1.2.3" or settings.updates.target.latest.
-  "settings.updates.title": "OpenBot updates",
+  "settings.updates.title": "Atelier updates",
   "settings.updates.track.title": "Update track",
-  "settings.updates.track.description": "Stable receives tested OpenBot releases.",
+  "settings.updates.track.description": "Stable receives tested Atelier releases.",
   "settings.updates.track.stable": "Stable",
   "settings.updates.version": "Version {version}",
   "settings.updates.versionUnknown": "Unknown",
@@ -387,9 +387,9 @@ export const messages = defineMessages("settings", {
   "settings.updates.autoDownload.description": "Download new versions when they become available.",
   "settings.updates.managed.title": "Managed by Host Manager",
   "settings.updates.managed.description":
-    "Updates for this Mac are managed automatically by OpenBot Host Manager. All users share the same OpenBot application and are updated together when registered users are idle.",
-  "settings.updates.target.latest": "The latest OpenBot update",
-  "settings.updates.host.upToDate": "Up to date. OpenBot Host Manager keeps this Mac current.",
+    "Updates for this Mac are managed automatically by Atelier Host Manager. All users share the same Atelier application and are updated together when registered users are idle.",
+  "settings.updates.target.latest": "The latest Atelier update",
+  "settings.updates.host.upToDate": "Up to date. Atelier Host Manager keeps this Mac current.",
   "settings.updates.host.ready": "{target} is downloaded. Waiting for the other users of this Mac to be idle.",
   "settings.updates.host.installing": "Installing {target}…",
   "settings.updates.host.failed": "The managed update failed. Contact the administrator of this Mac.",
@@ -401,19 +401,19 @@ export const messages = defineMessages("settings", {
   "settings.updates.status.downloadingProgress": "Downloading {target} · {progress}",
   "settings.updates.status.ready": "{target} is ready. Restart to apply.",
   "settings.updates.status.installing": "Restarting to apply {target}…",
-  "settings.updates.status.upToDate": "OpenBot is up to date on the Stable track.",
-  "settings.updates.status.checkFailed": "OpenBot could not check for updates. Try again.",
+  "settings.updates.status.upToDate": "Atelier is up to date on the Stable track.",
+  "settings.updates.status.checkFailed": "Atelier could not check for updates. Try again.",
   "settings.updates.status.unsupported": "Updates are unavailable in this build.",
-  "settings.updates.actionFailed": "Could not update OpenBot.",
+  "settings.updates.actionFailed": "Could not update Atelier.",
   "settings.updates.autoInstall.title": "Install updates automatically",
   "settings.updates.autoInstall.description":
-    "OpenBot restarts into a downloaded update when the agents are idle. Members of your servers are disconnected for a short time.",
+    "Atelier restarts into a downloaded update when the agents are idle. Members of your servers are disconnected for a short time.",
   // Restart OpenBot, or install a downloaded update, when no agent works.
-  "settings.updates.idleRestart.title": "Restart OpenBot",
+  "settings.updates.idleRestart.title": "Restart Atelier",
   "settings.updates.idleRestart.relaunchDescription":
-    "OpenBot restarts when no agent works. New routine runs wait until then.",
+    "Atelier restarts when no agent works. New routine runs wait until then.",
   "settings.updates.idleRestart.updateDescription":
-    "OpenBot installs {target} when no agent works. New routine runs wait until then.",
+    "Atelier installs {target} when no agent works. New routine runs wait until then.",
   "settings.updates.idleRestart.relaunch": "Restart when idle",
   "settings.updates.idleRestart.update": "Install when idle",
   "settings.updates.allowRemote.title": "Allow updates from server members",
@@ -600,8 +600,8 @@ export const messages = defineMessages("settings", {
   "settings.transfer.import.reading": "Reading the file…",
   "settings.transfer.import.openFailed": "The file could not be opened",
   "settings.transfer.import.contains": "This file contains",
-  "settings.transfer.import.source": "OpenBot {version} · exported {date}",
-  "settings.transfer.import.sourceNoDate": "OpenBot {version}",
+  "settings.transfer.import.source": "Atelier {version} · exported {date}",
+  "settings.transfer.import.sourceNoDate": "Atelier {version}",
   "settings.transfer.import.warnings": "Before the import starts",
   "settings.transfer.import.agentsLabel": "Agents in the file",
   "settings.transfer.import.nameExists": "Name already used",

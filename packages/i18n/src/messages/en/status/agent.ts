@@ -10,7 +10,7 @@ export const messages = defineMessages("status.agent", {
   "status.agent.modelReturnedAfterError": "Switched back to {model} after the provider error.",
   "status.agent.marketplaceSuggested": "Suggested a Marketplace app: {app}.",
   "status.agent.messageDuplicate":
-    "An identical message to this agent is still queued or running. OpenBot did not send it again.",
+    "An identical message to this agent is still queued or running. Atelier did not send it again.",
   "status.agent.messageHeld":
     "The recipients read this message in their next turn; it does not start one. When a recipient must act on it now, send it again with expectsReply true.",
   "status.agent.toolFailed": "A tool step failed: {tool}. {reason}",
@@ -54,9 +54,9 @@ export const messages = defineMessages("status.agent", {
   "status.agent.skillReading": "Reading a skill…",
   "status.agent.memoryChanges": "Memory: {saved} saved, {updated} updated, {forgotten} forgotten.",
   "status.agent.mcpServerAdd":
-    "Add the MCP server {name}: {target}. Every agent on this server gets its tools. OpenBot connects to it to test it.",
+    "Add the MCP server {name}: {target}. Every agent on this server gets its tools. Atelier connects to it to test it.",
   "status.agent.mcpServerChange":
-    "Change the MCP server {name} to {target}. Every agent on this server gets its tools. OpenBot connects to it to test it.",
+    "Change the MCP server {name} to {target}. Every agent on this server gets its tools. Atelier connects to it to test it.",
   "status.agent.mcpServerEnable": "Turn on the MCP server {name} for every agent on this server.",
   "status.agent.mcpServerDisable": "Turn off the MCP server {name} for every agent on this server.",
   "status.agent.mcpServerRemove": "Remove the MCP server {name} and its sign-in from every agent on this server.",

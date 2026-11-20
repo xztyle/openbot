@@ -27,7 +27,7 @@ export const messages = defineMessages("marketplace", {
   "marketplace.tab.skills": "Skills",
 
   // A plugin link.
-  "marketplace.plugins.missing": "This plugin is not in the OpenBot catalog.",
+  "marketplace.plugins.missing": "This plugin is not in the Atelier catalog.",
 
   // The agent page.
   "marketplace.agents.loadingDetail": "Loading agent details…",
@@ -41,7 +41,7 @@ export const messages = defineMessages("marketplace", {
   "marketplace.skill.update": "Update skill",
   "marketplace.skill.updateAvailable": "Update available",
   "marketplace.skill.remove.titleMany": "Remove {name} from {agents}?",
-  "marketplace.skill.remove.many": "OpenBot removes {name} from each of these agents. Chat history stays.",
+  "marketplace.skill.remove.many": "Atelier removes {name} from each of these agents. Chat history stays.",
   "marketplace.skill.remove.modifiedMany":
     "Some of these agents have local changes in the skill's files. Removing deletes those files. Chat history stays.",
   "marketplace.skill.updates.label": "Skill updates",
@@ -50,7 +50,7 @@ export const messages = defineMessages("marketplace", {
     other: "{count} installed skills have updates.",
   },
   "marketplace.skill.updates.all": "Update all",
-  "marketplace.try.readFailed": "OpenBot could not read this agent's skills. Try again.",
+  "marketplace.try.readFailed": "Atelier could not read this agent's skills. Try again.",
   "marketplace.try.enable": "Enable this skill in agent settings to try it.",
   "marketplace.try.repair": "Repair this skill in agent settings to try it.",
   "marketplace.try.update": "Update this skill to try this version.",
@@ -193,7 +193,7 @@ export const messages = defineMessages("marketplace", {
   "marketplace.plugin.figma.prompt.assets": "Extract the marketing icons at 2x for the app bundle.",
   "marketplace.plugin.paper.tagline": "Design canvas built on HTML and CSS",
   "marketplace.plugin.paper.description":
-    "Paper lets agents read and write the design file that is open in Paper Desktop: inspect artboards, selections, computed styles, JSX and tokens, and create or change frames, text and styles. Install Paper Desktop, open it once, and open a file before you start. OpenBot starts the Paper CLI that Paper Desktop installs. Paper needs no key. Write tools change the open file, so review each write before you approve it.",
+    "Paper lets agents read and write the design file that is open in Paper Desktop: inspect artboards, selections, computed styles, JSX and tokens, and create or change frames, text and styles. Install Paper Desktop, open it once, and open a file before you start. Atelier starts the Paper CLI that Paper Desktop installs. Paper needs no key. Write tools change the open file, so review each write before you approve it.",
   "marketplace.plugin.paper.app":
     "Reads and writes the open Paper Desktop file, over the local MCP server that the Paper CLI relays. Needs Paper Desktop with a file open.",
   "marketplace.plugin.paper.prompt.implement":
@@ -204,7 +204,7 @@ export const messages = defineMessages("marketplace", {
     "List the design tokens in the open Paper file and compare them with our theme.",
   "marketplace.plugin.appleApps.tagline": "Mail, Calendar and more on your Mac",
   "marketplace.plugin.appleApps.description":
-    "Apple apps lets agents use Mail, Calendar, Contacts, Reminders, Notes, Messages and Safari on this Mac. It works on macOS only. OpenBot starts mcp-icloud, a community server that is not made by Apple or OpenBot. The server controls the apps through AppleScript, on this computer, and needs no account and no key. The first time an agent uses an app, macOS asks if OpenBot can control it. To change this later, open System Settings › Privacy & Security › Automation. Agents can send email and iMessages, and change or delete events, contacts and reminders, so review each write before you approve it. What the tools read, such as email text, goes to the model provider of the agent.",
+    "Apple apps lets agents use Mail, Calendar, Contacts, Reminders, Notes, Messages and Safari on this Mac. It works on macOS only. Atelier starts mcp-icloud, a community server that is not made by Apple or Atelier. The server controls the apps through AppleScript, on this computer, and needs no account and no key. The first time an agent uses an app, macOS asks if Atelier can control it. To change this later, open System Settings › Privacy & Security › Automation. Agents can send email and iMessages, and change or delete events, contacts and reminders, so review each write before you approve it. What the tools read, such as email text, goes to the model provider of the agent.",
   "marketplace.plugin.appleApps.app":
     "Mail, Calendar, Contacts, Reminders, Notes, Messages and Safari, over the local mcp-icloud server. Needs macOS and Automation access.",
   "marketplace.plugin.appleApps.prompt.unread": "Summarize my unread email in Apple Mail from today.",

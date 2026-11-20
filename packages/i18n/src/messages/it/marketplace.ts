@@ -24,7 +24,7 @@ export const messages = {
   "marketplace.tab.agents": "Agenti",
   "marketplace.tab.skills": "Skill",
 
-  "marketplace.plugins.missing": "Questo plugin non è nel catalogo di OpenBot.",
+  "marketplace.plugins.missing": "Questo plugin non è nel catalogo di Atelier.",
 
   "marketplace.agents.loadingDetail": "Caricamento dettagli agente…",
   "marketplace.agents.skills": "Skill",
@@ -34,7 +34,7 @@ export const messages = {
 
   "marketplace.skill.loading": "Caricamento skill",
   "marketplace.skill.update": "Aggiorna skill",
-  "marketplace.try.readFailed": "OpenBot non è riuscito a leggere le skill di questo agente. Riprova.",
+  "marketplace.try.readFailed": "Atelier non è riuscito a leggere le skill di questo agente. Riprova.",
   "marketplace.try.enable": "Attiva questa skill nelle impostazioni dell'agente per provarla.",
   "marketplace.try.repair": "Ripara questa skill nelle impostazioni dell'agente per provarla.",
   "marketplace.try.update": "Aggiorna questa skill per provare questa versione.",
@@ -168,7 +168,7 @@ export const messages = {
   "marketplace.plugin.figma.prompt.assets": "Estrai le icone di marketing a 2x per il bundle dell'app.",
   "marketplace.plugin.paper.tagline": "Tela di design basata su HTML e CSS",
   "marketplace.plugin.paper.description":
-    "Paper permette agli agenti di leggere e scrivere il file di design aperto in Paper Desktop: ispezionare artboard, selezioni, stili calcolati, JSX e token, e creare o modificare frame, testi e stili. Installa Paper Desktop, aprilo una volta e apri un file prima di iniziare. OpenBot avvia la CLI di Paper che Paper Desktop installa. Paper non richiede chiavi. I tool di scrittura modificano il file aperto, quindi controlla ogni scrittura prima di approvarla.",
+    "Paper permette agli agenti di leggere e scrivere il file di design aperto in Paper Desktop: ispezionare artboard, selezioni, stili calcolati, JSX e token, e creare o modificare frame, testi e stili. Installa Paper Desktop, aprilo una volta e apri un file prima di iniziare. Atelier avvia la CLI di Paper che Paper Desktop installa. Paper non richiede chiavi. I tool di scrittura modificano il file aperto, quindi controlla ogni scrittura prima di approvarla.",
   "marketplace.plugin.paper.app":
     "Legge e scrive il file aperto in Paper Desktop, tramite il server MCP locale che la CLI di Paper inoltra. Richiede Paper Desktop con un file aperto.",
   "marketplace.plugin.paper.prompt.implement":
@@ -179,7 +179,7 @@ export const messages = {
     "Elenca i design token del file Paper aperto e confrontali con il nostro tema.",
   "marketplace.plugin.appleApps.tagline": "Mail, Calendario e altro sul tuo Mac",
   "marketplace.plugin.appleApps.description":
-    "Apple apps consente agli agenti di usare Mail, Calendario, Contatti, Promemoria, Note, Messaggi e Safari su questo Mac. Funziona solo su macOS. OpenBot avvia mcp-icloud, un server della community che non è fatto da Apple né da OpenBot. Il server controlla le app tramite AppleScript, su questo computer, e non richiede account né chiavi. La prima volta che un agente usa un'app, macOS chiede se OpenBot può controllarla. Per cambiarlo in seguito, apri Impostazioni di Sistema › Privacy e sicurezza › Automazione. Gli agenti possono inviare email e iMessage e modificare o eliminare eventi, contatti e promemoria, quindi controlla ogni scrittura prima di approvarla. Ciò che gli strumenti leggono, come il testo delle email, va al provider del modello dell'agente.",
+    "Apple apps consente agli agenti di usare Mail, Calendario, Contatti, Promemoria, Note, Messaggi e Safari su questo Mac. Funziona solo su macOS. Atelier avvia mcp-icloud, un server della community che non è fatto da Apple né da Atelier. Il server controlla le app tramite AppleScript, su questo computer, e non richiede account né chiavi. La prima volta che un agente usa un'app, macOS chiede se Atelier può controllarla. Per cambiarlo in seguito, apri Impostazioni di Sistema › Privacy e sicurezza › Automazione. Gli agenti possono inviare email e iMessage e modificare o eliminare eventi, contatti e promemoria, quindi controlla ogni scrittura prima di approvarla. Ciò che gli strumenti leggono, come il testo delle email, va al provider del modello dell'agente.",
   "marketplace.plugin.appleApps.app":
     "Mail, Calendario, Contatti, Promemoria, Note, Messaggi e Safari, tramite il server locale mcp-icloud. Richiede macOS e l'accesso in Automazione.",
   "marketplace.plugin.appleApps.prompt.unread": "Riassumi le mie email non lette di oggi in Apple Mail.",

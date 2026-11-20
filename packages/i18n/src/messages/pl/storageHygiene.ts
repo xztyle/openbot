@@ -33,7 +33,7 @@ export const messages = {
   "storageHygiene.folders.title": "Największe foldery",
   "storageHygiene.plan.title": "Plan czyszczenia",
   "storageHygiene.plan.description":
-    "OpenBot ponownie sprawdza każdy element przed usunięciem. Zachowuje wszystko, co jest w użyciu lub zmieniło się w ciągu ostatnich {minutes} min.",
+    "Atelier ponownie sprawdza każdy element przed usunięciem. Zachowuje wszystko, co jest w użyciu lub zmieniło się w ciągu ostatnich {minutes} min.",
   "storageHygiene.plan.empty": "Nie ma nic do wyczyszczenia.",
   "storageHygiene.plan.items": {
     one: "{count} element",
@@ -73,11 +73,11 @@ export const messages = {
   "storageHygiene.cleanup.button": "Wyczyść {size}",
   "storageHygiene.cleanup.confirmTitle": "Wyczyścić {size}?",
   "storageHygiene.cleanup.confirmDescription": {
-    one: "OpenBot usunie {count} element. Najpierw sprawdzi go ponownie i zachowa, jeśli jest w użyciu lub zmienił się w ciągu ostatnich {minutes} min. Dziennik audytu zapisze usunięcie.",
-    few: "OpenBot usunie {count} elementy. Najpierw ponownie sprawdzi każdy z nich i zachowa wszystko, co jest w użyciu lub zmieniło się w ciągu ostatnich {minutes} min. Dziennik audytu zapisze każde usunięcie.",
-    many: "OpenBot usunie {count} elementów. Najpierw ponownie sprawdzi każdy z nich i zachowa wszystko, co jest w użyciu lub zmieniło się w ciągu ostatnich {minutes} min. Dziennik audytu zapisze każde usunięcie.",
+    one: "Atelier usunie {count} element. Najpierw sprawdzi go ponownie i zachowa, jeśli jest w użyciu lub zmienił się w ciągu ostatnich {minutes} min. Dziennik audytu zapisze usunięcie.",
+    few: "Atelier usunie {count} elementy. Najpierw ponownie sprawdzi każdy z nich i zachowa wszystko, co jest w użyciu lub zmieniło się w ciągu ostatnich {minutes} min. Dziennik audytu zapisze każde usunięcie.",
+    many: "Atelier usunie {count} elementów. Najpierw ponownie sprawdzi każdy z nich i zachowa wszystko, co jest w użyciu lub zmieniło się w ciągu ostatnich {minutes} min. Dziennik audytu zapisze każde usunięcie.",
     other:
-      "OpenBot usunie {count} elementu. Najpierw ponownie sprawdzi każdy z nich i zachowa wszystko, co jest w użyciu lub zmieniło się w ciągu ostatnich {minutes} min. Dziennik audytu zapisze każde usunięcie.",
+      "Atelier usunie {count} elementu. Najpierw ponownie sprawdzi każdy z nich i zachowa wszystko, co jest w użyciu lub zmieniło się w ciągu ostatnich {minutes} min. Dziennik audytu zapisze każde usunięcie.",
   },
   "storageHygiene.cleanup.confirm": "Wyczyść",
   "storageHygiene.cleanup.pending": "Czyszczenie…",

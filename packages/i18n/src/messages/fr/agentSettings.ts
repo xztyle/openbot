@@ -102,7 +102,7 @@ export const messages = {
   "agentSettings.runtime.fullAccessNote":
     "L’agent s’exécute avec un accès complet à l’ordinateur depuis son espace de travail et le dossier partagé.",
   "agentSettings.runtime.askNote":
-    "Il vous demande avant d’utiliser un outil OpenBot ou de publier un site, et quand son fournisseur demande une approbation.",
+    "Il vous demande avant d’utiliser un outil Atelier ou de publier un site, et quand son fournisseur demande une approbation.",
   "agentSettings.runtime.fullNote": "Il agit sans demander, sauf pour les questions qu’il vous pose.",
 
   "agentSettings.access.workspace": "Espace de travail seul",
@@ -154,7 +154,7 @@ export const messages = {
   "agentSettings.runtime.workspaceEnforcedClaude":
     "Une modification de fichier à l’extérieur vous demande d’abord. Une commande ne peut pas écrire à l’extérieur.",
   "agentSettings.runtime.workspaceUnlimited":
-    "Computer Use et le navigateur OpenBot ne sont pas limités ; vous pouvez désactiver Computer Use ci-dessous.",
+    "Computer Use et le navigateur Atelier ne sont pas limités ; vous pouvez désactiver Computer Use ci-dessous.",
   "agentSettings.computerUse.title": "Computer Use",
   "agentSettings.computerUse.description": "Autoriser cet agent à contrôler les apps de cet ordinateur",
   "agentSettings.automation.title": "Scripts locaux",

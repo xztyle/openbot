@@ -56,8 +56,8 @@ export const messages = {
   "browser.pip.reattach": "Browser wieder an die rechte Seitenleiste andocken",
   "browser.pip.reattachTitle": "Browser wieder andocken",
   "browser.pip.close": "Browser-Popup schließen",
-  "browser.pip.reattachFailed": "OpenBot konnte den Browser nicht wieder andocken.",
-  "browser.pip.closeFailed": "OpenBot konnte das Browser-Popup nicht schließen.",
+  "browser.pip.reattachFailed": "Atelier konnte den Browser nicht wieder andocken.",
+  "browser.pip.closeFailed": "Atelier konnte das Browser-Popup nicht schließen.",
   "browser.popupBlocked.title": "Popup blockiert",
   "browser.popupBlocked.dismiss": "Popup-Meldung schließen",
   "browser.liveView.label": "Live-Ansicht der Seite auf dem Server",
@@ -133,22 +133,22 @@ export const messages = {
   "browser.signIn.local": "Auf diesem Computer anmelden",
   "browser.signIn.title": "Bei {site} anmelden",
   "browser.signIn.description":
-    "Manche Websites lehnen eine Anmeldung von einem Server ab. Melde dich auf diesem Computer an, und OpenBot sendet die Anmeldung für {site} an {server}. Alle Agenten und Mitglieder auf {server} können sie dann im Browser verwenden.",
+    "Manche Websites lehnen eine Anmeldung von einem Server ab. Melde dich auf diesem Computer an, und Atelier sendet die Anmeldung für {site} an {server}. Alle Agenten und Mitglieder auf {server} können sie dann im Browser verwenden.",
   "browser.signIn.windowOpen":
-    "Melde dich in dem geöffneten Fenster an. OpenBot sendet die Anmeldung, wenn sie fertig ist. Wenn das Fenster offen bleibt, wähle Fertig.",
+    "Melde dich in dem geöffneten Fenster an. Atelier sendet die Anmeldung, wenn sie fertig ist. Wenn das Fenster offen bleibt, wähle Fertig.",
   "browser.signIn.windowClosed":
     "Das Anmeldefenster ist geschlossen. Wähle Fertig, um die Anmeldung zu senden, oder öffne das Fenster erneut.",
   "browser.signIn.reopen": "Anmeldefenster öffnen",
   "browser.signIn.sending": "Wird an {server} gesendet…",
   "browser.signIn.sent": "Bei {site} auf {server} angemeldet",
   "browser.signIn.notFound":
-    "OpenBot hat keine Anmeldung für {site} gefunden. Melde dich im Fenster an und wähle dann Fertig.",
+    "Atelier hat keine Anmeldung für {site} gefunden. Melde dich im Fenster an und wähle dann Fertig.",
   "browser.signIn.stillSignedOut":
     "{server} zeigt für {site} noch eine Anmeldeseite. Schließe die Anmeldung im Fenster ab.",
-  "browser.signIn.failed": "OpenBot konnte die Anmeldung nicht senden.",
+  "browser.signIn.failed": "Atelier konnte die Anmeldung nicht senden.",
   "browser.profiles.title": "Browser-Profile",
   "browser.profiles.subtitle":
-    "Jedes Profil behält eigene Anmeldungen, Cookies und Website-Daten auf dem Computer, auf dem OpenBot läuft.",
+    "Jedes Profil behält eigene Anmeldungen, Cookies und Website-Daten auf dem Computer, auf dem Atelier läuft.",
   "browser.profiles.label": "Browser-Profile",
   "browser.profiles.newName": "Profilname",
   "browser.profiles.create": "Hinzufügen",
@@ -167,8 +167,8 @@ export const messages = {
   "browser.profiles.deleteDescription":
     "Dies löscht die Anmeldungen, Cookies und Website-Daten des Profils. Seine offenen Tabs werden geschlossen.",
   "browser.profiles.deleteAgents": "Diese Agenten wechseln zum gemeinsamen Profil: {agents}.",
-  "browser.profiles.failed": "OpenBot konnte die Browser-Profile nicht ändern.",
-  "browser.profiles.loadFailed": "OpenBot konnte die Browser-Profile nicht laden.",
+  "browser.profiles.failed": "Atelier konnte die Browser-Profile nicht ändern.",
+  "browser.profiles.loadFailed": "Atelier konnte die Browser-Profile nicht laden.",
   "browser.profiles.tabLabel": "Profil: {name}",
   "browser.profiles.agentTabLabel": "Eigenes Profil des Agenten",
 } as const satisfies PartialTranslation<typeof source>;

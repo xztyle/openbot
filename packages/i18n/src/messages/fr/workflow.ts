@@ -323,9 +323,9 @@ export const messages = {
   "workflow.canvas.version.restore": "Avant une restauration",
   "workflow.canvas.version.run": "Avant une exécution",
   "workflow.canvas.deleteUndo.title": "{name} supprimé",
-  "workflow.page.failed": "OpenBot n’a pas pu effectuer cette action. Réessayez.",
+  "workflow.page.failed": "Atelier n’a pas pu effectuer cette action. Réessayez.",
   "workflow.page.conflict": "Modifié sur un autre appareil. Annulez pour récupérer vos modifications.",
   "workflow.page.needsNewerApp":
-    "Ce workflow contient des étapes d’une version plus récente d’OpenBot. Mettez OpenBot à jour pour le modifier.",
+    "Ce workflow contient des étapes d’une version plus récente d’Atelier. Mettez Atelier à jour pour le modifier.",
   "workflow.page.manageOnly": "Pour modifier ce workflow, il vous faut l’accès Gérer sur chacun de ses agents.",
 } as const satisfies PartialTranslation<typeof source>;

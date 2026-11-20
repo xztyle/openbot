@@ -22,7 +22,7 @@ export const messages = {
   "marketplace.kinds": "Typy zawartości Marketplace",
   "marketplace.tab.agents": "Agenci",
   "marketplace.tab.skills": "Umiejętności",
-  "marketplace.plugins.missing": "Tej wtyczki nie ma w katalogu OpenBot.",
+  "marketplace.plugins.missing": "Tej wtyczki nie ma w katalogu Atelier.",
   "marketplace.agents.loadingDetail": "Wczytywanie szczegółów agenta…",
   "marketplace.agents.skills": "Umiejętności",
   "marketplace.agents.routines": "Rutyny",
@@ -30,7 +30,7 @@ export const messages = {
   "marketplace.agents.routineInactive": "Nieaktywna",
   "marketplace.skill.loading": "Wczytywanie umiejętności",
   "marketplace.skill.update": "Zaktualizuj",
-  "marketplace.try.readFailed": "OpenBot nie mógł odczytać umiejętności tego agenta. Spróbuj ponownie.",
+  "marketplace.try.readFailed": "Atelier nie mógł odczytać umiejętności tego agenta. Spróbuj ponownie.",
   "marketplace.try.enable": "Włącz tę umiejętność w ustawieniach agenta, aby ją wypróbować.",
   "marketplace.try.repair": "Napraw tę umiejętność w ustawieniach agenta, aby ją wypróbować.",
   "marketplace.try.update": "Zaktualizuj tę umiejętność, aby wypróbować tę wersję.",
@@ -176,7 +176,7 @@ export const messages = {
   "marketplace.plugin.figma.prompt.assets": "Wyeksportuj ikony marketingowe w 2x do pakietu aplikacji.",
   "marketplace.plugin.paper.tagline": "Płótno projektowe oparte na HTML i CSS",
   "marketplace.plugin.paper.description":
-    "Paper pozwala agentom czytać i zapisywać plik projektu otwarty w Paper Desktop: sprawdzać plansze, zaznaczenia, obliczone style, JSX i tokeny oraz tworzyć lub zmieniać ramki, tekst i style. Zainstaluj Paper Desktop, otwórz go raz i otwórz plik przed rozpoczęciem. OpenBot uruchamia Paper CLI instalowane przez Paper Desktop. Paper nie wymaga klucza. Narzędzia zapisu zmieniają otwarty plik, więc sprawdź każdy zapis, zanim go zatwierdzisz.",
+    "Paper pozwala agentom czytać i zapisywać plik projektu otwarty w Paper Desktop: sprawdzać plansze, zaznaczenia, obliczone style, JSX i tokeny oraz tworzyć lub zmieniać ramki, tekst i style. Zainstaluj Paper Desktop, otwórz go raz i otwórz plik przed rozpoczęciem. Atelier uruchamia Paper CLI instalowane przez Paper Desktop. Paper nie wymaga klucza. Narzędzia zapisu zmieniają otwarty plik, więc sprawdź każdy zapis, zanim go zatwierdzisz.",
   "marketplace.plugin.paper.app":
     "Czyta i zapisuje otwarty plik Paper Desktop przez lokalny serwer MCP przekazywany przez Paper CLI. Wymaga Paper Desktop z otwartym plikiem.",
   "marketplace.plugin.paper.prompt.implement":
@@ -187,7 +187,7 @@ export const messages = {
     "Wypisz tokeny projektu z otwartego pliku Paper i porównaj je z naszym motywem.",
   "marketplace.plugin.appleApps.tagline": "Mail, Kalendarz i więcej na Twoim Macu",
   "marketplace.plugin.appleApps.description":
-    "Apple apps pozwala agentom korzystać z aplikacji Mail, Kalendarz, Kontakty, Przypomnienia, Notatki, Wiadomości i Safari na tym Macu. Działa tylko w macOS. OpenBot uruchamia mcp-icloud, serwer społeczności, którego nie tworzy Apple ani OpenBot. Serwer steruje aplikacjami przez AppleScript na tym komputerze i nie wymaga konta ani klucza. Gdy agent po raz pierwszy używa aplikacji, macOS pyta, czy OpenBot może nią sterować. Aby zmienić to później, otwórz Ustawienia systemowe › Prywatność i ochrona › Automatyzacja. Agenci mogą wysyłać e-maile i wiadomości iMessage oraz zmieniać lub usuwać wydarzenia, kontakty i przypomnienia, więc sprawdź każdy zapis, zanim go zatwierdzisz. To, co odczytują narzędzia, na przykład treść e-maili, trafia do dostawcy modelu agenta.",
+    "Apple apps pozwala agentom korzystać z aplikacji Mail, Kalendarz, Kontakty, Przypomnienia, Notatki, Wiadomości i Safari na tym Macu. Działa tylko w macOS. Atelier uruchamia mcp-icloud, serwer społeczności, którego nie tworzy Apple ani Atelier. Serwer steruje aplikacjami przez AppleScript na tym komputerze i nie wymaga konta ani klucza. Gdy agent po raz pierwszy używa aplikacji, macOS pyta, czy Atelier może nią sterować. Aby zmienić to później, otwórz Ustawienia systemowe › Prywatność i ochrona › Automatyzacja. Agenci mogą wysyłać e-maile i wiadomości iMessage oraz zmieniać lub usuwać wydarzenia, kontakty i przypomnienia, więc sprawdź każdy zapis, zanim go zatwierdzisz. To, co odczytują narzędzia, na przykład treść e-maili, trafia do dostawcy modelu agenta.",
   "marketplace.plugin.appleApps.app":
     "Mail, Kalendarz, Kontakty, Przypomnienia, Notatki, Wiadomości i Safari przez lokalny serwer mcp-icloud. Wymaga macOS i dostępu w Automatyzacji.",
   "marketplace.plugin.appleApps.prompt.unread": "Podsumuj moje dzisiejsze nieprzeczytane e-maile w Apple Mail.",

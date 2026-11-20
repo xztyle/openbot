@@ -55,11 +55,11 @@ export const messages = {
   "mobile.marketplace.facts.accessNone": "Senza account",
   "mobile.marketplace.permission.admin": "Solo proprietari e amministratori possono installare dal Marketplace.",
   "mobile.marketplace.permission.unavailable":
-    "Questo server è offline, oppure il suo OpenBot è troppo vecchio per questo. Aggiorna OpenBot sul computer che lo esegue.",
-  "mobile.marketplace.error.agentUnsupported": "Aggiorna OpenBot sul server per aggiungere agenti dal Marketplace.",
+    "Questo server è offline, oppure il suo Atelier è troppo vecchio per questo. Aggiorna Atelier sul computer che lo esegue.",
+  "mobile.marketplace.error.agentUnsupported": "Aggiorna Atelier sul server per aggiungere agenti dal Marketplace.",
   "mobile.marketplace.error.agentUpdateUnsupported":
-    "Aggiorna OpenBot sul server per aggiornare gli agenti dal Marketplace.",
-  "mobile.marketplace.error.signInUnsupported": "Aggiorna OpenBot sul server per accedere alle app dal telefono.",
+    "Aggiorna Atelier sul server per aggiornare gli agenti dal Marketplace.",
+  "mobile.marketplace.error.signInUnsupported": "Aggiorna Atelier sul server per accedere alle app dal telefono.",
   "mobile.marketplace.agent.add": "Aggiungi agente",
   "mobile.marketplace.agent.adding": "Aggiunta agente",
   "mobile.marketplace.agent.update": "Aggiorna agente",
@@ -102,9 +102,9 @@ export const messages = {
   "mobile.marketplace.app.connectFailed": "Impossibile connettere l’app.",
   "mobile.marketplace.app.linkInvalid": "Usa un link https su {hostname}.",
   "mobile.marketplace.app.docs": "Ottieni chiave",
-  "mobile.marketplace.app.local": "Questa app funziona sul computer con OpenBot. Configurala su quel computer.",
+  "mobile.marketplace.app.local": "Questa app funziona sul computer con Atelier. Configurala su quel computer.",
   "mobile.marketplace.app.relayUnsupported":
-    "Questa app chiede l’accesso nel browser. Aggiorna OpenBot sul server oppure connetti l’app sul computer.",
+    "Questa app chiede l’accesso nel browser. Aggiorna Atelier sul server oppure connetti l’app sul computer.",
   "mobile.marketplace.app.waiting": "In attesa della pagina di accesso…",
   "mobile.marketplace.app.openAgain": "Riapri la pagina di accesso",
   "mobile.marketplace.app.pasteHint":

@@ -21,7 +21,7 @@ export const messages = {
     "エージェントが使えるのは、OpenBot GitHub App がインストールされたリポジトリだけです。",
   "connector.github.chooseRepositories": "リポジトリを選ぶ",
   "connector.github.repositoriesLoading": "GitHub からリポジトリを読み込んでいます",
-  "connector.github.repositoriesFailed": "OpenBot は GitHub からリポジトリを読み込めませんでした。",
+  "connector.github.repositoriesFailed": "Atelier は GitHub からリポジトリを読み込めませんでした。",
   "connector.github.noRepositories": "OpenBot GitHub App はまだどのリポジトリにもインストールされていません。",
   "connector.github.moreRepositories": { other: "ほか {count} 件のリポジトリ" },
   "connector.github.private": "非公開",
@@ -33,7 +33,7 @@ export const messages = {
   "connector.github.expiredDescription":
     "エージェントが再び GitHub を使えるように、@{login} としてもう一度接続してください。",
   "connector.github.reconnect": "再接続",
-  "connector.github.actionFailed": "OpenBot は GitHub の接続を変更できませんでした。",
+  "connector.github.actionFailed": "Atelier は GitHub の接続を変更できませんでした。",
   "connector.github.statusConnected": "接続済み",
   "connector.github.statusConnecting": "接続中",
   "connector.github.statusExpired": "期限切れ",
@@ -44,7 +44,7 @@ export const messages = {
   "connector.github.noMatch": "「{query}」に一致するリポジトリはありません。",
   "connector.github.stepSignIn": "サインイン",
   "connector.github.stepConnected": "接続済み",
-  "connector.github.requestingCode": "OpenBot が GitHub にコードを要求しています。",
+  "connector.github.requestingCode": "Atelier が GitHub にコードを要求しています。",
   "connector.github.codeLabel": "コード {code}",
   "connector.github.failedTitle": "GitHub に接続できませんでした",
   "connector.github.cancelConnecting": "GitHub の接続をキャンセル",
@@ -57,7 +57,7 @@ export const messages = {
   "connector.github.disconnectConfirmDescription":
     "切断すると、@{login} のサインイン情報がこのコンピューターから削除されます。",
   "connector.github.disconnectEffectTools": "すべてのエージェントが GitHub のツール、gh、git を使えなくなります。",
-  "connector.github.disconnectEffectRevoke": "その後 GitHub が開き、OpenBot のアクセスを取り消せます。",
+  "connector.github.disconnectEffectRevoke": "その後 GitHub が開き、Atelier のアクセスを取り消せます。",
   "connector.github.disconnectEffectKept": "チャット、ファイル、エージェントのメモリーはこのコンピューターに残ります。",
   // The same text for the connection of a joined server. {host} is the server name, such as Studio.
   "connector.github.descriptionHost":
@@ -72,7 +72,7 @@ export const messages = {
   "connector.github.close": "閉じる",
   "connector.dangerZone": "危険な操作",
   "connector.statusUnknown": "不明",
-  "connector.readFailed": "OpenBot はこの接続の状態を読み取れませんでした。",
+  "connector.readFailed": "Atelier はこの接続の状態を読み取れませんでした。",
 
   // Server settings > Connectors: the list of integrations. Each row opens its page.
   "connector.hub.onThisComputer": "このコンピューター上",
@@ -104,7 +104,7 @@ export const messages = {
   "connector.slack.workspaceDescription": "@OpenBot をメンションするか、ダイレクトメッセージを送ります。",
   "connector.slack.disconnectWorkspace": "切断",
   "connector.slack.missingScopes":
-    "OpenBot には Slack で次の権限がありません: {scopes}。ワークスペースを切断してから、もう一度接続してください。",
+    "Atelier には Slack で次の権限がありません: {scopes}。ワークスペースを切断してから、もう一度接続してください。",
   "connector.slack.retryAt": "Slack から待機するよう求められました。{time} に再試行します。",
   "connector.slack.reconnect": "再接続",
   "connector.slack.pause": "一時停止",
@@ -122,7 +122,7 @@ export const messages = {
   "connector.slack.stepAgent": "エージェント",
   "connector.slack.connectTitle": "Slack ワークスペースを接続",
   "connector.slack.connectDescription":
-    "OpenBot はワークスペースに OpenBot という名前のアプリを 1 つインストールし、そのアプリはすべての公開チャンネルに参加します。",
+    "Atelier はワークスペースに Atelier という名前のアプリを 1 つインストールし、そのアプリはすべての公開チャンネルに参加します。",
   "connector.slack.connectStepBrowser": "ブラウザーで Slack が開きます",
   "connector.slack.connectStepAllow": "右上でワークスペースを選び、「許可する」を押します",
   "connector.slack.connectStepReturn": "Slack での操作が終わると、このダイアログが続行します",
@@ -137,19 +137,19 @@ export const messages = {
   "connector.slack.orchestratorDoesDelegate": "各タスクを最も適したエージェントに任せます",
   "connector.slack.orchestratorDoesAnswer": "回答を Slack のスレッドに投稿します",
   "connector.slack.orchestratorModel": "モデル",
-  "connector.slack.doneTitle": "OpenBot が {workspace} に参加しました",
+  "connector.slack.doneTitle": "Atelier が {workspace} に参加しました",
   "connector.slack.doneDescription":
     "公開チャンネルで @OpenBot をメンションするか、ダイレクトメッセージを送ってください。",
   "connector.slack.done": "完了",
   "connector.slack.disconnectTitle": "{workspace} を切断しますか？",
   "connector.slack.disconnectDescription":
-    "OpenBot は {workspace} での回答を停止し、Slack のトークンをこのコンピューターから削除します。",
+    "Atelier は {workspace} での回答を停止し、Slack のトークンをこのコンピューターから削除します。",
   "connector.slack.disconnectDescriptionHost":
-    "OpenBot は {workspace} での回答を停止し、Slack のトークンを {host} から削除します。",
+    "Atelier は {workspace} での回答を停止し、Slack のトークンを {host} から削除します。",
   "connector.slack.disconnectEffect":
     "{workspace} のメンバーは、@OpenBot からあなたのエージェントに連絡できなくなります。",
-  "connector.slack.removeEffectKept": "会話と Slack Orchestrator は OpenBot に残ります。",
-  "connector.slack.removeEffectDeleted": "Slack Orchestrator とその会話は OpenBot から削除されます。",
+  "connector.slack.removeEffectKept": "会話と Slack Orchestrator は Atelier に残ります。",
+  "connector.slack.removeEffectDeleted": "Slack Orchestrator とその会話は Atelier から削除されます。",
   "connector.slack.keep": "接続を維持",
   "connector.slack.close": "閉じる",
   "connector.slack.addWorkspace": "ワークスペースを追加",
@@ -182,7 +182,7 @@ export const messages = {
     "チャンネルで @OpenBot をメンションします。続けるには OpenBot に返信します。",
   "connector.discord.disconnectWorkspace": "切断",
   "connector.discord.missingScopes":
-    "OpenBot には Discord で次の権限がありません: {scopes}。Discord サーバーを切断してから、もう一度接続してください。",
+    "Atelier には Discord で次の権限がありません: {scopes}。Discord サーバーを切断してから、もう一度接続してください。",
   "connector.discord.retryAt": "Discord から待機するよう求められました。{time} に再試行します。",
   "connector.discord.reconnect": "再接続",
   "connector.discord.pause": "一時停止",
@@ -194,11 +194,11 @@ export const messages = {
   "connector.discord.orchestratorNone": "回答するエージェントはまだいません",
   "connector.discord.orchestratorNoneDescription":
     "Discord Orchestrator を追加してください。追加しないと、Discord に回答が届きません。",
-  "connector.discord.channelsNote": "OpenBot には、そのロールが閲覧できるチャンネルが見えます。",
+  "connector.discord.channelsNote": "Atelier には、そのロールが閲覧できるチャンネルが見えます。",
   "connector.discord.stepWorkspace": "Discord サーバー",
   "connector.discord.stepAgent": "エージェント",
   "connector.discord.connectTitle": "Discord サーバーを接続",
-  "connector.discord.connectDescription": "OpenBot は Discord サーバーに OpenBot という名前のボットを 1 つ追加します。",
+  "connector.discord.connectDescription": "Atelier は Discord サーバーに Atelier という名前のボットを 1 つ追加します。",
   "connector.discord.connectStepBrowser": "ブラウザーで Discord が開きます",
   "connector.discord.connectStepAllow": "サーバーを選び、「認証」を押します",
   "connector.discord.connectStepReturn": "Discord での操作が終わると、このダイアログが続行します",
@@ -213,19 +213,19 @@ export const messages = {
   "connector.discord.orchestratorDoesDelegate": "各タスクを最も適したエージェントに任せます",
   "connector.discord.orchestratorDoesAnswer": "Discord のチャンネルで回答を返信します",
   "connector.discord.orchestratorModel": "モデル",
-  "connector.discord.doneTitle": "OpenBot が {workspace} に参加しました",
+  "connector.discord.doneTitle": "Atelier が {workspace} に参加しました",
   "connector.discord.doneDescription":
     "チャンネルで @OpenBot をメンションしてください。続けるには OpenBot に返信してください。",
   "connector.discord.done": "完了",
   "connector.discord.disconnectTitle": "{workspace} を切断しますか？",
   "connector.discord.disconnectDescription":
-    "OpenBot は {workspace} での回答を停止し、Discord の接続をこのコンピューターから削除します。",
+    "Atelier は {workspace} での回答を停止し、Discord の接続をこのコンピューターから削除します。",
   "connector.discord.disconnectDescriptionHost":
-    "OpenBot は {workspace} での回答を停止し、Discord の接続を {host} から削除します。",
+    "Atelier は {workspace} での回答を停止し、Discord の接続を {host} から削除します。",
   "connector.discord.disconnectEffect":
     "{workspace} のメンバーは、@OpenBot からあなたのエージェントに連絡できなくなります。",
-  "connector.discord.removeEffectKept": "会話と Discord Orchestrator は OpenBot に残ります。",
-  "connector.discord.removeEffectDeleted": "Discord Orchestrator とその会話は OpenBot から削除されます。",
+  "connector.discord.removeEffectKept": "会話と Discord Orchestrator は Atelier に残ります。",
+  "connector.discord.removeEffectDeleted": "Discord Orchestrator とその会話は Atelier から削除されます。",
   "connector.discord.keep": "接続を維持",
   "connector.discord.close": "閉じる",
   "connector.discord.addWorkspace": "Discord サーバーを追加",
@@ -235,15 +235,15 @@ export const messages = {
   "connector.discord.summaryMany": {
     other: "Discord サーバー {count} 件 · Discord Orchestrator が回答します",
   },
-  "connector.discord.accessTitle": "OpenBot を使える人",
-  "connector.discord.accessDescription": "OpenBot はこれらの人にだけ回答します。ほかの人からのメンションは無視します。",
+  "connector.discord.accessTitle": "Atelier を使える人",
+  "connector.discord.accessDescription": "Atelier はこれらの人にだけ回答します。ほかの人からのメンションは無視します。",
   "connector.discord.accessEveryone": "サーバーの全員",
   "connector.discord.accessEveryoneDescription":
-    "OpenBot が見えるチャンネルに投稿できる人なら、誰でもメンションできます。",
+    "Atelier が見えるチャンネルに投稿できる人なら、誰でもメンションできます。",
   "connector.discord.accessRoles": "{roles} を持つメンバー",
   "connector.discord.accessChoose": "ロールを選択",
-  "connector.discord.accessDialogTitle": "{workspace} で OpenBot を使えるのは誰ですか？",
-  "connector.discord.accessDialogDescription": "ロールを選択しない場合は、全員が OpenBot をメンションできます。",
+  "connector.discord.accessDialogTitle": "{workspace} で Atelier を使えるのは誰ですか？",
+  "connector.discord.accessDialogDescription": "ロールを選択しない場合は、全員が Atelier をメンションできます。",
   "connector.discord.accessLoading": "ロールを読み込んでいます…",
   "connector.discord.accessLoadFailed": "Discord のロールを読み込めませんでした",
   "connector.discord.accessNoRoles": "このサーバーには選択できるロールがありません。",
@@ -264,15 +264,15 @@ export const messages = {
     "ここでのメッセージはあなたとエージェントのチャットに届き、その回答がここに投稿されます。",
   "connector.discord.channelsLoading": "チャンネルを読み込み中…",
   "connector.discord.channelsLoadFailed": "Discord のチャンネルを読み込めませんでした",
-  "connector.discord.channelsNone": "このサーバーには OpenBot が見えるテキストチャンネルがありません。",
+  "connector.discord.channelsNone": "このサーバーには Atelier が見えるテキストチャンネルがありません。",
   "connector.discord.channelsSave": "保存",
   "connector.discord.channelsSaveFailed": "Discord の設定を保存できませんでした",
-  "connector.discord.accessHostUpdate": "ロールを選択するには、{host} の OpenBot を更新してください。",
+  "connector.discord.accessHostUpdate": "ロールを選択するには、{host} の Atelier を更新してください。",
 
   // Server settings > Connectors > Telegram.
   "connector.telegram.title": "Telegram",
   "connector.telegram.description":
-    "OpenBot ボットを Telegram グループに追加するか、ボットとのダイレクトチャットを開きます。Telegram Orchestrator が適切なエージェントに依頼して回答します。",
+    "Atelier ボットを Telegram グループに追加するか、ボットとのダイレクトチャットを開きます。Telegram Orchestrator が適切なエージェントに依頼して回答します。",
   "connector.telegram.statusNotSetUp": "未設定",
   "connector.telegram.statusConnected": "接続済み",
   "connector.telegram.statusAttention": "対応が必要",
@@ -293,12 +293,12 @@ export const messages = {
   "connector.telegram.groupDescription": "ボットをメンションするか、ボットのメッセージに返信します。",
   "connector.telegram.directDescription": "このチャットのすべてのメッセージが Telegram Orchestrator に届きます。",
   "connector.telegram.helpRemoved":
-    "OpenBot ボットはこのチャットにいません。チャットを切断してから、ボットをもう一度追加してください。",
+    "Atelier ボットはこのチャットにいません。チャットを切断してから、ボットをもう一度追加してください。",
   "connector.telegram.helpRelayUnavailable":
-    "このコンピューターでは OpenBot が Telegram のメッセージを受信できません。サインインし、サーバー設定でこのコンピューターに名前を付けて、OpenBot を開いたままにしてください。",
+    "このコンピューターでは Atelier が Telegram のメッセージを受信できません。サインインし、サーバー設定でこのコンピューターに名前を付けて、Atelier を開いたままにしてください。",
   "connector.telegram.helpRelayUnavailableHost":
-    "{host} の OpenBot は Telegram のメッセージを受信できません。{host} でサインインし、サーバー設定でサーバーに名前を付けて、OpenBot を開いたままにしてください。",
-  "connector.telegram.helpError": "OpenBot はこのチャットに接続できません。再接続するか、チャットを切断してください。",
+    "{host} の Atelier は Telegram のメッセージを受信できません。{host} でサインインし、サーバー設定でサーバーに名前を付けて、Atelier を開いたままにしてください。",
+  "connector.telegram.helpError": "Atelier はこのチャットに接続できません。再接続するか、チャットを切断してください。",
   "connector.telegram.retryAt": "Telegram から待機するよう求められました。{time} に再試行します。",
   "connector.telegram.pause": "一時停止",
   "connector.telegram.resume": "再開",
@@ -313,7 +313,7 @@ export const messages = {
   "connector.telegram.openDirectChat": "ダイレクトチャットを開く",
   "connector.telegram.orchestratorTitle": "Telegram Orchestrator",
   "connector.telegram.orchestratorDescription":
-    "このエージェントは、すべての Telegram チャットから OpenBot 宛てのメッセージを受け取ります。短いものには自分で回答し、その他の作業は適切なエージェントに任せて、回答をチャットに投稿します。",
+    "このエージェントは、すべての Telegram チャットから Atelier 宛てのメッセージを受け取ります。短いものには自分で回答し、その他の作業は適切なエージェントに任せて、回答をチャットに投稿します。",
   "connector.telegram.orchestratorNone": "回答するエージェントはまだいません",
   "connector.telegram.orchestratorNoneDescription":
     "Telegram Orchestrator を追加してください。追加しないと、Telegram に回答が届きません。",
@@ -323,37 +323,37 @@ export const messages = {
   "connector.telegram.stepAgent": "エージェント",
   "connector.telegram.connectTitle": "Telegram チャットをリンク",
   "connector.telegram.connectDescription":
-    "OpenBot ボットをグループに追加するか、ボットとのダイレクトチャットを開きます。1 つのボットがすべてのチャットに対応します。",
+    "Atelier ボットをグループに追加するか、ボットとのダイレクトチャットを開きます。1 つのボットがすべてのチャットに対応します。",
   "connector.telegram.connectStepBrowser": "ブラウザーで Telegram が開きます",
   "connector.telegram.connectStepPick": "グループを選ぶか、ダイレクトチャットで「開始」を押します",
   "connector.telegram.connectStepReturn": "チャットがリンクされると、このダイアログが続行します",
   "connector.telegram.connectWaiting": "Telegram を待っています。Telegram でチャットを選んでください。",
   "connector.telegram.agentStepTitle": "Telegram Orchestrator を追加",
   "connector.telegram.agentStepDescription":
-    "この新しいエージェントは、{chat} と、あとでリンクする各チャットで、OpenBot 宛てのメッセージに回答します。",
+    "この新しいエージェントは、{chat} と、あとでリンクする各チャットで、Atelier 宛てのメッセージに回答します。",
   "connector.telegram.orchestratorName": "Telegram Orchestrator",
   "connector.telegram.orchestratorRole": "Telegram で回答し、チームに依頼します",
-  "connector.telegram.orchestratorDoesReceive": "OpenBot 宛ての Telegram のメッセージをすべて最初に受け取ります",
+  "connector.telegram.orchestratorDoesReceive": "Atelier 宛ての Telegram のメッセージをすべて最初に受け取ります",
   "connector.telegram.orchestratorDoesDelegate": "各タスクを最も適したエージェントに任せます",
   "connector.telegram.orchestratorDoesAnswer": "回答を Telegram のチャットに投稿します",
   "connector.telegram.orchestratorModel": "モデル",
-  "connector.telegram.doneTitle": "OpenBot が {chat} に参加しました",
+  "connector.telegram.doneTitle": "Atelier が {chat} に参加しました",
   "connector.telegram.done": "完了",
   "connector.telegram.disconnectTitle": "{chat} を切断しますか？",
-  "connector.telegram.leaveDescription": "OpenBot ボットは {chat} から退出し、OpenBot はそこでの回答を停止します。",
+  "connector.telegram.leaveDescription": "Atelier ボットは {chat} から退出し、Atelier はそこでの回答を停止します。",
   "connector.telegram.disconnectEffect":
-    "{chat} のメンバーは、OpenBot ボットからあなたのエージェントに連絡できなくなります。",
-  "connector.telegram.removeEffectKept": "会話と Telegram Orchestrator は OpenBot に残ります。",
+    "{chat} のメンバーは、Atelier ボットからあなたのエージェントに連絡できなくなります。",
+  "connector.telegram.removeEffectKept": "会話と Telegram Orchestrator は Atelier に残ります。",
   "connector.telegram.removeEffectDeleted":
-    "これが最後のチャットのため、Telegram Orchestrator とその会話は OpenBot から削除されます。",
+    "これが最後のチャットのため、Telegram Orchestrator とその会話は Atelier から削除されます。",
   "connector.telegram.keep": "接続を維持",
   "connector.telegram.close": "閉じる",
   // Marketplace > 1Password: a vault that the user shares with OpenBot through a service account.
   "connector.onePassword.title": "1Password",
   "connector.onePassword.description":
-    "専用の 1Password 保管庫をサービスアカウント経由で OpenBot と共有すると、エージェントが OpenBot のブラウザーでサイトにサインインできます。",
+    "専用の 1Password 保管庫をサービスアカウント経由で Atelier と共有すると、エージェントが Atelier のブラウザーでサイトにサインインできます。",
   "connector.onePassword.howItWorks":
-    "接続すると、1Password アカウントに「Shared with OpenBot」保管庫と、その保管庫だけを読み取れるサービスアカウントが設定されます。OpenBot はこのコンピューターの自分のブラウザーで保存済みのログイン情報を入力するので、共有されるのはその保管庫に移動した項目だけです。エージェントがパスワードを見ることはありません。",
+    "接続すると、1Password アカウントに「Shared with OpenBot」保管庫と、その保管庫だけを読み取れるサービスアカウントが設定されます。Atelier はこのコンピューターの自分のブラウザーで保存済みのログイン情報を入力するので、共有されるのはその保管庫に移動した項目だけです。エージェントがパスワードを見ることはありません。",
   "connector.onePassword.connect": "1Password を接続",
   "connector.onePassword.setupTitle": "設定",
   "connector.onePassword.stepCliTitle": "1Password CLI をインストール",
@@ -361,20 +361,20 @@ export const messages = {
   "connector.onePassword.stepCliInstalling": "1Password から 1Password CLI をダウンロードしています",
   "connector.onePassword.stepCliReady": "バージョン {version} がインストールされています。",
   "connector.onePassword.stepCliMissing":
-    "OpenBot は 1Password から専用のフォルダーにダウンロードします。管理者パスワードは不要です。",
+    "Atelier は 1Password から専用のフォルダーにダウンロードします。管理者パスワードは不要です。",
   "connector.onePassword.stepCliManual":
-    "OpenBot はこのコンピューターにインストールできません。1Password からインストールしてから、このページに戻ってください。",
+    "Atelier はこのコンピューターにインストールできません。1Password からインストールしてから、このページに戻ってください。",
   "connector.onePassword.installCli": "インストール",
   "connector.onePassword.stepAppTitle": "CLI 連携をオンにする",
   "connector.onePassword.stepAppDescription":
     "1Password アプリで「設定」>「開発者」を開き、「1Password CLI と連携」をオンにしてください。",
   "connector.onePassword.stepAppReady": "1Password アプリで、CLI が共有保管庫を作成できるようになっています。",
   "connector.onePassword.openApp": "1Password を開く",
-  "connector.onePassword.openAppFailed": "OpenBot は 1Password を開けませんでした。",
+  "connector.onePassword.openAppFailed": "Atelier は 1Password を開けませんでした。",
   "connector.onePassword.checkAgain": "再確認",
   "connector.onePassword.stepVaultTitle": "共有保管庫を作成",
   "connector.onePassword.stepVaultDescription":
-    "OpenBot は「Shared with OpenBot」保管庫と、それを読み取ることだけができるサービスアカウントを作成します。1Password から承認を求められます。",
+    "Atelier は「Shared with OpenBot」保管庫と、それを読み取ることだけができるサービスアカウントを作成します。1Password から承認を求められます。",
   "connector.onePassword.useToken": "代わりにサービスアカウントのトークンを使う",
   "connector.onePassword.tokenLabel": "サービスアカウントのトークン",
   "connector.onePassword.tokenPlaceholder": "ops_…",
@@ -382,7 +382,7 @@ export const messages = {
   "connector.onePassword.approveInApp": "1Password アプリでリクエストを承認してください",
   "connector.onePassword.cancel": "キャンセル",
   "connector.onePassword.chooseAccountTitle": "アカウントを選ぶ",
-  "connector.onePassword.chooseAccountDescription": "OpenBot は選んだアカウントに共有保管庫を作成します。",
+  "connector.onePassword.chooseAccountDescription": "Atelier は選んだアカウントに共有保管庫を作成します。",
   "connector.onePassword.useAccount": "このアカウントを使う",
   "connector.onePassword.vaultTitle": "共有保管庫",
   "connector.onePassword.vaultDescription":
@@ -392,13 +392,13 @@ export const messages = {
   "connector.onePassword.disconnect": "切断",
   "connector.onePassword.disconnectTitle": "1Password を切断",
   "connector.onePassword.disconnectSummary":
-    "OpenBot はトークンを破棄します。保管庫とサービスアカウントは 1Password に残ります。不要になったら 1Password で削除してください。",
-  "connector.onePassword.actionFailed": "OpenBot は 1Password の接続を変更できませんでした。",
+    "Atelier はトークンを破棄します。保管庫とサービスアカウントは 1Password に残ります。不要になったら 1Password で削除してください。",
+  "connector.onePassword.actionFailed": "Atelier は 1Password の接続を変更できませんでした。",
   "connector.onePassword.statusConnected": "接続済み",
   "connector.onePassword.statusConnecting": "接続中",
   "connector.onePassword.statusNotSetUp": "未設定",
   "connector.onePassword.descriptionHost":
-    "サービスアカウントを通じて専用の 1Password 保管庫を {host} 上の OpenBot と共有すると、{host} のエージェントがそのブラウザーでサイトにサインインできます。",
+    "サービスアカウントを通じて専用の 1Password 保管庫を {host} 上の Atelier と共有すると、{host} のエージェントがそのブラウザーでサイトにサインインできます。",
   "connector.onePassword.howItWorksHost":
     "{host} はサービスアカウントのトークンで接続します。1Password.com で、OpenBot と共有する保管庫だけを読み取れるサービスアカウントを作成し、そのトークンをここに貼り付けてください。{host} がトークンを確認して保存します。このコンピューターには保存されません。エージェントがパスワードを見ることはありません。",
   "connector.onePassword.disconnectSummaryHost":
@@ -408,21 +408,21 @@ export const messages = {
   "connector.bitwarden.setup":
     "Bitwarden CLI をインストールし、bw login でサインインしてください。Shared with OpenBot という名前のフォルダーを作成し、エージェントに使わせてよいログイン情報だけを入れてください。bw unlock --raw を実行し、表示されたセッションキーを下に貼り付けてください。マスターパスワードは貼り付けないでください。",
   "connector.bitwarden.scope":
-    "このコンピューターのすべてのエージェントが、Shared with OpenBot 内の一致するログイン情報を使えます。OpenBot は HTTPS のオリジンが完全に一致する場合にのみ使います。マスターパスワードの再入力が必要な項目や、カスタムの URI 一致ルールがある項目は使いません。",
+    "このコンピューターのすべてのエージェントが、Shared with OpenBot 内の一致するログイン情報を使えます。Atelier は HTTPS のオリジンが完全に一致する場合にのみ使います。マスターパスワードの再入力が必要な項目や、カスタムの URI 一致ルールがある項目は使いません。",
   "connector.bitwarden.session":
-    "セッションキーはメモリーにのみ保持されます。保管庫を 8 時間使わなかった場合や OpenBot を終了した場合は、もう一度接続してください。切断すると OpenBot のアクセスは停止しますが、他の Bitwarden クライアントはロックされません。",
+    "セッションキーはメモリーにのみ保持されます。保管庫を 8 時間使わなかった場合や Atelier を終了した場合は、もう一度接続してください。切断すると Atelier のアクセスは停止しますが、他の Bitwarden クライアントはロックされません。",
   "connector.bitwarden.sessionKey": "Bitwarden のセッションキー",
   "connector.bitwarden.connect": "Bitwarden を接続",
   "connector.bitwarden.disconnect": "Bitwarden を切断",
   "connector.bitwarden.connected": "接続済み",
   "connector.bitwarden.disconnected": "未接続",
-  "connector.bitwarden.actionFailed": "OpenBot は Bitwarden の接続を変更できませんでした。",
+  "connector.bitwarden.actionFailed": "Atelier は Bitwarden の接続を変更できませんでした。",
   "connector.bitwarden.descriptionHost":
     "{host} のブラウザーのログインを Bitwarden または Vaultwarden から入力します。",
   "connector.bitwarden.setupHost":
     "{host} は自分の Bitwarden CLI でサインインします。保管庫に Shared with OpenBot という名前のフォルダーを作成し、エージェントが使ってよいログインだけを入れてください。ウェブ保管庫で 設定 › セキュリティ › キー を開き、API キーを表示します。下にサーバーのアドレス、client_id、client_secret、マスターパスワードを入力してください。",
   "connector.bitwarden.scopeHost":
-    "{host} のすべてのエージェントが Shared with OpenBot の一致するログインを使えます。OpenBot は完全に一致する HTTPS オリジンを使います。マスターパスワードの再入力が必要なアイテムや、カスタムの URI 一致ルールを持つアイテムは使いません。",
+    "{host} のすべてのエージェントが Shared with OpenBot の一致するログインを使えます。Atelier は完全に一致する HTTPS オリジンを使います。マスターパスワードの再入力が必要なアイテムや、カスタムの URI 一致ルールを持つアイテムは使いません。",
   "connector.bitwarden.sessionHost":
     "{host} は API キーとマスターパスワードを暗号化して保存し、再起動の後にもう一度ロックを解除できます。このコンピューターには保存しません。切断すると {host} から削除されます。{host} は HTTPS でサーバーのアドレスに接続できる必要があります。",
   "connector.bitwarden.serverUrl": "サーバーのアドレス",

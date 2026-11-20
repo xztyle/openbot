@@ -427,7 +427,7 @@ export const messages = {
   "workspace.app.discord.title": "Discord",
   "workspace.app.discord.notLinked": "Não conectado a um canal do Discord.",
   "workspace.app.discord.linkedWebhook": "Conectado a #{name}. As postagens mostram cada autor.",
-  "workspace.app.discord.linkedBot": "Conectado a #{name}. O bot do OpenBot publica com o nome do autor.",
+  "workspace.app.discord.linkedBot": "Conectado a #{name}. O bot do Atelier publica com o nome do autor.",
   "workspace.app.discord.unlink": "Desconectar",
   "workspace.app.discord.loading": "Carregando servidores do Discord…",
   "workspace.app.discord.noServers":

@@ -28,7 +28,7 @@ export const messages = {
   "storageHygiene.folders.title": "가장 큰 폴더",
   "storageHygiene.plan.title": "정리 계획",
   "storageHygiene.plan.description":
-    "OpenBot은 삭제하기 전에 각 항목을 다시 확인해요. 사용 중이거나 최근 {minutes}분 안에 바뀐 항목은 남겨요.",
+    "Atelier는 삭제하기 전에 각 항목을 다시 확인해요. 사용 중이거나 최근 {minutes}분 안에 바뀐 항목은 남겨요.",
   "storageHygiene.plan.empty": "정리할 항목이 없어요.",
   "storageHygiene.plan.items": { other: "항목 {count}개" },
   "storageHygiene.plan.more": { other: "항목 {count}개 더" },
@@ -59,7 +59,7 @@ export const messages = {
   "storageHygiene.cleanup.confirmTitle": "{size}를 정리할까요?",
   "storageHygiene.cleanup.confirmDescription": {
     other:
-      "OpenBot이 항목 {count}개를 삭제해요. 먼저 각 항목을 다시 확인하고, 사용 중이거나 최근 {minutes}분 안에 바뀐 항목은 남겨요. 모든 삭제는 감사 로그에 기록돼요.",
+      "Atelier가 항목 {count}개를 삭제해요. 먼저 각 항목을 다시 확인하고, 사용 중이거나 최근 {minutes}분 안에 바뀐 항목은 남겨요. 모든 삭제는 감사 로그에 기록돼요.",
   },
   "storageHygiene.cleanup.confirm": "정리",
   "storageHygiene.cleanup.pending": "정리하는 중…",

@@ -35,7 +35,7 @@ export const messages = {
   "provider.status.checking": "检查中",
   "provider.status.off": "已关闭",
   "provider.gemini.hostSignIn":
-    "要连接 Gemini，请在主机上打开 OpenBot，然后在“设置 > 服务商”中选择“连接”。Google 登录需要该主机上有浏览器，不支持远程登录。",
+    "要连接 Gemini，请在主机上打开 Atelier，然后在“设置 > 服务商”中选择“连接”。Google 登录需要该主机上有浏览器，不支持远程登录。",
 
   // Which account tier the OpenCode row runs on. It shows only while it adds to the runtime
   // badge: a saved key leaves the runtime "Connected" to speak for the row.
@@ -66,7 +66,7 @@ export const messages = {
   "provider.aria.cancelSignIn": "取消 {name} 的登录",
   "provider.aria.apiKey": "{name} API 密钥",
   "provider.connecting.browserHint": "如果弹出浏览器页面，请在那里完成登录。",
-  "provider.connecting.cancelFailed": "OpenBot 无法取消 {name} 的登录，请重试。",
+  "provider.connecting.cancelFailed": "Atelier 无法取消 {name} 的登录，请重试。",
   "provider.aria.install": "安装 {name}",
   "provider.aria.signIn": "登录 {name}",
   "provider.aria.codeFallback": "用验证码登录 {name}",
@@ -74,7 +74,7 @@ export const messages = {
 
   // The switch that turns a provider on or off in OpenBot. While an agent uses the provider, the
   // switch stays on and a toast names the agent, or counts the agents when there are more.
-  "provider.aria.use": "在 OpenBot 中使用 {name}",
+  "provider.aria.use": "在 Atelier 中使用 {name}",
   "provider.use.inUseOne": "{agent} 正在使用 {name}。请先更改该助手的模型，再关闭 {name}。",
   "provider.use.inUse": {
     other: "{count} 个助手正在使用 {name}。请先更改这些助手的模型，再关闭 {name}。",
@@ -82,7 +82,7 @@ export const messages = {
 
   // The dialog that signs in to a provider with a code on another device.
   "provider.codeLogin.title": "用验证码登录 {name}",
-  "provider.codeLogin.description": "在你的手机或另一个浏览器上完成，OpenBot 会在这里等待。",
+  "provider.codeLogin.description": "在你的手机或另一个浏览器上完成，Atelier 会在这里等待。",
   "provider.codeLogin.starting": "正在从 {name} 获取验证码…",
   "provider.codeLogin.qrLabel": "{name} 登录页面的二维码",
   "provider.codeLogin.open": "打开",
@@ -103,12 +103,12 @@ export const messages = {
   "provider.codeLogin.pageDescription": "该页面已在 {host} 的浏览器中打开，请在这里登录。",
   "provider.codeLogin.relayStarting": "正在 {host} 上启动 {name} 登录…",
   "provider.codeLogin.pageOpening": "正在 {host} 上打开 {name} 登录页面…",
-  "provider.codeLogin.linkStep": "登录 {name}，OpenBot 会自动继续。",
+  "provider.codeLogin.linkStep": "登录 {name}，Atelier 会自动继续。",
 
   // A provider that only the OpenBot app can sign in, from a browser tab.
-  "provider.useApp.title": "在 OpenBot 应用中连接 {name}",
+  "provider.useApp.title": "在 Atelier 应用中连接 {name}",
   "provider.useApp.description":
-    "{name} 的登录结果会返回发起登录的电脑，浏览器标签页无法接收。请在 OpenBot 应用中连接 {name}，应用会自动完成登录。",
+    "{name} 的登录结果会返回发起登录的电脑，浏览器标签页无法接收。请在 Atelier 应用中连接 {name}，应用会自动完成登录。",
   "provider.useApp.download": "获取应用",
 
   // The agent model picker.
@@ -120,7 +120,7 @@ export const messages = {
   "provider.picker.providers": "模型服务商",
   "provider.picker.downloading": "正在下载 {percent}",
   "provider.picker.unavailable": "{name} 不可用。",
-  "provider.picker.updateToUse": "更新 OpenBot 以使用 {name}",
+  "provider.picker.updateToUse": "更新 Atelier 以使用 {name}",
   "provider.picker.models": "{name} 的模型",
   "provider.picker.addProvider": "添加服务商",
   "provider.picker.download": "{name} 下载",
@@ -155,15 +155,15 @@ export const messages = {
   "provider.geminiKey.label": "Gemini API 密钥",
   "provider.inceptionKey.title": "Inception API 密钥",
   "provider.inceptionKey.description":
-    "在这台电脑上保存 Inception API 密钥，即可使用 Mercury 模型。OpenBot 会在它下载的 Pi CLI 中运行这些模型。",
+    "在这台电脑上保存 Inception API 密钥，即可使用 Mercury 模型。Atelier 会在它下载的 Pi CLI 中运行这些模型。",
   "provider.inceptionKey.label": "Inception API 密钥",
   "provider.deepseekKey.title": "DeepSeek API 密钥",
   "provider.deepseekKey.description":
-    "在这台电脑上保存 DeepSeek API 密钥，即可使用 DeepSeek 模型。OpenBot 会在它下载的 Pi CLI 中运行这些模型。",
+    "在这台电脑上保存 DeepSeek API 密钥，即可使用 DeepSeek 模型。Atelier 会在它下载的 Pi CLI 中运行这些模型。",
   "provider.deepseekKey.label": "DeepSeek API 密钥",
   "provider.openrouterKey.title": "OpenRouter API 密钥",
   "provider.openrouterKey.description":
-    "在这台电脑上保存 OpenRouter API 密钥，即可使用 OpenRouter 提供的模型。OpenBot 会在它下载的 Pi CLI 中运行这些模型。",
+    "在这台电脑上保存 OpenRouter API 密钥，即可使用 OpenRouter 提供的模型。Atelier 会在它下载的 Pi CLI 中运行这些模型。",
   "provider.openrouterKey.label": "OpenRouter API 密钥",
 
   // The optional OpenCode Go key dialog.
@@ -228,7 +228,7 @@ export const messages = {
   "provider.settings.removeTitle": "移除 {name}？",
   "provider.settings.removeMoves": "{agents} 将改用 {name}。",
   "provider.settings.removeUnused": "没有助手使用该账号。",
-  "provider.settings.removeCredentials": "OpenBot 会从这台电脑删除该账号的登录凭据。",
+  "provider.settings.removeCredentials": "Atelier 会从这台电脑删除该账号的登录凭据。",
   "provider.settings.usageLow": "剩余 {percent} · {window}",
   "provider.settings.usageOf": "{name} 的用量",
   "provider.settings.signIn": "登录",

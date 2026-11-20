@@ -154,7 +154,7 @@ export const messages = {
   "sidebar.state.usageLimitChip": "Лимит",
   "sidebar.delete.title": "Удалить «{name}»?",
   "sidebar.delete.agentDescription":
-    "Агент и его диалог в OpenBot будут удалены из приложения вместе с очередью, памятью, регулярными задачами и рабочим пространством. История, которую отдельно хранит подключённый CLI-провайдер, не удаляется.",
+    "Агент и его диалог в Atelier будут удалены из приложения вместе с очередью, памятью, регулярными задачами и рабочим пространством. История, которую отдельно хранит подключённый CLI-провайдер, не удаляется.",
   "sidebar.delete.channelDescription":
     "Канал будет остановлен. Его история останется в разделе «Удалённые каналы» только для просмотра. Оттуда канал можно восстановить. Агенты-участники сохранятся.",
   "sidebar.delete.sectionDescription":
@@ -168,7 +168,7 @@ export const messages = {
   "sidebar.announce.movedPinned": "Закреплённый чат перемещён на позицию {position} из {total}.",
   "sidebar.announce.personFallback": "человек",
   "sidebar.announce.chatFallback": "чат",
-  "sidebar.mobileApp.title": "OpenBot для телефона",
+  "sidebar.mobileApp.title": "Atelier для телефона",
   "sidebar.mobileApp.body": "Приложение теперь доступно для iPhone и Android.",
   "sidebar.mobileApp.howToInstall": "Как установить",
   "sidebar.mobileApp.dismiss": "Закрыть объявление о мобильном приложении",
@@ -183,6 +183,6 @@ export const messages = {
   "sidebar.community.title": "Присаживайтесь.",
   "sidebar.community.body": "В будущем ИИ есть место для вас. Присоединяйтесь к сообществу в Discord и X.",
   "sidebar.community.joinDiscord": "Войти в Discord",
-  "sidebar.community.followX": "Читать OpenBot в X",
+  "sidebar.community.followX": "Читать Atelier в X",
   "sidebar.community.dismiss": "Закрыть приглашение в сообщество",
 } as const satisfies PartialTranslation<typeof source>;

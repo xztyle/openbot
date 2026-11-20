@@ -29,7 +29,7 @@ export const messages = {
   "storageHygiene.folders.title": "大きいフォルダー",
   "storageHygiene.plan.title": "クリーンアップ計画",
   "storageHygiene.plan.description":
-    "OpenBot は削除する前に各項目をもう一度確認します。使用中のものや、直近 {minutes} 分以内に変更されたものは残します。",
+    "Atelier は削除する前に各項目をもう一度確認します。使用中のものや、直近 {minutes} 分以内に変更されたものは残します。",
   "storageHygiene.plan.empty": "クリーンアップするものはありません。",
   "storageHygiene.plan.items": { other: "{count} 件" },
   "storageHygiene.plan.more": { other: "ほか {count} 件" },
@@ -62,7 +62,7 @@ export const messages = {
   "storageHygiene.cleanup.confirmTitle": "{size} をクリーンアップしますか？",
   "storageHygiene.cleanup.confirmDescription": {
     other:
-      "OpenBot は {count} 件の項目を削除します。削除前に各項目をもう一度確認し、使用中のものや直近 {minutes} 分以内に変更されたものは残します。すべての削除は監査ログに記録されます。",
+      "Atelier は {count} 件の項目を削除します。削除前に各項目をもう一度確認し、使用中のものや直近 {minutes} 分以内に変更されたものは残します。すべての削除は監査ログに記録されます。",
   },
   "storageHygiene.cleanup.confirm": "クリーンアップ",
   "storageHygiene.cleanup.pending": "クリーンアップ中…",

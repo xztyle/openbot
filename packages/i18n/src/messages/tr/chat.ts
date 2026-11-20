@@ -402,7 +402,7 @@ export const messages = {
   "chat.suggestion.detailsNamed": "{name} uygulamasını Pazaryerinde aç",
   "chat.suggestion.dismissNamed": "{name} önerisini kapat",
   "chat.suggestion.dismissed": "{name} önerisi kapatıldı.",
-  "chat.suggestion.localOnly": "{name} bağlantısını kendi bilgisayarınızdaki OpenBot'ta kurun.",
+  "chat.suggestion.localOnly": "{name} bağlantısını kendi bilgisayarınızdaki Atelier'de kurun.",
   "chat.suggestion.unavailable": "Bu sunucu {name} uygulamasını bağlayamaz.",
   "chat.compaction.running": "Bağlam sıkıştırılıyor",
   "chat.compaction.completed": "Bağlam sıkıştırıldı",

@@ -2,7 +2,7 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/webClient";
 
 export const messages = {
-  "webClient.loading": "OpenBot wird geladen…",
+  "webClient.loading": "Atelier wird geladen…",
   "webClient.loadingLine.wake": "Agenten werden geweckt…",
   "webClient.loadingLine.coffee": "Kaffee für die Agenten wird eingeschenkt…",
   "webClient.loadingLine.tokens": "Tokens werden an den Fingern abgezählt…",
@@ -23,13 +23,13 @@ export const messages = {
   "webClient.notice.hostsFailed": "Deine Server konnten nicht geladen werden",
   "webClient.notice.connectComputer": "Verbinde einen Server",
   "webClient.connect.description":
-    "Starte OpenBot auf deinem Computer, um über diesen Browser mit deinen Agenten zu chatten. Du kannst auch mit einer Einladung einem Server beitreten.",
+    "Starte Atelier auf deinem Computer, um über diesen Browser mit deinen Agenten zu chatten. Du kannst auch mit einer Einladung einem Server beitreten.",
   "webClient.connect.descriptionHosted":
-    "Erstelle einen gehosteten Server, um über diesen Browser mit deinen Agenten zu chatten. Du kannst OpenBot auch auf deinem Computer starten oder mit einer Einladung einem Server beitreten.",
-  "webClient.connect.stepInstall": "Installiere und öffne OpenBot auf deinem Computer.",
+    "Erstelle einen gehosteten Server, um über diesen Browser mit deinen Agenten zu chatten. Du kannst Atelier auch auf deinem Computer starten oder mit einer Einladung einem Server beitreten.",
+  "webClient.connect.stepInstall": "Installiere und öffne Atelier auf deinem Computer.",
   "webClient.connect.stepSignIn": "Melde dich mit deiner E-Mail-Adresse an.",
   "webClient.connect.stepRemote": "Aktiviere den Fernzugriff.",
-  "webClient.notice.download": "OpenBot herunterladen",
+  "webClient.notice.download": "Atelier herunterladen",
   "webClient.notice.createServer": "Gehosteten Server erstellen",
   "webClient.notice.join": "Mit Einladung beitreten",
   "webClient.notice.refreshHosts": "Server aktualisieren",
@@ -41,7 +41,7 @@ export const messages = {
   "webClient.error.usageOffline": "Verbinde dich mit deinem Server, um die Nutzung anzuzeigen.",
   "webClient.error.desktopOnly": "Diese Aktion ist in der Desktop-App verfügbar.",
   "webClient.settings.preferences.title": "Einstellungen",
-  "webClient.settings.preferences.description": "Wähle die Sprache und Töne von OpenBot in diesem Browser.",
+  "webClient.settings.preferences.description": "Wähle die Sprache und Töne von Atelier in diesem Browser.",
   "webClient.error.checkConversation": "Prüfe die Unterhaltung, bevor du erneut sendest.",
   "webClient.error.hostReported": "Der Server hat einen Fehler gemeldet. Prüfe die Unterhaltung und den Serverstatus.",
   "webClient.error.requestFailed": "Die Anfrage ist fehlgeschlagen.",
@@ -68,14 +68,14 @@ export const messages = {
   "webClient.error.requestIncomplete":
     "Der Server konnte diese Anfrage nicht abschließen. Aktualisiere, bevor du es erneut versuchst.",
   "webClient.error.connectionInterrupted":
-    "Die Verbindung zum Server wurde unterbrochen. OpenBot verbindet sich neu. Versuche es gleich noch einmal.",
+    "Die Verbindung zum Server wurde unterbrochen. Atelier verbindet sich neu. Versuche es gleich noch einmal.",
   "webClient.error.viewEnded": "Die Browseransicht wurde beendet.",
   "webClient.error.viewChanged": "Die Browseransicht hat sich geändert.",
   "webClient.error.connectionChanging": "Die Serververbindung ändert sich.",
   "webClient.error.identityChanged": "Die Identität des Servers hat sich geändert. Verbindung abgelehnt.",
   "webClient.error.connectionUnavailable": "Die Serververbindung ist nicht verfügbar.",
   "webClient.error.incompatible":
-    "Dieser Server ist nicht mit OpenBot Web kompatibel. Aktualisiere den Server und lade diese Seite neu.",
+    "Dieser Server ist nicht mit Atelier Web kompatibel. Aktualisiere den Server und lade diese Seite neu.",
   "webClient.error.sendUnconfirmed":
     "Die Zustellung der Nachricht ist nicht bestätigt. Aktualisiere, bevor du sie erneut sendest.",
   "webClient.error.fileType": "Aktualisiere den Server, um diesen Dateityp anzuhängen.",
@@ -83,7 +83,7 @@ export const messages = {
   "webClient.error.duplication": "Dieser Server unterstützt das Duplizieren von Agenten nicht.",
   "webClient.error.connectServerFirst": "Verbinde dich zuerst mit diesem Server.",
   "webClient.error.agentInstallNotAllowed":
-    "Nur Eigentümer oder Administratoren können hier einen Agenten hinzufügen. Der Server muss eine aktuelle OpenBot-Version ausführen.",
+    "Nur Eigentümer oder Administratoren können hier einen Agenten hinzufügen. Der Server muss eine aktuelle Atelier-Version ausführen.",
   "webClient.error.linkDesktopOnly": "Dieser Link öffnet sich nur in der Desktop-App.",
   "webClient.error.saveEndpointOffline": "Verbinde dich mit deinem Server, um einen Endpunkt zu speichern.",
   "webClient.error.removeEndpointOffline": "Verbinde dich mit deinem Server, um einen Endpunkt zu entfernen.",

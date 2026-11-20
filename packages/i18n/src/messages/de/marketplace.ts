@@ -22,7 +22,7 @@ export const messages = {
   "marketplace.kinds": "Inhaltstypen im Marketplace",
   "marketplace.tab.agents": "Agenten",
   "marketplace.tab.skills": "Fähigkeiten",
-  "marketplace.plugins.missing": "Dieses Plugin ist nicht im OpenBot-Katalog.",
+  "marketplace.plugins.missing": "Dieses Plugin ist nicht im Atelier-Katalog.",
   "marketplace.agents.loadingDetail": "Agentendetails werden geladen…",
   "marketplace.agents.skills": "Fähigkeiten",
   "marketplace.agents.routines": "Routinen",
@@ -30,7 +30,7 @@ export const messages = {
   "marketplace.agents.routineInactive": "Inaktiv",
   "marketplace.skill.loading": "Fähigkeit wird geladen",
   "marketplace.skill.update": "Fähigkeit aktualisieren",
-  "marketplace.try.readFailed": "OpenBot konnte die Fähigkeiten dieses Agenten nicht lesen. Versuche es erneut.",
+  "marketplace.try.readFailed": "Atelier konnte die Fähigkeiten dieses Agenten nicht lesen. Versuche es erneut.",
   "marketplace.try.enable": "Aktiviere diese Fähigkeit in den Agenteneinstellungen, um sie auszuprobieren.",
   "marketplace.try.repair": "Repariere diese Fähigkeit in den Agenteneinstellungen, um sie auszuprobieren.",
   "marketplace.try.update": "Aktualisiere diese Fähigkeit, um diese Version auszuprobieren.",
@@ -172,7 +172,7 @@ export const messages = {
   "marketplace.plugin.figma.prompt.assets": "Exportiere die Marketing-Icons in 2x für das App-Bundle.",
   "marketplace.plugin.paper.tagline": "Design-Canvas auf Basis von HTML und CSS",
   "marketplace.plugin.paper.description":
-    "Mit Paper lesen und schreiben Agenten die Designdatei, die in Paper Desktop geöffnet ist: Sie prüfen Artboards, Auswahlen, berechnete Stile, JSX und Tokens und erstellen oder ändern Frames, Text und Stile. Installiere Paper Desktop, öffne es einmal und öffne eine Datei, bevor du beginnst. OpenBot startet die Paper CLI, die Paper Desktop installiert. Paper braucht keinen Schlüssel. Schreibwerkzeuge ändern die geöffnete Datei, prüfe also jeden Schreibvorgang, bevor du ihn genehmigst.",
+    "Mit Paper lesen und schreiben Agenten die Designdatei, die in Paper Desktop geöffnet ist: Sie prüfen Artboards, Auswahlen, berechnete Stile, JSX und Tokens und erstellen oder ändern Frames, Text und Stile. Installiere Paper Desktop, öffne es einmal und öffne eine Datei, bevor du beginnst. Atelier startet die Paper CLI, die Paper Desktop installiert. Paper braucht keinen Schlüssel. Schreibwerkzeuge ändern die geöffnete Datei, prüfe also jeden Schreibvorgang, bevor du ihn genehmigst.",
   "marketplace.plugin.paper.app":
     "Liest und schreibt die geöffnete Paper-Desktop-Datei über den lokalen MCP-Server, den die Paper CLI weiterleitet. Benötigt Paper Desktop mit einer geöffneten Datei.",
   "marketplace.plugin.paper.prompt.implement":
@@ -183,7 +183,7 @@ export const messages = {
     "Liste die Design-Tokens in der geöffneten Paper-Datei auf und vergleiche sie mit unserem Theme.",
   "marketplace.plugin.appleApps.tagline": "Mail, Kalender und mehr auf deinem Mac",
   "marketplace.plugin.appleApps.description":
-    "Mit Apple apps nutzen Agenten Mail, Kalender, Kontakte, Erinnerungen, Notizen, Nachrichten und Safari auf diesem Mac. Es funktioniert nur unter macOS. OpenBot startet mcp-icloud, einen Community-Server, der nicht von Apple oder OpenBot stammt. Der Server steuert die Apps über AppleScript auf diesem Computer und braucht kein Konto und keinen Schlüssel. Wenn ein Agent eine App zum ersten Mal nutzt, fragt macOS, ob OpenBot sie steuern darf. Um das später zu ändern, öffne Systemeinstellungen › Datenschutz & Sicherheit › Automation. Agenten können E-Mails und iMessages senden und Termine, Kontakte und Erinnerungen ändern oder löschen, prüfe also jeden Schreibvorgang, bevor du ihn genehmigst. Was die Werkzeuge lesen, etwa E-Mail-Text, geht an den Modellanbieter des Agenten.",
+    "Mit Apple apps nutzen Agenten Mail, Kalender, Kontakte, Erinnerungen, Notizen, Nachrichten und Safari auf diesem Mac. Es funktioniert nur unter macOS. Atelier startet mcp-icloud, einen Community-Server, der nicht von Apple oder Atelier stammt. Der Server steuert die Apps über AppleScript auf diesem Computer und braucht kein Konto und keinen Schlüssel. Wenn ein Agent eine App zum ersten Mal nutzt, fragt macOS, ob Atelier sie steuern darf. Um das später zu ändern, öffne Systemeinstellungen › Datenschutz & Sicherheit › Automation. Agenten können E-Mails und iMessages senden und Termine, Kontakte und Erinnerungen ändern oder löschen, prüfe also jeden Schreibvorgang, bevor du ihn genehmigst. Was die Werkzeuge lesen, etwa E-Mail-Text, geht an den Modellanbieter des Agenten.",
   "marketplace.plugin.appleApps.app":
     "Mail, Kalender, Kontakte, Erinnerungen, Notizen, Nachrichten und Safari über den lokalen Server mcp-icloud. Benötigt macOS und Zugriff unter Automation.",
   "marketplace.plugin.appleApps.prompt.unread": "Fasse meine ungelesenen E-Mails von heute in Apple Mail zusammen.",

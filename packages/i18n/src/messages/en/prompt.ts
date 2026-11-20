@@ -73,7 +73,7 @@ export const messages = defineMessages("prompt", {
   "prompt.browser.expand": "Open in the full view",
   "prompt.browser.stopWatching": "Show the preview",
   "prompt.browser.openUnavailable":
-    "This page cannot open here. Open the chat of {name} in the OpenBot app on a computer that is connected to this server, finish the step there, then press I’m done.",
+    "This page cannot open here. Open the chat of {name} in the Atelier app on a computer that is connected to this server, finish the step there, then press I’m done.",
   "prompt.browser.cancelling": "Cancelling…",
   "prompt.browser.pageFallback": "Browser page",
   "prompt.browser.hostFallback": "the browser",
@@ -81,7 +81,7 @@ export const messages = defineMessages("prompt", {
   "prompt.browser.signInBlocked.title": "{host} blocked the sign-in from {server}",
   "prompt.browser.signInBlocked.cancelledTitle": "Sign-in to {host} cancelled",
   "prompt.browser.signInBlocked.body":
-    "Sign in on this computer. OpenBot sends only the {host} sign-in to {server}, and {name} continues.",
+    "Sign in on this computer. Atelier sends only the {host} sign-in to {server}, and {name} continues.",
   "prompt.browser.signInBlocked.cancelledBody": "The sign-in was cancelled.",
   "prompt.browser.signInBlocked.waiting": "Waiting for the sign-in",
   "prompt.browser.signInBlocked.waitingButton": "Waiting for the sign-in…",

@@ -31,7 +31,7 @@ export const messages = {
   "storageHygiene.folders.title": "最大的文件夹",
   "storageHygiene.plan.title": "清理计划",
   "storageHygiene.plan.description":
-    "OpenBot 在删除每一项之前都会再次检查。正在使用或在最近 {minutes} 分钟内更改过的内容都会保留。",
+    "Atelier 在删除每一项之前都会再次检查。正在使用或在最近 {minutes} 分钟内更改过的内容都会保留。",
   "storageHygiene.plan.empty": "没有需要清理的内容。",
   "storageHygiene.plan.items": { one: "{count} 项", other: "{count} 项" },
   "storageHygiene.plan.more": { one: "还有 {count} 项", other: "还有 {count} 项" },
@@ -59,9 +59,9 @@ export const messages = {
   "storageHygiene.cleanup.button": "清理 {size}",
   "storageHygiene.cleanup.confirmTitle": "清理 {size}？",
   "storageHygiene.cleanup.confirmDescription": {
-    one: "OpenBot 将删除 {count} 项。删除前会再次检查，正在使用或在最近 {minutes} 分钟内更改过的会保留。审计日志会记录每一次删除。",
+    one: "Atelier 将删除 {count} 项。删除前会再次检查，正在使用或在最近 {minutes} 分钟内更改过的会保留。审计日志会记录每一次删除。",
     other:
-      "OpenBot 将删除 {count} 项。删除前会再次检查每一项，正在使用或在最近 {minutes} 分钟内更改过的都会保留。审计日志会记录每一次删除。",
+      "Atelier 将删除 {count} 项。删除前会再次检查每一项，正在使用或在最近 {minutes} 分钟内更改过的都会保留。审计日志会记录每一次删除。",
   },
   "storageHygiene.cleanup.confirm": "清理",
   "storageHygiene.cleanup.pending": "正在清理…",

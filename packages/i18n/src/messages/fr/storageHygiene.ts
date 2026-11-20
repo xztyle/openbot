@@ -32,7 +32,7 @@ export const messages = {
   "storageHygiene.folders.title": "Dossiers les plus lourds",
   "storageHygiene.plan.title": "Plan de nettoyage",
   "storageHygiene.plan.description":
-    "OpenBot revérifie chaque élément avant de le supprimer. Il garde tout ce qui est utilisé ou modifié dans les {minutes} dernières minutes.",
+    "Atelier revérifie chaque élément avant de le supprimer. Il garde tout ce qui est utilisé ou modifié dans les {minutes} dernières minutes.",
   "storageHygiene.plan.empty": "Rien à nettoyer.",
   "storageHygiene.plan.items": { one: "{count} élément", other: "{count} éléments" },
   "storageHygiene.plan.more": { one: "{count} autre élément", other: "{count} autres éléments" },
@@ -64,9 +64,9 @@ export const messages = {
   "storageHygiene.cleanup.button": "Nettoyer {size}",
   "storageHygiene.cleanup.confirmTitle": "Nettoyer {size} ?",
   "storageHygiene.cleanup.confirmDescription": {
-    one: "OpenBot supprime {count} élément. Il le revérifie d’abord et le garde s’il est utilisé ou modifié dans les {minutes} dernières minutes. Le journal d’audit enregistre la suppression.",
+    one: "Atelier supprime {count} élément. Il le revérifie d’abord et le garde s’il est utilisé ou modifié dans les {minutes} dernières minutes. Le journal d’audit enregistre la suppression.",
     other:
-      "OpenBot supprime {count} éléments. Il revérifie d’abord chacun d’eux et garde tout ce qui est utilisé ou modifié dans les {minutes} dernières minutes. Le journal d’audit enregistre chaque suppression.",
+      "Atelier supprime {count} éléments. Il revérifie d’abord chacun d’eux et garde tout ce qui est utilisé ou modifié dans les {minutes} dernières minutes. Le journal d’audit enregistre chaque suppression.",
   },
   "storageHygiene.cleanup.confirm": "Nettoyer",
   "storageHygiene.cleanup.pending": "Nettoyage…",

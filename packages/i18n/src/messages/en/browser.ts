@@ -55,8 +55,8 @@ export const messages = defineMessages("browser", {
   "browser.pip.reattach": "Reattach browser to right sidebar",
   "browser.pip.reattachTitle": "Reattach browser",
   "browser.pip.close": "Close browser popup",
-  "browser.pip.reattachFailed": "OpenBot could not reattach the browser.",
-  "browser.pip.closeFailed": "OpenBot could not close the browser popup.",
+  "browser.pip.reattachFailed": "Atelier could not reattach the browser.",
+  "browser.pip.closeFailed": "Atelier could not close the browser popup.",
   "browser.popupBlocked.title": "Popup blocked",
   "browser.popupBlocked.dismiss": "Dismiss popup message",
   "browser.liveView.label": "Live view of the page on the server",
@@ -136,20 +136,20 @@ export const messages = defineMessages("browser", {
   "browser.signIn.local": "Sign in on this computer",
   "browser.signIn.title": "Sign in to {site}",
   "browser.signIn.description":
-    "Some sites refuse a sign-in from a server. Sign in on this computer, and OpenBot sends the sign-in for {site} to {server}. All agents and members on {server} can then use it in the browser.",
+    "Some sites refuse a sign-in from a server. Sign in on this computer, and Atelier sends the sign-in for {site} to {server}. All agents and members on {server} can then use it in the browser.",
   "browser.signIn.windowOpen":
-    "Sign in in the window that opened. OpenBot sends the sign-in when it is complete. If the window stays open, select Done.",
+    "Sign in in the window that opened. Atelier sends the sign-in when it is complete. If the window stays open, select Done.",
   "browser.signIn.windowClosed":
     "The sign-in window is closed. Select Done to send the sign-in, or open the window again.",
   "browser.signIn.reopen": "Open the sign-in window",
   "browser.signIn.sending": "Sending to {server}…",
   "browser.signIn.sent": "Signed in to {site} on {server}",
-  "browser.signIn.notFound": "OpenBot found no sign-in for {site}. Sign in in the window, then select Done.",
+  "browser.signIn.notFound": "Atelier found no sign-in for {site}. Sign in in the window, then select Done.",
   "browser.signIn.stillSignedOut": "{server} still shows a sign-in page for {site}. Finish the sign-in in the window.",
-  "browser.signIn.failed": "OpenBot could not send the sign-in.",
+  "browser.signIn.failed": "Atelier could not send the sign-in.",
   "browser.profiles.title": "Browser profiles",
   "browser.profiles.subtitle":
-    "Each profile keeps its own sign-ins, cookies and site data on the computer that runs OpenBot.",
+    "Each profile keeps its own sign-ins, cookies and site data on the computer that runs Atelier.",
   "browser.profiles.label": "Browser profiles",
   "browser.profiles.newName": "Profile name",
   "browser.profiles.create": "Add",
@@ -168,8 +168,8 @@ export const messages = defineMessages("browser", {
   "browser.profiles.deleteDescription":
     "This deletes the sign-ins, cookies and site data of the profile. Its open tabs close.",
   "browser.profiles.deleteAgents": "These agents change to the shared profile: {agents}.",
-  "browser.profiles.failed": "OpenBot could not change the browser profiles.",
-  "browser.profiles.loadFailed": "OpenBot could not load the browser profiles.",
+  "browser.profiles.failed": "Atelier could not change the browser profiles.",
+  "browser.profiles.loadFailed": "Atelier could not load the browser profiles.",
   "browser.profiles.tabLabel": "Profile: {name}",
   "browser.profiles.agentTabLabel": "Own profile of the agent",
 });

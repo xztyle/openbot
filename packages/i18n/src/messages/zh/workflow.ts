@@ -323,8 +323,8 @@ export const messages = {
   "workflow.canvas.version.restore": "恢复之前",
   "workflow.canvas.version.run": "运行之前",
   "workflow.canvas.deleteUndo.title": "{name} 已删除",
-  "workflow.page.failed": "OpenBot 无法完成该操作，请重试。",
+  "workflow.page.failed": "Atelier 无法完成该操作，请重试。",
   "workflow.page.conflict": "已在另一台设备上更改。撤销即可找回你的编辑。",
-  "workflow.page.needsNewerApp": "该工作流包含来自更新版 OpenBot 的步骤。更新 OpenBot 后才能更改它。",
+  "workflow.page.needsNewerApp": "该工作流包含来自更新版 Atelier 的步骤。更新 Atelier 后才能更改它。",
   "workflow.page.manageOnly": "要更改该工作流，你需要对其中每个助手拥有“可管理”权限。",
 } as const satisfies PartialTranslation<typeof source>;

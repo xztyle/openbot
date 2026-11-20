@@ -19,7 +19,7 @@ import type {
   BrowserViewTarget,
   BrowserVisibilityInput,
 } from "@openbot/contracts/ipc";
-import { isNumber, isString } from "@openbot/contracts/runtime-values";
+import { isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 import {
   type BrowserSignInCookie,
   browserSignInCookieFitsHost,
@@ -32,7 +32,7 @@ import {
 } from "@openbot/contracts/team-protocol/browser-view-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, redactText, toLogValue } from "@openbot/logging";
-import { Deferred, Effect, Exit, Fiber, Scope, Semaphore } from "effect";
+import { Deferred, Effect, Exit, Fiber, Result, Scope, Semaphore } from "effect";
 import {
   app,
   type BrowserWindow,
@@ -60,7 +60,12 @@ import {
   type SnapshotReadResult,
 } from "./browser-cdp";
 import { PAGE_SECRET_MIN_LENGTH } from "./browser-cdp-snapshot";
-import { CHALLENGE_CLICK_WAIT_MS, CHALLENGE_POLL_MS, TURNSTILE_SELF_PASS_MS } from "./browser-challenge";
+import {
+  CHALLENGE_CLICK_PAUSE_MS,
+  CHALLENGE_CLICK_WAIT_MS,
+  CHALLENGE_POLL_MS,
+  TURNSTILE_SELF_PASS_MS,
+} from "./browser-challenge";
 import { refuseCookieBanners, stopCookieBanners } from "./browser-consent";
 import { BrowserControlSessions } from "./browser-control-sessions";
 import { browserViewCursor } from "./browser-cursor";
@@ -136,6 +141,7 @@ import {
   browserToolTimeout,
 } from "./browser-tool-actions";
 import {
+  type BrowserStep,
   type BrowserToolArguments,
   type BrowserToolCall,
   parseBrowserToolArguments,
@@ -1182,12 +1188,15 @@ export class BrowserHost {
           if (!widget) return "passed" as const;
         }
         if (!widget.checkbox || widget.puzzle) return "none" as const;
+        // A widget frame takes input only some time after it shows, and a person does not click at once.
+        if (widget.vendor !== "turnstile") yield* Effect.sleep(CHALLENGE_CLICK_PAUSE_MS);
         current.challengeClickDocument = document;
         current.engine.invalidateReferences();
-        yield* current.engine.clickPoint(widget.checkbox);
+        const clicked = yield* current.engine.clickChallengeCheckbox();
+        if (!clicked) return (yield* gone) ? ("passed" as const) : ("none" as const);
         logger.info("Clicked the checkbox of a security check once before a takeover.", {
           tabId,
-          vendor: widget.vendor,
+          vendor: clicked.vendor,
         });
         // A check that passes on a Cloudflare interstitial loads the site, which is a new document.
         if (yield* waitUntilGone(CHALLENGE_CLICK_WAIT_MS)) return "passed" as const;
@@ -1949,42 +1958,10 @@ export class BrowserHost {
         if (!url && !direction) return yield* browserFailure(new Error("navigate requires url or direction."));
         const timeoutMs = browserToolTimeout(args.timeoutMs);
         return textResult(
-          yield* this.#runAction(
-            tabId,
-            "navigate",
-            undefined,
-            (tab, deadline) =>
-              Effect.gen({ self: this }, function* () {
-                const operationTimeout = remainingTime(deadline, "Browser navigate timed out.");
-                if (url) {
-                  const normalizedUrl = yield* browserSync(() => normalizeBrowserUrl(url));
-                  tab.requestedUrl = normalizedUrl;
-                  yield* navigateAndWait(
-                    tab.contents,
-                    () => tab.contents.loadURL(normalizedUrl, browserLoadOptions()),
-                    operationTimeout,
-                  );
-                } else if (direction === "reload") {
-                  yield* navigateAndWait(
-                    tab.contents,
-                    () => {
-                      tab.contents.reload();
-                      return true;
-                    },
-                    operationTimeout,
-                  );
-                } else if (direction) {
-                  yield* navigateAndWait(
-                    tab.contents,
-                    () => navigateHistory(tab.contents, direction),
-                    operationTimeout,
-                  );
-                }
-              }),
-            timeoutMs,
-          ),
+          yield* this.#runAction(tabId, "navigate", undefined, this.#navigateOperation(url, direction), timeoutMs),
         );
       }),
+    run_steps: ({ args }, params, hooks) => this.#runSteps(args, params, hooks),
     click: (call, params, hooks) => this.#runInputTool(call, params, hooks),
     type: (call, params, hooks) => this.#runInputTool(call, params, hooks),
     fill_fields: ({ args }, params) =>
@@ -2319,6 +2296,169 @@ export class BrowserHost {
         ...(result.unconfirmed.length > 0 ? { unconfirmed: result.unconfirmed } : {}),
         snapshot,
       }),
+    };
+  });
+
+  /** The page load of `navigate`, for the tool and for a `run_steps` step. */
+  #navigateOperation(
+    url: string | undefined,
+    direction: "back" | "forward" | "reload" | undefined,
+  ): (tab: BrowserHostTab, deadline: number) => Effect.Effect<void, BrowserOperationError> {
+    return (tab, deadline) =>
+      Effect.gen(function* () {
+        const operationTimeout = remainingTime(deadline, "Browser navigate timed out.");
+        if (url) {
+          const normalizedUrl = yield* browserSync(() => normalizeBrowserUrl(url));
+          tab.requestedUrl = normalizedUrl;
+          yield* navigateAndWait(
+            tab.contents,
+            () => tab.contents.loadURL(normalizedUrl, browserLoadOptions()),
+            operationTimeout,
+          );
+        } else if (direction === "reload") {
+          yield* navigateAndWait(
+            tab.contents,
+            () => {
+              tab.contents.reload();
+              return true;
+            },
+            operationTimeout,
+          );
+        } else if (direction) {
+          yield* navigateAndWait(tab.contents, () => navigateHistory(tab.contents, direction), operationTimeout);
+        }
+      });
+  }
+
+  /**
+   * One step of `run_steps`, with the checks, queue, highlight and settle of its single tool, but no
+   * snapshot: the refs of the agent's last snapshot stay valid. `closed` when the step closed the tab.
+   */
+  readonly #runStep = Effect.fn("BrowserHost.runStep")(function* (
+    this: BrowserHost,
+    tabId: string,
+    step: BrowserStep,
+    timeoutMs: number,
+    hooks: BrowserDynamicToolHooks,
+  ): Effect.fn.Return<{ closed: false } | { closed: true; openerTabId?: string }, BrowserOperationError> {
+    const tab = yield* this.#requireTab(tabId);
+    const finished = (result: unknown) =>
+      isDynamicRecord(result) && result.closed === true
+        ? { closed: true as const, ...(isString(result.openerTabId) ? { openerTabId: result.openerTabId } : {}) }
+        : { closed: false as const };
+    switch (step.action) {
+      case "wait_for": {
+        const { action: _action, ...condition } = step;
+        if (!condition.target && !condition.text && !condition.url && !condition.state)
+          return yield* browserFailure(new Error("wait_for requires a condition."));
+        yield* this.#enqueue(tabId, (current, keepQueueBlocked) =>
+          Effect.gen(function* () {
+            const timeoutMessage = "Browser wait condition timed out.";
+            const waitTimeout = remainingTime(Date.now() + timeoutMs, timeoutMessage);
+            yield* boundEngineOperation(
+              current,
+              current.engine.waitFor(condition, waitTimeout),
+              waitTimeout,
+              timeoutMessage,
+              keepQueueBlocked,
+            );
+          }),
+        );
+        return { closed: false as const };
+      }
+      case "navigate": {
+        if (!step.url && !step.direction)
+          return yield* browserFailure(new Error("navigate requires url or direction."));
+        return finished(
+          yield* runTabAction(
+            tab,
+            "navigate",
+            undefined,
+            this.#navigateOperation(step.url, step.direction),
+            timeoutMs,
+            undefined,
+            false,
+          ),
+        );
+      }
+      default: {
+        const { action: tool, ...rest } = step;
+        // The same arguments as the single tool, so the same parser checks them.
+        const call = yield* browserSync(() => parseBrowserToolCall(tool, { ...rest, tabId, timeoutMs }));
+        if (
+          call.tool !== "click" &&
+          call.tool !== "type" &&
+          call.tool !== "press" &&
+          call.tool !== "hover" &&
+          call.tool !== "scroll" &&
+          call.tool !== "select_option" &&
+          call.tool !== "set_checked"
+        )
+          return yield* browserFailure(new Error(`run_steps cannot run ${tool}.`));
+        const action = yield* browserSync(() => browserInputAction(call, hooks));
+        return finished(
+          yield* runTabAction(
+            tab,
+            action.name,
+            action.target,
+            (current, deadline, markDispatched) => action.run(current.engine, deadline, markDispatched),
+            timeoutMs,
+            undefined,
+            false,
+          ),
+        );
+      }
+    }
+  });
+
+  /**
+   * `run_steps`: the steps in order, then one snapshot. It stops at the first failed step. A person who
+   * takes the tab stops it as a single tool, and the result keeps what ran.
+   */
+  readonly #runSteps = Effect.fn("BrowserHost.runSteps")(function* (
+    this: BrowserHost,
+    args: BrowserToolArguments<"run_steps">,
+    params: DynamicToolCallParams,
+    hooks: BrowserDynamicToolHooks,
+  ): Effect.fn.Return<DynamicToolResult, BrowserOperationError> {
+    const tabId = args.tabId;
+    const timeoutMs = browserToolTimeout(args.timeoutMs);
+    let completed = 0;
+    let failed: { step: number; action: string; error: string } | undefined;
+    for (const [index, step] of args.steps.entries()) {
+      yield* browserSync(() => this.#requireToolTab(params, tabId));
+      const outcome = yield* Effect.result(this.#runStep(tabId, step, timeoutMs, hooks));
+      if (Result.isFailure(outcome)) {
+        // A person holds the tab: the call waits for the release, as a single tool does.
+        if (outcome.failure.cause instanceof BrowserUserControlHeld && completed === 0)
+          return yield* Effect.fail(outcome.failure);
+        failed = { step: index, action: step.action, error: redactText(String(outcome.failure.cause)) };
+        break;
+      }
+      completed += 1;
+      if (outcome.success.closed)
+        return textResult({
+          completed,
+          closed: true,
+          ...(outcome.success.openerTabId ? { openerTabId: outcome.success.openerTabId } : {}),
+        });
+    }
+    const snapshot = yield* Effect.result(
+      this.#enqueue(tabId, (tab, keepQueueBlocked) =>
+        Effect.gen(function* () {
+          return (yield* readTabSnapshot(tab, tab.revision + 1, keepQueueBlocked)).snapshot;
+        }),
+      ),
+    );
+    return {
+      ...textResult({
+        completed,
+        ...(failed ? { failed } : {}),
+        ...(Result.isSuccess(snapshot)
+          ? { snapshot: snapshot.success }
+          : { snapshotError: redactText(String(snapshot.failure.cause)) }),
+      }),
+      success: failed === undefined,
     };
   });
 
@@ -3202,7 +3342,8 @@ export class BrowserHost {
     onOperationStarted?: (completion: Fiber.Fiber<void, BrowserOperationError>) => void,
   ): Effect.fn.Return<BrowserSnapshot | { tabId: string; closed: true; openerTabId?: string }, BrowserOperationError> {
     const tab = yield* this.#requireTab(tabId);
-    return yield* runTabAction(tab, action, target, operation, timeoutMs, onOperationStarted);
+    const result = yield* runTabAction(tab, action, target, operation, timeoutMs, onOperationStarted);
+    return result ?? (yield* browserFailure(new Error(`Browser ${action} took no snapshot.`)));
   });
 
   readonly #runEvaluation = Effect.fn("BrowserHost.runEvaluation")(function* (

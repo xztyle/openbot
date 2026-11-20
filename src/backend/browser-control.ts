@@ -53,6 +53,8 @@ export function browserControlAction(call: BrowserToolCall): BrowserControlActio
       return "screenshot";
     case "recording_stop":
       return "screenshot";
+    case "run_steps":
+      return "click";
     case "act":
       return call.args.action.type;
     default:

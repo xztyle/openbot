@@ -24,6 +24,9 @@ export const CHALLENGE_CLICK_WAIT_MS = 6_000;
  */
 export const TURNSTILE_SELF_PASS_MS = 3_000;
 
+/** The pause before the click on a widget that does not pass by itself. */
+export const CHALLENGE_CLICK_PAUSE_MS = 1_500;
+
 /** How often the host reads the widget again while it waits. */
 export const CHALLENGE_POLL_MS = 500;
 

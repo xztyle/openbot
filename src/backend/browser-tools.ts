@@ -105,6 +105,58 @@ const legacyActionSchema = z.discriminatedUnion("type", [
 
 const targetAction = { tabId, target: browserTargetSchema, timeoutMs: timeout };
 
+/** The most steps that one `run_steps` call runs. */
+export const BROWSER_RUN_STEPS_LIMIT = 20;
+
+/**
+ * One step of `run_steps`: the arguments of the single tool of that name, without `tabId`. Sign-in,
+ * card, upload and script tools are not steps: they keep their own checks and cards.
+ */
+const browserStepSchema = z.discriminatedUnion("action", [
+  z.strictObject({
+    action: z.literal("click"),
+    target: browserTargetSchema,
+    button: z.enum(["left", "middle", "right"]).optional(),
+    clickCount: z.number().int().min(1).max(2).optional(),
+    modifiers,
+  }),
+  z.strictObject({
+    action: z.literal("type"),
+    target: browserTargetSchema.optional(),
+    text: z.string().max(INPUT_LIMITS.browserActionText),
+    mode: z.enum(["replace", "append"]).optional(),
+    submit: z.boolean().optional(),
+  }),
+  z.strictObject({ action: z.literal("press"), key: requiredString(128), target: browserTargetSchema.optional() }),
+  z.strictObject({ action: z.literal("hover"), target: browserTargetSchema }),
+  z.strictObject({
+    action: z.literal("scroll"),
+    target: browserTargetSchema.optional(),
+    deltaX: z.number().min(-100_000).max(100_000).optional(),
+    deltaY: z.number().min(-100_000).max(100_000).optional(),
+  }),
+  z.strictObject({
+    action: z.literal("select_option"),
+    target: browserTargetSchema,
+    values: z.array(z.string().max(1_000)).min(1).max(100),
+  }),
+  z.strictObject({ action: z.literal("set_checked"), target: browserTargetSchema, checked: z.boolean() }),
+  z.strictObject({
+    action: z.literal("wait_for"),
+    target: browserTargetSchema.optional(),
+    text: requiredString(2_000).optional(),
+    url: requiredString(INPUT_LIMITS.browserUrl).optional(),
+    state: z.enum(["load", "domcontentloaded", "dom-quiet"]).optional(),
+  }),
+  z.strictObject({
+    action: z.literal("navigate"),
+    url: requiredString(INPUT_LIMITS.browserUrl).optional(),
+    direction: z.enum(["back", "forward", "reload"]).optional(),
+  }),
+]);
+
+export type BrowserStep = z.infer<typeof browserStepSchema>;
+
 const BROWSER_TOOL_DEFINITIONS = [
   browserTool({
     name: "open",
@@ -333,6 +385,16 @@ const BROWSER_TOOL_DEFINITIONS = [
           "Combined field text exceeds 16 KiB UTF-8.",
         ),
       timeoutMs: z.number().int().min(1).max(BROWSER_FILL_FIELDS_MAX_TIMEOUT_MS).optional(),
+    },
+  }),
+  browserTool({
+    name: "run_steps",
+    description:
+      "Run up to 20 known browser steps in order in one call and get one final snapshot, instead of one call and one snapshot per step: for example navigate, type a search, press Enter, and wait_for the results, or click Next several times. Each step takes the arguments of the tool of the same name without tabId: click, type, press, hover, scroll, select_option, set_checked, wait_for, navigate. Refs from your last snapshot stay valid until a step loads a new page; after that, use role, text or CSS targets. The run stops at the first failed step and returns which steps ran, the error, and the snapshot. Use single tools to explore a page you do not know; use submit_secret, fill_card and upload_files on their own.",
+    shape: {
+      tabId,
+      steps: z.array(browserStepSchema).min(1).max(BROWSER_RUN_STEPS_LIMIT),
+      timeoutMs: timeout.describe("The limit of each step, as for the single tools. Default 10000."),
     },
   }),
   browserTool({

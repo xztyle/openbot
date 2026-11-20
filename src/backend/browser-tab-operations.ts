@@ -203,6 +203,11 @@ export const runTabAction = Effect.fn("BrowserTab.action")(
     ) => Effect.Effect<void, BrowserOperationError>,
     timeoutMs = 10_000,
     onOperationStarted?: (completion: Fiber.Fiber<void, BrowserOperationError>) => void,
+    /**
+     * False for a step of `run_steps`: the action settles but takes no snapshot, so the refs of the
+     * agent's last snapshot stay valid for the next step. The result is then null.
+     */
+    readSnapshot = true,
   ) =>
     enqueueTabOperation(tab, (_tab, keepQueueBlocked) =>
       Effect.gen(function* () {
@@ -293,6 +298,7 @@ export const runTabAction = Effect.fn("BrowserTab.action")(
               : {}),
           });
           actionRecorded = true;
+          if (!readSnapshot) return null;
           return (yield* readTabSnapshot(
             tab,
             tab.revision + 1,

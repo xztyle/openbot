@@ -64,7 +64,7 @@ import {
   type SendCommand,
   stringValue,
 } from "./browser-cdp-values";
-import { readChallengeWidget } from "./browser-challenge";
+import { type ChallengeWidget, readChallengeWidget } from "./browser-challenge";
 import { type BrowserOperationError, browserCall, browserFailure, browserSync } from "./browser-effects";
 import {
   type BrowserFillFieldsProgress,
@@ -754,12 +754,22 @@ export class BrowserCdpEngine {
     );
   });
 
-  /** One trusted left click at a viewport point, as a person's click on a check's checkbox. */
-  readonly clickPoint = Effect.fn("BrowserCdp.clickPoint")(function* (
+  /**
+   * Reads the check widget again and sends one trusted left click to its checkbox, as a person would,
+   * in one debugger lease: a new lease applies the tab's environment, and a click right after that can
+   * land before the page has laid out again. The widget it clicked, or null when there was none.
+   */
+  readonly clickChallengeCheckbox = Effect.fn("BrowserCdp.clickChallengeCheckbox")(function* (
     this: BrowserCdpEngine,
-    point: { x: number; y: number },
-  ): Effect.fn.Return<void, BrowserOperationError> {
-    yield* this.#leaseEffect((send) => dispatchMouseClick(send, point, "left", 1, 0));
+  ): Effect.fn.Return<ChallengeWidget | null, BrowserOperationError> {
+    return yield* this.#leaseEffect((send) =>
+      Effect.gen({ self: this }, function* () {
+        const widget = yield* readChallengeWidget(this.#contents, send, [...this.#targetSessions.keys()]);
+        if (!widget?.checkbox || widget.puzzle) return null;
+        yield* dispatchMouseClick(send, widget.checkbox, "left", 1, 0);
+        return widget;
+      }),
+    );
   });
 
   readonly hover = Effect.fn("BrowserCdp.hover")(function* (

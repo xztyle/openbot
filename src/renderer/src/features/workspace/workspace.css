@@ -227,8 +227,14 @@
     padding: 0 var(--openbot-space-2) var(--openbot-space-2);
   }
 
-  .ws-channel-bottom > .ws-composer {
+  .ws-channel-bottom > .ws-composer,
+  .ws-channel-bottom > .ws-composer-frame > .ws-composer {
     padding: 0;
+  }
+
+  /* The typing line takes room only while someone types, as in Slack's app. */
+  .ws-channel-bottom > .ws-typing:not(:has(*)) {
+    display: none;
   }
 }
 

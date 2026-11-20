@@ -64,26 +64,58 @@ body {
   display: none;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (pointer: coarse) {
   /*
-   * `WebMobileNavigation` sets the properties: the visible height, and the height left while the
-   * on-screen keyboard is open. The app is fixed to the top of the screen and the page cannot
-   * scroll, so the header stays clear of the status bar and the box sits on the bottom edge.
+   * On a phone or a tablet, the app is the part of the screen that shows. `web-visual-viewport.ts`
+   * sets its height and where it starts: on an iPhone the keyboard shrinks the visible part and pans
+   * it down the page, and the app follows, so the header stays at the top and the box sits on the keyboard. The page
+   * cannot scroll, and a drag past the end of a pane does not move it.
    */
   html:has(.web-app),
   html:has(.web-app) body {
     height: 100%;
     overflow: hidden;
+    overscroll-behavior: none;
   }
 
   .web-app {
     position: fixed;
-    top: 0;
+    top: var(--web-viewport-top, 0px);
     right: 0;
     left: 0;
-    height: var(--web-keyboard-visible-height, min(100dvh, var(--web-viewport-height, 100dvh)));
+    height: var(--web-viewport-height, 100dvh);
+    overflow: hidden;
   }
 
+  /*
+   * The box grows with the draft up to a third of the visible part. `dvh` keeps the height of the
+   * screen while the keyboard is open, so a long draft pushed the header and the messages out.
+   */
+  .web-app :is(.composer-input-label, .composer-editor-root) {
+    --composer-editor-max-height: max(48px, calc(var(--web-viewport-height, 100dvh) * 0.3));
+  }
+
+  .web-app :is(.ws-composer-editor, .ws-composer-editor-anchor .composer-editor-surface) {
+    max-height: max(48px, calc(var(--web-viewport-height, 100dvh) * 0.3));
+  }
+
+  /*
+   * Dialogs, sheets and toasts render outside the app. While the keyboard is open, they also take
+   * the visible part: a sheet sits on the keyboard, and the field of a dialog stays in view.
+   */
+  html[data-web-keyboard] .ui-dialog-overlay {
+    top: var(--web-viewport-top, 0px);
+    bottom: auto;
+    height: var(--web-viewport-height, 100dvh);
+  }
+
+  html[data-web-keyboard] .ui-dialog-content.ui-sheet {
+    max-height: calc(var(--web-viewport-height, 100dvh) - var(--openbot-space-6));
+    padding-bottom: var(--openbot-space-2);
+  }
+}
+
+@media (max-width: 720px) {
   .web-app-window {
     --web-mobile-navigation-height: 64px;
   }

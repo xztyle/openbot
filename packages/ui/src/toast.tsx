@@ -154,11 +154,12 @@ export function Toaster(props: ToasterProps): JSX.Element {
         theme={props.theme ?? documentColorScheme()}
         position={props.position ?? "top-right"}
         // On a phone the toasts stay clear of the status bar and the home indicator: the app on the
-        // Home Screen draws under them (viewport-fit=cover). The insets are 0 elsewhere.
+        // Home Screen draws under them (viewport-fit=cover). The insets are 0 elsewhere. While the
+        // keyboard of a phone is open, the web client sets the part of the page that shows.
         mobileOffset={
           props.mobileOffset ?? {
-            top: "calc(env(safe-area-inset-top, 0px) + var(--openbot-space-4))",
-            bottom: "calc(env(safe-area-inset-bottom, 0px) + var(--openbot-space-4))",
+            top: "calc(env(safe-area-inset-top, 0px) + var(--web-viewport-top, 0px) + var(--openbot-space-4))",
+            bottom: "calc(env(safe-area-inset-bottom, 0px) + var(--web-keyboard-inset, 0px) + var(--openbot-space-4))",
           }
         }
         // A toast past the visible count stays hidden even when hover expands the stack, so an update

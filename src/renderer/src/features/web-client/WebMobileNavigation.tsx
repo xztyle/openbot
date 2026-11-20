@@ -2,7 +2,8 @@ import type { AppTextKey } from "@openbot/i18n";
 import { Bot, Button, MessageCircle, Workflow } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import { Dynamic } from "@solidjs/web";
-import { createSignal, For, onSettled, Show } from "solid-js";
+import { For, Show } from "solid-js";
+import { createWebVisualViewport } from "./web-visual-viewport";
 
 export type WebMobilePane = "conversation" | "workspace";
 
@@ -29,98 +30,12 @@ const PANES: ReadonlyArray<PaneButton> = [
 ];
 
 /**
- * How much the visible height must shrink, with a text field focused, to count as an on-screen
- * keyboard. The browser bars of a phone change the height by less than this when they hide.
- */
-const KEYBOARD_MIN_HEIGHT = 150;
-/** The visible height while the keyboard is open. `web-client.css` sizes the app with it. */
-const VISIBLE_HEIGHT_PROPERTY = "--web-keyboard-visible-height";
-/**
- * The visible height at all times. Safari's `100dvh` can be taller than the part of the page that
- * shows between its bars, and the page then scrolls under the status bar, so the app takes the
- * smaller of the two.
- */
-const VIEWPORT_HEIGHT_PROPERTY = "--web-viewport-height";
-/** The width up to which the app is the phone layout, as in `web-client.css`. */
-const PHONE_QUERY = "(max-width: 720px)";
-
-/**
- * Whether an on-screen keyboard covers the page. iOS shrinks only the visual viewport, and Android
- * with `interactive-widget=resizes-content` shrinks the layout too, so the test compares against the
- * tallest height seen at the current width instead of `innerHeight`. A new width is a rotation.
- *
- * iOS keeps the layout at full height under the keyboard and scrolls the document to the field. So
- * while the keyboard is open the app takes the visible height, and the document goes back to the top.
- */
-function createKeyboardOpen() {
-  const [open, setOpen] = createSignal(false);
-  onSettled(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-    let width = viewport.width;
-    let tallest = viewport.height;
-    const measure = () => {
-      if (viewport.width !== width) {
-        width = viewport.width;
-        tallest = viewport.height;
-      }
-      tallest = Math.max(tallest, viewport.height);
-      const typing = document.activeElement?.matches("input, textarea, [contenteditable='true']") ?? false;
-      const covered = typing && tallest - viewport.height > KEYBOARD_MIN_HEIGHT;
-      setOpen(covered);
-      const root = document.documentElement.style;
-      root.setProperty(VIEWPORT_HEIGHT_PROPERTY, `${Math.round(viewport.height)}px`);
-      if (covered) {
-        root.setProperty(VISIBLE_HEIGHT_PROPERTY, `${viewport.height}px`);
-        window.scrollTo(0, 0);
-      } else root.removeProperty(VISIBLE_HEIGHT_PROPERTY);
-    };
-    /*
-     * Focus can leave a field for a moment, such as when a press in its list or menu moves it and
-     * the field takes it back. Giving the page its full height back at once moved the composer and
-     * its list under the finger before the tap ended, so a focus change is measured a frame later.
-     * A keyboard that really closes also resizes the viewport.
-     */
-    let focusFrame: number | undefined;
-    const focusChanged = () => {
-      if (focusFrame !== undefined) cancelAnimationFrame(focusFrame);
-      focusFrame = requestAnimationFrame(() => {
-        focusFrame = undefined;
-        measure();
-      });
-    };
-    /*
-     * The app scrolls inside its own panes, never as a page. iOS can leave the page scrolled after
-     * the keyboard closes, or after a drag past the end of a pane, which put the header under the
-     * status bar; the page goes back to the top.
-     */
-    const phone = window.matchMedia?.(PHONE_QUERY);
-    const pageScrolled = () => {
-      if (phone?.matches && (window.scrollY !== 0 || window.scrollX !== 0) && !open()) window.scrollTo(0, 0);
-    };
-    measure();
-    viewport.addEventListener("resize", measure);
-    window.addEventListener("scroll", pageScrolled, { passive: true });
-    document.addEventListener("focusout", focusChanged);
-    return () => {
-      if (focusFrame !== undefined) cancelAnimationFrame(focusFrame);
-      viewport.removeEventListener("resize", measure);
-      window.removeEventListener("scroll", pageScrolled);
-      document.removeEventListener("focusout", focusChanged);
-      document.documentElement.style.removeProperty(VISIBLE_HEIGHT_PROPERTY);
-      document.documentElement.style.removeProperty(VIEWPORT_HEIGHT_PROPERTY);
-    };
-  });
-  return open;
-}
-
-/**
  * The small-screen switch for the existing workspace and conversation surfaces. It steps aside while
  * the keyboard is open, so it does not sit on the keyboard and push the composer up.
  */
 export function WebMobileNavigation(props: WebMobileNavigationProps) {
   const { t } = useText();
-  const keyboardOpen = createKeyboardOpen();
+  const keyboardOpen = createWebVisualViewport();
   const shown = (pane: PaneButton): PaneButton =>
     pane.id === "conversation" && props.routines ? { ...pane, label: "webClient.pane.routines", Icon: Workflow } : pane;
   return (

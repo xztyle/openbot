@@ -59,13 +59,13 @@ export function WorkspacePaneHeader(props: WorkspacePaneHeaderProps): JSX.Elemen
 
 /**
  * The one primary action of a view header, such as "New agent": the default button with a plus.
- * Other header actions are ghost buttons. See docs/ux/standard.md § 3.
+ * Other header actions are ghost buttons. See docs/ux/standard.md § 3. A phone shows the plus alone.
  */
 export function PaneHeaderAction(props: { label: string; onClick: () => void }): JSX.Element {
   return (
-    <Button size="sm" onClick={() => props.onClick()}>
+    <Button size="sm" class="ws-pane-header-primary" onClick={() => props.onClick()}>
       <Plus aria-hidden="true" />
-      {props.label}
+      <span class="ws-pane-header-primary-label">{props.label}</span>
     </Button>
   );
 }

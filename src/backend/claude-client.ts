@@ -202,6 +202,12 @@ interface ActiveTurn {
   usageLimit: { resetsAt: number | null; text: string | null } | null;
   /** The CLI started this turn itself, with no message from OpenBot, such as after a background task ended. */
   unprompted: boolean;
+  /** When the CLI last sent a message for this turn, or OpenBot last answered one of its requests. */
+  lastActivityAt: number;
+  /** Requests of this turn that OpenBot answers, such as an OpenBot tool or a question to the user. The stall limit waits. */
+  hostRequests: number;
+  /** The user stopped the turn. Its stop ends it as interrupted, never as a stall. */
+  stopRequested: boolean;
 }
 
 interface ThreadRuntime {
@@ -258,6 +264,22 @@ function nextProcessStart(): Promise<void> {
  * each of five agents otherwise holds five processes of about 140 MB each for ten minutes.
  */
 const CLAUDE_IDLE_THREAD_LIMIT = 2;
+
+/**
+ * How long a turn can send nothing, with no tool call or compaction open, before OpenBot ends it. A
+ * CLI that stopped answering held its turn and the agent's queue for hours, until the user pressed
+ * Stop. Longer than the CLI's own request timeout, so its own retry goes first.
+ */
+const CLAUDE_TURN_STALL_MS = 15 * 60_000;
+
+/**
+ * The same limit while a tool call or a compaction is open. A foreground command or an MCP tool can
+ * run long with no output, so only a wait far longer than those ends the turn.
+ */
+const CLAUDE_TOOL_STALL_MS = 60 * 60_000;
+
+/** How often a thread checks its turn against the stall limits. */
+const CLAUDE_STALL_CHECK_MS = 60_000;
 
 interface ClaudeStreamMessage {
   type: string;
@@ -541,6 +563,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
         // A released thread has no turn to stop.
         if (this.#threads.isReleased(threadId)) return yield* providerSync(() => decoder({}));
         const runtime = yield* providerSync(() => this.#requireThread(threadId));
+        if (runtime.activeTurn) runtime.activeTurn.stopRequested = true;
         yield* providerCall(() => runtime.query.interrupt());
         return yield* providerSync(() => decoder({}));
       }
@@ -973,7 +996,69 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     };
     runtime.consume = yield* Effect.forkIn(this.#consume(runtime), this.#scope, { startImmediately: true });
     this.#threads.add(runtime);
+    yield* Effect.forkIn(this.#watchStall(runtime), this.#scope);
   });
+
+  /**
+   * Ends the turn of a CLI that sends nothing past the stall limit. The wait for OpenBot, such as an
+   * OpenBot tool or a question to the user, does not count, nor does the time the computer sleeps.
+   * The turn fails with a notice, so the agent's queue goes on, and the process closes as after a
+   * crash: the next turn opens the same session again.
+   */
+  readonly #watchStall = Effect.fn("ClaudeAgentClient.watchStall")(function* (
+    this: ClaudeAgentClient,
+    runtime: ThreadRuntime,
+  ) {
+    while (this.#running && this.#threads.get(runtime.id) === runtime) {
+      const before = Date.now();
+      yield* Effect.sleep(CLAUDE_STALL_CHECK_MS);
+      const turn = runtime.activeTurn;
+      if (!turn || this.#threads.get(runtime.id) !== runtime) continue;
+      // A timer does not run while the computer sleeps, but the clock does.
+      const asleep = Date.now() - before - CLAUDE_STALL_CHECK_MS;
+      if (asleep > CLAUDE_STALL_CHECK_MS) turn.lastActivityAt = Math.min(Date.now(), turn.lastActivityAt + asleep);
+      const silentFor = Date.now() - turn.lastActivityAt;
+      const limit = turn.toolCalls.size > 0 || runtime.compacting ? CLAUDE_TOOL_STALL_MS : CLAUDE_TURN_STALL_MS;
+      if (turn.hostRequests > 0 || turn.stopRequested || silentFor < limit) continue;
+      queryLogger.warn("Ended a Claude turn that sent nothing past the stall limit.", {
+        threadId: runtime.id,
+        silentForMinutes: Math.floor(silentFor / 60_000),
+        openToolCalls: turn.toolCalls.size,
+      });
+      for (const [toolCallId, name] of turn.toolCalls) this.#emitToolCall(runtime, toolCallId, name, true);
+      turn.toolCalls.clear();
+      yield* this.#completeTurn(runtime, "failed", sourceText("error.agent.turnStalled", { provider: "Claude" }));
+      // A session that is not saved cannot open again, so its thread goes with the process.
+      this.#threads.lose(runtime, runtime.config.persistSession);
+      runtime.input.close();
+      try {
+        runtime.query.close();
+      } catch {
+        // The process is already gone.
+      }
+      for (const change of stopClaudeSubagents(runtime.subagents, new Date().toISOString()))
+        this.#emitSubagents(runtime, change);
+      return;
+    }
+  });
+
+  /** Runs a request that OpenBot answers. The stall limit waits for it and counts again from its answer. */
+  #awaitHost<A, E, R>(threadId: string, request: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+    return Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const turn = this.#threads.get(threadId)?.activeTurn ?? null;
+        if (turn) turn.hostRequests += 1;
+        return turn;
+      }),
+      () => request,
+      (turn) =>
+        Effect.sync(() => {
+          if (!turn) return;
+          turn.hostRequests -= 1;
+          turn.lastActivityAt = Date.now();
+        }),
+    );
+  }
 
   readonly #startTurnEffect = Effect.fn("ClaudeAgentClient.startTurn")(function* (
     this: ClaudeAgentClient,
@@ -1087,6 +1172,9 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       toolCalls: new Map<string, string>(),
       usageLimit: null,
       unprompted,
+      lastActivityAt: Date.now(),
+      hostRequests: 0,
+      stopRequested: false,
     };
     runtime.activeTurn = turn;
     startClaudePlanTurn(runtime.plan);
@@ -1200,6 +1288,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     runtime: ThreadRuntime,
     message: ClaudeStreamMessage,
   ) {
+    if (runtime.activeTurn) runtime.activeTurn.lastActivityAt = Date.now();
     if (message.type === "assistant") {
       // Each content block repeats its request's message; the last copy has the final count.
       const id = getString(message.message, "id");
@@ -1895,16 +1984,17 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     args: unknown,
   ): Effect.fn.Return<CallToolResult, ProviderClientOperationError> {
     const runtime = yield* providerSync(() => this.#requireThread(threadId));
-    const result = yield* this.#serverRequests
-      .call("item/tool/call", {
+    const result = yield* this.#awaitHost(
+      threadId,
+      this.#serverRequests.call("item/tool/call", {
         threadId,
         turnId: runtime.activeTurn?.id ?? randomUUID(),
         callId: randomUUID(),
         namespace,
         tool: name,
         arguments: args,
-      })
-      .pipe(toProviderClientOperationError);
+      }),
+    ).pipe(toProviderClientOperationError);
     if (!isRecord(result)) return { content: [{ type: "text" as const, text: String(result) }] };
     const content: CallToolResult["content"] = [];
     if (Array.isArray(result.contentItems)) {
@@ -1928,14 +2018,15 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       options: Array.isArray(question.options) ? question.options : undefined,
       ...(question.multiSelect === true ? { multiSelect: true } : {}),
     }));
-    const result = yield* this.#serverRequests
-      .call("item/tool/requestUserInput", {
+    const result = yield* this.#awaitHost(
+      threadId,
+      this.#serverRequests.call("item/tool/requestUserInput", {
         threadId,
         turnId: runtime.activeTurn?.id ?? randomUUID(),
         itemId: toolUseId,
         questions,
-      })
-      .pipe(toProviderClientOperationError);
+      }),
+    ).pipe(toProviderClientOperationError);
     const responseAnswers = isRecord(result) && isRecord(result.answers) ? result.answers : {};
     const answers = Object.fromEntries(
       questions.map((question) => {
@@ -1959,14 +2050,15 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     toolInput: DynamicRecord,
     toolUseId: string,
   ): Effect.fn.Return<PermissionResult, ProviderClientOperationError> {
-    const result = yield* this.#serverRequests
-      .call("item/fileChange/requestApproval", {
+    const result = yield* this.#awaitHost(
+      threadId,
+      this.#serverRequests.call("item/fileChange/requestApproval", {
         threadId,
         turnId: this.#threads.get(threadId)?.activeTurn?.id ?? randomUUID(),
         itemId: toolUseId,
         reason: sourceText("status.agent.claudeWriteOutside", { path }),
-      })
-      .pipe(toProviderClientOperationError);
+      }),
+    ).pipe(toProviderClientOperationError);
     if (isRecord(result) && result.decision === "accept") return { behavior: "allow", updatedInput: toolInput };
     return { behavior: "deny", message: "The user did not allow this write outside the workspace." };
   });

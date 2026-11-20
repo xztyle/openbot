@@ -2,6 +2,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { type DynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
+import { createOpenBotLogger } from "@openbot/logging";
 import { Effect, Fiber } from "effect";
 import { type AgentProvider, RequestTimeoutError } from "./agent-client";
 import { cliSpawnTarget } from "./cli";
@@ -27,6 +28,33 @@ import {
 import { registerProviderProcess } from "./provider-processes";
 import { createDiagnosticStream } from "./stderr-diagnostics";
 import { endProcessTree } from "./windows-process-tree";
+
+/**
+ * How long a turn may send nothing before OpenBot ends it, as for Claude and ACP. Codex retries a
+ * stopped model stream after 5 minutes and reports each retry, so a turn that works sends something
+ * sooner. A turn that stopped held the agent on "working" and its queue until a Stop.
+ */
+const CODEX_TURN_STALL_MS = 15 * 60_000;
+/**
+ * The limit while a tool call, a command or a compaction is open. Codex can reason for minutes with no
+ * event after a large tool result, and a long command or MCP tool must not be ended.
+ */
+const CODEX_TOOL_STALL_MS = 60 * 60_000;
+/** How often the open turns are checked against the stall limits. */
+const CODEX_STALL_CHECK_MS = 60_000;
+/** Items that show model output. An open one does not raise the stall limit as a tool does. */
+const OUTPUT_ITEM_TYPES: ReadonlySet<unknown> = new Set(["agentMessage", "reasoning", "userMessage", "plan"]);
+
+const logger = createOpenBotLogger("codex-app-server");
+
+/** The clock of a turn that the stall limits watch. */
+interface TurnClock {
+  threadId: string;
+  turnId: string;
+  lastActivityAt: number;
+  /** The tool, command and compaction items that started and did not complete. */
+  openItems: Set<string>;
+}
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
@@ -60,6 +88,18 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
   readonly #pending = new Map<RequestId, PendingRequest>();
   readonly #toolRequests = new Map<RequestId, { threadId: string; turnId: string; controller: AbortController }>();
   readonly #interruptedTurns = new Set<string>();
+  /** The running turns, by `[threadId, turnId]`, for the stall limits. */
+  readonly #turnClocks = new Map<string, TurnClock>();
+  /**
+   * The requests of Codex that OpenBot answers, such as an OpenBot tool, an approval or a question to
+   * the user, with their thread. The stall limit waits for them, also for those of a subagent.
+   */
+  readonly #hostRequests = new Map<RequestId, string>();
+  /** The thread that started each subagent thread, so a subagent's events count for its parent's turn. */
+  readonly #subagentParents = new Map<string, string>();
+  /** Turns that OpenBot ended for a stall. Their late events and requests are dropped. */
+  readonly #abandonedTurns = new Set<string>();
+  #stallCheck: { timer: ReturnType<typeof setInterval>; at: number } | null = null;
   #process: ChildProcessWithoutNullStreams | null = null;
   /** The end of a process that failed. `stop` waits for it, because `#process` no longer holds it. */
   #ending: Fiber.Fiber<void> | null = null;
@@ -310,11 +350,13 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
 
   respond(id: RequestId, result: unknown): void {
     this.#toolRequests.delete(id);
+    this.#answeredHostRequest(id);
     this.#write({ id, result });
   }
 
   respondError(id: RequestId, error: RpcError): void {
     this.#toolRequests.delete(id);
+    this.#answeredHostRequest(id);
     this.#write({ id, error });
   }
 
@@ -328,6 +370,14 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
   #handleMessage(message: RpcMessage): void {
     if ("method" in message) {
       if ("id" in message) {
+        const requestTurn = turnKeyOf(message.params);
+        if (requestTurn !== null && this.#abandonedTurns.has(requestTurn)) {
+          // OpenBot ended this turn: nobody answers its approvals or tool calls any more.
+          this.#write({ id: message.id, error: { code: -32_000, message: "OpenBot stopped this turn." } });
+          return;
+        }
+        if (isRecord(message.params) && isString(message.params.threadId))
+          this.#hostRequests.set(message.id, message.params.threadId);
         let signal: AbortSignal | undefined;
         if (
           message.method === "item/tool/call" &&
@@ -354,6 +404,14 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
           params: message.params,
         });
       } else {
+        const turnKey = turnKeyOf(message.params);
+        if (turnKey !== null && this.#abandonedTurns.has(turnKey)) {
+          // The late events of a turn that OpenBot already ended as stalled.
+          if (message.method === "turn/completed") this.#abandonedTurns.delete(turnKey);
+          return;
+        }
+        this.#observeSubagents(message.method, message.params);
+        this.#observeTurnClock(message.method, message.params, turnKey);
         if (
           message.method === "turn/completed" &&
           isRecord(message.params) &&
@@ -384,8 +442,147 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
     pending.resolve(message.result);
   }
 
+  #answeredHostRequest(id: RequestId): void {
+    const threadId = this.#hostRequests.get(id);
+    this.#hostRequests.delete(id);
+    // The stall limit counts again from the answer.
+    if (threadId !== undefined) this.#noteTurnActivity(threadId);
+  }
+
+  /** Keeps the clock of each running turn for the stall limits. An event of the thread or of its subagents counts. */
+  #observeTurnClock(method: string, params: unknown, turnKey: string | null): void {
+    if (!isRecord(params) || !isString(params.threadId)) return;
+    if (method === "turn/completed") {
+      if (turnKey !== null) this.#forgetTurnClock(turnKey);
+      return;
+    }
+    if (method === "turn/started" && turnKey !== null && isRecord(params.turn) && isString(params.turn.id)) {
+      this.#turnClocks.set(turnKey, {
+        threadId: params.threadId,
+        turnId: params.turn.id,
+        lastActivityAt: Date.now(),
+        openItems: new Set(),
+      });
+      this.#startStallCheck();
+    }
+    const clock = turnKey === null ? undefined : this.#turnClocks.get(turnKey);
+    const item = params.item;
+    if (clock && isRecord(item) && isString(item.id) && !OUTPUT_ITEM_TYPES.has(item.type)) {
+      if (method === "item/started") clock.openItems.add(item.id);
+      else if (method === "item/completed") clock.openItems.delete(item.id);
+    }
+    this.#noteTurnActivity(params.threadId);
+  }
+
+  /** Links each subagent thread to the thread that started it. */
+  #observeSubagents(method: string, params: unknown): void {
+    if ((method !== "item/started" && method !== "item/completed") || !isRecord(params)) return;
+    const threadId = params.threadId;
+    const item = params.item;
+    if (!isString(threadId) || !isRecord(item)) return;
+    const children =
+      item.type === "collabAgentToolCall" && Array.isArray(item.receiverThreadIds)
+        ? item.receiverThreadIds.filter(isString)
+        : item.type === "subAgentActivity" && isString(item.agentThreadId)
+          ? [item.agentThreadId]
+          : [];
+    for (const child of children) {
+      if (this.#subagentParents.get(child) === threadId || this.#isSubagentOf(threadId, child)) continue;
+      this.#subagentParents.set(child, threadId);
+    }
+  }
+
+  /** Whether `threadId` is the thread `ancestor` or one of its subagents. Keeps the links free of loops. */
+  #isSubagentOf(threadId: string, ancestor: string): boolean {
+    for (
+      let current: string | undefined = threadId;
+      current !== undefined;
+      current = this.#subagentParents.get(current)
+    )
+      if (current === ancestor) return true;
+    return false;
+  }
+
+  /** Starts the stall limits again for the turns of this thread and of the threads whose subagent it is. */
+  #noteTurnActivity(threadId: string): void {
+    const now = Date.now();
+    for (const clock of this.#turnClocks.values())
+      if (this.#isSubagentOf(threadId, clock.threadId)) clock.lastActivityAt = now;
+  }
+
+  #forgetTurnClock(turnKey: string): void {
+    this.#turnClocks.delete(turnKey);
+    if (this.#turnClocks.size === 0 && this.#stallCheck) {
+      clearInterval(this.#stallCheck.timer);
+      this.#stallCheck = null;
+    }
+  }
+
+  #startStallCheck(): void {
+    if (this.#stallCheck) return;
+    const timer = setInterval(() => this.#checkStalls(), CODEX_STALL_CHECK_MS);
+    timer.unref?.();
+    this.#stallCheck = { timer, at: Date.now() };
+  }
+
+  /**
+   * Ends each turn that sent nothing past its stall limit. A wait for OpenBot, such as an OpenBot tool
+   * or a question to the user, does not count, nor does the time the computer sleeps. A subagent's
+   * turn ends with the turn that started it.
+   */
+  #checkStalls(): void {
+    const check = this.#stallCheck;
+    if (!check) return;
+    const now = Date.now();
+    // A timer does not run while the computer sleeps, but the clock does.
+    const asleep = now - check.at - CODEX_STALL_CHECK_MS;
+    check.at = now;
+    for (const [key, clock] of this.#turnClocks) {
+      if (asleep > CODEX_STALL_CHECK_MS) clock.lastActivityAt = Math.min(now, clock.lastActivityAt + asleep);
+      const silentFor = now - clock.lastActivityAt;
+      const limit = clock.openItems.size > 0 ? CODEX_TOOL_STALL_MS : CODEX_TURN_STALL_MS;
+      if (
+        silentFor < limit ||
+        this.#subagentParents.has(clock.threadId) ||
+        this.#interruptedTurns.has(key) ||
+        [...this.#hostRequests.values()].some((threadId) => this.#isSubagentOf(threadId, clock.threadId))
+      )
+        continue;
+      this.#endStalledTurn(key, clock, silentFor);
+    }
+  }
+
+  /**
+   * Ends a turn past its stall limit as failed, with the text that says what to do, so the agent's
+   * queue goes on. Codex gets a Stop: a process that does not answer it is ended by the request
+   * timeout probe, and the next turn resumes the thread on a new process.
+   */
+  #endStalledTurn(key: string, clock: TurnClock, silentFor: number): void {
+    const { threadId, turnId } = clock;
+    logger.warn("Ended a Codex turn that sent nothing past the stall limit.", {
+      threadId,
+      silentForMinutes: Math.floor(silentFor / 60_000),
+      openItems: clock.openItems.size,
+    });
+    Effect.runFork(this.request("turn/interrupt", { threadId, turnId }, decodeRecordResponse).pipe(Effect.ignore));
+    this.#handleMessage({
+      method: "error",
+      params: { threadId, turnId, message: sourceText("error.agent.turnStalled", { provider: "ChatGPT" }) },
+    });
+    this.#handleMessage({ method: "turn/completed", params: { threadId, turn: { id: turnId, status: "failed" } } });
+    this.#abandonedTurns.add(key);
+  }
+
   #cancelToolRequests(threadId?: string, turnId?: string, interruption?: string): void {
-    if (threadId === undefined) this.#interruptedTurns.clear();
+    if (threadId === undefined) {
+      this.#interruptedTurns.clear();
+      this.#turnClocks.clear();
+      this.#hostRequests.clear();
+      this.#subagentParents.clear();
+      this.#abandonedTurns.clear();
+      if (this.#stallCheck) clearInterval(this.#stallCheck.timer);
+      this.#stallCheck = null;
+    }
     for (const [id, request] of this.#toolRequests) {
       if (threadId !== undefined && (request.threadId !== threadId || request.turnId !== turnId)) continue;
       this.#toolRequests.delete(id);
@@ -550,3 +747,10 @@ function redactDiagnostic(message: string): string {
 }
 
 /** Kept inside the adapter; public callers still receive the native protocol error. */
+
+/** The `[threadId, turnId]` key of a notification or request that names its turn, or null. */
+function turnKeyOf(params: unknown): string | null {
+  if (!isRecord(params) || !isString(params.threadId)) return null;
+  const turnId = isString(params.turnId) ? params.turnId : isRecord(params.turn) ? params.turn.id : undefined;
+  return isString(turnId) ? JSON.stringify([params.threadId, turnId]) : null;
+}

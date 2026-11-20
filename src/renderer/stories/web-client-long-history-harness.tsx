@@ -1,9 +1,10 @@
 /*
  * The web client on a mock host with two long histories, for `scripts/timeline-flow-e2e.ts`:
- * #historia holds 330 messages and the DM with Chief 330, of mixed heights (long Spanish paragraphs
- * with mention chips, lists, code blocks, tables), over several days, each read up to message 300.
- * The script drives it through `globalThis.openbotFlow`: it grows the reader's last message in
- * #historia, as an edit does, and streams a reply into the DM.
+ * #historia holds 330 messages and the DM with Chief 330 (or `?count=<n>`), of mixed heights (long
+ * Spanish paragraphs with mention chips, lists, code blocks, tables), over several days, each read up
+ * to 30 messages before the end. The scripts drive it through `globalThis.openbotFlow`: it grows the
+ * reader's last message in #historia, as an edit does, streams a reply into the DM, posts new
+ * messages to #historia and adds new messages to the DM, as host events do.
  */
 import type { ChannelMessage, ConversationMessage } from "@openbot/contracts/ipc";
 import { Toaster } from "@openbot/ui";
@@ -17,8 +18,22 @@ import { seeds } from "./workspace/workspace-app-seeds";
 import "../src/styles.css";
 import "../src/features/web-client/web-client.css";
 
-const COUNT = 330;
-const READ_THROUGH = 300;
+/**
+ * `?count=<n>` sets the length of both histories (the perf bench uses 300, 1,500 and 5,000). It
+ * stays for the session, so a link that opens another route keeps it.
+ */
+function historyLength(): number {
+  const asked = new URLSearchParams(location.search).get("count");
+  try {
+    if (asked) sessionStorage.setItem("openbot-flow-count", asked);
+    const value = Number(asked ?? sessionStorage.getItem("openbot-flow-count"));
+    return Number.isInteger(value) && value >= 40 ? value : 330;
+  } catch {
+    return Number(asked) >= 40 ? Number(asked) : 330;
+  }
+}
+const COUNT = historyLength();
+const READ_THROUGH = COUNT - 30;
 const START = Date.parse("2026-11-10T07:00:00Z");
 
 const PARAGRAPHS = [
@@ -181,7 +196,46 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     mock.emitAgentEvent({ type: "turn-completed", agentId: "chief", threadId, turnId, status: "completed" });
   }
 
-  Object.assign(globalThis, { openbotFlow: { growChannel, streamDm } });
+  /** New messages in #historia, each from a host event, `gap` ms apart. */
+  async function postChannel(count: number, gap: number): Promise<void> {
+    for (let index = 0; index < count; index++) {
+      await mock.api.agent.channelCommand({
+        type: "send",
+        operationId: crypto.randomUUID(),
+        channelId: "historia",
+        text: `Nuevo ${index}: ${PARAGRAPHS[index % PARAGRAPHS.length]}`,
+        recipientAgentId: null,
+        replyToMessageId: null,
+        attachmentDraftIds: [],
+      });
+      await wait(gap);
+    }
+  }
+
+  /** New agent messages in the DM, each announced by the host's `conversation` event, `gap` ms apart. */
+  async function postDm(count: number, gap: number): Promise<void> {
+    for (let index = 0; index < count; index++) {
+      const id = `dm-new-${Date.now()}-${index}`;
+      // The update sends the `conversation` event, which asks the client for a read.
+      mock.updateConversationSnapshot("chief", (snapshot) => {
+        snapshot.messages = [
+          ...snapshot.messages,
+          {
+            id,
+            turnId: `${id}-turn`,
+            author: "assistant",
+            source: "assistant",
+            text: `Nuevo ${index}: ${PARAGRAPHS[index % PARAGRAPHS.length]}`,
+            createdAt: new Date().toISOString(),
+            status: "completed",
+          },
+        ];
+      });
+      await wait(gap);
+    }
+  }
+
+  Object.assign(globalThis, { openbotFlow: { growChannel, streamDm, postChannel, postDm } });
   return mockWebRuntimeFor(mock, events);
 };
 

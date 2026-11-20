@@ -343,6 +343,29 @@
   --openbot-switch-sm-height: 14px;
   --openbot-switch-sm-thumb: 12px;
   --openbot-switch-sm-inset: 1px;
+  /* The touch scale: the steps that settings, forms and management screens read on a phone
+   * (the touch scale in patterns.css). Body text 16px, hints 14px, controls and rows 44px,
+   * as in a native app, and no field under 16px, so iOS does not zoom into it. */
+  --openbot-touch-text-sm: 14px;
+  --openbot-touch-text-md: 16px;
+  --openbot-touch-text-lg: 16px;
+  --openbot-touch-text-xl: 17px;
+  --openbot-touch-text-2xl: 20px;
+  --openbot-touch-leading-sm: 18px;
+  --openbot-touch-leading-md: 22px;
+  --openbot-touch-leading-lg: 22px;
+  --openbot-touch-leading-xl: 24px;
+  --openbot-touch-leading-2xl: 26px;
+  --openbot-touch-control-xs: 32px;
+  --openbot-touch-control-sm: 40px;
+  --openbot-touch-control-md: 44px;
+  --openbot-touch-control-lg: 44px;
+  --openbot-touch-control-xl: 48px;
+  --openbot-touch-switch-width: 48px;
+  --openbot-touch-switch-height: 28px;
+  --openbot-touch-switch-thumb: 24px;
+  --openbot-touch-icon-sm: 16px;
+  --openbot-touch-icon-md: 18px;
   /* Unitless on purpose. Lucide icons carry viewBox="0 0 24 24", so CSS stroke-width
    * resolves in user units, not px: a literal 1px paints 1 * (16/24) = 0.67 device px at
    * the 16px default size and reads blurry. 1.5 user units is the 1px the design asks for.

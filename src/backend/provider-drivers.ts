@@ -11,6 +11,7 @@ import {
   type KeyOnlyProviderId,
   type McpServerConfig,
   type PromptCacheTtl,
+  type ProviderEnvironmentProvider,
 } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { Effect } from "effect";
@@ -185,7 +186,12 @@ type ProviderCodeSignIn =
  */
 function antigravityKeyOptions(context: ProviderClientContext, agentEnvironment: boolean) {
   const account = context.accountEnvironment;
-  const key = () => (account ? null : context.apiKey("antigravity"));
+  const variables = () => context.providerEnvironment?.("antigravity") ?? {};
+  // A gateway or a key in the provider's variables takes the place of the saved key.
+  const key = () =>
+    account || "AGY_LLM_GATEWAY_URL" in variables() || "GEMINI_API_KEY" in variables()
+      ? null
+      : context.apiKey("antigravity");
   return {
     extraEnv: () => {
       const saved = key();
@@ -193,6 +199,8 @@ function antigravityKeyOptions(context: ProviderClientContext, agentEnvironment:
         ...(agentEnvironment ? context.agentEnvironment?.() : {}),
         ...account,
         ...(saved ? { GEMINI_API_KEY: saved } : {}),
+        // Last: the host refuses a variable that names a folder of the account (`GEMINI_HOME`).
+        ...variables(),
       };
     },
     redactValues: () => {
@@ -387,6 +395,34 @@ export interface ProviderClientContext {
    * same reason as `reportMcpDrops`: without it the CLI uses its own cache time.
    */
   readonly promptCacheTtl?: () => PromptCacheTtl;
+  /**
+   * The environment variables of a provider on this server, read at each spawn. Each process of the
+   * provider gets them after OpenBot's own values, except the names that the host refuses
+   * (`PROVIDER_ENVIRONMENT_RESERVED_NAMES`). Optional for the same reason as `reportMcpDrops`.
+   */
+  readonly providerEnvironment?: (provider: ProviderEnvironmentProvider) => Readonly<Record<string, string>>;
+}
+
+/** The model provider of Codex that `OPENAI_BASE_URL` on the Codex page makes. */
+const CODEX_VARIABLE_PROVIDER = "openbot_environment";
+
+/**
+ * Codex does not read a base URL from its environment while it has a ChatGPT sign-in (checked with
+ * Codex 0.167.2), so `OPENAI_BASE_URL` in the Codex variables becomes a model provider of Codex, as
+ * `-c` overrides of the app-server. Codex then sends the Responses requests to `<url>/responses`, with
+ * `OPENAI_API_KEY` as a bearer when that variable is there, and not the ChatGPT sign-in. A value that
+ * is not TOML is a string, so no value needs quotes. An address that is not http or https is left out.
+ */
+function codexVariableOverrides(variables: Readonly<Record<string, string>>): string[] {
+  const baseUrl = variables.OPENAI_BASE_URL?.trim().replace(/\/+$/, "");
+  if (!baseUrl || !/^https?:\/\/[^/\s]+/.test(baseUrl) || /\s/.test(baseUrl)) return [];
+  return [
+    `model_provider=${CODEX_VARIABLE_PROVIDER}`,
+    `model_providers.${CODEX_VARIABLE_PROVIDER}.name=OpenBot`,
+    `model_providers.${CODEX_VARIABLE_PROVIDER}.base_url=${baseUrl}`,
+    `model_providers.${CODEX_VARIABLE_PROVIDER}.wire_api=responses`,
+    ...("OPENAI_API_KEY" in variables ? [`model_providers.${CODEX_VARIABLE_PROVIDER}.env_key=OPENAI_API_KEY`] : []),
+  ];
 }
 
 /** The agent environment with the account's home folder after it, so the account folder wins. */
@@ -403,6 +439,10 @@ function withAccountEnvironment(
  * CLI's own choice. `1h` sets `ENABLE_PROMPT_CACHING_1H`, which the CLI reads last: a `promptCacheTtl`
  * in the Claude settings or `CLAUDE_CODE_PROMPT_CACHE_TTL` still wins. The CLI reads the flag before
  * its subscription rules, so subagents, an API key and a subscription on extra usage also get 1 hour.
+ *
+ * The agent environment and the account's folder come after the cache flag. The provider's variables
+ * of this server come last, so a variable that an admin set wins over a value of the same name; the
+ * host refuses the names of the account folders.
  */
 function claudeAgentEnvironment(
   context: ProviderClientContext,
@@ -411,6 +451,9 @@ function claudeAgentEnvironment(
   return (inherited) => ({
     ...((context.promptCacheTtl?.() ?? DEFAULT_PROMPT_CACHE_TTL.ttl) === "1h" ? { ENABLE_PROMPT_CACHING_1H: "1" } : {}),
     ...environment?.(inherited),
+    // After the account, so a key account's key does not go to a gateway that the variables name.
+    // The host refuses `CLAUDE_CONFIG_DIR`, the account's folder.
+    ...context.providerEnvironment?.("claude"),
   });
 }
 
@@ -420,7 +463,13 @@ function claudeAgentEnvironment(
  * its environment, and no other account gets it.
  */
 function claudeFallbackApiKey(context: ProviderClientContext): (() => string | null) | undefined {
-  return context.accountEnvironment ? undefined : () => context.apiKey("claude");
+  if (context.accountEnvironment) return undefined;
+  return () => {
+    // A credential in the provider's variables takes the place of the saved key. Claude Code would
+    // send both, and the saved key would go to the gateway that the variables name.
+    const variables = context.providerEnvironment?.("claude") ?? {};
+    return "ANTHROPIC_API_KEY" in variables || "ANTHROPIC_AUTH_TOKEN" in variables ? null : context.apiKey("claude");
+  };
 }
 
 /** Nothing stored and no endpoint, for tests and for call sites that predate the credential store. */
@@ -640,12 +689,23 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
     },
     catalog: { paged: true, modelFields: codexFastServiceTier },
     resolveCli: resolveCodexCli,
-    createClient: (cli, requestTimeoutMs, context) =>
-      new CodexAppServerClient(cli.executable, requestTimeoutMs, {
-        ...cliPathEnvironment(cli),
-        ...context.serverEnvironment,
-        ...context.accountEnvironment,
-      }),
+    createClient: (cli, requestTimeoutMs, context) => {
+      // The variables go in the spawn environment: the app-server is one process for every agent.
+      // Codex leaves a name with KEY, SECRET or TOKEN out of the shells that its agents run.
+      const variables = context.providerEnvironment?.("codex") ?? {};
+      return new CodexAppServerClient(
+        cli.executable,
+        requestTimeoutMs,
+        {
+          ...cliPathEnvironment(cli),
+          ...context.serverEnvironment,
+          ...context.accountEnvironment,
+          // The host refuses `CODEX_HOME`, the account's folder.
+          ...variables,
+        },
+        codexVariableOverrides(variables),
+      );
+    },
     authState: (account) => ({ kind: "chatgpt", email: account?.email ?? null }),
     validateAccount: (account) => {
       if (account.type !== "chatgpt") {

@@ -702,6 +702,7 @@ function ServerSettings(props: { connectors: ConnectorRegistry }) {
           hostTimezone={{}}
           hostMemoryLimit={{}}
           hostPromptCacheTtl={{}}
+          providerEnvironment={{}}
           agentAccess={{ listAgents: () => appPort().agent.listAgents(server().id) }}
           workspaceSettings={{}}
           initialSection={serverSettingsSection()}

@@ -4111,6 +4111,22 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       );
   }
 
+  /** A setting of the providers changed: clients read the status, and with it the settings, again. */
+  notifyProviderSettingsChanged(): void {
+    this.#emit({ type: "status", status: this.getStatus() });
+  }
+
+  /** See `ProviderRuntime.spawnSettingsChanged`. */
+  providerSpawnSettingsChanged(provider: AgentProvider): Effect.Effect<AgentStatus, AgentLifecycleFailed> {
+    return this.#providers
+      .spawnSettingsChanged(provider)
+      .pipe(
+        Effect.mapError(
+          (failure) => new AgentLifecycleFailed({ operation: "providerSpawnSettingsChanged", cause: failure.cause }),
+        ),
+      );
+  }
+
   /**
    * Turns the pool of a provider's accounts on or off. The provider's agents move to the pool's
    * account before their next work.

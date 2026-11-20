@@ -401,6 +401,8 @@ const PREVIEW_BROWSERS: ExternalLinkBrowsers = {
 };
 
 const MOCK_MCP_TOOL_COUNTS: Record<string, number> = { "Local SQLite": 12, Linear: 1, Figma: 6 };
+/** The variables of each provider in the preview; a sensitive one keeps its value here, as a host keeps it encrypted. */
+const previewProviderVariables = new Map<string, { name: string; value: string; sensitive: boolean }[]>();
 /** The one address that asks for a sign-in until it has one, so the preview shows Save signing in. */
 const MOCK_MCP_SIGN_IN_URL = "https://mcp.granola.ai/mcp";
 
@@ -3086,6 +3088,34 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         if (!isPromptCacheTtl(ttl)) throw new Error("Prompt cache time is required.");
         promptCacheTtl = { ttl };
         return clone(promptCacheTtl);
+      },
+      // The preview keeps each provider's variables in memory; a sensitive value never comes back.
+      getProviderEnvironment: async (provider) => ({
+        provider,
+        variables: (previewProviderVariables.get(provider) ?? []).map((variable) => ({
+          name: variable.name,
+          value: variable.sensitive ? "" : variable.value,
+          sensitive: variable.sensitive,
+          stored: variable.sensitive,
+        })),
+      }),
+      setProviderEnvironment: async ({ provider, variables }) => {
+        const previous = previewProviderVariables.get(provider) ?? [];
+        const next = variables.map((variable) => ({
+          name: variable.name.trim(),
+          value: variable.value ?? previous.find((item) => item.name === variable.name.trim())?.value ?? "",
+          sensitive: variable.sensitive,
+        }));
+        previewProviderVariables.set(provider, next);
+        return {
+          provider,
+          variables: next.map((variable) => ({
+            name: variable.name,
+            value: variable.sensitive ? "" : variable.value,
+            sensitive: variable.sensitive,
+            stored: variable.sensitive,
+          })),
+        };
       },
       getWorkspaceSettings: async () => clone(workspaceSettings),
       setWorkspaceSettings: async (settings) => {

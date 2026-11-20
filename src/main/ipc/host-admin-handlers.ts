@@ -23,8 +23,13 @@ import {
   type HostUpdateStatus,
   hostAgentMemoryLimit,
   isPromptCacheTtl,
+  isProviderEnvironmentProvider,
   LOCAL_SERVER_ID,
+  PROVIDER_ENVIRONMENT_LIMITS,
   type PromptCacheTtl,
+  type ProviderEnvironmentProvider,
+  type ProviderEnvironmentUpdate,
+  type ProviderEnvironmentVariableInput,
   parseAgentAccessChange,
   type ServerSummary,
   UPDATE_RESTART_MODES,
@@ -47,6 +52,11 @@ import {
   PROMPT_CACHE_TTL_CAPABILITY,
   PROMPT_CACHE_TTL_ROUTES,
 } from "@openbot/contracts/team-protocol/prompt-cache-ttl-v1";
+import {
+  decodeProviderEnvironmentResponse,
+  PROVIDER_ENVIRONMENT_CAPABILITY,
+  PROVIDER_ENVIRONMENT_ROUTES,
+} from "@openbot/contracts/team-protocol/provider-environment-v1";
 import { WORKSPACE_CAPABILITY, WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { runCauseEffect } from "../../backend/effect-boundary";
@@ -54,6 +64,7 @@ import { type AgentAccessStore, agentAccessSnapshot } from "../agent-access-stor
 import type { AgentMemoryLimitSetting } from "../agent-memory-limit-preference-store";
 import type { HostService } from "../host-service";
 import type { PromptCacheTtlPreferenceStore } from "../prompt-cache-ttl-preference-store";
+import type { ProviderEnvironmentControl } from "../provider-environment-store";
 import { acceptEmpty, decodeHostReleaseStatusFromHost, type ResponseDecoder } from "../remote-host-decoding";
 import type { RemoteRequestInit } from "../remote-server-client";
 import { parseServerTimezone, type ServerTimezonePreferenceStore } from "../server-timezone-preference-store";
@@ -63,6 +74,7 @@ import type { IpcGroupHandlers } from "./define-ipc-group";
 import { scopedHandler, scopedQueryHandler } from "./scoped-handler";
 import { parseHostIdentity } from "./server-inputs";
 import { withLocalHostSummary } from "./team-handlers";
+import { isObject } from "./validation";
 
 interface HostAdminRemoteServers {
   list(): ServerSummary[];
@@ -83,6 +95,7 @@ interface HostAdminIpcDependencies {
   agentMemoryLimit: AgentMemoryLimitSetting;
   promptCacheTtl: Pick<PromptCacheTtlPreferenceStore, "get" | "set">;
   workspaceSettings: WorkspaceSettingsStore;
+  providerEnvironment: Pick<ProviderEnvironmentControl, "get" | "set">;
   agentAccess: Pick<AgentAccessStore, "levels" | "set">;
   /** The server ID of this computer's host, when it has one. Roles are stored by it. */
   localServerId: () => string | undefined;
@@ -102,6 +115,7 @@ export function hostAdminIpcHandlers({
   agentMemoryLimit,
   promptCacheTtl,
   workspaceSettings,
+  providerEnvironment,
   agentAccess,
   localServerId,
   localAgentIds,
@@ -139,6 +153,17 @@ export function hostAdminIpcHandlers({
     if (!remoteServers.supportsCapability(serverId, WORKSPACE_CAPABILITY))
       throw new Error(sourceText("error.team.workspaceUnsupported"));
     return runCauseEffect(remoteServers.request(serverId, route, decodeWorkspaceSettings, { method: "POST", body }));
+  }
+  function remoteProviderEnvironment(
+    serverId: string,
+    route: string,
+    body: ProviderEnvironmentUpdate | { provider: ProviderEnvironmentProvider },
+  ) {
+    if (!remoteServers.supportsCapability(serverId, PROVIDER_ENVIRONMENT_CAPABILITY))
+      throw new Error(sourceText("error.team.providerEnvironmentUnsupported"));
+    return runCauseEffect(
+      remoteServers.request(serverId, route, decodeProviderEnvironmentResponse, { method: "POST", body }),
+    );
   }
   function localAccessServerId(): string {
     const serverId = localServerId();
@@ -261,6 +286,15 @@ export function hostAdminIpcHandlers({
           runCauseEffect(workspaceSettings.set(withKeptAgentChannelDefaults(workspaceSettings.get(), settings))),
         remote: (settings, serverId) => remoteWorkspaceSettings(serverId, WORKSPACE_ROUTES.settingsUpdate, settings),
       }),
+      getProviderEnvironment: scopedHandler(parseProviderEnvironmentProvider, {
+        local: (provider) => providerEnvironment.get(provider),
+        remote: (provider, serverId) =>
+          remoteProviderEnvironment(serverId, PROVIDER_ENVIRONMENT_ROUTES.settings, { provider }),
+      }),
+      setProviderEnvironment: scopedHandler(parseProviderEnvironmentUpdate, {
+        local: (update) => runCauseEffect(providerEnvironment.set(update)),
+        remote: (update, serverId) => remoteProviderEnvironment(serverId, PROVIDER_ENVIRONMENT_ROUTES.update, update),
+      }),
       getAgentAccess: scopedQueryHandler({
         local: () => {
           const serverId = localAccessServerId();
@@ -299,6 +333,33 @@ function wireIdentity(input: UpdateHostIdentityInput) {
   };
 }
 
+function parseProviderEnvironmentProvider(value: unknown): ProviderEnvironmentProvider {
+  if (!isProviderEnvironmentProvider(value)) throw new Error("A provider with variables is required.");
+  return value;
+}
+
+/** The renderer's change. A value can be a secret: no error here quotes one. */
+function parseProviderEnvironmentUpdate(value: unknown): ProviderEnvironmentUpdate {
+  if (
+    !isObject(value) ||
+    !Array.isArray(value.variables) ||
+    value.variables.length > PROVIDER_ENVIRONMENT_LIMITS.variables
+  )
+    throw new Error("Invalid provider variables.");
+  const provider = parseProviderEnvironmentProvider(value.provider);
+  const variables: ProviderEnvironmentVariableInput[] = value.variables.map((item: unknown) => {
+    if (
+      !isObject(item) ||
+      typeof item.name !== "string" ||
+      item.name.length > PROVIDER_ENVIRONMENT_LIMITS.name ||
+      typeof item.sensitive !== "boolean" ||
+      (item.value !== null && (typeof item.value !== "string" || item.value.length > PROVIDER_ENVIRONMENT_LIMITS.value))
+    )
+      throw new Error("Invalid provider variables.");
+    return { name: item.name, value: item.value, sensitive: item.sensitive };
+  });
+  return { provider, variables };
+}
 function parsePromptCacheTtl(value: unknown): PromptCacheTtl {
   if (!isPromptCacheTtl(value)) throw new Error("Prompt cache time is required.");
   return value;

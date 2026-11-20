@@ -95,6 +95,7 @@ export const messages = defineMessages("error.team", {
   "error.team.promptCacheTtlUnsupported": "The prompt cache time is not supported by this connection.",
   "error.team.workspaceUnsupported": "Workspace channels are not supported by this connection.",
   "error.team.workspaceThumbnailNotFound": "The image of this artifact is not available.",
+  "error.team.providerEnvironmentUnsupported": "This connection does not support provider variables.",
   "error.team.agentAccessUnsupported": "Roles are not supported by this connection.",
   "error.team.agentAccessStale": "Someone changed the roles. Open them again and make your change.",
   "error.team.agentViewOnly": "You can only view this agent.",

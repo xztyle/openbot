@@ -69,12 +69,20 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
 
   /** Added to the inherited environment, such as the `CODEX_HOME` of an account after the first. */
   readonly #extraEnv: Readonly<Record<string, string>> | undefined;
+  readonly #configOverrides: readonly string[];
 
-  constructor(executable: string, requestTimeoutMs = 30_000, extraEnv?: Readonly<Record<string, string>>) {
+  constructor(
+    executable: string,
+    requestTimeoutMs = 30_000,
+    extraEnv?: Readonly<Record<string, string>>,
+    /** `key=value` config overrides, each given to the app-server as one `-c`. */
+    configOverrides: readonly string[] = [],
+  ) {
     super();
     this.#executable = executable;
     this.#requestTimeoutMs = requestTimeoutMs;
     this.#extraEnv = extraEnv;
+    this.#configOverrides = configOverrides;
   }
 
   get running(): boolean {
@@ -86,7 +94,12 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
 
     this.#stopping = false;
     this.#decoder = new JsonLineDecoder();
-    const target = cliSpawnTarget(this.#executable, ["app-server", "--listen", "stdio://"]);
+    const target = cliSpawnTarget(this.#executable, [
+      "app-server",
+      ...this.#configOverrides.flatMap((override) => ["-c", override]),
+      "--listen",
+      "stdio://",
+    ]);
     const child = spawn(target.command, target.args, {
       stdio: ["pipe", "pipe", "pipe"],
       env: this.#extraEnv ? { ...process.env, ...this.#extraEnv } : process.env,

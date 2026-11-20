@@ -389,6 +389,11 @@ import type {
   ProviderDetectionSettings,
 } from "./ipc-provider-detection";
 import type {
+  ProviderEnvironment,
+  ProviderEnvironmentProvider,
+  ProviderEnvironmentUpdate,
+} from "./ipc-provider-environment";
+import type {
   AcknowledgeFailedTurnInput,
   BusyMessageModePreference,
   CancelQueuedMessageInput,
@@ -1173,6 +1178,14 @@ export const IPC_ENDPOINTS = {
     getWorkspaceSettings: scopedQuery<WorkspaceSettings, "required">()("host-admin:get-workspace-settings"),
     setWorkspaceSettings: scopedRequest<WorkspaceSettings, WorkspaceSettings, "required">()(
       "host-admin:set-workspace-settings",
+    ),
+    // The environment variables that each process of one provider of the server starts with
+    // (`provider-environment-v1`). A sensitive value goes to the host only. An owner or admin sets them.
+    getProviderEnvironment: scopedRequest<ProviderEnvironmentProvider, ProviderEnvironment, "required">()(
+      "host-admin:get-provider-environment",
+    ),
+    setProviderEnvironment: scopedRequest<ProviderEnvironmentUpdate, ProviderEnvironment, "required">()(
+      "host-admin:set-provider-environment",
     ),
     // The roles of the server and the level each gives for each agent. A member reads only `mine`.
     getAgentAccess: scopedQuery<AgentAccessSnapshot, "required">()("host-admin:get-agent-access"),

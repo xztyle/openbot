@@ -16,6 +16,9 @@ import {
   isDiscordChannelList,
   isDiscordRoleList,
   isHiddenAgentsSnapshot,
+  type ProviderEnvironment,
+  type ProviderEnvironmentProvider,
+  type ProviderEnvironmentUpdate,
   type ResetAgentSessionSettingInput,
   type SetAgentHiddenInput,
   type SetAgentSessionSettingInput,
@@ -31,6 +34,10 @@ import { HOST_MEMBER_UPDATE_ROUTES } from "@openbot/contracts/team-protocol/host
 import { HOST_RELEASE_ROUTES } from "@openbot/contracts/team-protocol/host-release-v1";
 import { HOST_TIMEZONE_ROUTES } from "@openbot/contracts/team-protocol/host-timezone-v1";
 import { PROMPT_CACHE_TTL_ROUTES } from "@openbot/contracts/team-protocol/prompt-cache-ttl-v1";
+import {
+  decodeProviderEnvironmentResponse,
+  PROVIDER_ENVIRONMENT_ROUTES,
+} from "@openbot/contracts/team-protocol/provider-environment-v1";
 import type { PROVIDERS_V5_ROUTES } from "@openbot/contracts/team-protocol/providers-v5";
 import { PROVIDERS_V8_ROUTES } from "@openbot/contracts/team-protocol/providers-v8";
 // Admin requests to one host: agent settings and skills, shared tables, agent share links, the server name and logo,
@@ -614,6 +621,28 @@ export function setHostPromptCacheTtl(
   return adminCall(() => request("POST", PROMPT_CACHE_TTL_ROUTES.update, decodePromptCacheTtlSetting, { ttl }));
 }
 
+/** `provider-environment-v1`: the variables of one provider of the host. A sensitive value has an empty `value`. */
+export function getHostProviderEnvironment(
+  request: TeamApiRequest,
+  provider: ProviderEnvironmentProvider,
+): Effect.Effect<ProviderEnvironment, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", PROVIDER_ENVIRONMENT_ROUTES.settings, decodeProviderEnvironmentResponse, { provider }),
+  );
+}
+
+/** `provider-environment-v1`: replaces the variables of one provider. `value: null` keeps a stored sensitive value. */
+export function setHostProviderEnvironment(
+  request: TeamApiRequest,
+  update: ProviderEnvironmentUpdate,
+): Effect.Effect<ProviderEnvironment, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", PROVIDER_ENVIRONMENT_ROUTES.update, decodeProviderEnvironmentResponse, {
+      provider: update.provider,
+      variables: update.variables.map(({ name, value, sensitive }) => ({ name, value, sensitive })),
+    }),
+  );
+}
 /** The one MCP read route, and the only one the host answers to a GET. */
 export function listMcpServers(request: TeamApiRequest): Effect.Effect<McpServerConfig[], TeamAdminRequestError> {
   return adminCall(() => request("GET", MCP_ROUTES.list, decodeMcpServerConfigs));

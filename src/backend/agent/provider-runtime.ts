@@ -2401,6 +2401,19 @@ export class ProviderRuntime implements ProviderPort {
     return this.status();
   }).bind(this);
 
+  /**
+   * A setting that each process of the provider reads at its start changed, such as the provider's
+   * environment variables. The shared process restarts when its turns end, as for
+   * `restartProviderWhenIdle`, and an agent's own process, such as one of an account after the first,
+   * starts again before the agent's next turn.
+   */
+  readonly spawnSettingsChanged = Effect.fn("ProviderRuntime.spawnSettingsChanged")(function* (
+    this: ProviderRuntime,
+    provider: AgentProvider,
+  ) {
+    this.#countActivation(provider);
+    return yield* this.restartProviderWhenIdle(provider);
+  }).bind(this);
   /** Removes a restart that still waits for turns to end. One that already runs goes on. */
   cancelProviderRestart(provider: AgentProvider): AgentStatus {
     const timer = this.#restartsWhenIdle.get(provider);

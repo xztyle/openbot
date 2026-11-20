@@ -788,6 +788,8 @@
   .settings-modal-row.ui-item {
     align-items: flex-start;
     flex-direction: column;
+    /* A row that wraps (the sound cards) would start a new column to the right, off the screen. */
+    flex-wrap: nowrap;
   }
 
   .settings-modal-row .ui-item-actions,

@@ -1,12 +1,9 @@
-import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   type AgentEvent,
   type AgentSummary,
   agentProviderDescriptor,
   type BrowserControlState,
   type BrowserTab,
-  CONVERSATION_MEMORY_CHANGE_LIMIT,
-  CONVERSATION_MEMORY_CHANGES_ITEM_TYPE,
   CONVERSATION_PLAN_ITEM_TYPE,
   CONVERSATION_SUBAGENTS_ITEM_TYPE,
   type ConversationMemoryChange,
@@ -18,7 +15,6 @@ import {
   clampConversationSubagents,
   conversationPlanText,
   conversationSubagentsText,
-  countConversationMemoryChanges,
   isAgentContextCategories,
   latestTurnAnswer,
 } from "@openbot/contracts/ipc";
@@ -59,6 +55,7 @@ import { readCapturedSteps } from "./handoff-tool-steps";
 import type { ImageGenRuntime } from "./image-gen-runtime";
 import { markIncompleteImageGeneration } from "./image-generation";
 import type { MailboxSync } from "./mailbox-sync";
+import { memoryChangesMessage } from "./memory-changes-message";
 import { PLAN_UPDATED_METHOD, planFromNotification } from "./plan-updates";
 import { isBalanceDiagnostic, isPlanLimitDiagnostic, isUsageLimitDiagnostic } from "./provider-diagnostics";
 import type { ProviderRuntime } from "./provider-runtime";
@@ -174,6 +171,8 @@ export interface TurnHooks {
   closeRoutineSession(externalThreadId: string): Effect.Effect<void>;
   /** Gives the answer of a routine run in its own session to the session of the agent's chat. */
   routineAnswered(agentId: string, deliveryId: string, answer: string): Effect.Effect<void>;
+  /** A turn of the agent's own chat ended: the background memory review counts it. */
+  conversationTurnEnded?(agentId: string, turn: { counts: boolean; person: boolean }): Effect.Effect<void>;
 }
 
 export interface TurnLifecycleOptions {
@@ -1166,6 +1165,12 @@ export class TurnLifecycle {
           ? { agentTalk: true as const }
           : {}),
       });
+      if (!channelTurn && !taskTurn && !routineSession && this.#hooks.conversationTurnEnded)
+        yield* this.#hooks.conversationTurnEnded(agentId, {
+          counts:
+            outcome === "completed" && !quiet && deliveries.every(({ delivery }) => delivery.sender.kind !== "routine"),
+          person: outcome === "completed" && deliveries.some(({ delivery }) => delivery.sender.kind === "user"),
+        });
       if (shouldCompact) yield* this.#compaction.request(agentId, threadId);
       else this.#hooks.scheduleDrain(agentId);
     },
@@ -1615,25 +1620,8 @@ function addMemoryChangesMessage(
   changes: readonly ConversationMemoryChange[],
   redact: (text: string) => string,
 ): void {
-  if (changes.length === 0) return;
-  const memoryChanges = changes.slice(0, CONVERSATION_MEMORY_CHANGE_LIMIT).map((change) => ({
-    ...change,
-    text: redact(change.text).slice(0, INPUT_LIMITS.agentMemoryText),
-    ...(change.previousText === undefined
-      ? {}
-      : { previousText: redact(change.previousText).slice(0, INPUT_LIMITS.agentMemoryText) }),
-  }));
-  snapshot.messages.push({
-    id: `${turnId}:memory-changes`,
-    turnId,
-    author: "system",
-    source: "system",
-    status: "completed",
-    createdAt: new Date().toISOString(),
-    itemType: CONVERSATION_MEMORY_CHANGES_ITEM_TYPE,
-    text: sourceText("status.agent.memoryChanges", countConversationMemoryChanges(memoryChanges)),
-    memoryChanges,
-  });
+  const message = memoryChangesMessage(turnId, changes, redact);
+  if (message) snapshot.messages.push(message);
 }
 
 /** Which subagents a list holds and the state of each, without their steps. */

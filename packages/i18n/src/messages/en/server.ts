@@ -266,6 +266,23 @@ export const messages = defineMessages("server", {
   "server.settings.workspaceGateTimeoutDescription":
     "When the check takes longer, the agent answers only when mentioned.",
   "server.settings.workspaceGateSeconds": "{seconds} s",
+  "server.settings.learning": "Learning",
+  "server.settings.learningDescription":
+    "Agents review their own chats in the background and keep what they learn. A review uses the provider's smaller model and starts only after a person wrote in the chat, so idle agents and talk between agents cost nothing.",
+  "server.settings.memoryReview": "Memory review",
+  "server.settings.memoryReviewHint":
+    "Reviews start after this many turns of an agent's own chat, or after a 30-minute pause. Each agent at most once in 3 hours.",
+  "server.settings.memoryReviewOff": "Off",
+  "server.settings.memoryReviewEvery": "Every {turns} turns",
+  "server.settings.skillLearning": "Skill learning",
+  "server.settings.skillLearningHint":
+    "Automatic: when a review finds a lesson, the agent saves it as a skill or revises one of its skills.",
+  "server.settings.skillLearningOff": "Off",
+  "server.settings.skillLearningAutomatic": "Automatic",
+  "server.settings.dailyReviewLimit": "Reviews per day",
+  "server.settings.dailyReviewLimitHint":
+    "The most reviews of all agents in one day. Each one reads about 10,000 tokens on the smaller model.",
+  "server.settings.dailyReviewLimitValue": "{count} a day",
   "server.settings.routinesTitle": "Routines",
   "server.settings.routinesDescription": "Show the routine schedule of this computer in a calendar app.",
   "server.routineFeed.title": "Calendar feed",

@@ -19,6 +19,11 @@ export class ProfileClients {
     return this.#clients.size >= PROFILE_CLIENT_LIMIT;
   }
 
+  /** Whether a background generation may start: it leaves the last place to a person's request. */
+  hasSpare(): boolean {
+    return this.#clients.size < PROFILE_CLIENT_LIMIT - 1;
+  }
+
   usesProvider(provider: AgentClient["provider"]): boolean {
     return [...this.#clients.keys()].some((client) => client.provider === provider);
   }

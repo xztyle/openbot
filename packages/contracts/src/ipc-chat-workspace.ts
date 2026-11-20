@@ -532,6 +532,47 @@ export interface WorkspaceSettings {
    * that does not know the field; the host then keeps the list it has.
    */
   handsOffChannelIds?: string[];
+  /**
+   * How the agents learn in the background from their own chats. Absent from a client or a host that
+   * does not know the field; the host then keeps what it has, and reads the defaults.
+   */
+  learning?: WorkspaceLearningSettings;
+}
+
+/** How many counted turns of an agent's own chat start a memory review. 0 turns the reviews off. */
+export const MEMORY_REVIEW_INTERVALS = [0, 20, 40, 80] as const;
+export type MemoryReviewInterval = (typeof MEMORY_REVIEW_INTERVALS)[number];
+/** Off: the review keeps memories only. Automatic: it also saves or revises a skill when the chat shows a lesson. */
+export const SKILL_LEARNING_MODES = ["off", "automatic"] as const;
+export type SkillLearningMode = (typeof SKILL_LEARNING_MODES)[number];
+/** The most memory reviews of the whole server in one day (UTC). */
+export const MEMORY_REVIEW_DAILY_LIMITS = { minimum: 1, maximum: 500 } as const;
+
+/**
+ * The background learning of the agents. A review reads the new part of an agent's own chat on the
+ * provider's smaller model, and only after a person wrote in it: an agent that only talks to other
+ * agents, or that is idle, costs nothing.
+ */
+export interface WorkspaceLearningSettings {
+  memoryReviewTurns: MemoryReviewInterval;
+  skillLearning: SkillLearningMode;
+  /** The most reviews of the server in one day. A review past it waits for the next day. */
+  dailyReviewLimit: number;
+}
+
+export const DEFAULT_WORKSPACE_LEARNING: WorkspaceLearningSettings = {
+  memoryReviewTurns: 40,
+  skillLearning: "automatic",
+  dailyReviewLimit: 40,
+};
+
+function isWorkspaceLearning(value: unknown): value is WorkspaceLearningSettings {
+  return (
+    isDynamicRecord(value) &&
+    MEMORY_REVIEW_INTERVALS.some((interval) => interval === value.memoryReviewTurns) &&
+    SKILL_LEARNING_MODES.some((mode) => mode === value.skillLearning) &&
+    integerInRange(value.dailyReviewLimit, MEMORY_REVIEW_DAILY_LIMITS.minimum, MEMORY_REVIEW_DAILY_LIMITS.maximum)
+  );
 }
 
 /** The most channels in hands-off mode. */
@@ -572,7 +613,8 @@ export function isWorkspaceSettings(value: unknown): value is WorkspaceSettings 
     (value.handsOffChannelIds === undefined ||
       (Array.isArray(value.handsOffChannelIds) &&
         value.handsOffChannelIds.length <= WORKSPACE_HANDS_OFF_LIMIT &&
-        value.handsOffChannelIds.every(isIdentifier)))
+        value.handsOffChannelIds.every(isIdentifier))) &&
+    (value.learning === undefined || isWorkspaceLearning(value.learning))
   );
 }
 
@@ -591,6 +633,15 @@ export function decodeWorkspaceSettings(value: unknown): WorkspaceSettings {
       ...(value.defaults.agents === undefined ? {} : { agents: decodeAgentChannelDefaults(value.defaults.agents) }),
     },
     ...(value.handsOffChannelIds === undefined ? {} : { handsOffChannelIds: [...new Set(value.handsOffChannelIds)] }),
+    ...(value.learning === undefined
+      ? {}
+      : {
+          learning: {
+            memoryReviewTurns: value.learning.memoryReviewTurns,
+            skillLearning: value.learning.skillLearning,
+            dailyReviewLimit: value.learning.dailyReviewLimit,
+          },
+        }),
   };
 }
 
@@ -621,9 +672,14 @@ export function withKeptAgentChannelDefaults(current: WorkspaceSettings, next: W
       ? next
       : { ...next, defaults: { ...next.defaults, agents: current.defaults.agents } };
   // The hands-off channels stay too when the body comes from a client that does not know them.
-  return keptAgents.handsOffChannelIds !== undefined || current.handsOffChannelIds === undefined
-    ? keptAgents
-    : { ...keptAgents, handsOffChannelIds: current.handsOffChannelIds };
+  const keptHandsOff =
+    keptAgents.handsOffChannelIds !== undefined || current.handsOffChannelIds === undefined
+      ? keptAgents
+      : { ...keptAgents, handsOffChannelIds: current.handsOffChannelIds };
+  // And the learning settings.
+  return keptHandsOff.learning !== undefined || current.learning === undefined
+    ? keptHandsOff
+    : { ...keptHandsOff, learning: current.learning };
 }
 
 export const CHANNEL_TYPING_STATES = ["typing", "thinking", "working"] as const;

@@ -412,5 +412,6 @@ export function workspaceSettingsBody(settings: WorkspaceSettings) {
           }),
     },
     ...(settings.handsOffChannelIds === undefined ? {} : { handsOffChannelIds: [...settings.handsOffChannelIds] }),
+    ...(settings.learning === undefined ? {} : { learning: { ...settings.learning } }),
   };
 }

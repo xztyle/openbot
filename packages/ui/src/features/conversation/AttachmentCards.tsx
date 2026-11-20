@@ -19,6 +19,17 @@ export interface AttachmentMediaSource {
   thumbnailLimit: number;
   /** Audio or video up to this size loads on a click. Above it, the card offers only the download. */
   mediaLimit: number;
+  /**
+   * Whether an image shows inline in its message, from a small copy that `load` reads. Absent: the
+   * image shows as a card.
+   */
+  inlineImage?(attachment: AttachmentSummary): boolean;
+  /** Whether `load` failed for an attachment. Reactive. */
+  failed?(attachmentId: string): boolean;
+  /** The full-size image for the viewer, once `loadFull` has read it. Reactive. */
+  fullUrl?(attachmentId: string): string | undefined;
+  /** Reads the full-size image for the viewer. Resolves false when it cannot. */
+  loadFull?(attachment: AttachmentSummary): Promise<boolean>;
 }
 
 export function AttachmentCards(props: {

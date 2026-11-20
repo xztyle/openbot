@@ -1156,7 +1156,7 @@ button.chat-action-target:active,
 
 .image-generation-stage {
   position: relative;
-  width: min(100%, 420px);
+  width: min(100%, 420px, var(--image-generation-height-width, 420px));
   overflow: hidden;
   aspect-ratio: var(--image-generation-ratio);
   border-radius: var(--openbot-radius-lg);

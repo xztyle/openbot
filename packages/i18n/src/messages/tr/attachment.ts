@@ -3,6 +3,8 @@ import type { messages as source } from "../en/attachment";
 
 export const messages = {
   "attachment.openFile": "Dosyayı aç",
+  "attachment.opening": "{name} açılıyor…",
+  "attachment.downloading": "{name} indiriliyor…",
   "attachment.preview": "{name} dosyasını önizle",
   "attachment.notFound": "Dosya bulunamadı",
   "attachment.download": "{name} dosyasını indir",

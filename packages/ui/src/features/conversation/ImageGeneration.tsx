@@ -14,6 +14,8 @@ export interface ImageGenerationProps {
   aspectRatio: ImageGenerationAspectRatio;
   attachment?: AttachmentSummary | undefined;
   error?: string | undefined;
+  /** An attached image whose copy a browser client is still reading. Its frame waits, with no error. */
+  loading?: boolean | undefined;
   /** `origin` is the clicked image, for a viewer that zooms out of it. */
   onPreview?: (attachment: AttachmentSummary, origin: HTMLElement) => void;
   onDownload?: ((attachment: AttachmentSummary) => void) | undefined;
@@ -23,15 +25,18 @@ export function ImageGeneration(props: ImageGenerationProps) {
   const { t, errorMessage } = useText();
   const [previewError, setPreviewError] = createSignal(false);
   const [imageRatio, setImageRatio] = createSignal<string | null>(null);
+  const [imageAspect, setImageAspect] = createSignal<number | null>(null);
   createEffect(
     () => `${props.attachment?.id ?? ""}:${props.attachment?.previewUrl ?? ""}`,
     () => {
       setPreviewError(false);
       setImageRatio(null);
+      setImageAspect(null);
     },
   );
 
-  const previewUnavailable = () => props.status === "completed" && !props.attachment?.previewUrl;
+  const previewUnavailable = () => props.status === "completed" && !props.attachment?.previewUrl && !props.loading;
+  const waiting = () => props.status === "generating" || (props.loading === true && !props.attachment?.previewUrl);
   const isAttachment = () => props.presentation === "attachment";
   const hasImage = () => props.status === "completed" && Boolean(props.attachment?.previewUrl) && !previewError();
   const hasFailure = () =>
@@ -47,6 +52,7 @@ export function ImageGeneration(props: ImageGenerationProps) {
         );
   const label = () => {
     if (props.status === "generating") return t("chat.image.generating");
+    if (waiting()) return t("chat.image.loading");
     if (previewError() || previewUnavailable()) return t("chat.image.unavailable");
     if (props.status === "interrupted") return t("chat.image.interrupted");
     if (props.status === "failed") return t("chat.image.failed");
@@ -74,7 +80,15 @@ export function ImageGeneration(props: ImageGenerationProps) {
       aria-label={hasImage() ? label() : isAttachment() ? t("chat.image.attachment") : t("chat.image.generation")}
       aria-live={props.status === "generating" ? "polite" : undefined}
     >
-      <div class="image-generation-stage" style={`--image-generation-ratio: ${stageRatio()}`}>
+      <div
+        class="image-generation-stage"
+        style={`--image-generation-ratio: ${stageRatio()}${
+          // An attached image keeps its height in a chat row, as Slack's: a tall screenshot gets narrower.
+          isAttachment() && hasImage() && imageAspect()
+            ? `; --image-generation-height-width: ${Math.round(360 * (imageAspect() ?? 1))}px`
+            : ""
+        }`}
+      >
         <div
           class={[
             "image-generation-canvas",
@@ -86,7 +100,7 @@ export function ImageGeneration(props: ImageGenerationProps) {
           role="img"
           aria-label={hasImage() ? undefined : label()}
           aria-hidden={hasImage() ? "true" : undefined}
-          aria-busy={props.status === "generating" ? "true" : undefined}
+          aria-busy={waiting() ? "true" : undefined}
         >
           <Show
             when={!hasFailure()}
@@ -121,7 +135,10 @@ export function ImageGeneration(props: ImageGenerationProps) {
               decoding="async"
               onLoad={(event) => {
                 const { naturalHeight, naturalWidth } = event.currentTarget;
-                if (naturalWidth > 0 && naturalHeight > 0) setImageRatio(`${naturalWidth} / ${naturalHeight}`);
+                if (naturalWidth > 0 && naturalHeight > 0) {
+                  setImageRatio(`${naturalWidth} / ${naturalHeight}`);
+                  setImageAspect(naturalWidth / naturalHeight);
+                }
               }}
               onError={() => setPreviewError(true)}
             />
@@ -144,7 +161,7 @@ export function ImageGeneration(props: ImageGenerationProps) {
           </Button>
         </Show>
       </div>
-      <Show when={!hasImage()}>
+      <Show when={!hasImage() && !(isAttachment() && waiting())}>
         <div class="image-generation-meta">
           <span class="image-generation-label">{label()}</span>
           <Show when={props.prompt}>

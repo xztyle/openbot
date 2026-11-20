@@ -1,5 +1,5 @@
 import type { AttachmentSummary } from "@openbot/contracts/ipc";
-import { Button, ChevronLeft, ChevronRight, Dialog, Spinner, X } from "@openbot/ui";
+import { Button, ChevronLeft, ChevronRight, Dialog, ExternalLink, Spinner, X } from "@openbot/ui";
 import { prefersReducedMotion } from "@openbot/ui/utils";
 import { createMemo, createSignal, createStore, For, onCleanup, onSettled, Show, untrack } from "solid-js";
 import { useText } from "../../text";
@@ -20,6 +20,16 @@ import {
 } from "./lightbox-motion";
 import { type Camera, DOUBLE_CLICK_ZOOM, MAX_SCALE, WHEEL_ZOOM_RATE, ZOOM_STEP, ZoomControls } from "./ZoomControls";
 
+/** The originals of the images in the viewer, read when an image shows. */
+export interface ImageLightboxOriginals {
+  /** The best URL there is now: the original, else the small copy. Reactive. */
+  url(attachment: AttachmentSummary): string | undefined;
+  /** Whether the original is here. Reactive. */
+  done(attachment: AttachmentSummary): boolean;
+  /** Reads the original. Resolves false when it cannot. */
+  load(attachment: AttachmentSummary): Promise<boolean>;
+}
+
 /** The images that the viewer steps through, the one it opens on, and the thumbnail it grows from. */
 export interface ImageLightboxOpening {
   images: AttachmentSummary[];
@@ -38,6 +48,8 @@ const GALLERY_GAP = 6;
 const GALLERY_MIN_RATIO = 0.5;
 const GALLERY_MAX_RATIO = 3;
 const SWIPE_DISTANCE = 48;
+/** A drag down this far on a touch screen closes the viewer, as in a phone's photo viewer. */
+const DISMISS_DISTANCE = 96;
 /** A drag of a zoomed image that moves this far is not a click, so it does not close the viewer. */
 const DRAG_DISTANCE = 4;
 
@@ -133,31 +145,34 @@ export function ImageGallery(props: {
                       <Spinner />
                     </span>
                   </Show>
-                  <img
-                    src={image.previewUrl ?? ""}
-                    alt=""
-                    decoding="async"
-                    draggable={false}
-                    onLoad={(event) => {
-                      setLoaded((state) => {
-                        state[key()] = true;
-                      });
-                      const { naturalHeight, naturalWidth } = event.currentTarget;
-                      if (naturalWidth <= 0 || naturalHeight <= 0) return;
-                      const ratio = Math.min(
-                        GALLERY_MAX_RATIO,
-                        Math.max(GALLERY_MIN_RATIO, naturalWidth / naturalHeight),
-                      );
-                      setRatios((state) => {
-                        state[image.id] = ratio;
-                      });
-                    }}
-                    onError={() =>
-                      setMissing((state) => {
-                        state[key()] = true;
-                      })
-                    }
-                  />
+                  {/* A browser client reads the image first: the tile waits with its spinner. */}
+                  <Show when={image.previewUrl}>
+                    <img
+                      src={image.previewUrl ?? ""}
+                      alt=""
+                      decoding="async"
+                      draggable={false}
+                      onLoad={(event) => {
+                        setLoaded((state) => {
+                          state[key()] = true;
+                        });
+                        const { naturalHeight, naturalWidth } = event.currentTarget;
+                        if (naturalWidth <= 0 || naturalHeight <= 0) return;
+                        const ratio = Math.min(
+                          GALLERY_MAX_RATIO,
+                          Math.max(GALLERY_MIN_RATIO, naturalWidth / naturalHeight),
+                        );
+                        setRatios((state) => {
+                          state[image.id] = ratio;
+                        });
+                      }}
+                      onError={() =>
+                        setMissing((state) => {
+                          state[key()] = true;
+                        })
+                      }
+                    />
+                  </Show>
                 </Show>
               </Button>
             </li>
@@ -219,7 +234,14 @@ export function ImageLightbox(props: {
   opening: ImageLightboxOpening;
   /** Finds the thumbnail of an image, so the viewer closes back into the one it shows. */
   thumbnail?: (attachment: AttachmentSummary) => HTMLElement | undefined;
+  /**
+   * The originals of images that show from a small copy, as in the browser client. The viewer shows
+   * the copy at once and the original when it is read. Reactive.
+   */
+  full?: ImageLightboxOriginals | undefined;
   onDownload?: ((attachment: AttachmentSummary) => void) | undefined;
+  /** Opens the original in a browser tab, once the viewer has read it. */
+  onOpenInNewTab?: ((attachment: AttachmentSummary) => void) | undefined;
   onClose: () => void;
 }) {
   const { t } = useText();
@@ -237,7 +259,37 @@ export function ImageLightbox(props: {
   const [closing, setClosing] = createSignal(false);
   const [loaded, setLoaded] = createStore<Record<string, boolean>>({});
   const [failed, setFailed] = createStore<Record<string, boolean>>({});
+  /** Originals that could not be read: the copy stays, and no spinner waits for them. */
+  const [originalFailed, setOriginalFailed] = createStore<Record<string, boolean>>({});
+  const requested = new Set<string>();
   const images = () => props.opening.images;
+  /** The URL that a slide shows: the original once it is here, else the image's own URL. */
+  const imageUrl = (entry: AttachmentSummary) => props.full?.url(entry) ?? entry.previewUrl ?? undefined;
+  const readOriginal = (entry: AttachmentSummary) => {
+    const full = props.full;
+    if (!full || requested.has(entry.id)) return;
+    requested.add(entry.id);
+    void full.load(entry).then(
+      (read) => {
+        if (!read)
+          setOriginalFailed((state) => {
+            state[entry.id] = true;
+          });
+      },
+      () =>
+        setOriginalFailed((state) => {
+          state[entry.id] = true;
+        }),
+    );
+  };
+  const originalHere = () => {
+    const shown = current();
+    return Boolean(shown && props.full?.done(shown));
+  };
+  const originalPending = () => {
+    const shown = current();
+    return Boolean(props.full && shown && !props.full.done(shown) && !originalFailed[shown.id]);
+  };
   const current = createMemo(() => images()[Math.min(index(), images().length - 1)]);
   const imageElements = new Map<string, HTMLImageElement>();
   const tiles = createTileMotion();
@@ -441,10 +493,12 @@ export function ImageLightbox(props: {
   };
 
   const reveal = (shown: AttachmentSummary, element: HTMLImageElement) => {
+    // The original replaces the copy under the same zoom; a first load fits the image.
+    const replaced = loaded[shown.id] === true;
     setLoaded((state) => {
       state[shown.id] = true;
     });
-    if (shown.id === current()?.id) move(FIT);
+    if (shown.id === current()?.id) move(replaced ? camera : FIT);
     if (opened || shown.id !== current()?.id) return;
     opened = true;
     if (!motion) return;
@@ -495,6 +549,13 @@ export function ImageLightbox(props: {
           SLIDE,
         )
       : track.animate(FADE_KEYFRAMES, IMAGE_FADE_IN);
+  };
+
+  /** Moves the shown image down by `distance` and fades the backdrop with it. */
+  const dismissDrag = (distance: number) => {
+    if (!track || !overlay) return;
+    track.style.translate = distance ? `0 ${distance}px` : "";
+    overlay.style.opacity = distance ? String(Math.max(0.3, 1 - distance / (DISMISS_DISTANCE * 4))) : "";
   };
 
   const step = (offset: number) => {
@@ -556,17 +617,34 @@ export function ImageLightbox(props: {
                 ? undefined
                 : { x: event.clientX, y: event.clientY };
           }}
+          onPointerMove={(event: PointerEvent) => {
+            const start = swipeStart;
+            if (!start || pointers.size > 1 || zoomed()) return;
+            // A drag down moves the image with the finger and fades the backdrop: a release far
+            // enough closes the viewer.
+            const y = Math.max(0, event.clientY - start.y);
+            if (y < Math.abs(event.clientX - start.x)) return dismissDrag(0);
+            dismissDrag(y);
+          }}
           onPointerUp={(event: PointerEvent) => {
             const start = swipeStart;
             swipeStart = undefined;
             if (!start) return;
             const x = event.clientX - start.x;
-            if (Math.abs(x) < SWIPE_DISTANCE || Math.abs(x) < Math.abs(event.clientY - start.y)) return;
+            const y = event.clientY - start.y;
+            if (y > DISMISS_DISTANCE && y > Math.abs(x)) {
+              swiped = true;
+              close();
+              return;
+            }
+            dismissDrag(0);
+            if (Math.abs(x) < SWIPE_DISTANCE || Math.abs(x) < Math.abs(y)) return;
             swiped = true;
             step(x < 0 ? 1 : -1);
           }}
           onPointerCancel={() => {
             swipeStart = undefined;
+            dismissDrag(0);
           }}
           onClick={(event: MouseEvent) => {
             // A click anywhere but the image or a control closes the viewer, as a click beside a
@@ -609,6 +687,28 @@ export function ImageLightbox(props: {
                 onFit={() => move(FIT, true)}
                 onZoomIn={() => zoomBy(ZOOM_STEP)}
               />
+              <Show when={originalPending() && loaded[current()?.id ?? ""]}>
+                <span class="image-lightbox-progress" role="status" title={t("chat.image.loadingOriginal")}>
+                  <Spinner />
+                  <span class="sr-only">{t("chat.image.loadingOriginal")}</span>
+                </span>
+              </Show>
+              <Show when={props.onOpenInNewTab && originalHere()}>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  type="button"
+                  class="image-lightbox-action"
+                  aria-label={t("chat.image.lightbox.openInNewTab")}
+                  title={t("chat.image.lightbox.openInNewTab")}
+                  onClick={() => {
+                    const shown = current();
+                    if (shown) props.onOpenInNewTab?.(shown);
+                  }}
+                >
+                  <ExternalLink aria-hidden="true" />
+                </Button>
+              </Show>
               <Show when={props.onDownload && current()}>
                 {(shown) => (
                   <Button
@@ -651,6 +751,7 @@ export function ImageLightbox(props: {
                         style={{ "--image-lightbox-slide": offset() ?? 0 }}
                         aria-hidden={offset() === 0 ? undefined : "true"}
                       >
+                        {readOriginal(entry)}
                         <Show
                           when={failed[entry.id] !== true}
                           fallback={
@@ -659,15 +760,24 @@ export function ImageLightbox(props: {
                             </p>
                           }
                         >
+                          <Show when={!imageUrl(entry)}>
+                            <span class="image-lightbox-waiting" role={offset() === 0 ? "status" : undefined}>
+                              <Spinner />
+                              <span class="sr-only">{t("chat.image.loading")}</span>
+                            </span>
+                          </Show>
                           <img
                             ref={(element) => imageElements.set(entry.id, element)}
                             class={["image-lightbox-image", { "image-lightbox-image-pending": !loaded[entry.id] }]}
-                            src={entry.previewUrl ?? ""}
+                            hidden={!imageUrl(entry)}
+                            src={imageUrl(entry) ?? ""}
                             alt={entry.name}
                             referrerpolicy="no-referrer"
                             draggable={false}
                             onLoad={(event) => reveal(entry, event.currentTarget)}
                             onError={() => {
+                              // An empty `src` while the copy loads is not a failure.
+                              if (!imageUrl(entry)) return;
                               if (entry.id === current()?.id) opened = true;
                               setFailed((state) => {
                                 state[entry.id] = true;
@@ -720,7 +830,7 @@ export function ImageLightbox(props: {
                     onClick={() => go(position(), Math.sign(position() - index()))}
                   >
                     <img
-                      src={entry.previewUrl ?? ""}
+                      src={entry.previewUrl ?? props.full?.url(entry) ?? ""}
                       alt=""
                       decoding="async"
                       referrerpolicy="no-referrer"

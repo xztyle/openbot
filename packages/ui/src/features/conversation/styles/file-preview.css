@@ -331,3 +331,56 @@
   font-size: var(--openbot-text-sm);
   text-align: center;
 }
+
+/* A file of a message in a viewer over the app. It covers the window on a phone, and most of it on a
+ * computer, so a PDF page or a long file has room. */
+.ui-dialog-overlay.file-preview-dialog-backdrop {
+  background: var(--openbot-bg-overlay);
+}
+
+.ui-dialog-content.file-preview-dialog {
+  position: fixed;
+  z-index: var(--openbot-layer-overlay);
+  inset: max(var(--openbot-space-6), env(safe-area-inset-top, 0px)) var(--openbot-space-6) var(--openbot-space-6);
+  display: flex;
+  width: min(1100px, calc(100vw - 2 * var(--openbot-space-6)));
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-canvas);
+  box-shadow: var(--openbot-shadow-raised);
+  outline: none;
+}
+
+.file-preview-dialog-surface {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  background: var(--openbot-bg-canvas);
+  color: var(--openbot-text-primary);
+}
+
+.file-preview-dialog-waiting {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--openbot-space-3);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+@media (max-width: 640px) {
+  .ui-dialog-content.file-preview-dialog {
+    inset: 0;
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px)
+      env(safe-area-inset-left, 0px);
+  }
+}

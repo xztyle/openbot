@@ -316,12 +316,34 @@ export function MessageBody(props: {
       (attachment) => !referencedIds.has(attachment.id) && attachment.id !== generatedAttachmentId,
     );
   });
+  /* A client with no `previewUrl` (the browser) reads an image through its media source and shows it
+     inline too. An image whose copy cannot load goes back to a file card, with its download. */
+  const inlineImage = (attachment: AttachmentSummary) =>
+    isLightboxImage(attachment) ||
+    (attachment.previewKind === "image" &&
+      !attachment.previewUrl &&
+      props.mediaSource?.inlineImage?.(attachment) === true &&
+      props.mediaSource.failed?.(attachment.id) !== true);
+  // One object per attachment and URL, so a list keyed by reference keeps its tiles while others load.
+  const shownImages = new Map<string, AttachmentSummary>();
+  const shownImage = (attachment: AttachmentSummary): AttachmentSummary => {
+    const source = props.mediaSource;
+    if (attachment.previewUrl || !source) return attachment;
+    const url = source.url(attachment.id) ?? null;
+    // Starts the read; `load` keeps one read per file and answers at once when the copy is here.
+    if (!url) void source.load(attachment);
+    const known = shownImages.get(attachment.id);
+    if (known && known.previewUrl === url && known.name === attachment.name) return known;
+    const shown = { ...attachment, previewUrl: url };
+    shownImages.set(attachment.id, shown);
+    return shown;
+  };
   const standaloneImageAttachments = createMemo(() =>
-    props.message.author === "agent" ? standaloneAttachments().filter(isLightboxImage) : [],
+    props.message.author === "agent" ? standaloneAttachments().filter(inlineImage).map(shownImage) : [],
   );
   const standaloneFileAttachments = createMemo(() =>
     props.message.author === "agent"
-      ? standaloneAttachments().filter((attachment) => !isLightboxImage(attachment))
+      ? standaloneAttachments().filter((attachment) => !inlineImage(attachment))
       : standaloneAttachments(),
   );
   const contentBlocks = createMemo<MessageContentBlock[]>((previous) =>
@@ -355,13 +377,13 @@ export function MessageBody(props: {
   });
   // A markdown image is a web address, not an attachment, so the viewer has no download for it.
   const [lightbox, setLightbox] = createSignal<(ImageLightboxOpening & { markdown?: boolean }) | null>(null);
-  const lightboxImages = createMemo(() => (props.message.attachments ?? []).filter(isLightboxImage));
+  const lightboxImages = createMemo(() => (props.message.attachments ?? []).filter(inlineImage).map(shownImage));
   /* An image opens in the viewer with the other images of its message. A quoted message's image
      is not one of them, so it opens alone. Other files open in the preview panel. */
   const openAttachment = (attachment: AttachmentSummary, origin?: HTMLElement) => {
-    if (isLightboxImage(attachment)) {
+    if (inlineImage(attachment)) {
       const siblings = lightboxImages();
-      const images = siblings.some((image) => image.id === attachment.id) ? siblings : [attachment];
+      const images = siblings.some((image) => image.id === attachment.id) ? siblings : [shownImage(attachment)];
       setLightbox({ images, index: images.findIndex((image) => image.id === attachment.id), origin });
     } else if (canPreviewAttachment(attachment)) {
       props.onPreview(attachment);
@@ -392,6 +414,24 @@ export function MessageBody(props: {
     const index = pictures.indexOf(origin);
     if (index < 0) return;
     setLightbox({ images, index, origin: origin.parentElement ?? undefined, markdown: true });
+  };
+  /* The viewer reads the original of an image that shows from a small copy. */
+  const fullImages = () => {
+    const source = props.mediaSource;
+    const read = source?.loadFull;
+    const url = source?.fullUrl;
+    if (!source || !read || !url) return undefined;
+    return {
+      url: (attachment: AttachmentSummary) => url(attachment.id) ?? source.url(attachment.id),
+      done: (attachment: AttachmentSummary) => url(attachment.id) !== undefined,
+      load: (attachment: AttachmentSummary) => read(attachment),
+    };
+  };
+  /* The original in a tab of its own, once the viewer has read it. Only a `blob:` URL of an allowed
+     image type opens there: an SVG image has a `data:` URL, which a browser does not open as a page. */
+  const openInNewTab = (attachment: AttachmentSummary) => {
+    const url = props.mediaSource?.fullUrl?.(attachment.id);
+    if (url?.startsWith("blob:")) window.open(url, "_blank", "noopener");
   };
   /* The images, the cards and the text blocks of one message share this parent. */
   const imageThumbnail = (attachment: AttachmentSummary) =>
@@ -575,8 +615,9 @@ export function MessageBody(props: {
                   presentation="attachment"
                   status="completed"
                   prompt={attachment.name}
-                  aspectRatio="square"
+                  aspectRatio="landscape"
                   attachment={attachment}
+                  loading={!attachment.previewUrl}
                   onPreview={openAttachment}
                   onDownload={props.onDownload}
                 />
@@ -600,7 +641,9 @@ export function MessageBody(props: {
           <ImageLightbox
             opening={opening()}
             thumbnail={imageThumbnail}
+            full={opening().markdown ? undefined : fullImages()}
             onDownload={opening().markdown ? undefined : props.onDownload}
+            onOpenInNewTab={opening().markdown || !fullImages() ? undefined : openInNewTab}
             onClose={() => setLightbox(null)}
           />
         )}

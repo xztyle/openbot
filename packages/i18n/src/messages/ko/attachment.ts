@@ -3,6 +3,8 @@ import type { messages as source } from "../en/attachment";
 
 export const messages = {
   "attachment.openFile": "파일 열기",
+  "attachment.opening": "{name} 여는 중…",
+  "attachment.downloading": "{name} 다운로드 중…",
   "attachment.preview": "{name} 미리 보기",
   "attachment.notFound": "파일을 찾을 수 없어요",
   "attachment.download": "{name} 다운로드",

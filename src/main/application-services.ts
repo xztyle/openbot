@@ -161,6 +161,7 @@ import { AppBehaviorService } from "./app-behavior-service";
 import { AppearanceService } from "./appearance-service";
 import { createApplicationManagedSkills } from "./application-managed-skills";
 import { ApprovalAutomation, readApprovalAutomation } from "./approval-automation-store";
+import { AttachmentPreviews } from "./attachment-previews";
 import { AutomationServer } from "./automation-server";
 import { BillingDesktopService } from "./billing-service";
 import { managedBitwardenCli } from "./bitwarden-cli-installer";
@@ -2415,6 +2416,7 @@ export async function createApplicationServices({
     logger,
   });
   teardown.push(TEARDOWN_ORDER.webPush, "the web push service", () => webPush.dispose());
+  const attachmentPreviews = new AttachmentPreviews(join(app.getPath("userData"), "attachment-previews"));
   const downloadTickets = new DownloadTickets({
     keyPath: join(app.getPath("userData"), "download-ticket.key"),
     baseUrlPath: join(app.getPath("userData"), "download-base-url"),
@@ -2527,6 +2529,8 @@ export async function createApplicationServices({
     // Signed links for large downloads from the operator's download host. Without the address file the
     // route answers 400 and the browser keeps using the connection.
     downloadTickets,
+    // Small copies of image attachments, which the browser client shows inline.
+    attachmentPreviews,
     // Present, so the host advertises `mcp-sign-in-v1`. The routes are admin-only.
     mcpSignIns: mcpHostSignIns,
     // Present, so the host advertises `sign-in-relay-v1`. The routes are admin-only.

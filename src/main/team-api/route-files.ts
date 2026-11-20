@@ -19,12 +19,18 @@ import { open, stat } from "node:fs/promises";
 import type { OutgoingHttpHeaders, ServerResponse } from "node:http";
 import { basename } from "node:path";
 import { pipeline } from "node:stream/promises";
+import { attachmentMimeTypeForName } from "@openbot/contracts/attachment-files";
 import { ATTACHMENT_LIMITS, INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import {
+  ATTACHMENT_PREVIEWS_CAPABILITY,
+  attachmentPreviewId,
+} from "@openbot/contracts/team-protocol/attachment-previews-v1";
 import { FILE_TICKET_ROUTES, FILE_TICKETS_CAPABILITY } from "@openbot/contracts/team-protocol/file-tickets-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { Deferred, Effect } from "effect";
 import { runCauseEffect } from "../../backend/effect-boundary";
+import type { AttachmentPreviews } from "../attachment-previews";
 import type { DownloadTickets } from "../download-tickets";
 import { remoteCall } from "../remote-service-effects";
 import type { TeamApiAgents, TeamApiMailbox } from "./dependencies";
@@ -87,11 +93,13 @@ export interface FileRouteDependencies {
   mailbox: TeamApiMailbox;
   /** `file-tickets-v1`: absent when the host has no download address, so the route answers 400. */
   tickets?: Pick<DownloadTickets, "mint">;
+  /** `attachment-previews-v1`: absent on a host that makes no previews, so the route answers 404. */
+  previews?: Pick<AttachmentPreviews, "preview">;
 }
 
 export async function routeFiles(
   context: TeamApiRequestContext,
-  { agents, mailbox, tickets }: FileRouteDependencies,
+  { agents, mailbox, tickets, previews }: FileRouteDependencies,
 ): Promise<RouteOutcome> {
   const { method, url, request, response, json, empty, capabilities } = context;
 
@@ -131,6 +139,24 @@ export async function routeFiles(
         "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(basename(attachment.path))}`,
       }));
     }
+  }
+  const previewId = method === "GET" && previews ? attachmentPreviewId(url.pathname) : null;
+  if (previewId !== null && previews && capabilities.has(ATTACHMENT_PREVIEWS_CAPABILITY)) {
+    // The same read as `GET /v1/attachments/:id`, so a preview never names a file that route refuses.
+    const attachment = await runCauseEffect(mailbox.resolveAttachment(pathIdentifier(previewId, "attachmentId")));
+    // Only an image has a preview. Any other file stays with the route that names it a download.
+    const mimeType = attachment?.mimeType || attachmentMimeTypeForName(attachment?.name ?? "");
+    if (!attachment || !mimeType.startsWith("image/"))
+      throw new HttpError(404, sourceText("error.team.attachmentNotFound"));
+    const preview = await runCauseEffect(previews.preview({ path: attachment.path, mimeType }));
+    const file = preview ?? { path: attachment.path, mimeType };
+    const name = preview ? `preview.${preview.mimeType === "image/png" ? "png" : "jpg"}` : basename(attachment.path);
+    return sendFile(response, file.path, null, (size) => ({
+      "Content-Type": file.mimeType,
+      "Content-Length": String(size),
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+      "X-Content-Type-Options": "nosniff",
+    }));
   }
   if (method === "GET" && url.pathname === TEAM_API_ROUTES.sharedFiles) {
     const sharedPath = url.searchParams.get("path");

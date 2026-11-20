@@ -3,6 +3,8 @@ import type { messages as source } from "../en/attachment";
 
 export const messages = {
   "attachment.openFile": "ファイルを開く",
+  "attachment.opening": "{name} を開いています…",
+  "attachment.downloading": "{name} をダウンロードしています…",
   "attachment.preview": "{name} をプレビュー",
   "attachment.notFound": "ファイルが見つかりません",
   "attachment.download": "{name} をダウンロード",

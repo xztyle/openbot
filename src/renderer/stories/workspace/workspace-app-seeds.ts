@@ -1,4 +1,4 @@
-import type { Channel, ChannelMessage, ChannelTask } from "@openbot/contracts/ipc";
+import type { AttachmentSummary, Channel, ChannelMessage, ChannelTask } from "@openbot/contracts/ipc";
 import type { MockChannelSeed, MockChannelWork } from "../../src/preview/mock-channels";
 
 /** The sample workspace of the workspace stories: #general with a thread, a private channel of 2,000 messages, a DM. */
@@ -88,7 +88,35 @@ function runningTask(channelId: string, id: string, ownerAgentId: string, reques
  * `unread`: the reader read #general up to their own request, the last five lines of #cakemaker and
  * nothing of the DM with Ana, so Unreads, the sidebar and Activity have unread messages.
  */
-export function seeds(reader = "local", options: { working?: boolean; unread?: boolean } = {}): MockChannelSeed[] {
+/** A file of a message in the media seeds. The browser client has no `previewUrl`; the runtime reads the bytes. */
+function file(id: string, name: string, mimeType: string, size: number): AttachmentSummary {
+  const previewKind = mimeType.startsWith("image/")
+    ? "image"
+    : mimeType === "application/pdf"
+      ? "pdf"
+      : mimeType.startsWith("text/")
+        ? "text"
+        : "none";
+  return { id, name, size, kind: previewKind === "image" ? "image" : "file", mimeType, previewKind, previewUrl: null };
+}
+
+/** The files of `media`: two ad mockups, a tall phone screen, a PDF and a CSV. */
+export const MEDIA_FILES = {
+  a1: file("media-a1", "maqueta-A1-pavo-al-horno.webp", "image/webp", 93_184),
+  a3: file("media-a3", "maqueta-A3-que-cubre.png", "image/png", 104_448),
+  phone: file("media-phone", "landing-mobile.png", "image/png", 2_310_000),
+  brief: file("media-brief", "brief-campana.pdf", "application/pdf", 182_000),
+  budget: file("media-budget", "presupuesto.csv", "text/csv", 1_200),
+} as const;
+
+/**
+ * `reader` is the member id the preview writes as. `media`: #general also has a reply with two images,
+ * one with a single tall image and one with a PDF and a CSV.
+ */
+export function seeds(
+  reader = "local",
+  options: { working?: boolean; unread?: boolean; media?: boolean } = {},
+): MockChannelSeed[] {
   READER = reader;
   const you = { kind: "member" as const, id: READER, name: "You" };
   sequences.clear();
@@ -143,6 +171,23 @@ export function seeds(reader = "local", options: { working?: boolean; unread?: b
     message("general", 41, you, "@channel standup in 5 minutes", { mentions: [{ kind: "channel" }] }),
     message("general", 60 * 26, ana, "Thanks all, the site looks great 🚀"),
   ];
+  if (options.media) {
+    const withFiles = (entry: ChannelMessage, attachments: AttachmentSummary[]): ChannelMessage => ({
+      ...entry,
+      message: { ...entry.message, attachments },
+    });
+    messages.push(
+      withFiles(
+        message("general", 60 * 26 + 2, chief, "Así se vería el anuncio en Facebook (las 2 imágenes de abajo)."),
+        [MEDIA_FILES.a1, MEDIA_FILES.a3],
+      ),
+      withFiles(message("general", 60 * 26 + 3, research, "The landing page on a phone:"), [MEDIA_FILES.phone]),
+      withFiles(message("general", 60 * 26 + 4, chief, "The brief and the budget:"), [
+        MEDIA_FILES.brief,
+        MEDIA_FILES.budget,
+      ]),
+    );
+  }
   const replies: ChannelMessage[] = [
     message("general", 50, research, "Started: I compare the plans of both rivals.", { threadRootId: rootId }),
     message("general", 55, you, "Great, add the yearly prices too.", { threadRootId: rootId }),

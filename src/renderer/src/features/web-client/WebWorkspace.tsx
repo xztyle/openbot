@@ -261,6 +261,7 @@ import { createWebAccountCalls } from "./web-account";
 import { createWebAccountUsage } from "./web-account-usage";
 import { createWebAgentImportCalls } from "./web-agent-import";
 import { createWebArtifactThumbnails } from "./web-artifact-thumbnails";
+import { clearWebAttachmentCache } from "./web-attachment-media";
 import { openWebLink } from "./web-attachments";
 import { createWebBillingCalls, createWebLicenseCalls } from "./web-billing";
 import { webBitwardenConnectorPort } from "./web-bitwarden-connector";
@@ -530,6 +531,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     await props.onLogout();
     // After the sign-out: a sign-out that fails keeps the account, so it keeps its drafts too.
     draftStorage.discard();
+    // The images of the host's chats that this browser kept, so the next person here cannot read them.
+    await clearWebAttachmentCache();
   }
   /** The host list was read and holds no computer to connect to. */
   const noHost = () => !workspace.state.host && (workspace.state.hostsLoaded || Boolean(workspace.state.hostsError));

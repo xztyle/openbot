@@ -1,4 +1,4 @@
-import { type AttachmentSummary, type ChannelMessage, channelKind } from "@openbot/contracts/ipc";
+import { type AttachmentSummary, type ChannelMessage, canPreviewAttachment, channelKind } from "@openbot/contracts/ipc";
 import {
   Bell,
   BellOff,
@@ -15,6 +15,7 @@ import {
   toast,
 } from "@openbot/ui";
 import type { AgentMessage } from "@openbot/ui/data";
+import { FilePreviewDialog, type FilePreviewDialogState } from "@openbot/ui/features/conversation/FilePreviewDialog";
 import { MessageBody } from "@openbot/ui/features/conversation/MessageRendering";
 import { ArtifactCard } from "@openbot/ui/features/workspace/ArtifactCard";
 import { DayDivider, NewMessagesDivider } from "@openbot/ui/features/workspace/MessageDividers";
@@ -22,8 +23,9 @@ import { MessageRow } from "@openbot/ui/features/workspace/MessageRow";
 import { StepTrail } from "@openbot/ui/features/workspace/StepTrail";
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
-import { createMemo, For, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
 import { toAgentMessage } from "../../app-message-projection";
+import { attachmentFilePreview } from "../conversation/attachment-preview";
 import { WorkspaceMessageEditor } from "./WorkspaceMessageEditor";
 import { MemberProfile } from "./WorkspaceProfile";
 import { useWorkspace } from "./workspace-context";
@@ -51,10 +53,48 @@ export function WorkspaceMessageBody(props: { entry: ChannelMessage }) {
     return { ...row, id: props.entry.id, author: "agent" };
   });
   const port = () => ws.channels.port();
-  const attachmentAction = (attachment: AttachmentSummary, action: "open" | "reveal" | "download") =>
+  const { t, errorMessage } = useText();
+  const [viewer, setViewer] = createSignal<{ attachment: AttachmentSummary; state: FilePreviewDialogState } | null>(
+    null,
+  );
+  let viewing = 0;
+  /** A download says that it started: a file that comes through the host connection takes a while. */
+  const download = (attachment: AttachmentSummary) => {
+    const progress = toast.loading(t("attachment.downloading", { name: attachment.name }));
+    void port()
+      .agent.openAttachment({ attachmentId: attachment.id, action: "download" })
+      .then(
+        () => toast.dismiss(progress),
+        (error: unknown) => toast.error(errorMessage(error, t("attachment.error.open")), { id: progress }),
+      );
+  };
+  /** A file that the app can show opens in the viewer at once, and fills it when it is read. */
+  const view = (attachment: AttachmentSummary) => {
+    if (!canPreviewAttachment(attachment)) return download(attachment);
+    const run = ++viewing;
+    const name = attachment.name;
+    setViewer({ attachment, state: { status: "loading", name } });
+    void (port().previewAttachment ?? attachmentFilePreview)(attachment).then(
+      (preview) => {
+        if (run === viewing)
+          setViewer({ attachment, state: { status: "ready", name, preview, sourceUrl: attachment.previewUrl } });
+      },
+      (error: unknown) => {
+        if (run === viewing)
+          setViewer({
+            attachment,
+            state: { status: "failed", name, message: errorMessage(error, t("attachment.error.preview", { name })) },
+          });
+      },
+    );
+  };
+  const attachmentAction = (attachment: AttachmentSummary, action: "open" | "reveal" | "download") => {
+    if (action === "open") return view(attachment);
+    if (action === "download") return download(attachment);
     void port()
       .agent.openAttachment({ attachmentId: attachment.id, action })
-      .catch(() => undefined);
+      .catch((error: unknown) => toast.error(errorMessage(error, t("attachment.error.open"))));
+  };
   return (
     <div class="ws-message-content">
       <MessageBody
@@ -64,11 +104,35 @@ export function WorkspaceMessageBody(props: { entry: ChannelMessage }) {
         onOpenLink={(url) => {
           if (!ws.openLink(url)) void port().openUrl(url);
         }}
-        onPreview={(attachment) => attachmentAction(attachment, "open")}
+        onPreview={view}
         onAttachmentAction={attachmentAction}
-        onDownload={(attachment) => attachmentAction(attachment, "download")}
+        onDownload={download}
         mediaSource={port().attachmentMedia}
       />
+      <Show when={viewer()}>
+        {(open) => (
+          <FilePreviewDialog
+            state={open().state}
+            agents={ws.env.agents()}
+            onOpenLink={(url) => {
+              if (!ws.openLink(url)) void port().openUrl(url);
+            }}
+            onDownload={() => download(open().attachment)}
+            onOpenExternally={
+              port().fileActions === "native"
+                ? () =>
+                    void port()
+                      .agent.openAttachment({ attachmentId: open().attachment.id, action: "open" })
+                      .catch((error: unknown) => toast.error(errorMessage(error, t("attachment.error.open"))))
+                : undefined
+            }
+            onClose={() => {
+              viewing += 1;
+              setViewer(null);
+            }}
+          />
+        )}
+      </Show>
     </div>
   );
 }

@@ -76,6 +76,8 @@ interface FilePreviewPanelProps {
   onDownload?: () => void;
   onReveal?: (() => void) | undefined;
   onClose: () => void;
+  /** `dialog`: the panel fills a viewer over the app, with no resize handle. */
+  presentation?: "panel" | "dialog" | undefined;
 }
 
 export default function FilePreviewPanel(props: FilePreviewPanelProps) {
@@ -91,6 +93,7 @@ export default function FilePreviewPanel(props: FilePreviewPanelProps) {
   let currentPreviewUrl: string | null = null;
   let revealFrame: number | undefined;
   const file = () => (props.directory ? null : props.preview);
+  const dialog = () => props.presentation === "dialog";
   const previewKind = () => file()?.previewKind;
   const pageUrl = () => (previewKind() === "text" ? props.pageUrl : null) ?? null;
   const pageHtml = () => (previewKind() === "text" ? props.pageHtml : null) ?? null;
@@ -167,28 +170,32 @@ export default function FilePreviewPanel(props: FilePreviewPanelProps) {
   return (
     <aside
       ref={revealPanel}
-      id="file-preview-panel"
-      class="browser-panel file-preview-panel t-panel-slide"
+      id={dialog() ? undefined : "file-preview-panel"}
+      class={
+        dialog() ? "file-preview-panel file-preview-dialog-surface" : "browser-panel file-preview-panel t-panel-slide"
+      }
       data-open={revealed() ? "true" : "false"}
       aria-label={t("preview.panel.label")}
     >
-      <PanelResizer
-        class="right-panel-resizer"
-        label={t("preview.panel.resize")}
-        controls="file-preview-panel"
-        direction="right"
-        value={panelWidth()}
-        defaultValue={defaultPanelWidth()}
-        min={PANEL_MIN}
-        max={props.maxWidth}
-        onResize={setPanelWidth}
-        onResizeEnd={props.onResizeEnd}
-        onParentResize={resizeDefaultPanel}
-        onReset={() => {
-          props.onResetWidth();
-          setPanelWidth(defaultPanelWidth());
-        }}
-      />
+      <Show when={!dialog()}>
+        <PanelResizer
+          class="right-panel-resizer"
+          label={t("preview.panel.resize")}
+          controls="file-preview-panel"
+          direction="right"
+          value={panelWidth()}
+          defaultValue={defaultPanelWidth()}
+          min={PANEL_MIN}
+          max={props.maxWidth}
+          onResize={setPanelWidth}
+          onResizeEnd={props.onResizeEnd}
+          onParentResize={resizeDefaultPanel}
+          onReset={() => {
+            props.onResetWidth();
+            setPanelWidth(defaultPanelWidth());
+          }}
+        />
+      </Show>
       <header class="file-preview-header">
         <Show when={props.onBack}>
           {(back) => (

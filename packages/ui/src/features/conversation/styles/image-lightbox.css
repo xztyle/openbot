@@ -106,7 +106,30 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--openbot-space-3);
-  padding: var(--openbot-space-3) var(--openbot-space-4);
+  /* Clear of a phone's notch and rounded corners. */
+  padding: calc(var(--openbot-space-3) + env(safe-area-inset-top, 0px))
+    calc(var(--openbot-space-4) + env(safe-area-inset-right, 0px)) var(--openbot-space-3)
+    calc(var(--openbot-space-4) + env(safe-area-inset-left, 0px));
+}
+
+/* The original loads while the small copy shows. */
+.image-lightbox-progress {
+  display: grid;
+  width: var(--openbot-control-sm);
+  place-items: center;
+  color: var(--openbot-text-muted);
+}
+
+/* An image whose copy is not here yet. */
+.image-lightbox-waiting {
+  display: grid;
+  grid-area: 1 / 1;
+  place-items: center;
+  color: var(--openbot-text-muted);
+}
+
+.image-lightbox-image[hidden] {
+  display: none;
 }
 
 .image-lightbox-caption {
@@ -164,6 +187,12 @@
   position: absolute;
   inset: 0;
   will-change: transform;
+  /* A drag down to close moves the track with `translate`. */
+  transition: translate var(--openbot-duration-fast) var(--openbot-ease-out);
+}
+
+.image-lightbox-stage:active .image-lightbox-track {
+  transition: none;
 }
 
 .image-lightbox-slide {
@@ -239,7 +268,9 @@
   /* `safe` keeps the first thumbnails reachable when the strip is wider than the window. */
   justify-content: safe center;
   gap: var(--openbot-space-2);
-  padding: var(--openbot-space-3) var(--openbot-space-4) var(--openbot-space-4);
+  padding: var(--openbot-space-3) calc(var(--openbot-space-4) + env(safe-area-inset-right, 0px))
+    calc(var(--openbot-space-4) + env(safe-area-inset-bottom, 0px))
+    calc(var(--openbot-space-4) + env(safe-area-inset-left, 0px));
   scrollbar-width: none;
 }
 

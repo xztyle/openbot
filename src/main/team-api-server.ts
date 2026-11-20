@@ -1140,6 +1140,7 @@ export class TeamApiServer {
       agents: this.#options.agents,
       mailbox: this.#options.mailbox,
       tickets: this.#options.downloadTickets,
+      previews: this.#options.attachmentPreviews,
     });
   }
 

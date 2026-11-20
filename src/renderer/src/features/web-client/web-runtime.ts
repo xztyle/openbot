@@ -67,6 +67,10 @@ import { guardedListDecoder, optionalHistoryExtent, requiredString } from "@open
 import { isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import {
+  ATTACHMENT_PREVIEWS_CAPABILITY,
+  attachmentPreviewRoute,
+} from "@openbot/contracts/team-protocol/attachment-previews-v1";
+import {
   BROWSER_PAGE_STATE_CAPABILITY,
   BROWSER_PAGE_STATE_ROUTES,
   decodeBrowserPageStateSnapshot,
@@ -283,6 +287,11 @@ export interface WebWorkspaceRuntime {
    */
   holdDrafts?(held: () => ReadonlySet<string>): void;
   download(attachmentId: string): Promise<WebFile>;
+  /**
+   * A small copy of an image attachment for inline display (`attachment-previews-v1`), or the
+   * original when the host makes no copy. `null` when the host has no such route.
+   */
+  attachmentPreview?(attachmentId: string): Promise<WebFile | null>;
   /** The image that the host drew of a workspace artifact's page, at its `thumbnailVersion`. */
   artifactThumbnail?(artifactId: string, version: string): Promise<WebFile>;
   /**
@@ -495,6 +504,8 @@ export function createWebWorkspaceRuntime(
   }
   let uploadGeneration = 0;
   let capabilities: string[] = [];
+  /** The hosts that answered 404 for a preview: a fork host built before `attachment-previews-v1`. */
+  const previewsMissing = new Set<string | null>();
   let connectedHost: RemoteTeamHost | null = null;
   const duplicateOperationIds = new Map<string, string>();
   const completedDraftIdsByHost = new Map<string, Set<string>>();
@@ -1232,6 +1243,19 @@ export function createWebWorkspaceRuntime(
     },
     async download(id) {
       return decodeWebFile(await request("GET", TEAM_API_ROUTES.attachment(id)));
+    },
+    async attachmentPreview(id) {
+      if (!capabilities.includes(ATTACHMENT_PREVIEWS_CAPABILITY) || previewsMissing.has(openedHostId)) return null;
+      try {
+        return decodeWebFile(await request("GET", attachmentPreviewRoute(id)));
+      } catch (error) {
+        // A fork host built before the route answers 404 for every preview: the next ones skip it.
+        if (error instanceof WebHostRequestError && error.refused && error.reference === referenceFrom("http", 404)) {
+          previewsMissing.add(openedHostId);
+          return null;
+        }
+        throw error;
+      }
     },
     async artifactThumbnail(artifactId, version) {
       const query = new URLSearchParams({ v: version });

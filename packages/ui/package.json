@@ -401,6 +401,7 @@
     "./components/SettingsPanel": "./src/components/SettingsPanel.tsx",
     "./features/provider-diagnostics/provider-diagnostics": "./src/features/provider-diagnostics/provider-diagnostics.ts",
     "./features/provider-updates/provider-update": "./src/features/provider-updates/provider-update.ts",
+    "./features/conversation/FilePreviewDialog": "./src/features/conversation/FilePreviewDialog.tsx",
     "./features/conversation/FilePreviewPanel": "./src/features/conversation/FilePreviewPanel.tsx",
     "./features/conversation/BrowserPreviewSidebar": "./src/features/conversation/BrowserPreviewSidebar.tsx",
     "./styles/sliding-tabs.css": "./src/styles/sliding-tabs.css",

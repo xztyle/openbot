@@ -66,6 +66,7 @@ import type { WorkflowsHandle } from "../../backend/workflows/workflows";
 import type { WorkspaceInsights } from "../../backend/workspace-insights";
 import type { WorkspaceSecretsService } from "../../backend/workspace-secrets";
 import type { AgentImportService } from "../agent-import-service";
+import type { AttachmentPreviews } from "../attachment-previews";
 import type { BitwardenConnectorService } from "../bitwarden-connector-service";
 import type { BrowserViewGateway } from "../browser-view-gateway";
 import type { DownloadTickets } from "../download-tickets";
@@ -531,6 +532,8 @@ export interface TeamApiOptions {
   webPush?: Pick<WebPushService, "publicKey" | "register" | "remove"> | undefined;
   /** `file-tickets-v1`: signed links that a browser downloads from the host's own download address. */
   downloadTickets?: Pick<DownloadTickets, "mint"> | undefined;
+  /** `attachment-previews-v1`: small copies of image attachments for a client that shows them inline. */
+  attachmentPreviews?: Pick<AttachmentPreviews, "preview"> | undefined;
   /** Starts and waits for the managed tool runtimes behind the MCP save, enable, and test routes. */
   mcpToolRuntimePreparation?: McpToolRuntimePreparation;
   storage?: TeamApiStorage;

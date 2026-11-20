@@ -2,6 +2,8 @@ import { defineMessages } from "../../message";
 
 export const messages = defineMessages("attachment", {
   "attachment.openFile": "Open file",
+  "attachment.opening": "Opening {name}…",
+  "attachment.downloading": "Downloading {name}…",
   "attachment.preview": "Preview {name}",
   "attachment.notFound": "File not found",
   "attachment.download": "Download {name}",

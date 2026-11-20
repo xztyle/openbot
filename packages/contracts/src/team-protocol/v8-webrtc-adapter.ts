@@ -1,4 +1,5 @@
 import { isDynamicRecord, isString } from "../runtime-values";
+import { isFileImageRoute } from "./attachment-previews-v1";
 import { isBrowserDisplayRoute } from "./browser-navigation-v1";
 import { isBrowserViewSessionRoute } from "./browser-view-v1";
 import { decodeTeamProtocolV2Json, type TeamProtocolV2EventFrame } from "./v2";
@@ -23,8 +24,10 @@ export function encodeTeamProtocolV8WebRtcHttpRequest(
   options: { preserveSemanticTags?: boolean; agentCreateModel?: boolean } = {},
 ) {
   // A GET reaches the v3 frame, whose frozen no-body route list cannot learn a route added after it.
-  // The display route carries no request body at all, so its frame is the empty object.
-  if (isBrowserDisplayRoute(method, path) || isBrowserViewSessionRoute(method, path)) return {};
+  // The display route carries no request body at all, so its frame is the empty object. So do the
+  // image file reads of `attachment-previews-v1`.
+  if (isBrowserDisplayRoute(method, path) || isBrowserViewSessionRoute(method, path) || isFileImageRoute(method, path))
+    return {};
   if (method === "GET" || method === "DELETE" || isRoutineTestRequest(method, path) || isRemoteViewerRoute(path))
     return encodeTeamProtocolV3WebRtcHttpRequest(method, path, value, options);
   return decodeTeamProtocolV2Json(
@@ -37,7 +40,8 @@ export function decodeTeamProtocolV8WebRtcHttpRequest(
   value: unknown,
   options: { preserveSemanticTags?: boolean; agentCreateModel?: boolean } = {},
 ) {
-  if (isBrowserDisplayRoute(method, path) || isBrowserViewSessionRoute(method, path)) return {};
+  if (isBrowserDisplayRoute(method, path) || isBrowserViewSessionRoute(method, path) || isFileImageRoute(method, path))
+    return {};
   if (method === "GET" || method === "DELETE" || isRoutineTestRequest(method, path) || isRemoteViewerRoute(path))
     return decodeTeamProtocolV3WebRtcHttpRequest(method, path, value, options);
   return decodeTeamProtocolV2Json(decodeTeamProtocolV8CurrentHttpRequest(method, path, value ?? {}, options));

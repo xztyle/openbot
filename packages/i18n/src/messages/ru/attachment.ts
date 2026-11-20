@@ -3,6 +3,8 @@ import type { messages as source } from "../en/attachment";
 
 export const messages = {
   "attachment.openFile": "Открыть файл",
+  "attachment.opening": "Открытие: {name}…",
+  "attachment.downloading": "Загрузка: {name}…",
   "attachment.preview": "Предпросмотр: {name}",
   "attachment.notFound": "Файл не найден",
   "attachment.download": "Скачать {name}",

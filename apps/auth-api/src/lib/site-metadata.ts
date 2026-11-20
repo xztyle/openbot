@@ -163,12 +163,16 @@ export function openBotRootHead(interLatinFont: string, options: { webApp?: bool
         href: interLatinFont,
         crossorigin: "anonymous" as const,
       },
-      { rel: "icon", href: "/favicon.ico", sizes: "any" },
-      { rel: "icon", href: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
-      // `/app` brings its own manifest and touch icon, so a browser installs the app and not the site.
+      // `/app` brings its own icons, manifest and touch icon: the Atelier symbol, which follows the
+      // browser's light or dark theme, so a browser installs the app and not the site.
       ...(options.webApp
-        ? []
+        ? [
+            { rel: "icon", href: "/app-favicon.svg", type: "image/svg+xml" },
+            { rel: "icon", href: "/app-favicon-32x32.png", type: "image/png", sizes: "32x32" },
+          ]
         : [
+            { rel: "icon", href: "/favicon.ico", sizes: "any" },
+            { rel: "icon", href: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
             { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
             { rel: "manifest", href: "/site.webmanifest" },
           ]),

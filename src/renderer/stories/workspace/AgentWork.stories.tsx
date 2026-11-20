@@ -5,8 +5,9 @@ import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { fonikad, gameDesigner, orchestrator, qa, STREAMING_STEPS } from "./workspace-fixtures";
 import { CakemakerComposer, CakemakerReplies, CakemakerRoot, LIGHT, StoryFrame } from "./workspace-story";
 
-/* The line over the composer while agents work, with Stop, and the thread panel while the reader
-   reads above the newest reply. */
+/* The line over the composer while agents work, with Stop; while the lead chooses who answers; and
+   while an agent waits for earlier work. Also the thread panel while the reader reads above the
+   newest reply. */
 
 function WorkLine() {
   return (
@@ -30,6 +31,8 @@ function WorkLine() {
           ]}
         />
         <TypingIndicator humans={[]} agents={[{ member: qa, state: "working", label: "Read only: no Stop" }]} />
+        <TypingIndicator humans={[]} agents={[{ member: orchestrator, state: "routing" }]} />
+        <TypingIndicator humans={[]} agents={[{ member: qa, state: "waiting", onStop: fn() }]} />
       </div>
     </StoryFrame>
   );

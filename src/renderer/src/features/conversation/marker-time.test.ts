@@ -12,7 +12,7 @@ const at = (hour: number, minute: number) => {
   return date.toISOString();
 };
 const clock = (hour: number, minute: number) =>
-  format.date(new Date(at(hour, minute)), { hour: "2-digit", minute: "2-digit" });
+  format.date(new Date(at(hour, minute)), { hour: "numeric", minute: "2-digit" });
 
 describe("marker time range", () => {
   it("shows the first and the newest time of a row", () => {

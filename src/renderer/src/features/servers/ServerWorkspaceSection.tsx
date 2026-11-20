@@ -5,6 +5,7 @@ import {
   CHANNEL_ANSWER_MODES,
   type ChannelAnswerMode,
   type ClientAgentModelOption,
+  DEFAULT_WORKSPACE_APPEARANCE,
   DEFAULT_WORKSPACE_LEARNING,
   foreignProvider,
   isAgentProvider,
@@ -15,9 +16,15 @@ import {
   type OpenBotDesktopApi,
   SKILL_LEARNING_MODES,
   type SkillLearningMode,
+  WORKSPACE_FACE_DEFAULTS,
   WORKSPACE_GATE_TIMEOUT_LIMITS,
+  WORKSPACE_SKIN_DEFAULTS,
+  WORKSPACE_THEMES,
+  type WorkspaceAppearance,
+  type WorkspaceFaceDefault,
   type WorkspaceLearningSettings,
   type WorkspaceSettings,
+  type WorkspaceTheme,
 } from "@openbot/contracts/ipc";
 import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
 import type { AppTextKey } from "@openbot/i18n";
@@ -48,6 +55,7 @@ import { createUnsavedGuard, DiscardChangesDialog } from "@openbot/ui/features/s
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createStore, Show, snapshot, untrack } from "solid-js";
+import { applyWorkspaceAppearance } from "../../atelier-theme";
 import { serverCanAdminister } from "./server-capabilities";
 import type { ServerSettingsSectionHost } from "./server-settings-section";
 
@@ -113,9 +121,30 @@ function sameSettings(left: WorkspaceSettings, right: WorkspaceSettings): boolea
     left.gate.effort === right.gate.effort &&
     left.gate.timeoutMs === right.gate.timeoutMs &&
     left.defaults.agentAnswerMode === right.defaults.agentAnswerMode &&
-    sameLearning(left.learning ?? DEFAULT_WORKSPACE_LEARNING, right.learning ?? DEFAULT_WORKSPACE_LEARNING)
+    sameLearning(left.learning ?? DEFAULT_WORKSPACE_LEARNING, right.learning ?? DEFAULT_WORKSPACE_LEARNING) &&
+    sameAppearance(left.appearance ?? DEFAULT_WORKSPACE_APPEARANCE, right.appearance ?? DEFAULT_WORKSPACE_APPEARANCE)
   );
 }
+
+function sameAppearance(left: WorkspaceAppearance, right: WorkspaceAppearance): boolean {
+  return left.theme === right.theme && left.faces === right.faces && left.skin === right.skin;
+}
+
+const THEME_TEXT = {
+  craft: "server.settings.themeCraft",
+  modern: "server.settings.themeModern",
+  riso: "server.settings.themeRiso",
+} as const satisfies Record<WorkspaceTheme, AppTextKey>;
+
+/** The name of each face family and of `mixed`. */
+const FACE_FAMILY_TEXT = {
+  portrait: "server.settings.facesPortrait",
+  sketch: "server.settings.facesSketch",
+  flat: "server.settings.facesFlat",
+  clay: "server.settings.facesClay",
+  character: "server.settings.facesCharacter",
+  mixed: "server.settings.facesMixed",
+} as const satisfies Record<WorkspaceFaceDefault, AppTextKey>;
 
 function sameLearning(left: WorkspaceLearningSettings, right: WorkspaceLearningSettings): boolean {
   return (
@@ -219,13 +248,14 @@ export function createServerWorkspaceSection(
     if (!next || !dirty()) return;
     const serverId = props.server.id;
     const request = generation;
-    const { gate, defaults, learning } = structuredClone(snapshot(next));
+    const { gate, defaults, learning, appearance } = structuredClone(snapshot(next));
     // Without `defaults.agents`, the host keeps the channel defaults of each agent as they are now, also
     // the ones that the agent settings changed after this section read them.
     const settings: WorkspaceSettings = {
       gate,
       defaults: { agentAnswerMode: defaults.agentAnswerMode },
       ...(learning ? { learning } : {}),
+      ...(appearance ? { appearance } : {}),
     };
     await run("workspace", async () => {
       const result = await calls().setWorkspaceSettings(settings, serverId);
@@ -234,6 +264,8 @@ export function createServerWorkspaceSection(
         draft.saved = result;
         draft.draft = structuredClone(result);
       });
+      // The look shows at once; other devices read it with their next DM list.
+      if (result.appearance) applyWorkspaceAppearance(result.appearance);
     });
   }
 
@@ -253,6 +285,14 @@ export function createServerWorkspaceSection(
       if (!draft.draft) return;
       draft.draft.learning ??= { ...DEFAULT_WORKSPACE_LEARNING };
       change(draft.draft.learning);
+    });
+  }
+
+  function updateAppearance(change: (appearance: WorkspaceAppearance) => void): void {
+    setState((draft) => {
+      if (!draft.draft) return;
+      draft.draft.appearance ??= { ...DEFAULT_WORKSPACE_APPEARANCE };
+      change(draft.draft.appearance);
     });
   }
 
@@ -283,6 +323,19 @@ export function createServerWorkspaceSection(
         <Show when={state.draft}>
           {(settings) => (
             <>
+              <SettingsSection
+                title={t("server.settings.appearance")}
+                description={t("server.settings.appearanceDescription")}
+              >
+                <ItemGroup class="settings-modal-card">
+                  <AppearanceRows
+                    appearance={settings().appearance ?? DEFAULT_WORKSPACE_APPEARANCE}
+                    disabled={Boolean(busy())}
+                    menuMount={host.menuMount()}
+                    onChange={updateAppearance}
+                  />
+                </ItemGroup>
+              </SettingsSection>
               <SettingsSection
                 title={t("server.settings.workspaceDefaults")}
                 description={t("server.settings.workspaceDefaultsDescription")}
@@ -483,6 +536,79 @@ function GateModelRow(props: {
         )}
       </Show>
     </Item>
+  );
+}
+
+/** Server Settings > Workspace > Appearance: the theme, the face family and the skin tone of every member's view. */
+function AppearanceRows(props: {
+  appearance: WorkspaceAppearance;
+  disabled: boolean;
+  menuMount: HTMLElement | undefined;
+  onChange: (change: (appearance: WorkspaceAppearance) => void) => void;
+}) {
+  const { t } = useText();
+  return (
+    <>
+      <ChoiceRow
+        id="server-settings-workspace-theme"
+        title={t("server.settings.workspaceTheme")}
+        hint={t("server.settings.workspaceThemeHint")}
+        options={[...WORKSPACE_THEMES]}
+        value={props.appearance.theme}
+        label={(value) => {
+          const theme = WORKSPACE_THEMES.find((candidate) => candidate === value);
+          return theme ? t(THEME_TEXT[theme]) : value;
+        }}
+        disabled={props.disabled}
+        menuMount={props.menuMount}
+        onChange={(value) => {
+          const theme = WORKSPACE_THEMES.find((candidate) => candidate === value);
+          if (theme)
+            props.onChange((appearance) => {
+              appearance.theme = theme;
+            });
+        }}
+      />
+      <ChoiceRow
+        id="server-settings-agent-faces"
+        title={t("server.settings.agentFaces")}
+        hint={t("server.settings.agentFacesHint")}
+        options={[...WORKSPACE_FACE_DEFAULTS]}
+        value={props.appearance.faces}
+        label={(value) => {
+          const family = WORKSPACE_FACE_DEFAULTS.find((candidate) => candidate === value);
+          return family ? t(FACE_FAMILY_TEXT[family]) : value;
+        }}
+        disabled={props.disabled}
+        menuMount={props.menuMount}
+        onChange={(value) => {
+          const family = WORKSPACE_FACE_DEFAULTS.find((candidate) => candidate === value);
+          if (family)
+            props.onChange((appearance) => {
+              appearance.faces = family;
+            });
+        }}
+      />
+      <ChoiceRow
+        id="server-settings-skin-tone"
+        title={t("server.settings.skinTone")}
+        hint={t("server.settings.skinToneHint")}
+        options={[...WORKSPACE_SKIN_DEFAULTS]}
+        value={props.appearance.skin}
+        label={(value) =>
+          value === "varied" ? t("server.settings.skinVaried") : t("server.settings.skinToneValue", { tone: value })
+        }
+        disabled={props.disabled}
+        menuMount={props.menuMount}
+        onChange={(value) => {
+          const skin = WORKSPACE_SKIN_DEFAULTS.find((candidate) => candidate === value);
+          if (skin)
+            props.onChange((appearance) => {
+              appearance.skin = skin;
+            });
+        }}
+      />
+    </>
   );
 }
 

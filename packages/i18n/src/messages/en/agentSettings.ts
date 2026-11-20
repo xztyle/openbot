@@ -244,6 +244,12 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.instructionsLabel": "Agent instructions",
   "agentSettings.instructionsPlaceholder": "What this agent is for",
 
+  "agentSettings.face.title": "Face",
+  "agentSettings.face.family": "Face family",
+  "agentSettings.face.newFace": "New face",
+  "agentSettings.face.reset": "Use the workspace face",
+  "agentSettings.face.skin": "Skin tone",
+  "agentSettings.face.workspaceSkin": "Workspace skin tone",
   "agentSettings.avatar.edit": "Edit agent avatar",
   "agentSettings.avatar.editor": "Avatar editor",
   "agentSettings.avatar.image": "Image",

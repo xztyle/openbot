@@ -255,6 +255,28 @@ export const messages = {
   "server.settings.dailyReviewLimitHint":
     "El máximo de revisiones de todos los agentes en un día. Cada una lee unos 10.000 tokens en el modelo más pequeño.",
   "server.settings.dailyReviewLimitValue": "{count} al día",
+  "server.settings.appearance": "Apariencia",
+  "server.settings.appearanceDescription":
+    "El aspecto de este espacio de trabajo para todos los miembros. Cada persona sigue eligiendo claro, oscuro o el ajuste del sistema en su dispositivo.",
+  "server.settings.workspaceTheme": "Tema del espacio de trabajo",
+  "server.settings.workspaceThemeHint": "Colores, tipografía y símbolo del espacio de trabajo.",
+  "server.settings.themeCraft": "Craft Studio",
+  "server.settings.themeModern": "Modern Atelier",
+  "server.settings.themeRiso": "Riso Press",
+  "server.settings.agentFaces": "Caras de los agentes",
+  "server.settings.agentFacesHint":
+    "La familia de caras de cada agente que no eligió la suya. Mixta da una a cada agente.",
+  "server.settings.facesMixed": "Mixta",
+  "server.settings.facesPortrait": "Retrato",
+  "server.settings.facesSketch": "Boceto",
+  "server.settings.facesFlat": "Plana",
+  "server.settings.facesClay": "Arcilla",
+  "server.settings.facesCharacter": "Personaje",
+  "server.settings.skinTone": "Tono de piel",
+  "server.settings.skinToneHint":
+    "El tono de piel de la cara de cada agente. Variado da uno propio a cada agente. Un agente puede elegir otro.",
+  "server.settings.skinVaried": "Variado",
+  "server.settings.skinToneValue": "Tono {tone}",
   "server.settings.routinesTitle": "Rutinas",
   "server.settings.routinesDescription":
     "Muestra la programación de rutinas de este equipo en una aplicación de calendario.",

@@ -283,6 +283,28 @@ export const messages = defineMessages("server", {
   "server.settings.dailyReviewLimitHint":
     "The most reviews of all agents in one day. Each one reads about 10,000 tokens on the smaller model.",
   "server.settings.dailyReviewLimitValue": "{count} a day",
+  "server.settings.appearance": "Appearance",
+  "server.settings.appearanceDescription":
+    "The look of this workspace for every member. Each person still chooses light, dark or the system setting on their own device.",
+  "server.settings.workspaceTheme": "Workspace theme",
+  "server.settings.workspaceThemeHint": "Colors, type and the symbol of the workspace.",
+  "server.settings.themeCraft": "Craft Studio",
+  "server.settings.themeModern": "Modern Atelier",
+  "server.settings.themeRiso": "Riso Press",
+  "server.settings.agentFaces": "Agent faces",
+  "server.settings.agentFacesHint":
+    "The face family of each agent that did not choose its own. Mixed gives each agent one.",
+  "server.settings.facesMixed": "Mixed",
+  "server.settings.facesPortrait": "Portrait",
+  "server.settings.facesSketch": "Sketch",
+  "server.settings.facesFlat": "Flat",
+  "server.settings.facesClay": "Clay",
+  "server.settings.facesCharacter": "Character",
+  "server.settings.skinTone": "Skin tone",
+  "server.settings.skinToneHint":
+    "The skin tone of every agent's face. Varied gives each agent its own. An agent can still choose another one.",
+  "server.settings.skinVaried": "Varied",
+  "server.settings.skinToneValue": "Tone {tone}",
   "server.settings.routinesTitle": "Routines",
   "server.settings.routinesDescription": "Show the routine schedule of this computer in a calendar app.",
   "server.routineFeed.title": "Calendar feed",

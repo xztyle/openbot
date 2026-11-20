@@ -82,6 +82,9 @@ const SKINS: [string, string, string][] = [
   ["#76482D", "#5E3721", "#64332B"],
   ["#583421", "#452818", "#4E2820"],
 ];
+/** The base colour of each skin tone, light to deep, for a picker. */
+export const SKIN_TONES: readonly string[] = SKINS.map(([base]) => base);
+
 const HAIR = {
   black: "#1E1916",
   espresso: "#33241B",

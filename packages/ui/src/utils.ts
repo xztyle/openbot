@@ -39,6 +39,11 @@ export function usesTouchLayout(): boolean {
   return window.matchMedia?.("(hover: none), (pointer: coarse)").matches ?? false;
 }
 
+/** Whether the window is as narrow as a phone, the width where the app takes Slack's phone layout. */
+export function usesPhoneLayout(): boolean {
+  return window.matchMedia?.("(max-width: 720px)").matches ?? false;
+}
+
 /** Constrains `value` to the inclusive range. */
 export function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));

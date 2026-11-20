@@ -630,6 +630,11 @@
   top: calc(-1 * var(--openbot-space-2));
 }
 
+/* The orbit around the working agent's face reaches past the face: the line keeps clear of it. */
+.ws-agent-dm .agent-activity-content {
+  gap: var(--openbot-space-3);
+}
+
 /* The message box stands as under a channel: the channel's bottom area and its box each pad 16px. */
 .ws-agent-dm .conversation-panel > .composer-wrap {
   padding-inline: calc(2 * var(--openbot-space-4));

@@ -1,6 +1,7 @@
 import { buttonVariants, DropdownMenu, Ellipsis, MessageCircle, X } from "@openbot/ui";
 import { createSignal, createUniqueId, For, Show, untrack } from "solid-js";
 import { useText } from "../../text";
+import { usesPhoneLayout } from "../../utils";
 import { createTaskListPlayState, TaskListHeader, TaskMark, type TaskMarkState } from "./TaskList";
 
 /**
@@ -60,7 +61,8 @@ function OpenWaitList(props: OpenWaitsProps) {
   const { t, format } = useText();
   const panelId = createUniqueId();
   const playState = createTaskListPlayState();
-  const [open, setOpen] = createSignal(untrack(() => props.defaultOpen ?? true));
+  // A phone has little room over the message box: the block starts as its one header row there.
+  const [open, setOpen] = createSignal(untrack(() => props.defaultOpen ?? !usesPhoneLayout()));
   const now = () => props.now ?? new Date();
   const total = () => props.items.length;
   const woken = () => props.items.filter((item) => item.state === "woken").length;

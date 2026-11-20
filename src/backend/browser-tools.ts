@@ -270,7 +270,7 @@ const BROWSER_TOOL_DEFINITIONS = [
   browserTool({
     name: "request_takeover",
     description:
-      "Ask the user to take over a tab for unclear OAuth account selection, CAPTCHA, passkeys, payment confirmation such as 3-D Secure, or when secure password/code handoff or card fill is unavailable.",
+      "Ask the user to take over a tab for unclear OAuth account selection, CAPTCHA, passkeys, payment confirmation such as 3-D Secure, or when secure password/code handoff or card fill is unavailable. For a checkbox CAPTCHA (Turnstile, reCAPTCHA, hCaptcha), OpenBot first clicks it once; if that passes, the result says so and no one is asked. Never click a CAPTCHA yourself.",
     shape: {
       tabId,
       reason: z

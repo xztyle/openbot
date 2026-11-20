@@ -60,6 +60,7 @@ import {
   type SnapshotReadResult,
 } from "./browser-cdp";
 import { PAGE_SECRET_MIN_LENGTH } from "./browser-cdp-snapshot";
+import { CHALLENGE_CLICK_WAIT_MS, CHALLENGE_POLL_MS, TURNSTILE_SELF_PASS_MS } from "./browser-challenge";
 import { refuseCookieBanners, stopCookieBanners } from "./browser-consent";
 import { BrowserControlSessions } from "./browser-control-sessions";
 import { browserViewCursor } from "./browser-cursor";
@@ -1128,6 +1129,74 @@ export class BrowserHost {
         }),
       ),
     );
+  }).bind(this);
+
+  /**
+   * Before an agent's takeover request reaches the user, clicks the checkbox of a Turnstile,
+   * reCAPTCHA or hCaptcha check once and waits for the check, because one click passes many of them.
+   * Each document gets one click, and an image puzzle is never touched. `passed` when the check went
+   * away, `stayed` when it is still there, `none` when there was nothing to click. No page data goes
+   * to a CAPTCHA service: this is the click a person would make.
+   */
+  readonly tryChallengeCheckbox = Effect.fn("BrowserHost.tryChallengeCheckbox")(function* (
+    this: BrowserHost,
+    tabId: string,
+  ): Effect.fn.Return<"passed" | "stayed" | "none"> {
+    const tab = this.#tabs.get(tabId);
+    if (
+      !tab ||
+      tab.closing ||
+      tab.sleeping ||
+      tab.secret ||
+      this.#takeoverTabIds.has(tabId) ||
+      this.#userControlTabIds.has(tabId) ||
+      tab.challengeClickDocument === tab.documents
+    )
+      return "none";
+    const outcome = yield* this.#enqueue(tabId, (current) =>
+      Effect.gen({ self: this }, function* () {
+        const read = current.engine.challengeWidget().pipe(Effect.catch(() => Effect.succeed(null)));
+        // A read during a navigation finds nothing, so the check counts as gone only on a loaded page.
+        const gone = Effect.gen(function* () {
+          if (current.contents.isDestroyed()) return false;
+          if (current.contents.isLoading()) return false;
+          return (yield* read) === null;
+        });
+        const waitUntilGone = Effect.fn("BrowserHost.waitForChallenge")(function* (waitMs: number) {
+          const deadline = Date.now() + waitMs;
+          while (Date.now() < deadline) {
+            yield* Effect.sleep(CHALLENGE_POLL_MS);
+            if (yield* gone) return true;
+          }
+          return false;
+        });
+        let widget = yield* read;
+        if (!widget || widget.puzzle) return "none" as const;
+        const document = current.documents;
+        // A Turnstile widget often passes by itself, and a click before that can look like a bot.
+        if (widget.vendor === "turnstile") {
+          if (yield* waitUntilGone(TURNSTILE_SELF_PASS_MS)) return "passed" as const;
+          if (current.documents !== document) return "none" as const;
+          widget = yield* read;
+          if (!widget) return "passed" as const;
+        }
+        if (!widget.checkbox || widget.puzzle) return "none" as const;
+        current.challengeClickDocument = document;
+        current.engine.invalidateReferences();
+        yield* current.engine.clickPoint(widget.checkbox);
+        logger.info("Clicked the checkbox of a security check once before a takeover.", {
+          tabId,
+          vendor: widget.vendor,
+        });
+        // A check that passes on a Cloudflare interstitial loads the site, which is a new document.
+        if (yield* waitUntilGone(CHALLENGE_CLICK_WAIT_MS)) return "passed" as const;
+        // The check now shows a puzzle or still waits: the user takes the new document as it is.
+        current.challengeClickDocument = current.documents;
+        return "stayed" as const;
+      }),
+    ).pipe(Effect.catch(() => Effect.succeed("none" as const)));
+    if (outcome !== "none") this.#emitChanged();
+    return outcome;
   }).bind(this);
 
   /**

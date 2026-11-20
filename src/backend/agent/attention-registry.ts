@@ -290,6 +290,8 @@ export interface AttentionBrowserHost {
   listTabs(): BrowserTab[];
   beginTakeover(tabId: string): Effect.Effect<void, BrowserOperationError>;
   endTakeover(tabId: string): void;
+  /** Clicks the checkbox of a simple check once before a takeover reaches the user. */
+  tryChallengeCheckbox?(tabId: string): Effect.Effect<"passed" | "stayed" | "none">;
 }
 
 /** What the registry reads of the conversation runtime, so a test can give it a small one. */
@@ -1213,8 +1215,24 @@ export class AttentionRegistry {
       const refused = this.#secretKeyRefusal(args, agentId, secretKey);
       if (refused) return browserTakeoverError(refused);
     }
-    const requestId = params.tool === "submit_secret" ? randomUUID() : request.id;
     const reason = getString(args, "reason");
+    // One click passes many Turnstile, reCAPTCHA and hCaptcha checks, so the user gets only the rest.
+    if (params.tool === "request_takeover" && !reason && this.#browser.tryChallengeCheckbox) {
+      const challenge = yield* this.#browser.tryChallengeCheckbox(tabId);
+      if (challenge === "passed") {
+        logger.info("A security check passed with one click; no takeover was needed.", { agentId, tabId });
+        return {
+          success: true,
+          contentItems: [
+            {
+              type: "inputText",
+              text: "OpenBot clicked the checkbox of the security check once, and the check passed. The user was not asked. Take a fresh snapshot and continue.",
+            },
+          ],
+        } satisfies DynamicToolResult;
+      }
+    }
+    const requestId = params.tool === "submit_secret" ? randomUUID() : request.id;
     const takeover: BrowserTakeoverRequest = {
       requestId,
       agentId,

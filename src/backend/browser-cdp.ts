@@ -64,6 +64,7 @@ import {
   type SendCommand,
   stringValue,
 } from "./browser-cdp-values";
+import { readChallengeWidget } from "./browser-challenge";
 import { type BrowserOperationError, browserCall, browserFailure, browserSync } from "./browser-effects";
 import {
   type BrowserFillFieldsProgress,
@@ -732,6 +733,21 @@ export class BrowserCdpEngine {
         yield* dispatchMouseClick(send, coordinates, button, totalClicks, modifiers, sessionId);
       }),
     );
+  });
+
+  /** The Turnstile, reCAPTCHA or hCaptcha widget of the page that waits for a person, or null. */
+  readonly challengeWidget = Effect.fn("BrowserCdp.challengeWidget")(function* (this: BrowserCdpEngine) {
+    return yield* this.#leaseEffect((send) =>
+      readChallengeWidget(this.#contents, send, [...this.#targetSessions.keys()]),
+    );
+  });
+
+  /** One trusted left click at a viewport point, as a person's click on a check's checkbox. */
+  readonly clickPoint = Effect.fn("BrowserCdp.clickPoint")(function* (
+    this: BrowserCdpEngine,
+    point: { x: number; y: number },
+  ): Effect.fn.Return<void, BrowserOperationError> {
+    yield* this.#leaseEffect((send) => dispatchMouseClick(send, point, "left", 1, 0));
   });
 
   readonly hover = Effect.fn("BrowserCdp.hover")(function* (

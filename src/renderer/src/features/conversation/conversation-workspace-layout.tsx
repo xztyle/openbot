@@ -28,6 +28,12 @@ export interface ConversationWorkspaceLayout {
    * DM. One header row then names the agent and holds its controls, as a channel's header does.
    */
   headerSlot: () => HTMLElement | undefined;
+  /**
+   * The chat tells the DM how to close its side panel while one is open, and null once it closes. On a
+   * phone the panel (the agent's details, files, the browser) covers the chat, so the DM's Back closes
+   * it first, as Back from a channel's details in Slack's app returns to the channel.
+   */
+  setPanelBack?: (close: (() => void) | null) => void;
   /** The message box of the workspace. */
   composer: {
     /** Whether the formatting toolbar shows: one choice for every message box, as Slack's "Aa". */

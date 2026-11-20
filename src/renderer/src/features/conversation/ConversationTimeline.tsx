@@ -1,7 +1,18 @@
 import { chatVisualReply } from "@openbot/contracts/chat-visual";
 import type { ConversationMessageSender, MessageReaction } from "@openbot/contracts/ipc";
 import type { ConversationUiBlock } from "@openbot/contracts/ui-blocks";
-import { ArrowUp, AudioLines, Button, ChevronDown, Copy, Link, MessageSquareReply, Square, toast } from "@openbot/ui";
+import {
+  ArrowUp,
+  AudioLines,
+  Button,
+  CheckCheck,
+  ChevronDown,
+  Copy,
+  Link,
+  MessageSquareReply,
+  Square,
+  toast,
+} from "@openbot/ui";
 import type { AgentMessage, ChatActionMarkerModel, RoutineRunMarkerModel } from "@openbot/ui/data";
 import { ChannelActivityIndicator } from "@openbot/ui/features/channels/ChannelActivityIndicator";
 import { AgentActivityIndicator } from "@openbot/ui/features/conversation/AgentActivity";
@@ -707,10 +718,19 @@ export function ConversationTimeline() {
           <div class="ws-unread-banner" role="status">
             <Button variant="ghost" size="xs" class="ws-unread-banner-jump" onClick={jumpToUnreadMessages}>
               <ArrowUp aria-hidden="true" />
-              {unreadSinceLabel()}
+              <span class="ws-unread-banner-label">{unreadSinceLabel()}</span>
             </Button>
-            <Button variant="ghost" size="xs" disabled={markingRead()} onClick={() => void markUnreadMessages()}>
-              {t("workspace.app.channel.markRead")}
+            <Button
+              variant="ghost"
+              size="xs"
+              class="ws-unread-banner-read"
+              aria-label={t("workspace.app.channel.markRead")}
+              title={t("workspace.app.channel.markRead")}
+              disabled={markingRead()}
+              onClick={() => void markUnreadMessages()}
+            >
+              <CheckCheck aria-hidden="true" />
+              <span class="ws-unread-banner-read-label">{t("workspace.app.channel.markRead")}</span>
             </Button>
           </div>
         ) : (

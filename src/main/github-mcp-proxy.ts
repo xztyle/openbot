@@ -24,6 +24,7 @@ import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { runCauseEffect } from "../backend/effect-boundary";
 import { readJsonBody } from "../backend/local-mcp-bridge";
+import { cutModelText, MCP_RESULT_MORE, MCP_RESULT_TEXT_LIMIT } from "../backend/model-text-limit";
 
 const logger = createOpenBotLogger("github-mcp-proxy");
 
@@ -224,7 +225,9 @@ export class GitHubMcpProxy {
       const owner = isDynamicRecord(args) && isString(args.owner) ? args.owner : null;
       const name = isDynamicRecord(args) && isString(args.repo) ? args.repo : null;
       const token = (owner && name && this.#options.botToken(owner, name)) || userToken;
-      return forward(token, (client) => client.callTool(params, undefined, requestOptions(extra.signal)));
+      return forward(token, async (client) =>
+        boundTextContent(await client.callTool(params, undefined, requestOptions(extra.signal))),
+      );
     });
     if (capabilities.prompts) {
       mcp.setRequestHandler(ListPromptsRequestSchema, ({ params }, extra) =>
@@ -303,6 +306,20 @@ export class GitHubMcpProxy {
     const secret = Buffer.from(this.#options.secret());
     return candidate.length === secret.length && timingSafeEqual(candidate, secret);
   }
+}
+
+/**
+ * Cuts each text item past the model limit: a long issue list or search result otherwise stays in the
+ * agent's context for the rest of the session. The note says how to read more.
+ */
+function boundTextContent<Result extends Awaited<ReturnType<Client["callTool"]>>>(result: Result): Result {
+  if (!Array.isArray(result.content)) return result;
+  result.content = result.content.map((item) => {
+    if (!isDynamicRecord(item) || item.type !== "text" || !isString(item.text)) return item;
+    const cut = cutModelText(item.text, MCP_RESULT_TEXT_LIMIT, MCP_RESULT_MORE);
+    return cut ? { ...item, text: `${cut.text}\n${cut.note}` } : item;
+  });
+  return result;
 }
 
 function requestOptions(signal: AbortSignal): RequestOptions {

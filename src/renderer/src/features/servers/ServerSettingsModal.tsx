@@ -340,6 +340,11 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
     if (!options || !actionsAvailable() || !serverCanAdminister(props.server, "prompt-cache-ttl-v1")) return undefined;
     return { ...options, serverId: props.server.id };
   }
+  function claudeContextSource(): ProviderPromptCacheSource | undefined {
+    const options = props.hostPromptCacheTtl;
+    if (!options || !actionsAvailable() || !serverCanAdminister(props.server, "claude-context-v1")) return undefined;
+    return { ...options, serverId: props.server.id };
+  }
   /** Whether this dialog has the section, from the options its caller supplied: the same test as its navigation. */
   const sectionAvailable = (value: Section): boolean => {
     switch (value) {
@@ -905,6 +910,7 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
                   onDetailChange={setProviderDetail}
                   promptCache={promptCacheSource()}
                   providerEnvironment={providerEnvironmentSource()}
+                  claudeContext={claudeContextSource()}
                 />
               )}
             </Show>

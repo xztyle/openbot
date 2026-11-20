@@ -11,6 +11,7 @@ import { AGENT_PUBLISH_ROUTES } from "@openbot/contracts/team-protocol/agent-pub
 import { AGENT_TASK_LIMIT_ROUTES } from "@openbot/contracts/team-protocol/agent-task-limit-v1";
 import { BROWSER_PROFILES_ROUTES } from "@openbot/contracts/team-protocol/browser-profiles-v1";
 import { CHANNEL_ROUTES } from "@openbot/contracts/team-protocol/channels-v1";
+import { CLAUDE_CONTEXT_ROUTES } from "@openbot/contracts/team-protocol/claude-context-v1";
 import { DISCORD_ACCESS_ROUTES } from "@openbot/contracts/team-protocol/discord-access-v1";
 import { DISCORD_CHANNELS_ROUTES } from "@openbot/contracts/team-protocol/discord-channels-v1";
 import { FOCUS_USE_ROUTES } from "@openbot/contracts/team-protocol/focus-use-v1";
@@ -61,6 +62,7 @@ const PASSIVE_ROUTES: ReadonlySet<string> = new Set([
   PROMPT_CACHE_TTL_ROUTES.settings,
   PROVIDER_ENVIRONMENT_ROUTES.settings,
   PROVIDER_ACCOUNT_POOL_ROUTES.list,
+  CLAUDE_CONTEXT_ROUTES.settings,
   DISCORD_ACCESS_ROUTES.access,
   DISCORD_CHANNELS_ROUTES.config,
   DISCORD_CHANNELS_ROUTES.channels,

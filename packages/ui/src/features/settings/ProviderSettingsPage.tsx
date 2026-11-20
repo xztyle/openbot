@@ -7,7 +7,9 @@
 import { ProviderLogo } from "@openbot/brand";
 import {
   type AgentProviderId,
+  type ClaudeContextSetting,
   type CustomProviderSummary,
+  claudeCompactWindowSizes,
   DEFAULT_PROVIDER_ACCOUNT_ID,
   isProviderEnvironmentProvider,
   MAX_PROVIDER_ACCOUNTS,
@@ -119,6 +121,16 @@ export interface ProviderEnvironmentControl {
   /** Replaces the whole list. `value: null` keeps a stored sensitive value. */
   onSave: (variables: ProviderEnvironmentVariableInput[]) => void;
 }
+
+/** What the host's Claude agents load into each request. `value` is null until the host answers. */
+export interface ProviderClaudeContext {
+  value: ClaudeContextSetting | null;
+  pending: boolean;
+  /** A load or a save that failed. */
+  error: string | null;
+  onChange: (update: Partial<ClaudeContextSetting>) => void;
+}
+
 export interface ProviderSettingsPageProps extends ProviderRowHost {
   options: ProviderPickerOption[];
   /** The default for new agents. A joined server has none: its default is not this computer's. */
@@ -157,6 +169,8 @@ export interface ProviderSettingsPageProps extends ProviderRowHost {
    * (`provider-environment-v1`), and only for a provider that takes variables.
    */
   environment?: ((provider: AgentProviderId) => ProviderEnvironmentControl | undefined) | undefined;
+  /** On the Claude page. Only for a host with `claude-context-v1` that this account administers. */
+  claudeContext?: ProviderClaudeContext | undefined;
   /** Below the list: what the host found, and the other agents the user can add. */
   footer?: JSX.Element;
 }
@@ -549,6 +563,11 @@ function ProviderPage(props: PageProps) {
               name={props.option.name}
               disabled={props.disabled}
             />
+          )}
+        </Show>
+        <Show when={props.option.id === "claude" && props.claudeContext}>
+          {(context) => (
+            <ClaudeContextSection context={context()} disabled={props.disabled} menuMount={props.menuMount} />
           )}
         </Show>
       </Show>
@@ -1724,6 +1743,103 @@ function EnvironmentSection(props: {
     </SettingsSection>
   );
 }
+
+/* ---------------------------------------------- Claude context */
+
+/** Claude only: the user's Claude Code setup and the compaction size. A change applies to the next Claude process. */
+function ClaudeContextSection(props: {
+  context: ProviderClaudeContext;
+  disabled: boolean | undefined;
+  menuMount: HTMLElement | undefined;
+}) {
+  const { t, format } = useText();
+  const busy = () => Boolean(props.disabled || props.context.pending);
+  const sizeLabel = (size: number | null) =>
+    size === null
+      ? t("provider.settings.compactWindowDefault")
+      : t("provider.settings.compactWindowTokens", { size: format.number(size) });
+  return (
+    <SettingsSection title={t("provider.settings.context")}>
+      <ItemGroup class="settings-modal-card">
+        <Show when={props.context.error}>
+          {(message) => (
+            <Item class="settings-modal-row">
+              <ItemContent>
+                <ItemDescription class="provider-settings-error" role="alert">
+                  {message()}
+                </ItemDescription>
+              </ItemContent>
+            </Item>
+          )}
+        </Show>
+        <Show when={props.context.value}>
+          {(value) => (
+            <>
+              <Item class="settings-modal-row">
+                <ItemContent>
+                  <ItemTitle id="provider-settings-claude-setup-label">
+                    {t("provider.settings.claudeUserSetup")}
+                  </ItemTitle>
+                  <ItemDescription>{t("provider.settings.claudeUserSetupDescription")}</ItemDescription>
+                </ItemContent>
+                <ItemActions>
+                  <Switch
+                    checked={value().userSetup}
+                    disabled={busy()}
+                    aria-busy={props.context.pending ? "true" : "false"}
+                    aria-labelledby="provider-settings-claude-setup-label"
+                    onChange={(on: boolean) => props.context.onChange({ userSetup: on })}
+                  />
+                </ItemActions>
+              </Item>
+              <Item class="settings-modal-row">
+                <ItemContent>
+                  <ItemTitle id="provider-settings-compact-window-label">
+                    {t("provider.settings.compactWindow")}
+                  </ItemTitle>
+                  <ItemDescription>{t("provider.settings.compactWindowDescription")}</ItemDescription>
+                </ItemContent>
+                <ItemActions>
+                  <Select<CompactWindowChoice>
+                    options={claudeCompactWindowSizes(value().compactWindow).map(compactWindowChoice)}
+                    value={compactWindowChoice(value().compactWindow)}
+                    disabled={busy()}
+                    placement="bottom-end"
+                    // The select also reports the value that it shows, which is not a choice of the user.
+                    onChange={(choice) => {
+                      const size = choice === null ? undefined : compactWindowSize(choice);
+                      if (size !== undefined && size !== props.context.value?.compactWindow)
+                        props.context.onChange({ compactWindow: size });
+                    }}
+                    itemComponent={(item) => (
+                      <SelectItem item={item.item}>{sizeLabel(compactWindowSize(item.item.rawValue))}</SelectItem>
+                    )}
+                  >
+                    <SelectTrigger size="sm" aria-labelledby="provider-settings-compact-window-label">
+                      <SelectValue<CompactWindowChoice>>
+                        {(state) => {
+                          const selected = state.selectedOption();
+                          return selected ? sizeLabel(compactWindowSize(selected)) : "";
+                        }}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent mount={props.menuMount} />
+                  </Select>
+                </ItemActions>
+              </Item>
+            </>
+          )}
+        </Show>
+      </ItemGroup>
+    </SettingsSection>
+  );
+}
+
+/** The select takes text values: "default" for Claude Code's own size, the token count otherwise. */
+type CompactWindowChoice = string;
+const compactWindowChoice = (size: number | null): CompactWindowChoice => (size === null ? "default" : String(size));
+const compactWindowSize = (choice: CompactWindowChoice): number | null =>
+  choice === "default" ? null : Number.parseInt(choice, 10);
 
 /* ---------------------------------------------- Use */
 

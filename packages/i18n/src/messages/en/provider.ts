@@ -299,6 +299,16 @@ export const messages = defineMessages("provider", {
   "provider.settings.environmentDiscard": "Discard",
   "provider.settings.environmentSave": "Save",
   "provider.settings.environmentLoadFailed": "Could not load the variables of {name}.",
+  "provider.settings.context": "Context",
+  "provider.settings.claudeUserSetup": "Use my Claude Code setup",
+  "provider.settings.claudeUserSetupDescription":
+    "Agents load your CLAUDE.md, skills, agents, hooks, plugins and output style from ~/.claude. Off, each turn sends a shorter prompt. Workspace files and sign-in settings still load.",
+  "provider.settings.compactWindow": "Compact chats at",
+  "provider.settings.compactWindowDescription":
+    "Claude Code sums up the older turns of a chat when it reaches this size. Lower keeps turns fast and cheap. Higher keeps more detail. A model with a smaller window compacts at its own limit.",
+  "provider.settings.compactWindowDefault": "Claude Code default",
+  "provider.settings.compactWindowTokens": "{size} tokens",
+  "provider.settings.claudeContextLoadFailed": "Could not load the Claude context settings of this server.",
   "provider.settings.use": "Use",
   "provider.settings.defaultForNew": "Default for new agents",
   "provider.settings.startsWith": "New agents start with {name}.",

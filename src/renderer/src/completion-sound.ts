@@ -41,6 +41,8 @@ function shouldPlayCompletionSound(
 ): boolean {
   // A quiet routine run posted nothing, so it has no reply to announce.
   if (event.type !== "turn-completed" || event.status !== "completed" || event.quiet) return false;
+  // Work between agents stays in the chat and shows no notification, so it plays no sound either.
+  if (event.agentTalk) return false;
   if (!isCompletionSoundEnabled(storage)) return false;
   return agents.some((agent) => agent.id === event.agentId && agent.notifications);
 }

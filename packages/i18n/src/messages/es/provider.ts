@@ -242,4 +242,15 @@ export const messages = {
   "provider.settings.environmentDiscard": "Descartar",
   "provider.settings.environmentSave": "Guardar",
   "provider.settings.environmentLoadFailed": "No se pudieron cargar las variables de {name}.",
+  "provider.settings.context": "Contexto",
+  "provider.settings.claudeUserSetup": "Usar mi configuración de Claude Code",
+  "provider.settings.claudeUserSetupDescription":
+    "Los agentes cargan tu CLAUDE.md, skills, agentes, hooks, plugins y estilo de salida de ~/.claude. Desactivado, cada turno envía un prompt más corto. Los archivos del espacio de trabajo y los ajustes de inicio de sesión se siguen cargando.",
+  "provider.settings.compactWindow": "Compactar chats en",
+  "provider.settings.compactWindowDescription":
+    "Claude Code resume los turnos antiguos de un chat cuando alcanza este tamaño. Menos mantiene los turnos rápidos y baratos. Más conserva más detalle. Un modelo con una ventana más pequeña compacta en su propio límite.",
+  "provider.settings.compactWindowDefault": "Predeterminado de Claude Code",
+  "provider.settings.compactWindowTokens": "{size} tokens",
+  "provider.settings.claudeContextLoadFailed":
+    "No se pudieron cargar los ajustes de contexto de Claude de este servidor.",
 } as const satisfies PartialTranslation<typeof source>;

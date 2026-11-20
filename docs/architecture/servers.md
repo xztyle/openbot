@@ -379,6 +379,7 @@ host advertises a capability only when its `TeamApiAdmin` member exists.
 | `host-timezone-v1` | Read and set the server timezone | `hostAdmin` |
 | `agent-memory-limit-v1` | Read and set how many memories each agent keeps | `hostAdmin` |
 | `prompt-cache-ttl-v1` | Read and set how long Claude keeps the prompt cache of the host's agents | `hostAdmin` |
+| `claude-context-v1` | Read and set whether the host's Claude agents load the host user's Claude Code setup, and when they compact | `hostAdmin` |
 | `agent-access-v1` | Read and set the roles that give members access to agents (see [Roles](#roles)) | `hostAdmin` |
 | `discord-access-v1` | Read and set which Discord roles can use OpenBot in a Discord server; list its roles | `messaging` |
 | `events-v1` | Manage webhook routines, their secrets, and activity | `events` |
@@ -443,6 +444,14 @@ sets nothing, so Claude Code uses its own choice: 5 minutes with an API key, 1 h
 subscription within its limits. A `promptCacheTtl`
 in the Claude settings or `CLAUDE_CODE_PROMPT_CACHE_TTL` on the host still wins. A change applies to
 the next Claude process, not to a running one; an idle thread starts a new process when it resumes.
+
+`claude-context-v1` reads and sets what the host's Claude agents load into each request
+(`openbot-claude-context-v1.json`; default `{ userSetup: false, compactWindow: null }`). With
+`userSetup` off, a Claude process loads no `user` setting source and no `~/.agents/skills` plugin: no
+user CLAUDE.md, skills, agents, hooks, plugins or output style. The sign-in keys and the text `env`
+values of `~/.claude/settings.json` still reach it through a 0600 flag settings file. `compactWindow`
+sets `CLAUDE_CODE_AUTO_COMPACT_WINDOW` (100,000 to 1,000,000 tokens); `null` sets nothing. Both apply to
+the next Claude process.
 The Cache section of the Claude page in Server settings → Providers sets it for this computer and
 for a joined server.
 

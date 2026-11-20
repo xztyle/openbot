@@ -4,6 +4,7 @@ import { z } from "zod";
 import { BROWSER_DYNAMIC_TOOLS, OPENBOT_BROWSER_NAMESPACE } from "../browser-tools";
 import { OPENBOT_DYNAMIC_TOOLS, OPENBOT_TOOL_DEFINITIONS } from "../openbot-tools";
 import type { DynamicToolCallParams } from "../protocol";
+import { advertisedJsonSchema } from "./advertised-json-schema";
 import { toolGuidance } from "./tool-guidance";
 
 /** Discovery changes visibility only. Original definitions and execution owners stay authoritative. */
@@ -31,8 +32,14 @@ const DIRECT_NAMES = new Set([
   "request_api_key",
 ]);
 
-// Names keep the complete, stable catalog below 4,000 characters without schema duplication.
-const INITIAL_TOOL_CATALOG = BUILTIN_TOOL_CATALOG.map((tool) => tool.name).join(", ");
+/**
+ * The names of all catalog tools, grouped by namespace, such as `openbot.{list_tables, query_data}`. Names
+ * give a complete, stable list without schemas; the group form keeps each name qualified and does not
+ * repeat the namespace for each tool.
+ */
+const INITIAL_TOOL_CATALOG = [OPENBOT_DYNAMIC_TOOLS, ...BROWSER_DYNAMIC_TOOLS]
+  .map((namespace) => `${namespace.name}.{${namespace.tools.map((tool) => tool.name).join(", ")}}`)
+  .join("; ");
 const qualifiedName = z.string().trim().min(1).max(160);
 const searchQuery = z.string().trim().min(1).max(200);
 // Models often send one query string, so search accepts `query` as well as `queries`.
@@ -81,7 +88,7 @@ export const VISIBLE_DYNAMIC_TOOLS = [
       type: "function" as const,
       name: definition.name,
       description: definition.description,
-      inputSchema: z.toJSONSchema(z.strictObject(definition.shape), { target: "draft-7" }),
+      inputSchema: advertisedJsonSchema(z.strictObject(definition.shape)),
     })),
   },
 ];

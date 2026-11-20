@@ -8,6 +8,7 @@ import {
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { isUiBlockId, UI_BLOCK_LIMITS } from "@openbot/contracts/ui-blocks";
 import { z } from "zod";
+import { advertisedJsonSchema } from "./agent/advertised-json-schema";
 import { interruptAgentToolSchema } from "./agent/agent-interrupt-tool";
 import { CHANNEL_ADMIN_TOOL_DEFINITIONS } from "./agent/channel-admin-tools";
 import { DATA_TOOL_DEFINITIONS } from "./agent/data-tools";
@@ -596,7 +597,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "remember",
     description:
-      "Stage one short, durable memory for this agent. Use memoryId to correct or consolidate an existing memory. New entries are searchable unless inclusion is essential. Essential requests that do not fit stay searchable. The change commits only if the current turn completes.",
+      "Stage one short, durable memory for this agent. Use memoryId to correct or consolidate an existing memory. New entries are searchable unless inclusion is essential. Essential requests that do not fit stay searchable. At the storage limit, consolidate related entries or forget facts that are no longer true first; if the user lowered the limit below the saved count, keep all entries and report that the new one could not be saved. The change commits only if the current turn completes.",
     shape: {
       text: z.string().min(1).max(INPUT_LIMITS.agentMemoryText),
       memoryId: z.string().optional(),
@@ -664,7 +665,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "ask_ui",
     description: [
-      "Show the user an interactive block in this conversation and wait for the answer.",
+      "Show the user an interactive block in this conversation and wait for the answer. In a channel, each member who reads the channel sees it.",
       "Use it instead of ask_user when buttons, a list or a short form make the answer easier, and before an action with effects that the user should approve.",
       "Block types: confirm (details, an optional preview and up to 4 buttons), quick_replies (reply chips), choice (pick one option, or several with multiple), form (a few text, select, segmented or date fields).",
       "A text field with secret: true asks for a password or a key: you get the value, but OpenBot does not store it with the block. Never repeat the value in a message or a thought. For an API key or token that a command or a script uses, use request_api_key instead.",
@@ -765,6 +766,6 @@ export const OPENBOT_DYNAMIC_TOOLS = {
     type: "function" as const,
     name: definition.name,
     description: definition.description,
-    inputSchema: z.toJSONSchema(z.strictObject(definition.shape), { target: "draft-7" }),
+    inputSchema: advertisedJsonSchema(z.strictObject(definition.shape)),
   })),
 } as const;

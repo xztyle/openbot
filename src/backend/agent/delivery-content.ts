@@ -340,22 +340,19 @@ export function deliveryPromptInput(context: DeliveryContext, sources: DeliveryP
     const senderName = agentNames.get(senderAgentId) ?? senderAgentId;
     const replyProtocol = delivery.replyToMessageId
       ? [
-          "This is a reply to a message you sent earlier.",
-          "Surface or summarize the result naturally for the user, and start with the name of the teammate.",
-          "When the reply reports blocked work, do not repeat that work with the same tools. Give the user the blocker and the action from its Unblock line. When OpenBot has a plugin for the service and that plugin is not in your tools, end your answer with the plugin sentence from your instructions.",
-          "Reply to the teammate only when the message requests another action, or when you have new information that unblocks its work. Do not send it the same request again. Otherwise do not send an acknowledgement and avoid reply loops.",
+          "This replies to a message you sent. Give the result to the user naturally, starting with the teammate's name.",
+          "For blocked work, do not repeat that work with the same tools. Give the user the blocker and its Unblock action. When OpenBot has a plugin for the service and it is not in your tools, end your answer with the plugin sentence from your instructions.",
+          "Reply to the teammate only for another requested action or new information that unblocks its work, never with the same request or an acknowledgement.",
         ]
       : delivery.expectsReply === false
         ? [
             NO_ANSWER_LINE,
-            "Use it if it changes your work, and continue with what you were doing.",
-            "Do not send a reply, an acknowledgement, or a result for it. OpenBot sends the sender nothing back.",
+            "Use it if it changes your work, and continue. Send no reply, acknowledgement or result: OpenBot sends the sender nothing back.",
           ]
         : [
-            `After completing the request, send a concise result back to ${senderName} with openbot.send_message.`,
-            `Use recipientAgentIds ["${senderAgentId}"], replyToMessageId "${delivery.messageId}", and expectsReply false.`,
-            "Format the reply as three lines: Status: done | partial | blocked, Result: <concrete outcome>, Evidence: <file, test, command, or none>. When Status is blocked, add a fourth line, Unblock: <the one action that unblocks the task>. When OpenBot has a plugin for the service and that plugin is not in your tools, that action is the plugin sentence from your instructions.",
-            "Do not acknowledge without a Status line. Do not leave the sender waiting for a result.",
+            `When done, send a concise result to ${senderName} with openbot.send_message: recipientAgentIds ["${senderAgentId}"], replyToMessageId "${delivery.messageId}", expectsReply false.`,
+            "Reply in three lines: Status: done | partial | blocked, Result: <concrete outcome>, Evidence: <file, test, command, or none>. When blocked, add Unblock: <the one action that unblocks the task>; when OpenBot has a plugin for the service and it is not in your tools, that action is the plugin sentence from your instructions.",
+            "Never acknowledge without a Status line, and never leave the sender waiting for a result.",
           ];
     text = [
       `${TEAMMATE_HEADER} ${senderName} (${senderAgentId}).`,

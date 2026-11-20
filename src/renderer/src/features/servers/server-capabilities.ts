@@ -70,6 +70,7 @@ export function serverSupportsCapability(
       capability === "host-turn-limits-v1" ||
       capability === "agent-memory-limit-v1" ||
       capability === "prompt-cache-ttl-v1" ||
+      capability === "claude-context-v1" ||
       capability === "claude-api-key-v1" ||
       capability === "agent-access-v1" ||
       capability === "discord-access-v1" ||

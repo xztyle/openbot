@@ -396,6 +396,17 @@ export interface ProviderClientContext {
    */
   readonly promptCacheTtl?: () => PromptCacheTtl;
   /**
+   * Whether Claude agents load the user's own Claude Code setup from `~/.claude`, read at each spawn.
+   * Optional for the same reason as `reportMcpDrops`: without it Claude does not load the setup, as the
+   * default is.
+   */
+  readonly claudeUserSetup?: () => boolean;
+  /**
+   * The size in tokens at which Claude Code compacts a chat, read at each spawn. `null` and absent
+   * leave Claude Code's own size for each model.
+   */
+  readonly claudeCompactWindow?: () => number | null;
+  /**
    * The environment variables of a provider on this server, read at each spawn. Each process of the
    * provider gets them after OpenBot's own values, except the names that the host refuses
    * (`PROVIDER_ENVIRONMENT_RESERVED_NAMES`). Optional for the same reason as `reportMcpDrops`.
@@ -443,18 +454,28 @@ function withAccountEnvironment(
  * The agent environment and the account's folder come after the cache flag. The provider's variables
  * of this server come last, so a variable that an admin set wins over a value of the same name; the
  * host refuses the names of the account folders.
+ *
+ * A compaction size sets `CLAUDE_CODE_AUTO_COMPACT_WINDOW`. The CLI reads it before the
+ * `autoCompactWindow` of the Claude settings, and lowers it to the context window of a smaller model.
+ * The default sets nothing.
  */
 function claudeAgentEnvironment(
   context: ProviderClientContext,
 ): (inherited?: NodeJS.ProcessEnv) => Readonly<Record<string, string>> {
   const environment = withAccountEnvironment(context);
-  return (inherited) => ({
-    ...((context.promptCacheTtl?.() ?? DEFAULT_PROMPT_CACHE_TTL.ttl) === "1h" ? { ENABLE_PROMPT_CACHING_1H: "1" } : {}),
-    ...environment?.(inherited),
-    // After the account, so a key account's key does not go to a gateway that the variables name.
-    // The host refuses `CLAUDE_CONFIG_DIR`, the account's folder.
-    ...context.providerEnvironment?.("claude"),
-  });
+  return (inherited) => {
+    const compactWindow = context.claudeCompactWindow?.() ?? null;
+    return {
+      ...((context.promptCacheTtl?.() ?? DEFAULT_PROMPT_CACHE_TTL.ttl) === "1h"
+        ? { ENABLE_PROMPT_CACHING_1H: "1" }
+        : {}),
+      ...(compactWindow === null ? {} : { CLAUDE_CODE_AUTO_COMPACT_WINDOW: String(compactWindow) }),
+      ...environment?.(inherited),
+      // After the account, so a key account's key does not go to a gateway that the variables name.
+      // The host refuses `CLAUDE_CONFIG_DIR`, the account's folder.
+      ...context.providerEnvironment?.("claude"),
+    };
+  };
 }
 
 /**
@@ -749,6 +770,7 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
         claudeAgentEnvironment(context),
         undefined,
         claudeFallbackApiKey(context),
+        context.claudeUserSetup,
       ),
     authState: (account) => ({ kind: "claude", email: account?.email ?? null }),
     validateAccount: () => undefined,

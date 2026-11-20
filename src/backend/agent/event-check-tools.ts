@@ -57,7 +57,7 @@ export const EVENT_CHECK_TOOL_DEFINITIONS = [
       secret: z
         .string()
         .regex(/^[A-Z][A-Z0-9_]{0,63}$/)
-        .describe("The key name in Secrets."),
+        .describe("The key name in Secrets: A-Z, 0-9 and _, starting with a letter."),
       shared: z.boolean().optional().describe("True (default): the shared key. False: your own key."),
     },
   },

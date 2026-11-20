@@ -3,8 +3,14 @@ import type { ProviderPromptCache } from "@openbot/ui/features/settings/Provider
 import { useText } from "@openbot/ui/text";
 import { createEffect, createStore, untrack } from "solid-js";
 
-/** The prompt cache calls of one server's host. The desktop reaches them through main. */
-export type HostPromptCacheTtlCalls = Pick<OpenBotDesktopApi["hostAdmin"], "getPromptCacheTtl" | "setPromptCacheTtl">;
+/**
+ * The Claude page's host calls of one server: the prompt cache time and the Claude context settings.
+ * The desktop reaches them through main.
+ */
+export type HostPromptCacheTtlCalls = Pick<
+  OpenBotDesktopApi["hostAdmin"],
+  "getPromptCacheTtl" | "setPromptCacheTtl" | "getClaudeContext" | "setClaudeContext"
+>;
 
 export interface HostPromptCacheTtlOptions {
   /** The calls of a client with no `window.openbot`, such as the web client. */

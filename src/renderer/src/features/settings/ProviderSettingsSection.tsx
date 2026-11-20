@@ -44,6 +44,7 @@ import {
   type ProviderKeyApi,
 } from "@openbot/ui/features/settings/OpenCodeKeyDialog";
 import {
+  type ProviderClaudeContext,
   type ProviderDefaultChoice,
   type ProviderEnvironmentControl,
   type ProviderPromptCache,
@@ -58,6 +59,7 @@ import type { ProviderConnectionApi } from "../../components/provider-connection
 import { createCustomProviderHostState } from "../custom-providers/custom-provider-host-state";
 import { savedCustomModel } from "../onboarding/SetupProviderPicker";
 import { createProviderEnvironment, type ProviderEnvironmentSource } from "./provider-environment";
+import { createProviderClaudeContext } from "./provider-claude-context";
 import { createProviderPromptCache, type ProviderPromptCacheSource } from "./provider-prompt-cache";
 import { createSettingsGeneralStore, type SettingsGeneralStore } from "./stores/general-store";
 
@@ -108,6 +110,7 @@ interface ProviderSettingsSectionProps {
   onDetailChange?: ((detail: ProviderSettingsDetail | null) => void) | undefined;
   promptCache?: ProviderPromptCache | undefined;
   environment?: ((provider: AgentProviderId) => ProviderEnvironmentControl | undefined) | undefined;
+  claudeContext?: ProviderClaudeContext | undefined;
 }
 
 /** The provider list of the computer the agents run on, with its custom endpoint dialogs. */
@@ -261,6 +264,7 @@ function ProviderSettingsSection(props: ProviderSettingsSectionProps) {
         onDetailChange={props.onDetailChange}
         promptCache={props.promptCache}
         environment={props.environment}
+        claudeContext={props.claudeContext}
         footer={
           <>
             <Show when={props.providerDetection}>
@@ -498,6 +502,8 @@ export function HostProviderSettingsPanel(
     promptCache?: ProviderPromptCacheSource | undefined;
     /** The Environment section of each provider page, for a host with `provider-environment-v1` that this account administers. */
     providerEnvironment?: ProviderEnvironmentSource | undefined;
+    /** The Claude page's context settings, for a host with `claude-context-v1` that this account administers. */
+    claudeContext?: ProviderPromptCacheSource | undefined;
   },
 ) {
   const promptCache = createProviderPromptCache(() => props.promptCache);
@@ -505,6 +511,7 @@ export function HostProviderSettingsPanel(
     () => props.providerEnvironment,
     () => props.agentStatus,
   );
+  const claudeContext = createProviderClaudeContext(() => props.claudeContext);
   const keys = createProviderKeyState({
     open: true,
     get providerKeys() {
@@ -567,6 +574,7 @@ export function HostProviderSettingsPanel(
         onDetailChange={props.onDetailChange}
         promptCache={promptCache()}
         environment={environment()}
+        claudeContext={claudeContext()}
         detectionSettings={
           <Show when={props.detectionSettings}>
             {(value) => (

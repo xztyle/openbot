@@ -33,6 +33,7 @@ import {
 } from "./browser-view-v1";
 import { TEAM_CHANNEL_ATTENTION_CAPABILITY } from "./channel-attention-v1";
 import { CLAUDE_API_KEY_CAPABILITY } from "./claude-api-key-v1";
+import { CLAUDE_CONTEXT_CAPABILITY } from "./claude-context-v1";
 import { CONNECTORS_CAPABILITY } from "./connectors-v1";
 import { CONTEXT_RESET_CAPABILITY } from "./context-reset-v1";
 import { CONVERSATION_FILE_SEARCH_CAPABILITY } from "./conversation-file-search-v1";
@@ -150,6 +151,7 @@ export {
   BROWSER_SIGN_IN_CAPABILITY,
   BROWSER_USER_CONTROL_CAPABILITY,
   CHANNEL_DELETE_CAPABILITY,
+  CLAUDE_CONTEXT_CAPABILITY,
   CONNECTORS_CAPABILITY,
   CONTEXT_RESET_CAPABILITY,
   CONVERSATION_FILE_SEARCH_CAPABILITY,
@@ -309,6 +311,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   PROVIDER_ACCOUNT_RELAY_CAPABILITY,
   STORAGE_DISK_CAPABILITY,
   PROMPT_CACHE_TTL_CAPABILITY,
+  CLAUDE_CONTEXT_CAPABILITY,
   CLAUDE_API_KEY_CAPABILITY,
   WORKFLOWS_CAPABILITY,
   HOST_TURN_LIMITS_CAPABILITY,
@@ -429,6 +432,7 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== PROVIDER_ACCOUNT_RELAY_CAPABILITY &&
     capability !== STORAGE_DISK_CAPABILITY &&
     capability !== PROMPT_CACHE_TTL_CAPABILITY &&
+    capability !== CLAUDE_CONTEXT_CAPABILITY &&
     capability !== CLAUDE_API_KEY_CAPABILITY &&
     capability !== WORKFLOWS_CAPABILITY &&
     capability !== HOST_TURN_LIMITS_CAPABILITY &&
@@ -492,6 +496,7 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== PROVIDER_ACCOUNT_RELAY_CAPABILITY &&
       capability !== STORAGE_DISK_CAPABILITY &&
       capability !== PROMPT_CACHE_TTL_CAPABILITY &&
+      capability !== CLAUDE_CONTEXT_CAPABILITY &&
       capability !== CLAUDE_API_KEY_CAPABILITY &&
       capability !== WORKFLOWS_CAPABILITY &&
       capability !== HOST_TURN_LIMITS_CAPABILITY &&

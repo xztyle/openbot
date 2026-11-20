@@ -32,8 +32,12 @@ export interface AgentClient {
    * this call the previous session stays open inside the client, and the MCP servers it spawned stay
    * alive with it, so each further change adds another set of processes - including the servers the
    * user turned off. Optional, because a client that keeps no per-thread state has nothing to close.
+   *
+   * `resumes`: the next turn resumes this same provider session, which still holds the context that
+   * its turns were sent. A client keeps what it knows of that context, so the turn does not send it
+   * again. Otherwise the session ends, and the client forgets it.
    */
-  releaseThread?(externalThreadId: string): Effect.Effect<void, ProviderClientOperationError>;
+  releaseThread?(externalThreadId: string, resumes?: boolean): Effect.Effect<void, ProviderClientOperationError>;
   /**
    * Whether the thread still runs work that outlives its turn, such as Claude's background subagents
    * and commands, which end with the process. Optional: a client without such work never holds any.

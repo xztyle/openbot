@@ -13,7 +13,9 @@ import type { RemoteWorkflowError } from "../remote-service-effects";
 import {
   type AgentAccessChange,
   type AgentAccessSnapshot,
+  type ClaudeContextSetting,
   decodeAgentAccessSnapshot,
+  decodeClaudeContextSetting,
   decodeHostAgentMemoryLimit,
   decodeHostTimezoneSettings,
   decodeHostTurnLimits,
@@ -47,6 +49,7 @@ import {
   AGENT_MEMORY_LIMIT_CAPABILITY,
   AGENT_MEMORY_LIMIT_ROUTES,
 } from "@openbot/contracts/team-protocol/agent-memory-limit-v1";
+import { CLAUDE_CONTEXT_CAPABILITY, CLAUDE_CONTEXT_ROUTES } from "@openbot/contracts/team-protocol/claude-context-v1";
 import type { TeamCurrentCapability } from "@openbot/contracts/team-protocol/current";
 import { HOST_ADMIN_CAPABILITY, HOST_ADMIN_ROUTES } from "@openbot/contracts/team-protocol/host-admin-v1";
 import { HOST_TIMEZONE_CAPABILITY, HOST_TIMEZONE_ROUTES } from "@openbot/contracts/team-protocol/host-timezone-v1";
@@ -69,6 +72,7 @@ import { sourceText } from "@openbot/i18n/source";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import { type AgentAccessStore, agentAccessSnapshot } from "../agent-access-store";
 import type { AgentMemoryLimitSetting } from "../agent-memory-limit-preference-store";
+import type { ClaudeContextPreferenceStore } from "../claude-context-preference-store";
 import type { HostService } from "../host-service";
 import type { HostTurnLimitsPreferenceStore } from "../host-turn-limits-preference-store";
 import type { PromptCacheTtlPreferenceStore } from "../prompt-cache-ttl-preference-store";
@@ -103,6 +107,7 @@ interface HostAdminIpcDependencies {
   hostTurnLimits: Pick<HostTurnLimitsPreferenceStore, "get" | "set">;
   agentMemoryLimit: AgentMemoryLimitSetting;
   promptCacheTtl: Pick<PromptCacheTtlPreferenceStore, "get" | "set">;
+  claudeContext: Pick<ClaudeContextPreferenceStore, "get" | "set">;
   workspaceSettings: WorkspaceSettingsStore;
   providerEnvironment: Pick<ProviderEnvironmentControl, "get" | "set">;
   agentAccess: Pick<AgentAccessStore, "levels" | "set">;
@@ -124,6 +129,7 @@ export function hostAdminIpcHandlers({
   hostTurnLimits,
   agentMemoryLimit,
   promptCacheTtl,
+  claudeContext,
   workspaceSettings,
   providerEnvironment,
   agentAccess,
@@ -163,6 +169,11 @@ export function hostAdminIpcHandlers({
     return runCauseEffect(
       remoteServers.request(serverId, route, decodePromptCacheTtlSetting, { method: "POST", body }),
     );
+  }
+  function remoteClaudeContext(serverId: string, route: string, body: ClaudeContextSetting | Record<string, never>) {
+    if (!remoteServers.supportsCapability(serverId, CLAUDE_CONTEXT_CAPABILITY))
+      throw new Error(sourceText("error.team.claudeContextUnsupported"));
+    return runCauseEffect(remoteServers.request(serverId, route, decodeClaudeContextSetting, { method: "POST", body }));
   }
   function remoteWorkspaceSettings(serverId: string, route: string, body: WorkspaceSettings | Record<string, never>) {
     if (!remoteServers.supportsCapability(serverId, WORKSPACE_CAPABILITY))
@@ -299,6 +310,14 @@ export function hostAdminIpcHandlers({
       setPromptCacheTtl: scopedHandler(parsePromptCacheTtl, {
         local: (ttl) => runCauseEffect(promptCacheTtl.set(ttl)),
         remote: (ttl, serverId) => remotePromptCacheTtl(serverId, PROMPT_CACHE_TTL_ROUTES.update, { ttl }),
+      }),
+      getClaudeContext: scopedQueryHandler({
+        local: () => claudeContext.get(),
+        remote: (serverId) => remoteClaudeContext(serverId, CLAUDE_CONTEXT_ROUTES.settings, {}),
+      }),
+      setClaudeContext: scopedHandler(decodeClaudeContextSetting, {
+        local: (setting) => runCauseEffect(claudeContext.set(setting)),
+        remote: (setting, serverId) => remoteClaudeContext(serverId, CLAUDE_CONTEXT_ROUTES.update, setting),
       }),
       getWorkspaceSettings: scopedQueryHandler({
         local: () => workspaceSettings.get(),

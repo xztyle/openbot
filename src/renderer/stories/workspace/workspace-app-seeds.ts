@@ -245,3 +245,100 @@ export function seeds(
     { channel: dm, messages: [message("dm-ana", 70, ana, "Lunch at 12?")], ...unread(0) },
   ];
 }
+
+const sales = { kind: "agent" as const, id: "sales", name: "Sales Outbound" };
+
+function task(id: string, ownerAgentId: string, requestMessageId: string, parentTaskId: string | null): ChannelTask {
+  return {
+    ...runningTask("nicho-cocina", id, ownerAgentId, requestMessageId),
+    parentTaskId,
+    rootTaskId: parentTaskId ?? id,
+  };
+}
+
+/**
+ * A team thread where the lead hands long Spanish tasks to three members, as #nicho-cocina showed
+ * the owner walls of text: two handoffs stored before the one-line summaries (`Name: task`), one
+ * with its summary, the long answer of a subtask, the lead's short answer to the person, and three
+ * agents still at work in the thread.
+ */
+export function agentTalkSeeds(reader = "local"): MockChannelSeed[] {
+  const base = seeds(reader);
+  const you = { kind: "member" as const, id: READER, name: "Alejandro" };
+  const members = [chief, research, sales].map((agent) => ({ agentId: agent.id }));
+  const room = channel({
+    id: "nicho-cocina",
+    name: "nicho-cocina",
+    topic: "PUO Cena Navideña: anuncios del 10 al 24 dic",
+    members,
+    leadAgentId: "chief",
+    routing: "coordinator",
+  });
+  const rootId = "cocina-root";
+  const root: ChannelMessage = {
+    ...message("nicho-cocina", 0, you, "¿El anuncio será imagen o link directo a la página? Quiero lanzarlo el 10."),
+    id: rootId,
+    taskId: "cocina-task",
+  };
+  const handoff = (minutes: number, to: typeof research, text: string, taskId: string, extra = {}) => {
+    const entry = message("nicho-cocina", minutes, chief, `${to.name}: ${text}`, {
+      threadRootId: rootId,
+      ...extra,
+    });
+    return { ...entry, taskId, message: { ...entry.message, author: "system" as const } };
+  };
+  const replies: ChannelMessage[] = [
+    handoff(
+      1,
+      research,
+      "Alejandro pregunta si el anuncio será imagen o link directo a la página. Necesito de ti, para responderle en un solo mensaje en el canal, un inventario corto y concreto (comenta en COC-19 y responde con channel_result, máx. 8 líneas): (1) qué piezas EXISTEN hoy (copys, hooks, guiones, imágenes, videos; IDs de los 11 con OK de Cumplimiento) y en qué estado (borrador/OK); (2) qué FALTA producir para lanzar el 10-dic (p. ej. imagen única 1080×1080/1350, carrusel, video corto 9:16) y quién lo produce; (3) derechos: las 4 fotos de la landing son CC BY con crédito visible; ¿se pueden usar en el anuncio y cómo ponemos el crédito? (4) tu recomendación de formato para una prueba con 98 USD. Plazo: sábado 21-nov. No publicas ni creas nada en Meta.",
+      "cocina-task",
+    ),
+    handoff(
+      2,
+      sales,
+      "Alejandro decidió anuncios del 10 al 24 dic con máx. 7 USD/día. Mi decisión como Líder de Producto: 10–23 dic = 14 días = 98 USD; el tope ACUMULADO de la cuenta Aprendivo Ads (spend_cap) debe quedar en 98 USD (sube a 105 solo si Alejandro responde en COC-34 «incluye el 24»; yo te aviso). Ya lo dice COC-34. Sigue con COC-35: tarjeta de toma de control para que Alejandro entre a Facebook, página «La Noche del 24» conectada, y el usuario de sistema con permisos de anunciante.",
+      "cocina-task",
+    ),
+    {
+      ...handoff(
+        3,
+        sales,
+        "Prepara la estructura de la campaña en borrador: un conjunto de anuncios, público Chile 25-55 interesado en cocina y celebraciones, ubicación automática, objetivo tráfico a la landing con parámetros src/sck. Deja todo en borrador y adjunta capturas en COC-36. No publiques nada.",
+        "cocina-task",
+      ),
+      agentNote: {
+        to: [sales.id],
+        summary: "¿Me dejas la campaña en borrador (tráfico a la landing, Chile 25-55) con capturas en COC-36?",
+      },
+    },
+    {
+      ...message(
+        "nicho-cocina",
+        6,
+        research,
+        "Inventario: existen 11 copys con OK de Cumplimiento (COC-12 a COC-22) y 4 fotos CC BY de la landing. Falta una imagen 1080×1350 y un carrusel de 3 piezas; los produce el Diseñador de Landing antes del sábado. Las fotos sirven con el crédito en el texto del anuncio. Recomiendo imagen única para la prueba de 98 USD: un carrusel solo si la imagen no rinde en 3 días.",
+        { threadRootId: rootId },
+      ),
+      taskId: "cocina-research",
+    },
+    message(
+      "nicho-cocina",
+      8,
+      chief,
+      "Será **imagen única** con link directo a la landing. La pieza está lista el sábado 21; te aviso para que la apruebes.",
+      { threadRootId: rootId },
+    ),
+  ];
+  root.threadSummary = {
+    replyCount: replies.length,
+    lastReplyAt: replies.at(-1)?.message.createdAt ?? root.message.createdAt,
+    participantIds: ["chief", "research", "sales"],
+  };
+  const work: MockChannelWork[] = [
+    { task: task("cocina-task", "chief", rootId, null), threadRootId: rootId },
+    { task: task("cocina-research", "research", rootId, "cocina-task"), threadRootId: rootId },
+    { task: task("cocina-sales", "sales", rootId, "cocina-task"), threadRootId: rootId },
+  ];
+  return [{ channel: room, messages: [root, ...replies], work }, ...base];
+}

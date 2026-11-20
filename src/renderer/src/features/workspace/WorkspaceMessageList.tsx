@@ -1,4 +1,4 @@
-import type { ChannelMessage } from "@openbot/contracts/ipc";
+import type { ChannelMessage, ChannelTask } from "@openbot/contracts/ipc";
 import { ArrowUp, Button, CheckCheck, ChevronDown } from "@openbot/ui";
 import { createChatFlow } from "@openbot/ui/features/conversation/createChatFlow";
 import { useText } from "@openbot/ui/text";
@@ -6,7 +6,7 @@ import type { JSX } from "@solidjs/web";
 import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
 import { WorkspaceMessage } from "./WorkspaceMessage";
 import { useWorkspace } from "./workspace-context";
-import { keepUnchangedRows, messageRows, type WorkspaceMessageRowModel } from "./workspace-model";
+import { agentNotes, keepUnchangedRows, messageRows, type WorkspaceMessageRowModel } from "./workspace-model";
 import { savedScrollPlace, saveScrollPlace } from "./workspace-scroll-places";
 
 /** How close to the end still counts as reading the newest messages. */
@@ -18,6 +18,8 @@ export interface WorkspaceMessageListProps {
   channelId: string;
   channelName: string;
   entries: readonly ChannelMessage[];
+  /** The tasks of the channel: the answer of a task that an agent assigned folds to one line. */
+  tasks?: readonly ChannelTask[];
   /** The first message the reader had not read when the channel opened. */
   firstUnreadId: string | null;
   /** Agents whose work runs in the channel. */
@@ -62,6 +64,7 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
         firstUnreadId: props.firstUnreadId,
         working: props.working,
         membersAnswer: props.membersAnswer === true,
+        note: agentNotes(ws.directory().agents, props.tasks ?? []),
       }),
       previous,
     ),

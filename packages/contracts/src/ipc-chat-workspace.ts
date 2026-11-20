@@ -214,6 +214,29 @@ export interface ChannelMessageWorkspaceFields {
   externalAuthor?: ChannelExternalAuthor;
   /** The message is pinned to its channel: who pinned it, and when. */
   pinned?: ChannelPin;
+  /**
+   * A message that an agent wrote for other agents, such as a task it handed over or a brief: the
+   * people see one line, its summary, and open the full text when they want it.
+   */
+  agentNote?: ChannelAgentNote;
+}
+
+/** The longest summary line of a message between agents. */
+export const CHANNEL_AGENT_NOTE_SUMMARY_LIMIT = 240;
+
+/** Who a message between agents is for, and the one line that the people read. */
+export interface ChannelAgentNote {
+  /** The agents the message is for. */
+  to: string[];
+  summary: string;
+}
+
+export function isChannelAgentNote(value: unknown): value is ChannelAgentNote {
+  return (
+    isDynamicRecord(value) &&
+    identifiers(value.to, 32) &&
+    isBoundedString(value.summary, CHANNEL_AGENT_NOTE_SUMMARY_LIMIT)
+  );
 }
 
 /** A pin on a channel message. */
@@ -457,7 +480,8 @@ export function hasValidChannelMessageWorkspaceFields(value: DynamicRecord): boo
         value.gateDecisions.every(isChannelGateDecision))) &&
     (value.gateFollowUp === undefined || isChannelGateFollowUp(value.gateFollowUp)) &&
     (value.externalAuthor === undefined || isChannelExternalAuthor(value.externalAuthor)) &&
-    (value.pinned === undefined || isChannelPin(value.pinned))
+    (value.pinned === undefined || isChannelPin(value.pinned)) &&
+    (value.agentNote === undefined || isChannelAgentNote(value.agentNote))
   );
 }
 

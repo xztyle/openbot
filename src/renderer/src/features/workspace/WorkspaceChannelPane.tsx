@@ -304,6 +304,7 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
           channelId={props.channelId}
           channelName={name()}
           entries={entries()}
+          tasks={page()?.tasks ?? []}
           firstUnreadId={firstUnreadId()}
           working={working()}
           membersAnswer={membersAnswer()}

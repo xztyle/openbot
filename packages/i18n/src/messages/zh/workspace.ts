@@ -97,6 +97,9 @@ export const messages = {
 
   "workspace.message.label": "{name}，{time}",
   "workspace.message.deleted": "此消息已删除。",
+  "workspace.message.agentNote.label": "{from} 发给 {to}：{summary}",
+  "workspace.message.agentNote.show": "显示完整消息",
+  "workspace.message.agentNote.hide": "收起",
   "workspace.message.edited": "（已编辑）",
   "workspace.message.actions": "消息操作",
   "workspace.message.react": "添加回应",
@@ -135,6 +138,7 @@ export const messages = {
   "workspace.typing.working": "{name} 正在工作…",
   "workspace.typing.routing": "{name} 正在选择由谁回答…",
   "workspace.typing.waiting": "{name} 将在之前的工作完成后回答…",
+  "workspace.typing.agentsWorking": { one: "{count} 个智能体正在工作", other: "{count} 个智能体正在工作" },
 
   "workspace.steps.count": { one: "{count} 个步骤", other: "{count} 个步骤" },
   "workspace.steps.summary": "{steps} · {time}",

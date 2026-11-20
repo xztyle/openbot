@@ -13,7 +13,7 @@ import { WorkspaceComposer } from "./WorkspaceComposer";
 import { WorkspaceMessage } from "./WorkspaceMessage";
 import { createAgentWork } from "./workspace-agent-work";
 import { useWorkspace } from "./workspace-context";
-import { conversationName, messageRows, readerJoined } from "./workspace-model";
+import { agentNotes, conversationName, messageRows, readerJoined } from "./workspace-model";
 import { savedScrollPlace, saveScrollPlace } from "./workspace-scroll-places";
 
 /** How close to the end still counts as reading the newest replies, as in the channel. */
@@ -64,6 +64,7 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
       thread: true,
       firstUnreadId: firstUnreadId(),
       membersAnswer: current ? channelMembersAnswer(current) : false,
+      note: agentNotes(ws.directory().agents, thread()?.page?.tasks ?? []),
     });
   });
   const root = () => rows().find((row) => row.entry.id === props.rootId && !row.pending);

@@ -2,7 +2,16 @@ import type { JSX } from "@solidjs/web";
 import { createSignal, For, Show } from "solid-js";
 import { Button, buttonVariants, IconButton } from "../../button";
 import { Popover } from "../../complex";
-import { Bookmark, ChevronRight, Ellipsis, MessageSquareReply, Pin, SmilePlus } from "../../icons";
+import {
+  ArrowRight,
+  Bookmark,
+  ChevronDown,
+  ChevronRight,
+  Ellipsis,
+  MessageSquareReply,
+  Pin,
+  SmilePlus,
+} from "../../icons";
 import { useText } from "../../text";
 import { LabelTooltip, LabelTooltipTrigger } from "../../tooltip";
 import { cx, usesTouchLayout } from "../../utils";
@@ -73,7 +82,21 @@ export interface MessageRowProps {
    * instead of the text, the content, the reactions and the thread, and has no action bar.
    */
   editor?: JSX.Element;
+  /**
+   * A message that the author agent wrote for other agents. The row is one quiet line, the faces of
+   * the author and the recipients and a summary, and opens to the text and the content in place, as
+   * Slack's "Show more". Reactions and the thread summary still show under the line.
+   */
+  note?: MessageRowNote | undefined;
   class?: string;
+}
+
+/** The one-line form of a message between agents. */
+export interface MessageRowNote {
+  recipients: readonly WorkspaceMember[];
+  summary: string;
+  /** The text says more than the summary: the line opens it. */
+  expandable: boolean;
 }
 
 /**
@@ -97,6 +120,9 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
   const fullTime = () => (timed() ? format.date(props.sentAt, { dateStyle: "full", timeStyle: "short" }) : undefined);
   const isoTime = () => (timed() ? new Date(props.sentAt).toISOString() : undefined);
   const profileLabel = () => t("workspace.profile.open", { name: props.author.name });
+  const [noteOpen, setNoteOpen] = createSignal(false);
+  /** A folded note shows its line only; the text and the content wait for the reader to open it. */
+  const folded = () => props.note !== undefined && !noteOpen() && !props.editor;
   return (
     <WorkspaceContextMenu
       items={() => props.menuItems ?? []}
@@ -119,6 +145,7 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
         class={cx("ws-message", props.class)}
         tabindex="0"
         data-grouped={props.grouped ? "" : undefined}
+        data-note={props.note ? (noteOpen() ? "open" : "folded") : undefined}
         data-highlighted={props.highlighted ? "" : undefined}
         data-mention={props.mentionsReader ? "" : undefined}
         data-pinned={props.pinnedBy !== undefined && !props.deleted ? "" : undefined}
@@ -129,11 +156,20 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
       >
         <div class="ws-message-gutter">
           <Show
-            when={!props.grouped}
+            when={!props.grouped && !props.note}
             fallback={
-              <time class="ws-message-gutter-time" datetime={isoTime()} title={fullTime()}>
-                {shownTime()}
-              </time>
+              <Show
+                when={props.note}
+                fallback={
+                  <time class="ws-message-gutter-time" datetime={isoTime()} title={fullTime()}>
+                    {shownTime()}
+                  </time>
+                }
+              >
+                <MemberProfilePopover card={armed() ? props.profile : undefined} label={profileLabel()}>
+                  <MemberAvatar member={props.author} size="xs" />
+                </MemberProfilePopover>
+              </Show>
             }
           >
             <MemberProfilePopover card={armed() ? props.profile : undefined} label={profileLabel()}>
@@ -160,7 +196,20 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
               </Show>
             </p>
           </Show>
-          <Show when={!props.grouped}>
+          <Show when={props.note}>
+            {(note) => (
+              <NoteLine
+                author={props.author}
+                note={note()}
+                open={noteOpen()}
+                time={shownTime()}
+                isoTime={isoTime()}
+                fullTime={fullTime()}
+                onToggle={note().expandable ? () => setNoteOpen((open) => !open) : undefined}
+              />
+            )}
+          </Show>
+          <Show when={!props.grouped && !props.note}>
             <div class="ws-message-meta">
               <MemberProfilePopover
                 card={armed() ? props.profile : undefined}
@@ -197,7 +246,7 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
               </Show>
             }
           >
-            <Show when={props.text?.length}>
+            <Show when={!folded() && props.text?.length}>
               <p class="ws-message-text">
                 <MessageText segments={props.text ?? []} />
                 <Show when={props.edited}>
@@ -205,9 +254,9 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
                 </Show>
               </p>
             </Show>
-            {props.children}
+            <Show when={!folded()}>{props.children}</Show>
             {/* A message drawn by the content renderer has no text run: the mark goes under it. */}
-            <Show when={props.edited && !props.text?.length}>
+            <Show when={!folded() && props.edited && !props.text?.length}>
               <span class="ws-message-edited ws-message-edited-block">{t("workspace.message.edited")}</span>
             </Show>
             <Show when={props.reactions?.length}>
@@ -278,6 +327,63 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
         </Show>
       </article>
     </WorkspaceContextMenu>
+  );
+}
+
+/**
+ * The line of a message between agents: the faces of whom it is for after an arrow, the summary on
+ * one ellipsized line, the time, and the chevron that opens the text.
+ */
+function NoteLine(props: {
+  author: WorkspaceMember;
+  note: MessageRowNote;
+  open: boolean;
+  time: string;
+  isoTime: string | undefined;
+  fullTime: string | undefined;
+  onToggle: (() => void) | undefined;
+}): JSX.Element {
+  const { t, format } = useText();
+  const label = () =>
+    t("workspace.message.agentNote.label", {
+      from: props.author.name,
+      to: format.list(props.note.recipients.map((member) => member.name)),
+      summary: props.note.summary,
+    });
+  const content = (
+    <>
+      <ArrowRight class="ws-note-arrow" aria-hidden="true" />
+      <AvatarStack members={props.note.recipients} max={3} size="xs" class="ws-note-faces" />
+      <span class="ws-note-summary">{props.note.summary}</span>
+      <time class="ws-note-time" datetime={props.isoTime} title={props.fullTime}>
+        {props.time}
+      </time>
+    </>
+  );
+  return (
+    <Show
+      when={props.onToggle}
+      fallback={
+        <p class="ws-note-line" title={label()}>
+          {content}
+        </p>
+      }
+    >
+      {(toggle) => (
+        <Button
+          variant="ghost"
+          size="xs"
+          class="ws-note-line"
+          aria-expanded={props.open ? "true" : "false"}
+          aria-label={`${label()}. ${t(props.open ? "workspace.message.agentNote.hide" : "workspace.message.agentNote.show")}`}
+          title={label()}
+          onClick={() => toggle()()}
+        >
+          {content}
+          <ChevronDown class="ws-note-chevron" aria-hidden="true" />
+        </Button>
+      )}
+    </Show>
   );
 }
 

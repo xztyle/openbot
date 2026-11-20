@@ -50,6 +50,8 @@
 //   `set-routing` (`{ routing: "responders" | "coordinator", leadAgentId? }`, owner and admin only).
 // - Later (workspace-saved-v1): on each message `pinned` (`{ by: { kind: "member" | "agent", id },
 //   at (80) }`), set while the message is pinned to its channel.
+// - Later still: on each message `agentNote` (`{ to, summary (240) }`, at most 32 agent ids), set on
+//   a message that an agent wrote for other agents; a client shows the summary and opens the text.
 // - `POST /v1/workspace/channels/typing`: `{ channelId, threadRootId?, typing }` answers `{}`. The
 //   person of the session types in the channel, or stopped. A client sends it at most every 3
 //   seconds while the person types; the host ends the typing 6 seconds after the last one.
@@ -198,6 +200,7 @@ const MESSAGE_FIELDS: Record<string, Decoder> = {
     { avatarUrl: string(500) },
   ),
   pinned: fields({ by: actor, at: string(80) }),
+  agentNote: fields({ to: uniqueIdentifiers(32), summary: string(240) }),
 };
 
 function present(source: unknown, decoders: Record<string, Decoder>): JsonObject {

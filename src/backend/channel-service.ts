@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, normalize, sep } from "node:path";
+import { channelAgentNoteLine, givenAgentNoteLine } from "@openbot/contracts/channel-agent-note";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   type AgentAccessLevel,
   type AgentEvent,
   type AgentSummary,
+  CHANNEL_AGENT_NOTE_SUMMARY_LIMIT,
   CHANNEL_ASSIGNMENT_LIMIT,
   CHANNEL_CHANGE_ITEM_TYPE,
   CHANNEL_DECISION_PREFIX,
@@ -13,6 +15,7 @@ import {
   CHANNEL_MENTION_CHAIN_LIMIT,
   CHANNEL_PARALLEL_LIMIT,
   type Channel,
+  type ChannelAgentNote,
   type ChannelAnswerMode,
   type ChannelCommand,
   type ChannelDiscordLink,
@@ -827,6 +830,8 @@ export class ChannelService {
       agent: { id: string; name: string };
       text: string;
       recipientAgentIds: readonly string[];
+      /** With recipients: the one line that the people read instead of the text. */
+      summary?: string | undefined;
       threadRootId: string | null;
       operationId: string;
     },
@@ -850,6 +855,22 @@ export class ChannelService {
           this.newTask(channel.id, id, input.text, agentId),
         );
         const mentions = channelMentions(input.text);
+        const recipients = [...new Set(input.recipientAgentIds)];
+        // A brief that gives members work is for them: the people read one line of it.
+        const agentNote: ChannelAgentNote | undefined = recipients.length
+          ? {
+              to: recipients,
+              summary:
+                givenAgentNoteLine(input.summary) ||
+                channelAgentNoteLine(
+                  input.text,
+                  this.hooks
+                    .agents()
+                    .filter((agent) => recipients.includes(agent.id))
+                    .map((agent) => agent.name),
+                ),
+            }
+          : undefined;
         const message: ChannelMessage = {
           id,
           channelId: channel.id,
@@ -859,6 +880,7 @@ export class ChannelService {
           superseded: false,
           ...(root ? { threadRootId: root.id } : {}),
           ...(mentions.length ? { mentions } : {}),
+          ...(agentNote ? { agentNote } : {}),
           message: {
             id,
             text: input.text,
@@ -1499,7 +1521,10 @@ export class ChannelService {
     if (channel.archived) return;
     const shown = recipients.filter((agent) => channel.members.some((member) => member.agentId === agent.id));
     const mentions = shown.map((agent) => `@[${agent.name}](agent:${agent.id})`).join(" ");
-    this.#postAgentLine(target.channelId, sender, `${mentions} ${line}`.trim(), target.threadRootId);
+    this.#postAgentLine(target.channelId, sender, `${mentions} ${line}`.trim(), target.threadRootId, {
+      to: (shown.length ? shown : recipients).map((agent) => agent.id),
+      summary: line.slice(0, CHANNEL_AGENT_NOTE_SUMMARY_LIMIT),
+    });
   });
 
   /**
@@ -1511,6 +1536,7 @@ export class ChannelService {
     agent: { id: string; name: string },
     text: string,
     threadRootId: string | null,
+    agentNote?: ChannelAgentNote,
   ): ChannelMessage | null {
     if (this.#stopped || this.#deletedChannels.has(channelId) || !this.store.exists(channelId)) return null;
     const channel = this.store.get(channelId);
@@ -1524,6 +1550,7 @@ export class ChannelService {
       sequence: 0,
       superseded: false,
       ...(threadRootId ? { threadRootId } : {}),
+      ...(agentNote ? { agentNote } : {}),
       message: { id, text, author: "assistant", createdAt: new Date().toISOString(), status: "completed" },
     };
     this.store.update(channel, { messages: [message] });
@@ -3777,6 +3804,10 @@ export class ChannelService {
       );
       message.id = `channel-result-${assignment.id}-revision-${assignment.taskRevision}`;
       message.message.id = message.id;
+      // The result of a subtask is for the agent that assigned it, which answers the people itself.
+      const assigner = task.parentTaskId ? tasks.find((item) => item.id === task.parentTaskId)?.ownerAgentId : null;
+      if (assigner && assigner !== agentId)
+        message.agentNote = { to: [assigner], summary: channelAgentNoteLine(args.text) };
       message.message.author = "assistant";
       message.message.turnId = turnId;
       yield* channelSync(() => this.store.update(channel, { messages: [message] }, operationId));
@@ -3893,12 +3924,19 @@ export class ChannelService {
         : root.id === task.id || tool === "channel_transfer"
           ? [rootUpdate, next]
           : [rootUpdate, parentUpdate, next];
+    const recipientName =
+      this.hooks.agents().find((item) => item.id === args.recipientAgentId)?.name ?? recipientAgentId;
     const handoff = this.message(
       channelId,
       task.id,
       { kind: "agent", id: agentId, name: this.hooks.agents().find((item) => item.id === agentId)?.name ?? agentId },
-      `${this.hooks.agents().find((item) => item.id === args.recipientAgentId)?.name ?? args.recipientAgentId}: ${args.task}`,
+      `${recipientName}: ${args.task}`,
     );
+    // The task is for the agent: the people read one line of it and open the rest when they want.
+    handoff.agentNote = {
+      to: [recipientAgentId],
+      summary: givenAgentNoteLine(args.summary) || channelAgentNoteLine(args.task, [recipientName]),
+    };
     // The check above rejects an empty list, so the first source message is always there.
     const [firstSourceMessageId] = sourceMessageIds;
     if (firstSourceMessageId !== undefined) handoff.message.replyToMessageId = firstSourceMessageId;

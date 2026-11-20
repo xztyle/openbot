@@ -99,6 +99,9 @@ export const messages = {
 
   "workspace.message.label": "{name} às {time}",
   "workspace.message.deleted": "Esta mensagem foi excluída.",
+  "workspace.message.agentNote.label": "{from} para {to}: {summary}",
+  "workspace.message.agentNote.show": "Mostrar a mensagem completa",
+  "workspace.message.agentNote.hide": "Mostrar menos",
   "workspace.message.edited": "(editada)",
   "workspace.message.actions": "Ações da mensagem",
   "workspace.message.react": "Adicionar reação",
@@ -137,6 +140,7 @@ export const messages = {
   "workspace.typing.working": "{name} está trabalhando…",
   "workspace.typing.routing": "{name} está escolhendo quem responde…",
   "workspace.typing.waiting": "{name} responderá após o trabalho anterior…",
+  "workspace.typing.agentsWorking": { one: "{count} agente trabalhando", other: "{count} agentes trabalhando" },
 
   "workspace.steps.count": { one: "{count} etapa", other: "{count} etapas" },
   "workspace.steps.summary": "{steps} · {time}",

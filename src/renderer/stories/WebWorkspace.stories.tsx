@@ -13,7 +13,7 @@ import { createBenchWebRuntime } from "../src/preview/bench-web-runtime";
 import { MOCK_HOSTED_SERVER_CATALOG } from "../src/preview/mock-hosted-servers";
 import { createMockOpenBot } from "../src/preview/mock-openbot";
 import { createMockWebRuntime, mockWebRuntimeFor, WEB_PREVIEW_MEMBER_ID } from "../src/preview/mock-web-runtime";
-import { MEDIA_FILES, seeds } from "./workspace/workspace-app-seeds";
+import { agentTalkSeeds, MEDIA_FILES, seeds } from "./workspace/workspace-app-seeds";
 import "../src/features/web-client/web-client.css";
 
 const meta = {
@@ -66,6 +66,18 @@ const agentWorkingRuntime: WebRuntimeFactory = (_accountId, events) =>
   );
 
 export const AgentWorking: Story = { args: { createRuntime: agentWorkingRuntime } };
+
+/**
+ * #nicho-cocina: in the thread, the lead's long Spanish handoffs and a subtask answer fold to one
+ * line each, the lead's answer to the person stays whole, and three working agents share one line.
+ */
+const agentTalkRuntime: WebRuntimeFactory = (_accountId, events) =>
+  mockWebRuntimeFor(
+    createMockOpenBot({ channels: agentTalkSeeds(WEB_PREVIEW_MEMBER_ID), channelMemberId: WEB_PREVIEW_MEMBER_ID }),
+    events,
+  );
+
+export const AgentTalk: Story = { args: { createRuntime: agentTalkRuntime } };
 
 /** The workspace with spaces: Trading holds Research and #cakemaker. Check it at phone width too. */
 const spacesRuntime: WebRuntimeFactory = (_accountId, events) =>

@@ -180,6 +180,16 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
       streaming: host.streaming,
     };
   });
+  /** Agents talking to each other: the row folds to one line that opens the text. */
+  const note = createMemo(() => {
+    const current = props.row.note;
+    if (!current || props.row.pending || deleted()) return undefined;
+    return {
+      recipients: current.to.map((id) => memberById(ws.directory(), id)),
+      summary: current.summary,
+      expandable: current.expandable,
+    };
+  });
   /** A plain line takes the light row; Markdown, files and questions take the chat's renderer. */
   const plain = createMemo(() => (props.row.pending ? null : plainMessageSegments(ws.directory(), entry())));
   const threadRootId = () => (props.inThread ? (entry().threadRootId ?? null) : null);
@@ -356,6 +366,7 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
             : undefined
         }
         menuItems={menuItems()}
+        note={note()}
         profile={() => <MemberProfile member={author()} />}
         editor={
           editingHere() ? (

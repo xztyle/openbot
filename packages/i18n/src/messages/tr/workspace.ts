@@ -99,6 +99,9 @@ export const messages = {
 
   "workspace.message.label": "{name}, {time}",
   "workspace.message.deleted": "Bu mesaj silindi.",
+  "workspace.message.agentNote.label": "{from} → {to}: {summary}",
+  "workspace.message.agentNote.show": "Mesajın tamamını göster",
+  "workspace.message.agentNote.hide": "Daha az göster",
   "workspace.message.edited": "(düzenlendi)",
   "workspace.message.actions": "Mesaj işlemleri",
   "workspace.message.react": "Tepki ekle",
@@ -137,6 +140,7 @@ export const messages = {
   "workspace.typing.working": "{name} çalışıyor…",
   "workspace.typing.routing": "{name} kimin yanıtlayacağını seçiyor…",
   "workspace.typing.waiting": "{name} önceki işten sonra yanıtlayacak…",
+  "workspace.typing.agentsWorking": { one: "{count} ajan çalışıyor", other: "{count} ajan çalışıyor" },
 
   "workspace.steps.count": { one: "{count} adım", other: "{count} adım" },
   "workspace.steps.summary": "{steps} · {time}",

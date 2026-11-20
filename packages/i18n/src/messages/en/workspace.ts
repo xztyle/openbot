@@ -107,6 +107,9 @@ export const messages = defineMessages("workspace", {
 
   "workspace.message.label": "{name} at {time}",
   "workspace.message.deleted": "This message was deleted.",
+  "workspace.message.agentNote.label": "{from} to {to}: {summary}",
+  "workspace.message.agentNote.show": "Show the full message",
+  "workspace.message.agentNote.hide": "Show less",
   "workspace.message.edited": "(edited)",
   "workspace.message.actions": "Message actions",
   "workspace.message.react": "Add reaction",
@@ -146,6 +149,7 @@ export const messages = defineMessages("workspace", {
   "workspace.typing.working": "{name} is working…",
   "workspace.typing.routing": "{name} is choosing who answers…",
   "workspace.typing.waiting": "{name} will answer after earlier work…",
+  "workspace.typing.agentsWorking": { one: "{count} agent working", other: "{count} agents working" },
 
   "workspace.steps.count": { one: "{count} step", other: "{count} steps" },
   "workspace.steps.summary": "{steps} · {time}",

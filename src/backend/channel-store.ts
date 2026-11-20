@@ -1216,6 +1216,9 @@ const CHANNEL_PREVIEW_SOURCE_LIMIT = CHANNEL_PREVIEW_LIMIT * 16;
  * the agent asked), so fall back to a description of what arrived instead of showing an empty row.
  */
 export function channelPreviewText(entry: ChannelMessage): string {
+  // A message between agents shows the people its one line, as the transcript does.
+  const note = entry.agentNote?.summary.trim();
+  if (note) return note.slice(0, CHANNEL_PREVIEW_LIMIT);
   // The text is Markdown with mention markup (`@[Chief](agent:chief)`): show what a reader sees.
   // Only the start is parsed, so a very long message does not slow down every channel list.
   const text = markdownPreviewText(entry.message.text.slice(0, CHANNEL_PREVIEW_SOURCE_LIMIT));

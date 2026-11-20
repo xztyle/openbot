@@ -10,6 +10,13 @@ import {
 const handoff = {
   recipientAgentId: z.string(),
   task: z.string().min(1).max(INPUT_LIMITS.messageText),
+  summary: z
+    .string()
+    .max(240)
+    .describe(
+      'One short sentence, at most 20 words, that the people of the channel see instead of the task, such as "Can you draft three ad hooks by Saturday?".',
+    )
+    .optional(),
   expectedResult: z.string().min(1).max(INPUT_LIMITS.messageText),
   sourceMessageIds: z.array(z.string()).min(1),
   resources: z

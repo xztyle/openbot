@@ -1,8 +1,9 @@
 import type { JSX } from "@solidjs/web";
-import { For, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { Button } from "../../button";
 import { Square } from "../../icons";
 import { useText } from "../../text";
+import { AgentWorkGroup } from "./AgentWorkGroup";
 import { StepTrail } from "./StepTrail";
 import { MemberAvatar } from "./WorkspaceAvatar";
 import type { AgentStepView, WorkspaceMember } from "./workspace-types";
@@ -53,9 +54,19 @@ export function TypingIndicator(props: TypingIndicatorProps): JSX.Element {
     if (names.length <= 3) return t("workspace.typing.many", { names: format.list(names) });
     return t("workspace.typing.several");
   };
+  // Several agents at work fold into one line of faces that opens their lines.
+  const [groupOpen, setGroupOpen] = createSignal(false);
+  const grouped = () => props.agents.length >= 2;
   return (
-    <div class="ws-typing" aria-live="polite">
-      <For each={props.agents} keyed={(agent) => agent.member.id}>
+    <div class="ws-typing" aria-live="polite" data-grouped={grouped() ? (groupOpen() ? "open" : "folded") : undefined}>
+      <Show when={grouped()}>
+        <AgentWorkGroup
+          members={props.agents.map((agent) => agent.member)}
+          open={groupOpen()}
+          onToggle={() => setGroupOpen((open) => !open)}
+        />
+      </Show>
+      <For each={grouped() && !groupOpen() ? [] : props.agents} keyed={(agent) => agent.member.id}>
         {(agent) => (
           <span class="ws-typing-agent" data-state={agent().state}>
             <MemberAvatar member={agent().member} size="xs" mood="working" />

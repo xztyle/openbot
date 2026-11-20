@@ -98,6 +98,9 @@ export const messages = {
 
   "workspace.message.label": "{name}、{time}",
   "workspace.message.deleted": "このメッセージは削除されました。",
+  "workspace.message.agentNote.label": "{from} から {to} へ: {summary}",
+  "workspace.message.agentNote.show": "メッセージ全体を表示",
+  "workspace.message.agentNote.hide": "表示を減らす",
   "workspace.message.edited": "（編集済み）",
   "workspace.message.actions": "メッセージの操作",
   "workspace.message.react": "リアクションを追加",
@@ -136,6 +139,7 @@ export const messages = {
   "workspace.typing.working": "{name} が作業中…",
   "workspace.typing.routing": "{name} が回答者を選んでいます…",
   "workspace.typing.waiting": "{name} は前の作業の後に回答します…",
+  "workspace.typing.agentsWorking": { other: "{count} 人のエージェントが作業中" },
 
   "workspace.steps.count": { other: "{count} ステップ" },
   "workspace.steps.summary": "{steps} · {time}",

@@ -142,6 +142,11 @@ export const postChannelMessageToolSchema = z.strictObject({
     .max(8)
     .optional()
     .describe("Member agents that each get this message as a task to work on. Absent: the message starts no work."),
+  summary: z
+    .string()
+    .max(240)
+    .optional()
+    .describe("With assignAgentIds: one short sentence that the people of the channel see instead of the text."),
   threadRootId: z.string().min(1).max(INPUT_LIMITS.identifier).optional().describe("Post as a reply in this thread."),
 });
 export const deleteChannelToolSchema = z.strictObject({
@@ -708,6 +713,7 @@ class ChannelAdminRun {
         agent: this.#self,
         text: mentions ? `${mentions} ${input.text}` : input.text,
         recipientAgentIds: recipients,
+        summary: input.summary,
         threadRootId: input.threadRootId ?? null,
         operationId: this.#operationId(),
       });

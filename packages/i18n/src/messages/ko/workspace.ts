@@ -98,6 +98,9 @@ export const messages = {
 
   "workspace.message.label": "{name}, {time}",
   "workspace.message.deleted": "삭제된 메시지예요.",
+  "workspace.message.agentNote.label": "{from} → {to}: {summary}",
+  "workspace.message.agentNote.show": "전체 메시지 보기",
+  "workspace.message.agentNote.hide": "간단히 보기",
   "workspace.message.edited": "(편집됨)",
   "workspace.message.actions": "메시지 작업",
   "workspace.message.react": "반응 추가",
@@ -136,6 +139,7 @@ export const messages = {
   "workspace.typing.working": "{name}이(가) 작업 중…",
   "workspace.typing.routing": "{name}이(가) 답변할 사람을 고르는 중…",
   "workspace.typing.waiting": "{name}이(가) 이전 작업 후에 답변합니다…",
+  "workspace.typing.agentsWorking": { other: "에이전트 {count}명 작업 중" },
 
   "workspace.steps.count": { other: "{count}단계" },
   "workspace.steps.summary": "{steps} · {time}",

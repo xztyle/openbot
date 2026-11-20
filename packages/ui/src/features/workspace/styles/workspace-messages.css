@@ -276,6 +276,85 @@ button.ws-profile-trigger.ws-message-author:hover {
   font-size: var(--openbot-text-sm);
 }
 
+/*
+ * A message between agents: one quiet line (the author's small face in the gutter, an arrow, the
+ * faces of the recipients, the summary, the time) that opens the text in place.
+ */
+.ws-message[data-note] {
+  padding-top: var(--openbot-space-0-5);
+  padding-bottom: var(--openbot-space-0-5);
+}
+
+.ws-message[data-note] > .ws-message-gutter {
+  justify-content: flex-end;
+  padding-top: var(--openbot-space-0-5);
+}
+
+.ws-note-line,
+.ws-note-line.ui-button {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 24px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--openbot-space-1-5);
+  margin: 0;
+  padding: 0 var(--openbot-space-1);
+  margin-left: calc(-1 * var(--openbot-space-1));
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-regular);
+  line-height: var(--openbot-leading-md);
+  text-align: left;
+}
+
+.ws-note-arrow {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+  flex: 0 0 auto;
+  color: var(--openbot-text-dim);
+}
+
+.ws-note-faces {
+  flex: 0 0 auto;
+}
+
+.ws-note-summary {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-note-time {
+  flex: 0 0 auto;
+  color: var(--openbot-text-dim);
+}
+
+.ws-note-chevron {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--openbot-text-dim);
+  transition: transform var(--openbot-duration-fast) var(--openbot-ease-out);
+}
+
+.ws-note-line[aria-expanded="true"] .ws-note-chevron {
+  transform: rotate(180deg);
+}
+
+/* Open, the text reads as a quoted aside under its line. */
+.ws-message[data-note="open"] .ws-note-line ~ :is(.ws-message-text, .ws-message-content, .ws-steps) {
+  padding-left: var(--openbot-space-2);
+  border-left: 2px solid var(--openbot-border);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-md);
+}
+
 .ws-message-text {
   margin: 0;
   overflow-wrap: anywhere;
@@ -649,6 +728,31 @@ button.ws-profile-trigger.ws-message-author:hover {
   padding: 0 var(--openbot-space-4);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
+}
+
+/* Several agents at work: one line of faces, which opens a line for each agent. */
+.ws-typing-group.ui-button {
+  height: 22px;
+  gap: var(--openbot-space-1-5);
+  padding-inline: var(--openbot-space-1);
+  margin-left: calc(-1 * var(--openbot-space-1));
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-typing-group-chevron {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+  transition: transform var(--openbot-duration-fast) var(--openbot-ease-out);
+}
+
+.ws-typing-group[aria-expanded="true"] .ws-typing-group-chevron {
+  transform: rotate(180deg);
+}
+
+.ws-typing[data-grouped="open"] > .ws-typing-agent {
+  flex-basis: 100%;
+  padding-left: var(--openbot-space-2);
 }
 
 .ws-typing-agent,

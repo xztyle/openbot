@@ -4,12 +4,14 @@
  * the directory of people and agents, so the desktop and the browser client build the same view.
  */
 
+import { channelAgentNoteLine } from "@openbot/contracts/channel-agent-note";
 import { chatTagReferences } from "@openbot/contracts/chat-tag-references";
 import {
   CHANNEL_RESULT_MESSAGE_PREFIX,
   type ChannelMessage,
   type ChannelReaction,
   type ChannelSummary,
+  type ChannelTask,
   type ChannelWorkspaceFields,
   channelKind,
   channelVisibility,
@@ -353,6 +355,71 @@ export interface WorkspaceMessageRowModel {
    * with the start of its text when the root is loaded. Null for every other row.
    */
   broadcast?: { rootId: string; rootText: string | null } | null;
+  /** A message between agents: the row is one line, the summary, and opens the full text. */
+  note?: WorkspaceAgentNoteView | null;
+}
+
+/** A message that an agent wrote for other agents, as the people see it: who it is for, and one line. */
+export interface WorkspaceAgentNoteView {
+  to: readonly string[];
+  summary: string;
+  /** The text says more than the line, so the row opens to show it. */
+  expandable: boolean;
+}
+
+const LEADING_AGENT_MENTIONS = /^(?:\s*@\[[^\]\r\n]+\]\(agent:[^)\r\n]+\))+\s*/u;
+
+/** `agentNoteOf` for the messages of one page: the agents and the tasks it reads stay the same. */
+export function agentNotes(
+  agents: readonly { id: string; name: string }[],
+  tasks: readonly ChannelTask[],
+): (entry: ChannelMessage) => WorkspaceAgentNoteView | null {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  return (entry) => agentNoteOf(entry, agents, byId);
+}
+
+/**
+ * Whether a channel message is one agent talking to others, and how its row reads. The host marks
+ * such a message (`agentNote`): a handoff, a brief that assigns work, a relayed message, a subtask
+ * result. A message stored before that mark is read from its shape: a handoff note ("Designer: …")
+ * of an agent, or the answer of a subtask, whose task an agent assigned. A question for the people
+ * and a deleted message are never notes.
+ */
+export function agentNoteOf(
+  entry: ChannelMessage,
+  agents: readonly { id: string; name: string }[],
+  tasks: ReadonlyMap<string, ChannelTask>,
+): WorkspaceAgentNoteView | null {
+  if (entry.author.kind !== "agent" || entry.deletedAt || entry.message.questionPrompt) return null;
+  const text = entry.message.text;
+  const view = (to: readonly string[], summary: string, body: string): WorkspaceAgentNoteView | null => {
+    const line = summary.trim();
+    if (!line || to.length === 0) return null;
+    const plain = previewText(body.replace(LEADING_AGENT_MENTIONS, ""), 100_000);
+    return {
+      to,
+      summary: line,
+      expandable: Boolean(entry.message.attachments?.length) || (plain !== line && plain !== line.replace(/…$/u, "")),
+    };
+  };
+  if (entry.agentNote) return view(entry.agentNote.to, entry.agentNote.summary, text);
+  if (entry.message.status === "streaming" || entry.message.itemType) return null;
+  // A handoff written before the mark: "<recipient>: <task>", a system note of the assigning agent.
+  if (entry.message.author === "system" && entry.taskId) {
+    const recipient = [...agents]
+      .sort((first, second) => second.name.length - first.name.length)
+      .find((agent) => agent.id !== entry.author.id && agent.name && text.startsWith(`${agent.name}: `));
+    if (recipient) {
+      const task = text.slice(recipient.name.length + 2);
+      return view([recipient.id], channelAgentNoteLine(task, [recipient.name]), task);
+    }
+  }
+  // The answer of a subtask goes to the agent that assigned it, which answers the people.
+  const task = entry.taskId ? tasks.get(entry.taskId) : undefined;
+  const assigner = task?.parentTaskId ? tasks.get(task.parentTaskId)?.ownerAgentId : null;
+  if (entry.message.author === "assistant" && assigner && assigner !== entry.author.id)
+    return view([assigner], channelAgentNoteLine(text), text);
+  return null;
 }
 
 function stepLabel(entry: ChannelMessage): string {
@@ -420,6 +487,9 @@ function sameRow(left: WorkspaceMessageRowModel, right: WorkspaceMessageRowModel
     left.firstUnread === right.firstUnread &&
     left.broadcast?.rootId === right.broadcast?.rootId &&
     left.broadcast?.rootText === right.broadcast?.rootText &&
+    left.note?.summary === right.note?.summary &&
+    left.note?.expandable === right.note?.expandable &&
+    left.note?.to.join(" ") === right.note?.to.join(" ") &&
     sameSteps(left.steps, right.steps)
   );
 }
@@ -472,6 +542,8 @@ export function messageRows(
     working?: ReadonlySet<string>;
     /** The members answer for themselves, so a result note that restates an answer is left out. */
     membersAnswer?: boolean;
+    /** Which messages are agents talking to each other (`agentNoteOf`): those rows fold to one line. */
+    note?: (entry: ChannelMessage) => WorkspaceAgentNoteView | null;
   } = {},
 ): WorkspaceMessageRowModel[] {
   const listed = options.thread ? entries : entries.filter((entry) => !isChannelThreadReply(entry));
@@ -490,7 +562,9 @@ export function messageRows(
   const byId = options.thread ? null : new Map(entries.map((entry) => [entry.id, entry]));
   const push = (entry: ChannelMessage, pending: boolean, steps: WorkspaceStepTrailView | null) => {
     const { at, day } = sendTime(entry.message.createdAt);
-    const authorKey = `${entry.author.kind}:${entry.externalAuthor?.id ?? entry.author.id}`;
+    const note = pending ? null : (options.note?.(entry) ?? null);
+    // A folded line stands alone: it joins no group, and the next message shows its author again.
+    const authorKey = note ? `note:${entry.id}` : `${entry.author.kind}:${entry.externalAuthor?.id ?? entry.author.id}`;
     const firstUnread = !pending && options.firstUnreadId === entry.id;
     const dayStart = previous?.day === day ? null : at;
     // A thread reply in the channel says which thread it answers, and starts a group of its own.
@@ -515,6 +589,7 @@ export function messageRows(
       firstUnread,
       steps,
       broadcast,
+      ...(note ? { note } : {}),
     });
     previous = { authorKey, at, day };
   };

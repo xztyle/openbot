@@ -588,10 +588,16 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
   readonly releaseThread = Effect.fn("ClaudeAgentClient.releaseThread")(function* (
     this: ClaudeAgentClient,
     threadId: string,
+    resumes = false,
   ): Effect.fn.Return<void, ProviderClientOperationError> {
     this.#threads.forget(threadId);
-    this.#memoryContexts.delete(threadId);
-    this.#teammates.delete(threadId);
+    // `--resume` opens the same conversation, which holds the memories and section-mates that its
+    // turns were sent. Before, they went again with the next turn after each runtime reload, such as
+    // an MCP server or skill change.
+    if (!resumes) {
+      this.#memoryContexts.delete(threadId);
+      this.#teammates.delete(threadId);
+    }
     const runtime = this.#threads.get(threadId);
     if (!runtime) return;
     yield* this.#threads.close(runtime).pipe(toProviderClientOperationError);

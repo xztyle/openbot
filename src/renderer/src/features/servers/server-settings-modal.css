@@ -345,6 +345,7 @@
   }
 
   .server-settings-invite-email-field {
+    width: 100%;
     max-width: none;
   }
 

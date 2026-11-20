@@ -142,19 +142,28 @@ await step("a model that is late or fails leaves the answer", async () => {
   assert.deepEqual(failed, { kind: "kept", reason: "error" });
 });
 
-await step("a rewrite that drops the Motion link or a mention, or invents a link, is refused", async () => {
-  const noLink = await run({ text: REPORT }, fake(SHORT_REWRITE.replace(` (${MOTION})`, "")));
-  assert.deepEqual(noLink, { kind: "kept", reason: "lost-link" });
-  const noMention = await run(
-    { text: REPORT },
-    fake(SHORT_REWRITE.replace("@[Creativo de Anuncios](agent:agent-creativo) ", "")),
-  );
-  assert.deepEqual(noMention, { kind: "kept", reason: "lost-link" });
-  const invented = await run({ text: REPORT }, fake(`${SHORT_REWRITE} Más en https://example.com/inventado`));
-  assert.deepEqual(invented, { kind: "kept", reason: "new-link" });
-  const longer = await run({ text: REPORT }, fake(`${REPORT}\nY algo más.`));
-  assert.deepEqual(longer, { kind: "kept", reason: "not-shorter" });
-});
+await step(
+  "a rewrite that drops a link or mention, invents a link or a name, echoes the prompt or keeps the report shape is refused",
+  async () => {
+    const noLink = await run({ text: REPORT }, fake(SHORT_REWRITE.replace(` (${MOTION})`, "")));
+    assert.deepEqual(noLink, { kind: "kept", reason: "lost-link" });
+    const noMention = await run(
+      { text: REPORT },
+      fake(SHORT_REWRITE.replace("@[Creativo de Anuncios](agent:agent-creativo) ", "")),
+    );
+    assert.deepEqual(noMention, { kind: "kept", reason: "lost-link" });
+    const invented = await run({ text: REPORT }, fake(`${SHORT_REWRITE} Más en https://example.com/inventado`));
+    assert.deepEqual(invented, { kind: "kept", reason: "new-link" });
+    const named = await run({ text: REPORT }, fake(SHORT_REWRITE.replace("El gasto", "Carlos, el gasto")));
+    assert.deepEqual(named, { kind: "kept", reason: "new-name" });
+    const echoed = await run({ text: REPORT }, fake(`Como teammate te cuento: ${SHORT_REWRITE}`));
+    assert.deepEqual(echoed, { kind: "kept", reason: "prompt-echo" });
+    const labelled = await run({ text: REPORT }, fake(`**Estado:** ${SHORT_REWRITE}`));
+    assert.deepEqual(labelled, { kind: "kept", reason: "still-report" });
+    const longer = await run({ text: REPORT }, fake(`${REPORT}\nY algo más.`));
+    assert.deepEqual(longer, { kind: "kept", reason: "not-shorter" });
+  },
+);
 
 await step("a person who asks for the detail, a text or code gets the whole answer, without a model call", async () => {
   const cases: Array<[string, string]> = [
@@ -316,7 +325,11 @@ if (samples.length > 0)
       const outcomes: Record<string, number> = {};
       for (const sample of samples) {
         const started = Date.now();
-        const request = { text: sample.text, ...(sample.person ? { personMessage: sample.person } : {}) };
+        const request = {
+          text: sample.text,
+          writer: sample.agent,
+          ...(sample.person ? { personMessage: sample.person } : {}),
+        };
         const result: CondenseResult = await Effect.runPromise(
           condenseAnswer(request, settings, model, live ? 30_000 : undefined),
         );

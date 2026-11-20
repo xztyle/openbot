@@ -103,6 +103,8 @@ export interface CondenseRequest {
   text: string;
   /** The message of a person that the turn answers, when a person started it. */
   personMessage?: string | undefined;
+  /** The name of the agent that wrote the answer. */
+  writer?: string | undefined;
 }
 
 export type CondensePlan = { condense: true; trigger: CondenseTriggerKind } | { condense: false; reason: string };
@@ -138,9 +140,9 @@ export function condensePrompt(request: CondenseRequest, settings: WorkspaceCond
   return [
     "You edit one chat message that an AI teammate is about to send to a person in a work chat. Rewrite it the way a colleague texts a colleague: short, spoken, direct.",
     "",
+    ...(request.writer?.trim() ? [`The writer is ${request.writer.trim().slice(0, 120)}.`, ""] : []),
     "Rules:",
-    "- Write in the language of the message. Keep the teammate's voice: the teammate speaking to the person, in the first person only for what the teammate itself did.",
-    "- Keep who did what. When the message reports another teammate's work, name that teammate; never turn someone else's work or decision into \"I\".",
+    "- Write in the language of the message, as the writer speaking to the person. Keep who did what: name whoever did each thing, and use I only for the writer's own work.",
     "- The answer or the main news goes in the first sentence. After it, only what the person must do or decide, or what they would want to know now: a blocker, a risk, a deadline, money.",
     `- Aim for about 60 words, never more than ${wordLimit(settings)}. One to four sentences of plain prose.`,
     '- A decision or request of the person goes early, said plainly, with the teammate\'s default when the message gives one ("say ok and I go with X"). Only when there are two to five separate things the person must do or decide, put them in a numbered list of one short line each, under one lead line. No other lists.',
@@ -148,9 +150,8 @@ export function condensePrompt(request: CondenseRequest, settings: WorkspaceCond
     '- Leave out how the work was done, evidence and sources, who reviewed what, internal steps, plans the person need not act on, caveats they cannot act on, and reassurances such as "nothing needed from you" unless that is the whole answer.',
     "- Copy exactly, character for character: every link the person may open (Motion pages, files, any [text](target) link), every mention tag such as @[Name](agent:id), and every number, amount, date or time the person must act on.",
     "- Never add a fact, a promise, a link, a name or a number that is not in the message. Do not answer the message, comment on it, or greet.",
-    "- If the message is mostly something the person asked to receive in full (text to publish, copy, a script, code, a list or table they requested), or the person asked for the detail, reply with exactly KEEP.",
     "",
-    "Reply with only the rewritten message, or KEEP.",
+    "Reply with only the rewritten message.",
     "",
     ...(person ? ["<person_message>", person, "</person_message>", ""] : []),
     "<message>",
@@ -158,6 +159,35 @@ export function condensePrompt(request: CondenseRequest, settings: WorkspaceCond
     "</message>",
   ].join("\n");
 }
+
+const CAPITALIZED = /\b\p{Lu}[\p{L}]{3,}\b/gu;
+
+/**
+ * Whether a rewrite names someone or something that the answer does not: a capitalized word in the
+ * middle of a sentence, or one that opens a sentence to address someone ("Carlos, …"), whose first
+ * four letters start no word of the answer. Rough on purpose: a rewrite it refuses only leaves the
+ * original.
+ */
+function newNames(original: string, rewrite: string): boolean {
+  const stems = new Set((original.match(WORD) ?? []).map((word) => word.slice(0, 4).toLocaleLowerCase()));
+  for (const match of rewrite.matchAll(CAPITALIZED)) {
+    const word = match[0];
+    if (stems.has(word.slice(0, 4).toLocaleLowerCase())) continue;
+    const at = match.index ?? 0;
+    const opensSentence = /(?:^|[.!?:;\n(«"“—-])\s*$/u.test(rewrite.slice(Math.max(0, at - 4), at)) || at === 0;
+    if (!opensSentence || rewrite[at + word.length] === ",") return true;
+  }
+  return false;
+}
+
+/** Words of the prompt that a rewrite has only when it talks about the prompt. */
+const PROMPT_WORDS = [
+  /\bteammate\b/iu,
+  /\bKEEP\b/u,
+  /<\/?(?:message|person_message)>/iu,
+  /\bprimera persona\b/iu,
+  /\bfirst person\b/iu,
+];
 
 const URL = /https?:\/\/[^\s)<>\]"']+/giu;
 const LINK_TARGET = /\]\(([^)\s]+)\)/gu;
@@ -190,7 +220,19 @@ function allReferences(text: string): Set<string> {
 
 export type CondenseOutcome =
   | { kind: "condensed"; text: string }
-  | { kind: "kept"; reason: "keep" | "empty" | "not-shorter" | "too-long" | "lost-link" | "new-link" };
+  | {
+      kind: "kept";
+      reason:
+        | "keep"
+        | "empty"
+        | "not-shorter"
+        | "too-long"
+        | "still-report"
+        | "prompt-echo"
+        | "new-name"
+        | "lost-link"
+        | "new-link";
+    };
 
 /**
  * The rewrite that replaces the answer, or why the answer stays as it is: the model said KEEP, the
@@ -209,7 +251,14 @@ export function checkRewrite(original: string, output: string, settings: Workspa
   if (!text) return { kind: "kept", reason: "empty" };
   const words = condenseSignals(text).words;
   if (words >= condenseSignals(original).words) return { kind: "kept", reason: "not-shorter" };
-  if (words > wordLimit(settings) * 1.5) return { kind: "kept", reason: "too-long" };
+  if (words > wordLimit(settings) * 1.25) return { kind: "kept", reason: "too-long" };
+  const shape = condenseSignals(text);
+  if (shape.boldLabels + shape.headings + shape.inventories > 0 || shape.plumbing > 2)
+    return { kind: "kept", reason: "still-report" };
+  if (newNames(original, text)) return { kind: "kept", reason: "new-name" };
+  // A small model sometimes answers the instructions instead of only following them.
+  for (const word of PROMPT_WORDS)
+    if (word.test(text) && !word.test(original)) return { kind: "kept", reason: "prompt-echo" };
   for (const reference of keptReferences(original))
     if (!text.includes(reference)) return { kind: "kept", reason: "lost-link" };
   const known = allReferences(original);

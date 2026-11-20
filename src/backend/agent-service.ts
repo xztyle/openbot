@@ -2741,7 +2741,15 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     };
     const started = Date.now();
     Effect.runFork(
-      condenseAnswer({ text: original, ...(personMessage ? { personMessage } : {}) }, settings, model).pipe(
+      condenseAnswer(
+        {
+          text: original,
+          writer: this.#store.list().find((agent) => agent.id === answer.agentId)?.name,
+          ...(personMessage ? { personMessage } : {}),
+        },
+        settings,
+        model,
+      ).pipe(
         Effect.flatMap((result) =>
           Effect.gen({ self: this }, function* () {
             if (result.kind === "skipped") return;

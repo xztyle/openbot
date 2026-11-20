@@ -2913,6 +2913,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                         }
                         onMounts={setSettingsMounts}
                         onEscape={showAgents}
+                        section={kind === "personal" ? null : serverSettingsSection()}
                       />
                     )}
                   </Show>

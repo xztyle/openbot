@@ -616,8 +616,10 @@
   line-height: var(--openbot-leading-lg);
 }
 
-/* The heading takes the focus when the page opens, only so a screen reader reads it. */
-.settings-page-title:focus {
+/* The heading takes the focus when the page opens, only so a screen reader reads it. The usage,
+ * schedule and tasks pages do the same, also on the web, where no window rule hides the ring. */
+.settings-page-title:focus,
+:is(.agent-usage-identity, .routine-planner-identity, .tasks-page) h2[tabindex="-1"]:focus {
   outline: none;
 }
 
@@ -799,6 +801,69 @@
   .settings-page-results {
     max-height: 40dvh;
     padding-bottom: var(--openbot-space-2);
+  }
+
+  /*
+   * Two screens, as iOS Settings and Slack's app (`data-phone-view` of `SettingsPageFrame`): the list
+   * of sections fills the page; a tap opens the section under a "‹ Settings" header.
+   */
+  .settings-page[data-phone-view] {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .settings-page[data-phone-view="list"] > .settings-page-content,
+  .settings-page[data-phone-view="section"]
+    :is(.settings-page-sections, .settings-page-results, .settings-page-search, .settings-page-empty) {
+    display: none;
+  }
+
+  .settings-page[data-phone-view="section"] {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .settings-page[data-phone-view="list"] > .settings-page-nav {
+    border-bottom: 0;
+  }
+
+  .settings-page[data-phone-view="list"] :is(.settings-page-sections, .settings-page-results) {
+    max-height: none;
+    padding-bottom: max(var(--openbot-space-4), env(safe-area-inset-bottom, 0px));
+  }
+
+  .settings-page[data-phone-view="list"] .settings-modal-nav {
+    display: grid;
+    overflow: visible;
+  }
+
+  .settings-page[data-phone-view="list"] .settings-modal-nav-item {
+    width: 100%;
+    min-height: var(--openbot-touch-target);
+    grid-template-columns: var(--openbot-icon-md) minmax(0, 1fr) auto auto;
+    color: var(--openbot-text-primary);
+  }
+
+  /* The list marks no section as open: each row is a way in, with a chevron at its end. */
+  .settings-page[data-phone-view="list"] .settings-modal-nav-item:is([aria-current="page"], [data-selected]) {
+    background: transparent;
+    font-weight: var(--openbot-weight-regular);
+  }
+
+  .settings-page[data-phone-view="list"] .settings-modal-nav-item::after {
+    width: var(--openbot-space-2);
+    height: var(--openbot-space-2);
+    grid-column: 4;
+    margin-right: var(--openbot-space-1);
+    border-top: 1.5px solid var(--openbot-text-muted);
+    border-right: 1.5px solid var(--openbot-text-muted);
+    content: "";
+    transform: rotate(45deg);
+  }
+
+  /* Back is the one way out of a phone page, so it is finger-sized. */
+  .settings-page-back.ui-button {
+    width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
+    margin-left: calc(-1 * var(--openbot-space-2));
   }
 }
 

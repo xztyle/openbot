@@ -703,11 +703,12 @@
 
 /*
  * A narrow computer window (the pane under 720px, the window over it) shows one workspace pane at a
- * time, but the sidebar stays in view. Back of the main pane led to that sidebar and did nothing.
- * A thread or the details keep Back: it returns to the conversation.
+ * time, but the sidebar stays in view. Back of the main pane (a channel, a view) led to that
+ * sidebar and did nothing; the search view's own field doubled the top bar's. A thread or the details
+ * keep Back: it returns to the conversation.
  */
 @media (min-width: 721px) {
-  .web-app-frame .ws-layout-main .ws-channel-header-back {
+  .web-app-frame .ws-layout-main .ws-phone-only {
     display: none;
   }
 
@@ -718,6 +719,25 @@
 
   .web-app-frame .ws-layout-main .ws-face-pile.ui-button {
     display: inline-flex;
+  }
+
+  /* The search filters stay one wrapping row of small menus, not the phone's two columns of fields. */
+  .web-app-frame .ws-layout-main .ws-search-filters {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .web-app-frame .ws-layout-main :is(.ws-search-filters > *, .ws-search-filters .ws-select-trigger) {
+    width: auto;
+  }
+
+  .web-app-frame .ws-layout-main .ws-search-filters .ws-search-threads {
+    min-height: 0;
+    padding: 0;
+  }
+
+  .web-app-frame .ws-layout-main .ws-view-toolbar .ws-select-trigger {
+    min-height: 0;
   }
 }
 

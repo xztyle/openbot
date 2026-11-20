@@ -1,5 +1,7 @@
-import { createEffect, createSignal, flush, onCleanup } from "solid-js";
+import { createEffect, createSignal, flush, onCleanup, Show } from "solid-js";
+import { AtelierSymbol } from "./AtelierSymbol";
 import { APP_LOGO_CORNER, APP_LOGO_EYE_POINTS, APP_LOGO_SIZE } from "./app-logo-shape";
+import { atelierTheme } from "./atelier-appearance";
 
 export type AppLogoAnimation = "none" | "blink" | "look-around" | "surprised";
 export type AppLogoVariant = "production" | "dev" | "preview";
@@ -22,7 +24,21 @@ const EYE_RANGE = { x: 2.4, y: 1.8 };
 /** A larger area gives the eyes more room: the pointer can be far from the logo. */
 const AREA_EYE_RANGE = { x: 9, y: 7 };
 
+/**
+ * The app's mark. In the app, which sets an Atelier workspace theme on the root element, it is the
+ * Atelier symbol of that theme; the public site keeps the original logo.
+ */
 export function AppLogo(props: AppLogoProps) {
+  return (
+    <Show when={atelierTheme()} fallback={<OriginalAppLogo {...props} />}>
+      {(theme) => (
+        <AtelierSymbol theme={theme()} class={["app-logo app-logo-atelier", props.class].filter(Boolean).join(" ")} />
+      )}
+    </Show>
+  );
+}
+
+function OriginalAppLogo(props: AppLogoProps) {
   const [clickReaction, setClickReaction] = createSignal(false);
   const [easterEgg, setEasterEgg] = createSignal(false);
   const className = () => ["app-logo", props.class].filter(Boolean).join(" ");

@@ -235,3 +235,49 @@
     transform: none;
   }
 }
+
+/* The Atelier symbol (AtelierSymbol.tsx). Its colors are the theme tokens of the place it sits in:
+   the sidebar of the Riso Press theme is navy, so the symbol there is drawn in the sidebar's text. */
+.atelier-symbol {
+  --atelier-symbol-ink: var(--openbot-text-primary);
+  --atelier-symbol-accent: var(--openbot-accent);
+  --atelier-symbol-paper: var(--atelier-symbol-background, var(--openbot-bg-canvas));
+  display: inline-block;
+  overflow: visible;
+}
+
+.atelier-symbol-ink {
+  stroke: var(--atelier-symbol-ink);
+}
+
+.atelier-symbol-accent {
+  stroke: var(--atelier-symbol-accent);
+}
+
+.atelier-symbol-ink-fill {
+  fill: var(--atelier-symbol-ink);
+}
+
+.atelier-symbol-accent-fill {
+  fill: var(--atelier-symbol-accent);
+}
+
+.atelier-symbol-paper {
+  stroke: var(--atelier-symbol-paper);
+  opacity: 0.9;
+}
+
+/* The pink dot overprints the ink on light paper, as a second riso drum does. */
+.atelier-symbol-overprint {
+  mix-blend-mode: var(--atelier-symbol-blend, normal);
+}
+
+:root[data-openbot-color-scheme="light"] {
+  --atelier-symbol-blend: multiply;
+}
+
+/* The symbol takes the place of the original logo in the app; it has no tile behind it. */
+.app-logo.app-logo-atelier {
+  overflow: visible;
+  border-radius: 0;
+}

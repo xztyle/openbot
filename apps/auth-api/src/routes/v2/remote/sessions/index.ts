@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import { sha256 } from "../../../../server/crypto";
 import { runApiResponse } from "../../../../server/effect-runtime";
 import { readJsonObject } from "../../../../server/json-body";
+import { sessionClientInstance } from "../../../../server/remote-session-membership";
 import {
   apiError,
   bearerToken,
@@ -25,8 +26,16 @@ export const Route = createFileRoute("/v2/remote/sessions/")({
             if (!user) return apiError(401, "unauthorized", "Sign in is required.");
             const body = yield* readJsonObject(request);
             if (!isString(body.hostId)) return apiError(400, "invalid_remote_request", "The host ID is invalid.");
+            const clientInstance = sessionClientInstance(body);
+            if (clientInstance === undefined)
+              return apiError(400, "invalid_remote_request", "The client instance ID is invalid.");
             return json(
-              yield* requestRemoteControlPlane().startSession(user.id, body.hostId, yield* sha256(token)),
+              yield* requestRemoteControlPlane().startSession(
+                user.id,
+                body.hostId,
+                yield* sha256(token),
+                clientInstance,
+              ),
               201,
             );
           }),

@@ -110,10 +110,10 @@ const failedHostsRuntime: WebRuntimeFactory = (...args) => ({
   },
 });
 
-const otherTabRuntime: WebRuntimeFactory = (...args) => ({
+const disconnectedRuntime: WebRuntimeFactory = (...args) => ({
   ...createMockWebRuntime(...args),
   connect: async () => {
-    throw new Error("This host is open in another tab. Close that connection before trying again.");
+    throw new Error("The browser connection is closed.");
   },
 });
 
@@ -136,7 +136,7 @@ export const HostsFailed: Story = {
 };
 
 export const Disconnected: Story = {
-  args: { accountEmail: "you@example.com", createRuntime: otherTabRuntime },
+  args: { accountEmail: "you@example.com", createRuntime: disconnectedRuntime },
 };
 
 export const Incompatible: Story = {

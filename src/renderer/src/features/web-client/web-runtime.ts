@@ -161,14 +161,7 @@ import {
   type WebHostNotice,
   WebHostRequestError,
 } from "./web-host-connections";
-import {
-  acquireOpenedWebHostLock,
-  acquireWebHostLock,
-  decodeWebHostTabMessage,
-  openWebHostChannel,
-  type WebHostState,
-  type WebHostTabMessage,
-} from "./web-host-lock";
+import { acquireWebHostLock, openWebHostChannel, type WebHostState, webTabInstanceId } from "./web-host-lock";
 
 /**
  * How long a request that the connection lost waits for the connection to come back before it fails.
@@ -406,6 +399,8 @@ export function createWebWorkspaceRuntime(
     // `bun run dev:api` serves this page and the account service from `http://localhost:<port>`.
     inviteLinks: { allowLocalDevelopmentApiUrl: import.meta.env.DEV },
     verifyHostKeySignature: verifyEd25519Base64Url,
+    // Each tab has its own remote session, so the host keeps a peer for each tab that opens it.
+    clientInstanceId: webTabInstanceId,
     hostKeys: {
       get: async (id) => localStorage.getItem(`openbot.web.host-key:${accountId}:${id}`),
       set: async (id, key) => localStorage.setItem(`openbot.web.host-key:${accountId}:${id}`, key),
@@ -462,7 +457,7 @@ export function createWebWorkspaceRuntime(
     { waitForHost: true },
   );
   let releaseHostLock: (() => void) | null = null;
-  let lockedHostId: string | null = null;
+  let openedHostId: string | null = null;
   const hostChannel = dependencies.openHostChannel?.(accountId) ?? null;
   const hosts = hostChannel
     ? createWebHostConnections({
@@ -483,16 +478,6 @@ export function createWebWorkspaceRuntime(
           : {}),
       })
     : undefined;
-  // Another tab asks for the host that this tab has open: it stays here.
-  hostChannel?.addEventListener("message", (event) => {
-    const message = decodeWebHostTabMessage(event.data);
-    if (message?.type === "release" && message.hostId === lockedHostId)
-      hostChannel.postMessage({
-        type: "busy",
-        hostId: message.hostId,
-        requestId: message.requestId,
-      } satisfies WebHostTabMessage);
-  });
   let connecting: Promise<unknown> | null = null;
   let disposed = false;
   let generation = 0;
@@ -518,7 +503,7 @@ export function createWebWorkspaceRuntime(
   /** The composer backup that each queue edit retains on its host, by host and edit. */
   const retainedEditDrafts = new Map<string, string[]>();
   const retainedEditKey = (hostId: string, editId: string) => `${hostId}\u0000${editId}`;
-  function trackCompletedDraft(id: string, hostId = lockedHostId): void {
+  function trackCompletedDraft(id: string, hostId = openedHostId): void {
     if (!hostId) return;
     // The released API has no draft listing. A request that commits before returning cannot be
     // recovered if its response is lost, so only returned identifiers enter this cleanup set.
@@ -529,7 +514,7 @@ export function createWebWorkspaceRuntime(
     }
     ids.add(id);
   }
-  function removeCompletedDrafts(idsToRemove: string[], hostId = lockedHostId): void {
+  function removeCompletedDrafts(idsToRemove: string[], hostId = openedHostId): void {
     if (!hostId) return;
     const ids = completedDraftIdsByHost.get(hostId);
     if (!ids) return;
@@ -540,8 +525,8 @@ export function createWebWorkspaceRuntime(
     }
   }
   /** `keepHeld` keeps the uploads of pending sends for a later return. Only the end of the page drops them. */
-  async function discardCompletedDrafts(hostId = lockedHostId, keepHeld = true): Promise<void> {
-    if (!hostId || lockedHostId !== hostId) return;
+  async function discardCompletedDrafts(hostId = openedHostId, keepHeld = true): Promise<void> {
+    if (!hostId || openedHostId !== hostId) return;
     const ids = completedDraftIdsByHost.get(hostId);
     if (!ids?.size) {
       draftCleanupRetryHosts.delete(hostId);
@@ -549,7 +534,7 @@ export function createWebWorkspaceRuntime(
     }
     const held = keepHeld ? heldDrafts() : new Set<string>();
     for (const id of [...ids]) {
-      if (lockedHostId !== hostId) {
+      if (openedHostId !== hostId) {
         draftCleanupRetryHosts.add(hostId);
         return;
       }
@@ -569,7 +554,7 @@ export function createWebWorkspaceRuntime(
     }
     if (!completedDraftIdsByHost.has(hostId)) draftCleanupRetryHosts.delete(hostId);
   }
-  /** Whether the peer of the locked host reported `online` last. */
+  /** Whether the peer of the opened host reported `online` last. */
   let peerOnline = false;
   /** Counts disconnects and abandoned waits. A request that waits for a reconnect stops waiting at one. */
   let closedConnections = 0;
@@ -581,13 +566,13 @@ export function createWebWorkspaceRuntime(
   /**
    * Waits until the connection to `hostId` is online again. False when the page closes, the person
    * disconnects or opens another host, or the wait ends first. Between two recovery attempts no host
-   * is locked; that is not a change of host. The recovery owner reconnects; this only waits for it.
+   * is opened; that is not a change of host. The recovery owner reconnects; this only waits for it.
    */
   function waitForConnection(hostId: string | null, closed: number, waitMs: number): Promise<boolean> {
     const settled = (): boolean | null =>
-      disposed || !hostId || closed !== closedConnections || (lockedHostId !== null && lockedHostId !== hostId)
+      disposed || !hostId || closed !== closedConnections || (openedHostId !== null && openedHostId !== hostId)
         ? false
-        : peerOnline && lockedHostId === hostId
+        : peerOnline && openedHostId === hostId
           ? true
           : null;
     // The peer still says online while it restarts its ICE path, and sends no update for it. A short
@@ -621,7 +606,7 @@ export function createWebWorkspaceRuntime(
    * must see.
    */
   async function request(method: string, path: string, body: TeamProtocolV2Json = {}, upload?: RemoteFileUpload) {
-    const requestHostId = lockedHostId;
+    const requestHostId = openedHostId;
     const closed = closedConnections;
     const deadline = Date.now() + REQUEST_RECONNECT_WAIT_MS;
     let timeoutResent = false;
@@ -645,7 +630,7 @@ export function createWebWorkspaceRuntime(
   async function requestOnce(method: string, path: string, body: TeamProtocolV2Json, upload?: RemoteFileUpload) {
     if (disposed) throw new Error(currentText().t("webClient.error.connectionClosed"));
     const current = hostGeneration;
-    const requestHostId = lockedHostId;
+    const requestHostId = openedHostId;
     const timeoutMs =
       method === "GET" && path === TEAM_API_ROUTES.me ? 15_000 : remoteWorkspaceReadTimeout(method, path);
     const result = await peer.execute({
@@ -804,7 +789,7 @@ export function createWebWorkspaceRuntime(
   async function connectHost(host: RemoteTeamHost): Promise<string[]> {
     try {
       await peer.cancelUpload().catch(() => undefined);
-      const switchingHost = lockedHostId !== host.hostId;
+      const switchingHost = openedHostId !== host.hostId;
       const retryDraftCleanup = switchingHost && draftCleanupRetryHosts.has(host.hostId);
       if (switchingHost) await discardCompletedDrafts();
       await releaseLiveView();
@@ -814,22 +799,19 @@ export function createWebWorkspaceRuntime(
         peerOnline = false;
         releaseHostLock?.();
         releaseHostLock = null;
-        lockedHostId = null;
+        openedHostId = null;
         // This tab's own status connection gives the host up first.
         await hosts?.select(host.hostId);
-        const release = await acquireOpenedWebHostLock(
-          accountId,
-          host.hostId,
-          hostChannel,
-          dependencies.acquireHostLock,
-        );
+        // This tab connects with its own session, so other tabs can have the host open too. The lock
+        // only makes this tab speak for the host's state to the tabs that have not opened it.
+        const release = await dependencies.acquireHostLock(accountId, host.hostId).catch(() => null);
         if (disposed) {
-          release();
+          release?.();
           throw new Error(currentText().t("webClient.error.connectionClosed"));
         }
         releaseHostLock = release;
-        lockedHostId = host.hostId;
-        hosts?.holdSelected(host.hostId, true);
+        openedHostId = host.hostId;
+        hosts?.holdSelected(host.hostId, release !== null);
       }
       const current = ++generation;
       noteRequestHost(host.hostId);
@@ -864,7 +846,7 @@ export function createWebWorkspaceRuntime(
       } finally {
         releaseHostLock?.();
         releaseHostLock = null;
-        lockedHostId = null;
+        openedHostId = null;
         hosts?.holdSelected(host.hostId, false);
       }
       throw error;
@@ -1053,7 +1035,7 @@ export function createWebWorkspaceRuntime(
       }
     },
     async disconnect() {
-      const hostForCleanup = lockedHostId;
+      const hostForCleanup = openedHostId;
       closedConnections += 1;
       wakeConnectionWaiters();
       try {
@@ -1068,7 +1050,7 @@ export function createWebWorkspaceRuntime(
       } finally {
         releaseHostLock?.();
         releaseHostLock = null;
-        lockedHostId = null;
+        openedHostId = null;
         connectedHost = null;
         void hosts?.select(null);
       }
@@ -1157,8 +1139,8 @@ export function createWebWorkspaceRuntime(
       // saved message holds its new files. A change of host must not discard them as leftover uploads.
       if ((edit.action === "retain-attachments" || edit.action === "save") && edit.attachmentDraftIds)
         removeCompletedDrafts(edit.attachmentDraftIds);
-      if (!lockedHostId) return snapshot;
-      const key = retainedEditKey(lockedHostId, edit.editId);
+      if (!openedHostId) return snapshot;
+      const key = retainedEditKey(openedHostId, edit.editId);
       if (edit.action === "retain-attachments") retainedEditDrafts.set(key, edit.attachmentDraftIds);
       else if (edit.action === "cancel" || edit.action === "save") {
         // Cancel and Save put the backup back in the composer, so its files are uploads not sent again.
@@ -1211,7 +1193,7 @@ export function createWebWorkspaceRuntime(
           );
         throw new Error(currentText().t("webClient.error.uploadCancelled"));
       }
-      trackCompletedDraft(value.id, uploadHostGeneration === generation ? lockedHostId : null);
+      trackCompletedDraft(value.id, uploadHostGeneration === generation ? openedHostId : null);
       // The host names the draft's preview with the desktop `openbot-attachment:` scheme.
       return { ...value, previewUrl: null };
     },
@@ -1237,7 +1219,7 @@ export function createWebWorkspaceRuntime(
       await peer.cancelUpload();
     },
     async discard(id, hostId) {
-      if (hostId !== undefined && hostId !== lockedHostId) {
+      if (hostId !== undefined && hostId !== openedHostId) {
         trackCompletedDraft(id, hostId);
         draftCleanupRetryHosts.add(hostId);
         return;
@@ -1329,7 +1311,7 @@ export function createWebWorkspaceRuntime(
     },
     async duplicateAgent(agentId) {
       if (!capabilities.includes("agent-duplication")) throw new Error(currentText().t("webClient.error.duplication"));
-      const operationKey = `${lockedHostId ?? ""}\0${agentId}`;
+      const operationKey = `${openedHostId ?? ""}\0${agentId}`;
       const operationId = duplicateOperationIds.get(operationKey) ?? crypto.randomUUID();
       duplicateOperationIds.set(operationKey, operationId);
       const value = await request("POST", TEAM_API_ROUTES.agent.duplicate(agentId), { operationId });
@@ -1383,7 +1365,7 @@ export function createWebWorkspaceRuntime(
     async dispose(options) {
       if (options?.sessionsEnded) sessionsEnded = true;
       // The pending sends end with the page, so their uploads go too.
-      await discardCompletedDrafts(lockedHostId, false);
+      await discardCompletedDrafts(openedHostId, false);
       await releaseLiveView();
       browserView.disconnect();
       viewListeners.clear();

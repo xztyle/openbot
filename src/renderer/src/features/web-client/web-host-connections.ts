@@ -22,9 +22,6 @@ import {
   type WebHostTabMessage,
 } from "./web-host-lock";
 
-/** After another tab asks for a host, this tab does not ask for its lock again for this long. */
-const RELEASED_HOST_REST_MS = 30_000;
-
 type Peer = ReturnType<typeof createRemoteTeamPeer>;
 
 /**
@@ -91,7 +88,7 @@ export interface WebHostConnections {
   setHosts(hosts: readonly RemoteTeamHost[]): void;
   /** The host this tab opens, or null. Resolves when its status connection has ended. */
   select(hostId: string | null): Promise<void>;
-  /** Whether this tab holds the lock of the opened host. Only then does it speak for that host. */
+  /** Whether this tab holds the lock of the opened host. Only then does it speak for that host to other tabs. */
   holdSelected(hostId: string, held: boolean): void;
   /** The state of the opened host, for the other tabs. */
   reportSelected(hostId: string, state: WebHostState): void;
@@ -103,8 +100,9 @@ export interface WebHostConnections {
 
 /**
  * One status connection for each host that this tab has not opened, as the mobile app keeps one for
- * each server. A connection holds the host's tab lock, so one browser has at most one peer for each
- * host; the tabs share one logical session for it. Other tabs learn the state from the channel.
+ * each server. A connection holds the host's tab lock, so the tabs keep one status connection for
+ * each host between them; the other tabs learn its state from the channel. A tab that opens the host
+ * connects with its own session whether or not it gets the lock.
  */
 export function createWebHostConnections(options: {
   accountId: string;
@@ -123,8 +121,6 @@ export function createWebHostConnections(options: {
   const { channel } = options;
   const entries = new Map<string, HostEntry>();
   const states = new Map<string, WebHostState>();
-  const restingUntil = new Map<string, number>();
-  const restTimers = new Set<ReturnType<typeof setTimeout>>();
   let hosts: readonly RemoteTeamHost[] = [];
   let selected: { hostId: string; state: WebHostState; held: boolean } | null = null;
   let disposed = false;
@@ -162,6 +158,7 @@ export function createWebHostConnections(options: {
     entries.set(host.hostId, entry);
     options.acquireHostLock(options.accountId, host.hostId, { wait: entry.stop.signal }).then(
       (release) => {
+        if (!release) return;
         if (entries.get(host.hostId) !== entry) {
           release();
           return;
@@ -298,8 +295,8 @@ export function createWebHostConnections(options: {
     entry.recovery?.dispose();
     try {
       await entry.peer?.dispose();
-      // A bootstrap that was still pending ends its session when it returns. The tab that asked for the
-      // host would reuse that session, so the lock waits for it.
+      // A bootstrap that was still pending ends its session when it returns. This tab reuses that
+      // session when it opens the host, so the open waits for it.
       await entry.connecting?.catch(() => undefined);
       await Promise.allSettled([...entry.endingSessions]);
     } finally {
@@ -315,11 +312,8 @@ export function createWebHostConnections(options: {
       if (!host || hostId === selected?.hostId || host.devicePublicKey !== entry.host.devicePublicKey)
         void stop(hostId);
     }
-    const now = Date.now();
     for (const host of hosts) {
       if (host.hostId === selected?.hostId || entries.has(host.hostId)) continue;
-      if ((restingUntil.get(host.hostId) ?? 0) > now) continue;
-      restingUntil.delete(host.hostId);
       start(host);
     }
   }
@@ -334,16 +328,8 @@ export function createWebHostConnections(options: {
       }
       if (selected?.held) post({ type: "state", hostId: selected.hostId, state: selected.state });
     } else if (message.type === "state") {
-      if (!holds(message.hostId)) setState(message.hostId, message.state, false);
-    } else if (message.type === "release" && entries.has(message.hostId)) {
-      // Also leave the queue: a queued request here would take the lock before the tab that asked.
-      restingUntil.set(message.hostId, Date.now() + RELEASED_HOST_REST_MS);
-      const timer = setTimeout(() => {
-        restTimers.delete(timer);
-        sync();
-      }, RELEASED_HOST_REST_MS);
-      restTimers.add(timer);
-      void stop(message.hostId);
+      // The opened host reports through this tab's own peer, even when another tab holds its lock.
+      if (!holds(message.hostId) && message.hostId !== selected?.hostId) setState(message.hostId, message.state, false);
     }
   }
   channel.addEventListener("message", listen);
@@ -393,8 +379,6 @@ export function createWebHostConnections(options: {
     async dispose() {
       disposed = true;
       channel.removeEventListener("message", listen);
-      for (const timer of restTimers) clearTimeout(timer);
-      restTimers.clear();
       await Promise.all([...entries.keys()].map(stop));
     },
   };

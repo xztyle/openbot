@@ -136,6 +136,7 @@ export class RemoteTeamDirectoryClient {
   readonly #pairedHost: MobileConnectHostBinding | undefined;
   readonly #inviteLinks: InviteLinkOptions;
   readonly #verifyHostKeySignature: HostKeySignatureCheck;
+  readonly #clientInstanceId: (() => Promise<string | null>) | undefined;
   readonly #pinLock = Semaphore.makeUnsafe(1);
 
   constructor(
@@ -148,6 +149,11 @@ export class RemoteTeamDirectoryClient {
       inviteLinks?: InviteLinkOptions;
       /** Checks the signatures of a host key handover, usually `verifyEd25519Base64Url`. */
       verifyHostKeySignature: HostKeySignatureCheck;
+      /**
+       * The browser tab of a web client. Each tab then gets its own remote session, so several tabs
+       * can have one host open at once. A native app passes none and has one session for each device.
+       */
+      clientInstanceId?: () => Promise<string | null>;
     } & ({ token: string; authentication?: never } | { token?: never; authentication: { kind: "browser" } }),
   ) {
     this.#apiUrl = input.apiUrl;
@@ -156,6 +162,7 @@ export class RemoteTeamDirectoryClient {
     this.#fetch = input.fetch;
     this.#pairedHost = input.pairedHost;
     this.#verifyHostKeySignature = input.verifyHostKeySignature;
+    this.#clientInstanceId = input.clientInstanceId;
     // A self-hosted account service accepts invitations that name it. `previewInvite` still refuses
     // an invitation for any other service.
     this.#inviteLinks = { selfHostedApiOrigin: selfHostedApiOrigin(input.apiUrl), ...input.inviteLinks };
@@ -388,7 +395,12 @@ export class RemoteTeamDirectoryClient {
         );
         if (existing) return existing;
       }
-      const value = yield* this.#request("/v2/remote/sessions/", { method: "POST", body: { hostId } });
+      const instance = this.#clientInstanceId;
+      const clientInstanceId = instance ? yield* directoryIO(instance) : null;
+      const value = yield* this.#request("/v2/remote/sessions/", {
+        method: "POST",
+        body: clientInstanceId ? { hostId, clientInstanceId } : { hostId },
+      });
       const session = yield* directoryDecode(() => decodeRemoteSession(value));
       return yield* this.#ticket(session.sessionId, clientPublicKey).pipe(
         Effect.catch((error) =>

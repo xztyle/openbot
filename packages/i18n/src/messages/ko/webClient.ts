@@ -58,7 +58,6 @@ export const messages = {
   "webClient.error.linkBlocked": "이 링크는 열 수 없어요.",
   "webClient.error.fileTransfer": "파일 전송에 실패했어요.",
   "webClient.error.noLocks": "이 브라우저는 서버 연결을 보호할 수 없어요. 최신 데스크톱 브라우저를 사용해 주세요.",
-  "webClient.error.otherTab": "이 서버가 다른 탭에서 열려 있어요. 해당 연결을 닫은 후 다시 시도해 주세요.",
   "webClient.error.connectionClosed": "브라우저 연결이 닫혔어요.",
   "webClient.error.hostChanged": "선택한 서버가 바뀌었어요.",
   "webClient.error.requestIncomplete": "서버가 이 요청을 완료하지 못했어요. 다시 시도하기 전에 새로 고쳐 주세요.",

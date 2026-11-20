@@ -60,7 +60,6 @@ export const messages = {
   "webClient.error.fileTransfer": "Передача файла не удалась.",
   "webClient.error.noLocks":
     "Этот браузер не может защитить подключение к серверу. Используйте актуальный браузер для компьютера.",
-  "webClient.error.otherTab": "Этот сервер открыт в другой вкладке. Закройте то подключение, прежде чем повторять.",
   "webClient.error.connectionClosed": "Подключение браузера закрыто.",
   "webClient.error.hostChanged": "Выбранный сервер изменился.",
   "webClient.error.requestIncomplete": "Сервер не смог выполнить этот запрос. Обновите страницу, прежде чем повторять.",

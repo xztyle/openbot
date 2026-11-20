@@ -60,7 +60,6 @@ export const messages = {
   "webClient.error.fileTransfer": "ファイルの転送に失敗しました。",
   "webClient.error.noLocks":
     "このブラウザーはサーバーへの接続を保護できません。最新のデスクトップブラウザーを使ってください。",
-  "webClient.error.otherTab": "このサーバーは別のタブで開かれています。再試行する前に、その接続を閉じてください。",
   "webClient.error.connectionClosed": "ブラウザーの接続は閉じられています。",
   "webClient.error.hostChanged": "選択したサーバーが変わりました。",
   "webClient.error.requestIncomplete":

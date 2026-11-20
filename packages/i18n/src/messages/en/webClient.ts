@@ -79,7 +79,6 @@ export const messages = defineMessages("webClient", {
   "webClient.error.linkBlocked": "This link cannot be opened.",
   "webClient.error.fileTransfer": "File transfer failed.",
   "webClient.error.noLocks": "This browser cannot protect the server connection. Use a current desktop browser.",
-  "webClient.error.otherTab": "This server is open in another tab. Close that connection before trying again.",
   "webClient.error.connectionClosed": "The browser connection is closed.",
   "webClient.error.hostChanged": "The selected server changed.",
   "webClient.error.requestIncomplete": "The server could not complete this request. Refresh before trying again.",

@@ -60,8 +60,6 @@ export const messages = {
   "webClient.error.fileTransfer": "Trasferimento del file non riuscito.",
   "webClient.error.noLocks":
     "Questo browser non può proteggere la connessione al server. Usa un browser desktop aggiornato.",
-  "webClient.error.otherTab":
-    "Questo server è aperto in un'altra scheda. Chiudi quella connessione prima di riprovare.",
   "webClient.error.connectionClosed": "La connessione del browser è chiusa.",
   "webClient.error.hostChanged": "Il server selezionato è cambiato.",
   "webClient.error.requestIncomplete":

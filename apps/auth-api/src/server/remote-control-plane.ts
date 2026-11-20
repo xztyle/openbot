@@ -62,6 +62,8 @@ const AUTH_EVENT_SEND_CONCURRENCY = 6;
 /** Longer than one drain: 50 events, 6 at a time, each with a 5 s timeout. */
 const AUTH_EVENT_CLAIM_MS = 2 * 60_000;
 const MAX_OUTSTANDING_INVITES_PER_HOST = 50;
+/** The tab sessions one browser keeps for one host. A new tab past this ends the oldest. */
+const REMOTE_TAB_SESSION_LIMIT = 16;
 const MAX_PERMANENT_INVITES_PER_HOST = 5;
 const MAX_TELEGRAM_LINK_CODES_PER_HOST = 10;
 // An active member keeps a seat; anyone else needs a free one. Binds: host, user, host, limit.
@@ -1512,13 +1514,54 @@ export class RemoteControlPlane {
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
 
+  /**
+   * Ends the tab sessions of one browser and host past the newest `REMOTE_TAB_SESSION_LIMIT`, with a
+   * `remote-session-ended` event for each, so Signal drops their sockets too. The events go first:
+   * they read the rows that the update then ends.
+   */
+  #trimTabSessionStatements(
+    hostId: string,
+    userId: string,
+    authSessionHash: string,
+    now: number,
+  ): D1PreparedStatement[] {
+    const database = this.#database;
+    const older = `SELECT session_id FROM remote_sessions
+       WHERE host_id = ? AND user_id = ? AND auth_session_hash = ? AND client_instance IS NOT NULL AND ended_at IS NULL
+       ORDER BY started_at DESC, session_id LIMIT -1 OFFSET ${REMOTE_TAB_SESSION_LIMIT}`;
+    return [
+      database
+        .prepare(
+          `INSERT INTO remote_auth_events(event_id, payload, created_at, attempts, next_attempt_at)
+         SELECT lower(hex(randomblob(16))),
+                json_object('type', 'remote-session-ended', 'hostId', host_id, 'sessionId', session_id),
+                ?, 0, ?
+           FROM remote_sessions WHERE session_id IN (${older})`,
+        )
+        .bind(now, now, hostId, userId, authSessionHash),
+      database
+        .prepare(`UPDATE remote_sessions SET ended_at = ? WHERE session_id IN (${older})`)
+        .bind(now, hostId, userId, authSessionHash),
+    ];
+  }
+
   readonly startSession = Effect.fn("RemoteControlPlane.startSession")(
-    function* (this: RemoteControlPlane, userId: string, hostId: string, authSessionHash: string) {
+    function* (
+      this: RemoteControlPlane,
+      userId: string,
+      hostId: string,
+      authSessionHash: string,
+      /**
+       * The browser tab of a web client, or null. The tabs of one browser share its account session,
+       * and each tab keeps its own remote session, so the host keeps a peer for each open tab.
+       */
+      clientInstance: string | null = null,
+    ) {
       const dependencies = yield* RemoteDependencies;
       const now = dependencies.now();
       // The role check and the reusable session are one row, so the common answer costs one read.
       const row = yield* remoteCall(() =>
-        readSessionMembership(dependencies.database, userId, hostId, authSessionHash, now),
+        readSessionMembership(dependencies.database, userId, hostId, authSessionHash, now, clientInstance),
       );
       const membership = yield* remoteValidate(() => this.#assertRole(row, ["owner", "admin", "member"]));
       if (membership.auth_expires_at === null) {
@@ -1532,7 +1575,7 @@ export class RemoteControlPlane {
       // retain their existing durable deadline.
       const expiresAt = membership.auth_expires_at;
       // The sweep frees the one-active-session slot, so it has to run before the insert.
-      const [, insert] = yield* remoteCall(() =>
+      const [, insert, ...trimmed] = yield* remoteCall(() =>
         dependencies.database.batch([
           dependencies.database
             .prepare(
@@ -1541,8 +1584,8 @@ export class RemoteControlPlane {
             .bind(now, hostId, userId, now),
           dependencies.database
             .prepare(
-              `INSERT OR IGNORE INTO remote_sessions(session_id, host_id, user_id, membership_id, started_at, expires_at, auth_session_hash)
-           SELECT ?, ?, ?, ?, ?, ?, ?
+              `INSERT OR IGNORE INTO remote_sessions(session_id, host_id, user_id, membership_id, started_at, expires_at, auth_session_hash, client_instance)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?
             WHERE EXISTS(
               SELECT 1 FROM auth_sessions
                WHERE token_hash = ? AND user_id = ? AND revoked_at IS NULL AND expires_at > ?
@@ -1556,12 +1599,17 @@ export class RemoteControlPlane {
               now,
               expiresAt,
               authSessionHash,
+              clientInstance,
               authSessionHash,
               userId,
               now,
             ),
+          // A closed tab does not end its session, so a browser keeps the newest few tab sessions
+          // for each host and ends the older ones, on Signal too.
+          ...(clientInstance === null ? [] : this.#trimTabSessionStatements(hostId, userId, authSessionHash, now)),
         ]),
       );
+      if (trimmed.some((result) => (result?.meta.changes ?? 0) > 0)) yield* this.#flushAuthEvents();
       // The insert carries the same live-account-session guard as the read below, so one written row
       // already proves the session may start. Only a row the insert ignored needs the read.
       if (insert?.meta.changes === 1) return { sessionId, hostId, expiresAt };
@@ -1570,14 +1618,14 @@ export class RemoteControlPlane {
           .prepare(
             `SELECT session_id, expires_at FROM remote_sessions
          WHERE host_id = ? AND user_id = ? AND ended_at IS NULL AND expires_at > ?
-           AND auth_session_hash = ?
+           AND auth_session_hash = ? AND client_instance IS ?
            AND EXISTS(
              SELECT 1 FROM auth_sessions
               WHERE token_hash = ? AND user_id = ? AND revoked_at IS NULL AND expires_at > ?
            )
          ORDER BY started_at DESC LIMIT 1`,
           )
-          .bind(hostId, userId, now, authSessionHash, authSessionHash, userId, now)
+          .bind(hostId, userId, now, authSessionHash, clientInstance, authSessionHash, userId, now)
           .first<{ session_id: string; expires_at: number }>(),
       );
       if (!active)

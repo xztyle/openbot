@@ -58,7 +58,6 @@ export const messages = {
   "webClient.error.linkBlocked": "Bu bağlantı açılamaz.",
   "webClient.error.fileTransfer": "Dosya aktarımı başarısız oldu.",
   "webClient.error.noLocks": "Bu tarayıcı sunucu bağlantısını koruyamaz. Güncel bir masaüstü tarayıcısı kullanın.",
-  "webClient.error.otherTab": "Bu sunucu başka bir sekmede açık. Tekrar denemeden önce o bağlantıyı kapatın.",
   "webClient.error.connectionClosed": "Tarayıcı bağlantısı kapalı.",
   "webClient.error.hostChanged": "Seçilen sunucu değişti.",
   "webClient.error.requestIncomplete": "Sunucu bu isteği tamamlayamadı. Tekrar denemeden önce sayfayı yenileyin.",

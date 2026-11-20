@@ -22,6 +22,7 @@ import { HostedSiteInputError, requireIdempotencyKey } from "./hosted-site-contr
 import type { HostedSiteService } from "./hosted-site-service";
 import { readJsonObject } from "./json-body";
 import { type RemoteControlPlane, RemoteControlPlaneError } from "./remote-control-plane";
+import { sessionClientInstance } from "./remote-session-membership";
 import { BROWSER_SESSION_LIFETIME_MS } from "./session-policy";
 import { sendTeamInviteEmail } from "./team-invite-email";
 import type { AuthUser, TeamInviteEmailDelivery } from "./types";
@@ -250,11 +251,19 @@ const handleBrowserOperation = Effect.fn("BrowserApi.handleOperation")(function*
   if (request.method !== "POST")
     return failure(404, "browser_operation_not_found", "This browser operation is not available.");
   const body = yield* readJsonObject(request);
-  if (path === "v2/remote/sessions")
+  if (path === "v2/remote/sessions") {
+    const clientInstance = sessionClientInstance(body);
+    if (clientInstance === undefined) return yield* invalidRemoteRequest("The client instance ID is invalid.");
     return json(
-      yield* services.remote.startSession(user.id, yield* requiredString(body, "hostId"), yield* sha256(token)),
+      yield* services.remote.startSession(
+        user.id,
+        yield* requiredString(body, "hostId"),
+        yield* sha256(token),
+        clientInstance,
+      ),
       201,
     );
+  }
   const [, encodedSessionId, sessionAction] = /^v2\/remote\/sessions\/([^/]+)\/(ticket|end)$/u.exec(path) ?? [];
   if (encodedSessionId !== undefined) {
     const sessionId = decodeURIComponent(encodedSessionId);

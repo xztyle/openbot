@@ -60,8 +60,6 @@ export const messages = {
   "webClient.error.fileTransfer": "Przesyłanie pliku nie powiodło się.",
   "webClient.error.noLocks":
     "Ta przeglądarka nie może chronić połączenia z serwerem. Użyj aktualnej przeglądarki na komputerze.",
-  "webClient.error.otherTab":
-    "Ten serwer jest otwarty w innej karcie. Zamknij tamto połączenie, zanim spróbujesz ponownie.",
   "webClient.error.connectionClosed": "Połączenie przeglądarki jest zamknięte.",
   "webClient.error.hostChanged": "Wybrany serwer się zmienił.",
   "webClient.error.requestIncomplete": "Serwer nie mógł ukończyć tego żądania. Odśwież, zanim spróbujesz ponownie.",

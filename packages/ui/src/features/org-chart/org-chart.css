@@ -533,7 +533,7 @@
 .ws-org-hint {
   position: absolute;
   right: var(--wfn-hud-inset);
-  bottom: var(--wfn-hud-inset);
+  bottom: calc(var(--wfn-hud-inset) + var(--web-safe-bottom, 0px));
   z-index: 2;
   margin: 0;
   padding: var(--openbot-space-1-5) var(--openbot-space-3);
@@ -761,6 +761,11 @@
 
   .ws-org-panel .ws-pane-header {
     border-bottom: 0;
+  }
+
+  /* The sheet runs to the bottom edge; its end keeps clear of the home indicator (`web-client.css`). */
+  .ws-org-panel-scroll {
+    padding-bottom: calc(var(--openbot-space-4) + var(--web-safe-bottom, 0px));
   }
 
   .ws-org-hint {

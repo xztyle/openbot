@@ -374,8 +374,10 @@ body {
     padding-bottom: 0;
   }
 
+  /* The phone shell is the whole screen: no edge line, which showed beside the notch on its side. */
   .web-app-frame[data-web-phone-shell][data-web-mobile-pane="workspace"] > .sidebar.ws-phone-shell {
     grid-column: 1;
+    border-right: 0;
   }
 
   .ws-phone-shell-body {

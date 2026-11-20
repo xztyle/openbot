@@ -157,7 +157,8 @@
  * are 32px with an 8px radius, so the bar radius is 8 + 4 = 12. The bars come in one after another.
  */
 .wfn-canvas {
-  /* The space between the bottom bars and the edges of the canvas. */
+  /* The space between the bottom bars and the edges of the canvas. The bottom bars also keep clear
+   * of a phone's home indicator: the web client sets `--web-safe-bottom` on a pushed phone screen. */
   --wfn-hud-inset: var(--openbot-space-4);
 
   -webkit-font-smoothing: antialiased;
@@ -206,7 +207,7 @@
 
 /* The tool bar: tools, then Search, then Add node as the one primary action. */
 .wfn-hud-tools {
-  bottom: var(--wfn-hud-inset);
+  bottom: calc(var(--wfn-hud-inset) + var(--web-safe-bottom, 0px));
   left: round(50%, 1px);
   translate: round(-50%, 1px) 0;
 }
@@ -293,7 +294,13 @@
 /* The options of the Draw, Sticky note and Shapes tools sit above the tool bar, at its centre. */
 .wfn-hud.wfn-hud-sub {
   right: 0;
-  bottom: calc(var(--wfn-hud-inset) + var(--openbot-control-lg) + var(--openbot-space-3) + var(--openbot-space-2));
+  bottom: calc(
+    var(--wfn-hud-inset) +
+    var(--web-safe-bottom, 0px) +
+    var(--openbot-control-lg) +
+    var(--openbot-space-3) +
+    var(--openbot-space-2)
+  );
   left: 0;
   gap: var(--openbot-space-1);
   width: fit-content;
@@ -432,14 +439,14 @@
 .wfn-stage .wfn-hud-show {
   position: absolute;
   right: var(--wfn-hud-inset);
-  bottom: var(--wfn-hud-inset);
+  bottom: calc(var(--wfn-hud-inset) + var(--web-safe-bottom, 0px));
   z-index: 3;
   gap: var(--openbot-space-1-5);
   animation: wfn-fade-in var(--openbot-duration-normal) var(--openbot-ease-out);
 }
 
 .wfn-hud-zoom {
-  bottom: var(--wfn-hud-inset);
+  bottom: calc(var(--wfn-hud-inset) + var(--web-safe-bottom, 0px));
   left: var(--wfn-hud-inset);
 }
 
@@ -683,7 +690,7 @@
 
 /* A version that shows, read-only, in place of the tools: its time, Back, and Make current. */
 .wfn-hud-version {
-  bottom: var(--wfn-hud-inset);
+  bottom: calc(var(--wfn-hud-inset) + var(--web-safe-bottom, 0px));
   left: round(50%, 1px);
   gap: var(--openbot-space-1-5);
   font-variant-numeric: tabular-nums;
@@ -826,7 +833,13 @@
  * then the empty line or the results. The panel radius is the field radius + its 4px inset.
  */
 .wfn-hud.wfn-search {
-  bottom: calc(var(--wfn-hud-inset) + var(--openbot-control-md) + var(--openbot-space-2) + var(--openbot-space-2));
+  bottom: calc(
+    var(--wfn-hud-inset) +
+    var(--web-safe-bottom, 0px) +
+    var(--openbot-control-md) +
+    var(--openbot-space-2) +
+    var(--openbot-space-2)
+  );
   left: round(50%, 1px);
   display: grid;
   gap: var(--openbot-space-1);
@@ -953,7 +966,13 @@
 
 /* The minimap sits over the zoom bar. Nodes are kind-tinted blocks; the view is a bright frame. */
 .wfn-hud.wfn-minimap {
-  bottom: calc(var(--wfn-hud-inset) + var(--openbot-control-md) + var(--openbot-space-2) + var(--openbot-space-2));
+  bottom: calc(
+    var(--wfn-hud-inset) +
+    var(--web-safe-bottom, 0px) +
+    var(--openbot-control-md) +
+    var(--openbot-space-2) +
+    var(--openbot-space-2)
+  );
   left: var(--wfn-hud-inset);
   height: auto;
   padding: 0;

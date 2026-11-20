@@ -150,8 +150,10 @@ export function WorkspaceKeyboard() {
           // The switcher takes ⌘K from the message search, which stays in the workspace menu.
           return take(() => ws.openDialog(ws.state.dialog?.kind === "switcher" ? null : { kind: "switcher" }));
         if (ws.state.dialog || document.querySelector('[aria-modal="true"]')) return;
-        // The owner's chat with an agent keeps ⌘F and ⌘G for its own search.
-        if (key === "g" && route.kind !== "agent") return take(() => startSearch());
+        // The owner's chat with an agent keeps ⌘F, and ⌘G while its own search is open (the next match).
+        // Otherwise ⌘G goes to the top bar's search, as its hint says.
+        if (key === "g" && !(route.kind === "agent" && document.querySelector(".chat-search")))
+          return take(() => startSearch());
         if (key === "f" && route.kind === "channel") {
           const name = ws.summary(route.channelId)?.name;
           return take(() => startSearch(name ? `in:#${name} ` : undefined));

@@ -117,6 +117,12 @@
   stroke-width: var(--openbot-icon-stroke);
 }
 
+/* With no page image, the middle holds the page's name and site, so Open stands under them. */
+.browser-takeover-preview-open:has(.browser-takeover-preview-fallback) .browser-takeover-preview-open-label {
+  align-self: end;
+  margin-bottom: var(--openbot-space-4);
+}
+
 /* Open is what the card asks for, so it shows without a hover; a touch screen has none. */
 .browser-takeover-preview-open:hover .browser-takeover-preview-open-label,
 .browser-takeover-preview-open:focus-visible .browser-takeover-preview-open-label {

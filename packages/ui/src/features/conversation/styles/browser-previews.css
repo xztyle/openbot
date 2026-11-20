@@ -117,6 +117,8 @@
   display: block;
   width: 100%;
   overflow: hidden;
+  /* A short title and a long one start at the same edge, under the preview's corner. */
+  text-align: start;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--openbot-text-sm);

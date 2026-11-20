@@ -510,6 +510,23 @@
   flex: 1 1 auto;
 }
 
+/* A computer: the magnifier stands inside the field, as in Slack's switcher and the top bar's search. */
+@media (min-width: 721px) {
+  .ws-switcher-field {
+    position: relative;
+  }
+
+  .ws-switcher-field > svg {
+    position: absolute;
+    left: var(--openbot-space-3);
+    pointer-events: none;
+  }
+
+  .ws-switcher-field > .ui-input {
+    padding-left: calc(var(--openbot-space-3) + var(--openbot-icon-sm) + var(--openbot-space-2));
+  }
+}
+
 .ws-switcher-list,
 .ws-browse-list {
   display: flex;
@@ -660,6 +677,110 @@
 
 .ws-agent-dm-controls .conversation-heading-group {
   display: none;
+}
+
+/*
+ * A notice over the workspace on a computer (a panel that did not load, a reload hint) is one slim
+ * band, as Slack's banners: small text, a tint, and a small button. It was a 60px row of large text.
+ */
+@media (min-width: 721px) {
+  .web-app-frame .server-connection-notice {
+    min-height: 36px;
+    padding: var(--openbot-space-1) var(--openbot-space-2) var(--openbot-space-1) var(--openbot-space-4);
+    border-bottom-color: var(--ws-line);
+    background: var(--openbot-warning-soft);
+    font-size: var(--openbot-text-md);
+  }
+
+  /* The title and its detail stand on one line, and wrap when the pane is narrow. */
+  .web-app-frame .server-connection-notice > div:first-child {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: var(--openbot-space-2);
+  }
+
+  .web-app-frame .server-connection-notice .ui-button {
+    height: var(--openbot-control-sm);
+    padding-inline: var(--openbot-space-3);
+    font-size: var(--openbot-text-md);
+  }
+}
+
+/*
+ * A narrow computer window (the pane under 720px, the window over it) shows one workspace pane at a
+ * time, but the sidebar stays in view. Back of the main pane (a channel, a view) led to that
+ * sidebar and did nothing; the search view's own field doubled the top bar's. A thread or the details
+ * keep Back: it returns to the conversation.
+ */
+@media (min-width: 721px) {
+  .web-app-frame .ws-layout-main .ws-phone-only {
+    display: none;
+  }
+
+  /* The topic (it shortens) and the member faces stay, as in Slack's narrow window. */
+  .web-app-frame .ws-layout-main .ws-channel-header-topic {
+    display: block;
+  }
+
+  .web-app-frame .ws-layout-main .ws-face-pile.ui-button {
+    display: inline-flex;
+  }
+
+  /* The search filters stay one wrapping row of small menus, not the phone's two columns of fields. */
+  .web-app-frame .ws-layout-main .ws-search-filters {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .web-app-frame .ws-layout-main :is(.ws-search-filters > *, .ws-search-filters .ws-select-trigger) {
+    width: auto;
+  }
+
+  .web-app-frame .ws-layout-main .ws-search-filters .ws-search-threads {
+    min-height: 0;
+    padding: 0;
+  }
+
+  .web-app-frame .ws-layout-main .ws-view-toolbar .ws-select-trigger {
+    min-height: 0;
+  }
+}
+
+/* The messages take the pane's width, as a channel's: no centered column that the box does not follow. */
+.ws-agent-dm .conversation-panel {
+  --conversation-column-width: 100vw;
+}
+
+/*
+ * A computer: the agent's name keeps its room, as Slack's, and the controls give way (the model
+ * name shortens first). The controls are as large as a channel header's buttons, at the same gap.
+ */
+@media (min-width: 721px) {
+  .ws-agent-dm-header .ws-channel-header-identity {
+    flex: 0 0 auto;
+    max-width: 50%;
+  }
+
+  .ws-agent-dm-header .ws-channel-header-actions {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
+  .ws-agent-dm-header .ws-channel-header-search {
+    flex: 0 1 auto;
+  }
+
+  .ws-agent-dm-controls .conversation-header-actions {
+    gap: var(--openbot-space-1);
+  }
+
+  .ws-agent-dm-controls .conversation-header-actions > .header-panel-toggle {
+    width: var(--openbot-control-md);
+    height: var(--openbot-control-md);
+    flex: 0 0 var(--openbot-control-md);
+  }
 }
 
 /*

@@ -418,7 +418,9 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
     >
       <NotificationObserver onShown={reportNotification}>
         <div class="web-app">
-          <Toaster onToastShown={reportNotification} />
+          {/* On a computer the toasts stand under the top bar and the conversation header, so they do not
+              cover the header's buttons. A phone keeps the mobile offset. */}
+          <Toaster onToastShown={reportNotification} offset={{ top: "104px", right: "16px" }} />
           <Show when={state.loaded}>
             <Show
               keyed

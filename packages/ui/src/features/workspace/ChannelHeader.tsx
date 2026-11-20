@@ -5,6 +5,7 @@ import { Button, buttonVariants, IconButton } from "../../button";
 import { DropdownMenu } from "../../complex";
 import { Bell, BellOff, Check, ChevronLeft, Hash, Info, LayoutDashboard, Lock, MessageSquareText } from "../../icons";
 import { useText } from "../../text";
+import { LabelTooltip, LabelTooltipTrigger } from "../../tooltip";
 import { cx, usesTouchLayout } from "../../utils";
 import { AiBadge, AvatarStack, MemberAvatar } from "./WorkspaceAvatar";
 import type { ChannelVisibility, ConversationKind, WorkspaceMember } from "./workspace-types";
@@ -286,15 +287,19 @@ function NotifyMenu(props: {
       </>
     );
   }
+  const [menuOpen, setMenuOpen] = createSignal(false);
   return (
-    <DropdownMenu.Root placement="bottom-end" gutter={4}>
-      <DropdownMenu.Trigger
-        class={cx(buttonVariants({ variant: "ghost", size: "icon-sm" }), "ws-channel-header-bell")}
-        data-muted={quiet() ? "" : undefined}
-        aria-label={t("workspace.header.notifications", { name: props.name })}
-      >
-        {icon()}
-      </DropdownMenu.Trigger>
+    <DropdownMenu.Root placement="bottom-end" gutter={4} onOpenChange={setMenuOpen}>
+      <LabelTooltip content={t("workspace.header.notifications", { name: props.name })} disabled={menuOpen()}>
+        <LabelTooltipTrigger
+          as={DropdownMenu.Trigger}
+          class={cx(buttonVariants({ variant: "ghost", size: "icon-sm" }), "ws-channel-header-bell")}
+          data-muted={quiet() ? "" : undefined}
+          aria-label={t("workspace.header.notifications", { name: props.name })}
+        >
+          {icon()}
+        </LabelTooltipTrigger>
+      </LabelTooltip>
       <DropdownMenu.Portal>
         <DropdownMenu.Content class="ws-notify-menu">
           <DropdownMenu.RadioGroup

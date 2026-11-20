@@ -11,9 +11,10 @@ import * as KobalteSelect from "@kobalte/core/select";
 import * as TabsPrimitive from "@kobalte/core/tabs";
 import * as TooltipPrimitive from "@kobalte/core/tooltip";
 import type { ValidComponent } from "@solidjs/web";
-import { createContext, createEffect, merge, onCleanup, untrack, useContext } from "solid-js";
+import { createContext, createEffect, createSignal, merge, onCleanup, untrack, useContext } from "solid-js";
 import { claimLongPress, longPressClaimed } from "./long-press";
 import { useMenuMotion } from "./menu-motion";
+import { claimTooltip, installTooltipCoordinator, isKeyboardFocus, tooltipMayOpen } from "./tooltip-coordinator";
 import { createPressedPopupCue } from "./utils";
 
 type OpenChangeHandler = (open: boolean) => void;
@@ -475,10 +476,93 @@ interface TooltipApi {
   Content: typeof TooltipPrimitive.Content;
 }
 
+/** What the trigger of a tooltip tells its root. */
+interface TooltipGate {
+  /** The pointer pressed the trigger: the tooltip closes and stays closed until the pointer leaves. */
+  press: () => void;
+  release: () => void;
+  close: () => void;
+}
+
+const TooltipGateContext = createContext<TooltipGate | null>(null);
+
+function callEventHandler<E extends Event>(event: E, handler: unknown): void {
+  if (typeof handler === "function") handler(event);
+  else if (Array.isArray(handler) && typeof handler[0] === "function") handler[0](handler[1], event);
+}
+
+/*
+ * Every tooltip of the app opens through this root, which decides when it may open. One tooltip is
+ * open at a time (tooltip-coordinator.ts). A focus opens it only when the keyboard moved the focus,
+ * not when a dialog or a panel gives the focus back to its button. A finger never opens it. A press
+ * on the trigger closes it, also when its open delay still runs. The tooltip closes as soon as the
+ * pointer leaves the trigger: a label has nothing to hover, so the area between the trigger and the
+ * label does not keep it open (`ignoreSafeArea`). With that area, a pointer that rested in it or
+ * left the window across it left the label open, as no move outside followed to close it.
+ */
+function TooltipRoot(props: TooltipPrimitive.TooltipRootProps) {
+  installTooltipCoordinator();
+  const [inner, setInner] = createSignal(untrack(() => props.defaultOpen ?? false));
+  const isOpen = () => props.open ?? inner();
+  let pressed = false;
+  const change = (next: boolean) => {
+    if (next && ((pressed && !isKeyboardFocus()) || !tooltipMayOpen())) return;
+    setInner(next);
+    props.onOpenChange?.(next);
+  };
+  const close = () => {
+    if (isOpen()) change(false);
+    else setInner(false);
+  };
+  createEffect(isOpen, (open) => (open ? claimTooltip(close) : undefined));
+  createEffect(
+    () => props.disabled,
+    (disabled) => {
+      if (disabled) close();
+    },
+  );
+  const gate: TooltipGate = {
+    press: () => {
+      pressed = true;
+      close();
+    },
+    release: () => {
+      pressed = false;
+    },
+    close,
+  };
+  return (
+    <TooltipGateContext value={gate}>
+      <TooltipPrimitive.Root ignoreSafeArea {...props} open={isOpen()} onOpenChange={change} />
+    </TooltipGateContext>
+  );
+}
+
+/** The trigger. Its tooltip closes when it leaves the page, such as when its row renders again. */
+const TooltipTrigger: typeof TooltipPrimitive.Trigger = (props) => {
+  const gate = useContext(TooltipGateContext);
+  onCleanup(() => gate?.close());
+  // The caller's own handlers, which these replace and call first.
+  const handlers: { onPointerDown?: unknown; onPointerLeave?: unknown } = props;
+  return (
+    <TooltipPrimitive.Trigger
+      {...props}
+      onPointerDown={(event: PointerEvent) => {
+        callEventHandler(event, handlers.onPointerDown);
+        gate?.press();
+      }}
+      onPointerLeave={(event: PointerEvent) => {
+        callEventHandler(event, handlers.onPointerLeave);
+        gate?.release();
+      }}
+    />
+  );
+};
+
 export const Tooltip: TooltipApi = {
-  Root: (props) => <TooltipPrimitive.Root {...props} />,
+  Root: TooltipRoot,
   Portal: (props) => <TooltipPrimitive.Portal {...props} />,
-  Trigger: (props) => <TooltipPrimitive.Trigger {...props} />,
+  Trigger: TooltipTrigger,
   Content: (props) => <TooltipPrimitive.Content {...props} />,
 };
 

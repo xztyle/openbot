@@ -9,6 +9,8 @@ import {
   Ellipsis,
   Globe2,
   IconButton,
+  LabelTooltip,
+  LabelTooltipTrigger,
   Lock,
   PanelRight,
   Search,
@@ -75,6 +77,7 @@ export interface ConversationHeaderRemoteControl {
 
 export function ConversationHeader(props: ConversationHeaderProps) {
   const { t } = useText();
+  const [browserMenuOpen, setBrowserMenuOpen] = createSignal(false);
   return (
     <header class="window-drag conversation-header">
       <div class="conversation-heading-group">
@@ -121,28 +124,35 @@ export function ConversationHeader(props: ConversationHeaderProps) {
           <ProviderModelPicker {...props.modelPicker} />
         </Show>
         <Show when={props.onOpenSearch && props.agent}>
-          <Button
-            variant="ghost"
-            type="button"
-            class="header-panel-toggle"
-            aria-label={t("chat.search.label")}
-            title={t("chat.search.label")}
-            onClick={() => props.onOpenSearch?.()}
-            data-cuelume-tap="open"
-          >
-            <Search aria-hidden="true" class="size-[14px]" />
-          </Button>
+          <LabelTooltip content={t("chat.search.label")}>
+            <LabelTooltipTrigger
+              as={Button}
+              variant="ghost"
+              type="button"
+              class="header-panel-toggle"
+              aria-label={t("chat.search.label")}
+              onClick={() => props.onOpenSearch?.()}
+              data-cuelume-tap="open"
+            >
+              <Search aria-hidden="true" class="size-[14px]" />
+            </LabelTooltipTrigger>
+          </LabelTooltip>
         </Show>
         <Show when={props.agent && props.browser && props.browser.tabs.length > 0 ? props.browser : undefined}>
           {(browser) => (
-            <DropdownMenu.Root placement="bottom-end" gutter={4}>
-              <DropdownMenu.Trigger
-                class={`${buttonVariants({ variant: "ghost" })} header-panel-toggle`}
-                aria-label={t("conversation.header.browser", { name: props.agent?.name ?? "" })}
-                title={t("conversation.header.browser", { name: props.agent?.name ?? "" })}
+            <DropdownMenu.Root placement="bottom-end" gutter={4} onOpenChange={setBrowserMenuOpen}>
+              <LabelTooltip
+                content={t("conversation.header.browser", { name: props.agent?.name ?? "" })}
+                disabled={browserMenuOpen()}
               >
-                <Globe2 aria-hidden="true" class="size-[14px]" />
-              </DropdownMenu.Trigger>
+                <LabelTooltipTrigger
+                  as={DropdownMenu.Trigger}
+                  class={`${buttonVariants({ variant: "ghost" })} header-panel-toggle`}
+                  aria-label={t("conversation.header.browser", { name: props.agent?.name ?? "" })}
+                >
+                  <Globe2 aria-hidden="true" class="size-[14px]" />
+                </LabelTooltipTrigger>
+              </LabelTooltip>
               <DropdownMenu.Portal>
                 <DropdownMenu.Content class="conversation-browser-menu">
                   <For each={browser().tabs}>

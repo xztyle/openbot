@@ -5,6 +5,9 @@ import {
   buttonVariants,
   DropdownMenu,
   Folder,
+  IconButton,
+  LabelTooltip,
+  LabelTooltipTrigger,
   ListChecks,
   Maximize2,
   MessageCircleQuestionMark,
@@ -19,7 +22,7 @@ import {
 import { ComputerIcon } from "@openbot/ui/features/conversation/ConversationIcons";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
-import { For, flush, onSettled, Show } from "solid-js";
+import { createSignal, For, flush, onSettled, Show } from "solid-js";
 
 /**
  * A pane of the side panel. Each open pane has a tab at the top of the panel. A side question opens
@@ -79,26 +82,28 @@ export function SidePanelToggle(props: SidePanelToggleProps) {
       : t("conversation.sidePanel.open");
   };
   return (
-    <Button
-      variant="ghost"
-      type="button"
-      class={[
-        "header-panel-toggle side-panel-toggle",
-        { "computer-button-agent-active": props.actingAgentName !== undefined },
-      ]}
-      aria-label={label()}
-      title={label()}
-      aria-expanded={props.open ? "true" : "false"}
-      onClick={() => props.onToggle()}
-    >
-      <PanelRight aria-hidden="true" class="size-[14px]" />
-      <Show when={props.actingAgentName !== undefined}>
-        <span class="computer-control-dot" aria-hidden="true" />
-      </Show>
-      <Show when={props.actingAgentName === undefined && props.running > 0}>
-        <span class="agent-tasks-trigger-dot" aria-hidden="true" />
-      </Show>
-    </Button>
+    <LabelTooltip content={label()}>
+      <LabelTooltipTrigger
+        as={Button}
+        variant="ghost"
+        type="button"
+        class={[
+          "header-panel-toggle side-panel-toggle",
+          { "computer-button-agent-active": props.actingAgentName !== undefined },
+        ]}
+        aria-label={label()}
+        aria-expanded={props.open ? "true" : "false"}
+        onClick={() => props.onToggle()}
+      >
+        <PanelRight aria-hidden="true" class="size-[14px]" />
+        <Show when={props.actingAgentName !== undefined}>
+          <span class="computer-control-dot" aria-hidden="true" />
+        </Show>
+        <Show when={props.actingAgentName === undefined && props.running > 0}>
+          <span class="agent-tasks-trigger-dot" aria-hidden="true" />
+        </Show>
+      </LabelTooltipTrigger>
+    </LabelTooltip>
   );
 }
 
@@ -127,6 +132,7 @@ export interface SidePanelHeaderProps {
  * their own, so no tab panel is registered.
  */
 export function SidePanelHeader(props: SidePanelHeaderProps) {
+  const [addMenuOpen, setAddMenuOpen] = createSignal(false);
   const { t } = useText();
   let tabList: HTMLDivElement | undefined;
   const closedPanes = () => props.available.filter((pane) => !props.panes.includes(pane));
@@ -188,14 +194,16 @@ export function SidePanelHeader(props: SidePanelHeaderProps) {
       </Tabs.List>
       <div class="side-panel-actions no-drag">
         <Show when={props.panes.length > 0 && closedPanes().length > 0}>
-          <DropdownMenu.Root placement="bottom-end" gutter={4}>
-            <DropdownMenu.Trigger
-              class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-              aria-label={t("conversation.sidePanel.add")}
-              title={t("conversation.sidePanel.add")}
-            >
-              <Plus aria-hidden="true" />
-            </DropdownMenu.Trigger>
+          <DropdownMenu.Root placement="bottom-end" gutter={4} onOpenChange={setAddMenuOpen}>
+            <LabelTooltip content={t("conversation.sidePanel.add")} disabled={addMenuOpen()}>
+              <LabelTooltipTrigger
+                as={DropdownMenu.Trigger}
+                class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                aria-label={t("conversation.sidePanel.add")}
+              >
+                <Plus aria-hidden="true" />
+              </LabelTooltipTrigger>
+            </LabelTooltip>
             <DropdownMenu.Portal>
               <DropdownMenu.Content>
                 <For each={closedPanes()}>
@@ -211,31 +219,23 @@ export function SidePanelHeader(props: SidePanelHeaderProps) {
           </DropdownMenu.Root>
         </Show>
         <Show when={props.panes.length > 0}>
-          <Button
+          <IconButton
             variant="ghost"
-            size="icon-sm"
             class="side-panel-maximize"
-            aria-label={t(props.maximized ? "conversation.sidePanel.restore" : "conversation.sidePanel.maximize")}
-            title={t(props.maximized ? "conversation.sidePanel.restore" : "conversation.sidePanel.maximize")}
+            label={t(props.maximized ? "conversation.sidePanel.restore" : "conversation.sidePanel.maximize")}
             aria-pressed={props.maximized ? "true" : "false"}
             onClick={() => props.onToggleMaximized()}
           >
             <Show when={props.maximized} fallback={<Maximize2 aria-hidden="true" />}>
               <Minimize2 aria-hidden="true" />
             </Show>
-          </Button>
+          </IconButton>
         </Show>
         {/* A maximized panel covers the chat header and its panel button, so Collapse takes its place. */}
         <Show when={props.maximized}>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t("conversation.sidePanel.close")}
-            title={t("conversation.sidePanel.close")}
-            onClick={() => props.onCollapse()}
-          >
+          <IconButton variant="ghost" label={t("conversation.sidePanel.close")} onClick={() => props.onCollapse()}>
             <PanelRight aria-hidden="true" />
-          </Button>
+          </IconButton>
         </Show>
       </div>
     </Tabs.Root>

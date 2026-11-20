@@ -3,6 +3,7 @@ import type { JSX } from "@solidjs/web";
 import { createEffect, createSignal } from "solid-js";
 import { Tooltip } from "./complex";
 import { type MotionPlace, useMenuMotion } from "./menu-motion";
+import { isKeyboardFocus } from "./tooltip-coordinator";
 
 const LABEL_OPEN_DELAY = 150;
 const LABEL_CLOSE_DELAY = 0;
@@ -71,6 +72,8 @@ export function MotionTooltip(props: MotionTooltipProps) {
       openDelay={props.openDelay ?? LABEL_OPEN_DELAY}
       closeDelay={props.closeDelay ?? LABEL_CLOSE_DELAY}
       skipDelayDuration={300}
+      // A card can be hovered: the area between the trigger and the card keeps it open.
+      ignoreSafeArea={props.class === undefined}
     >
       <Tooltip.Trigger
         as="div"
@@ -78,8 +81,9 @@ export function MotionTooltip(props: MotionTooltipProps) {
           trigger = element;
         }}
         class="ui-motion-tooltip-trigger"
-        onFocusIn={(event: FocusEvent) => {
-          if (event.target instanceof Element && event.target.matches(":focus-visible")) setOpen(true);
+        // Only a focus that the keyboard moved opens it, not a focus that a closing menu gives back.
+        onFocusIn={() => {
+          if (isKeyboardFocus()) setOpen(true);
         }}
         onFocusOut={() => setOpen(false)}
       >

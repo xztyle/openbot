@@ -5,6 +5,7 @@ import { createEffect, createSignal, createStore, For, onCleanup, Show } from "s
 import { createScrollFades } from "../../components/createScrollFades";
 import { createVerticalDragPreview } from "../../components/createVerticalDragPreview";
 import { useText } from "../../text";
+import { isKeyboardFocus } from "../../tooltip-coordinator";
 import { type ServerActionCallbacks, ServerActionItems, serverMuteDescription } from "./ServerActionItems";
 
 const SERVER_RAIL_TOOLTIP_OPEN_DELAY = 150;
@@ -413,6 +414,8 @@ function ServerRailButton(
             }}
             onFocus={(event) => {
               trigger = event.currentTarget;
+              // Only a focus that the keyboard moved opens the tooltip, not a focus a menu gives back.
+              if (!isKeyboardFocus()) return;
               setOverlay((state) => {
                 state.tooltipOpen = true;
               });

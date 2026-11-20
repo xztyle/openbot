@@ -169,10 +169,20 @@
   padding-top: var(--openbot-space-0-5);
 }
 
-.ws-message:hover,
-.ws-message:focus-within,
-.ws-message[data-menu-open] {
+.ws-message[data-menu-open],
+.ws-message:has(:focus-visible) {
   background: var(--ws-hover);
+}
+
+/*
+ * A touch screen keeps `:hover` and the focus on the row that the finger last touched, so the tint
+ * stayed on a message after a tap or a scroll. Only a pointer that can hover tints the row under it.
+ */
+@media (hover: hover) and (pointer: fine) {
+  .ws-message:hover,
+  .ws-message:focus-within {
+    background: var(--ws-hover);
+  }
 }
 
 /* A message takes the keyboard focus, so its actions are reachable without a pointer. */
@@ -206,9 +216,16 @@
   white-space: nowrap;
 }
 
-.ws-message:hover .ws-message-gutter-time,
-.ws-message:focus-within .ws-message-gutter-time {
+.ws-message:has(:focus-visible) .ws-message-gutter-time,
+.ws-message[data-menu-open] .ws-message-gutter-time {
   opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ws-message:hover .ws-message-gutter-time,
+  .ws-message:focus-within .ws-message-gutter-time {
+    opacity: 1;
+  }
 }
 
 .ws-message-body {
@@ -321,6 +338,8 @@ button.ws-profile-trigger.ws-message-author:hover {
   color: var(--openbot-danger-text);
   font-family: var(--openbot-font-mono);
   font-size: var(--openbot-text-md);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 .ws-message-actions {
@@ -707,17 +726,21 @@ button.ws-profile-trigger.ws-message-author:hover {
   transition: transform var(--openbot-duration-fast) var(--openbot-ease-out);
 }
 
-.ws-steps[data-open] .ws-steps-header.ui-button[aria-expanded] {
-  background: transparent;
-}
-
-.ws-steps-header.ui-button:hover {
-  background: var(--ws-hover);
-  color: var(--openbot-text-primary);
-}
-
-.ws-steps-chevron {
+/* The chevron points right while the steps are closed and down while they show. */
+.ws-steps[data-open] .ws-steps-chevron {
   transform: rotate(90deg);
+}
+
+/* A finger's row on a touch screen: the 24px header was hard to hit under a long answer. */
+@media (hover: none), (pointer: coarse) {
+  .ws-steps-header.ui-button {
+    height: 36px;
+  }
+
+  .ws-steps-header.ui-button:hover {
+    background: transparent;
+    color: var(--openbot-text-muted);
+  }
 }
 
 .ws-steps-spinner {
@@ -1358,5 +1381,29 @@ button.ws-profile-trigger.ws-message-author:hover {
   .ws-jump-latest-dock > .ws-jump-latest.ui-button {
     height: 36px;
     padding-inline: var(--openbot-space-3);
+  }
+}
+
+/*
+ * A phone reads the conversation at the size of Slack's app: 16px text with a 24px line, and the
+ * names, times, code and tables one step up as well. The scale changes only inside the transcript of a
+ * channel, a thread and the agent DM; the header and the message box keep their own sizes.
+ */
+@media (max-width: 720px) {
+  :is(.ws-message-scroll, .ws-thread-scroll, .ws-agent-dm .conversation-scroll) {
+    --openbot-text-sm: 13px;
+    --openbot-text-md: 14px;
+    --openbot-text-lg: 16px;
+    --openbot-text-xl: 18px;
+    --openbot-text-2xl: 20px;
+    --openbot-leading-sm: 18px;
+    --openbot-leading-md: 20px;
+    --openbot-leading-lg: 24px;
+    --openbot-leading-xl: 24px;
+    --openbot-leading-2xl: 26px;
+  }
+
+  :is(.ws-message-scroll, .ws-thread-scroll, .ws-agent-dm .conversation-scroll) .message-copy {
+    line-height: var(--openbot-leading-lg);
   }
 }

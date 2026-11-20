@@ -289,3 +289,14 @@
     transition: none;
   }
 }
+
+/*
+ * A touch screen cannot point at the rail, which only opens under a pointer, and a phone has no room
+ * for it: its bars stood over the right edge of the text, beside the scroll bar of the system. Slack's
+ * app has no rail either.
+ */
+@media (hover: none), (pointer: coarse) {
+  .chat-scroll-rail {
+    display: none;
+  }
+}

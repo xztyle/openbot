@@ -106,6 +106,9 @@
   font-family: var(--openbot-font-mono);
   font-size: var(--openbot-text-md);
   white-space: break-spaces;
+  /* A code span that wraps keeps its edge and padding on each line, as Slack's does. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 .message-markdown hr {

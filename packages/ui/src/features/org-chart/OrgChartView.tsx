@@ -98,6 +98,10 @@ const FIT_MARGIN = 56;
 /** The top of the view that the search bar covers, so a fit leaves the top row clear. */
 const FIT_TOP = 72;
 const DRAG_THRESHOLD = 4;
+/** A view this narrow is a phone: a fit keeps the cards readable and shows the top of the tree. */
+const NARROW_VIEW = 600;
+/** The smallest scale of a fit on a phone, where the text of a card still reads. */
+const NARROW_FIT_SCALE = 0.75;
 /** How long a message pulse shows; its animation in org-chart.css is a little shorter. */
 const PULSE_MS = 1_600;
 
@@ -272,6 +276,20 @@ export function OrgChartView(props: OrgChartViewProps): JSX.Element {
     if (!width || !height || bounds.width === 0) return undefined;
     const room = { width: width - FIT_MARGIN * 2, height: height - FIT_MARGIN - FIT_TOP };
     const scale = clampScale(Math.min(room.width / bounds.width, room.height / bounds.height, 1));
+    // A phone does not shrink the whole team into cards too small to read. It shows the first card
+    // at the top at a size that reads, and a drag or a pinch shows the rest.
+    if (width < NARROW_VIEW && scale < NARROW_FIT_SCALE) {
+      const first = [...layout().nodes.values()].reduce<OrgChartPlacedNode | undefined>(
+        (top, node) => (!top || node.y < top.y || (node.y === top.y && node.x < top.x) ? node : top),
+        undefined,
+      );
+      if (first)
+        return {
+          scale: NARROW_FIT_SCALE,
+          x: width / 2 - (first.x + first.width / 2) * NARROW_FIT_SCALE,
+          y: FIT_TOP + FIT_MARGIN / 2 - first.y * NARROW_FIT_SCALE,
+        };
+    }
     return {
       scale,
       x: (width - bounds.width * scale) / 2 - bounds.x * scale,
@@ -305,11 +323,14 @@ export function OrgChartView(props: OrgChartViewProps): JSX.Element {
       top + node.height * at.scale <= height - FIT_MARGIN / 2;
     if (inView && !always) return;
     const scale = Math.max(at.scale, 0.85);
+    // On a phone the agent's panel is a sheet over the lower part of the chart: the card goes above it.
+    const centreY =
+      width < NARROW_VIEW ? Math.min(height / 2, FIT_TOP + (node.height * scale) / 2 + FIT_MARGIN / 2) : height / 2;
     glideTo(
       {
         scale,
         x: width / 2 - (node.x + node.width / 2) * scale,
-        y: height / 2 - (node.y + node.height / 2) * scale,
+        y: centreY - (node.y + node.height / 2) * scale,
       },
       "flight",
     );
@@ -528,6 +549,17 @@ export function OrgChartView(props: OrgChartViewProps): JSX.Element {
     }
     const dx = at.x - current.start.x;
     const dy = at.y - current.start.y;
+    // A finger on a card moves the chart, as on every map on a phone. A card changes its manager
+    // there from its panel; a mouse can still drag it.
+    if (event.pointerType === "touch" && !current.dragging) {
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD * 2) return;
+      gesture = { kind: "pan", pointerId: current.pointerId, last: at };
+      moveCamera({ x: camera.x + dx, y: camera.y + dy, scale: camera.scale });
+      setUi((draft) => {
+        draft.panning = true;
+      });
+      return;
+    }
     if (!current.dragging) {
       if (!canMove() || Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
       current.dragging = true;

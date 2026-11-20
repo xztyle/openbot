@@ -55,7 +55,7 @@ export const CannotOpenHere: Story = {
   args: {
     onOpen: undefined,
     openUnavailable:
-      "This page cannot open here. Open the chat of Chief in the OpenBot app on a computer that is connected to this server, finish the step there, then press I’m done.",
+      "This page cannot open here. Open the chat of Chief in the Atelier app on a computer that is connected to this server, finish the step there, then press I’m done.",
   },
 };
 

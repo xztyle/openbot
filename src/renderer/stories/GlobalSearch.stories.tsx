@@ -111,7 +111,7 @@ const actions: GlobalSearchAction[] = [
 ];
 
 const shortcuts: GlobalSearchShortcut[] = [
-  { id: "search", label: "Search OpenBot", keys: "⌘K" },
+  { id: "search", label: "Search Atelier", keys: "⌘K" },
   { id: "settings", label: "Open settings", keys: "⌘," },
   { id: "chat-search", label: "Search the open conversation", keys: "⌘F" },
   { id: "next", label: "Next match", keys: "⌘G" },

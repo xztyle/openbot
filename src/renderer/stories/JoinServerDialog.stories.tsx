@@ -72,7 +72,7 @@ export const Joining: Story = {
 export const JoinError: Story = {
   args: {
     onJoin: async () => {
-      throw new Error("OpenBot could not connect to this host.");
+      throw new Error("Atelier could not connect to this host.");
     },
   },
 };

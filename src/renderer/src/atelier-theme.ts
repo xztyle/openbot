@@ -9,6 +9,7 @@ import { ATELIER_THEME_STORAGE_KEY } from "./atelier-theme-key";
 function applyToRoot(appearance: WorkspaceAppearance): void {
   document.documentElement.dataset.atelierTheme = appearance.theme;
   document.documentElement.dataset.atelierFaces = appearance.faces;
+  document.documentElement.dataset.atelierSkin = appearance.skin;
 }
 
 function cachedAppearance(): WorkspaceAppearance {
@@ -40,4 +41,5 @@ export function applyWorkspaceAppearance(value: unknown): void {
 export function clearAtelierTheme(): void {
   delete document.documentElement.dataset.atelierTheme;
   delete document.documentElement.dataset.atelierFaces;
+  delete document.documentElement.dataset.atelierSkin;
 }

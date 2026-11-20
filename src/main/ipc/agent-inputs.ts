@@ -1,4 +1,4 @@
-import { isAgentFaceSeed, isAgentFaceStyle } from "@openbot/contracts/agent-face";
+import { isAgentFaceSeed, isAgentFaceSkin, isAgentFaceStyle } from "@openbot/contracts/agent-face";
 import { isAgentManagerValue } from "@openbot/contracts/agent-org";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
@@ -663,6 +663,10 @@ export function parseUpdateAgent(value: unknown): UpdateAgentInput {
   if (value.faceSeed !== undefined) {
     if (value.faceSeed !== null && !isAgentFaceSeed(value.faceSeed)) throw new Error("Invalid face seed.");
     result.faceSeed = value.faceSeed;
+  }
+  if (value.faceSkin !== undefined) {
+    if (value.faceSkin !== null && !isAgentFaceSkin(value.faceSkin)) throw new Error("Invalid face skin.");
+    result.faceSkin = value.faceSkin;
   }
   if (value.allowNewChat !== undefined) {
     if (value.allowNewChat !== null && !isBoolean(value.allowNewChat)) throw new Error("Invalid new chat value.");

@@ -2368,6 +2368,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
           background,
           faceStyle,
           faceSeed,
+          faceSkin,
           ...updates
         } = input;
         const updated: ClientAgentSummary = { ...current, ...updates };
@@ -2376,6 +2377,8 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         else if (faceStyle !== undefined) updated.faceStyle = faceStyle;
         if (faceSeed === null) delete updated.faceSeed;
         else if (faceSeed !== undefined) updated.faceSeed = faceSeed;
+        if (faceSkin === null) delete updated.faceSkin;
+        else if (faceSkin !== undefined) updated.faceSkin = faceSkin;
         // `null` returns the agent to the account default, which an agent records by having no value.
         const flags = { allowAutomation, allowNewChat, quickAcknowledgement };
         for (const key of AGENT_DEFAULT_KEYS) {

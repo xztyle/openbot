@@ -1,4 +1,4 @@
-import type { AgentFaceStyle } from "@openbot/contracts/agent-face";
+import type { AgentFaceSkin, AgentFaceStyle } from "@openbot/contracts/agent-face";
 import type { AgentProviderRef } from "@openbot/contracts/agent-providers";
 import type {
   AgentAccess,
@@ -326,6 +326,8 @@ export interface AgentProfile {
   faceStyle?: AgentFaceStyle | undefined;
   /** A re-rolled face. Absent: the face of `avatarSeed`. */
   faceSeed?: string | undefined;
+  /** The agent's own skin tone. Absent: the workspace default. */
+  faceSkin?: AgentFaceSkin | undefined;
   threadId: string | null;
   /** The agent's working directory. Absent for profiles built before it was tracked. */
   workspacePath?: string;

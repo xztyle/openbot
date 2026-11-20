@@ -6,7 +6,7 @@
 // `ipc-chat-channels.ts` owns the channel types and calls the guards here. This file imports no
 // value from it, so the two modules do not form an import cycle.
 
-import { AGENT_FACE_STYLES } from "./agent-face";
+import { AGENT_FACE_SKINS, AGENT_FACE_STYLES } from "./agent-face";
 import { chatTagReferences } from "./chat-tag-references";
 import { INPUT_LIMITS } from "./input-limits";
 import { integerInRange, isBoundedString, isIdentifier } from "./ipc-bounded-values";
@@ -553,12 +553,18 @@ export type WorkspaceTheme = (typeof WORKSPACE_THEMES)[number];
 export const WORKSPACE_FACE_DEFAULTS = [...AGENT_FACE_STYLES, "mixed"] as const;
 export type WorkspaceFaceDefault = (typeof WORKSPACE_FACE_DEFAULTS)[number];
 
+/** The skin tone of every agent's face, or `varied`: a tone from each agent's seed. */
+export const WORKSPACE_SKIN_DEFAULTS = ["varied", ...AGENT_FACE_SKINS] as const;
+export type WorkspaceSkinDefault = (typeof WORKSPACE_SKIN_DEFAULTS)[number];
+
 export interface WorkspaceAppearance {
   theme: WorkspaceTheme;
   faces: WorkspaceFaceDefault;
+  /** Absent on the wire from a host or a client before it: the light tone `1`. */
+  skin: WorkspaceSkinDefault;
 }
 
-export const DEFAULT_WORKSPACE_APPEARANCE: WorkspaceAppearance = { theme: "craft", faces: "portrait" };
+export const DEFAULT_WORKSPACE_APPEARANCE: WorkspaceAppearance = { theme: "craft", faces: "portrait", skin: "1" };
 
 /**
  * The appearance that a value names, field by field. A theme or a family that this build does not
@@ -569,6 +575,7 @@ export function workspaceAppearanceOf(value: unknown): WorkspaceAppearance {
   return {
     theme: isOneOf(WORKSPACE_THEMES, value.theme) ? value.theme : DEFAULT_WORKSPACE_APPEARANCE.theme,
     faces: isOneOf(WORKSPACE_FACE_DEFAULTS, value.faces) ? value.faces : DEFAULT_WORKSPACE_APPEARANCE.faces,
+    skin: isOneOf(WORKSPACE_SKIN_DEFAULTS, value.skin) ? value.skin : DEFAULT_WORKSPACE_APPEARANCE.skin,
   };
 }
 

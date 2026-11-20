@@ -65,6 +65,7 @@ export function toAgentProfile(stored: ClientAgentSummary): AgentProfile {
     // Always written, so a store update that returns the agent to the default face replaces the old value.
     faceStyle: stored.faceStyle,
     faceSeed: stored.faceSeed,
+    faceSkin: stored.faceSkin,
     threadId: stored.threadId,
     workspacePath: stored.workspacePath,
     avatarSeed: stored.avatarSeed,
@@ -646,6 +647,7 @@ export function agentProfilesEqual(left: AgentProfile, right: AgentProfile): boo
     left.createdBy?.agentId === right.createdBy?.agentId &&
     left.faceStyle === right.faceStyle &&
     left.faceSeed === right.faceSeed &&
+    left.faceSkin === right.faceSkin &&
     left.threadId === right.threadId &&
     left.avatarSeed === right.avatarSeed &&
     left.avatarHue === right.avatarHue &&

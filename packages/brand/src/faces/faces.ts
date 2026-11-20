@@ -59,6 +59,11 @@ export interface FaceOptions {
   role?: AgentRole;
   /** Pin a hue 0–11. */
   hue?: number;
+  /**
+   * Skin tone: 0–7 (light to deep, see SKINS) for every agent, or "varied" for a tone from the seed.
+   * Default 0, the light warm tone. Hair, features and accessories keep their variety.
+   */
+  skin?: number | "varied";
   /** Workspace brand/theme the face is drawn for: craft (default) · modern · riso. Same agent → same face in every brand. */
   brand?: Brand;
 }
@@ -290,11 +295,15 @@ const pickS = (seed: string, salt: string, n: number) => hash32(`${seed}:${salt}
 export function faceTraits(
   id: string,
   name = "",
-  o: { seed?: string | number; role?: AgentRole; hue?: number } = {},
+  o: { seed?: string | number; role?: AgentRole; hue?: number; skin?: number | "varied" } = {},
 ): FaceTraits {
   const base = agentTraits(id, name, o.role, o.hue);
   const seed = o.seed === undefined || o.seed === "" ? id : String(o.seed);
-  const skin = pickS(seed, "skin", SKINS.length);
+  const fixedSkin = o.skin === "varied" ? undefined : (o.skin ?? 0);
+  const skin =
+    fixedSkin !== undefined && Number.isInteger(fixedSkin) && fixedSkin >= 0 && fixedSkin < SKINS.length
+      ? fixedSkin
+      : pickS(seed, "skin", SKINS.length);
   const hairPool = skin >= 5 ? HAIR_DEEP : HAIR_LIGHT;
   const hair = at([0, 0, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 8, 9, 9, 10, 11, 12], pickS(seed, "hair", 19));
   const fr = pickS(seed, "facial", 20);
@@ -1002,6 +1011,8 @@ interface Ctx {
   uid: string;
   hue: ReturnType<typeof agentHue>;
   hueDeg: number;
+  /** One skin tone for every agent (not "varied"). */
+  toned: boolean;
 }
 
 function figureMotion(inner: string, c: Ctx): string {
@@ -1235,9 +1246,12 @@ function renderCharacter(c: Ctx): string {
   const { t, theme, small } = c;
   const line = theme === "dark" ? BR.inkDark : BR.ink;
   const failed = c.state === "failed";
+  // With one skin tone for every agent, the character wears it too; else the agent's hue.
   const fill = failed
     ? oklch(theme === "dark" ? 0.72 : 0.8, 0.012, c.hueDeg)
-    : oklch(theme === "dark" ? 0.8 : 0.84, 0.085, c.hueDeg);
+    : c.toned
+      ? mix(SKINS[t.skin]?.[0] ?? "#F6D9C6", SKINS[t.skin]?.[1] ?? "#E6B89E", 0.45)
+      : oklch(theme === "dark" ? 0.8 : 0.84, 0.085, c.hueDeg);
   const p = makePainter("portrait", c.uid, theme, small);
   const sw = small ? 3 : 2.2;
   const st = `fill="${fill}" stroke="${line}" stroke-width="${sw}" stroke-linejoin="round"`;
@@ -1345,15 +1359,16 @@ export function agentFaceSVG(opts: FaceOptions): string {
   const size = opts.size ?? 48;
   const anim = opts.animate ?? true;
   const style = resolveStyle(opts.id, opts.style);
-  const t = faceTraits(opts.id, opts.name, { seed: opts.seed, role: opts.role, hue: opts.hue });
+  const t = faceTraits(opts.id, opts.name, { seed: opts.seed, role: opts.role, hue: opts.hue, skin: opts.skin });
+  const toned = opts.skin !== "varied";
   const small = size <= 24;
   const brand: Brand = opts.brand ?? "craft";
   BR = BRAND_SPECS[brand];
   const hueDeg = (BRAND_HUES[brand].hueOffset + t.hue * 30) % 360;
-  const uid = `af${hash32(`${opts.id}|${t.seed}|${style}|${state}|${theme}|${small}|${anim}|${brand}`).toString(36)}`;
+  const uid = `af${hash32(`${opts.id}|${t.seed}|${t.skin}|${toned}|${style}|${state}|${theme}|${small}|${anim}|${brand}`).toString(36)}`;
   // A face is never inverted: in a dark UI it is drawn exactly as in a light one, dark ink on its own
   // light paper, with the same skin. Only the overlays (badge ring, bubble) follow the UI theme.
-  const c: Ctx = { t, state, theme: "light", anim, small, uid, hue: agentHue(brand, t.hue, "light"), hueDeg };
+  const c: Ctx = { t, state, theme: "light", anim, small, uid, hue: agentHue(brand, t.hue, "light"), hueDeg, toned };
   let body: string;
   if (style === "flat") body = renderFlat(c);
   else if (style === "character") {

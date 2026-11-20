@@ -6,6 +6,7 @@ export interface AgentFaceEntry {
   title?: string | undefined;
   faceStyle?: string | undefined;
   faceSeed?: string | undefined;
+  faceSkin?: string | undefined;
 }
 
 interface DirectoryAgent extends AgentFaceEntry {
@@ -20,7 +21,8 @@ function sameEntry(left: AgentFaceEntry | undefined, right: AgentFaceEntry): boo
     left.name === right.name &&
     left.title === right.title &&
     left.faceStyle === right.faceStyle &&
-    left.faceSeed === right.faceSeed
+    left.faceSeed === right.faceSeed &&
+    left.faceSkin === right.faceSkin
   );
 }
 
@@ -39,6 +41,7 @@ export function registerAgentFaces(agents: readonly DirectoryAgent[]): void {
       title: agent.title,
       faceStyle: agent.faceStyle,
       faceSeed: agent.faceSeed,
+      faceSkin: agent.faceSkin,
     };
     if (sameEntry(current.get(agent.avatarSeed), entry)) continue;
     next.set(agent.avatarSeed, entry);

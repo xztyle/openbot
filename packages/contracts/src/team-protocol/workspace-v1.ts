@@ -61,7 +61,8 @@
 //   workspace that the owner chose, so that every member reads it. The workspace settings carry the
 //   same optional `appearance`; a body without it keeps the value that the host has. A client shows
 //   its default for a theme (`craft`, `modern`, `riso`) or a face family (`portrait`, `sketch`,
-//   `flat`, `clay`, `character`, `mixed`) that it does not know.
+//   `flat`, `clay`, `character`, `mixed`) that it does not know. `appearance.skin?` (1 to 32
+//   characters): the skin tone of every face (`1` to `8`, light to deep) or `varied`; absent, `1`.
 // - The event `channel-typing` (`{ channelId, typing }`): the whole list, at most 50 entries, each
 //   `{ kind: "member" | "agent", id, state: "typing" | "thinking" | "working", threadRootId? }`.
 //   It replaces the last list of the channel. The host sends it only to a peer that can see the
@@ -349,7 +350,7 @@ const agentDefaults: Decoder = (value) => {
   );
 };
 // Open strings: a theme or a face family of a newer build reads as the default on an older one.
-const appearance = fields({ theme: nonEmpty(32), faces: nonEmpty(32) });
+const appearance = fields({ theme: nonEmpty(32), faces: nonEmpty(32) }, { skin: nonEmpty(32) });
 const settings = fields(
   {
     gate: fields({ provider: identifier, model: nonEmpty(200), timeoutMs: count }, { effort: nonEmpty(32) }),

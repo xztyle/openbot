@@ -1,4 +1,4 @@
-import { atelierFaceDefault, atelierTheme } from "@openbot/brand/atelier-appearance";
+import { atelierFaceDefault, atelierSkinDefault, atelierSkinOf, atelierTheme } from "@openbot/brand/atelier-appearance";
 import { agentFaceSVG, FACE_STYLES, type FaceState, type FaceStyle } from "@openbot/brand/faces";
 import { createEffect, createMemo, createSignal, onCleanup, onSettled } from "solid-js";
 import { documentColorScheme } from "../../document-color-scheme";
@@ -14,6 +14,8 @@ export interface AgentFaceProps {
   faceStyle?: string | undefined;
   /** A re-rolled face. Absent: the face of `id`. */
   faceSeed?: string | undefined;
+  /** The agent's own skin tone, `1` to `8`. Absent: the workspace default. */
+  faceSkin?: string | undefined;
   state?: FaceState | undefined;
   class?: string | undefined;
   style?: Record<string, string> | undefined;
@@ -110,6 +112,7 @@ export function agentFaceMarkup(seed: string, name?: string): string {
     name: known?.title ? `${words} · ${known.title}` : words,
     style: preferred ?? (fallback === "mixed" ? "auto" : fallback),
     ...(known?.faceSeed ? { seed: known.faceSeed } : {}),
+    skin: known?.faceSkin ? atelierSkinOf(known.faceSkin) : atelierSkinDefault(),
     theme: documentColorScheme(),
     brand: atelierTheme() ?? "craft",
     size: SMALL_FACE,
@@ -151,17 +154,20 @@ export function AgentFace(props: AgentFaceProps) {
     const fallback = atelierFaceDefault();
     const style: FaceStyle | "auto" = preferred ?? (fallback === "mixed" ? "auto" : fallback);
     const seed = props.faceSeed ?? known?.faceSeed ?? "";
+    const ownSkin = props.faceSkin ?? known?.faceSkin;
+    const skin = ownSkin ? atelierSkinOf(ownSkin) : atelierSkinDefault();
     const theme = documentColorScheme();
     const brand = atelierTheme() ?? "craft";
     const small = width() <= SMALL_FACE;
     const animate = !prefersLessMotion() && visible() && (state() !== "idle" || width() >= LIVELY_FACE);
-    const key = [props.id, roleWords, style, seed, state(), theme, brand, small, animate].join("|");
+    const key = [props.id, roleWords, style, seed, skin, state(), theme, brand, small, animate].join("|");
     return drawing(key, () =>
       agentFaceSVG({
         id: props.id,
         name: roleWords,
         style,
         ...(seed ? { seed } : {}),
+        skin,
         state: state(),
         theme,
         brand,

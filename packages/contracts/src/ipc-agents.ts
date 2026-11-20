@@ -1,4 +1,10 @@
-import { type AgentFaceStyle, isAgentFaceSeed, isAgentFaceStyle } from "./agent-face";
+import {
+  type AgentFaceSkin,
+  type AgentFaceStyle,
+  isAgentFaceSeed,
+  isAgentFaceSkin,
+  isAgentFaceStyle,
+} from "./agent-face";
 import { isAgentManagerValue } from "./agent-org";
 import { type AgentProviderRef, isAgentProviderRef } from "./agent-providers";
 import { INPUT_LIMITS } from "./input-limits";
@@ -316,6 +322,8 @@ export interface AgentSummary {
   faceStyle?: AgentFaceStyle;
   /** A re-rolled face. Absent: the face of the agent's avatar seed. */
   faceSeed?: string;
+  /** The agent's own skin tone. Absent: the workspace default. */
+  faceSkin?: AgentFaceSkin;
   threadId: string | null;
   workspacePath: string;
   preview: string;
@@ -388,6 +396,7 @@ function hasAgentSummaryFields(value: DynamicRecord): boolean {
     (value.createdBy === undefined || isAgentCreator(value.createdBy)) &&
     (value.faceStyle === undefined || isAgentFaceStyle(value.faceStyle)) &&
     (value.faceSeed === undefined || isAgentFaceSeed(value.faceSeed)) &&
+    (value.faceSkin === undefined || isAgentFaceSkin(value.faceSkin)) &&
     (value.threadId === null || isIdentifier(value.threadId)) &&
     isBoundedString(value.workspacePath, INPUT_LIMITS.path) &&
     isBoundedString(value.preview, INPUT_LIMITS.messageText) &&
@@ -463,6 +472,8 @@ export interface UpdateAgentInput {
   faceStyle?: AgentFaceStyle | null;
   /** A re-rolled face, or `null` for the face of the avatar seed. */
   faceSeed?: string | null;
+  /** The agent's own skin tone, or `null` for the workspace default. */
+  faceSkin?: AgentFaceSkin | null;
   avatarSeed?: string;
   avatarHue?: AvatarHue | null;
 }

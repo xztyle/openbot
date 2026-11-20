@@ -2,7 +2,7 @@
 //
 // What it adds, recorded here because freezing it makes it permanent: an agent summary can carry
 // `faceStyle` (`portrait`, `sketch`, `flat`, `clay`, `character`), the agent's own family of Atelier
-// face, and `faceSeed` (1 to 64 characters), a re-rolled face. They ride beside the frozen agent
+// face, `faceSeed` (1 to 64 characters), a re-rolled face, and `faceSkin` (`1` to `8`), its skin tone. They ride beside the frozen agent
 // projection exactly as `reportsToAgentId` does (see `agent-reports-to-v1.ts`): on the agent list,
 // create, update, avatar and duplicate responses and on the agents-changed event. The agent update
 // request can set them, or clear them with `null`. An older client or host drops both keys, so it
@@ -11,13 +11,13 @@
 // A value that this build does not know, such as a family that a later build adds, is dropped from
 // an agent summary rather than failing the list: the agent then wears the default family. An update
 // request must carry a known value or `null`.
-import { isAgentFaceSeed, isAgentFaceStyle } from "../agent-face";
+import { isAgentFaceSeed, isAgentFaceSkin, isAgentFaceStyle } from "../agent-face";
 import { isDynamicRecord, isString } from "../runtime-values";
 import { AGENT_KEYS, AGENT_LIST_KEYS, agentsIn } from "./agent-background-v1";
 import type { TeamProtocolV6BaseJsonObject, TeamProtocolV6BaseJsonValue } from "./v6-base";
 
 /** The fields of an agent update request that this contract adds. */
-export const AGENT_FACE_UPDATE_KEYS = ["faceStyle", "faceSeed"] as const;
+export const AGENT_FACE_UPDATE_KEYS = ["faceStyle", "faceSeed", "faceSkin"] as const;
 
 /** The `faceStyle` and `faceSeed` fields of an agent update request: a known value, or `null` to clear. */
 export function decodeAgentFaceRequest(value: unknown): TeamProtocolV6BaseJsonObject {
@@ -31,6 +31,10 @@ export function decodeAgentFaceRequest(value: unknown): TeamProtocolV6BaseJsonOb
     if (value.faceSeed !== null && !isAgentFaceSeed(value.faceSeed)) throw new Error("Invalid agent face.");
     result.faceSeed = value.faceSeed;
   }
+  if (value.faceSkin !== undefined) {
+    if (value.faceSkin !== null && !isAgentFaceSkin(value.faceSkin)) throw new Error("Invalid agent face.");
+    result.faceSkin = value.faceSkin;
+  }
   return result;
 }
 
@@ -42,6 +46,7 @@ export function withAgentFace(projected: TeamProtocolV6BaseJsonValue, source: un
     const face: TeamProtocolV6BaseJsonObject = {};
     if (isAgentFaceStyle(agent.faceStyle)) face.faceStyle = agent.faceStyle;
     if (isAgentFaceSeed(agent.faceSeed)) face.faceSeed = agent.faceSeed;
+    if (isAgentFaceSkin(agent.faceSkin)) face.faceSkin = agent.faceSkin;
     if (Object.keys(face).length > 0) faces.set(agent.id, face);
   }
   if (faces.size === 0) return projected;

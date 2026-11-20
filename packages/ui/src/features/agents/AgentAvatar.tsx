@@ -72,7 +72,7 @@ const FACE_STATES: Readonly<Record<AvatarMood, FaceState>> = {
 };
 
 type AvatarAgent = Pick<AgentProfile, "avatarSeed" | "avatarHue" | "avatarUrl"> &
-  Partial<Pick<AgentProfile, "name" | "title" | "faceStyle" | "faceSeed">>;
+  Partial<Pick<AgentProfile, "name" | "title" | "faceStyle" | "faceSeed" | "faceSkin">>;
 
 interface AgentAvatarProps {
   agent?: AvatarAgent | undefined;
@@ -151,6 +151,7 @@ export function AgentAvatar(props: AgentAvatarProps) {
             title={props.title ?? props.agent?.title}
             faceStyle={props.faceStyle ?? props.agent?.faceStyle}
             faceSeed={props.faceSeed ?? props.agent?.faceSeed}
+            faceSkin={props.agent?.faceSkin}
             state={FACE_STATES[mood()]}
             class={`agent-avatar agent-avatar-face ${props.class ?? ""}`}
             style={props.style}

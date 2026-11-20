@@ -17,7 +17,13 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { type AgentFaceStyle, isAgentFaceSeed, isAgentFaceStyle } from "@openbot/contracts/agent-face";
+import {
+  type AgentFaceSkin,
+  type AgentFaceStyle,
+  isAgentFaceSeed,
+  isAgentFaceSkin,
+  isAgentFaceStyle,
+} from "@openbot/contracts/agent-face";
 import { type AgentManagerRefusal, agentManagerRefusal, isAgentManagerValue } from "@openbot/contracts/agent-org";
 import { avatarFileExtension, isAvatarMimeType, isValidAvatarImage } from "@openbot/contracts/avatar-images";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
@@ -141,6 +147,7 @@ type PersistedStoredAgent = Omit<StoredAgent, "avatarUrl" | "provider" | "access
   // stored before faces existed, which wears the workspace default. An older build drops them.
   faceStyle?: AgentFaceStyle;
   faceSeed?: string;
+  faceSkin?: AgentFaceSkin;
 };
 type StoredAgentBase = Omit<PersistedStoredAgent, "avatarSeed" | "avatarHue"> & DynamicRecord;
 
@@ -884,6 +891,11 @@ export class AgentStore {
         if (!isAgentFaceSeed(input.faceSeed)) throw new Error("Invalid face seed.");
         next.faceSeed = input.faceSeed;
       }
+      if (input.faceSkin === null) delete next.faceSkin;
+      else if (input.faceSkin !== undefined) {
+        if (!isAgentFaceSkin(input.faceSkin)) throw new Error("Invalid face skin.");
+        next.faceSkin = input.faceSkin;
+      }
       if (input.taskLimit === null) delete next.taskLimit;
       else if (input.taskLimit !== undefined) {
         if (!isAgentTaskLimit(input.taskLimit)) throw new Error("Invalid task limit.");
@@ -967,6 +979,7 @@ export class AgentStore {
       if (next.quickAcknowledgement === undefined) delete agent.quickAcknowledgement;
       if (next.faceStyle === undefined) delete agent.faceStyle;
       if (next.faceSeed === undefined) delete agent.faceSeed;
+      if (next.faceSkin === undefined) delete agent.faceSkin;
       try {
         this.#persist(modelChange ? "agent.model-changed" : "agent.updated", modelChange);
       } catch (error) {
@@ -976,6 +989,7 @@ export class AgentStore {
         if (previous.reportsToAgentId === undefined) delete agent.reportsToAgentId;
         if (previous.faceStyle === undefined) delete agent.faceStyle;
         if (previous.faceSeed === undefined) delete agent.faceSeed;
+        if (previous.faceSkin === undefined) delete agent.faceSkin;
         if (previous.taskLimit === undefined) delete agent.taskLimit;
         if (previous.providerAccountId === undefined) delete agent.providerAccountId;
         if (previous.backupModels === undefined) delete agent.backupModels;
@@ -2006,6 +2020,7 @@ function isStoredAgent(value: unknown): value is PersistedStoredAgent {
     (record.reportsToAgentId === undefined || isAgentManagerValue(record.reportsToAgentId)) &&
     (record.faceStyle === undefined || isAgentFaceStyle(record.faceStyle)) &&
     (record.faceSeed === undefined || isAgentFaceSeed(record.faceSeed)) &&
+    (record.faceSkin === undefined || isAgentFaceSkin(record.faceSkin)) &&
     isAvatarSeed(record.avatarSeed) &&
     (record.avatarHue === null || isAvatarHue(record.avatarHue)) &&
     isMarketplaceSource(record.marketplaceSource)
@@ -2143,6 +2158,11 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     : value.faceSeed === undefined
       ? undefined
       : reset("faceSeed", undefined);
+  const faceSkin = isAgentFaceSkin(value.faceSkin)
+    ? value.faceSkin
+    : value.faceSkin === undefined
+      ? undefined
+      : reset("faceSkin", undefined);
   let marketplaceSource: StoredAgent["marketplaceSource"];
   if (value.marketplaceSource !== undefined) {
     if (isMarketplaceSource(value.marketplaceSource)) {
@@ -2201,6 +2221,7 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     ...(reportsToAgentId === undefined ? {} : { reportsToAgentId }),
     ...(faceStyle === undefined ? {} : { faceStyle }),
     ...(faceSeed === undefined ? {} : { faceSeed }),
+    ...(faceSkin === undefined ? {} : { faceSkin }),
     ...(sessionSettingOverrides === undefined ? {} : { sessionSettingOverrides }),
     ...(sessionSettingResets === undefined ? {} : { sessionSettingResets }),
     ...(marketplaceSource === undefined ? {} : { marketplaceSource }),

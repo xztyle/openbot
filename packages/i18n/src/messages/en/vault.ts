@@ -46,6 +46,11 @@ export const messages = defineMessages("vault", {
   "vault.field.website": "Website",
   "vault.field.username": "Username or email",
   "vault.field.password": "Password",
+  "vault.field.twoStepKey": "Two-step key",
+  "vault.twoStepKeyHint":
+    "Optional. The setup key that the site shows under its QR code for an authenticator app. Agents then enter the current code for you.",
+  "vault.removeTwoStepKey": "Remove two-step key",
+  "vault.placeholder.twoStepKey": "Setup key or otpauth:// link",
   "vault.field.notes": "Notes",
   "vault.field.label": "Label",
   "vault.field.nameOnCard": "Name on card",

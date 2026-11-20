@@ -40,6 +40,8 @@ export const messages = defineMessages("status.agent", {
   "status.agent.vaultCardFillFrames": "The card fields are in frames from {origins}.",
   "status.agent.secretKeyFill":
     "Fill the saved key {name} into the password field on {site}. After you approve, agents can fill this key on this site with no approval. Remove the key in Secrets to remove the approval.",
+  "status.agent.secretKeyCodeFill":
+    "Fill a two-step code from the saved key {name} into the code field on {site}. After you approve, agents can fill codes from this key on this site with no approval. Remove the key in Secrets to remove the approval.",
   "status.agent.screenCaptureProgress": "Asking to capture the screen…",
   "status.agent.screenCaptureReviewing": "Reviewing the screen capture…",
   "status.agent.memoriesSearching": "Searching its memories…",

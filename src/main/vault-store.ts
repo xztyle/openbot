@@ -21,6 +21,11 @@ const loginSchema = Schema.Struct({
   username: Schema.String,
   password: Schema.String,
   notes: Schema.String,
+  /**
+   * The two-step (TOTP) setup key, normalized: base32, or an `otpauth://totp/` link for a key that is
+   * not SHA-1, 6 digits and 30 seconds. Absent when there is none. An older build drops it.
+   */
+  twoStepKey: Schema.optionalKey(Schema.String),
   addedBy,
 });
 

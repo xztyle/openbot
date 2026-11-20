@@ -12,6 +12,7 @@ import {
   type VaultSecretRequest,
 } from "@openbot/contracts/ipc";
 import type { DynamicRecord } from "@openbot/contracts/runtime-values";
+import { normalizeTwoStepKey, TWO_STEP_KEY_LIMIT } from "@openbot/contracts/two-step-code";
 import { type SourceMessages, sourceText } from "@openbot/i18n/source";
 import { websiteUrl } from "../backend/password-vault";
 import { isObject } from "./ipc/validation";
@@ -106,6 +107,19 @@ function siteList(value: unknown): string[] {
 }
 
 /**
+ * A login's two-step key as the Vault keeps it. Undefined keeps the saved key, and "" removes it. A
+ * text that is not a TOTP setup key or `otpauth://totp/` link is refused.
+ */
+function vaultTwoStepKey(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  const key = text(value, "twoStepKey", TWO_STEP_KEY_LIMIT);
+  if (key === "") return "";
+  const normalized = normalizeTwoStepKey(key);
+  if (normalized === null) throw userError("error.vault.twoStepKeyInvalid");
+  return normalized;
+}
+
+/**
  * The item to save. A login's website must be HTTPS; a card number must pass the Luhn check, and its
  * security code has 3 or 4 digits. A null secret keeps the saved value.
  */
@@ -126,6 +140,7 @@ export function decodeVaultSaveInput(value: unknown): VaultSaveInput {
         username: text(value.username, "username"),
         notes: text(value.notes, "notes", VAULT_NOTES_LIMIT),
         password,
+        twoStepKey: vaultTwoStepKey(value.twoStepKey),
       };
     }
     case "card": {

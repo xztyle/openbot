@@ -12,6 +12,8 @@ interface VaultLoginForAgent extends VaultItemOrigin {
   id: string;
   website: string;
   username: string;
+  /** Whether `submit_secret` with `method=authenticator` can enter a code for this login. */
+  hasTwoStepKey: boolean;
 }
 
 /** What an agent may see of a card. The number and the security code are never in it. */

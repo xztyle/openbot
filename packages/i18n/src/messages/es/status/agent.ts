@@ -30,6 +30,8 @@ export const messages = {
   "status.agent.screenCaptureWindow": "Capturar la ventana {name} y enviar la imagen al modelo del agente.",
   "status.agent.screenCaptureRegion":
     "Capturar el área de la pantalla en {x}, {y}, de {width} × {height} puntos, y enviar la imagen al modelo del agente.",
+  "status.agent.secretKeyCodeFill":
+    "Rellenar un código de verificación en dos pasos de la clave guardada {name} en el campo de código de {site}. Si lo apruebas, los agentes podrán rellenar códigos de esta clave en este sitio sin aprobación. Elimina la clave en Secretos para quitar la aprobación.",
   "status.agent.screenCaptureProgress": "Pidiendo permiso para capturar la pantalla…",
   "status.agent.screenCaptureReviewing": "Revisando la captura de pantalla…",
   "status.agent.memoriesSearching": "Buscando en sus recuerdos…",

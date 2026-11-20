@@ -105,6 +105,58 @@ const legacyActionSchema = z.discriminatedUnion("type", [
 
 const targetAction = { tabId, target: browserTargetSchema, timeoutMs: timeout };
 
+/** The most steps that one `run_steps` call runs. */
+export const BROWSER_RUN_STEPS_LIMIT = 20;
+
+/**
+ * One step of `run_steps`: the arguments of the single tool of that name, without `tabId`. Sign-in,
+ * card, upload and script tools are not steps: they keep their own checks and cards.
+ */
+const browserStepSchema = z.discriminatedUnion("action", [
+  z.strictObject({
+    action: z.literal("click"),
+    target: browserTargetSchema,
+    button: z.enum(["left", "middle", "right"]).optional(),
+    clickCount: z.number().int().min(1).max(2).optional(),
+    modifiers,
+  }),
+  z.strictObject({
+    action: z.literal("type"),
+    target: browserTargetSchema.optional(),
+    text: z.string().max(INPUT_LIMITS.browserActionText),
+    mode: z.enum(["replace", "append"]).optional(),
+    submit: z.boolean().optional(),
+  }),
+  z.strictObject({ action: z.literal("press"), key: requiredString(128), target: browserTargetSchema.optional() }),
+  z.strictObject({ action: z.literal("hover"), target: browserTargetSchema }),
+  z.strictObject({
+    action: z.literal("scroll"),
+    target: browserTargetSchema.optional(),
+    deltaX: z.number().min(-100_000).max(100_000).optional(),
+    deltaY: z.number().min(-100_000).max(100_000).optional(),
+  }),
+  z.strictObject({
+    action: z.literal("select_option"),
+    target: browserTargetSchema,
+    values: z.array(z.string().max(1_000)).min(1).max(100),
+  }),
+  z.strictObject({ action: z.literal("set_checked"), target: browserTargetSchema, checked: z.boolean() }),
+  z.strictObject({
+    action: z.literal("wait_for"),
+    target: browserTargetSchema.optional(),
+    text: requiredString(2_000).optional(),
+    url: requiredString(INPUT_LIMITS.browserUrl).optional(),
+    state: z.enum(["load", "domcontentloaded", "dom-quiet"]).optional(),
+  }),
+  z.strictObject({
+    action: z.literal("navigate"),
+    url: requiredString(INPUT_LIMITS.browserUrl).optional(),
+    direction: z.enum(["back", "forward", "reload"]).optional(),
+  }),
+]);
+
+export type BrowserStep = z.infer<typeof browserStepSchema>;
+
 const BROWSER_TOOL_DEFINITIONS = [
   browserTool({
     name: "open",
@@ -131,7 +183,7 @@ const BROWSER_TOOL_DEFINITIONS = [
   browserTool({
     name: "submit_secret",
     description:
-      "Request the secret card for the active authentication step discovered in a fresh page snapshot. Identify password, email/SMS code, or authenticator-app code from the page instructions before calling. Select any login-method option first. The user authorizes one fill-and-submit action to the shown HTTPS origin. Never pass a secret as an argument. Use takeover if the method or code length is unclear, for nonnumeric/recovery codes, CAPTCHA, passkeys, or payment confirmation. Fill saved cards with fill_card.",
+      "Request the secret card for the active authentication step discovered in a fresh page snapshot. Identify password, email/SMS code, or authenticator-app code from the page instructions before calling. Select any login-method option first. The user authorizes one fill-and-submit action to the shown HTTPS origin. Never pass a secret as an argument. Use takeover if the method or (without loginId) code length is unclear, for nonnumeric/recovery codes, CAPTCHA, passkeys, or bank app approval. Not for a bank's 3-D Secure payment code. Fill saved cards with fill_card.",
     shape: {
       tabId,
       method: z
@@ -168,14 +220,14 @@ const BROWSER_TOOL_DEFINITIONS = [
       loginId: identifier
         .optional()
         .describe(
-          "For password or authenticator: the id of a saved login from list_logins. OpenBot fills its password or current code without asking the user.",
+          "For password or authenticator: the id of a saved login from list_logins. OpenBot fills its password or current code without asking the user. With it and one code field, omit digits: the saved code sets the length.",
         ),
       secretKey: z
         .string()
         .regex(API_KEY_NAME_PATTERN)
         .optional()
         .describe(
-          "For password, instead of loginId: the name of a saved key from openbot.list_api_keys, such as SITE_PASSWORD. OpenBot fills its value; you never see it. The first fill of a key on a site waits for the owner's approval.",
+          "For password or authenticator, instead of loginId: the name of a saved key from openbot.list_api_keys, such as SITE_PASSWORD, or for authenticator a two-step setup key such as SITE_TOTP. OpenBot fills the password or the current code; you never see it. The first fill of a key on a site waits for the owner's approval.",
         ),
       username: z
         .string()
@@ -195,7 +247,7 @@ const BROWSER_TOOL_DEFINITIONS = [
   browserTool({
     name: "list_vault_items",
     description:
-      "List what the user saved in the OpenBot Vault. A login shows id, website and username; its password and notes are never returned, so sign in with list_logins and submit_secret. A card shows id, label, nameOnCard, brand, last4, expiry and hasSecurityCode; its number and security code are never returned, so fill card fields with fill_card. A contact shows every field: type them with fill_fields, type, or select_option. addedBy names the agent that added an item; it is absent when the user added it.",
+      "List what the user saved in the OpenBot Vault. A login shows id, website, username and hasTwoStepKey; its password, two-step key and notes are never returned, so sign in with list_logins and submit_secret. A card shows id, label, nameOnCard, brand, last4, expiry and hasSecurityCode; its number and security code are never returned, so fill card fields with fill_card. A contact shows every field: type them with fill_fields, type, or select_option. addedBy names the agent that added an item; it is absent when the user added it.",
     shape: {},
   }),
   browserTool({
@@ -270,7 +322,7 @@ const BROWSER_TOOL_DEFINITIONS = [
   browserTool({
     name: "request_takeover",
     description:
-      "Ask the user to take over a tab for unclear OAuth account selection, CAPTCHA, passkeys, payment confirmation such as 3-D Secure, or when secure password/code handoff or card fill is unavailable.",
+      "Ask the user to take over a tab for unclear OAuth account selection, CAPTCHA, passkeys, a payment step that you cannot complete, or when secure password/code handoff or card fill is unavailable. For a checkbox CAPTCHA (Turnstile, reCAPTCHA, hCaptcha), OpenBot first clicks it once; if that passes, the result says so and no one is asked. Never click a CAPTCHA yourself.",
     shape: {
       tabId,
       reason: z
@@ -333,6 +385,16 @@ const BROWSER_TOOL_DEFINITIONS = [
           "Combined field text exceeds 16 KiB UTF-8.",
         ),
       timeoutMs: z.number().int().min(1).max(BROWSER_FILL_FIELDS_MAX_TIMEOUT_MS).optional(),
+    },
+  }),
+  browserTool({
+    name: "run_steps",
+    description:
+      "Run up to 20 known browser steps in order in one call and get one final snapshot, instead of one call and one snapshot per step: for example navigate, type a search, press Enter, and wait_for the results, or click Next several times. Each step takes the arguments of the tool of the same name without tabId: click, type, press, hover, scroll, select_option, set_checked, wait_for, navigate. Refs from your last snapshot stay valid until a step loads a new page; after that, use role, text or CSS targets. The run stops at the first failed step and returns which steps ran, the error, and the snapshot. Use single tools to explore a page you do not know; use submit_secret, fill_card and upload_files on their own.",
+    shape: {
+      tabId,
+      steps: z.array(browserStepSchema).min(1).max(BROWSER_RUN_STEPS_LIMIT),
+      timeoutMs: timeout.describe("The limit of each step, as for the single tools. Default 10000."),
     },
   }),
   browserTool({

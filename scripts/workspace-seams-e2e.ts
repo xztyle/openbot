@@ -149,7 +149,7 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
 
   await step(page, viewport, "the tab title names the channel and the space", async () => {
     await load(page, origin, "/app/general/c/general", pane(page, "general"));
-    await page.waitForFunction(() => document.title.includes("#general - General - OpenBot"), null, {
+    await page.waitForFunction(() => document.title.includes("#general - General - Atelier"), null, {
       timeout: UI_WAIT_MS,
     });
     report.titles.push(await page.title());

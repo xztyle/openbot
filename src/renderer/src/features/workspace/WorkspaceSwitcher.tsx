@@ -6,12 +6,35 @@
  */
 
 import { channelKind, channelVisibility } from "@openbot/contracts/ipc";
-import { Button, FormDialog, Hash, Input, Lock, Plus, Search } from "@openbot/ui";
+import {
+  Activity,
+  ArrowLeftRight,
+  AtSign,
+  Bookmark,
+  Bot,
+  Button,
+  FormDialog,
+  HardDrive,
+  Hash,
+  Inbox,
+  Input,
+  KeyRound,
+  LayoutDashboard,
+  Lock,
+  MessageSquareText,
+  MessagesSquare,
+  Network,
+  Pencil,
+  Plus,
+  Search,
+  Workflow,
+} from "@openbot/ui";
 import { AiBadge, MemberAvatar } from "@openbot/ui/features/workspace/WorkspaceAvatar";
 import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSidebar";
 import { slugChannelName } from "@openbot/ui/features/workspace/workspace-format";
 import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
+import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { useWorkspace } from "./workspace-context";
 import {
@@ -36,7 +59,28 @@ export interface JumpEntry {
   mentions?: number | undefined;
   /** The name of the space of a conversation of another space. */
   space?: string | undefined;
+  /** The view that a `view` entry opens, for its icon. */
+  view?: WorkspaceView | undefined;
 }
+
+/** The icon of each view, as on its sidebar row, so a view does not look like a channel. */
+const VIEW_ICON: Record<WorkspaceView, () => JSX.Element> = {
+  unreads: () => <Inbox />,
+  threads: () => <MessageSquareText />,
+  activity: () => <AtSign />,
+  dms: () => <MessagesSquare />,
+  later: () => <Bookmark />,
+  drafts: () => <Pencil />,
+  fleet: () => <Activity />,
+  org: () => <Network />,
+  artifacts: () => <LayoutDashboard />,
+  agents: () => <ArrowLeftRight />,
+  "space-agents": () => <Bot />,
+  storage: () => <HardDrive />,
+  secrets: () => <KeyRound />,
+  routines: () => <Workflow />,
+  search: () => <Search />,
+};
 
 function fold(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
@@ -154,7 +198,7 @@ export function useJumpEntries() {
 
   const views = createMemo((): JumpEntry[] =>
     VIEWS.filter((item) => ws.viewAvailable(item.view) && (item.view !== "space-agents" || ws.spaces.available())).map(
-      (item) => ({ id: `view:${item.view}`, label: item.label(), kind: "view" }),
+      (item) => ({ id: `view:${item.view}`, label: item.label(), kind: "view", view: item.view }),
     ),
   );
 
@@ -294,8 +338,15 @@ export function QuickSwitcher(props: { onClose: () => void }) {
                       <Show
                         when={entry.kind === "create" || entry.kind === "search"}
                         fallback={
-                          <Show when={entry.private} fallback={<Hash />}>
-                            <Lock />
+                          <Show
+                            when={entry.view}
+                            fallback={
+                              <Show when={entry.private} fallback={<Hash />}>
+                                <Lock />
+                              </Show>
+                            }
+                          >
+                            {(view) => VIEW_ICON[view()]()}
                           </Show>
                         }
                       >

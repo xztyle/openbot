@@ -1,0 +1,358 @@
+/* The workspace's lists and views on a phone, as Slack's iOS app: Home's list, the DMs and Activity
+   tabs, and the views that push over them (Unreads, Threads, Drafts & sent, Later, Fleet, Org chart,
+   Artifacts, Search). Type is at least 15px for body text, and rows and buttons that a finger hits
+   are at least --openbot-touch-target high. A computer keeps the sizes of the other fragments. */
+
+/* The DMs and Activity tabs are the views of a computer. They answer the same narrow-layout rules as
+   a view that pushes over Home. */
+.ws-phone-tab-view {
+  container: ws-layout / inline-size;
+}
+
+/* Type ------------------------------------------------------------------------------------------- */
+
+@media (pointer: coarse) {
+  @container ws-layout (max-width: 720px) {
+    .ws-view {
+      --openbot-text-sm: 13px;
+      --openbot-text-md: 15px;
+      --openbot-text-lg: 16px;
+      --openbot-text-xl: 17px;
+      --openbot-leading-sm: 18px;
+      --openbot-leading-md: 20px;
+      --openbot-leading-lg: 22px;
+    }
+  }
+
+  .ws-phone-home-list {
+    --openbot-text-md: 15px;
+    --openbot-text-lg: 17px;
+  }
+}
+
+@container ws-layout (max-width: 720px) {
+  /* Header: Back, the title and the actions, as the top bar of a pushed screen. ------------------ */
+
+  .ws-view > .ws-pane-header {
+    min-height: calc(var(--openbot-touch-target) + var(--openbot-space-2));
+    gap: var(--openbot-space-1);
+    padding: var(--openbot-space-1) var(--openbot-space-2) var(--openbot-space-1) var(--openbot-space-4);
+  }
+
+  /* A tab of the bottom bar is a start: it has no Back. */
+  .ws-phone-tab-view .ws-pane-header > .ui-button.ws-phone-only {
+    display: none;
+  }
+
+  .ws-view > .ws-pane-header:has(> .ws-phone-only) {
+    padding-left: var(--openbot-space-1);
+  }
+
+  .ws-phone-tab-view .ws-view > .ws-pane-header {
+    padding-left: var(--openbot-space-4);
+  }
+
+  .ws-pane-header > .ui-button.ws-phone-only,
+  .ws-pane-header-actions .ui-icon-button.ui-button {
+    width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
+    flex: none;
+  }
+
+  .ws-pane-header > .ui-button.ws-phone-only > svg {
+    width: var(--openbot-icon-lg);
+    height: var(--openbot-icon-lg);
+  }
+
+  .ws-pane-header-actions .ui-button {
+    min-height: var(--openbot-touch-target);
+  }
+
+  /* The title says where the reader is; the icon of a computer's header is not needed. */
+  .ws-view > .ws-pane-header > .ws-pane-header-icon {
+    display: none;
+  }
+
+  .ws-view > .ws-pane-header .ws-pane-header-title {
+    font-size: var(--openbot-text-2xl);
+    line-height: var(--openbot-leading-2xl);
+  }
+
+  /* A second fact, such as the cost of today, goes under the title so the title is not cut. */
+  .ws-view > .ws-pane-header .ws-pane-header-copy {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+
+  .ws-view > .ws-pane-header .ws-pane-header-subtitle {
+    max-width: 100%;
+    font-size: var(--openbot-text-sm);
+  }
+
+  /* The one primary action is an icon: its name is the button's label. */
+  .ws-pane-header-actions .ui-button.ws-pane-header-primary {
+    width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
+    flex: none;
+    border-radius: var(--openbot-radius-pill);
+    background: var(--openbot-bg-control);
+    padding: 0;
+    color: var(--openbot-text-primary);
+  }
+
+  .ws-pane-header-actions .ui-button.ws-pane-header-primary > svg {
+    width: var(--openbot-icon-lg);
+    height: var(--openbot-icon-lg);
+  }
+
+  .ws-pane-header-actions .ws-pane-header-primary-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* A list right under the header keeps a gap from its line, as one under a toolbar. */
+  .ws-view > .ws-pane-header + .ws-view-scroll {
+    padding-top: var(--openbot-space-2);
+  }
+
+  /* Toolbar: tabs, search and filters. ---------------------------------------------------------- */
+
+  .ws-view-toolbar {
+    gap: var(--openbot-space-2);
+    padding: var(--openbot-space-2) var(--openbot-space-4);
+  }
+
+  /* The tabs fill the row, each one as wide as the others, as Slack's Activity filters. */
+  .ws-view-toolbar > :has(> .ui-sliding-tabs) {
+    flex: 1 0 100%;
+  }
+
+  .ws-view-toolbar .ui-sliding-tabs {
+    display: grid;
+    width: 100%;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+  }
+
+  .ws-view-toolbar .ui-sliding-tabs-trigger,
+  .ws-view-toolbar .ui-sliding-tabs-pill {
+    height: calc(var(--openbot-touch-target) - 6px);
+  }
+
+  .ws-view-toolbar .ui-sliding-tabs-trigger {
+    min-width: 0;
+    overflow: hidden;
+    padding-inline: var(--openbot-space-1);
+    text-overflow: ellipsis;
+  }
+
+  .ws-view-search {
+    min-width: 0;
+    flex: 1 1 0;
+    margin-left: 0;
+  }
+
+  .ws-view-search input {
+    height: var(--openbot-touch-target);
+  }
+
+  /* The search keeps its row beside the select-all box; what acts on the chosen agents goes under. */
+  .space-agents .ws-view-search {
+    flex-basis: calc(100% - 20px - var(--openbot-space-2));
+  }
+
+  .ws-view-toolbar > .ui-button {
+    min-height: var(--openbot-touch-target);
+  }
+
+  .ws-inline-switch {
+    min-height: var(--openbot-touch-target);
+  }
+
+  .ws-view-layout-toggle .ui-button {
+    width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
+  }
+
+  .ws-view-layout-toggle .ui-button > svg {
+    width: var(--openbot-icon-lg);
+    height: var(--openbot-icon-lg);
+  }
+
+  /* Rows and their actions. --------------------------------------------------------------------- */
+
+  .ws-fleet-card-actions .ui-button,
+  .ws-artifact-footer .ui-button,
+  .ws-view-more .ui-button,
+  .ws-drafts-more .ui-button {
+    min-height: var(--openbot-touch-target);
+  }
+
+  .ws-fleet-card-actions .ui-icon-button.ui-button {
+    width: var(--openbot-touch-target);
+  }
+
+  /* A row's own buttons, such as Open chat and Move of an agent in the space's list. */
+  .ws-row-actions {
+    gap: 0;
+  }
+
+  .ws-row-actions .ui-icon-button.ui-button {
+    width: 40px;
+    height: var(--openbot-touch-target);
+  }
+
+  .ws-row-actions .ui-icon-button.ui-button > svg {
+    width: var(--openbot-icon-lg);
+    height: var(--openbot-icon-lg);
+  }
+
+  /* A check box is a little larger, and the space around it takes the tap. */
+  .ws-view .ui-checkbox {
+    width: 20px;
+    height: 20px;
+  }
+
+  .ws-view .ui-checkbox-input {
+    inset: -12px;
+    width: auto;
+    height: auto;
+  }
+}
+
+/* Home's list ------------------------------------------------------------------------------------ */
+
+/* Faces and icons that read at the size of the row's name. */
+.ws-phone-home-list .ws-sidebar-row .ws-avatar {
+  --ws-avatar-size: 26px;
+}
+
+.ws-phone-home-list .ws-sidebar-row-icon {
+  width: 26px;
+  height: 26px;
+}
+
+.ws-phone-home-list .ws-sidebar-row-icon > svg {
+  width: var(--openbot-icon-lg);
+  height: var(--openbot-icon-lg);
+}
+
+.ws-phone-home-list .ws-sidebar-row.ui-button {
+  gap: var(--openbot-space-3);
+}
+
+/* The section's options and add buttons always show on a phone, at a finger's size. */
+.ws-phone-home-list .ws-sidebar-group-header {
+  min-height: var(--openbot-touch-target);
+}
+
+.ws-phone-home-list .ws-sidebar-group-add.ui-button,
+.ws-phone-home-list .ws-sidebar-group-options.ui-button {
+  width: var(--openbot-touch-target);
+  height: var(--openbot-touch-target);
+  flex: none;
+  opacity: 1;
+}
+
+.ws-phone-home-list .ws-sidebar-group-add.ui-button > svg,
+.ws-phone-home-list .ws-sidebar-group-options.ui-button > svg {
+  width: var(--openbot-icon-lg);
+  height: var(--openbot-icon-lg);
+}
+
+/* Sheets reached from Home: Jump to, New message, Browse channels. ------------------------------- */
+
+@media (pointer: coarse) {
+  .ui-form-dialog-close.ui-button {
+    width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
+  }
+
+  .ui-form-dialog-close.ui-button > svg {
+    width: var(--openbot-icon-lg);
+    height: var(--openbot-icon-lg);
+  }
+
+  .ws-switcher-field .ui-input,
+  .ws-picker-field {
+    min-height: var(--openbot-touch-target);
+  }
+
+  .ws-picker-row.ui-button,
+  .ws-browse-filters .ws-select-trigger,
+  .ws-browse-filters .ui-button {
+    min-height: var(--openbot-touch-target);
+  }
+
+  .ws-picker-row.ui-button {
+    height: auto;
+  }
+
+  /* The filters fill the row; the switch and New channel go under them, one at each end. */
+  .ws-browse-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ws-browse-filters .ws-select,
+  .ws-browse-filters .ws-select-trigger {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .ws-browse-filters > .ws-inline-switch {
+    min-height: var(--openbot-touch-target);
+    margin-left: 0;
+  }
+
+  .ws-browse-filters > .ui-button {
+    justify-self: end;
+  }
+}
+
+/* Server notices on a phone ---------------------------------------------------------------------- */
+
+/* Over the tabs: a bar under the status bar, as Slack's "Connecting…". */
+.ws-phone-shell-banner {
+  display: contents;
+}
+
+/* A narrow screen gives the text the full width; the buttons go under it, at the end. */
+@media (max-width: 720px) {
+  .server-connection-notice {
+    flex-wrap: wrap;
+    gap: var(--openbot-space-2) var(--openbot-space-3);
+    padding: var(--openbot-space-2) var(--openbot-space-4);
+    background: var(--openbot-bg-surface);
+    font-size: var(--openbot-text-lg);
+  }
+
+  .server-connection-notice > :first-child {
+    min-width: min(100%, 220px);
+    flex: 1 1 220px;
+  }
+
+  .server-connection-notice .server-connection-detail {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: var(--openbot-text-md);
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .server-connection-notice > .server-connection-actions,
+  .server-connection-notice > .ui-button {
+    margin-left: auto;
+  }
+}
+
+@media (pointer: coarse) {
+  .server-connection-notice .ui-button {
+    min-height: var(--openbot-touch-target);
+  }
+}

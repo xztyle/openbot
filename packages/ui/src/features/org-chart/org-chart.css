@@ -736,22 +736,77 @@
   overflow-y: auto;
 }
 
-/* A narrow window shows the panel over the chart. */
+/* A narrow window shows the panel as a sheet over the lower part of the chart, as a map app does,
+   so the selected card stays in sight above it. */
 @media (max-width: 720px) {
+  .ws-org-body {
+    position: relative;
+  }
+
   .ws-org-panel {
     position: absolute;
-    inset: 0;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
     z-index: 5;
     width: auto;
-    border-left: 0;
+    max-height: min(68%, 560px);
+    border: 1px solid var(--ws-line);
+    border-bottom: 0;
+    border-radius: var(--openbot-radius-xl) var(--openbot-radius-xl) 0 0;
+    box-shadow: 0 -12px 32px var(--openbot-shadow-dialog);
+    animation: ws-org-sheet-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .ws-org-panel .ws-pane-header {
+    border-bottom: 0;
   }
 
   .ws-org-hint {
     display: none;
   }
 
+  .ws-org-search {
+    right: var(--wfn-hud-inset);
+  }
+
   .ws-org-search .ui-input {
-    width: 140px;
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+}
+
+@keyframes ws-org-sheet-in {
+  from {
+    transform: translateY(24%);
+    opacity: 0;
+  }
+}
+
+/* A finger's size for the bars on a touch screen. */
+@media (pointer: coarse) {
+  .ws-org .wfn-hud {
+    height: calc(var(--openbot-touch-target) + var(--openbot-space-2));
+  }
+
+  .ws-org .wfn-hud .ui-button {
+    min-width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
+  }
+
+  .ws-org .ws-org-search .ui-input {
+    height: var(--openbot-touch-target);
+  }
+
+  .ws-org-panel .ws-pane-header-actions .ui-button,
+  .ws-org-panel .ws-org-panel-actions .ui-button {
+    min-height: var(--openbot-touch-target);
+  }
+
+  .ws-org-panel .ws-pane-header-actions .ui-icon-button.ui-button {
+    width: var(--openbot-touch-target);
   }
 }
 
@@ -761,6 +816,7 @@
     display: none;
   }
 
+  .ws-org-panel,
   .ws-org-line[data-state="working"] .ws-org-line-flow,
   .ws-org-card[data-state="working"]::before,
   .ws-org-card[data-flash] {

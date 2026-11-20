@@ -34,6 +34,7 @@ import {
 import { type PhoneTab, PhoneTabBar } from "@openbot/ui/features/workspace/PhoneTabBar";
 import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSidebar";
 import { useText } from "@openbot/ui/text";
+import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, Match, Switch } from "solid-js";
 import { WorkspaceDmsView } from "../workspace/WorkspaceInboxViews";
 import { useWorkspaceMenu, WorkspaceSidebarPane } from "../workspace/WorkspaceSidebarPane";
@@ -55,6 +56,8 @@ export interface WebPhoneShellProps {
   onSelectServer: (serverId: string) => void;
   /** The server's pages and the app's links, after the workspace views in the More tab. */
   moreSections: readonly PhoneMoreSection[];
+  /** The notices about the server, such as Reconnecting, as a bar over each tab. */
+  banner?: JSX.Element;
 }
 
 /**
@@ -302,6 +305,7 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
 
   return (
     <div class="ws-phone-shell-body">
+      <div class="ws-phone-shell-banner">{props.banner}</div>
       <div class="ws-phone-shell-screen">
         <Switch>
           <Match when={props.tab === "home"}>

@@ -1399,7 +1399,13 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   };
   // On a small screen the sidebar pane covers the chat, and so does the usage report. A covered
   // message was not seen.
-  const canMarkRead = () => document.hasFocus() && mobilePane() === "conversation" && !pageCovered() && !routinesView();
+  // A view of the workspace, such as Threads or Activity, covers the agent's chat: the chat is not read.
+  const canMarkRead = () =>
+    document.hasFocus() &&
+    mobilePane() === "conversation" &&
+    !pageCovered() &&
+    !routinesView() &&
+    (!workspaceOn() || workspaceController.route().kind === "agent");
   /** The channel list before the newest one, for the reader it was read for. A reply notifies once. */
   let channelBaseline: { scope: string; channels: ChannelSummary[] } | null = null;
   /** The level the reader set on a conversation's bell; the workspace sets it once it exists. */
@@ -2219,6 +2225,65 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   });
   /** The workspace on a phone: Slack's tabs over the list, and one screen at a time. */
   const phoneShell = () => phone() && workspaceOn() && !noHost();
+  /**
+   * The notices about the server: its connection, a reload, and panels that did not load. On a phone
+   * they show over the conversation and, as a bar, at the top of the tabs.
+   */
+  const serverNotices = () => (
+    <>
+      <Show when={!noHost() && workspace.state.status !== "online" && !blockedServer()}>
+        <ServerConnectionNotice
+          name={workspace.state.host?.name ?? t("webClient.notice.findingHosts")}
+          initial={!workspace.state.workspaceLoaded}
+          issue={workspace.state.hostedIssue}
+          start={workspace.state.hostedStart}
+          updateVersion={workspace.state.hostRestart?.version ?? null}
+          detail={
+            workspace.state.hostedSleep !== "sleeping" && !workspace.state.hostedIssue && !hostUpdating()
+              ? (workspace.state.connectionError?.message ?? null)
+              : null
+          }
+          reference={
+            workspace.state.hostedSleep !== "sleeping" && !workspace.state.hostedIssue && !hostUpdating()
+              ? (workspace.state.connectionError?.reference ?? null)
+              : null
+          }
+          phase={serverWorkspacePhase({
+            hostedSleep: workspace.state.hostedSleep,
+            updating: hostUpdating(),
+            blocked: workspace.state.recovery?.phase === "suspended",
+            loading: workspace.state.status === "connecting",
+            hasContent: workspace.state.workspaceLoaded,
+          })}
+          remainingSeconds={
+            // A restarting host is asked at a short, flat interval, so no countdown is shown.
+            !workspace.state.hostRestart &&
+            (workspace.state.recovery?.phase === "waiting" || workspace.state.recovery?.phase === "cooldown")
+              ? workspace.state.recovery.remainingSeconds
+              : 0
+          }
+          // Retry stays available while the hosts load, so a wait without end has a way out.
+          busy={Boolean(workspace.state.host) && workspace.state.status === "connecting"}
+          onRetry={() => void workspace.run(workspace.state.host ? workspace.reconnect : workspace.refreshHosts)}
+          onManage={() => setBillingOpen(true)}
+          upsell={offlineUpsell()}
+        />
+      </Show>
+      <Show when={reloadSuggested()}>
+        <section class="server-connection-notice" role="status">
+          <p class="server-connection-detail">{t("webClient.notice.reloadHint")}</p>
+          <div class="server-connection-actions">
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              {t("webClient.notice.reload")}
+            </Button>
+          </div>
+        </section>
+      </Show>
+      <Show when={workspace.state.status === "online" && workspace.state.panelsFailed}>
+        <ServerPanelLoadNotice busy={workspace.state.panelsLoading} onRetry={() => void workspace.retryPanels()} />
+      </Show>
+    </>
+  );
   const [phoneTab, setPhoneTab] = createSignal<WebPhoneTab>("home");
   /**
    * A page that the More tab opened (settings, usage, schedule) shows over the conversation pane. When
@@ -2462,6 +2527,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           if (phoneShell() && (target.view === "dms" || target.view === "activity")) {
             setPhoneTab(target.view);
             setMobilePane("workspace");
+          } else if (phone()) {
+            // The view pushes over the list. A space that the address chose showed its list first, and
+            // the pane that the view asks for can come in the same update, before the list's.
+            setMobilePane("conversation");
           }
         }
       }
@@ -2822,62 +2891,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
             initialLoading={hostOffline()}
             connection={
               <>
-                <Show when={!noHost() && workspace.state.status !== "online" && !blockedServer()}>
-                  <ServerConnectionNotice
-                    name={workspace.state.host?.name ?? t("webClient.notice.findingHosts")}
-                    initial={!workspace.state.workspaceLoaded}
-                    issue={workspace.state.hostedIssue}
-                    start={workspace.state.hostedStart}
-                    updateVersion={workspace.state.hostRestart?.version ?? null}
-                    detail={
-                      workspace.state.hostedSleep !== "sleeping" && !workspace.state.hostedIssue && !hostUpdating()
-                        ? (workspace.state.connectionError?.message ?? null)
-                        : null
-                    }
-                    reference={
-                      workspace.state.hostedSleep !== "sleeping" && !workspace.state.hostedIssue && !hostUpdating()
-                        ? (workspace.state.connectionError?.reference ?? null)
-                        : null
-                    }
-                    phase={serverWorkspacePhase({
-                      hostedSleep: workspace.state.hostedSleep,
-                      updating: hostUpdating(),
-                      blocked: workspace.state.recovery?.phase === "suspended",
-                      loading: workspace.state.status === "connecting",
-                      hasContent: workspace.state.workspaceLoaded,
-                    })}
-                    remainingSeconds={
-                      // A restarting host is asked at a short, flat interval, so no countdown is shown.
-                      !workspace.state.hostRestart &&
-                      (workspace.state.recovery?.phase === "waiting" || workspace.state.recovery?.phase === "cooldown")
-                        ? workspace.state.recovery.remainingSeconds
-                        : 0
-                    }
-                    // Retry stays available while the hosts load, so a wait without end has a way out.
-                    busy={Boolean(workspace.state.host) && workspace.state.status === "connecting"}
-                    onRetry={() =>
-                      void workspace.run(workspace.state.host ? workspace.reconnect : workspace.refreshHosts)
-                    }
-                    onManage={() => setBillingOpen(true)}
-                    upsell={offlineUpsell()}
-                  />
-                </Show>
-                <Show when={reloadSuggested()}>
-                  <section class="server-connection-notice" role="status">
-                    <p class="server-connection-detail">{t("webClient.notice.reloadHint")}</p>
-                    <div class="server-connection-actions">
-                      <Button variant="outline" onClick={() => window.location.reload()}>
-                        {t("webClient.notice.reload")}
-                      </Button>
-                    </div>
-                  </section>
-                </Show>
-                <Show when={workspace.state.status === "online" && workspace.state.panelsFailed}>
-                  <ServerPanelLoadNotice
-                    busy={workspace.state.panelsLoading}
-                    onRetry={() => void workspace.retryPanels()}
-                  />
-                </Show>
+                {serverNotices()}
                 <Show when={workspace.state.status === "online" && agentChatOpen()}>
                   <ConversationLoadNotice
                     name={workspace.selected()?.name ?? ""}
@@ -3147,6 +3161,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                           }))}
                           onSelectServer={selectServer}
                           moreSections={phoneMoreSections()}
+                          banner={workspace.state.workspaceLoaded ? serverNotices() : undefined}
                         />
                       </div>
                     </Show>

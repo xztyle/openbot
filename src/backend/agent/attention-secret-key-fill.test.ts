@@ -204,7 +204,7 @@ describe("submit_secret with secretKey", () => {
     const state = setup({ approve: "decline" });
     const result = await submit(state);
     expect(state.submitted).toEqual([]);
-    expect(text(result)).toContain("did not let OpenBot fill");
+    expect(text(result)).toContain("did not let Atelier fill");
     expect(keys.fillApproved(SHARED_API_KEY_SCOPE, KEY, ORIGIN)).toBe(false);
   });
 

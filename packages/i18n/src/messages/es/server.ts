@@ -238,6 +238,23 @@ export const messages = {
   "server.settings.workspaceGateTimeoutDescription":
     "Si la comprobación tarda más, el agente solo responde cuando lo mencionan.",
   "server.settings.workspaceGateSeconds": "{seconds} s",
+  "server.settings.learning": "Aprendizaje",
+  "server.settings.learningDescription":
+    "Los agentes revisan sus propios chats en segundo plano y guardan lo que aprenden. Una revisión usa el modelo más pequeño del proveedor y solo empieza después de que una persona escribió en el chat, así que los agentes inactivos y la conversación entre agentes no cuestan nada.",
+  "server.settings.memoryReview": "Revisión de memoria",
+  "server.settings.memoryReviewHint":
+    "Las revisiones empiezan tras este número de turnos del chat propio de un agente, o tras una pausa de 30 minutos. Cada agente como mucho una vez cada 3 horas.",
+  "server.settings.memoryReviewOff": "Desactivada",
+  "server.settings.memoryReviewEvery": "Cada {turns} turnos",
+  "server.settings.skillLearning": "Aprendizaje de habilidades",
+  "server.settings.skillLearningHint":
+    "Automático: cuando una revisión encuentra una lección, el agente la guarda como habilidad o revisa una de sus habilidades.",
+  "server.settings.skillLearningOff": "Desactivado",
+  "server.settings.skillLearningAutomatic": "Automático",
+  "server.settings.dailyReviewLimit": "Revisiones al día",
+  "server.settings.dailyReviewLimitHint":
+    "El máximo de revisiones de todos los agentes en un día. Cada una lee unos 10.000 tokens en el modelo más pequeño.",
+  "server.settings.dailyReviewLimitValue": "{count} al día",
   "server.settings.routinesTitle": "Rutinas",
   "server.settings.routinesDescription":
     "Muestra la programación de rutinas de este equipo en una aplicación de calendario.",

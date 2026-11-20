@@ -17,7 +17,7 @@ const CHAT_CHARACTERS = 60_000;
 const EARLIER_CHARACTERS = 60_000;
 
 /** Indented JSON for a prompt block, with `<` escaped as `tagSafe` does. */
-function promptJson(value: unknown): string {
+export function promptJson(value: unknown): string {
   return tagSafe(JSON.stringify(value, null, 2));
 }
 
@@ -36,12 +36,18 @@ function chatMessage(message: ConversationMessage): boolean {
   );
 }
 
-function chatTranscript(agent: AgentSummary, messages: readonly ConversationMessage[]) {
+/** The newest chat messages that fit `budget` characters, oldest first. */
+export function chatTranscript(
+  agent: Pick<AgentSummary, "name">,
+  messages: readonly ConversationMessage[],
+  budget: number = CHAT_CHARACTERS,
+  messageCharacters: number = MESSAGE_CHARACTERS,
+) {
   const entries: { from: string; text: string }[] = [];
   let characters = 0;
   for (const message of [...messages].filter(chatMessage).reverse()) {
-    const text = message.text.slice(0, MESSAGE_CHARACTERS);
-    if (characters + text.length > CHAT_CHARACTERS) break;
+    const text = message.text.slice(0, messageCharacters);
+    if (characters + text.length > budget) break;
     characters += text.length;
     const from =
       message.author === "user"

@@ -5,12 +5,18 @@ import {
   CHANNEL_ANSWER_MODES,
   type ChannelAnswerMode,
   type ClientAgentModelOption,
+  DEFAULT_WORKSPACE_LEARNING,
   foreignProvider,
   isAgentProvider,
   isForeignProviderId,
   isReasoningEffort,
+  MEMORY_REVIEW_INTERVALS,
+  type MemoryReviewInterval,
   type OpenBotDesktopApi,
+  SKILL_LEARNING_MODES,
+  type SkillLearningMode,
   WORKSPACE_GATE_TIMEOUT_LIMITS,
+  type WorkspaceLearningSettings,
   type WorkspaceSettings,
 } from "@openbot/contracts/ipc";
 import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
@@ -72,6 +78,8 @@ const ANSWER_MODE_TEXT = {
 } as const satisfies Record<ChannelAnswerMode, { label: AppTextKey; hint: AppTextKey }>;
 
 const TIMEOUT_STEP_MS = 500;
+/** The choices of the server's daily review limit. A value saved outside them shows as well. */
+const DAILY_REVIEW_LIMITS = [10, 20, 40, 80, 200] as const;
 
 interface WorkspaceSectionState {
   /** The settings as the host last confirmed them, or null before they load. */
@@ -104,7 +112,16 @@ function sameSettings(left: WorkspaceSettings, right: WorkspaceSettings): boolea
     left.gate.model === right.gate.model &&
     left.gate.effort === right.gate.effort &&
     left.gate.timeoutMs === right.gate.timeoutMs &&
-    left.defaults.agentAnswerMode === right.defaults.agentAnswerMode
+    left.defaults.agentAnswerMode === right.defaults.agentAnswerMode &&
+    sameLearning(left.learning ?? DEFAULT_WORKSPACE_LEARNING, right.learning ?? DEFAULT_WORKSPACE_LEARNING)
+  );
+}
+
+function sameLearning(left: WorkspaceLearningSettings, right: WorkspaceLearningSettings): boolean {
+  return (
+    left.memoryReviewTurns === right.memoryReviewTurns &&
+    left.skillLearning === right.skillLearning &&
+    left.dailyReviewLimit === right.dailyReviewLimit
   );
 }
 
@@ -202,10 +219,14 @@ export function createServerWorkspaceSection(
     if (!next || !dirty()) return;
     const serverId = props.server.id;
     const request = generation;
-    const { gate, defaults } = structuredClone(snapshot(next));
+    const { gate, defaults, learning } = structuredClone(snapshot(next));
     // Without `defaults.agents`, the host keeps the channel defaults of each agent as they are now, also
     // the ones that the agent settings changed after this section read them.
-    const settings: WorkspaceSettings = { gate, defaults: { agentAnswerMode: defaults.agentAnswerMode } };
+    const settings: WorkspaceSettings = {
+      gate,
+      defaults: { agentAnswerMode: defaults.agentAnswerMode },
+      ...(learning ? { learning } : {}),
+    };
     await run("workspace", async () => {
       const result = await calls().setWorkspaceSettings(settings, serverId);
       if (request !== generation) return;
@@ -224,6 +245,14 @@ export function createServerWorkspaceSection(
       draft.loadError = null;
       draft.catalog = null;
       draft.catalogError = null;
+    });
+  }
+
+  function updateLearning(change: (learning: WorkspaceLearningSettings) => void): void {
+    setState((draft) => {
+      if (!draft.draft) return;
+      draft.draft.learning ??= { ...DEFAULT_WORKSPACE_LEARNING };
+      change(draft.draft.learning);
     });
   }
 
@@ -318,6 +347,19 @@ export function createServerWorkspaceSection(
                       />
                     </ItemContent>
                   </Item>
+                </ItemGroup>
+              </SettingsSection>
+              <SettingsSection
+                title={t("server.settings.learning")}
+                description={t("server.settings.learningDescription")}
+              >
+                <ItemGroup class="settings-modal-card">
+                  <LearningRows
+                    learning={settings().learning ?? DEFAULT_WORKSPACE_LEARNING}
+                    disabled={Boolean(busy())}
+                    menuMount={host.menuMount()}
+                    onChange={updateLearning}
+                  />
                 </ItemGroup>
               </SettingsSection>
             </>
@@ -440,6 +482,116 @@ function GateModelRow(props: {
           </ItemActions>
         )}
       </Show>
+    </Item>
+  );
+}
+
+/** Server Settings > Workspace > Learning: the background memory review and skill learning of the agents. */
+function LearningRows(props: {
+  learning: WorkspaceLearningSettings;
+  disabled: boolean;
+  menuMount: HTMLElement | undefined;
+  onChange: (change: (learning: WorkspaceLearningSettings) => void) => void;
+}) {
+  const { t, format } = useText();
+  const reviewLabel = (turns: number) =>
+    turns === 0 ? t("server.settings.memoryReviewOff") : t("server.settings.memoryReviewEvery", { turns });
+  const limits = () =>
+    [...new Set<number>([...DAILY_REVIEW_LIMITS, props.learning.dailyReviewLimit])].sort((a, b) => a - b);
+  return (
+    <>
+      <ChoiceRow
+        id="server-settings-memory-review"
+        title={t("server.settings.memoryReview")}
+        hint={t("server.settings.memoryReviewHint")}
+        options={MEMORY_REVIEW_INTERVALS.map(String)}
+        value={String(props.learning.memoryReviewTurns)}
+        label={(value) => reviewLabel(Number(value))}
+        disabled={props.disabled}
+        menuMount={props.menuMount}
+        onChange={(value) => {
+          const turns = MEMORY_REVIEW_INTERVALS.find((interval) => String(interval) === value);
+          if (turns !== undefined)
+            props.onChange((learning) => {
+              learning.memoryReviewTurns = turns satisfies MemoryReviewInterval;
+            });
+        }}
+      />
+      <ChoiceRow
+        id="server-settings-skill-learning"
+        title={t("server.settings.skillLearning")}
+        hint={t("server.settings.skillLearningHint")}
+        options={[...SKILL_LEARNING_MODES]}
+        value={props.learning.skillLearning}
+        label={(value) =>
+          value === "automatic" ? t("server.settings.skillLearningAutomatic") : t("server.settings.skillLearningOff")
+        }
+        disabled={props.disabled || props.learning.memoryReviewTurns === 0}
+        menuMount={props.menuMount}
+        onChange={(value) => {
+          const mode = SKILL_LEARNING_MODES.find((candidate) => candidate === value);
+          if (mode)
+            props.onChange((learning) => {
+              learning.skillLearning = mode satisfies SkillLearningMode;
+            });
+        }}
+      />
+      <ChoiceRow
+        id="server-settings-daily-reviews"
+        title={t("server.settings.dailyReviewLimit")}
+        hint={t("server.settings.dailyReviewLimitHint")}
+        options={limits().map(String)}
+        value={String(props.learning.dailyReviewLimit)}
+        label={(value) => t("server.settings.dailyReviewLimitValue", { count: format.number(Number(value)) })}
+        disabled={props.disabled || props.learning.memoryReviewTurns === 0}
+        menuMount={props.menuMount}
+        onChange={(value) => {
+          const limit = Number(value);
+          if (Number.isSafeInteger(limit) && limit > 0)
+            props.onChange((learning) => {
+              learning.dailyReviewLimit = limit;
+            });
+        }}
+      />
+    </>
+  );
+}
+
+function ChoiceRow(props: {
+  id: string;
+  title: string;
+  hint: string;
+  options: string[];
+  value: string;
+  label: (value: string) => string;
+  disabled: boolean;
+  menuMount: HTMLElement | undefined;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Item>
+      <ItemContent>
+        <ItemTitle id={`${props.id}-label`}>{props.title}</ItemTitle>
+        <ItemDescription>{props.hint}</ItemDescription>
+      </ItemContent>
+      <ItemActions>
+        <Select<string>
+          options={props.options}
+          value={props.value}
+          disabled={props.disabled}
+          placement="bottom-end"
+          sameWidth={false}
+          onChange={(value) => {
+            if (value && value !== props.value) props.onChange(value);
+          }}
+          itemComponent={(item) => <SelectItem item={item.item}>{props.label(item.item.rawValue)}</SelectItem>}
+        >
+          <SelectTrigger size="sm" aria-labelledby={`${props.id}-label`}>
+            <SelectValue<string>>{(selected) => props.label(selected.selectedOption() ?? props.value)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent mount={props.menuMount} />
+        </Select>
+      </ItemActions>
     </Item>
   );
 }

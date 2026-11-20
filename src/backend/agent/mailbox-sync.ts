@@ -4,6 +4,7 @@ import type {
   AgentSummary,
   ConversationMessage,
   ConversationSnapshot,
+  QueueDeliveryStatus,
   QueueHold,
   QueueSnapshot,
 } from "@openbot/contracts/ipc";
@@ -15,6 +16,8 @@ import type { OpenBotDatabase } from "../openbot-database";
 import type { ConversationRuntime } from "./conversation-runtime";
 import { conversationContentSignature, digestMessages } from "./delivery-content";
 import type { RoutineScheduler } from "./routine-scheduler";
+
+const OPEN_STATUSES: ReadonlySet<QueueDeliveryStatus> = new Set(["queued", "starting", "running"]);
 
 export interface MailboxSyncHooks {
   emit(event: AgentEvent): void;
@@ -116,6 +119,12 @@ export class MailboxSync {
         snapshot.messages.push(mailboxMessage);
       }
     }
+    // The read gives each open request, but a finished one only among the newest. A request that
+    // ended after newer messages came kept its copy from when it ran, so "Waiting for replies" showed
+    // its teammate as working (upstream 0.74, #12570).
+    const read = new Set(incomingMailboxMessages.map((message) => message.id));
+    for (const message of snapshot.messages)
+      if (!read.has(message.id) && this.#refreshOpenRequest(message)) changed?.add(message);
     const reactions = this.#mailbox.reactionsFor(snapshot.agentId);
     for (const message of snapshot.messages) {
       const next = reactions.get(message.id) ?? [];
@@ -131,6 +140,22 @@ export class MailboxSync {
       message.reaction = reaction;
     }
     sortConversationMessages(snapshot.messages);
+  }
+
+  /** Puts the current state of each delivery on a request whose copy has one still open. True when it changed. */
+  #refreshOpenRequest(message: ConversationMessage): boolean {
+    const exchange = message.exchange;
+    if (exchange?.direction !== "outgoing" || !exchange.deliveries.some(({ status }) => OPEN_STATUSES.has(status)))
+      return false;
+    let changed = false;
+    const deliveries = exchange.deliveries.map((delivery) => {
+      const current = this.#mailbox.getDelivery(delivery.id)?.delivery;
+      if (!current || current.status === delivery.status) return delivery;
+      changed = true;
+      return { ...delivery, status: current.status, position: current.position, error: current.error };
+    });
+    if (changed) message.exchange = { ...exchange, deliveries };
+    return changed;
   }
 
   /** Moves with each committed change of the mailbox (`MailboxStore.revision`). */

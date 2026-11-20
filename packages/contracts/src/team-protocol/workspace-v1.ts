@@ -348,7 +348,10 @@ const settings = fields(
     gate: fields({ provider: identifier, model: nonEmpty(200), timeoutMs: count }, { effort: nonEmpty(32) }),
     defaults: fields({ agentAnswerMode: answerMode }, { agents: agentDefaults }),
   },
-  { handsOffChannelIds: list(identifier, 500) },
+  {
+    handsOffChannelIds: list(identifier, 500),
+    learning: fields({ memoryReviewTurns: count, skillLearning: oneOf("off", "automatic"), dailyReviewLimit: count }),
+  },
 );
 
 const activityLimit: Decoder = (value) => {

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import { join } from "node:path";
 import { agentProviderDescriptor, customAgentIdOfModel } from "@openbot/contracts/agent-providers";
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
 import { developmentStartingModel } from "@openbot/contracts/development-defaults";
@@ -117,7 +118,9 @@ import {
   CONTEXT_RESET_ITEM_TYPE,
   DEFAULT_BUSY_MESSAGE_MODE,
   DEFAULT_PROVIDER_ACCOUNT_ID,
+  DEFAULT_WORKSPACE_LEARNING,
   DEFAULT_WORKSPACE_SETTINGS,
+  defaultProviderModel,
   isAgentProvider,
   isContextResetMarker,
   isReasoningEffort,
@@ -172,6 +175,9 @@ import { MailboxSync } from "./agent/mailbox-sync";
 import { type GitHubConnectorSource, McpGateway, type TestMcpServerOptions } from "./agent/mcp-gateway";
 import { mcpServersFromGateway } from "./agent/mcp-tools";
 import { MemoryHold } from "./agent/memory-hold";
+import { MEMORY_REVIEW_MESSAGES, MEMORY_REVIEW_STATE_FILE, MemoryReview } from "./agent/memory-review";
+import type { ReviewSkill } from "./agent/memory-review-prompt";
+import { MemoryReviewState } from "./agent/memory-review-state";
 import {
   creationModel,
   developmentDefaultsApply,
@@ -202,6 +208,7 @@ import type { ScreenCaptureHost } from "./agent/screen-capture";
 import { SessionSettings } from "./agent/session-settings";
 import { SIDE_QUESTION_CHAT_MESSAGES, sideQuestionPrompt } from "./agent/side-question";
 import type { AgentSidebar } from "./agent/sidebar-tools";
+import type { SkillLearner } from "./agent/skill-learning";
 import type { LocalSkillTools } from "./agent/skill-tools";
 import {
   agentProviderAccount,
@@ -213,7 +220,7 @@ import {
 import { ThreadLifecycle } from "./agent/thread-lifecycle";
 import { toToolOperationFailed } from "./agent/tool-operation";
 import { type AgentBrowserHost, TurnLifecycle } from "./agent/turn-lifecycle";
-import { gateUsageObserver, workflowUsageObserver } from "./agent/usage-collection";
+import { gateUsageObserver, memoryReviewUsageObserver, workflowUsageObserver } from "./agent/usage-collection";
 import { toUsageReadFailed, UsageLimitGate, type UsageLimitKey } from "./agent/usage-limit-gate";
 import { WarmGenerations } from "./agent/warm-generations";
 import type { WebhookRoutineWriter } from "./agent/webhook-routine-tool";
@@ -392,6 +399,9 @@ export interface AgentServiceOptions {
   channelPerson?: (personId: string) => { id: string; name: string } | null;
   /** The workspace settings of this server. Omitted, the defaults. */
   workspaceSettings?: () => WorkspaceSettings;
+  /** The skills that a memory review may revise, and the library it saves learned skills in. Omitted, no skill learning. */
+  reviewSkills?: (agentId: string) => Effect.Effect<readonly ReviewSkill[], unknown>;
+  skillLearner?: () => SkillLearner;
   /** Every active person of the team, the host user first, for the onboarding `#general`. */
   channelPeople?: () => { id: string; name: string }[];
   deleteWithRevokedApproval?: (
@@ -488,6 +498,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #browser: AgentBrowserHost;
   readonly #reader: ConversationReader;
   readonly #memories: AgentMemories;
+  readonly #memoryReview: MemoryReview;
   readonly #waits: AgentWaits;
   readonly #tasks: AgentTasks;
   readonly #tables: SpaceAgentTables | null;
@@ -653,6 +664,44 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       emit: (event) => this.#emit(event),
       emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
       ...(options.agentMemoryLimit ? { limit: options.agentMemoryLimit } : {}),
+    });
+    const skillLearner = options.skillLearner;
+    this.#memoryReview = new MemoryReview({
+      memories: this.#memories,
+      profileClients: this.#profileClients,
+      state: new MemoryReviewState(join(store.database.userDataPath, MEMORY_REVIEW_STATE_FILE)),
+      settings: () => options.workspaceSettings?.().learning ?? DEFAULT_WORKSPACE_LEARNING,
+      listAgents: () => this.listAgents(),
+      model: (agent) =>
+        this.#providers.ensureProvider(agent.provider).pipe(Effect.map(() => this.#backgroundModel(agent))),
+      createClient: (agent) => this.#providers.createProfileClient(agent.provider),
+      usageObserver: (agent, model) =>
+        memoryReviewUsageObserver(this.#store.database.usage, agent.provider, model.id, agent.id),
+      chat: (agentId) => {
+        const loaded = this.#conversation.loadedSnapshot(agentId);
+        if (loaded)
+          return loaded.activeTurnId
+            ? loaded.messages.filter((message) => message.turnId !== loaded.activeTurnId)
+            : loaded.messages;
+        const threadId = this.#store.list().find((agent) => agent.id === agentId)?.threadId;
+        return threadId
+          ? this.#store.database.readConversationPage(agentId, threadId, { type: "latest" }, MEMORY_REVIEW_MESSAGES)
+              .messages
+          : [];
+      },
+      turnActive: (agentId) => Boolean(this.#conversation.loadedSnapshot(agentId)?.activeTurnId),
+      appendSystemMessage: (agentId, message) => this.#appendReviewMessage(agentId, message),
+      ...(options.reviewSkills ? { skills: options.reviewSkills } : {}),
+      ...(skillLearner
+        ? {
+            skillLearner: {
+              read: (skillId) => Effect.suspend(() => skillLearner().read(skillId)),
+              save: (agentId, draft) => Effect.suspend(() => skillLearner().save(agentId, draft)),
+            },
+          }
+        : {}),
+      redact: (text) => this.#mcp.redact(text),
+      stopping: () => this.#stopping,
     });
     // One timer for every routine owner. The sources are read lazily because `channels` and its
     // scheduler are built further down, and because an owner's earliest routine changes constantly.
@@ -1538,6 +1587,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         quietRoutineDelivery: (deliveryId) => this.#routines.quietRunForDelivery(deliveryId),
         takeRoutinePreview: (deliveryId) => this.#routines.takePreviewBeforeRun(deliveryId),
         closeRoutineSession: (externalThreadId) => this.#threads.closeRoutineThread(externalThreadId),
+        conversationTurnEnded: (agentId, turn) => this.#memoryReview.turnEnded(agentId, turn),
         routineAnswered: (agentId, deliveryId, answer) => {
           const agent = this.#store.list().find((item) => item.id === agentId);
           const run = this.#routines.runForDelivery(deliveryId);
@@ -1600,8 +1650,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             yield* lifecycleStep("delete agent tasks", () => this.#tasks.deleteForAgent(agentId));
           }).pipe(Effect.mapError((failure) => new AgentRemovalFailed({ cause: failure.cause }))),
         stopAgentProcess: (agentId) =>
-          this.#providers
-            .stopAgentProcess(agentId)
+          this.#memoryReview
+            .cancel(agentId)
+            .pipe(Effect.andThen(this.#providers.stopAgentProcess(agentId)))
             .pipe(Effect.mapError((failure) => new AgentRemovalFailed({ cause: failure.cause }))),
       },
     });
@@ -2442,6 +2493,40 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     },
     Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "generate profile", cause: failure.cause })),
   ).bind(this);
+
+  /**
+   * The model of a background review: the provider's default model when it is listed, which is its
+   * smaller one (Claude Haiku, the small GPT), else the agent's own. At the lowest effort it takes.
+   */
+  #backgroundModel(agent: AgentSummary): AgentModelOption | null {
+    const models = this.#endpoints.available().filter((candidate) => candidate.provider === agent.provider);
+    const model =
+      models.find((candidate) => candidate.id === defaultProviderModel(agent.provider)) ??
+      models.find((candidate) => candidate.id === agent.model);
+    if (!model) return null;
+    const effort =
+      model.reasoningEffortConfigurable === false
+        ? undefined
+        : AGENT_REASONING_EFFORTS.find((candidate) => model.supportedReasoningEfforts.includes(candidate));
+    return effort ? { ...model, defaultReasoningEffort: effort } : model;
+  }
+
+  /** Adds a line of a background memory review to the agent's own chat. It wakes nobody. */
+  #appendReviewMessage(agentId: string, message: ConversationMessage): void {
+    const database = this.#store.database;
+    this.#conversation.withConversationTransaction(agentId, ({ threadId, snapshot }) => {
+      snapshot.messages.push(message);
+      sortConversationMessages(snapshot.messages);
+      snapshot.revision = database.appendConversationMessage({
+        agentId,
+        threadId,
+        activeTurnId: snapshot.activeTurnId,
+        message,
+        eventType: "thread.memory-reviewed",
+      });
+      return { result: undefined, snapshot };
+    });
+  }
 
   /**
    * Answers a question about an agent's chat with the agent's own model. Nothing is kept: the
@@ -4273,6 +4358,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#deltas.dispose();
     this.#conversation.dispose();
     this.#threads.dispose();
+    yield* this.#memoryReview.dispose();
     this.#memories.clearPending();
     this.#tables?.dispose();
     this.#attention.clearPrompts();

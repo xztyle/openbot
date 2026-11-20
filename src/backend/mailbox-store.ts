@@ -1634,7 +1634,8 @@ export class MailboxStore {
     return this.#contexts(
       this.#queuedFor(next.recipientAgentId).filter((candidate) => {
         if (candidate.id === next.id || !this.#mayStart(candidate) || this.#taskIdOf(candidate, messages)) return false;
-        if (!requestId) return this.#isHeldReply(candidate);
+        // Also an answer that a later turn released: the person's message reads it now.
+        if (!requestId) return this.#awaitsTeammates(candidate);
         const reply = this.#requireMessage(candidate.messageId, messages);
         return isAnswer(reply) && reply.replyToMessageId === requestId;
       }),
@@ -1863,8 +1864,30 @@ export class MailboxStore {
    * An answer to a request that its recipient sent to several teammates waits while another of them
    * has the request still queued or running. So the requester reads all the answers in one turn,
    * not one turn for each answer. `#holdsReply` adds the time limit.
+   *
+   * It waits no longer once a later turn of the requester in the same lane (its own chat, or the same
+   * task) has ended, such as its next routine run or a person's message (upstream 0.74, #12859): the
+   * answers that came then start together in one turn, and its prompt names the teammates that still
+   * work. A turn that the message was steered into started before the answer, so it does not count.
    */
   #isHeldReply(delivery: StoredDelivery): boolean {
+    return this.#awaitsTeammates(delivery) && !this.#laterTurnEnded(delivery);
+  }
+
+  #laterTurnEnded(held: StoredDelivery): boolean {
+    const lane = this.#taskIdOf(held);
+    return this.#deliveriesTo(held.recipientAgentId).some(
+      (candidate) =>
+        candidate.turnId !== null &&
+        candidate.steeredAt === undefined &&
+        !isActiveDelivery(candidate) &&
+        candidate.createdAt > held.createdAt &&
+        this.#taskIdOf(candidate) === lane,
+    );
+  }
+
+  /** An answer whose request another teammate still has queued or running. */
+  #awaitsTeammates(delivery: StoredDelivery): boolean {
     const reply = this.#requireMessage(delivery.messageId);
     if (!isAnswer(reply)) return false;
     const request = this.#state.messages.find((message) => message.id === reply.replyToMessageId);
@@ -2226,17 +2249,36 @@ export class MailboxStore {
     error: string | null = null,
   ): Effect.fn.Return<void, StoredStateFailure> {
     try {
+      // A teammate that already sent its answer to this request did answer it, also when its turn
+      // then failed or stopped. The request ends completed, so "Waiting for replies" shows Replied,
+      // not Failed (upstream 0.72, #8002). The turn keeps its own failure.
+      const answered = status !== "completed" && this.#answeredRequest(deliveryId);
       // Redacted here, not at the call site: this text is written to the database and read back by
       // the renderer through the queue. A provider CLI quotes what it was given, so a failure against
       // a custom endpoint can carry that endpoint's API key or a header value.
       yield* this.#updateDeliveryEffect(deliveryId, ["starting", "running"], {
-        status,
-        error: error === null ? null : redactText(error),
+        status: answered ? "completed" : status,
+        error: answered || error === null ? null : redactText(error),
       });
     } catch (cause) {
       return yield* new StoredStateFailure({ cause });
     }
   }, Effect.uninterruptible).bind(this);
+
+  /** Whether the delivery is a teammate request outside a channel that its recipient has answered. */
+  #answeredRequest(deliveryId: string): boolean {
+    const delivery = this.#index().deliveryById.get(deliveryId);
+    if (!delivery) return false;
+    const request = this.#index().messageById.get(delivery.messageId);
+    if (request?.sender.kind !== "agent" || request.channelId) return false;
+    // A linked question from this agent is not an answer.
+    return this.#state.messages.some(
+      (message) =>
+        isAnswer(message) &&
+        message.sender.agentId === delivery.recipientAgentId &&
+        message.replyToMessageId === request.id,
+    );
+  }
 
   cancel = Effect.fn("MailboxStore.cancel")(function* (
     this: MailboxStore,

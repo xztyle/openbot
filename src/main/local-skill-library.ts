@@ -99,16 +99,24 @@ export class LocalSkillLibrary {
 
   create(agentId: string, sourcePath: string): Effect.Effect<MarketplaceSkillDetail, LocalSkillFailure> {
     return this.serialize(
-      Effect.gen({ self: this }, function* () {
-        const bytes = yield* this.sourceEffect(agentId, sourcePath);
-        const info = yield* localSync(() => inspectArchive(bytes));
-        if ((yield* this.list()).some((skill) => skill.slug === info.slug))
-          return yield* new LocalSkillFailure({ cause: new Error(sourceText("error.skill.localNameTaken")) });
-        const id = `local-skill-${randomUUID()}`;
-        yield* this.publishEffect(id, 1, bytes);
-        return yield* this.get(id, 1);
-      }),
+      this.sourceEffect(agentId, sourcePath).pipe(Effect.flatMap((bytes) => this.#publishNew(bytes))),
     );
+  }
+
+  /** Saves a new skill from a bundle that OpenBot wrote, such as a skill that a memory review learned. */
+  createFromBundle(bytes: Uint8Array): Effect.Effect<MarketplaceSkillDetail, LocalSkillFailure> {
+    return this.serialize(this.#publishNew(bytes));
+  }
+
+  #publishNew(bytes: Uint8Array): Effect.Effect<MarketplaceSkillDetail, LocalSkillFailure> {
+    return Effect.gen({ self: this }, function* () {
+      const info = yield* localSync(() => inspectArchive(bytes));
+      if ((yield* this.list()).some((skill) => skill.slug === info.slug))
+        return yield* new LocalSkillFailure({ cause: new Error(sourceText("error.skill.localNameTaken")) });
+      const id = `local-skill-${randomUUID()}`;
+      yield* this.publishEffect(id, 1, bytes);
+      return yield* this.get(id, 1);
+    });
   }
 
   revise(
@@ -118,19 +126,37 @@ export class LocalSkillLibrary {
     sourcePath: string,
   ): Effect.Effect<MarketplaceSkillDetail, LocalSkillFailure> {
     return this.serialize(
-      Effect.gen({ self: this }, function* () {
-        const current = yield* this.get(id);
-        if (current.version !== expectedRevision)
-          return yield* new LocalSkillFailure({
-            cause: new Error("The skill changed. Read its latest revision before revising it."),
-          });
-        const bytes = yield* this.sourceEffect(agentId, sourcePath);
-        if ((yield* localSync(() => inspectArchive(bytes))).slug !== current.slug)
-          return yield* new LocalSkillFailure({ cause: new Error(sourceText("error.skill.localKeepName")) });
-        yield* this.publishEffect(id, expectedRevision + 1, bytes);
-        return yield* this.get(id, expectedRevision + 1);
-      }),
+      this.sourceEffect(agentId, sourcePath).pipe(
+        Effect.flatMap((bytes) => this.#publishRevision(id, expectedRevision, bytes)),
+      ),
     );
+  }
+
+  /** Saves the next revision of a skill from a bundle that OpenBot wrote. */
+  reviseFromBundle(
+    id: string,
+    expectedRevision: number,
+    bytes: Uint8Array,
+  ): Effect.Effect<MarketplaceSkillDetail, LocalSkillFailure> {
+    return this.serialize(this.#publishRevision(id, expectedRevision, bytes));
+  }
+
+  #publishRevision(
+    id: string,
+    expectedRevision: number,
+    bytes: Uint8Array,
+  ): Effect.Effect<MarketplaceSkillDetail, LocalSkillFailure> {
+    return Effect.gen({ self: this }, function* () {
+      const current = yield* this.get(id);
+      if (current.version !== expectedRevision)
+        return yield* new LocalSkillFailure({
+          cause: new Error("The skill changed. Read its latest revision before revising it."),
+        });
+      if ((yield* localSync(() => inspectArchive(bytes))).slug !== current.slug)
+        return yield* new LocalSkillFailure({ cause: new Error(sourceText("error.skill.localKeepName")) });
+      yield* this.publishEffect(id, expectedRevision + 1, bytes);
+      return yield* this.get(id, expectedRevision + 1);
+    });
   }
 
   /** Removes a revision a failed import published. A skill left with no revision is removed too. */

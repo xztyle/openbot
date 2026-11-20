@@ -41,6 +41,7 @@ import {
 } from "./hosted-update-adapter";
 import { LicenseDesktopService } from "./license-service";
 import { LocalSignInWindows } from "./local-sign-in-window";
+import { localSkillLearner } from "./local-skill-learner";
 import { LocalSkillLibrary } from "./local-skill-library";
 import { localSkillTools } from "./local-skill-tools";
 import { MAC_PERMISSION_URLS } from "./mac-permission-urls";
@@ -1866,6 +1867,16 @@ export async function createApplicationServices({
     channelPerson: (personId) => host.channelPerson(personId),
     channelPeople: () => host.channelPeople(),
     workspaceSettings: () => workspaceSettings.get(),
+    // The skills that a memory review may revise, and where it saves what it learns. Read at review time.
+    reviewSkills: (agentId) =>
+      skills
+        .listInstalledForChatTags(agentId)
+        .pipe(
+          Effect.map((installed) =>
+            installed.map((skill) => ({ skillId: skill.skillId, name: skill.name, description: skill.description })),
+          ),
+        ),
+    skillLearner: () => localSkillLearner(skills),
     // The delete also clears the agent from workflow nodes, so the editors of those workflows load
     // the new graph. `workflowStore` is built later, after the agent service.
     deleteWithRevokedApproval: (agentId, remove) =>

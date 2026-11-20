@@ -39,9 +39,16 @@ export function usesTouchLayout(): boolean {
   return window.matchMedia?.("(hover: none), (pointer: coarse)").matches ?? false;
 }
 
-/** Whether the window is as narrow as a phone, the width where the app takes Slack's phone layout. */
+/**
+ * Where the app takes Slack's phone layout: a window as narrow as a phone, or a touch phone on its
+ * side, which is wider than 720px but too short for the computer's layout. The phone media queries
+ * of the stylesheets spell out the same condition (see `workspace-shell.css`).
+ */
+export const PHONE_LAYOUT_QUERY = "(max-width: 720px), (max-height: 520px) and (pointer: coarse)";
+
+/** Whether the app takes the phone layout now (`PHONE_LAYOUT_QUERY`). */
 export function usesPhoneLayout(): boolean {
-  return window.matchMedia?.("(max-width: 720px)").matches ?? false;
+  return window.matchMedia?.(PHONE_LAYOUT_QUERY).matches ?? false;
 }
 
 /** Constrains `value` to the inclusive range. */

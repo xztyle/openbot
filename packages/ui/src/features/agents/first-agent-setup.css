@@ -437,7 +437,7 @@
 }
 
 /* A phone: the faces scroll in one row instead of wrapping into three. */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .new-agent-identity {
     align-items: flex-start;
   }

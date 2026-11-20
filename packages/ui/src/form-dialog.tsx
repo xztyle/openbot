@@ -5,7 +5,7 @@ import { Button, IconButton } from "./button";
 import { Dialog } from "./complex";
 import { ChevronLeft, TriangleAlert, X } from "./icons";
 import { useText } from "./text";
-import { cx } from "./utils";
+import { cx, PHONE_LAYOUT_QUERY } from "./utils";
 
 export type FormDialogSize = "sm" | "md" | "lg";
 
@@ -55,12 +55,9 @@ export interface FormDialogProps {
   children: JSX.Element;
 }
 
-/** The width under which a form dialog is a sheet: the phone layout of the workspace. */
-const PHONE_QUERY = "(max-width: 720px)";
-
 /** Whether the window is phone width now. The sheet follows a rotation or a resize. */
 function createPhoneWidth(): () => boolean {
-  const query = typeof window === "undefined" ? undefined : window.matchMedia?.(PHONE_QUERY);
+  const query = typeof window === "undefined" ? undefined : window.matchMedia?.(PHONE_LAYOUT_QUERY);
   const [phone, setPhone] = createSignal(query?.matches ?? false);
   if (query) {
     const change = (event: MediaQueryListEvent) => setPhone(event.matches);

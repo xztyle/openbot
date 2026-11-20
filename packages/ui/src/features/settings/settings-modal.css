@@ -685,7 +685,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .settings-modal {
     width: calc(100vw - 24px);
     height: calc(100dvh - 24px);

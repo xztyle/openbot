@@ -32,6 +32,20 @@
 
 /* Layout ---------------------------------------------------------------------------------------- */
 
+/*
+ * The phone layout is the condition `(max-width: 720px), (max-height: 520px) and (pointer: coarse)`:
+ * a narrow window, or a touch phone on its side, which is wider than 720px but has no height for the
+ * computer's layout. Every phone media query spells it out (CSS has no shared media query yet), and
+ * `PHONE_LAYOUT_QUERY` in `@openbot/ui/utils` is the same condition for code. A container query
+ * cannot read the pointer, so the phone on its side sets this flag, and the `ws-layout` queries read
+ * it with `style(--ws-phone-landscape: 1)`. `ui-foundation-check` keeps them in step.
+ */
+@media (max-height: 520px) and (pointer: coarse) {
+  :root {
+    --ws-phone-landscape: 1;
+  }
+}
+
 .ws-layout {
   container: ws-layout / inline-size;
   display: flex;
@@ -102,7 +116,7 @@
 }
 
 /* One pane at a time under 720px. The pane header's back button chooses the pane before it. */
-@container ws-layout (max-width: 720px) {
+@container ws-layout (max-width: 720px) or style(--ws-phone-landscape: 1) {
   .ws-layout-sidebar,
   .ws-layout-panel {
     flex-basis: 100%;

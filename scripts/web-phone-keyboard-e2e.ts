@@ -454,8 +454,16 @@ try {
     await editor(page).tap();
     await typeDraft(page, "Landscape draft");
     await phoneShot(browser, page, phone, "02-dm-keyboard");
-    // A phone on its side is wider than 720px, so it shows the computer's layout, which has no room
-    // over the keyboard. The app takes the visible part; the screenshot shows the result.
+    // A phone on its side is wider than 720px but has no height for the computer's layout, so it
+    // takes the phone layout (`PHONE_LAYOUT_QUERY`): the DM fills the screen, with no sidebar.
+    await step(phone, "landscape: the phone layout, with the header on top and the box on the keyboard", async () => {
+      const sidebar = await page
+        .locator(".ws-layout-sidebar, .web-app-frame > .sidebar")
+        .filter({ visible: true })
+        .count();
+      assert.equal(sidebar, 0, "A sidebar shows beside the DM.");
+      await checkKeyboardLayout(page, phone);
+    });
     await step(phone, "landscape: the app takes the visible part", async () => {
       const view = await visible(page);
       const app = await page.locator(".web-app").boundingBox();

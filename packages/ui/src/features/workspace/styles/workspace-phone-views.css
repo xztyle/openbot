@@ -12,7 +12,7 @@
 /* Type ------------------------------------------------------------------------------------------- */
 
 @media (pointer: coarse) {
-  @container ws-layout (max-width: 720px) {
+  @container ws-layout (max-width: 720px) or style(--ws-phone-landscape: 1) {
     .ws-view {
       --openbot-text-sm: 13px;
       --openbot-text-md: 15px;
@@ -30,7 +30,7 @@
   }
 }
 
-@container ws-layout (max-width: 720px) {
+@container ws-layout (max-width: 720px) or style(--ws-phone-landscape: 1) {
   /* Header: Back, the title and the actions, as the top bar of a pushed screen. ------------------ */
 
   .ws-view > .ws-pane-header {
@@ -323,7 +323,7 @@
 }
 
 /* A narrow screen gives the text the full width; the buttons go under it, at the end. */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .server-connection-notice {
     flex-wrap: wrap;
     gap: var(--openbot-space-2) var(--openbot-space-3);

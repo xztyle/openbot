@@ -801,7 +801,7 @@
   translate: 0 -50%;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   /* A form field keeps the width of its row. */
   .provider-model-trigger:not(.provider-model-trigger-field) {
     max-width: 148px;
@@ -823,7 +823,7 @@
  * buttons. The other controls are in More's sheet. An open side panel keeps its button, which
  * closes it.
  */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .conversation-header-actions > .conversation-header-more {
     display: inline-flex;
     width: var(--openbot-touch-target);

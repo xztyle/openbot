@@ -465,7 +465,7 @@
 }
 
 /* A phone: rows and buttons are at least the touch target. */
-@container ws-layout (max-width: 720px) {
+@container ws-layout (max-width: 720px) or style(--ws-phone-landscape: 1) {
   .ws-search-view-field {
     display: flex;
   }
@@ -515,7 +515,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .ws-browse-open.ui-button,
   .ws-browse-item .ui-button,
   .ws-switcher-item.ui-button {

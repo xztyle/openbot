@@ -176,7 +176,7 @@
  * A phone: the sheet of `ActionSheet` (`.ui-sheet-overlay`, `.ui-sheet-handle`, `ui-sheet-in`) at the
  * full height under the status bar. The header and the footer stay; the body scrolls.
  */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .ui-dialog-content.ui-form-dialog,
   .ui-form-dialog[data-size="sm"],
   .ui-form-dialog[data-size="lg"] {
@@ -338,7 +338,7 @@
  * 16px, hints 14px, controls and rows 44px, a switch a thumb can drag. A computer keeps the dense
  * scale, also in a narrow window, because the query asks for a coarse pointer.
  */
-@media (max-width: 720px) and (pointer: coarse) {
+@media (max-width: 720px) and (pointer: coarse), (max-height: 520px) and (pointer: coarse) {
   :is(
     .settings-page,
     .settings-panel,

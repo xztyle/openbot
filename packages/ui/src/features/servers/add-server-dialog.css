@@ -772,7 +772,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .hosted-plans {
     grid-template-columns: minmax(0, 1fr);
   }

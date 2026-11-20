@@ -127,6 +127,7 @@ import type { SidebarView } from "@openbot/ui/features/sidebar/sidebar-types";
 import { PageRail, type PageRailPage } from "@openbot/ui/features/window/PageRail";
 import type { PhoneMoreRow, PhoneMoreSection } from "@openbot/ui/features/workspace/PhoneScreens";
 import { useText } from "@openbot/ui/text";
+import { PHONE_LAYOUT_QUERY } from "@openbot/ui/utils";
 import { Effect } from "effect";
 import {
   createEffect,
@@ -304,8 +305,6 @@ const CONNECTING_STATUS: AgentStatus = {
  * uses the macOS geometry.
  */
 const WEB_APP_INFO: AppInfo = { name: "OpenBot", version: "web", platform: "darwin", variant: "production" };
-/** Below this width the web shows one pane at a time; see `web-client.css`. */
-const PHONE_QUERY = "(max-width: 720px)";
 /** The account whose queue edit the browser may hold under `QUEUE_EDIT_STORAGE_KEY`. */
 const QUEUE_EDIT_ACCOUNT_KEY = "openbot.web.queue-edit-account";
 
@@ -698,7 +697,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     );
   };
   // A phone shows the sidebar as a full pane, so it is never compact there.
-  const phoneQuery = window.matchMedia?.(PHONE_QUERY);
+  const phoneQuery = window.matchMedia?.(PHONE_LAYOUT_QUERY);
   const [phone, setPhone] = createSignal(phoneQuery?.matches ?? false);
   onSettled(() => {
     const update = (event: MediaQueryListEvent) => setPhone(event.matches);

@@ -17,13 +17,13 @@
 }
 
 /* The narrow window has no card: the panes sit on the frame. */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   :root[data-openbot-window-glass] .app-window > .app-frame-edge {
     background: var(--window-glass-card);
   }
 }
 
-@media (min-width: 721px) {
+@media (min-width: 721px) and (not ((max-height: 520px) and (pointer: coarse))) {
   /* The window paints the frame once. Opaque, these layers repeat its color; translucent, each one
    * would add its tint again, and the top row would show darker than the page rail. */
   :root[data-openbot-window-glass] .app-window > .app-frame-edge,

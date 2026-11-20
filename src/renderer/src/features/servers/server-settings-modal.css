@@ -317,7 +317,7 @@
   margin-top: var(--openbot-space-1);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .server-settings-readonly-name {
     align-items: flex-start;
     flex-direction: column;

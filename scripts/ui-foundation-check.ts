@@ -243,6 +243,16 @@ export function checkUiFoundation(
       ),
       0,
     ],
+    // A touch phone on its side takes the phone layout too (`PHONE_LAYOUT_QUERY`, and the comment in
+    // workspace-shell.css). CSS has no shared media query, so every phone query spells it out.
+    [
+      "phone media queries that leave out a phone on its side",
+      matches(
+        legacyStyles,
+        /@media\s*\(max-width:\s*720px\)(?!(?: and \(pointer: coarse\))?, \(max-height: 520px\) and \(pointer: coarse\)|, \(pointer: coarse\))|@media\s*\(min-width:\s*721px\)(?! and \(not \(\(max-height: 520px\) and \(pointer: coarse\)\)\))|@container\s+ws-layout\s*\(max-width:\s*720px\)(?! or style\(--ws-phone-landscape: 1\))/gu,
+      ),
+      0,
+    ],
     [
       "untokenized transition durations",
       matches(legacyStyles, /transition(?:-duration)?:(?![^;]*var\()(?!\s*(?:none|0\.01ms))[^;]*\b\d+m?s\b[^;]*/gu),

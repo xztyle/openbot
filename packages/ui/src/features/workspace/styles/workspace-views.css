@@ -239,7 +239,7 @@
   margin-left: auto;
 }
 
-@container ws-layout (max-width: 720px) {
+@container ws-layout (max-width: 720px) or style(--ws-phone-landscape: 1) {
   .ws-fleet-list[data-layout="list"] .ws-fleet-card {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -533,13 +533,13 @@
 
 /* A phone: the title keeps the header (the add dialog says what a secret is), and the row actions,
  * which a touch screen always shows, are finger-sized. */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .ws-secrets .ws-pane-header-subtitle {
     display: none;
   }
 }
 
-@media (max-width: 720px) and (pointer: coarse) {
+@media (max-width: 720px) and (pointer: coarse), (max-height: 520px) and (pointer: coarse) {
   .ws-secrets .ws-row-actions .ui-icon-button {
     width: var(--openbot-touch-target);
     height: var(--openbot-touch-target);
@@ -607,7 +607,7 @@
 }
 
 /* A phone keeps the header for the title: the subtitle would cut it. */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .ws-drafts .ws-pane-header-subtitle {
     display: none;
   }

@@ -26,7 +26,7 @@
 }
 
 /* The frame below the edge layout keeps its own shape, so the rail would only take width. */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .app-window > .window-rail {
     display: none;
   }
@@ -47,7 +47,7 @@
   padding-left: var(--openbot-space-3);
 }
 
-@media (min-width: 721px) {
+@media (min-width: 721px) and (not ((max-height: 520px) and (pointer: coarse))) {
   /* The top row holds a short line at the end of the sidebar. */
   .app-window > .app-frame-edge > .sidebar:not(.sidebar-compact) .sidebar-topbar {
     position: relative;
@@ -771,7 +771,7 @@
 }
 
 /* A narrow window stacks the page: the heading and the sections above the panel. */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .settings-page {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);

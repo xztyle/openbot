@@ -738,7 +738,7 @@
 
 /* A narrow window shows the panel as a sheet over the lower part of the chart, as a map app does,
    so the selected card stays in sight above it. */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .ws-org-body {
     position: relative;
   }

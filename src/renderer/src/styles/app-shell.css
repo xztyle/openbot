@@ -933,7 +933,7 @@ textarea {
  * window card in `window.css` draws the lines, the surfaces and the rounded corners. The theme layer at
  * the end of this file also sets the server rail background, so the selector carries the frame class
  * to win. */
-@media (min-width: 721px) {
+@media (min-width: 721px) and (not ((max-height: 520px) and (pointer: coarse))) {
   .app-frame-edge > .server-rail {
     background: var(--openbot-bg-native-sidebar);
   }

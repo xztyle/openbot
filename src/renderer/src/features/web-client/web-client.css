@@ -105,10 +105,6 @@ body {
     max-height: max(48px, calc(var(--web-viewport-height, 100dvh) * 0.3));
   }
 
-  /*
-   * Dialogs, sheets and toasts render outside the app. While the keyboard is open, they also take
-   * the visible part: a sheet sits on the keyboard, and the field of a dialog stays in view.
-   */
   /* An empty box is one line high, and grows with the draft. */
   .web-app :is(.composer-input-label, .composer-editor-root, .composer-editor-surface) {
     min-height: 34px;
@@ -132,6 +128,10 @@ body {
     min-height: 36px;
   }
 
+  /*
+   * Dialogs, sheets and toasts render outside the app. While the keyboard is open, they also take
+   * the visible part: a sheet sits on the keyboard, and the field of a dialog stays in view.
+   */
   html[data-web-keyboard] .ui-dialog-overlay {
     top: var(--web-viewport-top, 0px);
     bottom: auto;
@@ -144,7 +144,22 @@ body {
   }
 }
 
-@media (max-width: 720px) {
+/*
+ * A phone on its side keeps about 180px over the keyboard: room for the header, the box and a line
+ * of the chat. The bars over the box (the queue, the awaited replies, the saved replies) step aside
+ * while the keyboard is open, as Slack's app keeps only the header and the box.
+ */
+@media (max-height: 520px) and (pointer: coarse) {
+  html[data-web-keyboard] .web-app :is(.composer-stack, .saved-replies) {
+    display: none;
+  }
+
+  html[data-web-keyboard] .web-app .conversation-scroll {
+    padding-bottom: 0;
+  }
+}
+
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .web-app-window {
     --web-mobile-navigation-height: 64px;
   }
@@ -299,8 +314,42 @@ body {
   }
 
   /* The workspace has its own back buttons: the pane switch is hidden and gives its room back. */
-  .web-app-frame:has(.web-mobile-navigation[hidden]):not(:has(.web-mobile-navigation[data-keyboard-open])) {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+  .web-app-frame:has(.web-mobile-navigation[hidden]) {
+    padding-bottom: 0;
+  }
+
+  /*
+   * A pushed screen (a conversation, a view, the settings) runs to the bottom edge, as in Slack's
+   * app: a list scrolls under the home indicator and its last row stops clear of it, and the box
+   * and the bars at the bottom keep clear of it themselves. The keyboard covers the indicator.
+   */
+  .web-app-frame[data-web-mobile-pane="conversation"]:has(.web-mobile-navigation[hidden]):not(
+    :has(.web-mobile-navigation[data-keyboard-open])
+  ) {
+    --web-safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .web-app-frame[data-web-mobile-pane="conversation"] :is(.composer-wrap, .ws-channel-bottom) {
+    padding-bottom: calc(var(--openbot-space-2) + var(--web-safe-bottom, 0px));
+  }
+
+  .web-app-frame[data-web-mobile-pane="conversation"] .ws-thread-frame .ws-thread-bottom {
+    padding-bottom: calc(var(--openbot-space-3) + var(--web-safe-bottom, 0px));
+  }
+
+  .web-app-frame[data-web-mobile-pane="conversation"] :is(.ws-view-scroll, .schedule-pane) {
+    padding-bottom: calc(var(--openbot-space-6) + var(--web-safe-bottom, 0px));
+  }
+
+  .web-app-frame[data-web-mobile-pane="conversation"] .tasks-page-scroll {
+    padding-bottom: calc(var(--openbot-space-8) + var(--web-safe-bottom, 0px));
+  }
+
+  .web-app-frame[data-web-mobile-pane="conversation"] :is(.agent-usage-body, .settings-modal-content),
+  .web-app-frame[data-web-mobile-pane="conversation"]
+    .settings-page[data-phone-view="list"]
+    :is(.settings-page-sections, .settings-page-results) {
+    padding-bottom: calc(var(--openbot-space-4) + var(--web-safe-bottom, 0px));
   }
 
   .web-app-window:has(.web-mobile-navigation[hidden]) > .window-rail {

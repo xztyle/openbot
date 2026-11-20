@@ -222,7 +222,7 @@
 }
 
 /* A phone's box takes the width of the screen, as Slack's; the home indicator's inset is under it. */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .ws-channel-bottom {
     padding: 0 var(--openbot-space-2) var(--openbot-space-2);
   }
@@ -511,7 +511,7 @@
 }
 
 /* A computer: the magnifier stands inside the field, as in Slack's switcher and the top bar's search. */
-@media (min-width: 721px) {
+@media (min-width: 721px) and (not ((max-height: 520px) and (pointer: coarse))) {
   .ws-switcher-field {
     position: relative;
   }
@@ -696,7 +696,7 @@
  * A notice over the workspace on a computer (a panel that did not load, a reload hint) is one slim
  * band, as Slack's banners: small text, a tint, and a small button. It was a 60px row of large text.
  */
-@media (min-width: 721px) {
+@media (min-width: 721px) and (not ((max-height: 520px) and (pointer: coarse))) {
   .web-app-frame .server-connection-notice {
     min-height: 36px;
     padding: var(--openbot-space-1) var(--openbot-space-2) var(--openbot-space-1) var(--openbot-space-4);
@@ -726,7 +726,7 @@
  * sidebar and did nothing; the search view's own field doubled the top bar's. A thread or the details
  * keep Back: it returns to the conversation.
  */
-@media (min-width: 721px) {
+@media (min-width: 721px) and (not ((max-height: 520px) and (pointer: coarse))) {
   .web-app-frame .ws-layout-main .ws-phone-only {
     display: none;
   }
@@ -769,7 +769,7 @@
  * A computer: the agent's name keeps its room, as Slack's, and the controls give way (the model
  * name shortens first). The controls are as large as a channel header's buttons, at the same gap.
  */
-@media (min-width: 721px) {
+@media (min-width: 721px) and (not ((max-height: 520px) and (pointer: coarse))) {
   .ws-agent-dm-header .ws-channel-header-identity {
     flex: 0 0 auto;
     max-width: 50%;
@@ -800,7 +800,7 @@
  * A phone shows the model as its provider's mark, so one row holds Back, the agent, the controls and
  * details. The picker names the model when it opens.
  */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .ws-agent-dm-header .ws-channel-header-topic,
   .ws-agent-dm-controls .provider-model-trigger-name,
   .ws-agent-dm-controls .provider-model-trigger-effort {
@@ -813,7 +813,7 @@
  * phone's header holds Back, the agent and the model and More of the chat: the name opens the
  * details, so the details button gives its room to the name.
  */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .ws-agent-dm .ws-phone-only {
     display: inline-flex;
   }
@@ -1015,7 +1015,7 @@
  * On a phone the pill fits the screen: it was wider than a phone in Spanish, so both of its ends went
  * off the screen. The count gives way first and ends in "…"; the pill keeps a finger's height.
  */
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .ws-unread-banner {
     max-width: calc(100% - 2 * var(--openbot-space-3));
   }

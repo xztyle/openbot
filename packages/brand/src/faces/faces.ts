@@ -196,7 +196,7 @@ const BRAND_SPECS: Record<Brand, BrandSpec> = {
       beret: "#E0287F",
       beretDark: "#FF5AAE",
       hardhat: "#FFD21F",
-      brass: "#E0287F",
+      brass: "#1F5FD0",
       gold: "#FFD21F",
       cap: "#1F5FD0",
       pencil: "#FFD21F",
@@ -1351,11 +1351,16 @@ export function agentFaceSVG(opts: FaceOptions): string {
   BR = BRAND_SPECS[brand];
   const hueDeg = (BRAND_HUES[brand].hueOffset + t.hue * 30) % 360;
   const uid = `af${hash32(`${opts.id}|${t.seed}|${style}|${state}|${theme}|${small}|${anim}|${brand}`).toString(36)}`;
-  const c: Ctx = { t, state, theme, anim, small, uid, hue: agentHue(brand, t.hue, theme), hueDeg };
+  // A face is never inverted: in a dark UI it is drawn exactly as in a light one, dark ink on its own
+  // light paper, with the same skin. Only the overlays (badge ring, bubble) follow the UI theme.
+  const c: Ctx = { t, state, theme: "light", anim, small, uid, hue: agentHue(brand, t.hue, "light"), hueDeg };
   let body: string;
   if (style === "flat") body = renderFlat(c);
-  else if (style === "character") body = renderCharacter(c);
-  else body = renderOrganic(style, c);
+  else if (style === "character") {
+    // The character has no tile of its own; on a dark UI it stands on a light paper disc.
+    const disc = theme === "dark" ? `<circle cx="32" cy="34" r="30" fill="${c.hue.tint}"/>` : "";
+    body = disc + renderCharacter(c);
+  } else body = renderOrganic(style, c);
   // overlays outside the clip
   if (state === "waiting" && !small) body += bubble(theme, anim);
   if (state === "success" && !small) body += sparkles(anim, theme);

@@ -182,6 +182,18 @@ export class DrainScheduler {
    */
   readonly #requeuedAtLimit = new Set<string>();
   readonly #settingsHolds = new Map<string, number>();
+  /**
+   * Lanes whose last start found the provider in a turn of its own, by lane key. OpenBot's snapshot
+   * can show no turn then, so without this the drain asked again at once, with no end: each try saved
+   * the queued messages again, and one server wrote 66 GB of chat updates in a day. The next
+   * `scheduleDrain` of the agent, which the end of any of its turns calls, lets the lane try again.
+   */
+  readonly #providerTurnHolds = new Set<string>();
+  /**
+   * The `scheduleDrain` calls of each agent. A start that a call overtook is not held: the call can
+   * be the end of the provider's turn, and no later one would come.
+   */
+  readonly #drainCalls = new Map<string, number>();
   /** The last hold `#reportHold` logged per lane, so a waiting queue logs once per reason. */
   readonly #reportedHolds = new Map<string, string>();
   /**
@@ -290,6 +302,7 @@ export class DrainScheduler {
     const { agentId, taskId } = lane;
     if (this.#settingsHolds.has(agentId)) return "session-settings";
     if (this.#laneTurnActive(lane)) return "active-turn";
+    if (this.#providerTurnHolds.has(laneKey(lane))) return "provider-turn";
     // The provider has one turn of the agent at a time, so each lane waits for the turn of any other.
     if (
       this.#tasks.oneTurnAtATime(agentId) &&
@@ -351,6 +364,9 @@ export class DrainScheduler {
 
   /** `followUsageLimit` is false after a move that failed, so that the drain does not try it again. */
   scheduleDrain(agentId: string, followUsageLimit = true): void {
+    this.#drainCalls.set(agentId, (this.#drainCalls.get(agentId) ?? 0) + 1);
+    for (const key of [...this.#providerTurnHolds])
+      if (laneOf(key).agentId === agentId) this.#providerTurnHolds.delete(key);
     this.#scheduleDrain(agentId, followUsageLimit);
     this.retrySlotWaiters();
     this.#holdTimer.arm();
@@ -441,11 +457,12 @@ export class DrainScheduler {
 
   forgetAgent(agentId: string): void {
     const ofAgent = (key: string) => laneOf(key).agentId === agentId;
-    for (const keys of [this.#drainingLanes, this.#scheduledDrains, this.#slotWaiters])
+    for (const keys of [this.#drainingLanes, this.#scheduledDrains, this.#slotWaiters, this.#providerTurnHolds])
       for (const key of [...keys]) if (ofAgent(key)) keys.delete(key);
     for (const key of [...this.#reportedHolds.keys()]) if (ofAgent(key)) this.#reportedHolds.delete(key);
     for (const key of [...this.#turnModels.keys()]) if (ofAgent(key)) this.#turnModels.delete(key);
     this.#requeuedAtLimit.delete(agentId);
+    this.#drainCalls.delete(agentId);
     this.retrySlotWaiters();
   }
 
@@ -560,6 +577,7 @@ export class DrainScheduler {
     const channelDelivery = this.#channels ? this.#channels.store.assignmentForDelivery(delivery.id) !== null : false;
     const messagingDelivery = this.#messaging?.ownsDelivery(delivery.id) ?? false;
     const taskId = this.#mailbox.taskIdForDelivery(delivery.id);
+    const drainCallsAtStart = this.#drainCalls.get(delivery.recipientAgentId) ?? 0;
     const ownSession = this.#runsInOwnSession(context);
     // The teammate answers that start in this turn too. A channel task, an external message and a
     // routine run in its own session always run alone; a teammate's answer in an external
@@ -918,6 +936,8 @@ export class DrainScheduler {
           // The provider started a turn of its own after the check above. Nothing ran, and `mayDrain`
           // holds the messages until that turn ends.
           if (error instanceof ProviderTurnActiveError) {
+            if ((this.#drainCalls.get(delivery.recipientAgentId) ?? 0) === drainCallsAtStart)
+              this.#providerTurnHolds.add(laneKey({ agentId: delivery.recipientAgentId, taskId }));
             for (const item of batch) yield* this.#mailbox.restoreQueued(item.delivery.id).pipe(toDeliveryStartFailed);
             this.#mailboxSync.emitQueue(delivery.recipientAgentId);
             return;

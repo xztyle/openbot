@@ -126,6 +126,7 @@ export function ConversationHeader(props: ConversationHeaderProps) {
             type="button"
             class="header-panel-toggle"
             aria-label={t("chat.search.label")}
+            title={t("chat.search.label")}
             onClick={() => props.onOpenSearch?.()}
             data-cuelume-tap="open"
           >

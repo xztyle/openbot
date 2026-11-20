@@ -1,8 +1,8 @@
 {
   "id": "/app",
-  "name": "OpenBot",
-  "short_name": "OpenBot",
-  "description": "Chat with your OpenBot agents from this browser.",
+  "name": "Atelier",
+  "short_name": "Atelier",
+  "description": "Chat with your Atelier agents from this browser.",
   "start_url": "/app",
   "scope": "/app",
   "display": "standalone",

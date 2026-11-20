@@ -86,7 +86,7 @@ export function createWebTitleBadge(options: {
   badge: () => WebTitleBadge;
   t: TextValue["t"];
   /**
-   * The place on screen and its space or server, for Slack's tab title: "#general - Market - OpenBot".
+   * The place on screen and its space or server, for Slack's tab title: "#general - Market - Atelier".
    * Null keeps the page's own title.
    */
   place?: (() => { place: string; workspace: string } | null) | undefined;

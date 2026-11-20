@@ -58,7 +58,7 @@ async function showNotification(event) {
   const tag = text(message.tag, 256) || (agentId ? `agent:${agentId}` : "openbot");
   // The host counts the messages of a burst in one more notice, which replaces the first one quietly.
   const update = message.update === true;
-  await self.registration.showNotification(text(message.title, 120) || "OpenBot", {
+  await self.registration.showNotification(text(message.title, 120) || "Atelier", {
     body: text(message.body, 200),
     icon: "/icon-192x192.png",
     tag,

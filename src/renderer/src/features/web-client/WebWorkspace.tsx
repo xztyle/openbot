@@ -2036,7 +2036,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           if (id) void openServerSettings(id, null, "connectors");
         }
       : undefined,
-    serverName: () => workspace.state.host?.name ?? "OpenBot",
+    serverName: () => workspace.state.host?.name ?? "Atelier",
     connectionReady: () => workspace.state.status === "online",
     menu: () => {
       const id = server()?.id;
@@ -3049,7 +3049,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                         channels.hasUnread()
                       }
                       view={layout.sidebarView()}
-                      serverName={workspace.state.host?.name ?? "OpenBot"}
+                      serverName={workspace.state.host?.name ?? "Atelier"}
                       serverUpdate={(() => {
                         const id = server()?.id;
                         const badge = id ? serverUpdateBadge(id) : null;

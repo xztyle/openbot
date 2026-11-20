@@ -13,7 +13,7 @@ import { requestLocale } from "../lib/request-locale";
 import { servingSiteUrl } from "../lib/serving-site-url";
 import { OPENBOT_SECURITY_HEADERS, openBotRootHead } from "../lib/site-metadata";
 
-const NOT_FOUND_TITLE = "Page not found · OpenBot";
+const NOT_FOUND_TITLE = "Page not found · Atelier";
 
 export const Route = createRootRoute({
   beforeLoad: () => ({ siteUrl: servingSiteUrl(), locale: requestLocale() }),

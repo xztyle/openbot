@@ -4,7 +4,7 @@ import { WEB_APPEARANCE_BOOT_SCRIPT } from "../../../../src/renderer/src/feature
 export const Route = createFileRoute("/app")({
   head: () => ({
     meta: [
-      { title: "OpenBot web" },
+      { title: "Atelier" },
       { name: "robots", content: "noindex, nofollow" },
       // The keyboard shrinks the layout on Android, so the composer stays above it instead of under it.
       // The page takes the full screen of a phone; the tab bar and the composer keep clear of the home
@@ -18,7 +18,7 @@ export const Route = createFileRoute("/app")({
       // The app can be added to the home screen. Safari reads these, and not the manifest, for its own mode.
       { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
-      { name: "apple-mobile-web-app-title", content: "OpenBot" },
+      { name: "apple-mobile-web-app-title", content: "Atelier" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black" },
     ],
     links: [

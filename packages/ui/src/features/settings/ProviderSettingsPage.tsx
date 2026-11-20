@@ -655,9 +655,9 @@ function AccountsSection(props: SectionProps) {
   const adding = () => accounts().some((account) => account.state === "connecting" && account.email == null);
   /** The pool of the accounts, while it is on. */
   const pool = () => (props.accountActions?.setPool ? props.option.accountPool : undefined);
-  /** The pool switch shows where the host has a pool and the provider has a second account to use. */
   /** A saved key has no plan limit, so it is not a pool member. */
   const planAccounts = () => accounts().filter((account) => !isApiKeyAccount(account.id));
+  /** The pool switch shows where the host has a pool and the provider has a second account to use. */
   const poolOffered = () => Boolean(props.accountActions?.setPool) && (planAccounts().length > 1 || Boolean(pool()));
   const poolLabelId = `provider-settings-${props.option.id}-pool-label`;
   const setPool = (enabled: boolean, leftOut: readonly string[]) =>

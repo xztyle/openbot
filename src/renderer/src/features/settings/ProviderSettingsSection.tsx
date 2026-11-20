@@ -58,8 +58,8 @@ import { ProviderSignInDialogs } from "../../components/ProviderSignInDialogs";
 import type { ProviderConnectionApi } from "../../components/provider-connection-api";
 import { createCustomProviderHostState } from "../custom-providers/custom-provider-host-state";
 import { savedCustomModel } from "../onboarding/SetupProviderPicker";
-import { createProviderEnvironment, type ProviderEnvironmentSource } from "./provider-environment";
 import { createProviderClaudeContext } from "./provider-claude-context";
+import { createProviderEnvironment, type ProviderEnvironmentSource } from "./provider-environment";
 import { createProviderPromptCache, type ProviderPromptCacheSource } from "./provider-prompt-cache";
 import { createSettingsGeneralStore, type SettingsGeneralStore } from "./stores/general-store";
 

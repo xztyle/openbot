@@ -91,6 +91,12 @@ import { rawDataBytes, sendableCloseCode } from "./ws-raw-data";
 const requireModule = createRequire(import.meta.url);
 const webSockets: typeof Ws = requireModule(join(dirname(requireModule.resolve("ws/package.json")), "index.js"));
 const MAXIMUM_BUFFERED_EVENTS = 2_000;
+/**
+ * The total length of the event frames that wait to be sent to one device. One frame can be about
+ * 1 MB, so the count limit alone let a device that does not take its events, such as a phone in the
+ * background or one on a slow relay, keep about 2 GB in the main process.
+ */
+const MAXIMUM_BUFFERED_EVENT_CHARACTERS = 32 * 1024 * 1024;
 const MAXIMUM_CACHED_RESPONSES = 1_000;
 /** About 16 MB of UTF-16 text. */
 const MAXIMUM_CACHED_RESPONSE_CHARS = 8 * 1024 * 1024;
@@ -145,6 +151,7 @@ export class TeamWebRtcHostPeer {
   #responseChars = 0;
   readonly #responsesInFlight = new Map<string, Fiber.Fiber<string, RemoteWorkflowError>>();
   readonly #events = new Map<number, string>();
+  #eventCharacters = 0;
   #peerCapabilities = new Set<string>();
   #peerId: string | null = null;
   readonly #hostId: string;
@@ -300,6 +307,7 @@ export class TeamWebRtcHostPeer {
     if (connection.sessionId === this.#localSessionId && this.#localSessionToken) return;
     // incoming already cleared the prior session; retain the active authentication gate.
     this.#events.clear();
+    this.#eventCharacters = 0;
     this.#responses.clear();
     this.#responseChars = 0;
     this.#nextEventSequence = 1;
@@ -856,8 +864,15 @@ export class TeamWebRtcHostPeer {
       }
       const sequence = this.#nextEventSequence++;
       // If this removes events that the sender did not send, the sender resets the client.
-      if (this.#events.size >= MAXIMUM_BUFFERED_EVENTS) this.#events.clear();
+      if (
+        this.#events.size >= MAXIMUM_BUFFERED_EVENTS ||
+        this.#eventCharacters + frame.length > MAXIMUM_BUFFERED_EVENT_CHARACTERS
+      ) {
+        this.#events.clear();
+        this.#eventCharacters = 0;
+      }
       this.#events.set(sequence, frame);
+      this.#eventCharacters += frame.length;
       const sessionId = this.#localSessionId;
       if (sessionId && this.#eventSender !== sessionId) {
         this.#eventSender = sessionId;
@@ -910,7 +925,7 @@ export class TeamWebRtcHostPeer {
       return yield* new RemoteWorkflowError({ cause: new Error("The event frame is not client control data.") });
     // Do not send `event-reset` here. The client can acknowledge an old event after the stream
     // already reset it, and a second reset would move it back before the newer events it has.
-    for (const sequence of this.#events.keys()) if (sequence <= frame.throughSequence) this.#events.delete(sequence);
+    // The sender already removed each event that it read, so the acknowledgement frees nothing.
   });
 
   readonly #sendEvents = Effect.fn("TeamHostPeer.sendEvents")(function* (
@@ -927,6 +942,9 @@ export class TeamWebRtcHostPeer {
       if (sequence >= this.#nextEventSequence) break;
       this.#eventsSentThrough = sequence;
       const frame = this.#events.get(sequence);
+      // No path sends an event again, so the buffer keeps only the events that are not sent yet.
+      this.#events.delete(sequence);
+      if (frame !== undefined) this.#eventCharacters -= frame.length;
       // The buffer limit removed this event before it was sent.
       if (frame === undefined) {
         this.#eventResetPending = true;

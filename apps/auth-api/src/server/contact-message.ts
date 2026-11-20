@@ -70,8 +70,8 @@ export const sendContactMessage = Effect.fn("ContactMessage.send")(function* (
     .pipe(
       Effect.mapError((error) =>
         isEmailDeliveryFailure(error)
-          ? emailDeliveryFailure(error.message, "OpenBot could not send the message.")
-          : new AuthServiceError(502, "email_delivery_failed", "OpenBot could not send the message."),
+          ? emailDeliveryFailure(error.message, "Atelier could not send the message.")
+          : new AuthServiceError(502, "email_delivery_failed", "Atelier could not send the message."),
       ),
     );
 });

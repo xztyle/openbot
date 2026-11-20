@@ -70,14 +70,14 @@ const COLOR = {
 
 export function renderSignInCodeEmail(input: SignInCodeEmailInput): RenderedEmail {
   const minutes = `${input.expiresInMinutes} minute${input.expiresInMinutes === 1 ? "" : "s"}`;
-  const subject = "Your OpenBot sign-in code";
-  const preheader = `${input.code} is your OpenBot sign-in code. It expires in ${minutes}.`;
+  const subject = "Your Atelier sign-in code";
+  const preheader = `${input.code} is your Atelier sign-in code. It expires in ${minutes}.`;
   const footer = "If you did not request this code, you can ignore this email. Nobody can sign in without it.";
   return {
     subject,
     preheader,
     text: textBody(
-      ["Use this code to sign in to OpenBot:", "", input.code, "", `This code expires in ${minutes} and works once.`],
+      ["Use this code to sign in to Atelier:", "", input.code, "", `This code expires in ${minutes} and works once.`],
       footer,
     ),
     html: renderLayout({
@@ -85,7 +85,7 @@ export function renderSignInCodeEmail(input: SignInCodeEmailInput): RenderedEmai
       preheader,
       body: [
         heading("Your sign-in code"),
-        paragraph("Enter this code in OpenBot to finish signing in."),
+        paragraph("Enter this code in Atelier to finish signing in."),
         codeBlock(input.code),
         paragraph(`The code expires in ${minutes} and works once.`, { muted: true, last: true }),
       ].join(""),
@@ -97,7 +97,7 @@ export function renderSignInCodeEmail(input: SignInCodeEmailInput): RenderedEmai
 export function renderTeamInviteEmail(input: TeamInviteEmailInput): RenderedEmail {
   const serverName = input.serverName.trim();
   const access = input.role === "admin" ? "Admin" : "Member";
-  const subject = `Join ${serverName} on OpenBot`;
+  const subject = `Join ${serverName} on Atelier`;
   const preheader = `${input.inviterEmail} invited you to join ${serverName}.`;
   const footer = "If you did not expect this invitation, you can ignore this email.";
   return {
@@ -105,7 +105,7 @@ export function renderTeamInviteEmail(input: TeamInviteEmailInput): RenderedEmai
     preheader,
     text: textBody(
       [
-        `${input.inviterEmail} invited you to join ${serverName} on OpenBot.`,
+        `${input.inviterEmail} invited you to join ${serverName} on Atelier.`,
         "",
         `Access: ${access}`,
         "",
@@ -122,7 +122,7 @@ export function renderTeamInviteEmail(input: TeamInviteEmailInput): RenderedEmai
       body: [
         heading(`Join ${escapeHtml(serverName)}`),
         paragraph(
-          `<strong style="color:${COLOR.text};font-weight:600;">${escapeHtml(input.inviterEmail)}</strong> invited you to a team on OpenBot.`,
+          `<strong style="color:${COLOR.text};font-weight:600;">${escapeHtml(input.inviterEmail)}</strong> invited you to a team on Atelier.`,
         ),
         detailRow("Access", access),
         button("Accept invitation", input.inviteUrl),
@@ -176,20 +176,20 @@ export function renderContactMessageEmail(input: ContactMessageEmailInput): Rend
 export function renderWelcomeEmail(input: WelcomeEmailInput): RenderedEmail {
   const serverName = input.serverName.trim();
   const planName = PLAN_NAMES[input.plan];
-  const subject = "Welcome to OpenBot!";
-  const thanks = "Thank you for choosing OpenBot to build and run your AI Coworkers.";
+  const subject = "Welcome to Atelier!";
+  const thanks = "Thank you for choosing Atelier to build and run your AI Coworkers.";
   const reachOut =
     "I just wanted to personally say hello and let you know that if you run into any issues or have any feedback or suggestions - feel free to reach out to me directly by replying to this email.";
   const feedback =
     "Every piece of feedback is incredibly valuable to us, especially as we’re still at an early stage and continuously improving the product.";
-  const footer = "You receive this email because you started an OpenBot subscription.";
+  const footer = "You receive this email because you started an Atelier subscription.";
   return {
     subject,
     preheader: thanks,
     text: textBody(
       [
         "Hi,",
-        "Welcome to OpenBot!",
+        "Welcome to Atelier!",
         thanks,
         "",
         `Plan: ${planName}`,
@@ -209,7 +209,7 @@ export function renderWelcomeEmail(input: WelcomeEmailInput): RenderedEmail {
       title: subject,
       preheader: thanks,
       body: [
-        heading("Welcome to OpenBot!", { gap: 16 }),
+        heading("Welcome to Atelier!", { gap: 16 }),
         paragraph("Hi,", { gap: 16 }),
         paragraph(thanks, { gap: 16 }),
         detailRows([
@@ -233,7 +233,7 @@ function textBody(lines: string[], footer: string): string {
     footer,
     "",
     "-- ",
-    `OpenBot · ${SITE_URL}`,
+    `Atelier · ${SITE_URL}`,
     FOOTER_LINKS.slice(1)
       .map((link) => `${link.label}: ${link.href}`)
       .join(" · "),
@@ -299,7 +299,7 @@ function renderLayout(input: LayoutInput): string {
         <tr>
           <td style="padding:0 4px 20px;">
             <a href="${SITE_URL}" style="text-decoration:none;">
-              OpenBot
+              Atelier
             </a>
           </td>
         </tr>

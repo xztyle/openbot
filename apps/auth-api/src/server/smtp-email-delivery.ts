@@ -428,7 +428,7 @@ function createMimeMessage(from: string, message: PreparedEmailMessage): string 
   const boundary = `openbot-${crypto.randomUUID()}`;
   return dotStuff(
     [
-      `From: OpenBot <${from}>`,
+      `From: Atelier <${from}>`,
       `To: <${message.email}>`,
       ...(message.replyTo ? [`Reply-To: <${message.replyTo}>`] : []),
       `Subject: ${encodeHeaderValue(message.content.subject)}`,

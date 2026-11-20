@@ -197,7 +197,7 @@ export class DiscordAppService {
       return yield* new DiscordAppError(
         409,
         "discord_guild_taken",
-        "Another OpenBot server answers this Discord server. Disconnect it there first.",
+        "Another Atelier server answers this Discord server. Disconnect it there first.",
       );
     }
     return {

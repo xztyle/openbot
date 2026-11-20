@@ -7,7 +7,7 @@ export function mcpOAuthCallbackResponse(): Response {
   const t = createTranslate({ source: en, locale: "en", sourceLocale: "en" });
   const message = t("mcp.remote.returned");
   const prefix = JSON.stringify(MCP_OAUTH_CHANNEL_PREFIX);
-  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>OpenBot</title></head><body><p>${message}</p><script nonce="${nonce}">
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>Atelier</title></head><body><p>${message}</p><script nonce="${nonce}">
     const params = new URL(location.href).searchParams;
     history.replaceState(null, '', location.pathname);
     const state = params.get('state') || '';

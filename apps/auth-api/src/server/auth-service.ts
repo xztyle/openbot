@@ -199,12 +199,12 @@ export class AuthService {
           return yield* new AuthServiceError(
             409,
             "email_delivery_pending",
-            "OpenBot could not confirm delivery. Check again when the countdown ends.",
+            "Atelier could not confirm delivery. Check again when the countdown ends.",
             retryAfterSeconds,
           );
         }
         yield* dependencies.repository.completeEmailChallengeDelivery(challengeHash, "failed", dependencies.now());
-        return yield* emailDeliveryFailure(deliveryError, "OpenBot could not send the sign-in code.");
+        return yield* emailDeliveryFailure(deliveryError, "Atelier could not send the sign-in code.");
       }
       yield* dependencies.repository.completeEmailChallengeDelivery(challengeHash, "sent", dependencies.now());
 
@@ -234,7 +234,7 @@ export class AuthService {
       );
     }
     if (challenge.deliveryState === "failed") {
-      return yield* new AuthServiceError(502, "email_delivery_failed", "OpenBot could not send the sign-in code.");
+      return yield* new AuthServiceError(502, "email_delivery_failed", "Atelier could not send the sign-in code.");
     }
     if (challenge.deliveryState === "pending") {
       const remainingMs = challenge.createdAt + EMAIL_CODE_DELIVERY_BUDGET_MS - now;
@@ -243,7 +243,7 @@ export class AuthService {
         return yield* new AuthServiceError(
           409,
           "email_delivery_pending",
-          "OpenBot is still confirming delivery. Check again when the countdown ends.",
+          "Atelier is still confirming delivery. Check again when the countdown ends.",
           retryAfterSeconds,
         );
       }
@@ -921,7 +921,7 @@ export function emailDeliveryFailure(deliveryError: string, permanentMessage: st
     return new AuthServiceError(
       429,
       "email_delivery_rate_limited",
-      "OpenBot cannot send more email right now. Try again when the countdown ends.",
+      "Atelier cannot send more email right now. Try again when the countdown ends.",
       DELIVERY_RATE_LIMIT_RETRY_SECONDS,
     );
   }

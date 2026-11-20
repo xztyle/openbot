@@ -220,7 +220,7 @@ export class SlackAppService {
       return yield* new SlackAppError(
         409,
         "slack_workspace_taken",
-        "Another OpenBot server answers this Slack workspace. Disconnect it there first.",
+        "Another Atelier server answers this Slack workspace. Disconnect it there first.",
       );
     }
     return {

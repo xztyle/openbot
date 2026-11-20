@@ -1398,7 +1398,13 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   };
   // On a small screen the sidebar pane covers the chat, and so does the usage report. A covered
   // message was not seen.
-  const canMarkRead = () => document.hasFocus() && mobilePane() === "conversation" && !pageCovered() && !routinesView();
+  // A view of the workspace, such as Threads or Activity, covers the agent's chat: the chat is not read.
+  const canMarkRead = () =>
+    document.hasFocus() &&
+    mobilePane() === "conversation" &&
+    !pageCovered() &&
+    !routinesView() &&
+    (!workspaceOn() || workspaceController.route().kind === "agent");
   /** The channel list before the newest one, for the reader it was read for. A reply notifies once. */
   let channelBaseline: { scope: string; channels: ChannelSummary[] } | null = null;
   /** The level the reader set on a conversation's bell; the workspace sets it once it exists. */

@@ -2,6 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { randomUUID, type UUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -14,6 +15,7 @@ import {
   query,
   type SDKUserMessage,
   type SessionMessage,
+  type Settings,
   type SpawnedProcess,
   type SpawnOptions,
   tool,
@@ -91,6 +93,7 @@ import {
   isClaudeTaskNotification,
 } from "./conversation-snapshots";
 import { runCauseEffect } from "./effect-boundary";
+import { skillFolderNames } from "./home-skills";
 import { IdleThreadPool } from "./idle-thread-pool";
 import {
   agentMcpServers,
@@ -150,6 +153,137 @@ const CLAUDE_NATIVE_SCHEDULING = [
   "Skill(schedule)",
   "Skill(loop)",
 ];
+
+/**
+ * Claude tools that duplicate an OpenBot feature or serve only the Claude Code app, which OpenBot does
+ * not show. `ListAgents` finds the user's other Claude sessions past the teammate rules, `Workflow`
+ * runs a background agent fleet, and the rest drive Claude Code's own review panel, design sync, phone
+ * notifications and status line. Their schemas and agent listings cost about 2.5k tokens in each request.
+ */
+const CLAUDE_UNSHOWN_TOOLS = [
+  "ListAgents",
+  "Workflow",
+  "Skill(workflow-authoring)",
+  "ReportFindings",
+  "DesignSync",
+  "PushNotification",
+  "Agent(statusline-setup)",
+  "Agent(claude-code-guide)",
+  "Agent(claude)",
+];
+/** Bundled skills that cannot work in OpenBot or are about Claude Code itself: they are off. */
+const CLAUDE_UNFIT_SKILLS = [
+  "deep-research",
+  "design",
+  "design-sync",
+  "doctor",
+  "fewer-permission-prompts",
+  "keybindings-help",
+  "loop",
+  "plugin-authoring",
+  "schedule",
+  "send-to-project",
+  "update-config",
+  "workflow-authoring",
+];
+/** Bundled coding skills that stay usable, listed by name only: their descriptions cost about 1k tokens. */
+const CLAUDE_NAME_ONLY_SKILLS = [
+  "batch",
+  "claude-api",
+  "code-review",
+  "dataviz",
+  "debug",
+  "init",
+  "run",
+  "run-skill-generator",
+  "security-review",
+  "simplify",
+  "verify",
+];
+/** The keys of the user's Claude settings that sign in, which stay when the user's setup is off. */
+const CLAUDE_SIGN_IN_KEYS = [
+  "apiKeyHelper",
+  "proxyAuthHelper",
+  "awsCredentialExport",
+  "awsAuthRefresh",
+  "gcpAuthRefresh",
+  "forceLoginMethod",
+  "forceLoginOrgUUID",
+] as const;
+
+/**
+ * What the user's own `settings.json` gives a turn when the user's Claude Code setup is off: only its
+ * sign-in keys and its text `env` values, so a gateway, an API key helper or a proxy still works.
+ * Hooks, plugins, the output style and the other keys stay off.
+ */
+export function claudeSignInSettings(userSettings: unknown): Settings {
+  if (!isDynamicRecord(userSettings)) return {};
+  const env = isDynamicRecord(userSettings.env)
+    ? Object.fromEntries(
+        Object.entries(userSettings.env).filter((entry): entry is [string, string] => isString(entry[1])),
+      )
+    : {};
+  const settings: Settings = Object.fromEntries(
+    CLAUDE_SIGN_IN_KEYS.filter((key) => userSettings[key] !== undefined).map((key) => [key, userSettings[key]]),
+  );
+  return Object.keys(env).length > 0 ? { ...settings, env } : settings;
+}
+
+export interface ClaudeAgentQueryConfig {
+  developerInstructions: string;
+  profileGeneration?: boolean;
+  workspaceOnly?: boolean;
+  /** Whether the agent loads the user's own Claude Code setup from `~/.claude`. Off by default. */
+  userSetup?: boolean;
+  /** Skill folder names that the user or the workspace has: an override never hides the user's own skill. */
+  ownSkills?: ReadonlySet<string>;
+  /** Whether the user's settings already choose a commit attribution: then OpenBot leaves it. */
+  ownAttribution?: boolean;
+}
+
+/**
+ * The options of an agent query that set what the model gets before the conversation: the system
+ * prompt, the tools and skills that are off, the setting sources and the flag settings.
+ * `scripts/claude-prompt-tokens-bench.ts` measures a request with these options.
+ */
+export function claudeAgentQueryOptions(config: ClaudeAgentQueryConfig) {
+  const user: NonNullable<Options["settingSources"]> = config.userSetup ? ["user"] : [];
+  const ownSkills = config.ownSkills ?? new Set<string>();
+  const overrides: Array<[string, "off" | "name-only"]> = [
+    ...CLAUDE_UNFIT_SKILLS.map((skill): [string, "off"] => [skill, "off"]),
+    ...CLAUDE_NAME_ONLY_SKILLS.map((skill): [string, "name-only"] => [skill, "name-only"]),
+  ];
+  const settings: Settings = {
+    // OpenBot is not a co-author of the agent's commits; a user's own attribution still applies.
+    ...(config.ownAttribution ? {} : { attribution: { commit: "", pr: "" } }),
+    disableRemoteControl: true,
+    skillOverrides: Object.fromEntries(overrides.filter(([skill]) => !ownSkills.has(skill))),
+  };
+  return {
+    // A call without tools, such as a title, a channel summary, a routing turn or a side question, gets
+    // only OpenBot's instructions: the `claude_code` preset adds about 2.3k tokens of coding rules for
+    // an agent with tools, which such a call never uses.
+    systemPrompt: config.profileGeneration
+      ? config.developerInstructions
+      : { type: "preset", preset: "claude_code", append: config.developerInstructions },
+    ...(config.profileGeneration
+      ? { tools: [] }
+      : { disallowedTools: [...CLAUDE_NATIVE_SCHEDULING, ...CLAUDE_UNSHOWN_TOOLS] }),
+    settingSources: config.profileGeneration ? [] : config.workspaceOnly ? user : [...user, "project", "local"],
+    strictMcpConfig: true,
+    settings: config.profileGeneration ? ({} satisfies Settings) : settings,
+    env: {
+      CLAUDE_AGENT_SDK_CLIENT_APP: "openbot/0.1.0",
+      // Without a terminal, the CLI gives the newer models no TodoWrite or task tools, so the
+      // agent has no plan for OpenBot to show as a task list.
+      CLAUDE_CODE_ENABLE_TODO_TOOLS: "1",
+      // OpenBot memory is the agent's memory, shown and edited in the app. Claude's auto memory kept a
+      // second store under `~/.claude/projects` that the app cannot see, and its rules took about 2k
+      // tokens of each request's system prompt. The files stay on disk.
+      CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+    },
+  } satisfies Options;
+}
 
 interface ClientEvents {
   notification: [notification: AppServerNotification];
@@ -325,6 +459,8 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
    * account: the key then serves the agents that the user did not move to another account.
    */
   readonly #fallbackApiKey: (() => string | null) | undefined;
+  /** Whether agents load the user's own Claude Code setup. Read at each session start. */
+  readonly #userSetup: () => boolean;
   /** Whether the last account read found no claude.ai account and signed in with the key. */
   #onApiKey = false;
   readonly readHistory: ReadProviderHistory;
@@ -374,8 +510,10 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     agentEnvironment?: (inherited?: NodeJS.ProcessEnv) => Readonly<Record<string, string>>,
     historyIndexDirectory?: string,
     fallbackApiKey?: () => string | null,
+    userSetup: () => boolean = () => false,
   ) {
     super();
+    this.#userSetup = userSetup;
     this.#cli = cli;
     this.#sdkLaunch = claudeSdkLaunch(cli.executable);
     this.#createQuery = createQuery;
@@ -853,15 +991,36 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           ).pipe(toProviderClientOperationError),
         );
     const stateDirectory = this.#stateDirectory;
+    const userSetup = !config.profileGeneration && this.#userSetup();
+    const configDirectory =
+      this.#agentEnvironment?.().CLAUDE_CONFIG_DIR ?? process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
+    const userSettings = yield* readClaudeSettingsFile(join(configDirectory, "settings.json"));
+    const projectSettings =
+      config.workspaceOnly || config.profileGeneration
+        ? []
+        : yield* Effect.forEach(
+            [join(config.cwd, ".claude", "settings.json"), join(config.cwd, ".claude", "settings.local.json")],
+            readClaudeSettingsFile,
+          );
+    const ownSettings = [...(userSetup ? [userSettings] : []), ...projectSettings];
+    const ownSkills = new Set([
+      ...(userSetup ? yield* skillFolderNames(join(configDirectory, "skills")) : []),
+      ...(yield* skillFolderNames(join(config.cwd, ".claude", "skills"))),
+    ]);
+    for (const file of ownSettings)
+      if (isDynamicRecord(file.skillOverrides))
+        for (const skill of Object.keys(file.skillOverrides)) ownSkills.add(skill);
+    const queryOptions = claudeAgentQueryOptions({
+      ...config,
+      userSetup,
+      ownSkills,
+      ownAttribution: ownSettings.some((file) => "attribution" in file || "includeCoAuthoredBy" in file),
+    });
     const skillPlugin =
       config.workspaceOnly && stateDirectory ? yield* claudeWorkspaceSkillPlugin(stateDirectory, config.cwd) : null;
     const homeSkillPlugin =
-      stateDirectory && !config.profileGeneration
-        ? yield* claudeHomeSkillPlugin(
-            stateDirectory,
-            this.#agentEnvironment?.().CLAUDE_CONFIG_DIR ?? process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"),
-            config.cwd,
-          ).pipe(
+      stateDirectory && userSetup
+        ? yield* claudeHomeSkillPlugin(stateDirectory, configDirectory, config.cwd).pipe(
             // The home skills are an addition: a state folder that cannot hold the links must not stop the session.
             Effect.catch((error) =>
               Effect.sync(() => {
@@ -882,6 +1041,34 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     if (handoff) this.#reportMcpDrops?.(this.provider, handoff.dropped);
     const mcpServers = handoff ? { ...handoff.servers, ...this.#createOpenBotServers(threadId) } : {};
     const nodeOptions = this.#agentEnvironment?.().NODE_OPTIONS;
+    // The SDK deletes NODE_OPTIONS from the environment of the CLI. On a server the agent environment
+    // has the CPU limit module there (`agentProcessEnvironment`), so it goes into the flag settings,
+    // whose `env` the CLI gives to the Bash tool and its hooks.
+    const signInSettings = userSetup || config.profileGeneration ? {} : claudeSignInSettings(userSettings);
+    const flagSettings: Settings = {
+      ...signInSettings,
+      ...queryOptions.settings,
+      ...(signInSettings.env || nodeOptions
+        ? { env: { ...signInSettings.env, ...(nodeOptions ? { NODE_OPTIONS: nodeOptions } : {}) } }
+        : {}),
+    };
+    // The sign-in settings can hold keys, such as ANTHROPIC_AUTH_TOKEN: an inline `--settings` value
+    // would show them in `ps`, so they go in a 0600 file of the state folder.
+    const settings =
+      Object.keys(signInSettings).length > 0 && stateDirectory
+        ? yield* writeClaudeFlagSettings(stateDirectory, threadId, flagSettings).pipe(
+            Effect.catch((error) =>
+              Effect.sync(() => {
+                queryLogger.warn("Claude starts without the sign-in settings of its settings file.", {
+                  error: error.cause,
+                });
+                return { ...queryOptions.settings, ...(nodeOptions ? { env: { NODE_OPTIONS: nodeOptions } } : {}) };
+              }),
+            ),
+          )
+        : Object.keys(signInSettings).length > 0
+          ? { ...queryOptions.settings, ...(nodeOptions ? { env: { NODE_OPTIONS: nodeOptions } } : {}) }
+          : flagSettings;
     const taskLimit = readTaskLimit();
     const claudeQuery = yield* providerSync(() =>
       this.#createQuery({
@@ -892,11 +1079,8 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           ...(config.model ? { model: this.#sdkModel(config.model) } : {}),
           ...(appliedEffort ? { effort: appliedEffort } : {}),
           ...(resume ? { resume: threadId } : { sessionId: threadId }),
-          systemPrompt: {
-            type: "preset",
-            preset: "claude_code",
-            append: config.developerInstructions,
-          },
+          ...queryOptions,
+          settings,
           // The developer instructions carry the profile and the memories, and `thread/resume` above
           // restarts the query when they change. A recorded prompt would be sent instead of them on
           // every later request and resume, so the agent kept an edited profile's old text. The CLI
@@ -905,12 +1089,6 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           ...(claudeTakesPromptSnapshotFlag(this.#cli.version)
             ? { extraArgs: { "system-prompt-snapshot": "off" } }
             : {}),
-          ...(config.profileGeneration ? { tools: [] } : { disallowedTools: CLAUDE_NATIVE_SCHEDULING }),
-          settingSources: config.profileGeneration
-            ? []
-            : config.workspaceOnly
-              ? ["user"]
-              : ["user", "project", "local"],
           // The MCP panel is the only door. Without this, Claude merges project `.mcp.json`, user
           // settings, plugin and agent-frontmatter servers into the record above, so two computers
           // with the same OpenBot settings give their agents different tools and "which servers does
@@ -923,10 +1101,6 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           persistSession: config.persistSession,
           additionalDirectories: config.additionalDirectories,
           canUseTool,
-          // The SDK deletes NODE_OPTIONS from the environment of the CLI. On a server the agent
-          // environment has the CPU limit module there (`agentProcessEnvironment`), so it goes into
-          // the flag settings, whose `env` the CLI gives to the Bash tool and its hooks.
-          ...(nodeOptions ? { settings: { env: { NODE_OPTIONS: nodeOptions } } } : {}),
           ...(config.workspaceOnly
             ? {
                 sandbox: claudeWorkspaceSandbox(config.additionalDirectories),
@@ -942,10 +1116,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
             // tools when Finder starts OpenBot. An `env.PATH` in the Claude settings still wins.
             ...(launchPath ? { PATH: launchPath } : {}),
             ...this.#environment(this.#onApiKey),
-            CLAUDE_AGENT_SDK_CLIENT_APP: "openbot/0.1.0",
-            // Without a terminal, the CLI gives the newer models no TodoWrite or task tools, so the
-            // agent has no plan for OpenBot to show as a task list.
-            CLAUDE_CODE_ENABLE_TODO_TOOLS: "1",
+            ...queryOptions.env,
           },
         },
       }),
@@ -1874,16 +2045,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     const call = (namespace: string, name: string, args: unknown) =>
       runCauseEffect(this.#callDynamicTool(threadId, namespace, name, args));
     return {
-      openbot: createSdkMcpServer({
-        name: "openbot",
-        version: "0.1.0",
-        // Claude uses the SDK's AskUserQuestion permission flow.
-        tools: VISIBLE_TOOL_DEFINITIONS.filter((definition) => definition.name !== "ask_user").map((definition) =>
-          tool(definition.name, definition.description, definition.shape, (args) =>
-            call("openbot", definition.name, args),
-          ),
-        ),
-      }),
+      openbot: claudeOpenBotServer((name, args) => call("openbot", name, args)),
     };
   }
 
@@ -2022,6 +2184,42 @@ const NPM_WRAPPER_TARGET = /"%dp0%\\([^"%]+\.(?:exe|js))"\s+%\*/i;
  * `cmd.exe` limits the length or the quoting of the arguments. Another wrapper starts through
  * `cmd.exe`, as `cliSpawnTarget` says.
  */
+/** A Claude settings file as a record; a missing or broken file reads as empty. */
+const readClaudeSettingsFile = Effect.fn("ClaudeAgentClient.readSettingsFile")(function* (path: string) {
+  const text = yield* Effect.tryPromise(() => readFile(path, "utf8")).pipe(Effect.orElseSucceed(() => ""));
+  try {
+    const parsed = text ? JSON.parse(text) : {};
+    return isDynamicRecord(parsed) ? parsed : {};
+  } catch {
+    queryLogger.warn("OpenBot reads no values from a Claude settings file: the file is not valid JSON.", { path });
+    return {};
+  }
+});
+
+/** One file for each thread, rewritten at each start, readable by this user only. */
+const writeClaudeFlagSettings = Effect.fn("ClaudeAgentClient.writeFlagSettings")(function* (
+  stateDirectory: string,
+  threadId: string,
+  settings: Settings,
+) {
+  const directory = join(stateDirectory, "claude-settings");
+  const file = join(directory, `${threadId}.json`);
+  yield* providerCall(() => mkdir(directory, { recursive: true, mode: 0o700 }));
+  yield* providerCall(() => writeFile(file, JSON.stringify(settings), { mode: 0o600 }));
+  return file;
+});
+
+/** OpenBot's in-process MCP server for Claude. Claude uses the SDK's AskUserQuestion permission flow. */
+export function claudeOpenBotServer(call: (name: string, args: unknown) => Promise<CallToolResult>) {
+  return createSdkMcpServer({
+    name: "openbot",
+    version: "0.1.0",
+    tools: VISIBLE_TOOL_DEFINITIONS.filter((definition) => definition.name !== "ask_user").map((definition) =>
+      tool(definition.name, definition.description, definition.shape, (args) => call(definition.name, args)),
+    ),
+  });
+}
+
 function claudeSdkLaunch(executable: string): ClaudeSdkLaunch {
   if (!cliSpawnTarget(executable, []).windowsVerbatimArguments) return { pathToClaudeCodeExecutable: executable };
   const target = NPM_WRAPPER_TARGET.exec(readWrapper(executable))?.[1];

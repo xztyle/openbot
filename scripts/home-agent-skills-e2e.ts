@@ -37,6 +37,7 @@ interface Report {
   passed: boolean;
   checks: {
     claudePlugin?: { plugin: string; linked: string[] };
+    claudeWithoutSetup?: { settingSources: string };
     claudeCli?: { version: string; skills: string[] } | "skipped: no claude on PATH";
     instructions?: string;
     tag?: string;
@@ -47,6 +48,8 @@ const report: Report = { passed: false, checks: {} };
 const realHome = process.env.OPENBOT_REAL_HOME;
 const root = process.env[ROOT_VARIABLE] ?? "";
 let client: ClaudeAgentClient | null = null;
+/** Read through a function: TypeScript keeps `client` narrowed to `null` past the closures that set it. */
+const openClient = (): ClaudeAgentClient | null => client;
 
 async function writeSkill(directory: string, name: string, description: string): Promise<void> {
   await mkdir(directory, { recursive: true });
@@ -81,40 +84,70 @@ try {
   const workspace = join(root, "workspace");
   await mkdir(workspace);
   const state = join(root, "state");
-  client = new ClaudeAgentClient(
-    { executable, version: "2.1.310", source: "system" },
-    undefined,
-    undefined,
-    30_000,
-    () => [],
-    undefined,
-    undefined,
-    undefined,
-    state,
-    () => ({}),
+  const sessionArguments = async (userSetup: boolean) => {
+    await rm(recorded, { force: true });
+    client = new ClaudeAgentClient(
+      { executable, version: "2.1.310", source: "system" },
+      undefined,
+      undefined,
+      30_000,
+      () => [],
+      undefined,
+      undefined,
+      undefined,
+      state,
+      () => ({}),
+      undefined,
+      undefined,
+      () => userSetup,
+    );
+    client.start();
+    await runCauseEffect(client.request("thread/start", { cwd: workspace, persistSession: false }, (value) => value));
+    const text = await new Promise<string>((done, fail) => {
+      let expired = false;
+      const deadline = setTimeout(() => {
+        expired = true;
+        fail(new Error("The Claude process did not start."));
+      }, 10_000);
+      const poll = () =>
+        readFile(recorded, "utf8").then(
+          (value) => {
+            clearTimeout(deadline);
+            done(value);
+          },
+          () => {
+            if (!expired) setTimeout(poll, 50);
+          },
+        );
+      poll();
+    });
+    await runCauseEffect(client.stop());
+    client = null;
+    return text.split("\n");
+  };
+  const flagValue = (argv: string[], flag: string) =>
+    argv.find((value) => value.startsWith(`${flag}=`))?.slice(flag.length + 1) ?? argv[argv.indexOf(flag) + 1];
+
+  // With "Use my Claude Code setup" off, the default, the session loads neither the user settings nor
+  // the home skills: only the workspace's own files.
+  const withoutSetup = await sessionArguments(false);
+  assert.ok(
+    !withoutSetup.some((value) => value.startsWith("--plugin-dir")),
+    "Without the user's setup, the session gets no home skills.",
   );
-  client.start();
-  await runCauseEffect(client.request("thread/start", { cwd: workspace, persistSession: false }, (value) => value));
-  const argumentsText = await new Promise<string>((done, fail) => {
-    let expired = false;
-    const deadline = setTimeout(() => {
-      expired = true;
-      fail(new Error("The Claude process did not start."));
-    }, 10_000);
-    const poll = () =>
-      readFile(recorded, "utf8").then(
-        (text) => {
-          clearTimeout(deadline);
-          done(text);
-        },
-        () => {
-          if (!expired) setTimeout(poll, 50);
-        },
-      );
-    poll();
-  });
+  assert.equal(flagValue(withoutSetup, "--setting-sources"), "project,local");
+  report.checks.claudeWithoutSetup = { settingSources: flagValue(withoutSetup, "--setting-sources") ?? "" };
+
+  const argumentsText = (await sessionArguments(true)).join("\n");
   const argv = argumentsText.split("\n");
-  const pluginDirectories = argv.flatMap((value, index) => (value === "--plugin-dir" ? [argv[index + 1] ?? ""] : []));
+  // The SDK writes the flag as `--plugin-dir=<path>`; older versions wrote the path as the next argument.
+  const pluginDirectories = argv.flatMap((value, index) =>
+    value === "--plugin-dir"
+      ? [argv[index + 1] ?? ""]
+      : value.startsWith("--plugin-dir=")
+        ? [value.slice("--plugin-dir=".length)]
+        : [],
+  );
   assert.equal(pluginDirectories.length, 1, "A Full access Claude session gets one plugin: the home skills.");
   const plugin = pluginDirectories[0] ?? "";
   const manifest = JSON.parse(await readFile(join(plugin, ".claude-plugin", "plugin.json"), "utf8"));
@@ -201,7 +234,8 @@ try {
 } catch (error) {
   report.error = error instanceof Error ? (error.stack ?? error.message) : String(error);
 } finally {
-  if (client) await runCauseEffect(client.stop()).catch(() => undefined);
+  const open = openClient();
+  if (open) await runCauseEffect(open.stop()).catch(() => undefined);
   await mkdir(OUT, { recursive: true });
   await writeFile(join(OUT, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
 }

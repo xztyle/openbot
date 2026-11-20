@@ -539,6 +539,19 @@
   flex-direction: column;
 }
 
+/* On a touch screen the card opens in a sheet: it takes the sheet's width, its banner rounded. */
+.ws-profile-sheet .ws-profile-card {
+  flex: none;
+}
+
+.ws-profile-sheet .ws-profile-card-banner {
+  border-radius: var(--openbot-radius-lg);
+}
+
+.ws-profile-sheet .ws-profile-card-body {
+  font-size: var(--openbot-text-lg);
+}
+
 .ws-profile-card-banner {
   display: flex;
   align-items: flex-end;

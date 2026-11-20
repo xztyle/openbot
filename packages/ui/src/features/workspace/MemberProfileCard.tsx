@@ -1,10 +1,10 @@
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 import { Button } from "../../button";
-import { Popover } from "../../complex";
+import { Dialog, Popover } from "../../complex";
 import { Cpu, Gauge, Globe2, MessageSquare, Server, Settings, Terminal } from "../../icons";
 import { type TextValue, useText } from "../../text";
-import { cx } from "../../utils";
+import { cx, usesTouchLayout } from "../../utils";
 import { AiBadge, MemberAvatar, presenceLabelKey } from "./WorkspaceAvatar";
 import type { AgentComputerPart, AgentWorkStatus, WorkspaceMember } from "./workspace-types";
 
@@ -181,10 +181,44 @@ export interface MemberProfilePopoverProps {
   class?: string;
 }
 
-/** Makes an avatar or a name open a profile card. */
+/**
+ * Makes an avatar or a name open a profile card. A touch screen opens it in a sheet from the bottom
+ * edge, as Slack's app does: a popover beside the avatar went off the right edge of a phone.
+ */
 export function MemberProfilePopover(props: MemberProfilePopoverProps): JSX.Element {
+  const touch = usesTouchLayout();
   return (
     <Show when={props.card} fallback={<span class={cx("ws-profile-trigger", props.class)}>{props.children}</span>}>
+      <Show when={!touch} fallback={<ProfileSheet {...props} />}>
+        <ProfilePopover {...props} />
+      </Show>
+    </Show>
+  );
+}
+
+/** The card in a sheet from the bottom edge, the form of `ActionSheet` with the card as its content. */
+function ProfileSheet(props: MemberProfilePopoverProps): JSX.Element {
+  return (
+    <Dialog.Root>
+      <Dialog.Trigger class={cx("ws-profile-trigger", props.class)} aria-label={props.label}>
+        {props.children}
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay class="ui-sheet-overlay">
+          <Dialog.Content class="ui-sheet ws-profile-sheet">
+            <span class="ui-sheet-handle" aria-hidden="true" />
+            <Dialog.Title class="sr-only">{props.label}</Dialog.Title>
+            {props.card?.()}
+          </Dialog.Content>
+        </Dialog.Overlay>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function ProfilePopover(props: MemberProfilePopoverProps): JSX.Element {
+  return (
+    <Show when={props.card}>
       <Popover.Root placement="right-start" gutter={8}>
         <Popover.Trigger class={cx("ws-profile-trigger", props.class)} aria-label={props.label}>
           {props.children}

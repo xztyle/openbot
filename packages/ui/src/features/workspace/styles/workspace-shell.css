@@ -3,6 +3,7 @@
 .ws-agent-dm,
 .ui-form-dialog,
 .ws-profile-popover,
+.ws-profile-sheet,
 .ws-quick-reactions {
   --ws-row-height: var(--openbot-control-sm);
   --ws-hover: var(--openbot-hover);

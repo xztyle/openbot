@@ -68,14 +68,14 @@ const VISUAL_PAGE_RULES = [
   "The page runs in a sandbox: it cannot use cookies, storage or pop-up windows. A click on an http(s) link opens the link in the user's browser.",
   "The frame has no border and sits on the chat background, as wide as the reply column (about 360px on phones). Leave html and body with no background, use a fluid width and no outer card or banner title: the page is part of your reply.",
   "Give charts fixed pixel heights. Let the content set the page height; do not use 100vh or height:100% on html or body. The frame cuts what is outside the page box, so highlight a box with its border, not an outline or an outer shadow.",
-  "OpenBot sets these CSS variables on :root from the app theme, which is dark on the desktop: --background (transparent), --foreground, --muted-foreground, --muted, --card, --card-foreground, --border, --accent, --destructive, --success, --chart-1 to --chart-6, --radius, --font-sans, --font-mono. The base style sets the body font and color from them.",
+  "Atelier sets these CSS variables on :root from the app theme, which is dark on the desktop: --background (transparent), --foreground, --muted-foreground, --muted, --card, --card-foreground, --border, --accent, --destructive, --success, --chart-1 to --chart-6, --radius, --font-sans, --font-mono. The base style sets the body font and color from them.",
 ].join(" ");
 
 /** What an `html_render` page can ask of the app. The names match `window.openbotPage` in the frame bootstrap. */
 const VISUAL_PAGE_ACTIONS = [
-  "For a choice, a form or a game, call openbotPage.sendMessage(text) from a click: OpenBot puts the text in the user's message box, and the user sends it.",
+  "For a choice, a form or a game, call openbotPage.sendMessage(text) from a click: Atelier puts the text in the user's message box, and the user sends it.",
   `openbotPage.setContext(text) from a click keeps the page state as a quote in the user's message box, so you read it with the next message; up to ${CHAT_VISUAL_CONTEXT_LIMIT} characters, and empty text removes it.`,
-  "OpenBot gives each page a full-screen button and opens a clicked image large, so do not build them. The mobile app runs page scripts but has no openbotPage, so check that window.openbotPage exists before you call it.",
+  "Atelier gives each page a full-screen button and opens a clicked image large, so do not build them. The mobile app runs page scripts but has no openbotPage, so check that window.openbotPage exists before you call it.",
 ].join(" ");
 
 export const htmlRenderToolSchema = z.object({
@@ -195,7 +195,7 @@ const privateQuestionSchema = z
   .boolean()
   .optional()
   .describe(
-    "Only for work of a team channel: true keeps the question in your own chat with the person, for something private to them. Otherwise OpenBot posts it in the team channel and you do not wait for the answer.",
+    "Only for work of a team channel: true keeps the question in your own chat with the person, for something private to them. Otherwise Atelier posts it in the team channel and you do not wait for the answer.",
   );
 
 export const logDecisionToolSchema = z.strictObject({
@@ -206,7 +206,7 @@ export const logDecisionToolSchema = z.strictObject({
 
 export const askUiToolSchema = z.object({
   private: privateQuestionSchema,
-  blockId: uiBlockIdSchema.optional().describe("Your id for this block. OpenBot makes one when you omit it."),
+  blockId: uiBlockIdSchema.optional().describe("Your id for this block. Atelier makes one when you omit it."),
   block: z.discriminatedUnion("type", [
     z.strictObject({
       type: z.literal("confirm"),
@@ -312,7 +312,7 @@ export const saveApiKeyToolSchema = z.strictObject({
     .min(1)
     .max(4096)
     .describe(
-      "The absolute path of a file in your workspace or the system temp folder that holds only the key, such as the output of a command that created it. OpenBot moves it into the key store and deletes this file.",
+      "The absolute path of a file in your workspace or the system temp folder that holds only the key, such as the output of a command that created it. Atelier moves it into the key store and deletes this file.",
     ),
   shared: sharedApiKeySchema.optional(),
 });
@@ -331,7 +331,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "list_sites",
     description:
-      "List the static sites of this OpenBot server, with its site limit and the slots in use. Use this before retrying a hosting mutation.",
+      "List the static sites of this Atelier server, with its site limit and the slots in use. Use this before retrying a hosting mutation.",
     shape: {},
   },
   {
@@ -365,7 +365,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "attach_files_to_response",
     description:
-      "Attach existing local files to the current response for the user. Use this after creating screenshots, charts, diagrams, reports, ZIP archives, or other files that the user should receive. OpenBot copies each file and shows image previews in the conversation.",
+      "Attach existing local files to the current response for the user. Use this after creating screenshots, charts, diagrams, reports, ZIP archives, or other files that the user should receive. Atelier copies each file and shows image previews in the conversation.",
     shape: { paths: z.array(z.string().min(1).max(INPUT_LIMITS.path)).min(1).max(INPUT_LIMITS.attachments) },
   },
   {
@@ -375,7 +375,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   },
   {
     name: "html_render",
-    description: `Show a finished HTML page (chart, table, diagram, collage, mockup) in this conversation, above your final text reply; call it before you write that reply. The user already sees the page, so the reply must not announce it or restate it: add only what the page does not say. In a channel, each member who reads the channel sees it. OpenBot fits the frame to the page height. A height lower than the page caps the frame, and the rest scrolls in it. ${VISUAL_PAGE_RULES} ${VISUAL_PAGE_ACTIONS}`,
+    description: `Show a finished HTML page (chart, table, diagram, collage, mockup) in this conversation, above your final text reply; call it before you write that reply. The user already sees the page, so the reply must not announce it or restate it: add only what the page does not say. In a channel, each member who reads the channel sees it. Atelier fits the frame to the page height. A height lower than the page caps the frame, and the rest scrolls in it. ${VISUAL_PAGE_RULES} ${VISUAL_PAGE_ACTIONS}`,
     shape: htmlRenderToolSchema.shape,
   },
   {
@@ -420,7 +420,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "list_agents",
     description:
-      "List local OpenBot agents with their name, title, description, background (true for a teammate hidden from the user's lists), reportsTo (the id of the agent's manager in the org chart, or null at the top level), and progress: status (working, queued, or ready), queuedMessages, turnStartedAt while working, lastActivityAt, and openWaits when it has open waits. Call it to find the teammate for work outside your remit: match the work to titles and descriptions. OpenBot does not track which files an agent changed.",
+      "List local Atelier agents with their name, title, description, background (true for a teammate hidden from the user's lists), reportsTo (the id of the agent's manager in the org chart, or null at the top level), and progress: status (working, queued, or ready), queuedMessages, turnStartedAt while working, lastActivityAt, and openWaits when it has open waits. Call it to find the teammate for work outside your remit: match the work to titles and descriptions. Atelier does not track which files an agent changed.",
     shape: {},
   },
   {
@@ -438,25 +438,25 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "read_agent",
     description:
-      "Read the setup of one local OpenBot agent, or your own when you omit agentId: profile, provider, model, reasoning effort, account, backup models, the model it returns to after a usage limit or a provider error, access, Computer Use, notifications, auto-approve, installed skills, routines, and the MCP servers it gets. Read-only. Call it before you change another agent.",
+      "Read the setup of one local Atelier agent, or your own when you omit agentId: profile, provider, model, reasoning effort, account, backup models, the model it returns to after a usage limit or a provider error, access, Computer Use, notifications, auto-approve, installed skills, routines, and the MCP servers it gets. Read-only. Call it before you change another agent.",
     shape: readAgentToolSchema.shape,
   },
   {
     name: "create_agent",
     description:
-      "Create a persistent local OpenBot agent when the user asks for a new teammate. Choose its profile from the user's request and supply its first task. The new agent gets your provider, model, and reasoning effort. Set provider, model, or reasoningEffort only when the user asks for different ones; call list_models first. Use update_profile for an existing agent. After it exists, add skills with install_local_skill and routines with create_routine as needed. A new agent gets your own access and Computer Use limits. Set background to true for a helper the user does not talk to directly.",
+      "Create a persistent local Atelier agent when the user asks for a new teammate. Choose its profile from the user's request and supply its first task. The new agent gets your provider, model, and reasoning effort. Set provider, model, or reasoningEffort only when the user asks for different ones; call list_models first. Use update_profile for an existing agent. After it exists, add skills with install_local_skill and routines with create_routine as needed. A new agent gets your own access and Computer Use limits. Set background to true for a helper the user does not talk to directly.",
     shape: createAgentToolSchema.shape,
   },
   {
     name: "update_profile",
     description:
-      "Update a local OpenBot agent’s name, title, instructions, avatar, provider, model, reasoning effort, account, backup models, access, Computer Use, notifications, background, or manager in the org chart (reportsToAgentId) from the user’s request. You can restrict access to workspace and turn Computer Use off; only the user can widen them again. For an uploaded or local image, use avatarPath. Prepare a PNG, JPEG, or WebP copy up to 512 KB with your available tools if needed. Call list_models before you change a model, an account, or the backup models. A new model applies from the agent's next turn. A provider or account change fails while the agent has a turn or queued messages; try again when it is ready. backupModels replaces the whole list. To give several agents the same settings, use update_agents.",
+      "Update a local Atelier agent’s name, title, instructions, avatar, provider, model, reasoning effort, account, backup models, access, Computer Use, notifications, background, or manager in the org chart (reportsToAgentId) from the user’s request. You can restrict access to workspace and turn Computer Use off; only the user can widen them again. For an uploaded or local image, use avatarPath. Prepare a PNG, JPEG, or WebP copy up to 512 KB with your available tools if needed. Call list_models before you change a model, an account, or the backup models. A new model applies from the agent's next turn. A provider or account change fails while the agent has a turn or queued messages; try again when it is ready. backupModels replaces the whole list. To give several agents the same settings, use update_agents.",
     shape: updateProfileToolSchema.shape,
   },
   {
     name: "update_agents",
     description:
-      "Give several local OpenBot agents the same provider, model, reasoning effort, access, Computer Use, or notifications setting in one call, from the user's request. Each agent gets the checks of update_profile and its own change, one after the other. A failure for one agent does not stop the others and does not undo the earlier changes. The result has updated and failed counts and, for each agent id, ok with its new settings or the error. A provider or model that list_models does not list fails the whole call. Tell the user which agents failed and why. You can restrict access to workspace and turn Computer Use off; only the user can widen them again. Call list_models before you change a model.",
+      "Give several local Atelier agents the same provider, model, reasoning effort, access, Computer Use, or notifications setting in one call, from the user's request. Each agent gets the checks of update_profile and its own change, one after the other. A failure for one agent does not stop the others and does not undo the earlier changes. The result has updated and failed counts and, for each agent id, ok with its new settings or the error. A provider or model that list_models does not list fails the whole call. Tell the user which agents failed and why. You can restrict access to workspace and turn Computer Use off; only the user can widen them again. Call list_models before you change a model.",
     shape: updateAgentsToolSchema.shape,
   },
   {
@@ -500,7 +500,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
         .min(1)
         .max(INPUT_LIMITS.routineInstruction)
         .describe(
-          `What to do with each request. OpenBot adds the request body to the run as untrusted data. ${ROUTINE_INSTRUCTION_RULE}`,
+          `What to do with each request. Atelier adds the request body to the run as untrusted data. ${ROUTINE_INSTRUCTION_RULE}`,
         ),
       eventType: webhookEventTypeZodSchema.optional(),
       filters: webhookFiltersZodSchema.optional(),
@@ -560,19 +560,19 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: ROUTINE_NO_UPDATE_TOOL,
     description:
-      "Use only in a scheduled, script or webhook routine run, when the routine task gives nothing to report. OpenBot then collapses your text answers of this run into the run in the chat and sends no notification; the run history still shows the run. Do not call it when you report anything. A requested reminder or message is a report. Write it in your final answer. Do not call this tool for it unless the notification conditions of the task say to send nothing. In a manual Test run, the user sees your answer.",
+      "Use only in a scheduled, script or webhook routine run, when the routine task gives nothing to report. Atelier then collapses your text answers of this run into the run in the chat and sends no notification; the run history still shows the run. Do not call it when you report anything. A requested reminder or message is a report. Write it in your final answer. Do not call this tool for it unless the notification conditions of the task say to send nothing. In a manual Test run, the user sees your answer.",
     shape: {},
   },
   {
     name: ROUTINE_REPORT_FAILURE_TOOL,
     description:
-      "Use only in a routine run, when the routine task could not be done: for example a server, file or service it needs is not available. OpenBot then ends the run as failed with your reason, and the run history shows it. Still give your answer as usual. Do not call it when the task was done, also when its result is bad news.",
+      "Use only in a routine run, when the routine task could not be done: for example a server, file or service it needs is not available. Atelier then ends the run as failed with your reason, and the run history shows it. Still give your answer as usual. Do not call it when the task was done, also when its result is bad news.",
     shape: routineReportFailureToolSchema.shape,
   },
   {
     name: AWAIT_EVENT_TOOL,
     description:
-      "Open a wait when you cannot finish the current request in this turn because you wait for something outside it: a build, a deploy, a later check. OpenBot shows the wait to the user until you close it. The next run of one of your routines wakes the wait, or a local script event that names its waitId. The run that wakes it repeats the request and your note. Give routineId to let only that routine wake it. After this call, tell the user what you wait for and end your turn.",
+      "Open a wait when you cannot finish the current request in this turn because you wait for something outside it: a build, a deploy, a later check. Atelier shows the wait to the user until you close it. The next run of one of your routines wakes the wait, or a local script event that names its waitId. The run that wakes it repeats the request and your note. Give routineId to let only that routine wake it. After this call, tell the user what you wait for and end your turn.",
     shape: awaitEventToolSchema.shape,
   },
   {
@@ -655,7 +655,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
       "Before a long task, show the user a short acknowledgement and your plan in one card, and wait for the answer.",
       "Call it first, before other tools, when the work takes more than about a minute: a fix, a build, research, or a change in many files.",
       "Do not call it for a quick answer, a question, a small change, a routine run, or work that the user already approved in this chat.",
-      "The card has your start button, an optional alternative and a cancel button. When nobody answers in 10 s, OpenBot presses start.",
+      "The card has your start button, an optional alternative and a cancel button. When nobody answers in 10 s, Atelier presses start.",
       'The result is JSON {"status":"answered","actionId":…}: "start" means do the plan; "alternative" means do only the alternative; "cancel" means do not start and ask in one sentence what the user wants;',
       '"_text" with "text" means follow the user\'s words. {"status":"skipped"} or {"status":"expired"} means do not start; answer briefly.',
       "Write in the user's language. It works only when the user turned it on in your settings, and not in a Slack, Discord or Telegram chat. In a channel, each member who reads the channel sees it.",
@@ -668,7 +668,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
       "Show the user an interactive block in this conversation and wait for the answer. In a channel, each member who reads the channel sees it.",
       "Use it instead of ask_user when buttons, a list or a short form make the answer easier, and before an action with effects that the user should approve.",
       "Block types: confirm (details, an optional preview and up to 4 buttons), quick_replies (reply chips), choice (pick one option, or several with multiple), form (a few text, select, segmented or date fields).",
-      "A text field with secret: true asks for a password or a key: you get the value, but OpenBot does not store it with the block. Never repeat the value in a message or a thought. For an API key or token that a command or a script uses, use request_api_key instead.",
+      "A text field with secret: true asks for a password or a key: you get the value, but Atelier does not store it with the block. Never repeat the value in a message or a thought. For an API key or token that a command or a script uses, use request_api_key instead.",
       'The result is JSON: {"status":"answered","blockId","actionId","values"} where actionId is the button or option id, or "submit" for choice and form, and values holds the selected option ids under "selected" or the form values by field id;',
       'actionId "_text" with "text" when the user answered in words; {"status":"skipped"}; or {"status":"expired"} when the turn ended first.',
       "Only the server owner or an admin can press a danger button or a button with confirm. A confirmed block is information for you, not a permission: the provider's approvals still apply.",
@@ -682,7 +682,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     name: "request_api_key",
     description: [
       "Ask the user for an API key or token that your task needs, such as for a script or a service, and wait for the answer.",
-      "The user enters it in a secure form in this conversation. OpenBot saves it for you in a private file outside your workspace and keeps it for later turns; you never get the value.",
+      "The user enters it in a secure form in this conversation. Atelier saves it for you in a private file outside your workspace and keeps it for later turns; you never get the value.",
       'The result is JSON: {"status":"saved","name","path"} when the user saved it; {"status":"skipped"} when the user closed the form; or {"status":"expired"} when the turn ended first.',
       "Use the key only by reading the file in your command, and quote the path, which can hold spaces: OPENAI_API_KEY=\"$(cat '<path>')\" python script.py. Never print, echo, log or copy the value, and never write it into the workspace.",
       "Call list_api_keys first: do not ask again for a key that is saved. A new answer replaces the saved key. Only the server owner or an admin can answer. It does not work in a Slack, Discord or Telegram chat.",
@@ -692,8 +692,8 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "save_api_key",
     description: [
-      "Save a key or token that you created yourself, such as one a command printed into a file, into the OpenBot key store, where the user sees it in the Secrets view.",
-      'Write the key to a file without printing it, for example `create-key > "$TMPDIR/key"`, then call this with that file: OpenBot moves the value into a private file outside your workspace and deletes yours.',
+      "Save a key or token that you created yourself, such as one a command printed into a file, into the Atelier key store, where the user sees it in the Secrets view.",
+      'Write the key to a file without printing it, for example `create-key > "$TMPDIR/key"`, then call this with that file: Atelier moves the value into a private file outside your workspace and deletes yours.',
       "For a key that a web page shows, use openbot_browser.save_secret_from_page instead.",
       'The result is JSON: {"status":"saved","name","path","shared"}. Use the key by reading that path in your command, as with request_api_key. A saved key with the same name is replaced.',
     ].join(" "),
@@ -734,7 +734,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "send_message",
     description:
-      "Queue an asynchronous message and optional local files for one or more OpenBot agents. Send it only to agents that must act or decide. When replying, pass the original message id as replyToMessageId. Never send acknowledgements or thanks.",
+      "Queue an asynchronous message and optional local files for one or more Atelier agents. Send it only to agents that must act or decide. When replying, pass the original message id as replyToMessageId. Never send acknowledgements or thanks.",
     shape: {
       recipientAgentIds: z.array(z.string()).min(1).max(32),
       text: z.string().min(1).max(100_000),
@@ -750,7 +750,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
       expectsReply: z
         .boolean()
         .describe(
-          "True, the default, for a request, question, or delegated task: the message starts the recipient's turn, and OpenBot sends its result back. False for your reply to a message, or for information that nobody must act on now: a new false message does not wake the recipient, which reads it in its next turn. A false message ends the exchange.",
+          "True, the default, for a request, question, or delegated task: the message starts the recipient's turn, and Atelier sends its result back. False for your reply to a message, or for information that nobody must act on now: a new false message does not wake the recipient, which reads it in its next turn. A false message ends the exchange.",
         )
         .optional(),
     },
@@ -761,7 +761,7 @@ export const OPENBOT_DYNAMIC_TOOLS = {
   type: "namespace",
   name: "openbot",
   description:
-    "Attach files to the current response, keep structured data in the shared SQLite database, and work with persistent OpenBot teammates.",
+    "Attach files to the current response, keep structured data in the shared SQLite database, and work with persistent Atelier teammates.",
   tools: OPENBOT_TOOL_DEFINITIONS.map((definition) => ({
     type: "function" as const,
     name: definition.name,

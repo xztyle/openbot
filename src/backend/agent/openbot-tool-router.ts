@@ -428,7 +428,7 @@ export class OpenBotToolRouter {
           if (params.namespace === "openbot") {
             if (params.tool === "tool_search" || params.tool === "tool_describe") {
               const agentId = this.#conversation.agentForThread(params.threadId);
-              if (!agentId) throw new Error("The calling OpenBot agent is unknown.");
+              if (!agentId) throw new Error("The calling Atelier agent is unknown.");
               try {
                 const result = discoverTools(params, this.#requireAgent(agentId));
                 client.respond(request.id, openBotToolResult(result));
@@ -472,7 +472,7 @@ export class OpenBotToolRouter {
           const toolRequest = { ...request, params };
           if (toolRequest.params.namespace === OPENBOT_BROWSER_NAMESPACE) {
             const agentId = this.#conversation.agentForThread(toolRequest.params.threadId);
-            if (!agentId) throw new Error("The browsing OpenBot agent is unknown.");
+            if (!agentId) throw new Error("The browsing Atelier agent is unknown.");
             if (toolRequest.params.tool === "request_takeover" || toolRequest.params.tool === "submit_secret") {
               // These calls wait for a person, so a call that never answers is only visible by these two lines.
               const takeoverContext = {
@@ -618,7 +618,7 @@ export class OpenBotToolRouter {
         default:
           client.respondError(request.id, {
             code: -32601,
-            message: `OpenBot does not implement server request ${request.method}.`,
+            message: `Atelier does not implement server request ${request.method}.`,
           });
       }
     }).pipe(
@@ -662,9 +662,9 @@ export class OpenBotToolRouter {
     params: DynamicToolCallParams,
   ) {
     const agentId = this.#conversation.agentForThread(params.threadId);
-    if (!agentId) throw new Error("The calling OpenBot agent is unknown.");
+    if (!agentId) throw new Error("The calling Atelier agent is unknown.");
     const apiKeys = this.#apiKeys;
-    if (!apiKeys) return openBotToolFailure("This OpenBot server cannot save API keys.");
+    if (!apiKeys) return openBotToolFailure("This Atelier server cannot save API keys.");
     const failed = (failure: { cause: unknown }) =>
       Effect.succeed(
         openBotToolFailure(
@@ -708,10 +708,10 @@ export class OpenBotToolRouter {
       return openBotToolFailure(`${z.prettifyError(parsed.error)}\nCorrect the arguments and retry.`);
     if (this.#messaging.linkForThread(this.#conversation.publicThreadId(agentId, params.threadId)))
       return openBotToolFailure(
-        "request_api_key does not work in a Slack, Discord or Telegram chat. Ask the user to give you the key in OpenBot.",
+        "request_api_key does not work in a Slack, Discord or Telegram chat. Ask the user to give you the key in Atelier.",
       );
     const spec = apiKeyFormSpec(parsed.data);
-    if (!spec) return openBotToolFailure("OpenBot could not show this form. Use a shorter title and retry.");
+    if (!spec) return openBotToolFailure("Atelier could not show this form. Use a shorter title and retry.");
     this.#attention.surfaceUiBlock(client, request, {
       blockId: randomUUID(),
       spec,
@@ -874,7 +874,7 @@ export class OpenBotToolRouter {
     params: DynamicToolCallParams,
   ) {
     const senderAgentId = this.#conversation.agentForThread(params.threadId);
-    if (!senderAgentId) throw new Error("The sending OpenBot agent is unknown.");
+    if (!senderAgentId) throw new Error("The sending Atelier agent is unknown.");
     // An agent sees and reaches only the agents of its own space, whatever the tool.
     const crossSpace = crossSpaceRefusal(this.#store.spaces, senderAgentId, params.arguments, (agentId) =>
       this.#hooks.listAgents().some((agent) => agent.id === agentId),
@@ -1234,7 +1234,7 @@ export class OpenBotToolRouter {
       return posted
         ? openBotToolResult({ status: "logged", channel: context.name })
         : openBotToolFailure(
-            "OpenBot could not post the decision in the channel. Continue, and name it in your report.",
+            "Atelier could not post the decision in the channel. Continue, and name it in your report.",
           );
     }
 
@@ -1344,7 +1344,7 @@ export class OpenBotToolRouter {
     if (!parsed.success) return openBotToolFailure(profileToolErrorMessage(parsed.error));
     const args = parsed.data;
     const preview = this.#visualPreview;
-    if (!preview) return openBotToolFailure("This OpenBot cannot draw a page. Call html_render without a preview.");
+    if (!preview) return openBotToolFailure("This Atelier cannot draw a page. Call html_render without a preview.");
     return yield* preview
       .capture({
         html: args.html,
@@ -1877,7 +1877,7 @@ export class OpenBotToolRouter {
       senderAgentId: string,
     ): Effect.fn.Return<OpenBotToolResponse, ToolOperationFailed> {
       if (params.tool !== "send_message" || !isRecord(params.arguments)) {
-        throw new Error(`Unsupported OpenBot tool: ${params.tool}`);
+        throw new Error(`Unsupported Atelier tool: ${params.tool}`);
       }
       const recipientValues = params.arguments.recipientAgentIds;
       if (!Array.isArray(recipientValues) || !recipientValues.every((item) => isString(item))) {
@@ -1890,7 +1890,7 @@ export class OpenBotToolRouter {
       const known = new Map(this.#hooks.listAgents().map((agent) => [agent.id, agent]));
       for (const recipient of recipientValues) {
         const agent = known.get(recipient);
-        if (!agent) throw new Error(`Unknown OpenBot agent: ${recipient}`);
+        if (!agent) throw new Error(`Unknown Atelier agent: ${recipient}`);
         // A hidden agent receives no new messages until the user restores it.
         if (agent.hiddenAt !== undefined)
           throw new Error(`${recipient}: ${sourceText("error.backend.recipientHidden")}`);

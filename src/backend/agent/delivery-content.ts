@@ -341,17 +341,17 @@ export function deliveryPromptInput(context: DeliveryContext, sources: DeliveryP
     const replyProtocol = delivery.replyToMessageId
       ? [
           "This replies to a message you sent. Give the result to the user naturally, starting with the teammate's name.",
-          "For blocked work, do not repeat that work with the same tools. Give the user the blocker and its Unblock action. When OpenBot has a plugin for the service and it is not in your tools, end your answer with the plugin sentence from your instructions.",
+          "For blocked work, do not repeat that work with the same tools. Give the user the blocker and its Unblock action. When Atelier has a plugin for the service and it is not in your tools, end your answer with the plugin sentence from your instructions.",
           "Reply to the teammate only for another requested action or new information that unblocks its work, never with the same request or an acknowledgement.",
         ]
       : delivery.expectsReply === false
         ? [
             NO_ANSWER_LINE,
-            "Use it if it changes your work, and continue. Send no reply, acknowledgement or result: OpenBot sends the sender nothing back.",
+            "Use it if it changes your work, and continue. Send no reply, acknowledgement or result: Atelier sends the sender nothing back.",
           ]
         : [
             `When done, send a concise result to ${senderName} with openbot.send_message: recipientAgentIds ["${senderAgentId}"], replyToMessageId "${delivery.messageId}", expectsReply false.`,
-            "Reply in three lines: Status: done | partial | blocked, Result: <concrete outcome>, Evidence: <file, test, command, or none>. When blocked, add Unblock: <the one action that unblocks the task>; when OpenBot has a plugin for the service and it is not in your tools, that action is the plugin sentence from your instructions.",
+            "Reply in three lines: Status: done | partial | blocked, Result: <concrete outcome>, Evidence: <file, test, command, or none>. When blocked, add Unblock: <the one action that unblocks the task>; when Atelier has a plugin for the service and it is not in your tools, that action is the plugin sentence from your instructions.",
             "Never acknowledge without a Status line, and never leave the sender waiting for a result.",
           ];
     text = [
@@ -383,14 +383,14 @@ export function deliveryPromptInput(context: DeliveryContext, sources: DeliveryP
     const testRun = run !== null && !quietRoutineRun(run);
     const runKind = testRun ? "manual Test run" : run?.source ? `${run.source} run` : "scheduled run";
     text = [
-      "Execute one run of an existing OpenBot routine now.",
+      "Execute one run of an existing Atelier routine now.",
       `Routine name: ${delivery.sender.routineName}`,
       `Run type: ${runKind}`,
       `Scheduled for: ${delivery.sender.scheduledFor}`,
       "The routine already exists, and its schedule is already configured.",
       "Do not create, update, delete, list, or test routines during this run.",
       "Perform the task below now. Do not answer only that the routine or monitoring is active.",
-      "A task can tell you to remind the user or to send the user a message. When it names no other place, write that message as your final answer. OpenBot shows your final answer to the user in this chat. openbot.send_message sends to other agents, not to the user.",
+      "A task can tell you to remind the user or to send the user a message. When it names no other place, write that message as your final answer. Atelier shows your final answer to the user in this chat. openbot.send_message sends to other agents, not to the user.",
       testRun
         ? "This is a manual Test run. Report the action and result even when a normal scheduled run would suppress a notification because there is no change."
         : `This is a ${runKind}. Follow the notification conditions in the routine task. When they give nothing to report, call the ${ROUTINE_NO_UPDATE_TOOL} tool instead of a written answer. A requested reminder or message is a report, also when there is no new information. Do not call ${ROUTINE_NO_UPDATE_TOOL} for it unless the notification conditions of the task say to send nothing.`,

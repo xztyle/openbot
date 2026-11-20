@@ -211,7 +211,7 @@ const BROWSER_TOOL_DEFINITIONS = [
       submission: z
         .enum(["click", "enter", "on_input"])
         .describe(
-          "Use click with submitTarget when the page has a Continue, Verify, Next, or Sign in button, even if disabled before entry. OpenBot fills the fields then clicks that button. Use enter only for a form submitted by Enter. on_input ONLY fills fields; use it only when the site explicitly submits on the final digit without a button. It does not find or click a button.",
+          "Use click with submitTarget when the page has a Continue, Verify, Next, or Sign in button, even if disabled before entry. Atelier fills the fields then clicks that button. Use enter only for a form submitted by Enter. on_input ONLY fills fields; use it only when the site explicitly submits on the final digit without a button. It does not find or click a button.",
         ),
       submitTarget: browserTargetSchema
         .optional()
@@ -221,40 +221,40 @@ const BROWSER_TOOL_DEFINITIONS = [
       loginId: identifier
         .optional()
         .describe(
-          "For password or authenticator: the id of a saved login from list_logins. OpenBot fills its password or current code without asking the user. With it and one code field, omit digits: the saved code sets the length.",
+          "For password or authenticator: the id of a saved login from list_logins. Atelier fills its password or current code without asking the user. With it and one code field, omit digits: the saved code sets the length.",
         ),
       secretKey: z
         .string()
         .regex(API_KEY_NAME_PATTERN)
         .optional()
         .describe(
-          "For password or authenticator, instead of loginId: the name of a saved key from openbot.list_api_keys, such as SITE_PASSWORD, or for authenticator a two-step setup key such as SITE_TOTP. OpenBot fills the password or the current code; you never see it. The first fill of a key on a site waits for the owner's approval.",
+          "For password or authenticator, instead of loginId: the name of a saved key from openbot.list_api_keys, such as SITE_PASSWORD, or for authenticator a two-step setup key such as SITE_TOTP. Atelier fills the password or the current code; you never see it. The first fill of a key on a site waits for the owner's approval.",
         ),
       username: z
         .string()
         .max(VAULT_TEXT_LIMIT)
         .optional()
         .describe(
-          "For password without loginId or secretKey: the username or email of this sign-in, as typed on the page. When the user saves the password in the OpenBot Vault from the card, the login gets this username.",
+          "For password without loginId or secretKey: the username or email of this sign-in, as typed on the page. When the user saves the password in the Atelier Vault from the card, the login gets this username.",
         ),
     },
   }),
   browserTool({
     name: "list_logins",
     description:
-      "List the logins that the user shared with OpenBot for the tab's current HTTPS site: id, title, username, and whether it has an authenticator code. Passwords and codes are never returned. Type the username yourself, then call submit_secret with loginId.",
+      "List the logins that the user shared with Atelier for the tab's current HTTPS site: id, title, username, and whether it has an authenticator code. Passwords and codes are never returned. Type the username yourself, then call submit_secret with loginId.",
     shape: { tabId },
   }),
   browserTool({
     name: "list_vault_items",
     description:
-      "List what the user saved in the OpenBot Vault. A login shows id, website, username and hasTwoStepKey; its password, two-step key and notes are never returned, so sign in with list_logins and submit_secret. A card shows id, label, nameOnCard, brand, last4, expiry and hasSecurityCode; its number and security code are never returned, so fill card fields with fill_card. A contact shows every field: type them with fill_fields, type, or select_option. addedBy names the agent that added an item; it is absent when the user added it.",
+      "List what the user saved in the Atelier Vault. A login shows id, website, username and hasTwoStepKey; its password, two-step key and notes are never returned, so sign in with list_logins and submit_secret. A card shows id, label, nameOnCard, brand, last4, expiry and hasSecurityCode; its number and security code are never returned, so fill card fields with fill_card. A contact shows every field: type them with fill_fields, type, or select_option. addedBy names the agent that added an item; it is absent when the user added it.",
     shape: {},
   }),
   browserTool({
     name: "save_vault_item",
     description:
-      "Add contact info to the OpenBot Vault, or change a saved item. A contact without id is new; with id, it changes. A login or a card needs its id from list_vault_items (not from list_logins). A login changes only its username; a card changes only fields that are not secret. You cannot set a password, a website, a card number or a security code. An omitted field keeps its value. Returns the id, kind and name, never a secret.",
+      "Add contact info to the Atelier Vault, or change a saved item. A contact without id is new; with id, it changes. A login or a card needs its id from list_vault_items (not from list_logins). A login changes only its username; a card changes only fields that are not secret. You cannot set a password, a website, a card number or a security code. An omitted field keeps its value. Returns the id, kind and name, never a secret.",
     shape: {
       kind: z.enum(["contact", "login", "card"]),
       id: identifier.optional().describe("The item to change. Omit it to add a contact."),
@@ -273,13 +273,13 @@ const BROWSER_TOOL_DEFINITIONS = [
   browserTool({
     name: "delete_vault_item",
     description:
-      "Delete a login, card or contact from the OpenBot Vault by its id from list_vault_items (not from list_logins). A card that uses a deleted contact for billing keeps no billing address. This cannot be undone: ask first unless you added the item or the user asked for the delete.",
+      "Delete a login, card or contact from the Atelier Vault by its id from list_vault_items (not from list_logins). A card that uses a deleted contact for billing keeps no billing address. This cannot be undone: ask first unless you added the item or the user asked for the delete.",
     shape: { id: identifier },
   }),
   browserTool({
     name: "save_secret_from_page",
     description: [
-      "Save a secret that the page shows, such as an API key or a token that a service just generated, straight into the OpenBot key store. The value never reaches you: OpenBot reads the element, saves it, and returns only the name and the file path.",
+      "Save a secret that the page shows, such as an API key or a token that a service just generated, straight into the Atelier key store. The value never reaches you: Atelier reads the element, saves it, and returns only the name and the file path.",
       "Take a fresh snapshot first and point the target at the element that shows the secret, a field or the text itself, with its ref. Never target it by its text: that would put the secret in your arguments.",
       "From then on the tab's snapshots, titles and addresses show [saved secret] in its place, and screenshots and evaluate are unavailable until the page navigates. The snapshot you took before still holds the value: do not repeat, quote, log or remember it.",
       "shared defaults to true: every agent of this server can read it, so a teammate can use the key you got. Set false to keep it for you only. A new value replaces a saved key with the same name.",
@@ -323,7 +323,7 @@ const BROWSER_TOOL_DEFINITIONS = [
   browserTool({
     name: "request_takeover",
     description:
-      "Ask the user to take over a tab for unclear OAuth account selection, CAPTCHA, passkeys, a payment step that you cannot complete, or when secure password/code handoff or card fill is unavailable. For a checkbox CAPTCHA (Turnstile, reCAPTCHA, hCaptcha), OpenBot first clicks it once; if that passes, the result says so and no one is asked. Never click a CAPTCHA yourself.",
+      "Ask the user to take over a tab for unclear OAuth account selection, CAPTCHA, passkeys, a payment step that you cannot complete, or when secure password/code handoff or card fill is unavailable. For a checkbox CAPTCHA (Turnstile, reCAPTCHA, hCaptcha), Atelier first clicks it once; if that passes, the result says so and no one is asked. Never click a CAPTCHA yourself.",
     shape: {
       tabId,
       reason: z
@@ -437,7 +437,7 @@ const BROWSER_TOOL_DEFINITIONS = [
   browserTool({
     name: "upload_files",
     description:
-      "Set local files readable by OpenBot on a file input after validating paths, then return a fresh snapshot.",
+      "Set local files readable by Atelier on a file input after validating paths, then return a fresh snapshot.",
     shape: {
       ...targetAction,
       paths: z.array(z.string().min(1).max(INPUT_LIMITS.path)).min(1).max(INPUT_LIMITS.attachments),
@@ -524,7 +524,7 @@ export const BROWSER_DYNAMIC_TOOLS = [
   {
     type: "namespace" as const,
     name: OPENBOT_BROWSER_NAMESPACE,
-    description: "Operate OpenBot's private, persistent native Electron/CDP browser.",
+    description: "Operate Atelier's private, persistent native Electron/CDP browser.",
     tools: BROWSER_TOOL_DEFINITIONS.map((definition) => ({
       type: "function" as const,
       name: definition.name,

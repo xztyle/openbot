@@ -49,7 +49,7 @@ export function cutModelText(text: string, limit: number, more: (end: number) =>
   const end = code >= 0xd800 && code <= 0xdbff ? limit - 1 : limit;
   return {
     text: text.slice(0, end),
-    note: `[OpenBot cut this result: you got the first ${end} of ${text.length} characters. ${more(end)}]`,
+    note: `[Atelier cut this result: you got the first ${end} of ${text.length} characters. ${more(end)}]`,
   };
 }
 

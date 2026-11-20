@@ -256,7 +256,7 @@ export class DelegationFollowUp {
     const name = this.#agentName(agentId);
     const excerpt = this.#lastText(agentId, owed.turnId);
     const text = [
-      `OpenBot note: ${name} ended its turn while it waited for its teammates, and no more answers came for your request ${owed.messageId}. ${name} sent no final result.`,
+      `Atelier note: ${name} ended its turn while it waited for its teammates, and no more answers came for your request ${owed.messageId}. ${name} sent no final result.`,
       excerpt ? `The last message of ${name} for your request follows.\n\n${excerpt}` : null,
     ]
       .filter(Boolean)
@@ -273,7 +273,7 @@ export class DelegationFollowUp {
   ) {
     const name = this.#agentName(agentId);
     const text = [
-      `OpenBot note: the turn of ${name} ${ended === "failed" ? "failed" : "was stopped"} while it handled the answers of its own teammates, so ${name} sent no final result for your request ${owed.messageId}.`,
+      `Atelier note: the turn of ${name} ${ended === "failed" ? "failed" : "was stopped"} while it handled the answers of its own teammates, so ${name} sent no final result for your request ${owed.messageId}.`,
       reason ? `Reason: ${this.#quote(reason)}` : null,
     ]
       .filter(Boolean)
@@ -304,14 +304,14 @@ export class DelegationFollowUp {
     const request = `your request ${delivery.messageId}`;
     const detail =
       end.kind === "failed"
-        ? `OpenBot note: the turn of ${name} failed, so it sent no result for ${request}.${end.reason ? ` Reason: ${this.#quote(end.reason)}` : ""}`
+        ? `Atelier note: the turn of ${name} failed, so it sent no result for ${request}.${end.reason ? ` Reason: ${this.#quote(end.reason)}` : ""}`
         : end.kind === "interrupted"
-          ? `OpenBot note: the turn of ${name} was stopped before it sent a result for ${request}.`
+          ? `Atelier note: the turn of ${name} was stopped before it sent a result for ${request}.`
           : end.kind === "restarted"
-            ? `OpenBot note: OpenBot or its provider restarted while ${name} worked on ${request}. The turn stopped before ${name} sent a result.`
+            ? `Atelier note: Atelier or its provider restarted while ${name} worked on ${request}. The turn stopped before ${name} sent a result.`
             : end.kind === "restarted-completed"
-              ? `OpenBot note: OpenBot or its provider restarted while ${name} worked on ${request}. The turn ended while OpenBot could not see it, so OpenBot did not send you its result. The result is in the chat of ${name}.`
-              : `OpenBot note: ${name} finished its turn for ${request} but wrote no result.`;
+              ? `Atelier note: Atelier or its provider restarted while ${name} worked on ${request}. The turn ended while Atelier could not see it, so Atelier did not send you its result. The result is in the chat of ${name}.`
+              : `Atelier note: ${name} finished its turn for ${request} but wrote no result.`;
     yield* this.#sendAnswer(
       agentId,
       requesterId,

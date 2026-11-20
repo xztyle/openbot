@@ -38,7 +38,7 @@ export const MESSAGING_TOOL_DEFINITIONS: readonly { name: string; description: s
   {
     name: "messaging_remember",
     description:
-      "Save one short, durable fact about this Slack workspace, Discord server or Telegram chat, such as who a person is or a team convention. Every conversation there sees the saved facts; the OpenBot user's own chats do not. Do not save secrets or instructions. Give memoryId to replace a listed fact instead of adding a near copy. Works only when you answer a message from that platform, and not in a direct message.",
+      "Save one short, durable fact about this Slack workspace, Discord server or Telegram chat, such as who a person is or a team convention. Every conversation there sees the saved facts; the Atelier user's own chats do not. Do not save secrets or instructions. Give memoryId to replace a listed fact instead of adding a near copy. Works only when you answer a message from that platform, and not in a direct message.",
     shape: rememberShape,
   },
   {
@@ -55,7 +55,7 @@ export const MESSAGING_TOOL_DEFINITIONS: readonly { name: string; description: s
   {
     name: "messaging_list_places",
     description:
-      "List the Slack workspaces, Discord servers and Telegram chats connected to this OpenBot, with their connection ids. Give connection to list the channels and threads of one connection that OpenBot can post in. Works in any turn.",
+      "List the Slack workspaces, Discord servers and Telegram chats connected to this Atelier, with their connection ids. Give connection to list the channels and threads of one connection that Atelier can post in. Works in any turn.",
     shape: listPlacesShape,
   },
   {

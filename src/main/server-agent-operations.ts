@@ -21,7 +21,7 @@ import { Effect, Result } from "effect";
 
 /** The reason that boot recovery writes on a delivery that the previous run left unfinished. */
 export const RESTART_INTERRUPTION_REASON = "OpenBot restarted before this delivery reached a confirmed terminal state.";
-export const RESUME_NOTE = "OpenBot restarted during your last turn; continue where you left off.";
+export const RESUME_NOTE = "Atelier restarted during your last turn; continue where you left off.";
 /** The newest handled deliveries that the marker file keeps. */
 const MARKER_LIMIT = 500;
 

@@ -56,7 +56,7 @@ const name = z
   .trim()
   .min(1)
   .max(CHANNEL_NAME_MAX)
-  .describe("The channel name. OpenBot writes it as Slack does: lower case, words joined with -.");
+  .describe("The channel name. Atelier writes it as Slack does: lower case, words joined with -.");
 const topic = z.string().max(CHANNEL_TOPIC_LIMIT).describe("One line that the channel header shows.");
 const description = z.string().max(CHANNEL_DESCRIPTION_LIMIT).describe("What the channel is for.");
 const instructions = z

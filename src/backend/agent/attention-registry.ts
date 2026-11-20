@@ -458,7 +458,7 @@ export class AttentionRegistry {
         `I need the key \`${options.apiKey}\`${options.purpose ? ` (${options.purpose})` : ""}. Add it in Secrets (shared), or tell me to create it myself.`,
       );
       return posted
-        ? `No form here: this work belongs to ${channel}. OpenBot asked the people there to add ${options.apiKey} in Secrets. ${
+        ? `No form here: this work belongs to ${channel}. Atelier asked the people there to add ${options.apiKey} in Secrets. ${
             context.handsOff
               ? "Hands-off mode: do not wait. Create the key yourself if you can (openbot_browser.save_secret_from_page or openbot.save_api_key), or continue without it and log the decision with openbot.log_decision."
               : "Do not wait for it: continue without the key or end your turn. Check openbot.list_api_keys later."
@@ -477,7 +477,7 @@ export class AttentionRegistry {
       })
       .join("\n\n");
     if (!this.#teamQuestion?.post(agentId, context.channelId, `${text}\n\nReply in this thread.`)) return null;
-    return `Not shown in your own chat: this work belongs to ${channel}, so OpenBot posted your question there for the people. Do not wait: end your turn, or continue with work that does not depend on the answer. The answer comes back to you as channel work in the thread of your question. Ask privately only for something private to one person: openbot.ask_ui with private true.`;
+    return `Not shown in your own chat: this work belongs to ${channel}, so Atelier posted your question there for the people. Do not wait: end your turn, or continue with work that does not depend on the answer. The answer comes back to you as channel work in the thread of your question. Ask privately only for something private to one person: openbot.ask_ui with private true.`;
   }
 
   /** The agent that asks `requestId`: a prompt, an approval, a browser takeover or a browser secret. */
@@ -957,9 +957,9 @@ export class AttentionRegistry {
       if (this.#takeovers.get(input.requestId) !== pending) return;
       if (outcome === "submitted") {
         const vault = pending.vaultLoginId
-          ? `OpenBot filled saved login ${pending.vaultLoginId}; the user did not type it.`
+          ? `Atelier filled saved login ${pending.vaultLoginId}; the user did not type it.`
           : pending.filledSecretKey
-            ? `OpenBot filled the saved key ${pending.filledSecretKey}; the user did not type it.`
+            ? `Atelier filled the saved key ${pending.filledSecretKey}; the user did not type it.`
             : input.saveToVault && secret.request.method === "password"
               ? yield* this.#saveTypedPassword(pending, secret.request.origin, input.secret)
               : undefined;
@@ -1227,7 +1227,7 @@ export class AttentionRegistry {
           contentItems: [
             {
               type: "inputText",
-              text: "OpenBot clicked the checkbox of the security check once, and the check passed. The user was not asked. Take a fresh snapshot and continue.",
+              text: "Atelier clicked the checkbox of the security check once, and the check passed. The user was not asked. Take a fresh snapshot and continue.",
             },
           ],
         } satisfies DynamicToolResult;
@@ -1545,7 +1545,7 @@ export class AttentionRegistry {
         contentItems: [
           {
             type: "inputText",
-            text: "OpenBot could not create a user question.",
+            text: "Atelier could not create a user question.",
           },
         ],
       });
@@ -1618,7 +1618,7 @@ export class AttentionRegistry {
     if (!threadId || !turnId || !agentId || !publicThreadId || !uiBlock || !validPromptQuestions(questions)) {
       client.respond(request.id, {
         success: false,
-        contentItems: [{ type: "inputText", text: "OpenBot could not show this block." }],
+        contentItems: [{ type: "inputText", text: "Atelier could not show this block." }],
       });
       return;
     }
@@ -1765,7 +1765,7 @@ export class AttentionRegistry {
       client.respond(request.id, { action: "decline", content: null, _meta: null });
       this.#emitError(
         "mcp_safety_handoff",
-        "A local plugin requested an unsupported security hand-off, so OpenBot declined it.",
+        "A local plugin requested an unsupported security hand-off, so Atelier declined it.",
         agentId,
       );
       return;
@@ -1932,7 +1932,7 @@ export class AttentionRegistry {
   #respondToMalformedApproval(client: AgentClient, request: AppServerRequest): void {
     client.respond(
       request.id,
-      approvalReply(request.method, request.params, "decline", "OpenBot could not identify this approval."),
+      approvalReply(request.method, request.params, "decline", "Atelier could not identify this approval."),
     );
   }
 
@@ -2103,7 +2103,7 @@ export class AttentionRegistry {
           requestId,
           pending,
           "cancel",
-          `The server owner did not let OpenBot fill ${name} on ${origin}. Do not try again: ask the user, or use submit_secret without secretKey.`,
+          `The server owner did not let Atelier fill ${name} on ${origin}. Do not try again: ask the user, or use submit_secret without secretKey.`,
         );
         return true;
       }

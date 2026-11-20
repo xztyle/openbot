@@ -153,7 +153,7 @@ export class InputEscalations {
       if (!agents.some((agent) => agent.id === recipientId)) return;
       if (this.#queuedNoteFrom(agentId, recipientId)) return;
       const name = agents.find((agent) => agent.id === agentId)?.name ?? agentId;
-      const text = `OpenBot note: ${name} is blocked waiting for the user: ${noteSummary(request)}. The user can answer it in your chat. Say so first in your next reply to the user, in one line. This note needs no reply to ${name}.`;
+      const text = `Atelier note: ${name} is blocked waiting for the user: ${noteSummary(request)}. The user can answer it in your chat. Say so first in your next reply to the user, in one line. This note needs no reply to ${name}.`;
       yield* this.#mailbox.enqueue({
         sender: { kind: "agent", agentId },
         recipientAgentIds: [recipientId],

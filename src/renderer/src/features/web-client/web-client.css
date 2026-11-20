@@ -484,6 +484,34 @@ body {
   .web-app .ui-dialog-content {
     max-width: calc(100vw - 24px);
   }
+
+  /*
+   * While a swipe from the left edge moves the conversation (`web-swipe-back.ts`), the list shows
+   * under it and slides in from the left, as the screen before does on iOS.
+   */
+  .web-app-frame[data-web-swipe] {
+    position: relative;
+  }
+
+  .web-app-frame[data-web-swipe][data-web-mobile-pane] > .sidebar {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    display: flex;
+    width: auto;
+    pointer-events: none;
+    transform: translateX(calc((var(--web-swipe-x, 0px) - 100%) * 0.3));
+  }
+
+  /* A short swipe springs back: the list slides out with the conversation. */
+  .web-app-frame[data-web-swipe="release"][data-web-mobile-pane] > .sidebar {
+    transition: transform var(--openbot-duration-normal) var(--openbot-ease-out);
+  }
+
+  .web-app-frame[data-web-swipe] > .app-frame-panes {
+    position: relative;
+    z-index: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

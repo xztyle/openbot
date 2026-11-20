@@ -6,3 +6,4 @@
 - On a phone, sheets, dialogs and notifications that open while the keyboard is open show over the keyboard, not under it.
 - On a phone, opening a channel or a thread no longer opens the keyboard. It opens when you tap the message box, as in Slack's app.
 - On a phone, the buttons of the message box (attach, formatting, emoji, send) are 40 px, and the saved replies over it are 36 px high. An empty box is one line high.
+- On a phone, a swipe from the left edge of a conversation shows the list under it while your finger moves, as on iOS. Before, an empty screen showed under it.

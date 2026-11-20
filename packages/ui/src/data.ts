@@ -1,3 +1,4 @@
+import type { AgentFaceStyle } from "@openbot/contracts/agent-face";
 import type { AgentProviderRef } from "@openbot/contracts/agent-providers";
 import type {
   AgentAccess,
@@ -321,6 +322,10 @@ export interface AgentProfile {
   reportsToAgentId?: string | null | undefined;
   /** The agent that created this one, which it reports to when it names no manager. */
   createdBy?: { agentId: string } | undefined;
+  /** The agent's own face family. Absent: the workspace default. */
+  faceStyle?: AgentFaceStyle | undefined;
+  /** A re-rolled face. Absent: the face of `avatarSeed`. */
+  faceSeed?: string | undefined;
   threadId: string | null;
   /** The agent's working directory. Absent for profiles built before it was tracked. */
   workspacePath?: string;

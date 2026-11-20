@@ -1,0 +1,75 @@
+/*
+ * The flavour of the Atelier workspace themes, over the shared rules. The tokens of each theme are in
+ * `@openbot/brand/atelier-themes.css`; these rules only give names and titles the display face, put
+ * the sidebar on its own ink, and add the few touches of one theme (the Riso halftone and its offset
+ * ink). Every rule is under `data-atelier-theme`, so a page without a theme keeps the shared look.
+ */
+
+/* Names and titles in the display face of the theme: Fraunces, Geist or expanded Archivo. */
+:root[data-atelier-theme]
+:is(
+  .ws-message-author .ws-member-name-text,
+  .ws-channel-header-title,
+  .ws-sidebar-workspace .ws-truncate,
+  .conversation-title,
+  .account-login-wordmark,
+  .ws-pane-header-title
+) {
+  font-family: var(--openbot-font-display);
+  font-variation-settings: var(--atelier-font-display-variation);
+  font-weight: var(--atelier-display-weight);
+  font-stretch: var(--atelier-display-stretch);
+  letter-spacing: var(--atelier-display-tracking);
+}
+
+/* The sidebar and the space rail read their own ink: in Riso Press light the sidebar is navy. */
+:root[data-atelier-theme] :is(.ws-sidebar, .ws-frame-sidebar, .space-rail, .window-rail) {
+  --openbot-text-primary: var(--atelier-sidebar-text);
+  --openbot-text-secondary: color-mix(in srgb, var(--atelier-sidebar-text) 84%, var(--atelier-sidebar));
+  --openbot-text-muted: color-mix(in srgb, var(--atelier-sidebar-text) 66%, var(--atelier-sidebar));
+  --openbot-text-dim: color-mix(in srgb, var(--atelier-sidebar-text) 48%, var(--atelier-sidebar));
+  --openbot-text-placeholder: color-mix(in srgb, var(--atelier-sidebar-text) 62%, var(--atelier-sidebar));
+  --openbot-hover: color-mix(in srgb, var(--atelier-sidebar-text) 8%, transparent);
+  --openbot-border: color-mix(in srgb, var(--atelier-sidebar-text) 14%, transparent);
+  --openbot-border-strong: color-mix(in srgb, var(--atelier-sidebar-text) 20%, transparent);
+  --openbot-bg-control: color-mix(in srgb, var(--atelier-sidebar-text) 6%, var(--atelier-sidebar));
+  --openbot-bg-control-hover: color-mix(in srgb, var(--atelier-sidebar-text) 10%, var(--atelier-sidebar));
+  --atelier-symbol-background: var(--atelier-sidebar);
+  --atelier-symbol-blend: normal;
+}
+
+/* The open conversation: a row in the accent, as in Slack's selected row. */
+:root[data-atelier-theme] :is(.ws-layout, .ws-frame-sidebar, .ws-agent-dm) {
+  --ws-active: var(--openbot-accent);
+  --ws-active-text: var(--openbot-text-on-accent);
+}
+
+:root[data-atelier-theme] .ws-sidebar-row.ui-button[data-active] :is(.ws-sidebar-row-label, .ws-ai-badge) {
+  color: inherit;
+}
+
+/* Modern Atelier: the open row is a surface with an accent edge, and the open space is ink. */
+:root[data-atelier-theme="modern"] :is(.ws-layout, .ws-frame-sidebar, .ws-agent-dm) {
+  --ws-active: var(--openbot-bg-surface);
+  --ws-active-text: var(--openbot-text-primary);
+}
+
+:root[data-atelier-theme="modern"] .ws-sidebar-row.ui-button[data-active] {
+  box-shadow:
+    inset 2px 0 0 var(--openbot-accent),
+    0 0 0 1px var(--openbot-border);
+}
+
+/* Riso Press: halftone on the sidebar, and cards printed with an offset second ink. */
+:root[data-atelier-theme="riso"] :is(.ws-sidebar, .space-rail) {
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--atelier-sidebar-text) 9%, transparent) 0.8px,
+    transparent 0.9px
+  );
+  background-size: 6px 6px;
+}
+
+:root[data-atelier-theme="riso"] .composer[data-layout="workspace"] {
+  border: 1.5px solid var(--openbot-text-primary);
+  box-shadow: 3px 3px 0 color-mix(in srgb, var(--openbot-accent) 60%, transparent);
+}

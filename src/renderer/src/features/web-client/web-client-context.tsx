@@ -40,6 +40,7 @@ import {
   type RemoteRecoveryStatus,
 } from "@openbot/team-client/remote-recovery";
 import { reconcilePendingRequests } from "@openbot/team-client/runtime-attention";
+import { registerAgentFaces } from "@openbot/ui/features/agents/agent-face-directory";
 import { duplicateSection as duplicateSectionWith } from "@openbot/ui/features/sidebar/duplicate-section";
 import { currentText } from "@openbot/ui/text";
 import { errorReference, type UserErrorDetails } from "@openbot/user-errors";
@@ -775,6 +776,8 @@ export function createWebWorkspace(
   const [serverOrder, setServerOrder] = createSignal(readWebServerOrder(props.accountId));
   const orderedHosts = createMemo(() => orderWebHosts(state.hosts, serverOrder()));
   const profiles = createMemo(() => state.agents.map(toAgentProfile));
+  // Every face of an agent, also one drawn from its seed alone, wears its name's hat and its own choice.
+  createEffect(profiles, (list) => registerAgentFaces(list));
   const selected = createMemo(() => profiles().find((agent) => agent.id === state.selectedId));
   const conversation = createMemo(() => (state.selectedId ? state.conversations[state.selectedId] : undefined));
 

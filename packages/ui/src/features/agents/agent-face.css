@@ -1,0 +1,25 @@
+/*
+ * An Atelier face (AgentFace.tsx). The drawing fills its box: the size comes from the avatar's
+ * place (`.agent-avatar` and the classes around it). The face carries its own state badge and
+ * motion, so the Bloub's mood glow and breathing stay off it.
+ */
+.agent-face {
+  display: grid;
+  place-items: center;
+  overflow: visible;
+}
+
+/* Twice the class: `.agent-avatar > svg` scales a Bloub past its box, and its sheet can load later. */
+.agent-face.agent-face > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  translate: none;
+}
+
+.agent-avatar.agent-avatar-face.agent-avatar-face {
+  border-radius: 0;
+  filter: none;
+  animation: none;
+}

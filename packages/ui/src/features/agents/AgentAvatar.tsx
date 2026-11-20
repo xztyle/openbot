@@ -8,18 +8,21 @@ import {
   POSES,
   RAYON,
 } from "@norbert_bodziony/bloub";
+import { atelierTheme } from "@openbot/brand/atelier-appearance";
 import {
   type AvatarMood,
   avatarMoodIsBusy,
   avatarMoodPresentation,
   type ShapeSafeStateId,
 } from "@openbot/brand/bloub-avatar-motion";
+import type { FaceState } from "@openbot/brand/faces";
 import type { AvatarHue } from "@openbot/contracts/ipc";
 import { prefersReducedMotion } from "@openbot/ui/utils";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createMemo, createSignal, createUniqueId, For, onSettled, Show } from "solid-js";
 import { type AvatarMotion, bloubAvatarProfile, type SupportedAvatarSilhouetteId } from "../../bloub-avatar";
 import type { AgentProfile } from "../../data";
+import { AgentFace } from "./AgentFace";
 import { createPointerGaze } from "./avatar-pointer-gaze";
 
 // Cap avatar animation at 30fps: uncapped bloub clocks measured 30% renderer / 24% GPU
@@ -55,9 +58,30 @@ function slowerBlock(state: ShapeSafeStateId): Block {
   return { ...block, duration: block.duration * SIDEBAR_MOTION_HOLD_FACTOR };
 }
 
+/** The face state of each mood: a surface's own moods (`connecting`, `asleep`) read as work and rest. */
+const FACE_STATES: Readonly<Record<AvatarMood, FaceState>> = {
+  idle: "idle",
+  working: "working",
+  talking: "talking",
+  waiting: "waiting",
+  failed: "failed",
+  responded: "success",
+  connecting: "working",
+  asleep: "idle",
+};
+
+type AvatarAgent = Pick<AgentProfile, "avatarSeed" | "avatarHue" | "avatarUrl"> &
+  Partial<Pick<AgentProfile, "name" | "title" | "faceStyle" | "faceSeed">>;
+
 interface AgentAvatarProps {
-  agent?: Pick<AgentProfile, "avatarSeed" | "avatarHue" | "avatarUrl"> | undefined;
+  agent?: AvatarAgent | undefined;
   seed?: string | undefined;
+  /** The agent's name and title, for the hat of its face, when `agent` is not given. */
+  name?: string | undefined;
+  title?: string | undefined;
+  /** The agent's own face family and re-rolled face, when `agent` is not given. */
+  faceStyle?: string | undefined;
+  faceSeed?: string | undefined;
   hue?: AvatarHue | null;
   url?: string | null | undefined;
   motion?: AvatarMotion;
@@ -102,19 +126,35 @@ export function AgentAvatar(props: AgentAvatarProps) {
     <Show
       when={url() && !imageFailed()}
       fallback={
-        <GeneratedAvatar
-          seed={seed()}
-          hue={hue()}
-          motion={motion()}
-          mood={mood()}
-          cycleOffset={props.cycleOffset}
-          animationOffset={props.animationOffset}
-          shape={props.shape}
-          followPointer={props.followPointer === true}
-          breathe={breathe()}
-          class={className()}
-          style={style()}
-        />
+        <Show
+          when={atelierTheme()}
+          fallback={
+            <GeneratedAvatar
+              seed={seed()}
+              hue={hue()}
+              motion={motion()}
+              mood={mood()}
+              cycleOffset={props.cycleOffset}
+              animationOffset={props.animationOffset}
+              shape={props.shape}
+              followPointer={props.followPointer === true}
+              breathe={breathe()}
+              class={className()}
+              style={style()}
+            />
+          }
+        >
+          <AgentFace
+            id={seed()}
+            name={props.name ?? props.agent?.name}
+            title={props.title ?? props.agent?.title}
+            faceStyle={props.faceStyle ?? props.agent?.faceStyle}
+            faceSeed={props.faceSeed ?? props.agent?.faceSeed}
+            state={FACE_STATES[mood()]}
+            class={`agent-avatar agent-avatar-face ${props.class ?? ""}`}
+            style={props.style}
+          />
+        </Show>
       }
     >
       <span

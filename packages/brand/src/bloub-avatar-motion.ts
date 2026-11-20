@@ -21,11 +21,11 @@ export type ShapeSafeStateId = (typeof SHAPE_SAFE_STATES)[number];
 /**
  * What an agent is doing, as far as its face is concerned.
  *
- * `idle`, `working`, `waiting`, `failed` and `responded` are derived from the agent's own runtime
+ * `idle`, `working`, `talking`, `waiting`, `failed` and `responded` are derived from the agent's own runtime
  * signals. `connecting` and `asleep` belong to the surface around it - a remote desktop dialling
  * in, a snoozed or disconnected agent - so they are passed in rather than derived.
  */
-export type AvatarMood = "idle" | "working" | "waiting" | "failed" | "responded" | "connecting" | "asleep";
+export type AvatarMood = "idle" | "working" | "talking" | "waiting" | "failed" | "responded" | "connecting" | "asleep";
 
 export interface AvatarMoodPresentation {
   state: ShapeSafeStateId;
@@ -55,6 +55,8 @@ export interface AvatarMoodPresentation {
 const MOOD_PRESENTATIONS: Readonly<Record<AvatarMood, AvatarMoodPresentation>> = {
   idle: { state: "idle", expression: null, rings: false, breathe: 0 },
   working: { state: "idle", expression: "attentif", rings: true, breathe: 0.03 },
+  // A reply streams in: the face talks (an Atelier face moves its mouth).
+  talking: { state: "idle", expression: "heureux", rings: false, breathe: 0.02 },
   waiting: { state: "idle", expression: "curieux", rings: false, breathe: 0 },
   failed: { state: "idle", expression: "triste", rings: false, breathe: 0 },
   responded: { state: "idle", expression: "heureux", rings: false, breathe: 0 },

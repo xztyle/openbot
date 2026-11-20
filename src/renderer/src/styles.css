@@ -96,6 +96,9 @@
 @import "@openbot/ui/skill-preview.css";
 /* After the page styles: the transparent window replaces their backgrounds. */
 @import "./styles/window-glass.css";
+@import "@openbot/ui/features/agents/agent-face.css";
+/* Last: the flavour of each Atelier theme over the shared rules. */
+@import "@openbot/ui/styles/atelier.css";
 
 @source "../../../packages/ui/src";
 

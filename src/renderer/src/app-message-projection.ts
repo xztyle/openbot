@@ -62,6 +62,9 @@ export function toAgentProfile(stored: ClientAgentSummary): AgentProfile {
     background: stored.background === true,
     ...(stored.reportsToAgentId === undefined ? {} : { reportsToAgentId: stored.reportsToAgentId }),
     ...(stored.createdBy === undefined ? {} : { createdBy: { agentId: stored.createdBy.agentId } }),
+    // Always written, so a store update that returns the agent to the default face replaces the old value.
+    faceStyle: stored.faceStyle,
+    faceSeed: stored.faceSeed,
     threadId: stored.threadId,
     workspacePath: stored.workspacePath,
     avatarSeed: stored.avatarSeed,
@@ -641,6 +644,8 @@ export function agentProfilesEqual(left: AgentProfile, right: AgentProfile): boo
     left.background === right.background &&
     left.reportsToAgentId === right.reportsToAgentId &&
     left.createdBy?.agentId === right.createdBy?.agentId &&
+    left.faceStyle === right.faceStyle &&
+    left.faceSeed === right.faceSeed &&
     left.threadId === right.threadId &&
     left.avatarSeed === right.avatarSeed &&
     left.avatarHue === right.avatarHue &&

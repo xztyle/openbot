@@ -9,6 +9,7 @@ import type {
 } from "@openbot/contracts/ipc";
 import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-accounts-v1";
 import type { AgentProfile } from "@openbot/ui/data";
+import { registerAgentFaces } from "@openbot/ui/features/agents/agent-face-directory";
 import { createFirstAgentDraft, type FirstAgentDraft } from "@openbot/ui/features/agents/FirstAgentSetup";
 import { currentText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, untrack } from "solid-js";
@@ -81,6 +82,8 @@ const Agents = createSimpleContext({
     const { uiErrors, setUiErrors, appendUiError } = useUiErrors();
 
     const [agentList, setAgentList] = createSignal<AgentProfile[]>([]);
+    // Every face of an agent, also one drawn from its seed alone, wears its name's hat and its own choice.
+    createEffect(agentList, (list) => registerAgentFaces(list));
     /** The first roster read of this scope succeeded. */
     const [agentListSettled, setAgentListSettled] = createSignal(false);
     const [duplicatingAgentIds, setDuplicatingAgentIds] = createSignal<Set<string>>(new Set());

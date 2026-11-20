@@ -11,6 +11,8 @@
     "./tokens.css": "./src/tokens.css",
     "./tokens-light.css": "./src/tokens-light.css",
     "./tokens-native.css": "./src/tokens-native.css",
+    "./faces": "./src/faces/faces.ts",
+    "./atelier-appearance": "./src/atelier-appearance.ts",
     "./article-gradient": "./src/article-gradient.ts",
     "./file-reference": "./src/file-reference.ts",
     "./app-logo-shape": "./src/app-logo-shape.ts",

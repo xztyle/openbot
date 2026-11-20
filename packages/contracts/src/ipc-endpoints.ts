@@ -110,6 +110,7 @@ import type {
   RemoveProviderAccountInput,
   RenameProviderAccountInput,
   ResetProviderUsageInput,
+  SetProviderAccountPoolInput,
   SetProviderApiKeyInput,
   SubmitProviderCodeLoginInput,
 } from "./ipc-agent-status";
@@ -820,6 +821,8 @@ export const IPC_ENDPOINTS = {
     ),
     renameProviderAccount: request<RenameProviderAccountInput, AgentStatus>()("app:rename-provider-account"),
     removeProviderAccount: request<RemoveProviderAccountInput, AgentStatus>()("app:remove-provider-account"),
+    /** Turns the pool of a provider's accounts on or off. The provider's agents then use its pick. */
+    setProviderAccountPool: request<SetProviderAccountPoolInput, AgentStatus>()("app:set-provider-account-pool"),
     /** The usage reset credits of each connected account of a provider. It reads the usage of each. */
     providerUsageResets: request<AgentProviderId, ProviderUsageResets[]>()("app:provider-usage-resets"),
     /** Spends one usage reset credit of an account. A reset ends the usage limit that holds its agents. */
@@ -1018,6 +1021,8 @@ export const IPC_ENDPOINTS = {
     cancelAccountSignIn: scopedRequest<AgentProviderId, void, "required">()("provider-admin:cancel-account-sign-in"),
     renameAccount: scopedRequest<RenameProviderAccountInput, void, "required">()("provider-admin:rename-account"),
     removeAccount: scopedRequest<RemoveProviderAccountInput, void, "required">()("provider-admin:remove-account"),
+    // The pool of a joined server's host's accounts (`provider-account-pool-v1`).
+    setAccountPool: scopedRequest<SetProviderAccountPoolInput, void, "required">()("provider-admin:set-account-pool"),
     // The usage reset credits of a joined server's host's accounts, and the reset that spends one
     // (`provider-usage-reset-v1`).
     usageResets: scopedRequest<AgentProviderId, ProviderUsageResets[], "required">()("provider-admin:usage-resets"),

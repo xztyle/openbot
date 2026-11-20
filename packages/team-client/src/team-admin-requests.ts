@@ -73,6 +73,7 @@ import {
   decodeHostGitHubConnectorStatus,
   decodeHostMessagingOverview,
   decodeHostOnePasswordConnectorStatus,
+  decodeHostProviderAccountPools,
   decodeHostProviderAccounts,
   decodeHostProviderAccountUsage,
   decodeHostReleaseStatus,
@@ -149,6 +150,7 @@ import {
   type SetAgentProviderAccountInput,
   type SetEnabledSkillInput,
   type SetMcpServerEnabledInput,
+  type SetProviderAccountPoolInput,
   type SetProviderApiKeyInput,
   type SetRoutineResultDestinationInput,
   type SharedTable,
@@ -198,6 +200,7 @@ import { MCP_SIGN_IN_APP_ROUTES } from "@openbot/contracts/team-protocol/mcp-sig
 import { MCP_SIGN_IN_ROUTES } from "@openbot/contracts/team-protocol/mcp-sign-in-v1";
 import { MCP_ROUTES } from "@openbot/contracts/team-protocol/mcp-v1";
 import { ONEPASSWORD_CONNECTOR_ROUTES } from "@openbot/contracts/team-protocol/onepassword-connector-v1";
+import { PROVIDER_ACCOUNT_POOL_ROUTES } from "@openbot/contracts/team-protocol/provider-account-pool-v1";
 import {
   type PROVIDER_ACCOUNT_RELAY_PROVIDERS,
   PROVIDER_ACCOUNT_RELAY_ROUTES,
@@ -895,6 +898,33 @@ export function listProviderAccounts(
   return adminCall(() => request("POST", PROVIDER_ACCOUNTS_ROUTES.list, decodeHostProviderAccounts, {}));
 }
 
+/**
+ * `listProviderAccounts` with, on a host with `provider-account-pool-v1`, the pools that are on. When
+ * the pool read fails, the accounts come without it, as from an older host.
+ */
+export function listProviderAccountsWithPools(
+  request: TeamApiRequest,
+  withPools: boolean,
+): Effect.Effect<HostProviderAccounts, TeamAdminRequestError> {
+  if (!withPools) return listProviderAccounts(request);
+  return Effect.all(
+    [
+      listProviderAccounts(request),
+      adminCall(() => request("POST", PROVIDER_ACCOUNT_POOL_ROUTES.list, decodeHostProviderAccountPools, {})).pipe(
+        Effect.orElseSucceed(() => null),
+      ),
+    ],
+    { concurrency: "unbounded" },
+  ).pipe(Effect.map(([accounts, pools]) => (pools ? { ...accounts, pools } : accounts)));
+}
+
+/** `provider-account-pool-v1`: turns the pool of a provider's accounts on the host on or off. */
+export function setProviderAccountPool(
+  request: TeamApiRequest,
+  input: SetProviderAccountPoolInput,
+): Effect.Effect<void, TeamAdminRequestError> {
+  return adminCall(() => request("POST", PROVIDER_ACCOUNT_POOL_ROUTES.update, ignoreResponse, { ...input }));
+}
 /** The readings of the accounts after the first. */
 export function providerAccountUsage(request: TeamApiRequest): Effect.Effect<AccountUsage, TeamAdminRequestError> {
   return adminCall(() => request("POST", PROVIDER_ACCOUNTS_ROUTES.usage, decodeHostProviderAccountUsage, {}));

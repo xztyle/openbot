@@ -87,6 +87,7 @@ export function createSettingsGeneralStore(props: GeneralStoreProps) {
           ...account,
           usedBy: props.providerAccountUsers?.[provider]?.[account.id],
         })),
+        accountPool: agent?.accountPool,
         /*
          * A CLI the user installed themselves is the one the provider runs, whatever the managed
          * runtime holds, so the row reads it as ready on the version the provider reports. An

@@ -33,6 +33,11 @@ export interface ProviderAccountActions {
   usageResets?: ((provider: AgentProviderId) => Promise<readonly ProviderUsageResets[]>) | undefined;
   /** Spends one usage reset credit of an account, and answers what the provider did. */
   resetUsage?: ((provider: AgentProviderId, accountId: string) => Promise<ProviderUsageResetOutcome>) | undefined;
+  /**
+   * Turns the provider's account pool on or off and sets the accounts that it leaves out. Absent where
+   * the computer that runs the providers has no pool.
+   */
+  setPool?: ((provider: AgentProviderId, enabled: boolean, leftOut: readonly string[]) => Promise<void>) | undefined;
 }
 
 /** The name an account shows: the user's name for it, its email, "API key", or its place in the list. */

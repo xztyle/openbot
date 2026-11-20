@@ -13,6 +13,7 @@ import {
   type AgentStatus,
   decodeCustomProviderResult,
   decodeCustomProviderSummaries,
+  decodeHostProviderAccountPools,
   decodeHostProviderAccountUsage,
   decodeProviderApiKeyStatus,
   decodeProviderCodeLoginStart,
@@ -28,6 +29,10 @@ import {
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import type { TeamCurrentCapability } from "@openbot/contracts/team-protocol/current";
+import {
+  PROVIDER_ACCOUNT_POOL_CAPABILITY,
+  PROVIDER_ACCOUNT_POOL_ROUTES,
+} from "@openbot/contracts/team-protocol/provider-account-pool-v1";
 import {
   PROVIDER_ACCOUNT_RELAY_CAPABILITY,
   PROVIDER_ACCOUNT_RELAY_PROVIDERS,
@@ -87,6 +92,7 @@ import {
   parseRemoveProviderAccountInput,
   parseRenameProviderAccountInput,
   parseResetProviderUsageInput,
+  parseSetProviderAccountPoolInput,
 } from "./provider-handlers";
 import { scopedHandler, scopedQueryHandler } from "./scoped-handler";
 import { isObject, requireString } from "./validation";
@@ -323,7 +329,36 @@ export function providerAdminIpcHandlers({
       cancelHostSignIn: hostSignIn((provider, serverId) =>
         remoteChange(serverId, PROVIDER_HOST_SIGN_IN_ROUTES.cancel, { provider }),
       ),
-      accounts: accountsQuery(PROVIDER_ACCOUNTS_ROUTES.list, decodeHostProviderAccountsFromHost),
+      // A host with `provider-account-pool-v1` also gives its pools. When that read fails, the
+      // accounts come without them, as from an older host.
+      accounts: scopedQueryHandler({
+        local: () => Promise.reject(new Error(sourceText("error.team.providersUnsupported"))),
+        remote: (serverId) => {
+          requireAccounts(serverId);
+          const list = remoteServers.request(
+            serverId,
+            PROVIDER_ACCOUNTS_ROUTES.list,
+            decodeHostProviderAccountsFromHost,
+            {
+              method: "POST",
+              body: {},
+            },
+          );
+          const pools = remoteServers.supportsCapability(serverId, PROVIDER_ACCOUNT_POOL_CAPABILITY)
+            ? remoteServers
+                .request(serverId, PROVIDER_ACCOUNT_POOL_ROUTES.list, decodeHostProviderAccountPools, {
+                  method: "POST",
+                  body: {},
+                })
+                .pipe(Effect.orElseSucceed(() => null))
+            : Effect.succeed(null);
+          return runCauseEffect(
+            Effect.all([list, pools], { concurrency: "unbounded" }).pipe(
+              Effect.map(([accounts, pooled]) => (pooled ? { ...accounts, pools: pooled } : accounts)),
+            ),
+          );
+        },
+      }),
       accountUsage: accountsQuery(PROVIDER_ACCOUNTS_ROUTES.usage, decodeHostProviderAccountUsage),
       startAccountSignIn: accountsRequest(
         parseConnectProviderAccountInput,
@@ -344,6 +379,19 @@ export function providerAdminIpcHandlers({
       ),
       renameAccount: accountsRequest(parseRenameProviderAccountInput, PROVIDER_ACCOUNTS_ROUTES.rename, acceptEmpty),
       removeAccount: accountsRequest(parseRemoveProviderAccountInput, PROVIDER_ACCOUNTS_ROUTES.remove, acceptEmpty),
+      setAccountPool: scopedHandler(parseSetProviderAccountPoolInput, {
+        local: () => Promise.reject(new Error(sourceText("error.team.providersUnsupported"))),
+        remote: (input, serverId) => {
+          if (!remoteServers.supportsCapability(serverId, PROVIDER_ACCOUNT_POOL_CAPABILITY))
+            throw new Error(sourceText("error.team.providersUnsupported"));
+          return runCauseEffect(
+            remoteServers.request(serverId, PROVIDER_ACCOUNT_POOL_ROUTES.update, acceptEmpty, {
+              method: "POST",
+              body: input,
+            }),
+          );
+        },
+      }),
       usageResets: usageResetRequest(
         parseProviderId,
         PROVIDER_USAGE_RESET_ROUTES.list,

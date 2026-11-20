@@ -5,6 +5,7 @@ import {
   LOCAL_SERVER_ID,
 } from "@openbot/contracts/ipc";
 import { CLAUDE_API_KEY_CAPABILITY } from "@openbot/contracts/team-protocol/claude-api-key-v1";
+import { PROVIDER_ACCOUNT_POOL_CAPABILITY } from "@openbot/contracts/team-protocol/provider-account-pool-v1";
 import {
   PROVIDER_ACCOUNT_RELAY_CAPABILITY,
   PROVIDER_ACCOUNT_RELAY_PROVIDERS,
@@ -256,6 +257,10 @@ const Providers = createSimpleContext({
     const accountsAdminServerId = createMemo(() => remoteAdminServer(activeServer(), PROVIDER_ACCOUNTS_CAPABILITY)?.id);
     /** The joined server whose host spends the usage reset credits of its accounts (`provider-usage-reset-v1`). */
     const usageResetServerId = createMemo(() => remoteAdminServer(activeServer(), PROVIDER_USAGE_RESET_CAPABILITY)?.id);
+    /** The joined server whose host pools its accounts (`provider-account-pool-v1`). */
+    const accountPoolServerId = createMemo(
+      () => remoteAdminServer(activeServer(), PROVIDER_ACCOUNT_POOL_CAPABILITY)?.id,
+    );
 
     /**
      * The accounts of the providers of this computer, or of a joined server's host that serves
@@ -289,6 +294,12 @@ const Providers = createSimpleContext({
                 },
               }
             : {}),
+          ...(accountPoolServerId() === hostServerId
+            ? {
+                setPool: (provider: AgentProviderId, enabled: boolean, leftOut: readonly string[]) =>
+                  changed(providerAdmin().setAccountPool({ provider, enabled, leftOut: [...leftOut] }, hostServerId)),
+              }
+            : {}),
         };
       }
       if (activeServer()?.kind !== "local") return undefined;
@@ -311,6 +322,8 @@ const Providers = createSimpleContext({
         remove: (provider, accountId) => apply(providersPort().removeProviderAccount({ provider, accountId })),
         usageResets: (provider) => providersPort().providerUsageResets(provider),
         resetUsage: (provider, accountId) => providersPort().resetProviderUsage({ provider, accountId }),
+        setPool: (provider, enabled, leftOut) =>
+          apply(providersPort().setProviderAccountPool({ provider, enabled, leftOut: [...leftOut] })),
       };
     });
 

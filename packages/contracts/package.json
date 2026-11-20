@@ -73,6 +73,7 @@
     "./team-protocol/mcp-sign-in-app-v1": "./src/team-protocol/mcp-sign-in-app-v1.ts",
     "./team-protocol/mcp-sign-in-v1": "./src/team-protocol/mcp-sign-in-v1.ts",
     "./team-protocol/provider-account-relay-v1": "./src/team-protocol/provider-account-relay-v1.ts",
+    "./team-protocol/provider-account-pool-v1": "./src/team-protocol/provider-account-pool-v1.ts",
     "./team-protocol/provider-accounts-v1": "./src/team-protocol/provider-accounts-v1.ts",
     "./team-protocol/provider-usage-reset-v1": "./src/team-protocol/provider-usage-reset-v1.ts",
     "./team-protocol/provider-host-sign-in-v1": "./src/team-protocol/provider-host-sign-in-v1.ts",

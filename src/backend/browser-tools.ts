@@ -131,7 +131,7 @@ const BROWSER_TOOL_DEFINITIONS = [
   browserTool({
     name: "submit_secret",
     description:
-      "Request the secret card for the active authentication step discovered in a fresh page snapshot. Identify password, email/SMS code, or authenticator-app code from the page instructions before calling. Select any login-method option first. The user authorizes one fill-and-submit action to the shown HTTPS origin. Never pass a secret as an argument. Use takeover if the method or code length is unclear, for nonnumeric/recovery codes, CAPTCHA, passkeys, or payment confirmation. Fill saved cards with fill_card.",
+      "Request the secret card for the active authentication step discovered in a fresh page snapshot. Identify password, email/SMS code, or authenticator-app code from the page instructions before calling. Select any login-method option first. The user authorizes one fill-and-submit action to the shown HTTPS origin. Never pass a secret as an argument. Use takeover if the method or (without loginId) code length is unclear, for nonnumeric/recovery codes, CAPTCHA, passkeys, or bank app approval. Not for a bank's 3-D Secure payment code. Fill saved cards with fill_card.",
     shape: {
       tabId,
       method: z
@@ -270,7 +270,7 @@ const BROWSER_TOOL_DEFINITIONS = [
   browserTool({
     name: "request_takeover",
     description:
-      "Ask the user to take over a tab for unclear OAuth account selection, CAPTCHA, passkeys, payment confirmation such as 3-D Secure, or when secure password/code handoff or card fill is unavailable. For a checkbox CAPTCHA (Turnstile, reCAPTCHA, hCaptcha), OpenBot first clicks it once; if that passes, the result says so and no one is asked. Never click a CAPTCHA yourself.",
+      "Ask the user to take over a tab for unclear OAuth account selection, CAPTCHA, passkeys, a payment step that you cannot complete, or when secure password/code handoff or card fill is unavailable. For a checkbox CAPTCHA (Turnstile, reCAPTCHA, hCaptcha), OpenBot first clicks it once; if that passes, the result says so and no one is asked. Never click a CAPTCHA yourself.",
     shape: {
       tabId,
       reason: z

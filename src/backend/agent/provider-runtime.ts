@@ -2992,7 +2992,7 @@ export class ProviderRuntime implements ProviderPort {
     keepsReleased = false,
   ): void {
     const hasActiveClient = this.#clients.has(provider) || (keepsReleased && this.#released.has(provider));
-    const fallbackMessage = `OpenBot could not connect ${providerLabel(provider)}. Try again.`;
+    const fallbackMessage = `Atelier could not connect ${providerLabel(provider)}. Try again.`;
     const rawMessage = error instanceof Error ? error.message : String(error);
     const timeout = isProviderTimeout(error);
     // A timeout says which stage did not answer, and the row's last error keeps it. Only a catalog

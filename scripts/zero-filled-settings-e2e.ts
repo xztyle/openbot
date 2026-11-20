@@ -92,7 +92,7 @@ try {
     const path = join(directory, "openbot-remote-servers-v1.json");
     await writeFile(path, '{"version":3,"servers":[{"encryptedToken":"SECRET-TOKEN-VALUE"');
     const message = await startError(() => runCauseEffect(new RemoteServerStore({ path, cipher }).load()));
-    assert.equal(message, `OpenBot cannot read ${path}. The file is damaged.`);
+    assert.equal(message, `Atelier cannot read ${path}. The file is damaged.`);
     assert.ok(!message.includes("SECRET"));
     assert.deepEqual(await setAsideCopies(directory, "openbot-remote-servers-v1.json"), []);
     return message;

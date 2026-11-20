@@ -172,8 +172,9 @@ export function ConversationTimeline() {
     markMessageSeen,
     markUnreadMessages,
     markingRead,
-    messageVirtualizer,
+    messageFlow,
     newMessageCount,
+    timelineRowKeys,
     timelineMessages,
     toggleRoutineRun,
     toggleAgentMessage,
@@ -578,7 +579,6 @@ export function ConversationTimeline() {
     marker.kind === "mcp-sign-in"
       ? mcpServers().find((config) => config.id === marker.mcpServerId && config.transport === "http")
       : undefined;
-  const virtualMessageRows = createMemo(() => messageVirtualizer.getVirtualItems());
   const rail = createChatScrollRail({
     rows: timelineMessages,
     // A change the person made in the app, such as to a routine, is a marker, not a message they wrote.
@@ -587,7 +587,7 @@ export function ConversationTimeline() {
       message.author === "you" && !message.actionMarker && !otherSender(message) ? message.body : undefined,
     storedCount: () => props.messages.length,
     unloaded: () => props.unloadedHistory,
-    virtualizer: messageVirtualizer,
+    flow: messageFlow,
     onLoadOlder: () => props.onLoadOlder?.(),
     onJump: () => setStickToLatest(false),
   });
@@ -815,15 +815,11 @@ export function ConversationTimeline() {
               )}
             </Show>
           )}
-          <div
-            ref={setVirtualRootElement}
-            class={["virtual-chat-list", { "virtual-chat-list-static": !messageVirtualizer.isVirtualized() }]}
-            style={{ height: messageVirtualizer.isVirtualized() ? `${messageVirtualizer.getTotalSize()}px` : "auto" }}
-          >
-            <For each={virtualMessageRows()}>
-              {(virtualRow) => {
-                // The row's own message, found by id: `virtualRow.index` can be stale for a tick.
-                const index = createMemo(() => timelineIndexById().get(virtualRow.key));
+          <div ref={setVirtualRootElement} class="virtual-chat-list">
+            <For each={timelineRowKeys()}>
+              {(rowKey) => {
+                // The row's own message, found by id, so the row keeps it when rows load above.
+                const index = createMemo(() => timelineIndexById().get(rowKey));
                 const message = createMemo(() => {
                   const current = index();
                   return current === undefined ? undefined : timelineMessages()[current];
@@ -941,15 +937,10 @@ export function ConversationTimeline() {
                   const fold = () => message()?.agentTurns ?? initialFold;
                   return (
                     <div
-                      data-index={virtualRow.index}
+                      data-index={index()}
+                      data-row-key={rowKey}
                       data-grouped={groupedWithMarker() ? "marker" : undefined}
-                      ref={messageVirtualizer.measureElement}
-                      class="virtual-chat-row"
-                      style={{
-                        transform: messageVirtualizer.isVirtualized()
-                          ? `translateY(${virtualRow.start - messageVirtualizer.scrollMargin()}px)`
-                          : "none",
-                      }}
+                      class="virtual-chat-row chat-flow-row"
                     >
                       <Show when={message()?.id === compactionBefore()}>
                         <CompactionMarker />
@@ -972,15 +963,10 @@ export function ConversationTimeline() {
                 if (markerOnly) {
                   return (
                     <div
-                      data-index={virtualRow.index}
+                      data-index={index()}
+                      data-row-key={rowKey}
                       data-grouped={groupedWithMarker() ? "marker" : undefined}
-                      ref={messageVirtualizer.measureElement}
-                      class="virtual-chat-row"
-                      style={{
-                        transform: messageVirtualizer.isVirtualized()
-                          ? `translateY(${virtualRow.start - messageVirtualizer.scrollMargin()}px)`
-                          : "none",
-                      }}
+                      class="virtual-chat-row chat-flow-row"
                     >
                       <Show when={message()?.id === compactionBefore()}>
                         <CompactionMarker />
@@ -1129,16 +1115,7 @@ export function ConversationTimeline() {
                   // A plan has no bubble, reactions or time: it is the agent's live checklist.
                   const plan = () => message()?.plan ?? initialMessage.plan;
                   return (
-                    <div
-                      data-index={virtualRow.index}
-                      ref={messageVirtualizer.measureElement}
-                      class="virtual-chat-row"
-                      style={{
-                        transform: messageVirtualizer.isVirtualized()
-                          ? `translateY(${virtualRow.start - messageVirtualizer.scrollMargin()}px)`
-                          : "none",
-                      }}
-                    >
+                    <div data-index={index()} data-row-key={rowKey} class="virtual-chat-row chat-flow-row">
                       <Show when={message()?.id === compactionBefore()}>
                         <CompactionMarker />
                       </Show>
@@ -1171,16 +1148,7 @@ export function ConversationTimeline() {
                   // The subagents have no bubble, reactions or time: they are the live work of the turn.
                   const subagents = () => message()?.subagents ?? initialMessage.subagents;
                   return (
-                    <div
-                      data-index={virtualRow.index}
-                      ref={messageVirtualizer.measureElement}
-                      class="virtual-chat-row"
-                      style={{
-                        transform: messageVirtualizer.isVirtualized()
-                          ? `translateY(${virtualRow.start - messageVirtualizer.scrollMargin()}px)`
-                          : "none",
-                      }}
-                    >
+                    <div data-index={index()} data-row-key={rowKey} class="virtual-chat-row chat-flow-row">
                       <Show when={message()?.id === compactionBefore()}>
                         <CompactionMarker />
                       </Show>
@@ -1212,16 +1180,7 @@ export function ConversationTimeline() {
                 if (untrack(() => initialMessage.kind === "memory-changes")) {
                   // Only a turn with no answer gets this row: an answer shows the changes in its steps.
                   return (
-                    <div
-                      data-index={virtualRow.index}
-                      ref={messageVirtualizer.measureElement}
-                      class="virtual-chat-row"
-                      style={{
-                        transform: messageVirtualizer.isVirtualized()
-                          ? `translateY(${virtualRow.start - messageVirtualizer.scrollMargin()}px)`
-                          : "none",
-                      }}
-                    >
+                    <div data-index={index()} data-row-key={rowKey} class="virtual-chat-row chat-flow-row">
                       <Show when={message()?.id === unreadBoundaryMessageId()}>
                         <UnreadDivider />
                       </Show>
@@ -1260,16 +1219,7 @@ export function ConversationTimeline() {
                     );
                   }
                   return (
-                    <div
-                      data-index={virtualRow.index}
-                      ref={messageVirtualizer.measureElement}
-                      class="virtual-chat-row"
-                      style={{
-                        transform: messageVirtualizer.isVirtualized()
-                          ? `translateY(${virtualRow.start - messageVirtualizer.scrollMargin()}px)`
-                          : "none",
-                      }}
-                    >
+                    <div data-index={index()} data-row-key={rowKey} class="virtual-chat-row chat-flow-row">
                       <Show when={message()?.id === compactionBefore()}>
                         <CompactionMarker />
                       </Show>
@@ -1492,15 +1442,10 @@ export function ConversationTimeline() {
                 };
                 return (
                   <div
-                    data-index={virtualRow.index}
+                    data-index={index()}
+                    data-row-key={rowKey}
                     data-grouped={groupedWithMarker() ? "marker" : continuesRun() ? "sender" : undefined}
-                    ref={messageVirtualizer.measureElement}
-                    class="virtual-chat-row"
-                    style={{
-                      transform: messageVirtualizer.isVirtualized()
-                        ? `translateY(${virtualRow.start - messageVirtualizer.scrollMargin()}px)`
-                        : "none",
-                    }}
+                    class="virtual-chat-row chat-flow-row"
                   >
                     <Show when={message()?.id === compactionBefore()}>
                       <CompactionMarker />

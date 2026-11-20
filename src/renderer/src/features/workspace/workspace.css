@@ -108,20 +108,15 @@
   padding-bottom: var(--openbot-space-2);
 }
 
-.ws-virtual-list {
+/* The rows of a channel, in the normal flow: each message starts below the one before it. */
+.ws-timeline {
   position: relative;
   width: 100%;
 }
 
-.ws-virtual-row {
-  position: absolute;
-  inset: 0 0 auto;
-  width: 100%;
-}
-
-.ws-virtual-list[data-static] .ws-virtual-row {
+.ws-timeline-row {
   position: relative;
-  inset: auto;
+  width: 100%;
 }
 
 .ws-message-older {

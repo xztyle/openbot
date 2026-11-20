@@ -21,9 +21,9 @@ import {
 } from "@openbot/ui/features/conversation/UnreadMessages";
 import { TeamPersonAvatar, teamMemberName } from "@openbot/ui/features/team/TeamPersonAvatar";
 import { type TextValue, useText } from "@openbot/ui/text";
-import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
 import { ChatScrollRail, createChatScrollRail, type UnloadedHistory } from "./ChatScrollRail";
-import { calculateChatScrollMargin, chatHistoryBoundaryReached, createChatVirtualizer } from "./createChatVirtualizer";
+import { chatHistoryBoundaryReached, createChatFlow } from "./createChatFlow";
 import { anchorNewMessages, type NewMessageTally, tallyNewMessages } from "./new-message-tally";
 import { isSendShortcutKey, type SendShortcut, sendShortcutAriaKey, sendShortcutHintKey } from "./send-shortcut";
 
@@ -60,10 +60,8 @@ export function DirectConversation(props: DirectConversationProps) {
   const [markingRead, setMarkingRead] = createSignal(false);
   const [showScrollToLatest, setShowScrollToLatest] = createSignal(false);
   const [unreadDividerVisible, setUnreadDividerVisible] = createSignal(false);
-  const [virtualScrollMargin, setVirtualScrollMargin] = createSignal(0);
   const [newMessageCount, setNewMessageCount] = createSignal(0);
   let messageList: HTMLDivElement | undefined;
-  let virtualRoot: HTMLDivElement | undefined;
   let unreadMessagesDivider: HTMLDivElement | undefined;
   let unreadVisibilityFrame: number | undefined;
   let currentUnreadCount = 0;
@@ -83,44 +81,34 @@ export function DirectConversation(props: DirectConversationProps) {
     newMessages = anchorNewMessages(timelineRows());
     setNewMessageCount(0);
   };
-  const messageVirtualizer = createChatVirtualizer<HTMLDivElement, HTMLDivElement>({
-    count: () => props.snapshot?.messages.length ?? 0,
-    getScrollElement: () => messageList ?? null,
-    estimateSize: () => 56,
-    getItemKey: (index) => props.snapshot?.messages[index]?.id ?? index,
-    keyVersion: () => {
-      const messages = props.snapshot?.messages;
-      return `${messages?.[0]?.id ?? ""}:${messages?.at(-1)?.id ?? ""}`;
-    },
-    scrollMargin: virtualScrollMargin,
-    onChange: (instance) => {
-      const first = instance.getVirtualItems()[0];
-      if (!first) return;
-      // The reader has to be at the top as well: a short thread renders row 0 at the newest message.
-      if (chatHistoryBoundaryReached(messageList, first.index) && props.hasOlder && !props.loadingOlder) {
-        props.onLoadOlder?.();
-      }
-    },
+  // The rows are in the normal flow of the page, so a row can never be drawn over another.
+  const messageFlow = createChatFlow({ following: () => stickToLatest });
+  /* One row per message id, so a row stays the same element when messages load above it. */
+  const rowKeys = createMemo<readonly string[]>((previous) => {
+    const keys = props.snapshot?.messages.map((message) => message.id) ?? [];
+    if (previous && previous.length === keys.length && previous.every((key, index) => key === keys[index]))
+      return previous;
+    // The rows change before they are drawn: take the reader's place now, so the flow keeps it.
+    messageFlow.notePlace();
+    return keys;
   });
-  const virtualMessageRows = createMemo(() => messageVirtualizer.getVirtualItems());
+  const indexById = createMemo(
+    () => new Map((props.snapshot?.messages ?? []).map((message, index) => [message.id, index])),
+  );
+  /* The reader is at the top of the loaded messages: the next older page loads. */
+  function loadOlderAtTop(): void {
+    if (chatHistoryBoundaryReached(messageList) && props.hasOlder && !props.loadingOlder) props.onLoadOlder?.();
+  }
   const rail = createChatScrollRail({
     rows: () => props.snapshot?.messages ?? [],
     question: (message) => (message.senderMemberId === props.currentMemberId ? message.text : undefined),
     unloaded: () => props.unloadedHistory,
-    virtualizer: messageVirtualizer,
+    flow: messageFlow,
     onLoadOlder: () => props.onLoadOlder?.(),
     onJump: () => {
       stickToLatest = false;
     },
   });
-  const unreadBannerReady = (): boolean => {
-    const unreadMessageId = props.snapshot?.readState?.firstUnreadMessageId;
-    if (!unreadMessageId) return true;
-    const unreadIndex = props.snapshot?.messages.findIndex((message) => message.id === unreadMessageId) ?? -1;
-    if (unreadIndex < 0) return true;
-    return messageVirtualizer.getVirtualItems().some((item) => item.index === unreadIndex);
-  };
-
   createEffect(
     () => {
       const rows = timelineRows();
@@ -147,10 +135,10 @@ export function DirectConversation(props: DirectConversationProps) {
       }
       requestAnimationFrame(() => {
         if (!messageList) return;
-        updateVirtualScrollMargin();
         if (stickToLatest) messageList.scrollTop = messageList.scrollHeight;
         updateScrollState(messageList);
         updateUnreadDividerVisibility();
+        loadOlderAtTop();
       });
     },
   );
@@ -163,11 +151,10 @@ export function DirectConversation(props: DirectConversationProps) {
 
   onSettled(() => {
     const resizeObserver = new ResizeObserver(() => {
-      updateVirtualScrollMargin();
+      if (messageList && stickToLatest) messageList.scrollTop = messageList.scrollHeight;
       updateUnreadDividerVisibility();
     });
     if (messageList) resizeObserver.observe(messageList);
-    if (virtualRoot) resizeObserver.observe(virtualRoot);
     return () => resizeObserver.disconnect();
   });
 
@@ -186,10 +173,6 @@ export function DirectConversation(props: DirectConversationProps) {
     const remaining = element.scrollHeight - element.scrollTop - element.clientHeight;
     setShowScrollToLatest(remaining > 80);
     if (remaining <= 80) clearNewMessages();
-  }
-
-  function updateVirtualScrollMargin(): void {
-    setVirtualScrollMargin(calculateChatScrollMargin(messageList, virtualRoot));
   }
 
   function updateUnreadDividerVisibility(): void {
@@ -291,7 +274,7 @@ export function DirectConversation(props: DirectConversationProps) {
         </span>
       </header>
 
-      <Show when={(props.snapshot?.readState?.unreadCount ?? 0) > 0 && !unreadDividerVisible() && unreadBannerReady()}>
+      <Show when={(props.snapshot?.readState?.unreadCount ?? 0) > 0 && !unreadDividerVisible()}>
         <UnreadMessagesBanner
           count={props.snapshot?.readState?.unreadCount ?? 0}
           busy={markingRead()}
@@ -304,7 +287,7 @@ export function DirectConversation(props: DirectConversationProps) {
         ref={(element) => {
           messageList = element;
           rail.ref(element);
-          updateVirtualScrollMargin();
+          messageFlow.setScrollElement(element);
         }}
         class="direct-message-list"
         role="log"
@@ -313,6 +296,7 @@ export function DirectConversation(props: DirectConversationProps) {
           stickToLatest = element.scrollHeight - element.scrollTop - element.clientHeight <= 80;
           updateScrollState(element);
           updateUnreadDividerVisibility();
+          loadOlderAtTop();
         }}
       >
         <ChatScrollRail {...rail.props} />
@@ -356,37 +340,24 @@ export function DirectConversation(props: DirectConversationProps) {
                   </Show>
                 </div>
               </Show>
-              <MessageGroup
-                ref={(element) => {
-                  virtualRoot = element;
-                  updateVirtualScrollMargin();
-                }}
-                class={["virtual-chat-list", { "virtual-chat-list-static": !messageVirtualizer.isVirtualized() }]}
-                style={{
-                  height: messageVirtualizer.isVirtualized() ? `${messageVirtualizer.getTotalSize()}px` : "auto",
-                }}
-              >
-                <For each={virtualMessageRows()}>
-                  {(virtualRow) => {
-                    const message = props.snapshot?.messages[virtualRow.index];
+              <MessageGroup ref={(element) => messageFlow.setListElement(element)} class="virtual-chat-list">
+                <For each={rowKeys()}>
+                  {(rowKey) => {
+                    const index = () => indexById().get(rowKey) ?? -1;
+                    const message = untrack(() => props.snapshot?.messages[index()]);
                     if (!message) return null;
                     const own = () => message.senderMemberId === props.currentMemberId;
-                    const previous = () => props.snapshot?.messages[virtualRow.index - 1];
+                    const previous = () => props.snapshot?.messages[index() - 1];
                     // The unread boundary keeps the full entry gap so its divider stays legible.
                     const grouped = () =>
                       previous()?.senderMemberId === message.senderMemberId &&
                       message.id !== props.snapshot?.readState?.firstUnreadMessageId;
                     return (
                       <div
-                        data-index={virtualRow.index}
+                        data-index={index()}
+                        data-row-key={rowKey}
                         data-grouped={grouped() ? "sender" : undefined}
-                        ref={messageVirtualizer.measureElement}
-                        class="virtual-chat-row"
-                        style={{
-                          transform: messageVirtualizer.isVirtualized()
-                            ? `translateY(${virtualRow.start - messageVirtualizer.scrollMargin()}px)`
-                            : "none",
-                        }}
+                        class="virtual-chat-row chat-flow-row"
                       >
                         <Show when={message.id === props.snapshot?.readState?.firstUnreadMessageId}>
                           <UnreadMessagesDivider

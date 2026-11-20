@@ -5,7 +5,7 @@ import { useText } from "@openbot/ui/text";
 import { prefersReducedMotion } from "@openbot/ui/utils";
 import { createEffect, createMemo, createSignal, createStore, For, onSettled, Show, untrack } from "solid-js";
 import type { DayMarkerOptions } from "./chat-day-markers";
-import type { ChatVirtualizer } from "./createChatVirtualizer";
+import type { ChatFlow } from "./createChatFlow";
 
 /**
  * How long the rail's place takes to reach the opened section after a jump from the rail. A fixed
@@ -158,7 +158,8 @@ export function createChatScrollRail<Row extends ChatScrollRow>(options: {
   /** The stored messages behind the rows. The number of rows when absent. */
   storedCount?: () => number;
   unloaded: () => UnloadedHistory | undefined;
-  virtualizer: Pick<ChatVirtualizer<Element>, "itemStart" | "scrollToIndex" | "getTotalSize">;
+  /** The transcript's rows: where each starts, their height, and the jump to one. */
+  flow: Pick<ChatFlow, "itemStart" | "scrollToIndex" | "getTotalSize">;
   onLoadOlder: () => void;
   /** Runs before each jump, such as to stop following the newest message. */
   onJump: () => void;
@@ -178,8 +179,8 @@ export function createChatScrollRail<Row extends ChatScrollRow>(options: {
       questions: questions(),
       rowCount,
       storedCount: options.storedCount?.() ?? rowCount,
-      itemStart: options.virtualizer.itemStart,
-      totalSize: options.virtualizer.getTotalSize(),
+      itemStart: options.flow.itemStart,
+      totalSize: options.flow.getTotalSize(),
       unloaded: options.unloaded(),
       text: { t, format },
     });
@@ -193,11 +194,11 @@ export function createChatScrollRail<Row extends ChatScrollRow>(options: {
     if (!section) return;
     options.onJump();
     if (section.row === undefined) {
-      options.virtualizer.scrollToIndex(0);
+      options.flow.scrollToIndex(0);
       options.onLoadOlder();
       return;
     }
-    options.virtualizer.scrollToIndex(section.row, { smooth: !prefersReducedMotion() });
+    options.flow.scrollToIndex(section.row, { smooth: !prefersReducedMotion() });
   };
   return { ref: setScrollElement, props: { scrollElement, sections, onJump } };
 }

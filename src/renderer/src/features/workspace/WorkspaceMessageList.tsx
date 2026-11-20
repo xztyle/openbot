@@ -1,10 +1,6 @@
 import type { ChannelMessage } from "@openbot/contracts/ipc";
 import { ArrowUp, Button, CheckCheck, ChevronDown } from "@openbot/ui";
-import {
-  calculateChatScrollMargin,
-  chatHistoryBoundaryReached,
-  createChatVirtualizer,
-} from "@openbot/ui/features/conversation/createChatVirtualizer";
+import { createChatFlow } from "@openbot/ui/features/conversation/createChatFlow";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
@@ -15,6 +11,8 @@ import { savedScrollPlace, saveScrollPlace } from "./workspace-scroll-places";
 
 /** How close to the end still counts as reading the newest messages. */
 const FOLLOW_DISTANCE = 80;
+/** How close to the top of the loaded rows asks for the next older page. */
+const HISTORY_TOP = 200;
 
 export interface WorkspaceMessageListProps {
   channelId: string;
@@ -41,20 +39,21 @@ export interface WorkspaceMessageListProps {
 }
 
 /**
- * The transcript of a channel as a virtual list: only the rows near the view are in the page, so a
- * channel with thousands of messages scrolls as smoothly as a short one. It follows new messages
- * while the reader is at the end, keeps its place when older ones load above, and loads the next
- * older page when the reader reaches the top.
+ * The transcript of a channel. Each message is a row in the normal flow of the page, below the one
+ * before it, so no row is ever drawn over another; the browser skips the layout and paint of the rows
+ * away from the screen (see `createChatFlow`). It follows new messages while the reader is at the
+ * end, keeps its place when older ones load above, and loads the next older page when the reader
+ * reaches the top.
  */
 export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
   const { t, format } = useText();
   const ws = useWorkspace();
   let scroller: HTMLDivElement | undefined;
-  let virtualRoot: HTMLDivElement | undefined;
-  const [margin, setMargin] = createSignal(0);
+  let rowList: HTMLDivElement | undefined;
   const [atEnd, setAtEnd] = createSignal(true);
   const [loadingOlder, setLoadingOlder] = createSignal(false);
   let follow = true;
+  const flow = createChatFlow({ following: () => follow });
   let opened = false;
 
   const rows = createMemo<readonly WorkspaceMessageRowModel[]>((previous) =>
@@ -68,6 +67,15 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
     ),
   );
   const indexByKey = createMemo(() => new Map(rows().map((row, index) => [row.key, index])));
+  /* One element per row key, so a row stays the same element while its message changes. */
+  const rowKeys = createMemo<readonly string[]>((previous) => {
+    const keys = rows().map((row) => row.key);
+    if (previous && previous.length === keys.length && previous.every((key, index) => key === keys[index]))
+      return previous;
+    // The rows change before they are drawn: take the reader's place now, so the flow keeps it.
+    flow.notePlace();
+    return keys;
+  });
   const unreadIndex = createMemo(() => rows().findIndex((row) => row.firstUnread));
   /** The messages of others from the "new" divider on, for "12 new messages since 10:15". */
   const unreadCount = createMemo(() => {
@@ -112,29 +120,6 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
     }
   }
 
-  const virtualizer = createChatVirtualizer<HTMLDivElement, HTMLDivElement>({
-    count: () => rows().length,
-    getScrollElement: () => scroller ?? null,
-    estimateSize: () => 64,
-    getItemKey: (index) => rows()[index]?.key ?? index,
-    keyVersion: () => {
-      const list = rows();
-      return `${list[0]?.key ?? ""}:${list.at(-1)?.key ?? ""}:${list.length}`;
-    },
-    scrollMargin: margin,
-    stickToLatest: () => follow,
-    // A page of the host holds 100 messages; only the rows near the view are built.
-    staticLimit: 24,
-    onChange: (instance) => {
-      const first = instance.getVirtualItems()[0];
-      if (first && opened && chatHistoryBoundaryReached(scroller, first.index)) void loadOlder();
-    },
-  });
-
-  function measure() {
-    setMargin(calculateChatScrollMargin(scroller, virtualRoot));
-  }
-
   function scrollToEnd() {
     if (!scroller) return;
     scroller.scrollTop = scroller.scrollHeight;
@@ -147,16 +132,16 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
     placeQueued = true;
     requestAnimationFrame(() => {
       placeQueued = false;
-      if (!scroller || !virtualRoot || !opened) return;
+      if (!scroller || !rowList || !opened) return;
       if (follow) {
         saveScrollPlace(placeId, null);
         return;
       }
       const top = scroller.getBoundingClientRect().top;
-      for (const element of virtualRoot.children) {
+      for (const element of rowList.children) {
         const box = element.getBoundingClientRect();
         if (box.bottom <= top) continue;
-        const key = untrack(rows)[Number(element.getAttribute("data-index"))]?.key;
+        const key = element.getAttribute("data-row-key");
         if (key) saveScrollPlace(placeId, { key, offset: box.top - top });
         return;
       }
@@ -166,19 +151,20 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
   /** Opens the list where the reader left it: that row, as far from the top as it was. */
   function restorePlace(index: number, offset: number) {
     follow = false;
-    virtualizer.scrollToIndex(index);
-    requestAnimationFrame(() => {
-      const element = virtualRoot?.querySelector(`[data-index="${index}"]`);
-      if (scroller && element)
-        scroller.scrollTop += element.getBoundingClientRect().top - scroller.getBoundingClientRect().top - offset;
-      requestAnimationFrame(updateAtEnd);
-    });
+    flow.scrollToIndex(index, { offset });
+    requestAnimationFrame(updateAtEnd);
   }
 
+  /** The scroll position at the last check, to tell a move up from content that grew below. */
+  let lastScrollTop = 0;
   function updateAtEnd() {
     if (!scroller) return;
     const remaining = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-    follow = remaining <= FOLLOW_DISTANCE;
+    // Only a move up leaves the end. A message that grows below the view moves the end away
+    // without a scroll, and the list follows it.
+    if (remaining <= FOLLOW_DISTANCE) follow = true;
+    else if (scroller.scrollTop < lastScrollTop - 1) follow = false;
+    lastScrollTop = scroller.scrollTop;
     notePlace();
     if (follow !== atEnd()) {
       setAtEnd(follow);
@@ -186,8 +172,8 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
       props.onAtEnd?.(follow);
     }
     const unread = untrack(unreadIndex);
-    const start = unread >= 0 ? virtualizer.itemStart(unread) : undefined;
-    const above = start !== undefined && start + untrack(margin) < scroller.scrollTop;
+    const start = unread >= 0 ? flow.itemStart(unread) : undefined;
+    const above = start !== undefined && start < scroller.scrollTop;
     if (above !== untrack(unreadAbove)) setUnreadAbove(above);
   }
 
@@ -195,7 +181,7 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
     const unread = untrack(unreadIndex);
     if (unread < 0) return;
     follow = false;
-    virtualizer.scrollToIndex(Math.max(0, unread - 1));
+    flow.scrollToIndex(Math.max(0, unread - 1));
     requestAnimationFrame(updateAtEnd);
   }
 
@@ -208,7 +194,13 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
     () => {
       const id = props.focusId;
       if (!id) return null;
-      return { id, index: rows().findIndex((row) => row.entry.id === id && !row.pending), older: props.hasOlder };
+      return {
+        id,
+        index: rows().findIndex((row) => row.entry.id === id && !row.pending),
+        older: props.hasOlder,
+        // A page that lands while another loads asks again once that one is done.
+        loading: loadingOlder(),
+      };
     },
     (focus) => {
       if (!focus) {
@@ -218,7 +210,7 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
       }
       if (focus.id === focused) return;
       if (focus.index < 0) {
-        if (focus.older && focusLoads < FOCUS_LOAD_LIMIT) {
+        if (focus.older && !focus.loading && focusLoads < FOCUS_LOAD_LIMIT) {
           focusLoads += 1;
           void loadOlder();
         }
@@ -227,7 +219,7 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
       focused = focus.id;
       follow = false;
       requestAnimationFrame(() => {
-        virtualizer.scrollToIndex(Math.max(0, focus.index - 1));
+        flow.scrollToIndex(Math.max(0, focus.index - 1));
         requestAnimationFrame(updateAtEnd);
       });
     },
@@ -236,18 +228,18 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
   // The first rows open at the "new" divider, or at the end. Each later change follows the end
   // while the reader is there.
   createEffect(
-    () => ({ count: rows().length, last: rows().at(-1)?.key, size: virtualizer.getTotalSize() }),
+    () => ({ count: rows().length, last: rows().at(-1)?.key, size: flow.getTotalSize() }),
     () => {
       requestAnimationFrame(() => {
         if (!scroller) return;
-        measure();
         if (!opened && rows().length > 0) {
           opened = true;
           // A linked message takes the place of the divider and the end.
           if (untrack(() => props.focusId)) return;
           const unread = untrack(() => rows().findIndex((row) => row.firstUnread));
           if (unread > 0) {
-            virtualizer.scrollToIndex(Math.max(0, unread - 1));
+            follow = false;
+            flow.scrollToIndex(Math.max(0, unread - 1));
             requestAnimationFrame(updateAtEnd);
             return;
           }
@@ -261,6 +253,8 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
         }
         if (follow) scrollToEnd();
         updateAtEnd();
+        // A transcript shorter than the view has no scroll to reach its top: it loads the next page.
+        if (opened && scroller.scrollTop <= HISTORY_TOP) void loadOlder();
       });
     },
   );
@@ -279,7 +273,6 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
 
   onSettled(() => {
     const observer = new ResizeObserver(() => {
-      measure();
       if (follow) scrollToEnd();
     });
     if (scroller) observer.observe(scroller);
@@ -294,6 +287,7 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
       <div
         ref={(element) => {
           scroller = element;
+          flow.setScrollElement(element);
           // A link to a message of this workspace opens it here, not in the browser. The links
           // take the keyboard themselves, so the list only hears their clicks.
           element.addEventListener("click", (event) => {
@@ -305,7 +299,7 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
         class="ws-message-scroll"
         onScroll={() => {
           updateAtEnd();
-          if (scroller && scroller.scrollTop < 200 && opened) void loadOlder();
+          if (scroller && scroller.scrollTop < HISTORY_TOP && opened) void loadOlder();
         }}
       >
         <Show when={loadingOlder()}>
@@ -318,28 +312,21 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
         </Show>
         <Show when={rows().length === 0}>{props.empty}</Show>
         <div
-          ref={(element) => (virtualRoot = element)}
-          class="ws-virtual-list"
-          data-static={virtualizer.isVirtualized() ? undefined : ""}
-          style={{ height: virtualizer.isVirtualized() ? `${virtualizer.getTotalSize()}px` : "auto" }}
+          ref={(element) => {
+            rowList = element;
+            flow.setListElement(element);
+          }}
+          class="ws-timeline"
         >
-          <For each={virtualizer.getVirtualItems()}>
-            {(item) => {
+          <For each={rowKeys()}>
+            {(key) => {
+              const index = createMemo(() => indexByKey().get(key));
               const row = createMemo(() => {
-                const index = indexByKey().get(String(item.key));
-                return index === undefined ? undefined : rows()[index];
+                const current = index();
+                return current === undefined ? undefined : rows()[current];
               });
               return (
-                <div
-                  data-index={item.index}
-                  ref={virtualizer.measureElement}
-                  class="ws-virtual-row"
-                  style={{
-                    transform: virtualizer.isVirtualized()
-                      ? `translateY(${item.start - virtualizer.scrollMargin()}px)`
-                      : "none",
-                  }}
-                >
+                <div data-index={index()} data-row-key={key} class="ws-timeline-row chat-flow-row">
                   <Show when={row()}>
                     {(current) => (
                       <WorkspaceMessage

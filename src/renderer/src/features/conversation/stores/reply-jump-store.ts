@@ -1,6 +1,5 @@
 import type { AgentMessage } from "@openbot/ui/data";
 import { preferredMessageScrollBehavior } from "@openbot/ui/features/conversation/MessageNavigation";
-import type { VirtualItem } from "@tanstack/virtual-core";
 import { createEffect, createSignal } from "solid-js";
 import type { ConversationProps } from "../conversation-types";
 
@@ -35,7 +34,7 @@ export function flashChatRow(row: HTMLElement): void {
 export interface ReplyJumpStoreDeps {
   props: ConversationProps;
   scrollElement: () => HTMLDivElement | undefined;
-  timelineIndexById: () => ReadonlyMap<VirtualItem["key"], number>;
+  timelineIndexById: () => ReadonlyMap<string, number>;
   scrollToIndex: (index: number) => void;
   setStickToLatest: (value: boolean) => void;
 }
@@ -75,7 +74,7 @@ export function createReplyJumpStore(deps: ReplyJumpStoreDeps) {
 
   const rowElement = (id: string) => messageElement(id)?.closest<HTMLElement>(".virtual-chat-row") ?? undefined;
 
-  /* The drawn row of a loaded message. A virtualized row that is far away is drawn first. */
+  /* The drawn row of a loaded message. */
   async function findRow(id: string): Promise<HTMLElement | undefined> {
     const drawn = rowElement(id);
     if (drawn) return drawn;

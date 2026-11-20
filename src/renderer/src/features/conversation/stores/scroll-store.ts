@@ -1,11 +1,7 @@
 import { createScrollFades } from "@openbot/ui/components/createScrollFades";
 import type { AgentMessage } from "@openbot/ui/data";
 import type { RoutineRunToggleMarkerModel } from "@openbot/ui/features/conversation/ChatActionMarker";
-import {
-  calculateChatScrollMargin,
-  chatHistoryBoundaryReached,
-  createChatVirtualizer,
-} from "@openbot/ui/features/conversation/createChatVirtualizer";
+import { chatHistoryBoundaryReached, createChatFlow } from "@openbot/ui/features/conversation/createChatFlow";
 import { scrollToLatestMessage } from "@openbot/ui/features/conversation/MessageNavigation";
 import {
   anchorNewMessages,
@@ -19,8 +15,7 @@ import {
   unreadMessagesDividerIsVisible,
 } from "@openbot/ui/features/conversation/UnreadMessages";
 import { currentText } from "@openbot/ui/text";
-import type { VirtualItem } from "@tanstack/virtual-core";
-import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { eventCheckOrigins, eventCheckOriginsEqual, isEventCheckMarkerMessage } from "../../../app-message-projection";
 import { useShowAgentMessages, useShowAgentReasoning } from "../../../chat-visibility-preferences";
 import { groupAgentMessageMarkers, markOpenAgentMessages } from "../agent-message-timeline";
@@ -40,7 +35,6 @@ import { conversationOwnerId } from "./composer-store";
 
 interface ScrollElements {
   scrollElement: () => HTMLDivElement | undefined;
-  virtualRoot: () => HTMLDivElement | undefined;
   unreadMessagesDivider: () => HTMLDivElement | undefined;
 }
 
@@ -61,6 +55,35 @@ export interface ScrollStoreDeps {
   sticky: ScrollStickyState;
 }
 
+/** Two values that draw the same: equal, or plain objects and arrays whose items are equal in turn. */
+function sameValue(left: unknown, right: unknown, depth: number): boolean {
+  if (Object.is(left, right)) return true;
+  if (depth === 0 || typeof left !== "object" || typeof right !== "object" || left === null || right === null)
+    return false;
+  if (Array.isArray(left) !== Array.isArray(right)) return false;
+  const leftEntries = Object.entries(left);
+  const rightValues = new Map(Object.entries(right));
+  if (leftEntries.length !== rightValues.size) return false;
+  return leftEntries.every(([key, value]) => rightValues.has(key) && sameValue(value, rightValues.get(key), depth - 1));
+}
+
+/**
+ * The rows of the timeline, with each message that did not change kept as the same object. Each
+ * streamed delta builds the timeline again; a row whose message is the same object draws nothing
+ * again, so a delta costs the one row it changes, not every row in the page.
+ */
+function keepUnchangedMessages(next: AgentMessage[], previous: AgentMessage[] | undefined): AgentMessage[] {
+  if (!previous) return next;
+  const byId = new Map(previous.map((message) => [message.id, message]));
+  const kept = next.map((message) => {
+    const before = byId.get(message.id);
+    return before && sameValue(before, message, 3) ? before : message;
+  });
+  return kept.length === previous.length && kept.every((message, index) => message === previous[index])
+    ? previous
+    : kept;
+}
+
 /**
  * A row the person switched off: the reasoning of a turn, or a message between agents. The timeline
  * draws it collapsed, so nothing is left out. The count of new messages still skips it, as it did
@@ -72,16 +95,19 @@ function switchedOff(message: AgentMessage, showReasoning: boolean, showAgentMes
 }
 
 export function createScrollStore(deps: ScrollStoreDeps) {
+  /*
+   * The rows are in the normal flow of the page, so a row can never be drawn over another; the
+   * browser skips the rows away from the screen. See `createChatFlow`.
+   */
+  const messageFlow = createChatFlow({ following: deps.sticky.getStickToLatest });
   const scrollFades = createScrollFades();
   const showReasoning = useShowAgentReasoning();
   const showAgentMessages = useShowAgentMessages();
-  const [virtualScrollMargin, setVirtualScrollMargin] = createSignal(0);
   const [showScrollToLatest, setShowScrollToLatest] = createSignal(false);
   const [atHistoryBoundary, setAtHistoryBoundary] = createSignal(false);
   const [unreadDividerVisible, setUnreadDividerVisible] = createSignal(false);
   const [newMessageCount, setNewMessageCount] = createSignal(0);
   let unreadVisibilityFrame: number | undefined;
-  let firstRenderedIndex = 0;
   let newMessages: NewMessageTally = { count: 0, anchorId: undefined };
   let talliedConversationIdentity: string | undefined;
 
@@ -177,7 +203,8 @@ export function createScrollStore(deps: ScrollStoreDeps) {
    * A group of agent messages or routine runs stops at the unread divider, so the divider keeps its
    * row. With messages between agents switched off, each run is one collapsed row; nothing is removed.
    */
-  const timelineMessages = createMemo(() => {
+  const timelineMessages = createMemo<AgentMessage[]>((previous) => keepUnchangedMessages(projectTimeline(), previous));
+  function projectTimeline(): AgentMessage[] {
     const group = (messages: readonly AgentMessage[]) =>
       groupRoutineRunMarkers(
         groupAgentMessageMarkers(messages, unreadBoundaryMessageId(), { collapsed: !showAgentMessages() }),
@@ -196,14 +223,23 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     const rows =
       boundary < 0 ? group(messages) : [...group(messages.slice(0, boundary)), ...group(messages.slice(boundary))];
     return expandRoutineRunGroups(rows, messages, routineRunTurns(), openRoutineRuns());
-  });
-  /*
-   * A row finds its message by id. The virtualizer gives a row its new index one tick after the list
-   * changes, so a lookup by index draws the neighbouring message in the row for that tick.
-   */
+  }
+  /* A row finds its message by id, so a row keeps its message when rows are added above it. */
   const timelineIndexById = createMemo(
-    () => new Map<VirtualItem["key"], number>(timelineMessages().map((message, index) => [message.id, index])),
+    () => new Map<string, number>(timelineMessages().map((message, index) => [message.id, index])),
   );
+  /*
+   * The ids of the rows, in order: the timeline draws one row per id, so a row stays the same element
+   * while its message changes, such as a reply that streams.
+   */
+  const timelineRowKeys = createMemo<readonly string[]>((previous) => {
+    const keys = timelineMessages().map((message) => message.id);
+    if (previous && previous.length === keys.length && previous.every((key, index) => key === keys[index]))
+      return previous;
+    // The rows change before they are drawn: take the reader's place now, so the flow keeps it.
+    messageFlow.notePlace();
+    return keys;
+  });
   /*
    * Every row anchors the count, but only some rows add to it. A message of a folded agent turn does
    * not add to it, as it does not add to the unread count.
@@ -262,27 +298,8 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     },
   );
 
-  // A channel row is mostly a short message under an author; an agent row is often a longer answer.
-  const rowEstimate = untrack(() => deps.props.channel) ? 84 : 128;
-  const messageVirtualizer = createChatVirtualizer<HTMLDivElement, HTMLDivElement>({
-    count: () => timelineMessages().length,
-    getScrollElement: () => deps.elements.scrollElement() ?? null,
-    estimateSize: () => rowEstimate,
-    getItemKey: (index) => timelineMessages()[index]?.id ?? index,
-    keyVersion: () => `${timelineMessages()[0]?.id ?? ""}:${timelineMessages().at(-1)?.id ?? ""}`,
-    scrollMargin: virtualScrollMargin,
-    stickToLatest: deps.sticky.getStickToLatest,
-    onChange: (instance) => {
-      const first = instance.getVirtualItems()[0];
-      if (!first) return;
-      firstRenderedIndex = first.index;
-      updateHistoryBoundary();
-    },
-  });
-
-  /* One writer for the boundary: the row the virtualizer renders first, read where the reader is. */
   function updateHistoryBoundary(element = deps.elements.scrollElement()): void {
-    setAtHistoryBoundary(chatHistoryBoundaryReached(element, firstRenderedIndex));
+    setAtHistoryBoundary(chatHistoryBoundaryReached(element));
   }
 
   function updateScrollFade(element = deps.elements.scrollElement()) {
@@ -292,10 +309,6 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     const remaining = element.scrollHeight - element.scrollTop - element.clientHeight;
     setShowScrollToLatest(remaining > 80);
     if (remaining <= 80) clearNewMessages();
-  }
-
-  function updateVirtualScrollMargin(): void {
-    setVirtualScrollMargin(calculateChatScrollMargin(deps.elements.scrollElement(), deps.elements.virtualRoot()));
   }
 
   function updateUnreadDividerVisibility(): void {
@@ -383,14 +396,14 @@ export function createScrollStore(deps: ScrollStoreDeps) {
 
   return {
     scrollFades,
-    virtualScrollMargin,
     showScrollToLatest,
     setShowScrollToLatest,
     unreadDividerVisible,
     setUnreadDividerVisible,
     newMessageCount,
     clearNewMessages,
-    messageVirtualizer,
+    messageFlow,
+    timelineRowKeys,
     timelineMessages,
     toggleRoutineRun,
     toggleAgentMessage,
@@ -399,7 +412,6 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     eventCheckOriginById,
     unreadBoundaryMessageId,
     updateScrollFade,
-    updateVirtualScrollMargin,
     updateUnreadDividerVisibility,
     scheduleUnreadDividerVisibilityUpdate,
     markUnreadMessages,

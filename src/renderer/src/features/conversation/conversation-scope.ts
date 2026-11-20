@@ -509,7 +509,6 @@ export function createConversationViewScope(props: ConversationProps) {
     pendingMessages,
     elements: {
       scrollElement: () => scrollElement,
-      virtualRoot: () => virtualRoot,
       unreadMessagesDivider: () => unreadMessagesDivider,
     },
     sticky: {
@@ -524,7 +523,8 @@ export function createConversationViewScope(props: ConversationProps) {
     unreadDividerVisible,
     newMessageCount,
     clearNewMessages,
-    messageVirtualizer,
+    messageFlow,
+    timelineRowKeys,
     timelineMessages,
     toggleRoutineRun,
     toggleAgentMessage,
@@ -533,7 +533,6 @@ export function createConversationViewScope(props: ConversationProps) {
     eventCheckOriginById,
     unreadBoundaryMessageId,
     updateScrollFade,
-    updateVirtualScrollMargin,
     updateUnreadDividerVisibility,
     scheduleUnreadDividerVisibilityUpdate,
     markUnreadMessages,
@@ -549,7 +548,7 @@ export function createConversationViewScope(props: ConversationProps) {
     props,
     scrollElement: () => scrollElement,
     timelineIndexById,
-    scrollToIndex: (index) => messageVirtualizer.scrollToIndex(index),
+    scrollToIndex: (index) => messageFlow.scrollToIndex(index),
     setStickToLatest,
   });
   const search = createSearchStore({
@@ -990,7 +989,6 @@ export function createConversationViewScope(props: ConversationProps) {
     keyboardWindow.addEventListener("pointerup", endReaderDrag);
     keyboardWindow.addEventListener("pointercancel", endReaderDrag);
     scrollResizeObserver = new ResizeObserver(() => {
-      updateVirtualScrollMargin();
       if (scrollElement && stickToLatest) followConversationBottom(scrollElement);
       updateScrollFade();
       updateUnreadDividerVisibility();
@@ -1002,7 +1000,6 @@ export function createConversationViewScope(props: ConversationProps) {
     if (conversationLiveElement) scrollResizeObserver.observe(conversationLiveElement);
     requestAnimationFrame(() => {
       if (!scrollElement) return;
-      updateVirtualScrollMargin();
       if (stickToLatest) followConversationBottom(scrollElement);
       updateScrollFade(scrollElement);
       updateUnreadDividerVisibility();
@@ -1088,7 +1085,6 @@ export function createConversationViewScope(props: ConversationProps) {
         // can sit near the bottom, and the next resize, such as the message box that grows, followed
         // the latest message again and moved the picked one out of view.
         leaveLatest();
-        updateVirtualScrollMargin();
         target.scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" });
         // As Slack shows a message that a link or a search opened: it is marked, then the mark fades.
         flashChatRow(target.closest<HTMLElement>(".virtual-chat-row") ?? target);
@@ -1196,7 +1192,6 @@ export function createConversationViewScope(props: ConversationProps) {
       latestScrollFrame = requestAnimationFrame(() => {
         latestScrollFrame = undefined;
         if (!scrollElement) return;
-        updateVirtualScrollMargin();
         if (followLatest) followConversationBottom(scrollElement);
         updateScrollFade(scrollElement);
         updateUnreadDividerVisibility();
@@ -1246,8 +1241,8 @@ export function createConversationViewScope(props: ConversationProps) {
       if (latestScrollSettleFrame !== undefined) cancelAnimationFrame(latestScrollSettleFrame);
       latestScrollFrame = undefined;
       latestScrollSettleFrame = undefined;
-      // A virtualized chat draws only the rows near the view, so the divider row is drawn first.
-      if (!unreadMessagesDivider?.isConnected) messageVirtualizer.scrollToIndex(boundaryIndex);
+      // The divider row may not be in the page yet; open its row first.
+      if (!unreadMessagesDivider?.isConnected) messageFlow.scrollToIndex(boundaryIndex);
       const opening = unreadOpening;
       const openAtDivider = (settle: boolean) =>
         requestAnimationFrame(() => {
@@ -1260,9 +1255,8 @@ export function createConversationViewScope(props: ConversationProps) {
             const viewTop = scrollElement.getBoundingClientRect().top - scrollElement.scrollTop;
             const dividerTop = divider.getBoundingClientRect().top - viewTop;
             const readTop = readRow instanceof HTMLElement ? readRow.getBoundingClientRect().top - viewTop : dividerTop;
-            // A long read row shows only its end, so the divider stays in view. An offset, not an index:
-            // the virtualizer would otherwise move back to the divider row as rows measure.
-            messageVirtualizer.scrollToOffset(Math.max(0, readTop, dividerTop - scrollElement.clientHeight / 3));
+            // A long read row shows only its end, so the divider stays in view.
+            messageFlow.scrollToOffset(Math.max(0, readTop, dividerTop - scrollElement.clientHeight / 3));
           }
           updateScrollFade(scrollElement);
           updateUnreadDividerVisibility();
@@ -1576,7 +1570,7 @@ export function createConversationViewScope(props: ConversationProps) {
   const setScrollElement = (element: HTMLDivElement) => {
     scrollElement = element;
     scrollFades.adopt(element);
-    updateVirtualScrollMargin();
+    messageFlow.setScrollElement(element);
   };
   /*
    * Following the latest message again, by request or because the reader came back, ends the reader's hold.
@@ -1668,7 +1662,7 @@ export function createConversationViewScope(props: ConversationProps) {
   }
   const setVirtualRootElement = (element: HTMLDivElement) => {
     virtualRoot = element;
-    updateVirtualScrollMargin();
+    messageFlow.setListElement(element);
     scrollResizeObserver?.observe(element);
   };
   const setUnreadMessagesDividerElement = (element: HTMLDivElement) => {
@@ -1824,7 +1818,8 @@ export function createConversationViewScope(props: ConversationProps) {
     markMessageSeen,
     markUnreadMessages,
     markingRead,
-    messageVirtualizer,
+    messageFlow,
+    timelineRowKeys,
     timelineMessages,
     toggleRoutineRun,
     toggleAgentMessage,

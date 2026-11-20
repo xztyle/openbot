@@ -5,12 +5,9 @@ import {
   type UnloadedHistory,
 } from "@openbot/ui/features/conversation/ChatScrollRail";
 import { dayMarkerLabel } from "@openbot/ui/features/conversation/chat-day-markers";
-import {
-  calculateChatScrollMargin,
-  createChatVirtualizer,
-} from "@openbot/ui/features/conversation/createChatVirtualizer";
+import { createChatFlow } from "@openbot/ui/features/conversation/createChatFlow";
 import { useText } from "@openbot/ui/text";
-import { createSignal, For, Show } from "solid-js";
+import { For, Show } from "solid-js";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 
 interface StoryRow {
@@ -57,38 +54,26 @@ function storyRows(days: number[], start = 0): StoryRow[] {
   return rows;
 }
 
-/** A transcript with the same scroll container, virtualizer and section rule as the chats. */
+/** A transcript with the same scroll container, flow of rows and section rule as the chats. */
 function RailTranscript(props: { rows: StoryRow[]; unloaded?: UnloadedHistory }) {
   const { t, format } = useText();
-  const [scrollElement, setScrollElement] = createSignal<HTMLDivElement>();
-  const [virtualRoot, setVirtualRoot] = createSignal<HTMLDivElement>();
-  const [scrollMargin, setScrollMargin] = createSignal(0);
-  const virtualizer = createChatVirtualizer<HTMLDivElement, HTMLDivElement>({
-    count: () => props.rows.length,
-    getScrollElement: () => scrollElement() ?? null,
-    estimateSize: () => 64,
-    getItemKey: (index) => props.rows[index]?.id ?? index,
-    keyVersion: () => `${props.rows[0]?.id ?? ""}:${props.rows.at(-1)?.id ?? ""}`,
-    scrollMargin,
-  });
+  const flow = createChatFlow({ following: () => false });
   const rail = createChatScrollRail({
     rows: () => props.rows,
     question: (row) => (row.own ? row.text : undefined),
     unloaded: () => props.unloaded,
-    virtualizer,
+    flow,
     onLoadOlder: () => {},
     onJump: () => {},
   });
-  const updateMargin = () => setScrollMargin(calculateChatScrollMargin(scrollElement(), virtualRoot()));
 
   return (
     <div style={{ display: "flex", height: "100vh", "flex-direction": "column" }}>
       <div
         ref={(element) => {
-          setScrollElement(element);
+          flow.setScrollElement(element);
           rail.ref(element);
           requestAnimationFrame(() => {
-            updateMargin();
             element.scrollTop = element.scrollHeight;
           });
         }}
@@ -96,34 +81,21 @@ function RailTranscript(props: { rows: StoryRow[]; unloaded?: UnloadedHistory })
         role="log"
       >
         <ChatScrollRail {...rail.props} />
-        <div
-          ref={setVirtualRoot}
-          class={["virtual-chat-list", { "virtual-chat-list-static": !virtualizer.isVirtualized() }]}
-          style={{ height: virtualizer.isVirtualized() ? `${virtualizer.getTotalSize()}px` : "auto" }}
-        >
-          <For each={virtualizer.getVirtualItems()}>
-            {(item) => {
-              const row = () => props.rows[item.index];
+        <div ref={(element) => flow.setListElement(element)} class="virtual-chat-list">
+          <For each={props.rows}>
+            {(item, index) => {
+              const row = () => item;
               const marker = () => {
                 const current = row();
                 if (!current) return null;
-                return dayMarkerLabel(props.rows[item.index - 1]?.createdAt, current.createdAt, {
+                return dayMarkerLabel(props.rows[index() - 1]?.createdAt, current.createdAt, {
                   now: NOW,
                   t,
                   format,
                 });
               };
               return (
-                <div
-                  data-index={item.index}
-                  ref={virtualizer.measureElement}
-                  class="virtual-chat-row"
-                  style={{
-                    transform: virtualizer.isVirtualized()
-                      ? `translateY(${item.start - virtualizer.scrollMargin()}px)`
-                      : "none",
-                  }}
-                >
+                <div data-index={index()} data-row-key={item.id} class="virtual-chat-row chat-flow-row">
                   <Show when={marker()}>
                     {(label) => (
                       <div class="time-marker">

@@ -1,7 +1,6 @@
 .conversation-scroll {
   min-height: 0;
   flex: 1;
-  overflow-anchor: none;
   overflow-x: hidden;
   overflow-y: auto;
   padding: 8px 12px var(--openbot-space-6);
@@ -12,9 +11,9 @@
   width: 100%;
 }
 
+/* A row of a transcript, in the normal flow: each row starts below the one before it. */
 .virtual-chat-row {
-  position: absolute;
-  inset: 0 0 auto;
+  position: relative;
   width: 100%;
   padding-top: var(--openbot-chat-entry-gap);
 }
@@ -28,9 +27,19 @@
   margin-top: var(--openbot-chat-marker-gap);
 }
 
-.virtual-chat-list-static .virtual-chat-row {
-  position: relative;
-  inset: auto;
+/*
+ * A row of a long transcript away from the screen skips its layout and paint, and keeps the size it
+ * had when it was last drawn (`auto`), so a long history scrolls as fast as a short one. Only where the
+ * browser keeps the reader's place when a row above the view takes its real size (scroll anchoring):
+ * Safari has none, and draws every row. The clip margin lets the hover action bar and the row's
+ * full-width band reach past the row, as they do without containment.
+ */
+@supports (overflow-anchor: auto) and (overflow-clip-margin: 1px) {
+  [data-chat-flow="long"] > .chat-flow-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 96px;
+    overflow-clip-margin: var(--openbot-space-8);
+  }
 }
 
 /*

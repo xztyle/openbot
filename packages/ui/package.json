@@ -388,7 +388,7 @@
     "./components/ProviderUseAppDialog": "./src/components/ProviderUseAppDialog.tsx",
     "./components/QuestionPromptBubble": "./src/components/QuestionPromptBubble.tsx",
     "./features/conversation/DirectConversation": "./src/features/conversation/DirectConversation.tsx",
-    "./features/conversation/createChatVirtualizer": "./src/features/conversation/createChatVirtualizer.ts",
+    "./features/conversation/createChatFlow": "./src/features/conversation/createChatFlow.ts",
     "./features/conversation/ChatScrollRail": "./src/features/conversation/ChatScrollRail.tsx",
     "./features/conversation/chat-day-markers": "./src/features/conversation/chat-day-markers.ts",
     "./features/conversation/new-message-tally": "./src/features/conversation/new-message-tally.ts",

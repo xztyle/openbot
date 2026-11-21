@@ -180,6 +180,22 @@ function newNames(original: string, rewrite: string): boolean {
   return false;
 }
 
+/** "Sí," "No." "Yes!": a yes or a no that opens a text as its own word. */
+const ANSWER_WORD =
+  /^[\s¡¿"«“*_]*(s[ií]|no|yes|yeah|yep|nope|claro|correcto|exacto|vale|ok|okay|sure|right|nah)(?=\s*[,.!:;—-]|\s*$)/iu;
+
+/**
+ * Whether a rewrite opens with a yes or a no that the answer does not open with, such as a leading
+ * "Sí," on an answer that never said yes: it would answer a question that the agent did not answer.
+ */
+function newAnswerWord(original: string, rewrite: string): boolean {
+  const added = ANSWER_WORD.exec(rewrite)?.[1];
+  if (!added) return false;
+  const own = ANSWER_WORD.exec(original)?.[1];
+  const plain = (word: string) => word.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
+  return own === undefined || plain(own) !== plain(added);
+}
+
 /** Words of the prompt that a rewrite has only when it talks about the prompt. */
 const PROMPT_WORDS = [
   /\bteammate\b/iu,
@@ -229,6 +245,7 @@ export type CondenseOutcome =
         | "too-long"
         | "still-report"
         | "prompt-echo"
+        | "new-answer"
         | "new-name"
         | "lost-link"
         | "new-link";
@@ -256,6 +273,7 @@ export function checkRewrite(original: string, output: string, settings: Workspa
   if (shape.boldLabels + shape.headings + shape.inventories > 0 || shape.plumbing > 2)
     return { kind: "kept", reason: "still-report" };
   if (newNames(original, text)) return { kind: "kept", reason: "new-name" };
+  if (newAnswerWord(original, text)) return { kind: "kept", reason: "new-answer" };
   // A small model sometimes answers the instructions instead of only following them.
   for (const word of PROMPT_WORDS)
     if (word.test(text) && !word.test(original)) return { kind: "kept", reason: "prompt-echo" };

@@ -143,7 +143,7 @@ await step("a model that is late or fails leaves the answer", async () => {
 });
 
 await step(
-  "a rewrite that drops a link or mention, invents a link or a name, echoes the prompt or keeps the report shape is refused",
+  "a rewrite that drops a link or mention, invents a link or a name, adds a yes or no, echoes the prompt or keeps the report shape is refused",
   async () => {
     const noLink = await run({ text: REPORT }, fake(SHORT_REWRITE.replace(` (${MOTION})`, "")));
     assert.deepEqual(noLink, { kind: "kept", reason: "lost-link" });
@@ -158,6 +158,12 @@ await step(
     assert.deepEqual(named, { kind: "kept", reason: "new-name" });
     const echoed = await run({ text: REPORT }, fake(`Como teammate te cuento: ${SHORT_REWRITE}`));
     assert.deepEqual(echoed, { kind: "kept", reason: "prompt-echo" });
+    const affirmed = await run({ text: REPORT }, fake(`Sí, ${SHORT_REWRITE}`));
+    assert.deepEqual(affirmed, { kind: "kept", reason: "new-answer" });
+    const denied = await run({ text: REPORT }, fake(`No. ${SHORT_REWRITE}`));
+    assert.deepEqual(denied, { kind: "kept", reason: "new-answer" });
+    const kept = await run({ text: `Sí, ${REPORT}` }, fake(`Sí, ${SHORT_REWRITE}`));
+    assert.equal(kept.kind, "condensed", "a yes that the answer opens with stays");
     const labelled = await run({ text: REPORT }, fake(`**Estado:** ${SHORT_REWRITE}`));
     assert.deepEqual(labelled, { kind: "kept", reason: "still-report" });
     const longer = await run({ text: REPORT }, fake(`${REPORT}\nY algo más.`));

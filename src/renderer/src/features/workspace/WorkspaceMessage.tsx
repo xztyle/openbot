@@ -223,10 +223,8 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
       : current;
   });
   /** A plain line takes the light row; Markdown, files and questions take the chat's renderer. */
-  // An agent's original text goes through the renderer, so that the "Show more" fold holds it too.
-  const plain = createMemo(() =>
-    props.row.pending || condensed.showingOriginal() ? null : plainMessageSegments(ws.directory(), shownEntry()),
-  );
+  // Either text folds to "Show more" the same way: the plain row and the renderer share `fold()`.
+  const plain = createMemo(() => (props.row.pending ? null : plainMessageSegments(ws.directory(), shownEntry())));
   const threadRootId = () => (props.inThread ? (entry().threadRootId ?? null) : null);
   /** The thread that "Mark unread" moves in: in the thread panel the root's thread too. */
   const readThread = () => (props.inThread ? (entry().threadRootId ?? entry().id) : null);

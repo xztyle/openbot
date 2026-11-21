@@ -11,7 +11,16 @@ import { useRecentTime } from "./workspace-format";
 import type { WorkspaceMember } from "./workspace-types";
 
 /** What a request asks of the user, as `AgentAttentionKind` names it. */
-export type NeedsYouKind = "question" | "form" | "api-key" | "approval" | "browser-takeover" | "sign-in" | "secret";
+export type NeedsYouKind =
+  | "question"
+  | "form"
+  | "api-key"
+  | "approval"
+  | "browser-takeover"
+  | "sign-in"
+  | "secret"
+  /** A loop decision: a gate, an experiment budget or an escalated question (`LoopDecision`). */
+  | "decision";
 
 /** One request that waits for the reader, as a row shows it. */
 export interface NeedsYouRow {
@@ -36,6 +45,7 @@ const KIND_ICON = {
   "browser-takeover": Globe2,
   "sign-in": LogIn,
   secret: KeyRound,
+  decision: ShieldCheck,
 } as const satisfies Record<NeedsYouKind, typeof Hand>;
 
 export interface NeedsYouListProps {

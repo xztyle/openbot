@@ -230,6 +230,8 @@ export interface WorkspaceLoops {
 
 export interface WorkspaceLoopsInput {
   spaceId: string;
+  /** Only the loops and the pending decisions, for a "Needs you" count: no items, history or experiments. */
+  decisionsOnly?: boolean;
 }
 
 export type WorkspaceLoopAction =
@@ -468,7 +470,8 @@ export function parseLoopValues(value: unknown): Record<string, LoopValue | null
 
 export function parseWorkspaceLoopsInput(value: unknown): WorkspaceLoopsInput {
   const input = record(value, "request");
-  return { spaceId: id(input.spaceId, "space") };
+  if (input.decisionsOnly !== undefined && !isBoolean(input.decisionsOnly)) fail("request");
+  return { spaceId: id(input.spaceId, "space"), ...(input.decisionsOnly === true ? { decisionsOnly: true } : {}) };
 }
 
 /** A loop action from an untrusted sender. It throws on any value outside the limits. */

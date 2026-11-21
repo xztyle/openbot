@@ -19,6 +19,7 @@ import {
   Hash,
   Inbox,
   Input,
+  Kanban,
   KeyRound,
   LayoutDashboard,
   Lock,
@@ -80,6 +81,7 @@ const VIEW_ICON: Record<WorkspaceView, () => JSX.Element> = {
   storage: () => <HardDrive />,
   secrets: () => <KeyRound />,
   reviews: () => <Gauge />,
+  loops: () => <Kanban />,
   routines: () => <Workflow />,
   search: () => <Search />,
 };
@@ -150,6 +152,7 @@ export function useJumpEntries() {
       "storage",
       "secrets",
       "reviews",
+      "loops",
       "routines",
     ] as const
   ).map((view) => ({ view, label: () => workspaceViewLabel(view, t) }));

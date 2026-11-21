@@ -332,6 +332,7 @@ const SAVED_VIEWS: readonly WorkspaceView[] = [
   "routines",
   "secrets",
   "reviews",
+  "loops",
   "space-agents",
   "drafts",
 ];
@@ -1737,6 +1738,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (view === "secrets") return env.secrets?.() === true && Boolean(channels.port().agent.workspaceSecrets);
     if (view === "storage") return Boolean(env.storageHygiene?.());
     if (view === "reviews") return Boolean(env.efficiency?.());
+    if (view === "loops") return Boolean(channels.port().agent.workspaceLoops);
     if (view === "routines") return env.routines?.available() === true;
     if (view === "later") return later.supported();
     if (view === "search") return search.supported();

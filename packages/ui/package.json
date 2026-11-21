@@ -454,6 +454,7 @@
     "./features/workspace/WorkspaceAvatar": "./src/features/workspace/WorkspaceAvatar.tsx",
     "./features/workspace/WorkspaceLayout": "./src/features/workspace/WorkspaceLayout.tsx",
     "./features/workspace/AgentTalkView": "./src/features/workspace/AgentTalkView.tsx",
+    "./features/workspace/LoopsView": "./src/features/workspace/LoopsView.tsx",
     "./features/workspace/SecretsView": "./src/features/workspace/SecretsView.tsx",
     "./features/workspace/WorkspaceContextMenu": "./src/features/workspace/WorkspaceContextMenu.tsx",
     "./features/workspace/WorkspaceMenu": "./src/features/workspace/WorkspaceMenu.tsx",

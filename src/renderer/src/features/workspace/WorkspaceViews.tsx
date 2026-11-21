@@ -20,6 +20,7 @@ import {
   WorkspaceSearchView,
   WorkspaceUnreadsView,
 } from "./WorkspaceInboxViews";
+import { WorkspaceLoopsView } from "./WorkspaceLoops";
 import { WorkspaceNeedsYouSection } from "./WorkspaceNeedsYou";
 import { WorkspaceOrgChart } from "./WorkspaceOrgChart";
 import { WorkspaceWhenBackSection } from "./WorkspaceOwnerAway";
@@ -56,6 +57,9 @@ export function WorkspaceViewPane(props: { view: WorkspaceView }) {
       </Match>
       <Match when={props.view === "storage"}>
         <WorkspaceStorageView />
+      </Match>
+      <Match when={props.view === "loops"}>
+        <WorkspaceLoopsView />
       </Match>
       <Match when={props.view === "secrets"}>
         <WorkspaceSecretsView />

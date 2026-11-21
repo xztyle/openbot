@@ -33,8 +33,10 @@ export async function routeWorkspaceLoops(
     throw new HttpError(400, sourceText("error.team.workspaceUnsupported"));
   // `readJson` has already run the body through the workspace-loops wire codec.
   const body = await readJson(request);
-  if (url.pathname === WORKSPACE_LOOPS_ROUTES.board)
-    return json(200, loops.board(parsed(parseWorkspaceLoopsInput, body).spaceId));
+  if (url.pathname === WORKSPACE_LOOPS_ROUTES.board) {
+    const input = parsed(parseWorkspaceLoopsInput, body);
+    return json(200, loops.board(input.spaceId, input));
+  }
   requireAdmin(member);
   const action = parsed(parseWorkspaceLoopAction, body);
   try {

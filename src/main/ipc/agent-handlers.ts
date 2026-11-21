@@ -535,7 +535,7 @@ export function agentIpcHandlers({
       }),
       // The person at this computer is the host's owner, so every loop action is theirs to take.
       workspaceLoops: scopedHandler(parseWorkspaceLoopsInput, {
-        local: (input) => service.loops.board(input.spaceId),
+        local: (input) => service.loops.board(input.spaceId, input),
         remote: (input, serverId) =>
           remoteWorkspace(serverId, WORKSPACE_LOOPS_ROUTES.board, input, decodeWorkspaceLoops),
       }),

@@ -2,10 +2,11 @@
 //
 // What it adds, recorded here because freezing it makes it permanent:
 //
-// - `POST /v1/workspace/loops` `{ spaceId }` answers `{ spaceId, loops, items, experiments, decisions,
+// - `POST /v1/workspace/loops` `{ spaceId, decisionsOnly? }` answers `{ spaceId, loops, items, experiments, decisions,
 //   events, templates }` for one space: every loop (50) with its definition, its items (2000), their
 //   experiments (500), the decisions of the space (200, the pending ones first) and the newest history
-//   rows (400). Any member may read it.
+//   rows (400). Any member may read it. With `decisionsOnly: true` it answers only the loops and the
+//   pending decisions, with the other lists empty.
 // - `POST /v1/workspace/loops/action` with an action answers the same board, with `createdId?` (a new
 //   loop or item, or the decision that a gated move opened) and `blocked?` (40 reasons: the exit
 //   criteria that do not hold). An action is one of `create-loop`, `update-loop`, `delete-loop`,

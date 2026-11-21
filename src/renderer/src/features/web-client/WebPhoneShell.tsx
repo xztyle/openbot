@@ -14,6 +14,7 @@ import {
   Hash,
   House,
   Inbox,
+  Kanban,
   KeyRound,
   LayoutDashboard,
   MessageSquareText,
@@ -259,6 +260,8 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
         icon: <HardDrive />,
         onSelect: () => openView("storage"),
       });
+    if (ws.viewAvailable("loops"))
+      rows.push({ id: "loops", label: t("workspace.view.loops"), icon: <Kanban />, onSelect: () => openView("loops") });
     if (ws.viewAvailable("secrets"))
       rows.push({
         id: "secrets",

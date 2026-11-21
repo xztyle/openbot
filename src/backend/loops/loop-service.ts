@@ -113,9 +113,19 @@ export class LoopService {
     return new LoopService(new LoopStore(database), hooks);
   }
 
-  board(spaceId: string): WorkspaceLoops {
+  board(spaceId: string, options: { decisionsOnly?: boolean } = {}): WorkspaceLoops {
     const loops = this.#store.loops(spaceId);
     const ids = loops.map((loop) => loop.id);
+    if (options.decisionsOnly)
+      return {
+        spaceId,
+        loops,
+        items: [],
+        experiments: [],
+        decisions: this.#store.decisions(spaceId).filter((decision) => decision.status === "pending"),
+        events: [],
+        templates: [],
+      };
     return {
       spaceId,
       loops,

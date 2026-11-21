@@ -21,6 +21,7 @@ import {
   HardDrive,
   Hash,
   Inbox,
+  Kanban,
   KeyRound,
   LayoutDashboard,
   ListFilter,
@@ -56,6 +57,8 @@ export type WorkspaceView =
   | "secrets"
   /** The weekly reviews of the agents, the model policy savings and the role playbooks. */
   | "reviews"
+  /** The loops (pipelines) of the space: items by stage, and the decisions that wait for the reader. */
+  | "loops"
   /** The agents of the space that shows. */
   | "space-agents"
   /** Slack's Drafts & sent: the unsent drafts of each conversation, and the reader's sent messages. */
@@ -204,6 +207,7 @@ export interface WorkspaceSidebarProps {
 /** The views under More: the admin and agent views that Slack keeps out of the top rows. */
 const MORE_VIEWS = [
   "dms",
+  "loops",
   "space-agents",
   "artifacts",
   "agents",
@@ -278,6 +282,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
             : true;
   const MORE_ICON: Record<MoreView, () => JSX.Element> = {
     dms: () => <MessagesSquare aria-hidden="true" />,
+    loops: () => <Kanban aria-hidden="true" />,
     "space-agents": () => <Bot aria-hidden="true" />,
     artifacts: () => <LayoutDashboard aria-hidden="true" />,
     agents: () => <ArrowLeftRight aria-hidden="true" />,
@@ -288,17 +293,19 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
   const moreLabel = (view: MoreView) =>
     view === "dms"
       ? t("workspace.view.dms")
-      : view === "space-agents"
-        ? t("workspace.view.spaceAgents")
-        : view === "artifacts"
-          ? t("workspace.view.artifacts")
-          : view === "agents"
-            ? t("workspace.view.agents")
-            : view === "storage"
-              ? t("storageHygiene.title")
-              : view === "reviews"
-                ? t("efficiency.view.title")
-                : t("workspace.view.secrets");
+      : view === "loops"
+        ? t("workspace.view.loops")
+        : view === "space-agents"
+          ? t("workspace.view.spaceAgents")
+          : view === "artifacts"
+            ? t("workspace.view.artifacts")
+            : view === "agents"
+              ? t("workspace.view.agents")
+              : view === "storage"
+                ? t("storageHygiene.title")
+                : view === "reviews"
+                  ? t("efficiency.view.title")
+                  : t("workspace.view.secrets");
   /** The view under More that shows now: it gets a row of its own above More while it shows. */
   const activeMore = () => MORE_VIEWS.find((view) => view === props.activeView && moreAvailable(view));
   const moreItems = (): WorkspaceMenuItem[] => [

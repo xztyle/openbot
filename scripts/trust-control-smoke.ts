@@ -37,8 +37,20 @@ try {
     ...DEFAULT_TRUST_POLICY,
     roles: { ...DEFAULT_TRUST_POLICY.roles, member: { ...DEFAULT_TRUST_POLICY.roles.member, launch_ads: "allow" } },
     agents: { "ana-1": { delete: "deny" } },
+    // The defaults keep sandbox first off; the smoke turns it on for landings to drive the go-live.
+    sandbox: { ...DEFAULT_TRUST_POLICY.sandbox, landings: true },
     budgets: [{ id: "meta-day", scope: "all", platform: "meta", perDay: 7, currency: "USD" }],
   };
+  const defaults = DEFAULT_TRUST_POLICY.roles;
+  check(
+    "defaults ask only for money",
+    (["lead", "member"] as const).every(
+      (role) =>
+        defaults[role].pay === "ask" &&
+        defaults[role].launch_ads === "ask" &&
+        (["publish", "email", "create_agent", "delete"] as const).every((action) => defaults[role][action] === "allow"),
+    ) && !Object.values(DEFAULT_TRUST_POLICY.sandbox).some(Boolean),
+  );
   await Effect.runPromise(trust.savePolicy(policy, { id: "owner", name: "Owner" }));
   check("policy file written 0600", (statSync(join(dir, "trust-policy.json")).mode & 0o777) === 0o600);
 

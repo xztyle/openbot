@@ -300,10 +300,22 @@ body:has(.browser-full-view) .app-frame {
 
 /* The X of a tab is at its end. It shows on the selected tab, and on the others under the pointer. */
 .browser-full-chip-close.ui-button {
+  position: relative;
   flex: none;
   opacity: 0;
   color: var(--openbot-text-muted);
   transition: opacity var(--openbot-duration-fast) var(--openbot-ease-out);
+}
+
+/* The X takes a press 24 px square (44 px on a touch screen) around its smaller drawn circle. */
+.browser-full-chip-close.ui-button::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 24px);
+  height: max(100%, 24px);
+  content: "";
+  transform: translate(-50%, -50%);
 }
 
 .browser-full-chip-close svg {
@@ -318,6 +330,11 @@ body:has(.browser-full-view) .app-frame {
 @media (pointer: coarse) {
   .browser-full-chip-close.ui-button {
     opacity: 1;
+  }
+
+  .browser-full-chip-close.ui-button::before {
+    width: 44px;
+    height: 44px;
   }
 }
 

@@ -57,6 +57,9 @@ interface BrowserPanels {
   setActiveRightPanel: (mode: RightPanelMode, agentId?: string) => void;
 }
 
+/** How long a closed tab stays out of the row while the host's list still has it. */
+const CLOSED_TAB_GRACE_MS = 10_000;
+
 export interface BrowserStoreDeps {
   props: ConversationProps;
   browserOpenRequests: Map<
@@ -84,8 +87,27 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     browserInteractionAvailable() && deps.panels.activeRightPanel() === "browser-expanded";
   const browserPipOpen = () => browserInteractionAvailable() && deps.panels.activeRightPanel() === "browser-pip";
   const screenOpen = () => browserSidebarOpen() || browserExpandedOpen() || browserPipOpen();
+  /** The tabs the host lists, the ones a close is on its way for included. */
+  const listedBrowserTabs = createMemo(() => (deps.props.browserEnabled === false ? [] : deps.props.browserTabs));
+  /**
+   * Tabs the person closed. They leave the row at once, as in other browsers: a host answers after a
+   * round trip, and a tab that stayed until then read as a click that did nothing, so the person
+   * clicked again. A close that fails puts the tab back.
+   */
+  const [closedTabIds, setClosedTabIds] = createSignal<ReadonlySet<string>>(new Set());
   /** All tabs of the server. The full view lists them; the side panel lists only the agent's. */
-  const allBrowserTabs = createMemo(() => (deps.props.browserEnabled === false ? [] : deps.props.browserTabs));
+  const allBrowserTabs = createMemo(() => {
+    const closed = closedTabIds();
+    const listed = listedBrowserTabs();
+    return closed.size === 0 ? listed : listed.filter((tab) => !closed.has(tab.id));
+  });
+  const reopenClosedTab = (tabId: string) =>
+    setClosedTabIds((current) => {
+      if (!current.has(tabId)) return current;
+      const next = new Set(current);
+      next.delete(tabId);
+      return next;
+    });
   const ownsTab = (agent: Pick<AgentProfile, "id" | "threadId">, tab: BrowserTab) =>
     tab.ownerAgentId ? tab.ownerAgentId === agent.id : Boolean(agent.threadId && tab.ownerThreadId === agent.threadId);
   const tabsOwnedBy = (agent: Pick<AgentProfile, "id" | "threadId">) =>
@@ -98,11 +120,15 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
   });
   const closingBrowserTabIds = new Set<string>();
   createEffect(
-    () => new Set(allBrowserTabs().map((tab) => tab.id)),
+    () => new Set(listedBrowserTabs().map((tab) => tab.id)),
     (visibleTabIds) => {
       for (const tabId of closingBrowserTabIds) {
         if (!visibleTabIds.has(tabId)) closingBrowserTabIds.delete(tabId);
       }
+      // A closed tab the host no longer lists is gone for good.
+      const closed = untrack(closedTabIds);
+      if ([...closed].some((tabId) => !visibleTabIds.has(tabId)))
+        setClosedTabIds(new Set([...closed].filter((tabId) => visibleTabIds.has(tabId))));
     },
   );
   createEffect(
@@ -567,9 +593,15 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     const agentId = deps.props.agent?.id;
     const target = agentId ? { agentId, serverId: deps.props.server?.id ?? "local" } : undefined;
     closingBrowserTabIds.add(tabId);
+    setClosedTabIds((current) => new Set(current).add(tabId));
     try {
       await deps.props.onCloseBrowserTab(tabId);
+      // A host that said yes and still lists the tab after a while kept it: the row shows it again.
+      setTimeout(() => {
+        if (untrack(listedBrowserTabs).some((tab) => tab.id === tabId)) reopenClosedTab(tabId);
+      }, CLOSED_TAB_GRACE_MS);
     } catch (error) {
+      reopenClosedTab(tabId);
       deps.setComposerError(currentText().t("browser.error.closeTab"), target, error);
     } finally {
       closingBrowserTabIds.delete(tabId);

@@ -300,9 +300,28 @@ export function BrowserTabStrip(props: {
     finishDrag(false);
   }
 
+  /**
+   * The tab a middle button went down on. The release on the same tab closes it. The release is read
+   * from `pointerup` and from `auxclick`, whichever comes first: Chromium on Windows starts its scroll
+   * cursor on a middle press in a row that scrolls, and then sends no `auxclick` at all.
+   */
+  let middlePress: string | undefined;
+  const middleRelease = (event: MouseEvent, id: string) => {
+    if (event.button !== 1) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const pressed = middlePress;
+    middlePress = undefined;
+    if (pressed === id) closeWithPointer(id);
+  };
+
   const onChipPointerDown = (event: PointerEvent, id: string) => {
-    // The middle button closes on release (auxclick); here it only stops the scroll cursor.
-    if (event.button === 1) event.preventDefault();
+    // The middle button closes on release; here it only stops the scroll cursor.
+    if (event.button === 1) {
+      event.preventDefault();
+      middlePress = id;
+      return;
+    }
     // Control-click is the right click of macOS: its menu takes the release, so no drag starts.
     // A touch scrolls the row; a long press opens the menu.
     if (event.button !== 0 || event.pointerType === "touch" || event.ctrlKey || drag) return;
@@ -399,11 +418,14 @@ export function BrowserTabStrip(props: {
                   data-profile-color={tabProfileColor(profile()) ? "" : undefined}
                   style={{ "--browser-profile-color": tabProfileColor(profile()) }}
                   onPointerDown={(event: PointerEvent) => onChipPointerDown(event, tab().id)}
-                  onAuxClick={(event: MouseEvent) => {
+                  // The default of a middle press is the scroll cursor; without it the release closes.
+                  onMouseDown={(event: MouseEvent) => {
                     if (event.button !== 1) return;
                     event.preventDefault();
-                    closeWithPointer(tab().id);
+                    middlePress = tab().id;
                   }}
+                  onPointerUp={(event: PointerEvent) => middleRelease(event, tab().id)}
+                  onAuxClick={(event: MouseEvent) => middleRelease(event, tab().id)}
                   onDragStart={(event: DragEvent) => event.preventDefault()}
                 >
                   <span class="browser-full-chip-icon">
@@ -451,7 +473,15 @@ export function BrowserTabStrip(props: {
                       }
                       data-cuelume-close=""
                       data-cuelume-emphasis="subtle"
-                      onClick={() => closeWithPointer(tab().id)}
+                      // The X is not the tab: a press on it starts no drag, and its click selects nothing.
+                      onPointerDown={(event: PointerEvent) => {
+                        if (event.button === 0) event.stopPropagation();
+                      }}
+                      onClick={(event: MouseEvent) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        closeWithPointer(tab().id);
+                      }}
                     >
                       <X aria-hidden="true" />
                     </Button>

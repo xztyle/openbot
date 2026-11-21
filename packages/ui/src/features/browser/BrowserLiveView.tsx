@@ -267,9 +267,13 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
       bitmap.close();
       return;
     }
-    if (element.width !== next.width || element.height !== next.height) {
-      element.width = next.width;
-      element.height = next.height;
+    // The canvas takes the pixels of the image, not the page size the frame reports. The host scales
+    // a page larger than its frame limit down (a 2000 px page comes as a 1280 px image), and an image
+    // drawn at its own size into a canvas of the page's size filled only its top-left corner. CSS
+    // (`object-fit: contain`) scales the canvas to the view, whatever size the image has.
+    if (element.width !== bitmap.width || element.height !== bitmap.height) {
+      element.width = bitmap.width;
+      element.height = bitmap.height;
     }
     context.drawImage(bitmap, 0, 0);
     bitmap.close();
@@ -540,26 +544,43 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
    * the edge of the frame would work the first or last row of a page the user never pointed at.
    * Nothing drawn yet is the same answer: there is no frame to be a fraction of.
    */
-  const point = (at: { clientX: number; clientY: number }): { x: number; y: number; sequence: number } | null => {
-    const bounds = canvas()?.getBoundingClientRect();
+  /**
+   * The box the frame is drawn in on the screen. The canvas holds the image's pixels, which can be
+   * fewer than the page's (a host scales a large page down), and `object-fit: contain` keeps the
+   * image's shape, so the box comes from the canvas's own size.
+   */
+  const drawnBox = () => {
+    const element = canvas();
+    const bounds = element?.getBoundingClientRect();
     const size = frame();
-    if (!bounds || !size || bounds.width === 0 || bounds.height === 0) return null;
-    if (size.width === 0 || size.height === 0) return null;
-    const scale = Math.min(bounds.width / size.width, bounds.height / size.height);
-    const width = size.width * scale;
-    const height = size.height * scale;
-    const x = (at.clientX - bounds.left - (bounds.width - width) / 2) / width;
-    const y = (at.clientY - bounds.top - (bounds.height - height) / 2) / height;
+    if (!element || !bounds || !size || bounds.width === 0 || bounds.height === 0) return null;
+    const pixels = { width: element.width || size.width, height: element.height || size.height };
+    if (pixels.width === 0 || pixels.height === 0 || size.width === 0 || size.height === 0) return null;
+    const scale = Math.min(bounds.width / pixels.width, bounds.height / pixels.height);
+    const width = pixels.width * scale;
+    const height = pixels.height * scale;
+    return {
+      left: bounds.left + (bounds.width - width) / 2,
+      top: bounds.top + (bounds.height - height) / 2,
+      width,
+      height,
+      size,
+    };
+  };
+
+  const point = (at: { clientX: number; clientY: number }): { x: number; y: number; sequence: number } | null => {
+    const box = drawnBox();
+    if (!box) return null;
+    const x = (at.clientX - box.left) / box.width;
+    const y = (at.clientY - box.top) / box.height;
     if (x < 0 || x > 1 || y < 0 || y > 1) return null;
-    return { x, y, sequence: size.sequence };
+    return { x, y, sequence: box.size.sequence };
   };
 
   /** Page pixels for one CSS pixel on the screen, after the zoom. */
   const pagePixelsPerScreenPixel = (): number => {
-    const bounds = canvas()?.getBoundingClientRect();
-    const size = frame();
-    if (!bounds || !size || bounds.width === 0 || bounds.height === 0) return 1;
-    return 1 / Math.min(bounds.width / size.width, bounds.height / size.height);
+    const box = drawnBox();
+    return box ? box.size.width / box.width : 1;
   };
 
   /** A mouse that a touch made up. The touch already sent its own input. */

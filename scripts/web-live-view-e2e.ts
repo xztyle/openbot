@@ -5,7 +5,7 @@
 // to the client as the host's live view does, and sends the client's pointer and key input to it with
 // the host's own CDP key table (`src/backend/browser-cdp-input.ts`).
 //
-// `bun scripts/web-live-view-e2e.ts [--browser-executable=<path>] [--headed]`
+// `bun scripts/web-live-view-e2e.ts [--browser-executable=<path>] [--headed] [--only=desktop|phone|wide|wide-2x]`
 // Writes .openbot-build/web-live-view-e2e/report.json and a screenshot of each checked screen.
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -35,8 +35,10 @@ declare global {
       connection(state: "online" | "offline"): void;
       addTab(tabId: string, title: string): void;
       removeTab(tabId: string): void;
+      failNextClose(): void;
     };
     takeoverResponses?: { requestId: string | number; decision: string }[];
+    closedTabs?: string[];
   }
 }
 
@@ -49,11 +51,26 @@ const DM_PATH = "/app/general/dm/chief";
 const TAB_ID = "browser-tab-signup";
 const TAB_SIZE = { width: 800, height: 600 };
 
+/** A 1920 x 1080 screen at a browser zoom of 110 %: the page has 1/1.1 of the CSS pixels, each 1.1 times as dense. */
+const ZOOM = 1.1;
+const zoomed = (scale: number) => ({
+  viewport: { width: Math.round(1920 / ZOOM), height: Math.round(1080 / ZOOM) },
+  deviceScaleFactor: scale * ZOOM,
+});
 const VIEWPORTS = {
   desktop: { viewport: { width: 1280, height: 800 } },
   phone: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
+  "wide-1x": zoomed(1),
+  "wide-1.25x": zoomed(1.25),
+  "wide-2x": zoomed(2),
 } as const;
 type ViewportName = keyof typeof VIEWPORTS;
+/**
+ * The frame bound of a host before the views asked for frames of their panel's size
+ * (`src/backend/browser-host.ts`): a page wider than this comes as a smaller image, and the view
+ * must scale it to the panel all the same.
+ */
+const HOST_FRAME_MAX = { width: 1_280, height: 800 };
 
 function option(name: string): string | undefined {
   return process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
@@ -258,7 +275,12 @@ class TabHost {
         )
         .catch(() => undefined);
     });
-    await cdp.send("Page.startScreencast", { format: "jpeg", quality: 70 });
+    await cdp.send("Page.startScreencast", {
+      format: "jpeg",
+      quality: 70,
+      maxWidth: HOST_FRAME_MAX.width,
+      maxHeight: HOST_FRAME_MAX.height,
+    });
   }
 
   async stop(): Promise<void> {
@@ -678,6 +700,159 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
   await tabContext.close();
 }
 
+/** How the page of the full view sits in its panel, as drawn. */
+interface Fit {
+  panel: { width: number; height: number };
+  drawn: { width: number; height: number };
+  image: { width: number; height: number };
+  /** The alpha of the canvas pixel at the bottom-right corner: 0 where no frame was drawn. */
+  cornerAlpha: number;
+}
+
+async function fullViewFit(page: Page): Promise<Fit | null> {
+  return page.evaluate((label) => {
+    const canvas = [
+      ...document.querySelectorAll<HTMLCanvasElement>(`[role="tabpanel"] canvas[aria-label="${label}"]`),
+    ].find((element) => !element.hidden && element.width > 0);
+    const panel = canvas?.closest(".browser-live-view")?.getBoundingClientRect();
+    if (!canvas || !panel) return null;
+    const box = canvas.getBoundingClientRect();
+    const scale = Math.min(box.width / canvas.width, box.height / canvas.height);
+    const corner = canvas.getContext("2d")?.getImageData(canvas.width - 2, canvas.height - 2, 1, 1).data[3] ?? 0;
+    return {
+      panel: { width: panel.width, height: panel.height },
+      drawn: { width: canvas.width * scale, height: canvas.height * scale },
+      image: { width: canvas.width, height: canvas.height },
+      cornerAlpha: corner,
+    };
+  }, english("browser.liveView.label"));
+}
+
+const chipOf = (page: Page, tabId: string) => page.locator(`.browser-full-chip[data-tab-id="${tabId}"]`);
+
+/**
+ * The full view on a wide screen at 110 % zoom: the page fills the panel, and the tab row closes a
+ * tab with the middle button and with its X at once, before the host answers.
+ */
+async function wide(browser: Browser, origin: string, viewport: "wide-1x" | "wide-1.25x" | "wide-2x"): Promise<void> {
+  const { page, host, tab, context, tabContext } = await open(browser, origin, viewport);
+  const card = () => takeoverCard(page);
+
+  await step(page, viewport, "the expanded view's page fills the panel", async () => {
+    await load(page, origin, DM_PATH, card());
+    await button(card(), english("prompt.browser.takeOver")).click();
+    await viewing(page, host);
+    await button(card(), english("prompt.browser.expand")).click();
+    await page
+      .getByRole("tabpanel")
+      .getByRole("img", { name: english("browser.liveView.label") })
+      .waitFor({ timeout: UI_WAIT_MS });
+    let fit: Fit | null = null;
+    const deadline = Date.now() + UI_WAIT_MS / 2;
+    const fills = (value: Fit | null) =>
+      value !== null &&
+      value.drawn.width / value.panel.width >= 0.98 &&
+      value.drawn.height / value.panel.height >= 0.98 &&
+      value.cornerAlpha > 0;
+    while (Date.now() < deadline) {
+      fit = await fullViewFit(page);
+      if (fills(fit)) break;
+      await page.waitForTimeout(200);
+    }
+    await shot(page, `${viewport}-expanded`);
+    assert.ok(fit && fills(fit), `The page fills the panel within 2 %: ${JSON.stringify(fit)}.`);
+    const asked = host.viewports.at(-1);
+    assert.ok(
+      asked && Math.abs(asked.width - fit.panel.width) <= 25 && Math.abs(asked.height - fit.panel.height) <= 25,
+      `The view asks for the panel's CSS size: asked ${JSON.stringify(asked)}, panel ${JSON.stringify(fit.panel)}.`,
+    );
+    // The panel is wider than the host's frame bound, so the image is smaller than the page and is scaled up.
+    assert.ok(
+      fit.image.width <= HOST_FRAME_MAX.width && fit.panel.width > HOST_FRAME_MAX.width,
+      `The frame is scaled to the panel: ${JSON.stringify(fit)}.`,
+    );
+  });
+
+  await step(page, viewport, "a click in the scaled page lands where it was aimed", async () => {
+    await tab.evaluate(() => window.scrollTo(0, 0));
+    const clicks = Number(await tab.evaluate(nextClicks));
+    const next = await onScreen(page, tab, "#next");
+    await page.mouse.click(next.x, next.y);
+    await waitForTab(tab, clicksAre, nextClicks, String(clicks + 1), "One click is one click");
+  });
+
+  const extra = [
+    { id: "browser-tab-docs", title: "Docs" },
+    { id: "browser-tab-mail", title: "Mail" },
+    { id: "browser-tab-calendar", title: "Calendar" },
+  ];
+  for (const entry of extra) {
+    host.pages.set(entry.id, tab);
+    await page.evaluate(({ id, title }) => window.liveViewBridge?.addTab(id, title), entry);
+    await chipOf(page, entry.id).waitFor({ timeout: UI_WAIT_MS });
+  }
+  const closedOnce = async (tabId: string) => {
+    const closed = await page.evaluate(() => window.closedTabs ?? []);
+    assert.equal(closed.filter((id) => id === tabId).length, 1, `One close of ${tabId}: ${JSON.stringify(closed)}.`);
+  };
+
+  await step(page, viewport, "a middle click closes a tab at once", async () => {
+    const chip = chipOf(page, "browser-tab-docs");
+    const box = await chip.boundingBox();
+    assert.ok(box);
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: "middle" });
+    // The host answers after 600 ms; the tab leaves the row before that.
+    await chip.waitFor({ state: "detached", timeout: 400 });
+    await page.waitForTimeout(900);
+    assert.equal(await chip.count(), 0, "The tab stays closed after the host answers.");
+    await closedOnce("browser-tab-docs");
+  });
+
+  await step(page, viewport, "the X closes a tab at once, and its press area is 24 px", async () => {
+    const chip = chipOf(page, "browser-tab-mail");
+    await chip.hover();
+    const close = chip.locator(".browser-full-chip-close");
+    const box = await close.boundingBox();
+    assert.ok(box);
+    const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const reach = await page.evaluate(
+      ({ x, y }) =>
+        [
+          [x - 11.5, y],
+          [x + 11.5, y],
+          [x, y - 11.5],
+          [x, y + 11.5],
+        ].every(([px, py]) => document.elementFromPoint(px ?? 0, py ?? 0)?.closest(".browser-full-chip-close")),
+      center,
+    );
+    assert.ok(reach, `The X takes presses 24 px square: ${JSON.stringify(box)}.`);
+    // A press that wobbles a few pixels is still a click on the X, not a drag of the tab.
+    await page.mouse.move(center.x, center.y);
+    await page.mouse.down();
+    await page.mouse.move(center.x + 4, center.y + 2, { steps: 3 });
+    await page.mouse.move(center.x + 7, center.y + 3, { steps: 3 });
+    await page.mouse.move(center.x + 4, center.y + 1, { steps: 2 });
+    await page.mouse.up();
+    await chip.waitFor({ state: "detached", timeout: 400 });
+    await page.waitForTimeout(900);
+    assert.equal(await chip.count(), 0, "The tab stays closed after the host answers.");
+    await closedOnce("browser-tab-mail");
+  });
+
+  await step(page, viewport, "a close the host refuses puts the tab back", async () => {
+    await page.evaluate(() => window.liveViewBridge?.failNextClose());
+    const chip = chipOf(page, "browser-tab-calendar");
+    await chip.hover();
+    await chip.locator(".browser-full-chip-close").click();
+    await chip.waitFor({ state: "detached", timeout: 400 });
+    await chip.waitFor({ state: "attached", timeout: UI_WAIT_MS });
+    await closedOnce("browser-tab-calendar");
+    await shot(page, `${viewport}-tabs`);
+  });
+  await context.close();
+  await tabContext.close();
+}
+
 function watch(page: Page, viewport: ViewportName): void {
   page.on("pageerror", (error) => report.pageErrors.push(`${viewport}: ${error.stack ?? error.message}`));
   page.on("console", (message) => {
@@ -717,8 +892,11 @@ try {
     headless: !process.argv.includes("--headed"),
     ...(executablePath ? { executablePath } : {}),
   });
-  await desktop(browser, origin);
-  await phone(browser, origin);
+  const only = option("only");
+  if (!only || only === "desktop") await desktop(browser, origin);
+  if (!only || only === "phone") await phone(browser, origin);
+  for (const name of ["wide-1x", "wide-1.25x", "wide-2x"] as const)
+    if (!only || only === "wide" || only === name) await wide(browser, origin, name);
   report.passed =
     report.steps.length > 0 &&
     report.steps.every((item) => item.passed) &&

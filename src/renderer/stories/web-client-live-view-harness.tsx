@@ -61,7 +61,11 @@ interface HarnessWindow {
     addTab(tabId: string, title: string): void;
     /** The popup closed. */
     removeTab(tabId: string): void;
+    /** The next close of a tab fails on the host, as a refused close does. */
+    failNextClose(): void;
   };
+  /** The tabs the client asked the host to close, in order. */
+  closedTabs?: string[];
   takeoverResponses?: { requestId: string | number; decision: string }[];
 }
 declare global {
@@ -69,6 +73,9 @@ declare global {
 }
 const harness: HarnessWindow = window;
 harness.takeoverResponses = [];
+harness.closedTabs = [];
+/** A host answers a close after a round trip; the row must not wait for it. */
+const CLOSE_ROUND_TRIP_MS = 600;
 
 const runtime: WebRuntimeFactory = (_accountId, events) => {
   const mock = createMockOpenBot({
@@ -79,6 +86,7 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
   });
   const listeners = new Set<(event: BrowserLiveViewEvent) => void>();
   let tabs: BrowserTab[] = [TAB];
+  let failNextClose = false;
   const emit = (event: BrowserLiveViewEvent) => {
     for (const listener of listeners) listener(event);
   };
@@ -100,10 +108,24 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
       tabs = tabs.filter((tab) => tab.id !== tabId);
       mock.emitAgentEvent({ type: "browser-changed", tabs, activeTabId: TAB.id });
     },
+    failNextClose: () => {
+      failNextClose = true;
+    },
   };
   const web = mockWebRuntimeFor(mock, events);
   return {
     ...web,
+    closeBrowserTab: async (tabId) => {
+      harness.closedTabs?.push(tabId);
+      await new Promise((resolve) => setTimeout(resolve, CLOSE_ROUND_TRIP_MS));
+      if (failNextClose) {
+        failNextClose = false;
+        throw new Error("The host kept the tab open.");
+      }
+      if (!tabs.some((tab) => tab.id === tabId)) throw new Error("Browser tab was closed.");
+      tabs = tabs.filter((tab) => tab.id !== tabId);
+      mock.emitAgentEvent({ type: "browser-changed", tabs, activeTabId: TAB.id });
+    },
     browser: {
       ...mock.api.browser,
       // The host holds the page at the size of the view, as a host with `browser-view-viewport` does.

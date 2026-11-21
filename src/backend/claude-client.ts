@@ -1044,7 +1044,8 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           }
           // The trust hook asked first: the owner's approval card answers this tool use.
           const toolUseId = options.toolUseID;
-          if (toolUseId && trustAsks.delete(toolUseId)) {
+          // Without an id, a classified tool use asks the gate again; an allowed one answers at once.
+          if (toolUseId ? trustAsks.delete(toolUseId) : classifyToolUse(toolName, toolInput) !== null) {
             const answer = yield* this.#trustCheck(threadId, toolName, toolInput, "approve");
             if (answer.decision !== "allow")
               return { behavior: "deny", message: answer.reason ?? "The trust policy did not allow this action." };

@@ -1,3 +1,4 @@
+import type { WorkspaceWhySlow } from "@openbot/contracts/ipc";
 import type { JSX } from "@solidjs/web";
 import { createSignal, For, Show } from "solid-js";
 import { Button } from "../../button";
@@ -5,6 +6,7 @@ import { Square } from "../../icons";
 import { useText } from "../../text";
 import { AgentWorkGroup } from "./AgentWorkGroup";
 import { StepTrail } from "./StepTrail";
+import { WhySlowPopover } from "./WhySlowPopover";
 import { MemberAvatar } from "./WorkspaceAvatar";
 import type { AgentStepView, WorkspaceMember } from "./workspace-types";
 
@@ -25,6 +27,8 @@ export interface TypingAgent {
   onStop?: (() => void) | undefined;
   /** The stop was sent and the work has not ended yet. */
   stopping?: boolean | undefined;
+  /** Reads where the time of its work went, for "Why is this slow?". Absent on a host without it. */
+  slow?: (() => Promise<WorkspaceWhySlow>) | undefined;
 }
 
 export interface TypingIndicatorProps {
@@ -80,6 +84,9 @@ export function TypingIndicator(props: TypingIndicatorProps): JSX.Element {
             </Show>
             <Show when={agent().model}>
               <span class="ws-typing-agent-label ws-typing-agent-model">{agent().model}</span>
+            </Show>
+            <Show when={agent().state === "working" || agent().state === "waiting" ? agent().slow : undefined}>
+              {(read) => <WhySlowPopover read={read()} name={agent().member.name} />}
             </Show>
             <Show when={agent().state === "working" || agent().state === "waiting" ? agent().onStop : undefined}>
               {(stop) => (

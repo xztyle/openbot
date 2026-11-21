@@ -2,7 +2,7 @@ import { Dynamic, type JSX } from "@solidjs/web";
 import { createSignal, For, Show } from "solid-js";
 import { Button, buttonVariants } from "../../button";
 import { Popover } from "../../complex";
-import { CircleQuestionMark, Globe2, Hand, KeyRound, LogIn, ShieldCheck, Ticket } from "../../icons";
+import { CircleQuestionMark, Globe2, Hand, KeyRound, LogIn, ShieldCheck, Ticket, TriangleAlert } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { MemberAvatar } from "./WorkspaceAvatar";
@@ -22,7 +22,9 @@ export type NeedsYouKind =
   /** A loop decision: a gate, an experiment budget or an escalated question (`LoopDecision`). */
   | "decision"
   /** A Motion ticket that waits on the reader. */
-  | "ticket";
+  | "ticket"
+  /** An insight alert of the host, such as ad spend with no sale. */
+  | "alert";
 
 /** One request that waits for the reader, as a row shows it. */
 export interface NeedsYouRow {
@@ -49,6 +51,7 @@ const KIND_ICON = {
   secret: KeyRound,
   decision: ShieldCheck,
   ticket: Ticket,
+  alert: TriangleAlert,
 } as const satisfies Record<NeedsYouKind, typeof Hand>;
 
 export interface NeedsYouListProps {

@@ -10,10 +10,12 @@ import { createMemo } from "solid-js";
 import { needsYouAction } from "../agents/needs-you";
 import { useLoopDecisions } from "./loop-decisions-feed";
 import { useWorkspace } from "./workspace-context";
+import { insightAlerts, pollInsightAlerts } from "./workspace-insight-alerts";
 import { memberById } from "./workspace-model";
 
 /** The key of a loop decision's row, apart from the keys of agent requests. */
 const LOOP_DECISION_KEY = "loop-decision\n";
+const ALERT_KEY = "insight:";
 
 /** The rows of the requests that wait for the reader, and the action that opens one. */
 export function useNeedsYouRows() {
@@ -38,6 +40,23 @@ export function useNeedsYouRows() {
       };
     }),
   );
+  // The insight alerts of the owner and the admins: money spent with no sale, a goal behind.
+  pollInsightAlerts(() => {
+    const read = ws.channels.port().agent.workspaceInsight;
+    return ws.viewAvailable("insights") && read ? async () => (await read({ days: 1 })).alerts : undefined;
+  });
+  const alertRows = createMemo((): NeedsYouRow[] =>
+    insightAlerts()
+      .filter((alert) => ws.spaces.current() === alert.spaceId || !ws.spaces.available())
+      .map((alert) => ({
+        key: `${ALERT_KEY}${alert.id}`,
+        member: { id: "insight", kind: "agent", name: t("insight.title"), avatarSeed: "insight" },
+        kind: "alert",
+        action: alert.text,
+        where: t("insight.needsYou.alert"),
+        at: Date.parse(alert.createdAt),
+      })),
+  );
   const requestRows = createMemo((): NeedsYouRow[] =>
     ws.needsYou().map((item) => {
       const agent = ws.env.agents().find((candidate) => candidate.id === item.agentId);
@@ -54,8 +73,14 @@ export function useNeedsYouRows() {
       };
     }),
   );
-  const rows = createMemo(() => [...requestRows(), ...decisionRows()].sort((left, right) => left.at - right.at));
+  const rows = createMemo(() =>
+    [...requestRows(), ...decisionRows(), ...alertRows()].sort((left, right) => left.at - right.at),
+  );
   const open = (key: string) => {
+    if (key.startsWith(ALERT_KEY)) {
+      ws.openView("insights");
+      return;
+    }
     if (key.startsWith(LOOP_DECISION_KEY)) {
       ws.openView("loops");
       return;

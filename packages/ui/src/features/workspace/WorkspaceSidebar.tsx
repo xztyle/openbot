@@ -32,6 +32,7 @@ import {
   Pencil,
   Plus,
   SquarePen,
+  Target,
   Trash2,
   UserRoundPlus,
   UsersRound,
@@ -59,6 +60,8 @@ export type WorkspaceView =
   | "reviews"
   /** The loops (pipelines) of the space: items by stage, and the decisions that wait for the reader. */
   | "loops"
+  /** Goals, money, agent costs and the briefing, for the owner and the admins. */
+  | "insights"
   /** The agents of the space that shows. */
   | "space-agents"
   /** Slack's Drafts & sent: the unsent drafts of each conversation, and the reader's sent messages. */
@@ -163,6 +166,8 @@ export interface WorkspaceSidebarProps {
   showSecrets?: boolean | undefined;
   /** The Reviews view: an owner or admin of a host with agent-efficiency-v1. */
   showReviews?: boolean | undefined;
+  /** Goals, money, agent costs and the briefing, for the owner and the admins of a host that has them. */
+  showInsights?: boolean | undefined;
   /** Shows the Agents view of the space that shows, on a host with spaces. */
   showSpaceAgents?: boolean | undefined;
   /** Opens the server's apps (Discord, Slack, Telegram and other connectors), for an owner or an admin. */
@@ -214,6 +219,7 @@ const MORE_VIEWS = [
   "storage",
   "secrets",
   "reviews",
+  "insights",
 ] as const satisfies readonly WorkspaceView[];
 type MoreView = (typeof MORE_VIEWS)[number];
 
@@ -279,7 +285,9 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
           ? Boolean(props.showSecrets)
           : view === "reviews"
             ? Boolean(props.showReviews)
-            : true;
+            : view === "insights"
+              ? Boolean(props.showInsights)
+              : true;
   const MORE_ICON: Record<MoreView, () => JSX.Element> = {
     dms: () => <MessagesSquare aria-hidden="true" />,
     loops: () => <Kanban aria-hidden="true" />,
@@ -289,6 +297,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
     storage: () => <HardDrive aria-hidden="true" />,
     secrets: () => <KeyRound aria-hidden="true" />,
     reviews: () => <Gauge aria-hidden="true" />,
+    insights: () => <Target aria-hidden="true" />,
   };
   const moreLabel = (view: MoreView) =>
     view === "dms"
@@ -305,7 +314,9 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                 ? t("storageHygiene.title")
                 : view === "reviews"
                   ? t("efficiency.view.title")
-                  : t("workspace.view.secrets");
+                  : view === "insights"
+                    ? t("insight.title")
+                    : t("workspace.view.secrets");
   /** The view under More that shows now: it gets a row of its own above More while it shows. */
   const activeMore = () => MORE_VIEWS.find((view) => view === props.activeView && moreAvailable(view));
   const moreItems = (): WorkspaceMenuItem[] => [

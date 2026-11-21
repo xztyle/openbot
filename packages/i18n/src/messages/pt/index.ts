@@ -19,6 +19,7 @@ import { messages as diagram } from "./diagram";
 import { messages as dialog } from "./dialog";
 import { messages as files } from "./files";
 import { messages as importAgent } from "./import";
+import { messages as insight } from "./insight";
 import { messages as island } from "./island";
 import { messages as marketplace } from "./marketplace";
 import { messages as mcp } from "./mcp";
@@ -100,6 +101,7 @@ export const pt = {
   ...agent,
   ...agentTemplate,
   ...importAgent,
+  ...insight,
   ...files,
   ...island,
   ...computerUse,

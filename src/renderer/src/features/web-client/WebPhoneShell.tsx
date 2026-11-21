@@ -22,6 +22,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Target,
   Workflow,
 } from "@openbot/ui";
 import {
@@ -275,6 +276,13 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
         label: t("efficiency.view.title"),
         icon: <Gauge />,
         onSelect: () => openView("reviews"),
+      });
+    if (ws.viewAvailable("insights"))
+      rows.push({
+        id: "insights",
+        label: t("insight.title"),
+        icon: <Target />,
+        onSelect: () => openView("insights"),
       });
     const apps = ws.env.openApps;
     if (apps) rows.push({ id: "apps", label: t("workspace.view.apps"), icon: <Blocks />, onSelect: apps });

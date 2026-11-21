@@ -1,0 +1,287 @@
+/* Insights: goals, money, agent costs and the briefing settings (InsightView). The rows are the
+   workspace list rows; this file adds the numbers, the small charts and the forms. */
+
+.ws-insight-toolbar {
+  flex-wrap: wrap;
+}
+
+.ws-insight-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-3) 0;
+}
+
+.ws-insight-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-1-5);
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-insight-heading svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-insight-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-2) 0;
+}
+
+.ws-insight-line {
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-insight-note {
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-insight-alert .ws-row-title {
+  color: var(--openbot-warning-text);
+}
+
+.ws-insight-pace {
+  padding: 0 var(--openbot-space-1-5);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-bg-control);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-insight-pace[data-pace="behind"] {
+  background: var(--openbot-warning-soft);
+  color: var(--openbot-warning-text);
+}
+
+.ws-insight-pace[data-pace="done"],
+.ws-insight-pace[data-pace="ahead"] {
+  background: var(--openbot-success-soft);
+  color: var(--openbot-success);
+}
+
+.ws-insight-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-1) 0;
+}
+
+.ws-insight-progress .ui-progress {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ws-insight-spark {
+  width: 72px;
+  height: 22px;
+  flex: none;
+  color: var(--openbot-accent);
+}
+
+.ws-insight-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  max-width: 280px;
+}
+
+.ws-insight-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--openbot-space-3);
+}
+
+.ws-insight-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--openbot-space-2);
+  margin: 0;
+}
+
+.ws-insight-stats > div {
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-surface);
+}
+
+.ws-insight-stats dt {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-insight-stats dd {
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-lg);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-insight-source {
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-insight-source[data-state="error"] {
+  color: var(--openbot-danger-text);
+}
+
+.ws-insight-cost .ws-row-title-end {
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-insight-idle {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-insight-idle[data-high] {
+  color: var(--openbot-warning-text);
+}
+
+.ws-insight-form {
+  max-width: 560px;
+  gap: var(--openbot-space-3);
+}
+
+.ws-insight-checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1-5);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ws-insight-checks legend {
+  margin-bottom: var(--openbot-space-1);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-insight-check {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-insight-error {
+  margin: 0;
+  color: var(--openbot-danger-text);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-insight-briefing {
+  margin: 0;
+  padding: var(--openbot-space-3);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-surface);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-sm);
+  white-space: pre-wrap;
+}
+
+@media (max-width: 640px) {
+  .ws-insight-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ws-insight-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* "Why is this slow?": the button on the working line and in the agent DM, and its popover. */
+
+.ws-why-slow-button svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-agent-dm-slow {
+  flex: none;
+}
+
+.ws-why-slow {
+  display: flex;
+  width: min(340px, calc(100vw - 32px));
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-3);
+}
+
+.ws-why-slow-title {
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-why-slow-total,
+.ws-why-slow-note {
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-why-slow-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-why-slow-segment {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 var(--openbot-space-2);
+  padding-left: var(--openbot-space-2);
+  border-left: 3px solid var(--openbot-border-strong);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-why-slow-segment[data-kind="running"] {
+  border-left-color: var(--openbot-accent);
+}
+
+.ws-why-slow-segment[data-kind="owner"],
+.ws-why-slow-segment[data-kind="blocked"] {
+  border-left-color: var(--openbot-warning);
+}
+
+.ws-why-slow-segment[data-kind="failed"] {
+  border-left-color: var(--openbot-danger);
+}
+
+.ws-why-slow-kind {
+  color: var(--openbot-text-primary);
+}
+
+.ws-why-slow-time {
+  color: var(--openbot-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-why-slow-detail {
+  grid-column: 1 / -1;
+  color: var(--openbot-text-muted);
+}

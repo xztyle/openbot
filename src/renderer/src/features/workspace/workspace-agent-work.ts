@@ -239,6 +239,22 @@ export function createAgentWork(input: {
     }
   }
 
+  /** "Why is this slow?" of one agent: the request of its active task here, else its latest work. */
+  const whySlow = (agentId: string) => {
+    const read = ws.channels.port().agent.workspaceWhySlow;
+    if (!read) return undefined;
+    return () => {
+      const task = tasks().find(
+        (item) => item.ownerAgentId === agentId && ACTIVE_TASK_STATES.has(item.state) && inPlace(item),
+      );
+      return read({
+        agentId,
+        channelId: input.channelId,
+        ...(task ? { messageId: task.requestMessageId } : {}),
+      });
+    };
+  };
+
   const agents = createMemo((): TypingAgent[] => {
     const directory = ws.directory();
     const fleet = ws.fleet.agents();
@@ -252,7 +268,8 @@ export function createAgentWork(input: {
         const member = memberById(directory, id);
         if (state === "thinking" || state === "routing") return { member, state };
         const onStop = canStop ? () => void stop(id, member.name) : undefined;
-        if (state === "waiting") return { member, state, onStop, stopping: halting.has(id) };
+        const slow = whySlow(id);
+        if (state === "waiting") return { member, state, onStop, stopping: halting.has(id), slow };
         const trail = steps[id];
         const record = fleet.find((agent) => agent.member.id === id);
         const model = record?.model ? modelNote(record.model, record.modelReason) : undefined;
@@ -264,6 +281,7 @@ export function createAgentWork(input: {
           trail: trail ? { steps: trail.steps, durationMs: trail.durationMs || undefined } : undefined,
           onStop,
           stopping: halting.has(id),
+          slow,
         };
       });
   });

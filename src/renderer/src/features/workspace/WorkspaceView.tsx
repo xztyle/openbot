@@ -1,5 +1,6 @@
 import { MessageMentionsContext } from "@openbot/ui/features/conversation/message-mentions";
 import { ChannelHeader } from "@openbot/ui/features/workspace/ChannelHeader";
+import { WhySlowPopover } from "@openbot/ui/features/workspace/WhySlowPopover";
 import { WorkspaceContextMenu } from "@openbot/ui/features/workspace/WorkspaceContextMenu";
 import { WorkspaceLayout } from "@openbot/ui/features/workspace/WorkspaceLayout";
 import { useText } from "@openbot/ui/text";
@@ -120,6 +121,13 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
   const workspaceMenu = useWorkspaceMenu();
   const agent = () => ws.env.agents().find((candidate) => candidate.id === props.agentId);
   const toolbar = composerToolbar("main");
+  // "Why is this slow?" while the agent works or waits: where the time of its current work went.
+  const slow = createMemo(() => {
+    const read = ws.channels.port().agent.workspaceWhySlow;
+    const state = ws.fleet.agents().find((item) => item.member.id === props.agentId)?.status.state;
+    if (!read || state === undefined || state === "idle") return undefined;
+    return () => read({ agentId: props.agentId });
+  });
   const [headerSlot, setHeaderSlot] = createSignal<HTMLElement>();
   // The chat's open side panel covers it on a phone: Back closes the panel before it leaves the DM.
   const [panelBack, setPanelBack] = createSignal<(() => void) | null>(null);
@@ -175,7 +183,14 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
                   if (close) close();
                   else ws.back();
                 }}
-                search={<div class="ws-agent-dm-controls" ref={setHeaderSlot} />}
+                search={
+                  <>
+                    <Show when={slow()}>
+                      {(read) => <WhySlowPopover read={read()} name={current().name} class="ws-agent-dm-slow" />}
+                    </Show>
+                    <div class="ws-agent-dm-controls" ref={setHeaderSlot} />
+                  </>
+                }
               />
             )}
           </Show>

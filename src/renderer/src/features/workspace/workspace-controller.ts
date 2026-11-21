@@ -334,6 +334,7 @@ const SAVED_VIEWS: readonly WorkspaceView[] = [
   "secrets",
   "reviews",
   "loops",
+  "insights",
   "space-agents",
   "drafts",
 ];
@@ -1737,6 +1738,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   /** Whether the reader has a view on this server: some need a role or a host feature. */
   function viewAvailable(view: WorkspaceView): boolean {
     if (view === "secrets") return env.secrets?.() === true && Boolean(channels.port().agent.workspaceSecrets);
+    // The owner and the admins: the same role as the key store, on a host that has the routes.
+    if (view === "insights") return env.secrets?.() === true && Boolean(channels.port().agent.workspaceInsight);
     if (view === "storage") return Boolean(env.storageHygiene?.());
     if (view === "reviews") return Boolean(env.efficiency?.());
     if (view === "loops") return Boolean(channels.port().agent.workspaceLoops);

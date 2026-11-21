@@ -34,6 +34,8 @@ export function workspaceViewLabel(view: WorkspaceView, t: TextValue["t"]): stri
       return t("efficiency.view.title");
     case "loops":
       return t("workspace.view.loops");
+    case "insights":
+      return t("insight.title");
     case "routines":
       return t("workspace.app.menu.routines");
     case "search":

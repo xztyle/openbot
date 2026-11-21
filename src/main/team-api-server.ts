@@ -265,6 +265,7 @@ import { routeWorkflows } from "./team-api/route-workflows";
 import { routeWorkspace } from "./team-api/route-workspace";
 import { routeWorkspaceDirectory } from "./team-api/route-workspace-directory";
 import { routeWorkspaceFleet } from "./team-api/route-workspace-fleet";
+import { routeWorkspaceInsight } from "./team-api/route-workspace-insight";
 import { routeWorkspaceLoops } from "./team-api/route-workspace-loops";
 import { routeWorkspaceReadState } from "./team-api/route-workspace-read-state";
 import { routeWorkspaceSaved } from "./team-api/route-workspace-saved";
@@ -967,6 +968,7 @@ export class TeamApiServer {
       if ((await routeWorkspaceFleet(context, this.#options.agents, hidden)) === "handled") return;
       if ((await routeAgentEfficiency(context, this.#options.agents, hidden)) === "handled") return;
       if ((await routeWorkspaceLoops(context, this.#options.agents.loops)) === "handled") return;
+      if ((await routeWorkspaceInsight(context, this.#options.agents.insight, hidden)) === "handled") return;
       if ((await routeWorkspaceSidebar(context, this.#options.workspaceSidebar)) === "handled") return;
       if ((await routeWorkspaceSpaces(context, this.#options.spaces, this.#options.agents, hidden)) === "handled")
         return;

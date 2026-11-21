@@ -87,6 +87,7 @@ export * from "./ipc-vault";
 export * from "./ipc-voice";
 export * from "./ipc-workflows";
 export * from "./ipc-workspace-fleet";
+export * from "./ipc-workspace-insight";
 export * from "./ipc-workspace-loops";
 export * from "./ipc-workspace-sidebar";
 export * from "./ipc-workspace-spaces";

@@ -71,6 +71,7 @@ import { safeStorageCipher } from "./safe-storage-cipher";
  * when - see `teardown-registry.ts` for why shutdown here is not the reverse of construction.
  */
 
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { homedir, hostname, tmpdir } from "node:os";
@@ -90,11 +91,13 @@ import type {
 } from "@openbot/contracts/ipc";
 import {
   agentBrowserProfile,
+  GENERAL_SPACE_ID,
   IPC_ENDPOINTS,
   isManagedToolRuntime,
   isUpdateBusyPhase,
   LOCAL_SERVER_ID,
   latestTurnAnswer,
+  SIGNED_OUT_CHANNEL_MEMBER_ID,
 } from "@openbot/contracts/ipc";
 import { decodeRecord, requiredString } from "@openbot/contracts/ipc-decoding";
 import { sourceText } from "@openbot/i18n/source";
@@ -122,6 +125,8 @@ import { BrowserHost } from "../backend/browser-host";
 import { BrowserProfileStore } from "../backend/browser-profiles/browser-profile-store";
 import { ChannelBridge } from "../backend/channel-bridge";
 import { runCauseEffect } from "../backend/effect-boundary";
+import { InsightService } from "../backend/insight/insight-service";
+import { InsightStore } from "../backend/insight/insight-store";
 import { MailboxStore } from "../backend/mailbox-store";
 import { McpOAuth } from "../backend/mcp-oauth-provider";
 import { discordDriver } from "../backend/messaging/discord/discord-driver";
@@ -403,6 +408,8 @@ const STORAGE_HYGIENE_SETTINGS_FILE = "openbot-storage-hygiene-v1.json";
 const CHANNEL_BRIDGE_FILE = "openbot-channel-bridge-v1.json";
 // The artifact index of the workspace and the images of its pages. Host only, never sent whole.
 const WORKSPACE_ARTIFACTS_FILE = "openbot-workspace-artifacts-v1.json";
+// The goals, money rows, alerts and briefing settings of the insight views. Host only.
+const INSIGHT_FILE = "openbot-insight-v1.json";
 const WORKSPACE_THUMBNAILS_DIRECTORY = "workspace-thumbnails";
 const PROVIDER_ENVIRONMENT_PREFERENCE_FILE = "openbot-provider-environment-v1.json";
 const REMOTE_SESSION_REUSE_PREFERENCE_FILE = "openbot-remote-session-reuse-preference-v1.json";
@@ -517,6 +524,8 @@ const TEARDOWN_ORDER = {
   storageHygiene: 109.5,
   // Before the agent service: no capture starts for a list while the service stops.
   workspaceThumbnails: 109.7,
+  // Before the agent service: no briefing or sync starts while the service stops.
+  insight: 109.8,
   service: 110,
   mcpOAuth: 111,
   analytics: 112,
@@ -1075,11 +1084,10 @@ export async function createApplicationServices({
   teardown.push(TEARDOWN_ORDER.database, "the database", () => store.database.close(), { afterAbandonedSteps: true });
   // Every managed skill (`MANAGED_SKILL_SLUGS`): site hosting, skill creator, data, event checks, host apps,
   // bench, storage, Meta ads, Hotmart, Render sites and Motion.
-  const managedSkills = createApplicationManagedSkills(
-    app.isPackaged
-      ? join(process.resourcesPath, "managed-skills")
-      : resolve(__dirname, "../../resources/managed-skills"),
-  );
+  const managedSkillsRoot = app.isPackaged
+    ? join(process.resourcesPath, "managed-skills")
+    : resolve(__dirname, "../../resources/managed-skills");
+  const managedSkills = createApplicationManagedSkills(managedSkillsRoot);
   await Effect.runPromise(managedSkills.syncAll(store.list()));
   performance.mark("openbot:services.skills");
   const hostedSites = new HostedSiteDesktopService(centralAuth, () => {
@@ -2798,6 +2806,83 @@ export async function createApplicationServices({
   });
   pushHost = host;
   teardown.push(TEARDOWN_ORDER.host, "the local host", () => runCauseEffect(host.shutdown()));
+  // Goals, money, costs and the daily briefing (`backend/insight`), after the host: the briefing is for
+  // its owner. Money is read with the Meta Ads and Hotmart helpers of the managed skills and the shared
+  // keys; no agent is woken for any of it.
+  const insight = new InsightService({
+    store: new InsightStore(join(app.getPath("userData"), INSIGHT_FILE)),
+    queries: store.database.insight,
+    agents: () => service.listAgents(),
+    spaces: () => service.spaces.store.list(),
+    agentSpaceId: (agentId) => service.spaces.store.agentSpaceId(agentId),
+    channelSpaceId: (channelId) =>
+      service.channels.store.exists(channelId)
+        ? service.spaces.store.channelSpaceId(service.channels.store.get(channelId))
+        : GENERAL_SPACE_ID,
+    sharedDirectory: (space) => service.spaces.store.sharedDirectory(space),
+    placeChannel: (channelId, spaceId) => service.spaces.place("channel", channelId, spaceId),
+    channels: {
+      exists: (channelId) => service.channels.store.exists(channelId),
+      get: (channelId) => service.channels.store.get(channelId),
+      ids: () => service.channels.store.ids(),
+      decisions: (channelId) => service.channels.decisions(channelId),
+      createPrivate: ({ channelId, name, description, owner }) =>
+        service.channels.command(
+          {
+            type: "create",
+            operationId: randomUUID(),
+            channelId,
+            kind: "channel",
+            visibility: "private",
+            name,
+            description,
+            humanMemberIds: [owner.id],
+            members: [],
+          },
+          owner,
+        ),
+      postNotice: (channelId, name, text) => service.channels.postNotice(channelId, name, text) !== null,
+    },
+    attention: () => service.attentionItems(),
+    usageLimit: (agentId) => service.usageLimitFor(agentId),
+    routines: {
+      list: (agentId) => service.listRoutines(agentId),
+      setActive: (agentId, routineId, active) => {
+        service.updateRoutine({ agentId, routineId, active });
+      },
+    },
+    artifacts: () => service.workspace.artifacts({ limit: 200 }, host.channelViewer()).artifacts,
+    owner: () => {
+      const actor = host.channelActor();
+      return actor.id === SIGNED_OUT_CHANNEL_MEMBER_ID ? null : actor;
+    },
+    generate: (prompt, deadline) => service.generateCheapText(prompt, deadline),
+    helpers: {
+      root: managedSkillsRoot,
+      node: existsSync("/usr/bin/node") ? "/usr/bin/node" : "node",
+      secret: (name) => agentApiKeys.readNow("shared", null, name),
+    },
+    motion: () => {
+      const board = service
+        .listMcpServers()
+        .find((config) => config.enabled && config.transport === "http" && /^motion(?:_|$)/i.test(config.name));
+      const token = agentApiKeys.readNow("shared", null, "MOTION_TOKEN");
+      if (!board || !token) return null;
+      try {
+        return { baseUrl: new URL(board.url).origin, token };
+      } catch {
+        return null;
+      }
+    },
+    hostTimeZone: () => serverTimezone.effective(),
+    loopDecisions: () => service.loops.pendingDecisions(),
+    heldNotifications: () => ownerAway.state().suppressed.count,
+  });
+  service.insight = insight;
+  await Effect.runPromise(insight.start());
+  teardown.push(TEARDOWN_ORDER.insight, "the insight service", async () => {
+    insight.stop();
+  });
   const signedInState = centralAuth.getState();
   if (signedInState.status === "signed_in") {
     await runCauseEffect(host.applySignedInAccount(signedInState.user));

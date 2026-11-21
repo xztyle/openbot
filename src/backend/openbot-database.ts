@@ -25,6 +25,7 @@ import {
   HostedSiteEventLog,
   type PendingHostedSiteTerminalEvent,
 } from "./database/hosted-site-event-log";
+import { InsightQueries } from "./database/insight-queries";
 import {
   MailboxProjection,
   type MailboxProjectionChanges,
@@ -76,6 +77,8 @@ export class OpenBotDatabase {
   readonly usage: AgentUsage;
   /** The reads of the workspace fleet, step trail and artifact views. */
   readonly workspace: WorkspaceQueries;
+  /** The reads of the goals, money, costs and briefing views. */
+  readonly insight: InsightQueries;
   readonly #conversations: ConversationQueries;
   readonly #roster: AgentRoster;
   readonly #conversationWrites: ConversationWriter;
@@ -92,6 +95,7 @@ export class OpenBotDatabase {
     this.#core = new DatabaseCore({ userDataPath });
     this.usage = new AgentUsage(this.#core);
     this.workspace = new WorkspaceQueries({ core: this.#core });
+    this.insight = new InsightQueries(this.#core);
     this.#conversations = new ConversationQueries({ core: this.#core });
     this.#roster = new AgentRoster({ core: this.#core });
     this.#conversationWrites = new ConversationWriter({ core: this.#core, roster: this.#roster });

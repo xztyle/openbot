@@ -57,6 +57,7 @@ import {
   acknowledgeRequestToolSchema,
   askUiToolSchema,
   CHAT_VISUAL_PREVIEW_DEFAULT_WIDTH,
+  goalsToolSchema,
   htmlPreviewToolSchema,
   htmlRenderToolSchema,
   logDecisionToolSchema,
@@ -221,6 +222,16 @@ export interface OpenBotToolRouterHooks {
   channelHost(): { id: string; name: string };
   /** Puts a channel that does not exist yet in a space, and tells the readers of the spaces. */
   placeChannel(channelId: string, spaceId: string): void;
+  /** The goals tool of the insight service; absent before the service is attached. */
+  goals?(
+    agentId: string,
+    input: {
+      action: "list" | "progress";
+      goalId?: string | undefined;
+      value?: number | undefined;
+      note?: string | undefined;
+    },
+  ): Effect.Effect<unknown, { message: string }>;
 }
 
 export interface OpenBotToolRouterOptions {
@@ -1296,6 +1307,16 @@ export class OpenBotToolRouter {
     }
 
     if (params.tool === "react_to_user_message") return yield* this.#react(params, senderAgentId);
+
+    if (params.tool === "goals") {
+      const parsed = goalsToolSchema.safeParse(params.arguments);
+      if (!parsed.success)
+        return openBotToolFailure(`${z.prettifyError(parsed.error)}\nCorrect the arguments and retry.`);
+      const goals = this.#hooks.goals;
+      if (!goals) return openBotToolFailure("Goals are not available on this host yet.");
+      const answer = yield* Effect.result(goals(senderAgentId, parsed.data));
+      return Result.isSuccess(answer) ? openBotToolResult(answer.success) : openBotToolFailure(answer.failure.message);
+    }
 
     if (OWNER_TOOL_NAMES.has(params.tool)) {
       const owned = yield* this.#ownerTools.handle(params, senderAgentId, executionThreadId);

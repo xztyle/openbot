@@ -29,6 +29,7 @@ import {
   decodeWorkspaceDecisions,
   decodeWorkspaceDmAgents,
   decodeWorkspaceFleet,
+  decodeWorkspaceInsight,
   decodeWorkspaceLoops,
   decodeWorkspaceSecrets,
   decodeWorkspaceSecretValue,
@@ -36,6 +37,7 @@ import {
   decodeWorkspaceSidebarPrefs,
   decodeWorkspaceSpaces,
   decodeWorkspaceSteps,
+  decodeWorkspaceWhySlow,
   hostAnalyticsQuery,
   isAgentModelOption,
   isWorkspaceChannelCommand,
@@ -57,12 +59,15 @@ import {
   parseWorkspaceArtifactsInput,
   parseWorkspaceDecisionsInput,
   parseWorkspaceFleetInput,
+  parseWorkspaceInsightAction,
+  parseWorkspaceInsightInput,
   parseWorkspaceLoopAction,
   parseWorkspaceLoopsInput,
   parseWorkspaceSecretInput,
   parseWorkspaceSecretSaveInput,
   parseWorkspaceSpaceAction,
   parseWorkspaceStepsInput,
+  parseWorkspaceWhySlowInput,
   remoteBrowserSecretResponse,
   type WorkspaceDmAgents,
   type WorkspaceSidebarPrefs,
@@ -86,6 +91,10 @@ import {
   WORKSPACE_FLEET_CAPABILITY,
   WORKSPACE_FLEET_ROUTES,
 } from "@openbot/contracts/team-protocol/workspace-fleet-v1";
+import {
+  WORKSPACE_INSIGHT_CAPABILITY,
+  WORKSPACE_INSIGHT_ROUTES,
+} from "@openbot/contracts/team-protocol/workspace-insight-v1";
 import { WORKSPACE_LOOPS_ROUTES } from "@openbot/contracts/team-protocol/workspace-loops-v1";
 import {
   WORKSPACE_SIDEBAR_CAPABILITY,
@@ -101,6 +110,7 @@ import { createOpenBotLogger } from "@openbot/logging";
 import { duplicateAgentIntoLayout } from "../../backend/agent/duplication-gate";
 import type { AgentService } from "../../backend/agent-service";
 import { runCauseEffect } from "../../backend/effect-boundary";
+import { type InsightService, runInsightLocally } from "../../backend/insight/insight-service";
 import type { SidebarLayoutStore } from "../../backend/sidebar-layout-store";
 import type { HostService } from "../host-service";
 import { type MessageLinkRelay, openHttpLink } from "../message-link-relay";
@@ -246,6 +256,15 @@ export function agentIpcHandlers({
     if (!remoteServers.supportsCapability(serverId, WORKSPACE_SPACES_CAPABILITY))
       throw new Error(sourceText("error.team.workspaceUnsupported"));
     return runCauseEffect(remoteServers.request(serverId, path, decoder, { method: "POST", body }));
+  };
+  const remoteInsight = <T>(serverId: string, path: string, body: object, decoder: ResponseDecoder<T>) => {
+    if (!remoteServers.supportsCapability(serverId, WORKSPACE_INSIGHT_CAPABILITY))
+      throw new Error(sourceText("error.team.workspaceUnsupported"));
+    return runCauseEffect(remoteServers.request(serverId, path, decoder, { method: "POST", body }));
+  };
+  const insight = (): InsightService => {
+    if (!service.insight) throw new Error(sourceText("error.team.workspaceUnsupported"));
+    return service.insight;
   };
   return {
     agent: {
@@ -581,6 +600,21 @@ export function agentIpcHandlers({
         local: (action) => runCauseEffect(service.spaces.apply(action)),
         remote: (action, serverId) =>
           remoteSpaces(serverId, WORKSPACE_SPACES_ROUTES.action, action, decodeWorkspaceSpaces),
+      }),
+      workspaceInsight: scopedHandler(parseWorkspaceInsightInput, {
+        local: (input) => runInsightLocally(insight().read(input)),
+        remote: (input, serverId) =>
+          remoteInsight(serverId, WORKSPACE_INSIGHT_ROUTES.read, input, decodeWorkspaceInsight),
+      }),
+      workspaceInsightAction: scopedHandler(parseWorkspaceInsightAction, {
+        local: (action) => runInsightLocally(insight().apply(action)),
+        remote: (action, serverId) =>
+          remoteInsight(serverId, WORKSPACE_INSIGHT_ROUTES.action, action, decodeWorkspaceInsight),
+      }),
+      workspaceWhySlow: scopedHandler(parseWorkspaceWhySlowInput, {
+        local: async (input) => insight().whySlow(input),
+        remote: (input, serverId) =>
+          remoteInsight(serverId, WORKSPACE_INSIGHT_ROUTES.whySlow, input, decodeWorkspaceWhySlow),
       }),
       getSidebarLayout: scopedQueryHandler({
         local: () => sidebarLayout.getSnapshot(),

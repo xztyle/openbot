@@ -57,6 +57,8 @@ export interface DeveloperInstructionOptions {
   serverHost?: boolean;
   /** Whether the agent has the Motion connection, the team's only work board. */
   workBoard?: boolean;
+  /** One short line per goal of the agent's space (`insight/`): what the team works toward. */
+  goals?: readonly string[];
 }
 
 /** When and how to use the OpenBot Vault. Its settings page is on the user's own computer only. */
@@ -305,6 +307,7 @@ export function developerInstructions(
       : []),
     "Create short-lived helpers, iterators, and sub-team workers with openbot.create_agent and background true, so they stay out of the user's agent lists, unless the user asks to see them.",
     ...(options.workBoard ? [WORK_BOARD_INSTRUCTIONS] : []),
+    ...goalInstructions(options.goals ?? []),
     "For app proactivity, such as new tickets, mentions, or pull requests, prefer an event check to an AI routine: it polls with deterministic API reads and no inference. Search the openbot event check tools, such as openbot.list_event_check_templates, and read their guidance before you set one up.",
     ...(options.memoriesInTurns
       ? [
@@ -316,6 +319,17 @@ export function developerInstructions(
 
 const WORK_BOARD_INSTRUCTIONS =
   "Motion, through your motion MCP tools, is the team's only work board; read the openbot-motion skill before your first Motion action in a conversation. Every task beyond a quick answer has a Motion issue: before you start, find yours (assigned to you, or by search) or create one in your team's project, set it In progress, keep its status true, put results, evidence, and blockers in its comments, and close it with what was done. To delegate, create the issue, assign it to the teammate (agents are Motion members under their Atelier names), and put the issue key in your message; work that reaches you without a key gets an issue first. Each team works in one Motion project, which its orchestrator creates when the user asks; if you do not know your team's project, ask your orchestrator, and never create a project unless you are the orchestrator and the user asked. Write a Motion page only for documentation someone will reuse, such as a spec, decision, process, or runbook, or for a long answer a person needs, such as a report or an analysis; never for unrequested status reports, chat summaries, or what the issue already holds. Keep plans, task lists, and trackers in Motion, not in files, memories, or chat. Ticket changes come to you as Motion events (assigned, a mention, due soon, overdue): do not poll Motion in routines or event checks just to look for changes. When you start on an issue, call issues_start on it, and issues_stop when you set it aside.";
+
+/** The goals of the space, at most 8 short lines. The progress is read with openbot.goals, not kept here. */
+function goalInstructions(goals: readonly string[]): string[] {
+  if (goals.length === 0) return [];
+  return [
+    `Your space's goals (openbot.goals lists progress; set a manual goal's progress there when you move it): ${goals
+      .slice(0, 8)
+      .map((goal) => redactText(goal).replace(/\s+/gu, " ").slice(0, 160))
+      .join("; ")}.`,
+  ];
+}
 
 /** Only the file paths go into the prompt. The token stays in its file, because a provider receives this text. */
 function automationInstructions(agentId: string, root: string): string {

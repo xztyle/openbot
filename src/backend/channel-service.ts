@@ -1643,6 +1643,31 @@ export class ChannelService {
     return this.#postAgentLine(channelId, agent, `${CHANNEL_DECISION_PREFIX} ${text}`, threadRootId) !== null;
   }
 
+  /**
+   * Posts a message of the host itself, such as the daily briefing, as the coordinator under `name`.
+   * Its mentions notify the people they name. It starts no task and wakes no agent.
+   */
+  postNotice(channelId: string, name: string, text: string): ChannelMessage | null {
+    if (this.#stopped || this.#deletedChannels.has(channelId) || !this.store.exists(channelId)) return null;
+    const channel = this.store.get(channelId);
+    if (channel.archived) return null;
+    const id = randomUUID();
+    const mentions = channelMentions(text);
+    const message: ChannelMessage = {
+      id,
+      channelId,
+      taskId: null,
+      author: { kind: "coordinator", id: "coordinator", name },
+      sequence: 0,
+      superseded: false,
+      ...(mentions.length ? { mentions } : {}),
+      message: { id, text, author: "assistant", createdAt: new Date().toISOString(), status: "completed" },
+    };
+    this.store.update(channel, { messages: [message] });
+    this.publish(channelId);
+    return message;
+  }
+
   /** The decisions that agents made without a person in a channel, newest first. */
   decisions(channelId: string, limit = 200): ChannelMessage[] {
     return this.store

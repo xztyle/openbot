@@ -273,6 +273,7 @@ import type { EventCheckReader } from "./event-check-reader";
 import type { EventCheckScheduler } from "./event-check-scheduler";
 import type { EventCheckTemplates } from "./event-check-templates";
 import type { HostMemory } from "./host-memory";
+import type { InsightService } from "./insight/insight-service";
 import { motionTicketCreator } from "./loops/loop-motion";
 import { LoopService } from "./loops/loop-service";
 import type { MailboxStore } from "./mailbox-store";
@@ -505,6 +506,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly spaces: SpaceService;
   /** The owner's loops (pipelines) of each space, their items, experiments and decisions. */
   readonly loops: LoopService;
+  /** Goals, money, costs and the briefing (`insight/`), which the application attaches after start. */
+  insight: InsightService | null = null;
   readonly messaging: MessagingThreads;
   readonly #profileSave: ProfileSave;
   readonly #profileClients = new ProfileClients();
@@ -1165,6 +1168,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       // Only a server has a memory reading.
       serverHost: hostMemory !== null,
       sectionTeammates: (agentId) => this.sectionTeammates(agentId),
+      goalLines: (agentId) => this.insight?.goalLines(agentId) ?? [],
       channelThread: (threadId) => this.channels.store.channelForThread(threadId) !== null,
       hooks: {
         logRecovery: (agentId, provider, outcome) =>
@@ -1851,6 +1855,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         // The first person is the host user of this computer; signed out, the signed-out reader.
         channelHost: () => options.channelPeople?.()[0] ?? { id: SIGNED_OUT_CHANNEL_MEMBER_ID, name: "You" },
         placeChannel: (channelId, spaceId) => this.spaces.place("channel", channelId, spaceId),
+        goals: (agentId, input) =>
+          this.insight
+            ? this.insight.goalTool(agentId, input)
+            : Effect.fail({ message: "Goals are not available yet." }),
       },
     });
   }
@@ -2893,6 +2901,21 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         observer(this.#store.database.usage, provider, model.id, agentId),
       );
     });
+  }
+
+  /**
+   * One toolless answer of the workspace gate model (the cheap one, such as Claude Haiku), as the
+   * reply condenser asks it. The daily briefing writes its message with it; its usage counts under
+   * the Workflows row.
+   */
+  /** The plan limit that holds an agent's work now, or null. */
+  usageLimitFor(agentId: string): { resetsAt: number | null } | null {
+    return this.#usageLimits.limitFor(agentId);
+  }
+
+  generateCheapText(prompt: string, deadline: number) {
+    const gate = this.#workspaceSettings().gate;
+    return this.#generateGateText(gate, WORKFLOWS_USAGE_ID, prompt, { pool: 1, deadline }, gateUsageObserver);
   }
 
   /**

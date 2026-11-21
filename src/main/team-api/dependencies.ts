@@ -56,6 +56,7 @@ import type {
 import type { Logger } from "@openbot/logging";
 import type { AgentService } from "../../backend/agent-service";
 import type { BrowserHost } from "../../backend/browser-host";
+import type { InsightService } from "../../backend/insight/insight-service";
 import type { LoopService } from "../../backend/loops/loop-service";
 import type { MailboxStore } from "../../backend/mailbox-store";
 import type { MessagingService } from "../../backend/messaging/messaging-service";
@@ -189,6 +190,8 @@ export type TeamApiAgents = TeamApiAgentMethods & {
   secrets: Pick<WorkspaceSecretsService, "list" | "read" | "save" | "remove">;
   /** workspace-loops-v1 (`fork-host-v1`): the loops of each space. */
   loops?: Pick<LoopService, "board" | "apply">;
+  /** workspace-insight-v1 (`fork-host-v1`): goals, money, costs, the briefing and the timeline of a request. */
+  readonly insight?: InsightService | null;
   on: (event: "event", listener: (event: AgentEvent) => void) => void;
   off: (event: "event", listener: (event: AgentEvent) => void) => void;
 } & Partial<Pick<AgentService, "setAgentsSleeping" | "modelSavings" | "playbooks" | "reviews">>;

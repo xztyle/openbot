@@ -205,6 +205,15 @@ export const logDecisionToolSchema = z.strictObject({
   alternatives: z.string().trim().max(400).optional().describe("The options you rejected, in a few words each."),
 });
 
+export const goalsToolSchema = z.strictObject({
+  action: z
+    .enum(["list", "progress"])
+    .describe("list: the goals of your space with their progress. progress: set a manual goal's current value."),
+  goalId: z.string().trim().min(1).max(128).optional().describe("For progress: the goal id that list gives."),
+  value: z.number().finite().optional().describe("For progress: the new current value, in the goal's metric."),
+  note: z.string().trim().max(200).optional().describe("For progress: what moved it, in a few words."),
+});
+
 export const askUiToolSchema = z.object({
   private: privateQuestionSchema,
   blockId: uiBlockIdSchema.optional().describe("Your id for this block. Atelier makes one when you omit it."),
@@ -766,6 +775,12 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     description:
       "Record a decision that a person would normally have made, in a hands-off team channel, where nobody answers questions: the channel shows it, and the people review the list of decisions made without them. Call it once per decision, then continue the work.",
     shape: logDecisionToolSchema.shape,
+  },
+  {
+    name: "goals",
+    description:
+      "Read the goals of your space (title, metric, target, deadline, current value, pace) or set the progress of a manual goal when your work moved it. Goals fed by Hotmart, Meta or Motion update by themselves each day.",
+    shape: goalsToolSchema.shape,
   },
   {
     name: "acknowledge_request",

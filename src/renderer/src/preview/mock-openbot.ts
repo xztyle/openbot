@@ -193,6 +193,7 @@ import { createMockHostTimezone } from "./mock-host-timezone";
 import { createMockHostTurnLimits } from "./mock-host-turn-limits";
 import { createMockHostUpdate, type MockHostUpdateOptions } from "./mock-host-update";
 import { createMockHostedServers } from "./mock-hosted-servers";
+import { createMockInsight } from "./mock-insight";
 import { createMockLicense } from "./mock-license";
 import { createMockMessaging } from "./mock-messaging";
 import { createMockOnePasswordConnector } from "./mock-onepassword-connector";
@@ -995,6 +996,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     options.spaces,
   );
   const mockProviderRuntimes = createMockProviderRuntimes(options, runtime);
+  const mockInsight = createMockInsight();
   const mockVoice = createMockVoice(options, runtime);
   const mockAuth = createMockAuth(options, runtime);
   const mockSkills = createMockSkills(options, (agentId) => emitAgentEvent({ type: "skills-changed", agentId }));
@@ -1816,6 +1818,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       ...mockWorkspaceState,
       workspaceSpaces: mockSpaces.workspaceSpaces,
       workspaceSpaceAction: mockSpaces.workspaceSpaceAction,
+      ...mockInsight,
       // The workspace fleet, step trails and artifacts of the preview: fixed shapes over the preview
       // agents and channels, so a story shows each status, step kind and artifact kind.
       workspaceFleet: async () => {

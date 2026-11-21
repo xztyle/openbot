@@ -162,6 +162,8 @@ export interface ThreadLifecycleOptions {
   sectionTeammates?: (agentId: string) => SectionTeammates | null;
   /** Whether a public thread is a channel member's thread. */
   channelThread?: (threadId: string) => boolean;
+  /** One line per goal of the agent's space, read at each start and resume of a session. */
+  goalLines?: (agentId: string) => readonly string[];
 }
 
 /**
@@ -193,6 +195,7 @@ export class ThreadLifecycle {
   readonly #vaultItems: () => VaultContents;
   readonly #serverHost: boolean;
   readonly #sectionTeammates: (agentId: string) => SectionTeammates | null;
+  readonly #goalLines: (agentId: string) => readonly string[];
   readonly #channelThread: (threadId: string) => boolean;
   readonly #pendingHandoffs = new Map<string, string>();
   readonly #pendingRuntimeRefreshes = new Set<string>();
@@ -222,6 +225,7 @@ export class ThreadLifecycle {
     this.#vaultItems = options.vaultItems ?? (() => ({ available: false, cards: false, contacts: false }));
     this.#serverHost = options.serverHost ?? false;
     this.#sectionTeammates = options.sectionTeammates ?? (() => null);
+    this.#goalLines = options.goalLines ?? (() => []);
     this.#channelThread = options.channelThread ?? (() => false);
   }
 
@@ -1036,6 +1040,7 @@ export class ThreadLifecycle {
       homeSkills,
       // A connection named motion is the team's board: every agent that has it follows its rules.
       workBoard: this.#agentMcpServers(agent).some((config) => /^motion(?:_|$)/i.test(config.name)),
+      goals: this.#goalLines(agent.id),
     };
     const instructions = developerInstructions(
       agent,

@@ -573,6 +573,13 @@ import type {
   WorkspaceSteps,
   WorkspaceStepsInput,
 } from "./ipc-workspace-fleet";
+import type {
+  WorkspaceInsight,
+  WorkspaceInsightAction,
+  WorkspaceInsightInput,
+  WorkspaceWhySlow,
+  WorkspaceWhySlowInput,
+} from "./ipc-workspace-insight";
 import type { WorkspaceLoopAction, WorkspaceLoopActionResult, WorkspaceLoopsInput } from "./ipc-workspace-loops";
 import type {
   WorkspacePins,
@@ -1470,6 +1477,11 @@ export const IPC_ENDPOINTS = {
     workspaceSpaceAction: scopedRequest<WorkspaceSpaceAction, WorkspaceSpaceActionResult>()(
       "agent:workspace:space-action",
     ),
+    // Goals, money, costs and the briefing, for the owner and the admins, and the timeline of a request.
+    // A joined server answers through workspace-insight-v1 (`fork-host-v1`); one without it fails.
+    workspaceInsight: scopedRequest<WorkspaceInsightInput, WorkspaceInsight>()("agent:workspace:insight"),
+    workspaceInsightAction: scopedRequest<WorkspaceInsightAction, WorkspaceInsight>()("agent:workspace:insight-action"),
+    workspaceWhySlow: scopedRequest<WorkspaceWhySlowInput, WorkspaceWhySlow>()("agent:workspace:why-slow"),
     getSidebarLayout: scopedQuery<SidebarLayoutSnapshot>()("agent:get-sidebar-layout"),
     mutateSidebarLayout: scopedRequest<SidebarLayoutAction, SidebarLayoutSnapshot>()("agent:mutate-sidebar-layout"),
     // A joined server answers through `agent-hidden-v1`. A server without it has no hidden agents.

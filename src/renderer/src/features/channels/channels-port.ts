@@ -58,6 +58,9 @@ export interface ChannelsPort {
         | "setWorkspaceSidebar"
         | "workspaceSpaces"
         | "workspaceSpaceAction"
+        | "workspaceInsight"
+        | "workspaceInsightAction"
+        | "workspaceWhySlow"
       >
     >;
   eventRoutines?: EventRoutinesApi | undefined;

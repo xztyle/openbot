@@ -4,6 +4,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { decodeWorkspaceLoops } from "@openbot/contracts/ipc";
+import { WORKSPACE_LOOPS_CODECS, WORKSPACE_LOOPS_ROUTES } from "@openbot/contracts/team-protocol/workspace-loops-v1";
 import { Effect } from "effect";
 import { handleLoopTool } from "../src/backend/agent/loop-tools";
 import { runCauseEffect } from "../src/backend/effect-boundary";
@@ -212,6 +214,31 @@ const badMove = await Effect.runPromise(
   handleLoopTool("move_loop_item", { itemId: "nope", toStageId: "scale" }, "agent-lead", loops),
 );
 check("refusal is a tool result", JSON.stringify(badMove).includes("does not exist"));
+
+// The wire codec of workspace-loops-v1 takes the board and an action as the host and client send them.
+const codec = WORKSPACE_LOOPS_CODECS.get(WORKSPACE_LOOPS_ROUTES.action);
+const wireBoard = codec?.response(200, JSON.parse(JSON.stringify(loops.board("uo"))));
+check(
+  "board crosses the wire codec",
+  JSON.stringify(wireBoard) === JSON.stringify(decodeWorkspaceLoops(loops.board("uo"))),
+);
+check(
+  "action crosses the wire codec",
+  JSON.stringify(codec?.request({ kind: "move-item", itemId, toStageId: "measure" })) ===
+    JSON.stringify({ kind: "move-item", itemId, toStageId: "measure" }),
+);
+check(
+  "malformed action fails closed",
+  (() => {
+    try {
+      codec?.request({ kind: "move-item", itemId, toStageId: "Bad Stage" });
+      return false;
+    } catch {
+      return true;
+    }
+  })(),
+);
+check("decisionsOnly reads no items", loops.board("uo", { decisionsOnly: true }).items.length === 0);
 
 const history = loops.board("uo").events.filter((event) => event.itemId === itemId);
 check("history recorded", history.length >= 8, history.length);

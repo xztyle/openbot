@@ -114,6 +114,7 @@ import type {
   UpdateRoutineInput,
 } from "@openbot/contracts/ipc";
 import {
+  AGENT_ATTENTION_TEXT_LIMIT,
   AGENT_REASONING_EFFORTS,
   AGENT_TASK_LIMIT_DEFAULT,
   type AgentDefaults,
@@ -135,12 +136,14 @@ import {
   isContextResetMarker,
   isReasoningEffort,
   MODEL_SWITCH_ITEM_TYPES,
+  MOTION_TICKET_TURN,
   type ModelSwitchReason,
   type QueueSteerFallback,
   SIGNED_OUT_CHANNEL_MEMBER_ID,
   sameAgentBrowserProfile,
   sameAgentModelChoice,
   WORKFLOWS_USAGE_ID,
+  type WorkspaceFleetTicket,
   type WorkspaceGateSettings,
   type WorkspaceSettings,
   workspaceAccessEnforced,
@@ -524,6 +527,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   #scope = Scope.makeUnsafe();
   /** The server's workspace settings, read on each use: the gate model and the reply condenser. */
   readonly #workspaceSettings: () => WorkspaceSettings;
+  /** The Motion ticket each agent works on now (`setCurrentTickets`). */
+  #currentTicket: (agentId: string) => WorkspaceFleetTicket | null = () => null;
   /** User sends still before their mailbox write, by idempotency key: a retry joins the first call. */
   readonly #pendingUserSends = new Map<string, Deferred.Deferred<QueuedMessageReceipt, AgentLifecycleFailed>>();
   readonly #store: AgentStore;
@@ -1728,6 +1733,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       artifactsPath: options.workspaceArtifactsPath ?? null,
       thumbnails: options.workspaceThumbnails ?? null,
       channelDecisions: (channelId) => this.channels.decisions(channelId),
+      currentTicket: (agentId) => this.#currentTicket(agentId),
     });
     this.#removal = new AgentRemoval({
       store,
@@ -1974,6 +1980,59 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   /** Every request of every agent that waits for the user now. */
   attentionItems(): AgentAttentionItem[] {
     return this.#attention.attentionItems();
+  }
+
+  /**
+   * The Motion tickets that wait on the user (`src/main/motion-events`), the whole list: each shows
+   * in Needs you as a question of its agent that opens the ticket. A ticket of an unknown agent is left
+   * out.
+   */
+  setWaitingTickets(
+    tickets: readonly {
+      agentId: string;
+      issueId: string;
+      key: string;
+      title: string;
+      url: string;
+      createdAt: string;
+    }[],
+  ): void {
+    const threads = new Map(this.listAgents().map((agent) => [agent.id, agent.threadId]));
+    this.#attention.setTickets(
+      tickets.flatMap((ticket) => {
+        const threadId = threads.get(ticket.agentId);
+        if (!threadId) return [];
+        const summary = `${ticket.key} · ${ticket.title}`.slice(0, AGENT_ATTENTION_TEXT_LIMIT);
+        return [
+          {
+            kind: "question" as const,
+            requestId: `motion:${ticket.issueId}`.slice(0, 128),
+            agentId: ticket.agentId,
+            threadId,
+            turnId: MOTION_TICKET_TURN,
+            createdAt: ticket.createdAt,
+            summary,
+            url: ticket.url,
+          },
+        ];
+      }),
+    );
+    const items = this.#attention.attentionItems();
+    const encoded = JSON.stringify(items);
+    if (encoded === this.#attentionEncoded) return;
+    this.#attentionEncoded = encoded;
+    this.emit("event", { type: "agent-attention-changed", items });
+  }
+
+  /** The source of each agent's current Motion ticket, which the fleet shows. */
+  setCurrentTickets(source: (agentId: string) => WorkspaceFleetTicket | null): void {
+    this.#currentTicket = source;
+    this.workspace?.fleetChanged();
+  }
+
+  /** The fleet reads the current tickets again. */
+  currentTicketsChanged(): void {
+    this.workspace?.fleetChanged();
   }
 
   getRuntimeSnapshot(): AgentRuntimeSnapshot {
@@ -5467,11 +5526,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     timezone?: string,
     /** Sends the text as a note from OpenBot itself, not the person: the chat shows a marker. */
     notice?: SystemNoticeKind,
+    /** A `motion-event` note that needs no action now: it waits for the agent's next turn. */
+    fyi?: boolean,
   ): Effect.fn.Return<QueuedMessageReceipt, AgentLifecycleFailed> {
     // A notice has no person behind it.
     const person = notice ? undefined : sender;
     if (!input.clientMessageId)
-      return yield* this.#sendUserMessage(input, person, timezone, undefined, undefined, notice);
+      return yield* this.#sendUserMessage(input, person, timezone, undefined, undefined, notice, fyi);
     const idempotencyKey = `user-send:${createHash("sha256")
       .update(JSON.stringify([person?.id ?? null, input.agentId, input.clientMessageId]))
       .digest("hex")}`;
@@ -5483,7 +5544,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     if (pending) return yield* Deferred.await(pending);
     const send = Deferred.makeUnsafe<QueuedMessageReceipt, AgentLifecycleFailed>();
     this.#pendingUserSends.set(idempotencyKey, send);
-    return yield* this.#sendUserMessage(input, person, timezone, idempotencyKey, undefined, notice).pipe(
+    return yield* this.#sendUserMessage(input, person, timezone, idempotencyKey, undefined, notice, fyi).pipe(
       Effect.onExit((exit) => Deferred.done(send, exit)),
       Effect.ensuring(Effect.sync(() => this.#pendingUserSends.delete(idempotencyKey))),
     );
@@ -5497,6 +5558,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     idempotencyKey?: string,
     fromAgentId?: string,
     notice?: SystemNoticeKind,
+    fyi?: boolean,
   ) {
     const validateRecipient = yield* lifecycleStep("prepare message delivery", () =>
       this.#mailbox.prepareDelivery([input.agentId]),
@@ -5537,6 +5599,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         sender: fromAgentId ? { kind: "agent", agentId: fromAgentId } : { kind: "user" },
         ...(sender && !fromAgentId ? { senderMember: sender } : {}),
         ...(notice && !fromAgentId ? { notice } : {}),
+        ...(fyi && notice === "motion-event" && !fromAgentId ? { fyi: true } : {}),
         ...(task ? { taskId: task.taskId } : {}),
         recipientAgentIds: [agent.id],
         text: input.text,

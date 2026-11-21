@@ -431,6 +431,8 @@ export class AttentionRegistry {
   readonly #takeovers = new Map<RequestId, PendingBrowserTakeover>();
   /** When `attentionItems` first listed each request. */
   readonly #listedAt = new WeakMap<PendingPrompt | PendingApproval | PendingBrowserTakeover, string>();
+  /** The Motion tickets that wait on the user, which belong to no turn (`isTicketAttention`). */
+  #tickets: AgentAttentionItem[] = [];
   /** The team channel of each approval and takeover, once looked up; null for none. */
   readonly #channels = new WeakMap<PendingApproval | PendingBrowserTakeover, string | null>();
 
@@ -671,7 +673,13 @@ export class AttentionRegistry {
         ...(channelId ? { channelId } : {}),
       });
     }
+    items.push(...this.#tickets);
     return items.sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(0, AGENT_ATTENTION_ITEMS_LIMIT);
+  }
+
+  /** The Motion tickets that wait on the user now, the whole list. */
+  setTickets(items: readonly AgentAttentionItem[]): void {
+    this.#tickets = [...items];
   }
 
   /** Full details for one agent; the UI snapshot has a separate size budget. */

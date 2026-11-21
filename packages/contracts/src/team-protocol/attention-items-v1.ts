@@ -10,6 +10,8 @@
 // no summary: its command can hold a secret. The cards keep coming from the released events and pages.
 // Added later, optional: `channelId`, the team channel that the work of the request belongs to. A
 // client of before drops it, as it drops any key it does not know, and shows the request as before.
+// Added later, optional: `url` (http or https, at most 2000 characters), on a Motion ticket that waits
+// on the user: a `question` whose `turnId` is `motion`. A client of before shows it as a question.
 //
 // The host sends the event after each runtime snapshot that it sends to a peer, and again at each
 // change, to a peer that has `fork-host-v1` only. It leaves out each request of an agent that the peer
@@ -60,6 +62,7 @@ function item(value: unknown): AgentAttentionItem {
   const summary = text(value.summary);
   const origin = text(value.origin);
   const channelId = value.channelId === undefined ? undefined : identifier(value.channelId);
+  const url = value.url === undefined ? undefined : ticketUrl(value.url);
   return {
     kind: value.kind,
     requestId: requestId(value.requestId),
@@ -70,7 +73,13 @@ function item(value: unknown): AgentAttentionItem {
     ...(summary === undefined ? {} : { summary }),
     ...(origin === undefined ? {} : { origin }),
     ...(channelId === undefined ? {} : { channelId }),
+    ...(url === undefined ? {} : { url }),
   };
+}
+
+function ticketUrl(value: unknown): string {
+  if (!isString(value) || value.length > 2_000 || !/^https?:\/\//u.test(value)) invalid();
+  return value;
 }
 
 /** The list in its wire shape. Throws on a malformed list. */

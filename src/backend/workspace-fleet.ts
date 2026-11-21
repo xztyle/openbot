@@ -10,6 +10,7 @@ import {
   type WorkspaceFleetAgent,
   type WorkspaceFleetInput,
   type WorkspaceFleetStatus,
+  type WorkspaceFleetTicket,
   type WorkspaceStepKind,
 } from "@openbot/contracts/ipc";
 import { redactSecrets } from "@openbot/logging";
@@ -40,6 +41,8 @@ export interface WorkspaceFleetTrackerOptions {
   agentTaskTitle(taskId: string): string | null;
   /** The usage limit that holds an agent's work now: `resetsAt` in epoch seconds, or null. Null when none. */
   usageLimit?(agentId: string): { resetsAt: number | null } | null;
+  /** The Motion ticket an agent works on now. */
+  currentTicket?(agentId: string): WorkspaceFleetTicket | null;
   emit(event: AgentEvent): void;
 }
 
@@ -116,6 +119,11 @@ export class WorkspaceFleetTracker {
       default:
         return;
     }
+    this.#schedule();
+  }
+
+  /** Something the fleet shows changed outside the agent events. */
+  changed(): void {
     this.#schedule();
   }
 
@@ -209,6 +217,7 @@ export class WorkspaceFleetTracker {
         const duration = today.durationMs.get(agent.id);
         const updated = agent.updatedAt ? Date.parse(agent.updatedAt) : Number.NaN;
         const lastActiveAt = today.lastActiveAt.get(agent.id) ?? (Number.isFinite(updated) ? updated : undefined);
+        const currentTicket = this.#options.currentTicket?.(agent.id);
         return {
           agentId: agent.id,
           status,
@@ -217,6 +226,7 @@ export class WorkspaceFleetTracker {
           ...(cost === undefined ? {} : { todayCostUsd: cost }),
           ...(duration === undefined ? {} : { todayDurationMs: duration }),
           ...(lastActiveAt === undefined ? {} : { lastActiveAt }),
+          ...(currentTicket ? { currentTicket } : {}),
         };
       }),
     };

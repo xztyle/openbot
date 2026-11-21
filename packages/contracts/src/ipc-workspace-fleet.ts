@@ -81,6 +81,27 @@ export interface WorkspaceFleetAgent {
   /** The time today's turns ran, the running one up to now. */
   todayDurationMs?: number;
   lastActiveAt?: number;
+  /** The Motion ticket that the agent works on now, from its turns or its `issues_start`. */
+  currentTicket?: WorkspaceFleetTicket;
+}
+
+export interface WorkspaceFleetTicket {
+  /** The ticket key, such as `MOT-12`. */
+  key: string;
+  title: string;
+  /** The ticket's web address, http or https. */
+  url: string;
+}
+
+function isFleetTicket(value: unknown): value is WorkspaceFleetTicket {
+  return (
+    isDynamicRecord(value) &&
+    isBoundedString(value.key, 64) &&
+    value.key.length > 0 &&
+    isFleetText(value.title) &&
+    isBoundedString(value.url, 2_048) &&
+    /^https?:\/\//u.test(value.url)
+  );
 }
 
 export interface WorkspaceFleet {
@@ -277,7 +298,8 @@ function isWorkspaceFleetAgent(value: unknown): value is WorkspaceFleetAgent {
     optional(value.currentStepKind, (kind) => isOneOf(WORKSPACE_STEP_KINDS, kind)) &&
     optional(value.todayCostUsd, isCost) &&
     optional(value.todayDurationMs, isTime) &&
-    optional(value.lastActiveAt, isTime)
+    optional(value.lastActiveAt, isTime) &&
+    optional(value.currentTicket, isFleetTicket)
   );
 }
 

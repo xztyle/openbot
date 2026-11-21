@@ -755,8 +755,11 @@ export class MailboxStore {
         throw new Error(sourceText("error.backend.attachLimit", { limit: MAX_ATTACHMENTS }));
       }
 
-      // Only an agent marks information that wakes nobody; it expects no reply either.
-      const fyi = input.fyi === true && input.sender.kind === "agent";
+      // Only an agent, or a Motion event that needs no action, marks information that wakes nobody; it
+      // expects no reply either.
+      const fyi =
+        input.fyi === true &&
+        (input.sender.kind === "agent" || (input.sender.kind === "user" && input.notice === "motion-event"));
       const createdAt = new Date().toISOString();
       const messageId = randomUUID();
       const attachments = yield* this.#files
@@ -3634,20 +3637,23 @@ function recordFinishedQueueEdit(delivery: StoredDelivery, editId: string, outco
 }
 
 /**
- * A new message from another agent marked `fyi`, outside channel, messaging and task work. A message
- * that only asks for no answer is no note: agents send orders that way, so it wakes the recipient.
+ * A new message from another agent marked `fyi`, or a Motion event marked so, outside channel, messaging
+ * and task work. A message that only asks for no answer is no note: agents send orders that way, so it
+ * wakes the recipient.
  * See `MailboxStore.#isHeldNote`.
  */
 function isNote(message: StoredMessage, recipientAgentId: string): boolean {
+  const fromTeammate =
+    message.sender.kind === "agent" && message.sender.agentId !== recipientAgentId && !message.notice;
+  // A Motion event that needs no action (`motion-events.ts`): a change by the owner, or one of a burst.
+  const fromMotion = message.sender.kind === "user" && message.notice === "motion-event";
   return (
-    message.sender.kind === "agent" &&
-    message.sender.agentId !== recipientAgentId &&
+    (fromTeammate || fromMotion) &&
     message.fyi === true &&
     message.replyToMessageId === null &&
     !message.channelId &&
     !message.messaging &&
     !message.taskId &&
-    !message.notice &&
     !message.eventCheck
   );
 }

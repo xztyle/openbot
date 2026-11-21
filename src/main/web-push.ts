@@ -358,6 +358,34 @@ export class WebPushService {
   }
 
   /**
+   * A Motion ticket that waits on the user (`src/main/motion-events`): each browser of an owner or an
+   * admin gets it as a question of the agent, which opens the agent's chat.
+   */
+  notifyTicket(input: { agentId: string; title: string; body: string }): void {
+    const now = this.#now();
+    const { workspace } = this.#options;
+    const conversation = webPushAgentConversation(input.agentId);
+    const path = workspace
+      ? webPushAgentPath(this.#options.hostId(), workspace.agentSpace(input.agentId), input.agentId)
+      : null;
+    for (const subscription of this.#readers(now)) {
+      if (this.#options.hiddenAgentIds(subscription.protocol).has(input.agentId)) continue;
+      const role = workspace?.viewer(subscription.memberId)?.role;
+      if (role !== undefined && role !== "owner" && role !== "admin") continue;
+      if (
+        !webPushAllowed(
+          "needs-input",
+          subscription.level,
+          workspace?.notifyLevel(subscription.memberId, conversation) ?? null,
+        )
+      )
+        continue;
+      const notice: Notice = { kind: "needs-input", ...input, burstTitle: input.title, threadId: null, path };
+      this.#notify(subscription, conversation, notice, now);
+    }
+  }
+
+  /**
    * A new message of a channel notifies each reader for whom it is a mention, a DM or a reply in a
    * followed thread (`webPushChannelKind`). A message notifies once, when it stops streaming; a later
    * change of it, and a message the host sees only long after it was written, notify no one.

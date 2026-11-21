@@ -11,6 +11,7 @@ import type {
   WorkspaceDecisionsInput,
   WorkspaceFleet,
   WorkspaceFleetInput,
+  WorkspaceFleetTicket,
   WorkspaceSteps,
   WorkspaceStepsInput,
 } from "@openbot/contracts/ipc";
@@ -70,6 +71,8 @@ export interface WorkspaceInsightsOptions {
   thumbnails?: Pick<WorkspaceThumbnails, "request" | "version" | "file"> | null;
   /** The decision messages that agents posted in a hands-off channel, newest first. Omitted, none. */
   channelDecisions?(channelId: string): readonly ChannelMessage[];
+  /** The Motion ticket an agent works on now (`src/main/motion-events/motion-tickets.ts`). */
+  currentTicket?(agentId: string): WorkspaceFleetTicket | null;
 }
 
 const NO_STEPS: WorkspaceSteps = { steps: [], total: 0, durationMs: 0, streaming: false };
@@ -96,6 +99,7 @@ export class WorkspaceInsights {
       ...(options.turnModel ? { turnModel: options.turnModel } : {}),
       agentTaskTitle: options.agentTaskTitle,
       ...(options.usageLimit ? { usageLimit: options.usageLimit } : {}),
+      ...(options.currentTicket ? { currentTicket: options.currentTicket } : {}),
       emit: options.emit,
       channelWork: (deliveryId) => {
         const assignment = options.channels.assignmentForDelivery(deliveryId);
@@ -122,6 +126,11 @@ export class WorkspaceInsights {
       path: options.artifactsPath ?? null,
       thumbnails: options.thumbnails ?? null,
     });
+  }
+
+  /** Something the fleet shows changed outside the agent events, such as a current ticket. */
+  fleetChanged(): void {
+    this.#fleet.changed();
   }
 
   observe(event: AgentEvent): void {

@@ -14,6 +14,7 @@ interface Options {
   service: () => AgentService;
   endpoint: McpEndpointSource;
   runtimes: McpToolRuntimeSource;
+  onToolCall?: ConstructorParameters<typeof ChatMcpProxy>[0]["onToolCall"];
 }
 function chatKey(service: AgentService, threadId: string): string | null {
   const channelId = service.channels.store.channelForThread(threadId);
@@ -36,6 +37,7 @@ export const createChatMcp = Effect.fn("ChatMcp.create")(function* (options: Opt
     agent: (threadId) => options.service().mcpAgentForThread(threadId),
     agentById: (agentId) => options.service().mcpAgent(agentId),
     personalize: (config, agent) => options.service().personalMcpServer(config, agent),
+    ...(options.onToolCall ? { onToolCall: options.onToolCall } : {}),
   });
   yield* proxy.start();
   const api = new ChatMcpService({

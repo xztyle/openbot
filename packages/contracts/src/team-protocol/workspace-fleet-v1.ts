@@ -4,7 +4,9 @@
 //
 // - `POST /v1/workspace/fleet` `{ timeZone? (64) }` answers `{ agents, revision, at }`: for each agent
 //   that the member can see (its roles, not hidden, not in the background), `{ agentId, status,
-//   queued?, currentStep? (240), currentStepKind?, todayCostUsd?, todayDurationMs?, lastActiveAt? }`.
+//   queued?, currentStep? (240), currentStepKind?, todayCostUsd?, todayDurationMs?, lastActiveAt?,
+//   currentTicket? }`. `currentTicket` (added later, optional) is `{ key (64), title (240), url (2048,
+//   http or https) }`: the Motion ticket the agent works on now.
 //   `status` is `{ kind: "idle" }`, `{ kind: "working", what (240), channelId?, threadRootId?,
 //   taskId?, startedAt }`, `{ kind: "waiting", reason: "question" | "approval" | "browser", what
 //   (240), forMemberId?, channelId?, threadRootId? }` or `{ kind: "queued", count }`. At most 500
@@ -162,6 +164,7 @@ const agent = fields(
     todayCostUsd: cost,
     todayDurationMs: count,
     lastActiveAt: count,
+    currentTicket: fields({ key: string(64), title: string(240), url: httpUrl }),
   },
 );
 

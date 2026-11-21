@@ -57,6 +57,9 @@
 //   host condensed for people; the text is the short version. In the workspace settings `condense?`
 //   (`{ enabled, words }`): whether the host condenses long agent answers, and past how many words. A
 //   body without it keeps the value that the host has.
+// - Later: in the workspace settings `motionEvents?` (`{ enabled, warnHours (8), overdueToManager,
+//   waitingToNeedsYou, quietHours: { enabled, start, end }, burstMinutes }`): how Motion's ticket events
+//   reach the agents. A body without it keeps the value that the host has.
 // - `POST /v1/workspace/channels/typing`: `{ channelId, threadRootId?, typing }` answers `{}`. The
 //   person of the session types in the channel, or stopped. A client sends it at most every 3
 //   seconds while the person types; the host ends the typing 6 seconds after the last one.
@@ -378,6 +381,14 @@ const settings = fields(
     learning: fields({ memoryReviewTurns: count, skillLearning: oneOf("off", "automatic"), dailyReviewLimit: count }),
     appearance,
     condense: fields({ enabled: boolean, words: count }),
+    motionEvents: fields({
+      enabled: boolean,
+      warnHours: list(count, 8),
+      overdueToManager: boolean,
+      waitingToNeedsYou: boolean,
+      quietHours: fields({ enabled: boolean, start: count, end: count }),
+      burstMinutes: count,
+    }),
   },
 );
 

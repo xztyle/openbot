@@ -10,6 +10,10 @@ import { isDynamicRecord, isOneOf } from "./runtime-values";
  * - `browser-takeover`: `request_takeover`, the user acts in a browser tab;
  * - `sign-in`: a takeover because the site refused the sign-in from the host's network address;
  * - `secret`: `submit_secret`, a password or a code for a browser tab.
+ *
+ * A ticket of the Motion board that waits on the user is a `question` of no turn: `turnId` is
+ * `MOTION_TICKET_TURN` and `url` opens the ticket (`isTicketAttention`). A client of before shows it
+ * as a question of the agent, so the wire needs no new kind.
  */
 export const AGENT_ATTENTION_KINDS = [
   "question",
@@ -50,6 +54,18 @@ export interface AgentAttentionItem {
   summary?: string;
   origin?: string;
   channelId?: string;
+  /** The web address of a `ticket`. */
+  url?: string;
+}
+
+/** The `turnId` of a Motion ticket that waits on the user. */
+export const MOTION_TICKET_TURN = "motion";
+
+/** A Motion ticket that waits on the user, which opens at its `url`, not in a chat. */
+export function isTicketAttention(item: Pick<AgentAttentionItem, "turnId" | "url">): item is AgentAttentionItem & {
+  url: string;
+} {
+  return item.turnId === MOTION_TICKET_TURN && item.url !== undefined;
 }
 
 export function isAgentAttentionItem(value: unknown): value is AgentAttentionItem {
@@ -63,7 +79,8 @@ export function isAgentAttentionItem(value: unknown): value is AgentAttentionIte
     isBoundedString(value.createdAt, 64) &&
     (value.summary === undefined || isBoundedString(value.summary, AGENT_ATTENTION_TEXT_LIMIT)) &&
     (value.origin === undefined || isBoundedString(value.origin, AGENT_ATTENTION_TEXT_LIMIT)) &&
-    (value.channelId === undefined || isIdentifier(value.channelId))
+    (value.channelId === undefined || isIdentifier(value.channelId)) &&
+    (value.url === undefined || (isBoundedString(value.url, 2_000) && /^https?:\/\//u.test(value.url)))
   );
 }
 

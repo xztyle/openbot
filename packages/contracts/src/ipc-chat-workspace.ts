@@ -588,6 +588,60 @@ export interface WorkspaceSettings {
    * the field; the host then keeps what it has, and reads the defaults.
    */
   condense?: WorkspaceCondenseSettings;
+  /**
+   * How ticket events from the Motion board reach the agents (`src/main/motion-events`). Absent from a
+   * client or a host that does not know the field; the host then keeps what it has, and reads the
+   * defaults.
+   */
+  motionEvents?: WorkspaceMotionEventsSettings;
+}
+
+/** The due-date warnings Motion can send, in hours before a ticket is due. */
+export const MOTION_WARN_HOURS = [48, 24, 8, 2, 1] as const;
+
+/**
+ * Motion sends a signed event when a ticket needs an agent: assigned, mentioned in a comment, due
+ * soon, overdue, or waiting on a person. The host wakes that agent with the ticket, so agents do not
+ * poll the board. A change by the owner that needs no action arrives as a held note.
+ */
+export interface WorkspaceMotionEventsSettings {
+  enabled: boolean;
+  /** The due-date warnings that reach the agent, hours before the due time, of `MOTION_WARN_HOURS`. */
+  warnHours: number[];
+  /** An overdue ticket also tells the manager of its agent, from the org chart. */
+  overdueToManager: boolean;
+  /** A ticket that waits on the owner shows in Needs you, with a push. */
+  waitingToNeedsYou: boolean;
+  /** Hours of the host's day when events wait, and arrive as one note per agent when they end. */
+  quietHours: { enabled: boolean; start: number; end: number };
+  /** A second event about one ticket for one agent within these minutes is held, not woken. */
+  burstMinutes: number;
+}
+
+export const DEFAULT_WORKSPACE_MOTION_EVENTS: WorkspaceMotionEventsSettings = {
+  enabled: true,
+  warnHours: [24, 2],
+  overdueToManager: true,
+  waitingToNeedsYou: true,
+  quietHours: { enabled: false, start: 23, end: 7 },
+  burstMinutes: 15,
+};
+
+function isWorkspaceMotionEvents(value: unknown): value is WorkspaceMotionEventsSettings {
+  if (!isDynamicRecord(value) || !isDynamicRecord(value.quietHours)) return false;
+  const quiet = value.quietHours;
+  return (
+    isBoolean(value.enabled) &&
+    Array.isArray(value.warnHours) &&
+    value.warnHours.length <= MOTION_WARN_HOURS.length &&
+    value.warnHours.every((hours) => MOTION_WARN_HOURS.some((allowed) => allowed === hours)) &&
+    isBoolean(value.overdueToManager) &&
+    isBoolean(value.waitingToNeedsYou) &&
+    isBoolean(quiet.enabled) &&
+    integerInRange(quiet.start, 0, 23) &&
+    integerInRange(quiet.end, 0, 23) &&
+    integerInRange(value.burstMinutes, 0, 1_440)
+  );
 }
 
 /** The word counts past which an agent's answer to people is condensed. */
@@ -724,6 +778,7 @@ export function isWorkspaceSettings(value: unknown): value is WorkspaceSettings 
         value.handsOffChannelIds.every(isIdentifier))) &&
     (value.learning === undefined || isWorkspaceLearning(value.learning)) &&
     (value.condense === undefined || isWorkspaceCondense(value.condense)) &&
+    (value.motionEvents === undefined || isWorkspaceMotionEvents(value.motionEvents)) &&
     // A theme or a family of a newer build reads as the default (`workspaceAppearanceOf`).
     (value.appearance === undefined || isDynamicRecord(value.appearance))
   );
@@ -757,6 +812,18 @@ export function decodeWorkspaceSettings(value: unknown): WorkspaceSettings {
     ...(value.condense === undefined
       ? {}
       : { condense: { enabled: value.condense.enabled, words: value.condense.words } }),
+    ...(value.motionEvents === undefined ? {} : { motionEvents: decodeMotionEvents(value.motionEvents) }),
+  };
+}
+
+function decodeMotionEvents(value: WorkspaceMotionEventsSettings): WorkspaceMotionEventsSettings {
+  return {
+    enabled: value.enabled,
+    warnHours: [...new Set(value.warnHours)].sort((a, b) => b - a),
+    overdueToManager: value.overdueToManager,
+    waitingToNeedsYou: value.waitingToNeedsYou,
+    quietHours: { enabled: value.quietHours.enabled, start: value.quietHours.start, end: value.quietHours.end },
+    burstMinutes: value.burstMinutes,
   };
 }
 
@@ -802,9 +869,14 @@ export function withKeptAgentChannelDefaults(current: WorkspaceSettings, next: W
       ? keptLearning
       : { ...keptLearning, appearance: current.appearance };
   // And the condensing of long answers.
-  return keptAppearance.condense !== undefined || current.condense === undefined
-    ? keptAppearance
-    : { ...keptAppearance, condense: current.condense };
+  const keptCondense =
+    keptAppearance.condense !== undefined || current.condense === undefined
+      ? keptAppearance
+      : { ...keptAppearance, condense: current.condense };
+  // And the Motion events.
+  return keptCondense.motionEvents !== undefined || current.motionEvents === undefined
+    ? keptCondense
+    : { ...keptCondense, motionEvents: current.motionEvents };
 }
 
 export const CHANNEL_TYPING_STATES = ["typing", "thinking", "working", "routing", "waiting"] as const;

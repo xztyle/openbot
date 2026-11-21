@@ -256,6 +256,7 @@ import {
 } from "./mcp-oauth-redirect-server";
 import { McpOAuthStore } from "./mcp-oauth-store";
 import { MessagingCredentialStore } from "./messaging-credential-store";
+import { type MotionEventsHost, motionServer, startMotionEventsHost } from "./motion-events/motion-events-host";
 import { NotificationPreferenceStore } from "./notification-preference-store";
 import { OnePasswordConnectorService } from "./onepassword-connector-service";
 import { OnePasswordConnectorStore } from "./onepassword-connector-store";
@@ -357,6 +358,7 @@ import { VoiceSpeechService } from "./voice-speech-service";
 import { spawnVoiceTranscriptionHost } from "./voice-transcription-host-process";
 import { VoiceTranscriptionService } from "./voice-transcription-service";
 import { WebPushService } from "./web-push";
+import { webPushAgentPath } from "./web-push-routing";
 import { WebPushStore } from "./web-push-store";
 import { webPushWorkspace } from "./web-push-workspace";
 import { WebhookRelay } from "./webhook-relay";
@@ -488,6 +490,8 @@ const TEARDOWN_ORDER = {
   // Before the host and the service: no new external message arrives while they stop.
   messaging: 85,
   hostEvents: 85.5,
+  // Before the service: no Motion event wakes an agent while it stops.
+  motionEvents: 85.7,
   // After the connections that hold it.
   signalIngress: 86,
   // Before the host, so a push message does not start while the host stops.
@@ -1712,6 +1716,8 @@ export async function createApplicationServices({
   teardown.push(TEARDOWN_ORDER.computerUsePermissionHelp, "the Computer Use permission help", () => {
     computerUsePermissionHelp.close();
   });
+  // Made with the web push service below; the chat app proxy tells it of the agents' Motion tool calls.
+  let motionEvents: MotionEventsHost | null = null;
   const chatMcp =
     process.env.OPENBOT_MCP_CHAT_PERMISSIONS === "true"
       ? await Effect.runPromise(
@@ -1721,6 +1727,9 @@ export async function createApplicationServices({
             runtimes: () => providerRuntimes.mcpToolRuntimes(),
             // The same endpoint the agents' providers get: a signed-in server through the OAuth proxy.
             endpoint: (config) => Effect.suspend(() => service.mcpEndpoint(config)),
+            onToolCall: ({ config, agentId, tool, arguments: args }) => {
+              if (agentId && motionServer([config])) motionEvents?.tickets.observeToolCall(agentId, tool, args);
+            },
           }),
         )
       : undefined;
@@ -2453,6 +2462,30 @@ export async function createApplicationServices({
   });
   ownerAway.start();
   teardown.push(TEARDOWN_ORDER.webPush, "the owner away clock", () => ownerAway.stop());
+  motionEvents = await startMotionEventsHost({
+    userData: app.getPath("userData"),
+    environment: process.env,
+    settings: () => workspaceSettings.get().motionEvents,
+    agents: () => service.listAgents(),
+    sharedSecret: (name) => agentApiKeys.readNow("shared", null, name),
+    send: (input, fyi) => service.sendMessage(input, undefined, undefined, "motion-event", fyi),
+    showWaiting: (tickets) => service.setWaitingTickets(tickets),
+    notifyOwner: (input) => webPush.notifyTicket(input),
+    timeZone: () => serverTimezone.effective(),
+    mcpServers: () => service.storedMcpServers(),
+    mcpAgent: (agentId) => service.mcpAgent(agentId),
+    personalMcpServer: (config, agent) => service.personalMcpServer(config, agent),
+    chatPath: (agentId) =>
+      webPushAgentPath(
+        teamStore.getIdentity()?.serverId ?? null,
+        service.spaces.store.agentSpace(agentId).slug,
+        agentId,
+      ),
+    ticketsChanged: () => service.currentTicketsChanged(),
+  });
+  const motion = motionEvents;
+  service.setCurrentTickets((agentId) => motion.tickets.current(agentId));
+  teardown.push(TEARDOWN_ORDER.motionEvents, "the Motion events", () => motion.close());
   const attachmentPreviews = new AttachmentPreviews(join(app.getPath("userData"), "attachment-previews"));
   const downloadTickets = new DownloadTickets({
     keyPath: join(app.getPath("userData"), "download-ticket.key"),

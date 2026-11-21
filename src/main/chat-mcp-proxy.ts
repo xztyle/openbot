@@ -33,6 +33,8 @@ interface Options {
   agentById?: (agentId: string) => McpAgent | null;
   /** One row filled for an agent, or null when a key it names is missing. */
   personalize?: (config: McpServerConfig, agent: McpAgent | null) => McpServerConfig | null;
+  /** A tool call that the row answered, for the Motion ticket tracker (`motion-tickets.ts`). */
+  onToolCall?: (call: { config: McpServerConfig; agentId: string | null; tool: string; arguments: unknown }) => void;
 }
 interface Upstream {
   client: Client;
@@ -292,7 +294,7 @@ export class ChatMcpProxy {
     response: ServerResponse,
   ) {
     const upstream = yield* this.#upstream(config, agent ? (this.options.agentById?.(agent) ?? null) : null);
-    const mcp = this.#serverFor(key, config, upstream);
+    const mcp = this.#serverFor(key, config, upstream, agent || null);
     const transport = new StreamableHTTPServerTransport({});
     yield* Effect.acquireUseRelease(
       mcpCall(() => mcp.connect(transport)),
@@ -304,7 +306,7 @@ export class ChatMcpProxy {
       () => mcpCall(() => mcp.close()).pipe(Effect.catch(() => Effect.void)),
     ).pipe(Effect.ensuring(this.#releaseUpstream(upstream)));
   });
-  #serverFor(key: string, config: McpServerConfig, upstream: Upstream): Server {
+  #serverFor(key: string, config: McpServerConfig, upstream: Upstream, agentId: string | null): Server {
     const mcp = new Server({ name: "openbot-chat-app", version: "1" }, { capabilities: { tools: {} } });
     const allowed = (tool: Tool) => mayCallChatTool(this.#mode(key, config.id), tool, config);
     mcp.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -323,10 +325,13 @@ export class ChatMcpProxy {
       const controller = new AbortController();
       this.#running.set(controller, key);
       try {
-        return await upstream.client.callTool(params, undefined, {
+        const result = await upstream.client.callTool(params, undefined, {
           signal: AbortSignal.any([extra.signal, controller.signal]),
           timeout: 300_000,
         });
+        if (result.isError !== true)
+          this.options.onToolCall?.({ config, agentId, tool: params.name, arguments: params.arguments });
+        return result;
       } catch {
         return { isError: true, content: [{ type: "text", text: sourceText("error.mcp.chatUnreachable") }] };
       } finally {

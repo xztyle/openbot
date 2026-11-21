@@ -19,6 +19,7 @@ export const SERVER_SETTINGS_SECTIONS: readonly ServerSettingsSection[] = [
   "sites",
   "providers",
   "updates",
+  "backups",
   "import",
   "transfer",
   "routines",
@@ -75,6 +76,9 @@ function hasSection(
       return options.providers;
     case "updates":
       return remoteUpdateServer(server) !== undefined;
+    // Only the browser client passes the Backups calls today.
+    case "backups":
+      return false;
     case "import":
       return serverSupportsCapability(server, "agent-import-v1");
     // The feed and the connectors belong to this computer.

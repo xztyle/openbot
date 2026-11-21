@@ -19,6 +19,7 @@ import {
   AlertIcon,
   AlertTitle,
   AppWindow,
+  Archive,
   ArrowLeftRight,
   Blocks,
   Button,
@@ -65,6 +66,7 @@ import type { HostPromptCacheTtlOptions, ProviderPromptCacheSource } from "../se
 import { type ServerVaultOptions, ServerVaultPanel } from "../vault/ServerVaultPanel";
 import { registerSettingsLeaveGuard } from "../window/settings-leave-guard";
 import type { McpServerConfig, McpTestResult } from "./mcp-servers";
+import { type ServerBackupsOptions, ServerBackupsPanel } from "./ServerBackupsPanel";
 import { ServerDesktopPanel } from "./ServerDesktopPanel";
 import { createServerGeneralSection } from "./ServerGeneralSection";
 import { type ServerImportDetail, type ServerImportOptions, ServerImportPanel } from "./ServerImportPanel";
@@ -197,6 +199,8 @@ export interface ServerSettingsModalProps {
    * `host-update-v1` that this member administers.
    */
   hostUpdate?: ServerUpdateOptions | undefined;
+  /** The Backups section appears only when a caller supplies this: an owner or admin of a fork host. */
+  hostBackups?: ServerBackupsOptions | undefined;
   /**
    * General shows the server timezone only when a caller supplies this, and only for the local
    * server or a remote host with `host-timezone-v1` that this member administers.
@@ -271,6 +275,7 @@ export type ServerSettingsSection =
   | "sites"
   | "providers"
   | "updates"
+  | "backups"
   | "import"
   | "transfer"
   | "routines"
@@ -290,6 +295,7 @@ const sections = {
   sites: { title: "server.settings.hostedSitesTitle", description: "server.settings.hostedSitesDescription" },
   providers: { title: "server.settings.providersTitle", description: "server.settings.providersDescription" },
   updates: { title: "server.settings.updatesTitle", description: "server.settings.updatesDescription" },
+  backups: { title: "backups.sectionTitle", description: "backups.sectionDescription" },
   import: { title: "server.settings.importTitle", description: "server.settings.importDescription" },
   transfer: { title: "server.settings.transferTitle", description: "server.settings.transferDescription" },
   routines: { title: "server.settings.routinesTitle", description: "server.settings.routinesDescription" },
@@ -369,6 +375,8 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
         return Boolean(props.providers || props.onSwitchToManageProviders);
       case "updates":
         return Boolean(props.hostUpdate);
+      case "backups":
+        return Boolean(props.hostBackups);
       case "import":
         return Boolean(props.agentImport);
       case "transfer":
@@ -593,6 +601,7 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
         value === "sites" ||
         value === "providers" ||
         value === "updates" ||
+        value === "backups" ||
         value === "import" ||
         value === "transfer" ||
         value === "routines" ||
@@ -774,6 +783,12 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
                 <span>{t(sections.updates.title)}</span>
               </Tabs.Trigger>
             </Show>
+            <Show when={props.hostBackups}>
+              <Tabs.Trigger class="settings-modal-nav-item" value="backups">
+                <Archive aria-hidden="true" />
+                <span>{t(sections.backups.title)}</span>
+              </Tabs.Trigger>
+            </Show>
             <Show when={props.agentImport}>
               <Tabs.Trigger class="settings-modal-nav-item" value="import">
                 <Download aria-hidden="true" />
@@ -921,6 +936,19 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
             <Tabs.Content value="updates" class="settings-modal-tab-panel server-settings-panel" data-tab="updates">
               <ServerUpdatePanel
                 {...hostUpdate()}
+                serverId={props.server.id}
+                hostName={props.server.name}
+                actionsAvailable={actionsAvailable()}
+              />
+            </Tabs.Content>
+          )}
+        </Show>
+        {/* Mounted only while selected, so the list is read and polled only while it is open. */}
+        <Show when={props.hostBackups}>
+          {(backups) => (
+            <Tabs.Content value="backups" class="settings-modal-tab-panel server-settings-panel" data-tab="backups">
+              <ServerBackupsPanel
+                {...backups()}
                 serverId={props.server.id}
                 hostName={props.server.name}
                 actionsAvailable={actionsAvailable()}

@@ -1,6 +1,7 @@
 import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
 import type { AppTextKey } from "@openbot/i18n";
 import {
+  Archive,
   ArrowLeftRight,
   Bell,
   Blocks,
@@ -105,6 +106,7 @@ const SERVER_SECTION_RESULTS = {
     keywords: "conversation.globalSearch.keywords.serverUpdates",
     icon: RefreshCw,
   },
+  backups: { title: "backups.sectionTitle", icon: Archive },
   import: {
     title: "server.settings.importTitle",
     keywords: "conversation.globalSearch.keywords.serverImport",

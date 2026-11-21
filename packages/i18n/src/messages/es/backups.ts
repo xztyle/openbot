@@ -1,0 +1,51 @@
+import type { PartialTranslation } from "../../message";
+import type { messages as source } from "../en/backups";
+
+export const messages = {
+  "backups.sectionTitle": "Copias de seguridad",
+  "backups.sectionDescription": "Copias nocturnas de este servidor y restauración.",
+  "backups.title": "Copias de seguridad de {name}",
+  "backups.description":
+    "Cada copia guarda la base de datos, los ajustes, las claves, la bóveda, las cuentas de proveedores, los espacios de trabajo de los agentes, los espacios y el tablero de Motion. Los archivos sin cambios se comparten entre copias, así que una copia nocturna solo añade lo que cambió.",
+  "backups.backUpNow": "Hacer copia ahora",
+  "backups.loadFailed": "No se pudieron leer las copias de {name}.",
+  "backups.createFailed": "La copia no empezó",
+  "backups.checkFailed": "La comprobación de restauración falló.",
+  "backups.restoreFailed": "La restauración no empezó.",
+  "backups.notSetUpTitle": "Las copias de seguridad no están configuradas en este servidor",
+  "backups.notSetUpDescription":
+    "El operador del servidor instala el servicio de copias (scripts/backup-broker) y monta su socket. Después esta sección muestra las copias.",
+  "backups.schedule": "Cada noche a las {time} (hora del servidor)",
+  "backups.retention": "Guarda {daily} copias diarias y {weekly} semanales.",
+  "backups.disk": "{free} libres de {total}.",
+  "backups.offsiteOn": "Una copia cifrada se guarda fuera del servidor.",
+  "backups.offsiteOff": "Sin copia fuera del servidor.",
+  "backups.running": "Haciendo la copia…",
+  "backups.restoring": "Restaurando {id}… El servidor se reinicia; Atelier vuelve a conectarse solo.",
+  "backups.lastRestoreOk": "Se restauró {id}",
+  "backups.lastRestoreFailed": "La restauración de {id} falló",
+  "backups.safetyBackup": "El estado anterior es la copia {id}.",
+  "backups.empty": "Aún no hay copias.",
+  "backups.row": "{reason} · {size} · {added} añadidos",
+  "backups.skipped": "No incluido: {parts}.",
+  "backups.reason.nightly": "Nocturna",
+  "backups.reason.manual": "Manual",
+  "backups.reason.preRestore": "Antes de restaurar",
+  "backups.reason.other": "Copia",
+  "backups.status.ok": "Completa",
+  "backups.status.partial": "Parcial",
+  "backups.status.failed": "Fallida",
+  "backups.status.running": "En curso",
+  "backups.restore": "Restaurar…",
+  "backups.restoreTitle": "¿Restaurar {name}?",
+  "backups.restoreDescription":
+    "El servidor vuelve a como estaba el {when}. Se detienen el servidor y todos los agentes, se restaura y se inicia de nuevo. Los mensajes, ajustes y trabajo desde entonces se reemplazan; antes se hace una copia de seguridad del estado actual.",
+  "backups.restoreConfirm": "Restaurar",
+  "backups.restoreStarting": "Empezando…",
+  "backups.restoreStarted": "{name} se está restaurando y se reiniciará",
+  "backups.checking": "Comprobando la copia…",
+  "backups.includeSpaces":
+    "Restaurar también las carpetas de los espacios (los archivos cambiados vuelven; los nuevos se quedan)",
+  "backups.typeToConfirm": "Escribe {id} para confirmar.",
+  "backups.countRow": "{table}: {now} ahora, {backup} en la copia",
+} as const satisfies PartialTranslation<typeof source>;

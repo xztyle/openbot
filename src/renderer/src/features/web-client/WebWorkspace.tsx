@@ -39,6 +39,12 @@ import {
 import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
 import { EVENTS_CAPABILITY } from "@openbot/contracts/team-protocol/events-v1";
 import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
+import {
+  decodeHostBackupsOverview,
+  decodeHostRestoreCheck,
+  decodeHostRestoreStarted,
+  HOST_BACKUPS_ROUTES,
+} from "@openbot/contracts/team-protocol/host-backups-v1";
 import { HOST_RELEASE_CAPABILITY } from "@openbot/contracts/team-protocol/host-release-v1";
 import { HOST_TURN_LIMITS_ROUTES } from "@openbot/contracts/team-protocol/host-turn-limits-v1";
 import { HOSTED_SITES_CAPABILITY } from "@openbot/contracts/team-protocol/hosted-sites-v1";
@@ -221,6 +227,7 @@ import {
   hostedUpsellRoutineCreated,
   routineMadeThisSession,
 } from "../servers/hosted-server-upsell-controller";
+import type { HostBackupsCalls } from "../servers/ServerBackupsPanel";
 import type { HostMemoryLimitCalls } from "../servers/ServerMemoryLimitSetting";
 import type { HostAgentAccessCalls } from "../servers/ServerRolesSection";
 import type { ServerHostedSitesOptions, ServerSettingsSection } from "../servers/ServerSettingsModal";
@@ -1311,6 +1318,17 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       runTeamEffect(getHostTimezone(hostRequest(serverId)).pipe(Effect.mapError((error) => error.cause))),
     setTimezone: async (timezone, serverId) =>
       runTeamEffect(setHostTimezone(hostRequest(serverId), timezone).pipe(Effect.mapError((error) => error.cause))),
+  };
+  // Server settings > Backups (`host-backups-v1`, `fork-host-v1`): the host's backup broker.
+  const hostBackupsCalls: HostBackupsCalls = {
+    overview: async (serverId) =>
+      hostRequest(serverId)("POST", HOST_BACKUPS_ROUTES.overview, decodeHostBackupsOverview, {}),
+    create: async (serverId) =>
+      hostRequest(serverId)("POST", HOST_BACKUPS_ROUTES.create, decodeHostBackupsOverview, {}),
+    check: async (id, spaces, serverId) =>
+      hostRequest(serverId)("POST", HOST_BACKUPS_ROUTES.check, decodeHostRestoreCheck, { id, spaces }),
+    restore: async (id, confirm, spaces, serverId) =>
+      hostRequest(serverId)("POST", HOST_BACKUPS_ROUTES.restore, decodeHostRestoreStarted, { id, confirm, spaces }),
   };
   const hostTurnLimitsCalls: HostTurnLimitsCalls = {
     getTurnLimits: async (serverId) =>
@@ -3467,6 +3485,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       }
                       providers={providerSettings()}
                       hostUpdate={{ calls: hostUpdateCalls }}
+                      hostBackups={
+                        canAdministerServer(workspace.state.host?.role) &&
+                        workspace.state.capabilities.includes(FORK_HOST_CAPABILITY)
+                          ? { calls: hostBackupsCalls, canRestore: workspace.state.host?.role === "owner" }
+                          : undefined
+                      }
                       hostTimezone={{ calls: hostTimezoneCalls }}
                       hostMemoryLimit={{ calls: hostMemoryLimitCalls }}
                       hostTurnLimits={{ calls: hostTurnLimitsCalls }}

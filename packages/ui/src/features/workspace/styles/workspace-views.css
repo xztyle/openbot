@@ -872,6 +872,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--openbot-space-3);
+}
 
 /* The Motion ticket an agent works on: fleet card, org chart card and DM header. */
 .ws-ticket-chip {

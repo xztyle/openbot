@@ -31,4 +31,6 @@ export const messages = defineMessages("error.host", {
   "error.host.tenantShutdownTimeout": "Tenant shutdown timed out. No application replacement was started.",
   "error.host.tenantHealthMissing":
     "Tenant health reports are missing or unhealthy after restart. Inspect tenant sessions before another update.",
+  "error.host.backupRestoreOwnerOnly": "Only the owner of this server can restore a backup.",
+  "error.host.backupConfirmMismatch": "Type the backup name exactly to confirm the restore.",
 });

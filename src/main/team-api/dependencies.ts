@@ -15,6 +15,7 @@ import type { BrowserProfileService } from "../browser-profile-service";
 import type { ChatMcpService } from "../chat-mcp-service";
 import type { ClaudeContextPreferenceStore } from "../claude-context-preference-store";
 import type { PeerCustomProviderChanges } from "../custom-provider-changes";
+import type { HostBackups } from "../host-backups";
 import type { HostEventsApi } from "../host-events-api";
 import type { HostEventsService } from "../host-events-service";
 import type { HostReleaseService } from "../host-release-service";
@@ -537,6 +538,8 @@ export interface TeamApiOptions {
   securityAudit?: Pick<SecurityAuditLog, "read"> | undefined;
   /** `owner-away-v1` (`fork-host-v1`): the owner's quiet hours, focus and held requests. */
   ownerAway?: OwnerAwayService | undefined;
+  /** `host-backups-v1` (`fork-host-v1`): the host's backup broker, for Server settings > Backups. */
+  hostBackups?: HostBackups | undefined;
   /** `web-push-v1`: a member's browser gives its push subscription, and the host sends it push messages. */
   webPush?: Pick<WebPushService, "publicKey" | "register" | "remove"> | undefined;
   /** `file-tickets-v1`: signed links that a browser downloads from the host's own download address. */

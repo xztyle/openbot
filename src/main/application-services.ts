@@ -215,6 +215,7 @@ import { githubAppConfig } from "./github-connector-config";
 import { GitHubConnectorService } from "./github-connector-service";
 import { GitHubConnectorStore } from "./github-connector-store";
 import { HermesImportService } from "./hermes-import-service";
+import { HostBackups } from "./host-backups";
 import { HostEventsRuntime } from "./host-events-runtime";
 import { agentWebhookRoutineWriter, HostEventsService } from "./host-events-service";
 import { HostService } from "./host-service";
@@ -2606,6 +2607,9 @@ export async function createApplicationServices({
     webPush,
     // The owner's quiet hours, focus and "When you're back" list (`owner-away-v1`, `fork-host-v1`).
     ownerAway,
+    // Server settings > Backups: the host's backup broker (`host-backups-v1`). Without its socket the
+    // section says that backups are not set up.
+    hostBackups: new HostBackups(),
     // Signed links for large downloads from the operator's download host. Without the address file the
     // route answers 400 and the browser keeps using the connection.
     downloadTickets,

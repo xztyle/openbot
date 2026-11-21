@@ -36,6 +36,7 @@ import { EVENTS_CODECS } from "./events-v1";
 import { FILE_TICKETS_CODECS } from "./file-tickets-v1";
 import { FOCUS_USE_CODECS } from "./focus-use-v1";
 import { HOST_ADMIN_CODECS } from "./host-admin-v1";
+import { HOST_BACKUPS_CODECS } from "./host-backups-v1";
 import { HOST_MEMBER_UPDATE_CODECS } from "./host-member-update-v1";
 import { HOST_RELEASE_CODECS } from "./host-release-v1";
 import { HOST_TIMEZONE_CODECS } from "./host-timezone-v1";
@@ -170,6 +171,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...WORKSPACE_CODECS,
   ...WORKSPACE_FLEET_CODECS,
   ...OWNER_AWAY_CODECS,
+  ...HOST_BACKUPS_CODECS,
   ...WORKSPACE_LOOPS_CODECS,
   ...WORKSPACE_SIDEBAR_CODECS,
   ...WORKSPACE_SPACES_CODECS,

@@ -35,4 +35,6 @@ export const messages = {
     "Se agotó el tiempo de apagado de los inquilinos. No se inició el reemplazo de la aplicación.",
   "error.host.tenantHealthMissing":
     "Faltan informes de estado de los inquilinos o indican problemas tras el reinicio. Inspecciona las sesiones de los inquilinos antes de otra actualización.",
+  "error.host.backupRestoreOwnerOnly": "Solo el propietario de este servidor puede restaurar una copia.",
+  "error.host.backupConfirmMismatch": "Escribe el nombre exacto de la copia para confirmar la restauración.",
 } as const satisfies PartialTranslation<typeof source>;

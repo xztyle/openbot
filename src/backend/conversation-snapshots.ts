@@ -133,13 +133,28 @@ export function mergeProviderHistoryMessages(
   }
   const importedIds = new Set(imported.map((message) => message.id));
   const importedAssistantMessages = new Set(imported.filter(isProviderAssistantMessage).map(providerMessageIdentity));
+  // A condensed answer is the provider's message under a short text: the import carries the agent's
+  // own text, so the answer is matched by that, and the import's copy under another ID is the repeat.
+  const condensedStored = new Map(
+    stored.flatMap((message) =>
+      message.condensed && isProviderAssistantMessage(message)
+        ? [[providerMessageIdentity({ ...message, text: message.condensed.original }), message.id] as const]
+        : [],
+    ),
+  );
   const reconciledStored = stored.filter(
     (message) =>
       importedIds.has(message.id) ||
       !isProviderAssistantMessage(message) ||
+      message.condensed !== undefined ||
       !importedAssistantMessages.has(providerMessageIdentity(message)),
   );
-  return mergeConversationMessages(reconciledStored, imported);
+  const reconciledImported = imported.filter((message) => {
+    if (!isProviderAssistantMessage(message)) return true;
+    const condensedId = condensedStored.get(providerMessageIdentity(message));
+    return condensedId === undefined || condensedId === message.id;
+  });
+  return mergeConversationMessages(reconciledStored, reconciledImported);
 }
 
 /** A user prompt from provider history, or the mailbox delivery that the prompt came from. */
@@ -251,6 +266,11 @@ function mergeConversationMessages(
         ? {
             ...previous,
             ...message,
+            // The reply condenser shortened this answer after its turn. The provider still has the
+            // agent's own text, which the message keeps as its original.
+            ...(previous.condensed && repeatsCondensedOriginal(previous, message.text)
+              ? { text: previous.text, condensed: previous.condensed }
+              : {}),
             attachments: message.attachments ?? previous.attachments,
             imageGeneration: message.imageGeneration ?? previous.imageGeneration,
           }
@@ -325,30 +345,39 @@ function reconcileClaudeHistoryMessages(
     const answer = storedMessages.get(`${turnId}:assistant`);
     if (!answer || !isClaudeAnswer(answer) || answer.turnId !== turnId) continue;
     const text = parts.map((part) => part.text).join("");
+    /* The reply condenser shortens an answer after its turn and keeps the agent's own text on it.
+       The import carries that own text, so the answer is matched by it, and keeps its short text. */
+    const answerText = answer.condensed?.original ?? answer.text;
+    const condensed = answer.condensed !== undefined && repeatsCondensedOriginal(answer, text);
     const narration = importedNarration.get(turnId) ?? [];
     /* A turn released before narration rode the thinking disclosure stored the narration and the
        answer together under this one ID. The import now splits the two, so the aggregate matches
        neither half on its own: match it whole, and keep only the answer as its text. Without this
        the backfill leaves the aggregate bubble in place and stores the split copy beside it. */
-    const aggregate = narration.length > 0 && answer.text === `${narration.map((part) => part.text).join("")}${text}`;
+    const aggregate = narration.length > 0 && answerText === `${narration.map((part) => part.text).join("")}${text}`;
     /* Existing split records can have saved references. Never remove or combine them - but a
        database holding the aggregate and its canonical rows together must still read as one
        answer, so the aggregate keeps only the answer and the rows repeating it stop being
        bubbles. A row already demoted stays demoted, whatever the import calls it. */
     if (parts.some((part) => storedMessages.has(part.id))) {
+      // A build before this check stored the import of a condensed answer beside it: that row only
+      // repeats the original that the answer keeps, so it stops being a bubble too.
       for (const part of parts) {
         const existing = storedMessages.get(part.id);
-        if (!existing || !(aggregate || existing.itemType === "commentary")) continue;
+        if (!existing || !(aggregate || condensed || existing.itemType === "commentary")) continue;
         replacements.set(part.id, { ...existing, ...part, itemType: "commentary" });
       }
-      if (aggregate && answer.text) appended.push({ ...answer, text });
+      if (aggregate && !answer.condensed && answer.text) appended.push({ ...answer, text });
       continue;
     }
-    if (!answer.text || !(aggregate || text.startsWith(answer.text))) continue;
+    if (!answerText || !(aggregate || condensed || text.startsWith(answerText))) continue;
     const first = parts[0];
     const last = parts.at(-1);
     if (!first || !last) continue;
-    replacements.set(first.id, { ...answer, text, status: last.status });
+    replacements.set(
+      first.id,
+      answer.condensed ? { ...answer, status: last.status } : { ...answer, text, status: last.status },
+    );
     for (const part of parts.slice(1)) omitted.add(part.id);
     if (!storedNarrationTurns.has(turnId)) continue;
     for (const part of narration) {
@@ -412,6 +441,15 @@ function isClaudeAnswer(message: ConversationMessage): boolean {
     message.author === "assistant" &&
     (message.itemType === "agentMessage" || message.itemType === ROUTINE_QUIET_ANSWER_ITEM_TYPE)
   );
+}
+
+/**
+ * Whether `text`, the provider's text of a condensed answer, is the original that the answer keeps.
+ * The kept original is cut at its limit, so a longer provider text that starts with it matches too.
+ */
+function repeatsCondensedOriginal(answer: ConversationMessage, text: string): boolean {
+  const original = answer.condensed?.original;
+  return original !== undefined && original.length > 0 && (text === original || text.startsWith(original));
 }
 
 function isClaudeReasoning(message: ConversationMessage): boolean {

@@ -48,6 +48,12 @@ const ITEM: AgentAttentionItem = {
   origin: "accounts.google.com",
 };
 
+const CONDENSED_MESSAGE = "message-agent-2";
+const CONDENSED_ORIGINAL =
+  "I paused: the page is not made and the cap is not set.\n\nSo far I only read the account through the API.\n\nAlejandro signs in when the browser view works, so I do not ask again.\n\nI sent the CSO the result in three lines.";
+const CONDENSED_TEXT =
+  "Paused: no page and no cap yet. Alejandro signs in when the view works; the CSO has the result.";
+
 const SECRET = { method: "otp", origin: "https://accounts.google.com", digits: 6 } as const;
 
 const runtime: WebRuntimeFactory = (_accountId, events) => {
@@ -79,8 +85,23 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     emit({ type: "browser-takeover-requested", request: { ...REQUEST, secret: SECRET } });
     emit({ type: "agent-attention-changed", items: [{ ...ITEM, kind: "secret" }] });
   };
+  // As the host when Chief answers and the reply condenser shortens the answer a moment later.
+  const answer = (step: "original" | "condensed") =>
+    mock.updateConversationSnapshot("chief", (snapshot) => {
+      const message = snapshot.messages.find((candidate) => candidate.id === CONDENSED_MESSAGE);
+      if (!message) return;
+      if (step === "original") {
+        message.text = CONDENSED_ORIGINAL;
+        delete message.condensed;
+      } else {
+        message.text = CONDENSED_TEXT;
+        message.condensed = { original: CONDENSED_ORIGINAL };
+      }
+    });
   window.addEventListener("needs-you-harness", (event) => {
     const detail = event instanceof CustomEvent ? event.detail : null;
+    if (detail === "answer") answer("original");
+    if (detail === "condense") answer("condensed");
     if (detail === "request") request();
     if (detail === "secret") secret();
     if (detail === "resolve") resolve();

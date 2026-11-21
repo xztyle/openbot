@@ -13,6 +13,7 @@ import {
   Button,
   Checkbox,
   ConfirmDialog,
+  History,
   Info,
   Input,
   Item,
@@ -275,7 +276,8 @@ export function ServerBackupsPanel(
                   </ItemDescription>
                 </ItemContent>
               </Item>
-              <Show when={value().running}>
+              {/* A restore shows in the notice above. */}
+              <Show when={value().running?.kind === "restore" ? null : value().running}>
                 {(job) => (
                   <Item class="settings-modal-row">
                     <ItemContent>
@@ -302,16 +304,18 @@ export function ServerBackupsPanel(
                         {when(backup.createdAt)} {statusBadge(backup)}
                       </ItemTitle>
                       <ItemDescription>
-                        {t("backups.row", {
-                          reason: reasonLabel(backup),
-                          size: format.fileSize(backup.bytes),
-                          added: format.fileSize(backup.newBytes),
-                        })}
-                        <Show when={skipped(backup).length > 0}>
-                          {" "}
-                          {t("backups.skipped", { parts: format.list(skipped(backup)) })}
-                        </Show>
-                        <Show when={backup.error}>{(error) => <> {error()}</>}</Show>
+                        {backup.status === "failed"
+                          ? `${reasonLabel(backup)} · ${backup.error ?? t("backups.status.failed")}`
+                          : [
+                              t("backups.row", {
+                                reason: reasonLabel(backup),
+                                size: format.fileSize(backup.bytes),
+                                added: format.fileSize(backup.newBytes),
+                              }),
+                              ...(skipped(backup).length > 0
+                                ? [t("backups.skipped", { parts: format.list(skipped(backup)) })]
+                                : []),
+                            ].join(" · ")}
                       </ItemDescription>
                     </ItemContent>
                     <Show when={props.canRestore && backup.status !== "failed" && backup.status !== "running"}>
@@ -340,6 +344,7 @@ export function ServerBackupsPanel(
         // The check can take a while on a busy host; Cancel stays available.
         dismissWhilePending
         tone="destructive"
+        icon={<History />}
         title={t("backups.restoreTitle", { name: props.hostName })}
         description={t("backups.restoreDescription", { when: when(target()?.createdAt ?? "") })}
         confirmLabel={t("backups.restoreConfirm")}
@@ -393,7 +398,6 @@ export function ServerBackupsPanel(
                 <Input
                   size="sm"
                   value={typed()}
-                  placeholder={result().confirm}
                   autocomplete="off"
                   spellcheck={false}
                   onValueChange={setTyped}

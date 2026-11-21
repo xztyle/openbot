@@ -15,6 +15,7 @@ import type {
   AgentModelId,
   AgentModelOption,
   AgentPendingRuntime,
+  AgentPromptQuestion,
   AgentReasoningEffort,
   AgentRuntimeSnapshot,
   AgentSessionSettings,
@@ -981,6 +982,16 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         context: (agentId, turnId) => this.channels.teamContext(agentId, turnId),
         post: (agentId, channelId, text) => this.channels.postTeamQuestion(agentId, channelId, text),
       },
+      ...(options.ownerAway
+        ? {
+            ownerHold: (agentId: string, turnId: string, questions: readonly AgentPromptQuestion[]) =>
+              options.ownerAway?.holdQuestions(
+                agentId,
+                questions,
+                this.channels.teamContext(agentId, turnId)?.channelId ?? null,
+              ) ?? null,
+          }
+        : {}),
       conversation: this.#conversation,
       browser: this.#browser,
       hostedSites: this.#hostedSites,

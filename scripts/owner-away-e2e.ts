@@ -147,6 +147,20 @@ assert.equal(away.urgentAlert("outage"), true);
   assert.ok(note?.includes("openbot.hold_for_owner"));
 }
 
+// A blocking question while the owner is quiet and away is held, and the agent does not wait.
+{
+  const asked = away.holdQuestions(
+    "agent-b",
+    [{ question: "Which audience first?", options: [{ label: "Students" }, { label: "Parents" }] }],
+    null,
+  );
+  assert.match(asked ?? "", /^Not asked now: the owner is in quiet hours/u);
+  const item = away.state().held.at(-1);
+  assert.deepEqual([item?.title, item?.options], ["Which audience first?", ["Students", "Parents"]]);
+  if (item) away.answer({ id: item.id, decision: "dismiss" });
+  delivered.length = 0;
+}
+
 // Held requests, and their answers.
 {
   const question = away.hold({

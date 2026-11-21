@@ -340,6 +340,13 @@ export interface AttentionRegistryOptions {
    * channel, not to the agent's own chat, where the people of the conversation would not see it.
    */
   teamQuestion?: TeamQuestionRouting | undefined;
+  /**
+   * While the owner is in quiet hours or focus and away, a question is held for when they are back
+   * instead of waiting: the answer is what the agent reads instead, or null to ask as usual.
+   */
+  ownerHold?:
+    | ((agentId: string, turnId: string, questions: readonly AgentPromptQuestion[]) => string | null)
+    | undefined;
 }
 
 /** How a question of work that belongs to a team channel reaches the people of that channel. */
@@ -418,6 +425,7 @@ export class AttentionRegistry {
   readonly #noteVaultChange: (agentId: string, threadId: string, turnId: string, text: string) => void;
   readonly #apiKeys: AgentApiKeys | null;
   readonly #teamQuestion: TeamQuestionRouting | null;
+  readonly #ownerHold: AttentionRegistryOptions["ownerHold"];
   readonly #prompts = new Map<RequestId, PendingPrompt>();
   readonly #approvals = new Map<RequestId, PendingApproval>();
   readonly #takeovers = new Map<RequestId, PendingBrowserTakeover>();
@@ -443,6 +451,7 @@ export class AttentionRegistry {
     this.#noteVaultChange = options.noteVaultChange ?? (() => undefined);
     this.#apiKeys = options.apiKeys ?? null;
     this.#teamQuestion = options.teamQuestion ?? null;
+    this.#ownerHold = options.ownerHold;
   }
 
   /**
@@ -459,6 +468,12 @@ export class AttentionRegistry {
     options: { private?: boolean; apiKey?: string; purpose?: string },
   ): string | null {
     const context = this.#teamQuestion?.context(agentId, turnId);
+    // The owner is quiet and away: the question waits in their list, and the agent does not. A private
+    // question, a secret or a key form still asks; hands-off mode asks no one.
+    if (!context?.handsOff && !options.private && !options.apiKey && !questions.some((question) => question.isSecret)) {
+      const held = this.#ownerHold?.(agentId, turnId, questions);
+      if (held) return held;
+    }
     // A card of a channel task shows in its channel already; hands-off mode refuses that one too.
     if (!context || (context.channelTurn && !context.handsOff)) return null;
     const channel = `#${context.name}`;

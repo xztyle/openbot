@@ -491,6 +491,35 @@ export class OwnerAwayService {
     return `Answer to ${about}, which you held for me: ${reply}`;
   }
 
+  /**
+   * While the owner is quiet and away, holds the questions of an `ask_user` or `ask_ui` call instead of
+   * a card that the agent would wait on. Answers the note the agent reads instead, or null to ask now.
+   */
+  holdQuestions(
+    agentId: string,
+    questions: readonly { question: string; options: readonly { label: string }[] | null }[],
+    channelId: string | null,
+  ): string | null {
+    const quiet = this.quietNow();
+    const [first, ...rest] = questions;
+    if (!quiet || !first || this.activeNow()) return null;
+    try {
+      this.hold({
+        agentId,
+        kind: "question",
+        title: first.question,
+        ...(rest.length ? { detail: rest.map((question) => question.question).join("\n") } : {}),
+        ...(first.options?.length ? { options: first.options.map((option) => option.label) } : {}),
+        ...(channelId ? { channelId } : {}),
+      });
+    } catch (error) {
+      if (error instanceof OwnerHoldRefused) return null;
+      throw error;
+    }
+    const what = quiet.kind === "focus" ? "in focus mode" : "in quiet hours";
+    return `Not asked now: the owner is ${what}, so Atelier put your question in their When you're back list. Do not wait for it and do not ask again: continue with work that does not need the answer, or end your turn. The answer comes to you later as a message from the owner.`;
+  }
+
   /** Removes the held requests of an agent that is gone. */
   forgetAgent(agentId: string): void {
     const before = this.#state.held.length;

@@ -22,6 +22,7 @@ export const CLAUDE_COMPACT_WINDOW_CHOICES = [
   100_000,
   150_000,
   200_000,
+  250_000,
   300_000,
   400_000,
   600_000,
@@ -36,9 +37,14 @@ export interface ClaudeContextSetting {
 
 /**
  * The user's setup is off, so each turn sends the shorter prompt; an upgrade turns it off too, because
- * the file exists only after a change. The compaction size stays Claude Code's own.
+ * the file exists only after a change. Chats compact at 250,000 tokens: Claude Code's own size is the
+ * model's whole window (1M for Sonnet and Opus), and every step of a long-lived agent re-reads it.
  */
-export const DEFAULT_CLAUDE_CONTEXT: ClaudeContextSetting = { userSetup: false, compactWindow: null };
+export const DEFAULT_CLAUDE_COMPACT_WINDOW = 250_000;
+export const DEFAULT_CLAUDE_CONTEXT: ClaudeContextSetting = {
+  userSetup: false,
+  compactWindow: DEFAULT_CLAUDE_COMPACT_WINDOW,
+};
 
 /** A whole number of tokens that Claude Code accepts, or `null` for its own size. */
 export function isClaudeCompactWindow(value: unknown): value is number | null {

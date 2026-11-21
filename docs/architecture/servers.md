@@ -446,12 +446,14 @@ in the Claude settings or `CLAUDE_CODE_PROMPT_CACHE_TTL` on the host still wins.
 the next Claude process, not to a running one; an idle thread starts a new process when it resumes.
 
 `claude-context-v1` reads and sets what the host's Claude agents load into each request
-(`openbot-claude-context-v1.json`; default `{ userSetup: false, compactWindow: null }`). With
+(`openbot-claude-context-v1.json`; default `{ userSetup: false, compactWindow: 250000 }`). With
 `userSetup` off, a Claude process loads no `user` setting source and no `~/.agents/skills` plugin: no
 user CLAUDE.md, skills, agents, hooks, plugins or output style. The sign-in keys and the text `env`
 values of `~/.claude/settings.json` still reach it through a 0600 flag settings file. `compactWindow`
-sets `CLAUDE_CODE_AUTO_COMPACT_WINDOW` (100,000 to 1,000,000 tokens); `null` sets nothing. Both apply to
-the next Claude process.
+sets `CLAUDE_CODE_AUTO_COMPACT_WINDOW` (100,000 to 1,000,000 tokens); `null` sets nothing, so Claude
+Code compacts at the model's whole window. The default is 250,000: a long-lived agent re-reads its
+whole chat on every step, and Claude Code's own size let chats grow to about 970,000 tokens. Both
+apply to the next Claude process.
 The Cache section of the Claude page in Server settings → Providers sets it for this computer and
 for a joined server.
 

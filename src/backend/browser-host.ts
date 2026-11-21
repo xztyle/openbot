@@ -199,6 +199,25 @@ const PREVIEW_STALE_AFTER_MS = 1_000;
 const VIEW_FRAME_QUALITY = 60;
 const VIEW_FRAME_MAX_WIDTH = 1_280;
 const VIEW_FRAME_MAX_HEIGHT = 800;
+/**
+ * A view that asked for the page size of its panel gets frames of that size, one image pixel for
+ * each CSS pixel of the page, up to this bound. The 1280 x 800 frame of a 2000 px panel was scaled
+ * up 1.6 times on the member's screen, and its text was soft.
+ */
+const VIEW_FRAME_PANEL_MAX_WIDTH = 1_920;
+const VIEW_FRAME_PANEL_MAX_HEIGHT = 1_200;
+
+/** The frame bound of a live view: the panel's size when the view asked for one, else the default. */
+export function viewFrameBounds(viewport: { width: number; height: number } | undefined): {
+  maxWidth: number;
+  maxHeight: number;
+} {
+  if (!viewport) return { maxWidth: VIEW_FRAME_MAX_WIDTH, maxHeight: VIEW_FRAME_MAX_HEIGHT };
+  return {
+    maxWidth: Math.min(Math.max(viewport.width, VIEW_FRAME_MAX_WIDTH), VIEW_FRAME_PANEL_MAX_WIDTH),
+    maxHeight: Math.min(Math.max(viewport.height, VIEW_FRAME_MAX_HEIGHT), VIEW_FRAME_PANEL_MAX_HEIGHT),
+  };
+}
 /** The agent browser tools that read or change the agent's tab set, and not one tab. */
 const TAB_SET_TOOLS: ReadonlySet<string> = new Set(["open", "list_tabs", "status"]);
 /** How long after a live view's right-click the page's menu still belongs to that view. */
@@ -1858,8 +1877,7 @@ export class BrowserHost {
       const stop = yield* tab.engine.startScreencast(
         {
           quality: VIEW_FRAME_QUALITY,
-          maxWidth: VIEW_FRAME_MAX_WIDTH,
-          maxHeight: VIEW_FRAME_MAX_HEIGHT,
+          ...viewFrameBounds(viewport),
           ...(viewport ? { viewport } : {}),
         },
         (frame) => {

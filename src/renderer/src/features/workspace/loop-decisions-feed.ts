@@ -24,7 +24,8 @@ const feeds = new WeakMap<Workspace, Feed>();
 export function useLoopDecisions(ws: Workspace): Pick<Feed, "decisions" | "refresh"> {
   let feed = feeds.get(ws);
   if (!feed) {
-    const [decisions, setDecisions] = createSignal<readonly LoopDecision[]>([]);
+    // The first read starts in the component that asked for the feed, and a new space empties it there.
+    const [decisions, setDecisions] = createSignal<readonly LoopDecision[]>([], { ownedWrite: true });
     let space = "";
     const refresh = () => {
       const read = ws.channels.port().agent.workspaceLoops;

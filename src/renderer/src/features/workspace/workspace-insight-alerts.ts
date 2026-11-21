@@ -7,7 +7,8 @@ import type { InsightAlert } from "@openbot/contracts/ipc";
 import { createSignal, onCleanup } from "solid-js";
 
 const POLL_MS = 10 * 60_000;
-const [alerts, setAlerts] = createSignal<readonly InsightAlert[]>([]);
+// The first read starts in the component that polls, so it may write there.
+const [alerts, setAlerts] = createSignal<readonly InsightAlert[]>([], { ownedWrite: true });
 
 export function setInsightAlerts(next: readonly InsightAlert[]): void {
   setAlerts(next);

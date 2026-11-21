@@ -64,4 +64,18 @@ export const messages = defineMessages("status.agent", {
   "status.agent.vaultAdded": "Saved to Vault: {name}",
   "status.agent.vaultUpdated": "Changed in Vault: {name}",
   "status.agent.vaultDeleted": "Deleted from Vault: {name}",
+  "status.agent.trustAsk.pay": "{agent} wants to make a payment. The trust policy asks you first.",
+  "status.agent.trustAsk.launchAds": "{agent} wants to launch or fund ads. The trust policy asks you first.",
+  "status.agent.trustAsk.publish": "{agent} wants to publish. The trust policy asks you first.",
+  "status.agent.trustAsk.email": "{agent} wants to email people. The trust policy asks you first.",
+  "status.agent.trustAsk.createAgent": "{agent} wants to create an agent. The trust policy asks you first.",
+  "status.agent.trustAsk.delete": "{agent} wants to delete something. The trust policy asks you first.",
+  "status.agent.trustAskSurface":
+    "{agent} wants to act on {site}, where a click can spend money or publish. If you allow it, {agent} can act there for {minutes} minutes.",
+  "status.agent.trustAskDaily":
+    "{agent} wants to spend {amount} on {platform}. This goes over the daily budget: {spent} of {limit} spent today.",
+  "status.agent.trustAskTotal":
+    "{agent} wants to spend {amount} on {platform}. This goes over the total budget: {spent} of {limit} spent.",
+  "status.agent.trustAskUnknown":
+    "{agent} wants to spend on {platform}, and the amount is not known. A budget covers {platform}.",
 });

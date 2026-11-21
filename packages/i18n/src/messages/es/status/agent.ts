@@ -43,4 +43,20 @@ export const messages = {
   "status.agent.skillUsing": "Usando la habilidad {name}…",
   "status.agent.skillReading": "Leyendo una habilidad…",
   "status.agent.memoryChanges": "Recuerdos: {saved} guardados, {updated} actualizados, {forgotten} olvidados.",
+  "status.agent.trustAsk.pay": "{agent} quiere hacer un pago. La política de confianza te pregunta primero.",
+  "status.agent.trustAsk.launchAds":
+    "{agent} quiere lanzar o financiar anuncios. La política de confianza te pregunta primero.",
+  "status.agent.trustAsk.publish": "{agent} quiere publicar. La política de confianza te pregunta primero.",
+  "status.agent.trustAsk.email":
+    "{agent} quiere enviar correos a personas. La política de confianza te pregunta primero.",
+  "status.agent.trustAsk.createAgent": "{agent} quiere crear un agente. La política de confianza te pregunta primero.",
+  "status.agent.trustAsk.delete": "{agent} quiere borrar algo. La política de confianza te pregunta primero.",
+  "status.agent.trustAskSurface":
+    "{agent} quiere actuar en {site}, donde un clic puede gastar dinero o publicar. Si lo permites, {agent} puede actuar allí durante {minutes} minutos.",
+  "status.agent.trustAskDaily":
+    "{agent} quiere gastar {amount} en {platform}. Supera el presupuesto diario: {spent} de {limit} gastados hoy.",
+  "status.agent.trustAskTotal":
+    "{agent} quiere gastar {amount} en {platform}. Supera el presupuesto total: {spent} de {limit} gastados.",
+  "status.agent.trustAskUnknown":
+    "{agent} quiere gastar en {platform} y no se sabe el importe. Un presupuesto cubre {platform}.",
 } as const satisfies PartialTranslation<typeof source>;

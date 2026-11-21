@@ -70,6 +70,8 @@
     "./telegram-app": "./src/telegram-app.ts",
     "./team-api-routes": "./src/team-api-routes.ts",
     "./ui-blocks": "./src/ui-blocks.ts",
+    "./trust-control": "./src/trust-control.ts",
+    "./team-protocol/trust-control-v1": "./src/team-protocol/trust-control-v1.ts",
     "./workspace-links": "./src/workspace-links.ts",
     "./team-protocol": "./src/team-protocol/index.ts",
     "./team-protocol/queue-edit-v1": "./src/team-protocol/queue-edit-v1.ts",

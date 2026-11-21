@@ -3,7 +3,7 @@
  * host's list. The top bar has a button with the count, Activity starts with the list, and a phone's
  * Home has a chip. A row opens the chat that answers the request.
  */
-import { agentAttentionKey } from "@openbot/contracts/ipc";
+import { agentAttentionKey, isTicketAttention } from "@openbot/contracts/ipc";
 import { NeedsYouButton, type NeedsYouRow, NeedsYouSection } from "@openbot/ui/features/workspace/NeedsYou";
 import { useText } from "@openbot/ui/text";
 import { createMemo } from "solid-js";
@@ -46,7 +46,7 @@ export function useNeedsYouRows() {
       return {
         key: agentAttentionKey(item),
         member: memberById(ws.directory(), item.agentId, agent?.name ?? t("chat.message.agentFallback")),
-        kind: item.kind,
+        kind: isTicketAttention(item) ? "ticket" : item.kind,
         action: needsYouAction(item, t),
         summary: item.summary,
         where: channel ? t("workspace.activity.in", { channel: channel.name }) : t("workspace.activity.directMessage"),

@@ -999,4 +999,6 @@ export const messages = {
   "workspace.loops.editor.fieldsHint":
     "Uno por línea: clave | Etiqueta | tipo | card. Tipos: text, number, money, percent, url, date. card lo muestra en el tablero.",
   "workspace.loops.editor.delete": "Borrar ciclo",
+  "workspace.needsYou.action.ticket": "Revisar un ticket de Motion",
+  "workspace.ticket.open": "Abrir {key} en Motion: {title}",
 } as const satisfies PartialTranslation<typeof source>;

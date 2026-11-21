@@ -8,6 +8,7 @@ import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState } from "../../view-state";
 import { AgentStatusLine } from "./MemberProfileCard";
+import { TicketChip, type WorkspaceTicket } from "./TicketChip";
 import { AiBadge, MemberAvatar } from "./WorkspaceAvatar";
 import { PaneHeaderAction, WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { useCost, useWorkspaceDuration } from "./workspace-format";
@@ -24,6 +25,8 @@ export interface FleetAgent {
   /** The model that the automatic model policy chose for the running turn, and why. */
   model?: string | undefined;
   modelReason?: string | undefined;
+  /** The Motion ticket it works on now. */
+  currentTicket?: WorkspaceTicket | undefined;
 }
 
 type FleetFilter = "all" | AgentWorkStatus["state"];
@@ -187,6 +190,9 @@ export function FleetView(props: FleetViewProps): JSX.Element {
                     </span>
                   </div>
                   <AgentStatusLine status={agent().status} />
+                  <Show when={agent().currentTicket}>
+                    {(ticket) => <TicketChip ticket={ticket()} withTitle class="ws-fleet-card-ticket" />}
+                  </Show>
                   <Show when={agent().currentStep}>
                     <p class="ws-fleet-card-step">{agent().currentStep}</p>
                   </Show>

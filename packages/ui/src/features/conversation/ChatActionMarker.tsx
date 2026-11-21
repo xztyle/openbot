@@ -951,6 +951,8 @@ function markerLabel(
     const agent = agents.find((candidate) => candidate.id === marker.agentId)?.name;
     if (marker.notice === "restart-resume")
       return agent ? t("chat.marker.notice.restartResume", { agent }) : t("chat.marker.notice.restartResumeUnnamed");
+    if (marker.notice === "motion-event")
+      return agent ? t("chat.marker.notice.motionEvent", { agent }) : t("chat.marker.notice.motionEventUnnamed");
     return agent ? t("chat.marker.notice.operatorNote", { agent }) : t("chat.marker.notice.operatorNoteUnnamed");
   }
   if (marker.kind === "model-switch" || marker.kind === "channel-change" || marker.kind === "vault-change")

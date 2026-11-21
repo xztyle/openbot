@@ -198,6 +198,7 @@ export function createHostFleetSource(input: {
         ...(status?.kind === "working" && status.model ? { model: status.model, modelReason: status.modelReason } : {}),
         todayCostUsd: record?.todayCostUsd,
         todayDurationMs: record?.todayDurationMs,
+        currentTicket: record?.currentTicket,
       };
     });
   });

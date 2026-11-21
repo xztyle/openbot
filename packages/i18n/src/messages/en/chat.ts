@@ -157,6 +157,8 @@ export const messages = defineMessages("chat", {
   "chat.marker.notice.restartResumeUnnamed": "Atelier restarted · the agent resumed its work",
   "chat.marker.notice.operatorNote": "Atelier sent {agent} a note",
   "chat.marker.notice.operatorNoteUnnamed": "Atelier sent the agent a note",
+  "chat.marker.notice.motionEvent": "Motion sent {agent} a ticket update",
+  "chat.marker.notice.motionEventUnnamed": "Motion sent the agent a ticket update",
   "chat.usageLimit.title": "{provider} usage limit reached",
   "chat.usageLimit.onHold": "Message on hold",
   "chat.usageLimit.bodyReset": "Your message has not started. Send it to another model now, or wait until {reset}.",

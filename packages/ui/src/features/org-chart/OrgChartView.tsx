@@ -27,6 +27,7 @@ import { DotGrid, devicePixel } from "../workflows/canvas-dot-grid";
 import { HudButton } from "../workflows/WorkflowCanvasHud";
 import { WorkflowZoomMenu, type ZoomAction } from "../workflows/WorkflowZoomMenu";
 import { type Camera, type CameraMotion, glideCamera } from "../workflows/workflow-camera";
+import { TicketChip, type WorkspaceTicket } from "../workspace/TicketChip";
 import { MemberAvatar } from "../workspace/WorkspaceAvatar";
 import { WorkspacePaneHeader } from "../workspace/WorkspacePaneHeader";
 import type { AgentWorkStatus, WorkspaceMember } from "../workspace/workspace-types";
@@ -65,6 +66,8 @@ export interface OrgChartAgent {
   background?: boolean | undefined;
   /** It sleeps: no routine, check or message starts a turn of it. */
   sleeping?: boolean | undefined;
+  /** The Motion ticket it works on now. */
+  ticket?: WorkspaceTicket | undefined;
 }
 
 /** A message from one agent to another. Each new id sends a pulse along the chart. */
@@ -1022,6 +1025,7 @@ function OrgCard(props: {
         </span>
       </Button>
       <div class="ws-org-card-meta">
+        <Show when={props.agent.ticket}>{(ticket) => <TicketChip ticket={ticket()} />}</Show>
         <Show when={props.agent.model}>
           <span class="ws-org-chip" title={props.agent.model}>
             {props.agent.effort ? `${props.agent.model} · ${props.agent.effort}` : props.agent.model}

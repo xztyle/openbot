@@ -7,6 +7,7 @@ import { Bell, BellOff, Check, ChevronLeft, Hash, Info, LayoutDashboard, Lock, M
 import { useText } from "../../text";
 import { LabelTooltip, LabelTooltipTrigger } from "../../tooltip";
 import { cx, usesTouchLayout } from "../../utils";
+import { TicketChip, type WorkspaceTicket } from "./TicketChip";
 import { AiBadge, AvatarStack, MemberAvatar } from "./WorkspaceAvatar";
 import type { ChannelVisibility, ConversationKind, WorkspaceMember } from "./workspace-types";
 
@@ -35,6 +36,8 @@ export interface ChannelHeaderProps {
   /** The other member of a DM, for its avatar. */
   dmMember?: WorkspaceMember | undefined;
   topic?: string | undefined;
+  /** The Motion ticket the agent of a DM works on now. */
+  ticket?: WorkspaceTicket | undefined;
   /** Opens the topic editor. Without it the topic is text only. */
   onEditTopic?: (() => void) | undefined;
   /** The first faces of the member pile. */
@@ -122,6 +125,9 @@ export function ChannelHeader(props: ChannelHeaderProps): JSX.Element {
               </Button>
             )}
           </Show>
+        </Show>
+        <Show when={props.ticket}>
+          {(ticket) => <TicketChip ticket={ticket()} withTitle class="ws-channel-header-ticket" />}
         </Show>
       </div>
       <div class="ws-channel-header-actions">

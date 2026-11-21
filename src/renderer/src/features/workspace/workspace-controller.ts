@@ -25,6 +25,7 @@ import {
   type DraftAttachment,
   GENERAL_SPACE_ID,
   isChannelAnswerMode,
+  isTicketAttention,
   type QueueSnapshot,
   type TeamRealtimeEvent,
   type WorkspaceActivity,
@@ -2530,6 +2531,11 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   );
   /** Opens the chat that answers a request: the card waits at its end. */
   function openNeedsYou(item: AgentAttentionItem) {
+    // A Motion ticket that waits on the reader opens in Motion.
+    if (isTicketAttention(item)) {
+      void channels.port().openUrl(item.url);
+      return;
+    }
     const place = needsYouPlace(item);
     if ("channelId" in place) openChannel(place.channelId);
     else openAgent(place.agentId);

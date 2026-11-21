@@ -177,6 +177,7 @@ export { default as TextAlignEnd } from "lucide-solid/icons/text-align-end";
 export { default as TextAlignJustify } from "lucide-solid/icons/text-align-justify";
 export { default as TextAlignStart } from "lucide-solid/icons/text-align-start";
 export { default as TextQuote } from "lucide-solid/icons/text-quote";
+export { default as Ticket } from "lucide-solid/icons/ticket";
 export { default as Trash2 } from "lucide-solid/icons/trash-2";
 export { default as TriangleAlert } from "lucide-solid/icons/triangle-alert";
 export { default as Type } from "lucide-solid/icons/type";

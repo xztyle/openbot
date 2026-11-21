@@ -166,6 +166,7 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
                 name={current().name}
                 dmMember={agentMember(current(), agentWorking(ws.directory(), current().id))}
                 topic={current().title || undefined}
+                ticket={ws.fleet.agents().find((entry) => entry.member.id === current().id)?.currentTicket}
                 members={[]}
                 memberCount={1}
                 onShowDetails={() => ws.env.openAgentSettings(current().id)}

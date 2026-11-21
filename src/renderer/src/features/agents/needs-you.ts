@@ -4,6 +4,7 @@ import {
   type AgentAttentionKind,
   agentAttentionKey,
   type BrowserTakeoverRequest,
+  isTicketAttention,
 } from "@openbot/contracts/ipc";
 import type { AgentProfile } from "@openbot/ui/data";
 import type { SidebarApproval, SidebarAttention } from "@openbot/ui/features/sidebar/sidebar-agent-states";
@@ -114,7 +115,11 @@ const ACTION_AT_KEY = {
 } as const;
 
 /** What the user does for a request, in a few words: "Sign in on accounts.google.com", "Answer a question". */
-export function needsYouAction(item: Pick<AgentAttentionItem, "kind" | "origin">, t: TextValue["t"]): string {
+export function needsYouAction(
+  item: Pick<AgentAttentionItem, "kind" | "origin" | "turnId" | "url">,
+  t: TextValue["t"],
+): string {
+  if (isTicketAttention(item)) return t("workspace.needsYou.action.ticket");
   if (item.origin && (item.kind === "browser-takeover" || item.kind === "sign-in" || item.kind === "secret"))
     return t(ACTION_AT_KEY[item.kind], { site: item.origin });
   return t(ACTION_KEY[item.kind]);

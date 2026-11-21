@@ -145,6 +145,8 @@ export const messages = {
   "chat.marker.notice.restartResumeUnnamed": "Atelier se reinició · el agente retomó su trabajo",
   "chat.marker.notice.operatorNote": "Atelier envió una nota a {agent}",
   "chat.marker.notice.operatorNoteUnnamed": "Atelier envió una nota al agente",
+  "chat.marker.notice.motionEvent": "Motion envió a {agent} una novedad de un ticket",
+  "chat.marker.notice.motionEventUnnamed": "Motion envió al agente una novedad de un ticket",
   "chat.usageLimit.title": "Límite de uso de {provider} alcanzado",
   "chat.usageLimit.onHold": "Mensaje en espera",
   "chat.usageLimit.bodyReset": "Tu mensaje no ha empezado. Envíalo ahora a otro modelo o espera hasta {reset}.",

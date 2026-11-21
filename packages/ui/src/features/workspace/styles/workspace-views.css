@@ -872,4 +872,61 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--openbot-space-3);
+
+/* The Motion ticket an agent works on: fleet card, org chart card and DM header. */
+.ws-ticket-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  border-radius: var(--openbot-radius-sm);
+  background: var(--openbot-hover);
+  padding: var(--openbot-space-0-5) var(--openbot-space-1-5);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.ws-ticket-chip:hover {
+  color: var(--openbot-text-primary);
+}
+
+.ws-ticket-chip:focus-visible {
+  outline: 2px solid var(--openbot-accent-text);
+  outline-offset: 1px;
+}
+
+.ws-ticket-chip-icon {
+  width: 0.9em;
+  height: 0.9em;
+  flex: none;
+}
+
+.ws-ticket-chip-key {
+  flex: none;
+  font-family: var(--openbot-font-mono);
+  font-weight: 600;
+}
+
+.ws-ticket-chip-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-fleet-card-ticket {
+  align-self: flex-start;
+}
+
+.ws-channel-header-ticket {
+  flex: 0 1 auto;
+  max-width: 20rem;
+}
+
+@media (max-width: 640px) {
+  .ws-channel-header-ticket .ws-ticket-chip-title {
+    display: none;
+  }
 }

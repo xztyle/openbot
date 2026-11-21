@@ -263,6 +263,36 @@ export const messages = {
     "Una respuesta larga o con forma de informe se reescribe como un mensaje corto de chat con el modelo de comprobación de arriba. «Ver original» abre el texto completo del agente. Cada una cuesta alrededor de una quinta parte de un centavo a precio de lista.",
   "server.settings.condenseRepliesOn": "Activado",
   "server.settings.condenseRepliesOff": "Desactivado",
+  "server.settings.motionSection": "Integraciones · Eventos de Motion",
+  "server.settings.motionSectionDescription":
+    "Los tickets del tablero de Motion llegan a los agentes como eventos: asignado, mención, vence pronto, vencido. Los agentes no necesitan rutinas que revisen Motion en busca de cambios.",
+  "server.settings.motionEvents": "Eventos de Motion",
+  "server.settings.motionEventsHint":
+    "Un evento despierta al agente al que afecta, con el ticket. Un cambio tuyo que no pide nada espera a su siguiente turno.",
+  "server.settings.motionOn": "Activado",
+  "server.settings.motionOff": "Desactivado",
+  "server.settings.motionWarn": "Avisos de vencimiento",
+  "server.settings.motionWarnHint":
+    "Con cuánta antelación se entera el agente de que vence un ticket. Motion envía las ventanas que tiene configuradas su servidor.",
+  "server.settings.motionWarnHours": "{hours} h antes",
+  "server.settings.motionWarnNone": "Sin avisos",
+  "server.settings.motionOverdue": "Tickets vencidos",
+  "server.settings.motionOverdueHint":
+    "Un ticket vencido despierta a su agente una vez y luego cada día. También puede avisar al responsable del agente en el organigrama.",
+  "server.settings.motionOverdueManager": "Agente y responsable",
+  "server.settings.motionOverdueAssignee": "Solo el agente",
+  "server.settings.motionWaiting": "Tickets que esperan por ti",
+  "server.settings.motionWaitingHint":
+    "Cuando un agente te pasa un ticket o lo marca como bloqueado, aparece en Te necesita con una notificación.",
+  "server.settings.motionWaitingOn": "Te necesita y notificación",
+  "server.settings.motionQuiet": "Horas de silencio",
+  "server.settings.motionQuietHint":
+    "En la zona horaria del servidor. Los eventos esperan y llegan como una sola nota por agente al terminar.",
+  "server.settings.motionQuietOff": "Desactivadas",
+  "server.settings.motionBurst": "Ráfagas",
+  "server.settings.motionBurstHint":
+    "Más eventos de un mismo ticket dentro de este tiempo esperan al siguiente turno del agente en vez de despertarlo otra vez.",
+  "server.settings.motionBurstMinutes": "{minutes} min",
   "server.settings.condenseWords": "Resumir a partir de",
   "server.settings.condenseWordsHint":
     "Se resumen las respuestas de más palabras que esto, y también las más cortas con títulos, apartados de estado o listas largas.",

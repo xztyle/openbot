@@ -9,6 +9,7 @@ import {
   DEFAULT_WORKSPACE_APPEARANCE,
   DEFAULT_WORKSPACE_CONDENSE,
   DEFAULT_WORKSPACE_LEARNING,
+  DEFAULT_WORKSPACE_MOTION_EVENTS,
   foreignProvider,
   isAgentProvider,
   isForeignProviderId,
@@ -26,6 +27,7 @@ import {
   type WorkspaceCondenseSettings,
   type WorkspaceFaceDefault,
   type WorkspaceLearningSettings,
+  type WorkspaceMotionEventsSettings,
   type WorkspaceSettings,
   type WorkspaceTheme,
 } from "@openbot/contracts/ipc";
@@ -59,8 +61,10 @@ import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createStore, Show, snapshot, untrack } from "solid-js";
 import { applyWorkspaceAppearance } from "../../atelier-theme";
+import { MotionEventsRows, sameMotionEvents } from "./ServerMotionEventsRows";
 import { serverCanAdminister } from "./server-capabilities";
 import type { ServerSettingsSectionHost } from "./server-settings-section";
+import { ChoiceRow } from "./settings-choice-row";
 
 /** The workspace settings calls of one server's host. The desktop reaches them through main. */
 export type WorkspaceSettingsCalls = Pick<
@@ -126,7 +130,11 @@ function sameSettings(left: WorkspaceSettings, right: WorkspaceSettings): boolea
     left.defaults.agentAnswerMode === right.defaults.agentAnswerMode &&
     sameLearning(left.learning ?? DEFAULT_WORKSPACE_LEARNING, right.learning ?? DEFAULT_WORKSPACE_LEARNING) &&
     sameAppearance(left.appearance ?? DEFAULT_WORKSPACE_APPEARANCE, right.appearance ?? DEFAULT_WORKSPACE_APPEARANCE) &&
-    sameCondense(left.condense ?? DEFAULT_WORKSPACE_CONDENSE, right.condense ?? DEFAULT_WORKSPACE_CONDENSE)
+    sameCondense(left.condense ?? DEFAULT_WORKSPACE_CONDENSE, right.condense ?? DEFAULT_WORKSPACE_CONDENSE) &&
+    sameMotionEvents(
+      left.motionEvents ?? DEFAULT_WORKSPACE_MOTION_EVENTS,
+      right.motionEvents ?? DEFAULT_WORKSPACE_MOTION_EVENTS,
+    )
   );
 }
 
@@ -256,7 +264,7 @@ export function createServerWorkspaceSection(
     if (!next || !dirty()) return;
     const serverId = props.server.id;
     const request = generation;
-    const { gate, defaults, learning, appearance, condense } = structuredClone(snapshot(next));
+    const { gate, defaults, learning, appearance, condense, motionEvents } = structuredClone(snapshot(next));
     // Without `defaults.agents`, the host keeps the channel defaults of each agent as they are now, also
     // the ones that the agent settings changed after this section read them.
     const settings: WorkspaceSettings = {
@@ -265,6 +273,7 @@ export function createServerWorkspaceSection(
       ...(learning ? { learning } : {}),
       ...(appearance ? { appearance } : {}),
       ...(condense ? { condense } : {}),
+      ...(motionEvents ? { motionEvents } : {}),
     };
     await run("workspace", async () => {
       const result = await calls().setWorkspaceSettings(settings, serverId);
@@ -302,6 +311,14 @@ export function createServerWorkspaceSection(
       if (!draft.draft) return;
       draft.draft.condense ??= { ...DEFAULT_WORKSPACE_CONDENSE };
       change(draft.draft.condense);
+    });
+  }
+
+  function updateMotionEvents(change: (settings: WorkspaceMotionEventsSettings) => void): void {
+    setState((draft) => {
+      if (!draft.draft) return;
+      draft.draft.motionEvents ??= structuredClone(DEFAULT_WORKSPACE_MOTION_EVENTS);
+      change(draft.draft.motionEvents);
     });
   }
 
@@ -442,6 +459,19 @@ export function createServerWorkspaceSection(
                     disabled={Boolean(busy())}
                     menuMount={host.menuMount()}
                     onChange={updateCondense}
+                  />
+                </ItemGroup>
+              </SettingsSection>
+              <SettingsSection
+                title={t("server.settings.motionSection")}
+                description={t("server.settings.motionSectionDescription")}
+              >
+                <ItemGroup class="settings-modal-card">
+                  <MotionEventsRows
+                    settings={settings().motionEvents ?? DEFAULT_WORKSPACE_MOTION_EVENTS}
+                    disabled={Boolean(busy())}
+                    menuMount={host.menuMount()}
+                    onChange={updateMotionEvents}
                   />
                 </ItemGroup>
               </SettingsSection>
@@ -760,44 +790,5 @@ function CondenseRows(props: {
         }}
       />
     </>
-  );
-}
-
-function ChoiceRow(props: {
-  id: string;
-  title: string;
-  hint: string;
-  options: string[];
-  value: string;
-  label: (value: string) => string;
-  disabled: boolean;
-  menuMount: HTMLElement | undefined;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <Item>
-      <ItemContent>
-        <ItemTitle id={`${props.id}-label`}>{props.title}</ItemTitle>
-        <ItemDescription>{props.hint}</ItemDescription>
-      </ItemContent>
-      <ItemActions>
-        <Select<string>
-          options={props.options}
-          value={props.value}
-          disabled={props.disabled}
-          placement="bottom-end"
-          sameWidth={false}
-          onChange={(value) => {
-            if (value && value !== props.value) props.onChange(value);
-          }}
-          itemComponent={(item) => <SelectItem item={item.item}>{props.label(item.item.rawValue)}</SelectItem>}
-        >
-          <SelectTrigger size="sm" aria-labelledby={`${props.id}-label`}>
-            <SelectValue<string>>{(selected) => props.label(selected.selectedOption() ?? props.value)}</SelectValue>
-          </SelectTrigger>
-          <SelectContent mount={props.menuMount} />
-        </Select>
-      </ItemActions>
-    </Item>
   );
 }

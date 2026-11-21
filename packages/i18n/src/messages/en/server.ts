@@ -291,6 +291,36 @@ export const messages = defineMessages("server", {
     'A long or report-shaped answer is rewritten as a short chat message by the check model above. "Show original" opens the agent\'s full text. Each one costs about a fifth of a cent at list price.',
   "server.settings.condenseRepliesOn": "On",
   "server.settings.condenseRepliesOff": "Off",
+  "server.settings.motionSection": "Integrations · Motion events",
+  "server.settings.motionSectionDescription":
+    "Tickets on the Motion board come to agents as events: assigned, mentioned, due soon, overdue. Agents do not need routines that check Motion for changes.",
+  "server.settings.motionEvents": "Motion events",
+  "server.settings.motionEventsHint":
+    "An event wakes the agent it concerns with the ticket. A change by you that needs no action waits for its next turn.",
+  "server.settings.motionOn": "On",
+  "server.settings.motionOff": "Off",
+  "server.settings.motionWarn": "Due-date warnings",
+  "server.settings.motionWarnHint":
+    "How long before a ticket is due its agent hears of it. Motion sends the windows that its server is set to.",
+  "server.settings.motionWarnHours": "{hours} h before",
+  "server.settings.motionWarnNone": "No warnings",
+  "server.settings.motionOverdue": "Overdue tickets",
+  "server.settings.motionOverdueHint":
+    "An overdue ticket wakes its agent once, then daily. It can also tell the agent's manager from the org chart.",
+  "server.settings.motionOverdueManager": "Agent and manager",
+  "server.settings.motionOverdueAssignee": "Agent only",
+  "server.settings.motionWaiting": "Tickets that wait on you",
+  "server.settings.motionWaitingHint":
+    "When an agent hands a ticket to you or marks it blocked, it shows in Needs you with a push.",
+  "server.settings.motionWaitingOn": "Needs you and push",
+  "server.settings.motionQuiet": "Quiet hours",
+  "server.settings.motionQuietHint":
+    "In the server's time zone. Events wait and arrive as one note per agent when the quiet hours end.",
+  "server.settings.motionQuietOff": "Off",
+  "server.settings.motionBurst": "Bursts",
+  "server.settings.motionBurstHint":
+    "More events about one ticket within this time wait for the agent's next turn instead of waking it again.",
+  "server.settings.motionBurstMinutes": "{minutes} min",
   "server.settings.condenseWords": "Condense past",
   "server.settings.condenseWordsHint":
     "Answers longer than this are condensed, and so are shorter ones with headings, status sections or long lists.",

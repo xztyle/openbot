@@ -1010,4 +1010,6 @@ export const messages = defineMessages("workspace", {
   "workspace.loops.editor.fieldsHint":
     "One per line: key | Label | type | card. Types: text, number, money, percent, url, date. card shows it on the board.",
   "workspace.loops.editor.delete": "Delete loop",
+  "workspace.needsYou.action.ticket": "Look at a Motion ticket",
+  "workspace.ticket.open": "Open {key} in Motion: {title}",
 });

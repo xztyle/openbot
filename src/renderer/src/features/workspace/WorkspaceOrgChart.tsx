@@ -55,6 +55,7 @@ export function WorkspaceOrgChart() {
         preview: profile.preview || undefined,
         background: profile.background,
         sleeping: profile.sleepingSince !== undefined,
+        ticket: work?.currentTicket,
       };
     });
   });

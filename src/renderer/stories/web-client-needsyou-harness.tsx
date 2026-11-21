@@ -48,6 +48,8 @@ const ITEM: AgentAttentionItem = {
   origin: "accounts.google.com",
 };
 
+const SECRET = { method: "otp", origin: "https://accounts.google.com", digits: 6 } as const;
+
 const runtime: WebRuntimeFactory = (_accountId, events) => {
   const mock = createMockOpenBot({
     channels: seeds(WEB_PREVIEW_MEMBER_ID),
@@ -57,6 +59,7 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
   const web = mockWebRuntimeFor(mock, events);
   const emit = (event: AgentEvent) => mock.emitAgentEvent(event);
   const answered: RespondToBrowserTakeoverInput[] = [];
+  const secrets: string[] = [];
   const resolve = () => {
     emit({ type: "agent-input-escalations-changed", escalations: [] });
     emit({ type: "browser-takeover-resolved", requestId: REQUEST.requestId, agentId: REQUEST.agentId });
@@ -71,9 +74,15 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     emit({ type: "browser-takeover-requested", request: { ...REQUEST } });
     emit({ type: "agent-attention-changed", items: [ITEM] });
   };
+  const secret = () => {
+    // As the host for `submit_secret`: a 6-digit SMS code for the tab's site.
+    emit({ type: "browser-takeover-requested", request: { ...REQUEST, secret: SECRET } });
+    emit({ type: "agent-attention-changed", items: [{ ...ITEM, kind: "secret" }] });
+  };
   window.addEventListener("needs-you-harness", (event) => {
     const detail = event instanceof CustomEvent ? event.detail : null;
     if (detail === "request") request();
+    if (detail === "secret") secret();
     if (detail === "resolve") resolve();
   });
   document.documentElement.dataset.needsYouReady = "";
@@ -82,8 +91,41 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     agentIds: ["chief", "research", "sales"],
     recentAgentIds: ["chief"],
   });
+  // `?stall`: Sales Outbound's turn runs and its event stream stalls while reads still work. The
+  // secret request goes out on the stalled stream, so the page never gets it, and the requested
+  // runtime snapshot never comes. Only a replaced connection starts a new stream, which brings it.
+  const stalled = new URLSearchParams(location.search).has("stall");
+  let replaced = 0;
+  if (stalled)
+    window.setTimeout(() => {
+      document.documentElement.dataset.needsYouStalled = "";
+    }, 0);
   return {
     ...web,
+    ...(stalled
+      ? {
+          conversation: async (agentId: string, before?: string) => {
+            const page = await web.conversation(agentId, before);
+            return agentId === REQUEST.agentId ? { ...page, activeTurnId: REQUEST.turnId } : page;
+          },
+          requestRuntimeSnapshot: () => {
+            document.documentElement.dataset.needsYouSnapshotRequests = String(
+              Number(document.documentElement.dataset.needsYouSnapshotRequests ?? 0) + 1,
+            );
+          },
+          replaceConnection: () => {
+            replaced += 1;
+            document.documentElement.dataset.needsYouReplaced = String(replaced);
+            events.connection({ hostId: "preview-host", state: "online", message: null, resync: true });
+            secret();
+          },
+        }
+      : {}),
+    respondToBrowserSecret: async (input) => {
+      secrets.push(input.decision === "submit" ? input.secret : input.decision);
+      document.documentElement.dataset.needsYouSecrets = secrets.join(",");
+      resolve();
+    },
     respondToTakeover: async (input) => {
       answered.push(input);
       document.documentElement.dataset.needsYouAnswered = String(answered.length);

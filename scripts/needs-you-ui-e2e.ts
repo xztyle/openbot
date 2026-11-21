@@ -282,6 +282,93 @@ async function phone(browser: Browser, origin: string): Promise<void> {
   await context.close();
 }
 
+const secretAction = english("workspace.needsYou.action.secretAt", { site: SITE });
+const secretTitle = () => english("browser.secret.title.code");
+
+/**
+ * `submit_secret`: Sales Outbound asks for a 6-digit SMS code. "Needs you" lists it, a row opens the
+ * chat with the secure card in view, and the typed code goes to the runtime's secret answer once.
+ */
+async function secretCard(browser: Browser, origin: string, viewport: ViewportName): Promise<void> {
+  const context = await browser.newContext(VIEWPORTS[viewport]);
+  const page = await context.newPage();
+  watch(page, viewport);
+  const tap = (target: Locator) => (viewport === "phone" ? target.tap() : target.click());
+
+  await step(page, viewport, "a secret request shows in Needs you", async () => {
+    await load(
+      page,
+      origin,
+      viewport === "phone" ? "/app/general" : "/app/general/dm/chief",
+      page.locator("[data-ws-conversation]").first(),
+    );
+    await page.waitForFunction(() => document.documentElement.dataset.needsYouReady !== undefined, null, {
+      timeout: UI_WAIT_MS,
+    });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("needs-you-harness", { detail: "secret" })));
+    await markedRow(page, "Sales Outbound").waitFor({ timeout: UI_WAIT_MS });
+    if (viewport === "phone") await tap(page.locator(".ws-phone-chip[data-urgent]"));
+    else await page.getByRole("button", { name: english("workspace.needsYou.buttonLabel", { count: 1 }) }).click();
+    const row = page.getByRole("button", {
+      name: english("workspace.needsYou.rowLabel", { name: "Sales Outbound", action: secretAction }),
+    });
+    await row.waitFor({ timeout: UI_WAIT_MS });
+    await shot(page, `${viewport}-secret-list`);
+    await tap(row);
+  });
+
+  await step(page, viewport, "the chat shows the secure code card in view", async () => {
+    await inView(page, button(page, english("browser.secret.submit")));
+    await shot(page, `${viewport}-secret-card`);
+  });
+
+  await step(page, viewport, "the typed code goes to the secret answer once, and the card goes", async () => {
+    await page.getByLabel(english("browser.secret.codeLength", { digits: 6 }), { exact: true }).focus();
+    await page.keyboard.type("482913");
+    await tap(button(page, english("browser.secret.submit")));
+    await page.waitForFunction(() => document.documentElement.dataset.needsYouSecrets !== undefined, null, {
+      timeout: UI_WAIT_MS,
+    });
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.needsYouSecrets), "482913");
+    await page.getByText(secretTitle()).first().waitFor({ state: "detached", timeout: UI_WAIT_MS });
+    await shot(page, `${viewport}-secret-cleared`);
+  });
+  await context.close();
+}
+
+/**
+ * The live case: Sales Outbound's turn runs, and its event stream stalls while reads still work, so
+ * the secret request and the requested runtime snapshot never come. The silent-turn check finds the
+ * missing snapshot and replaces the connection; the new stream brings the card.
+ */
+async function stalledSecret(browser: Browser, origin: string): Promise<void> {
+  const viewport = "desktop";
+  const context = await browser.newContext(VIEWPORTS.desktop);
+  const page = await context.newPage();
+  watch(page, viewport);
+  await step(page, viewport, "a stalled event stream is replaced, and the secret card shows", async () => {
+    await load(page, origin, "/app/general/dm/sales?stall", page.locator("[data-ws-conversation]").first());
+    await page.waitForFunction(() => document.documentElement.dataset.needsYouStalled !== undefined, null, {
+      timeout: UI_WAIT_MS,
+    });
+    // 30 s of silence, the check every 5 s, then 10 s for the snapshot that does not come.
+    await page.waitForFunction(() => document.documentElement.dataset.needsYouReplaced !== undefined, null, {
+      timeout: 120_000,
+    });
+    assert.ok(
+      Number(await page.evaluate(() => document.documentElement.dataset.needsYouSnapshotRequests ?? 0)) > 0,
+      "The silent-turn check did not ask for the runtime snapshot first.",
+    );
+    await inView(page, button(page, english("browser.secret.submit")));
+    await page.getByRole("button", { name: english("workspace.needsYou.buttonLabel", { count: 1 }) }).waitFor({
+      timeout: UI_WAIT_MS,
+    });
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.needsYouReplaced), "1");
+    await shot(page, "desktop-stalled-secret");
+  });
+  await context.close();
+}
+
 function watch(page: Page, viewport: ViewportName): void {
   page.on("pageerror", (error) => report.pageErrors.push(`${viewport}: ${error.stack ?? error.message}`));
   page.on("console", (message) => {
@@ -323,6 +410,9 @@ try {
   });
   await desktop(browser, origin);
   await phone(browser, origin);
+  await secretCard(browser, origin, "desktop");
+  await secretCard(browser, origin, "phone");
+  await stalledSecret(browser, origin);
   report.passed =
     report.steps.length > 0 &&
     report.steps.every((item) => item.passed) &&

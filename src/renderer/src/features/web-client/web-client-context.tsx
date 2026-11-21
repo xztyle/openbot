@@ -339,6 +339,8 @@ export function createWebWorkspace(
    */
   let hostEventAt = Date.now();
   let hostEvents = 0;
+  /** How many runtime snapshots arrived. A requested snapshot that does not come shows a stalled event stream. */
+  let runtimeSnapshots = 0;
   /** The silence after which the running turn is checked next. It grows while the host confirms the silence. */
   let turnSilenceMs = TURN_SILENCE_MS;
   let turnCheck: Promise<void> | null = null;
@@ -582,6 +584,7 @@ export function createWebWorkspace(
         }
         if (event.type === "status") hooks.onStatus?.(event.status);
         if (event.type === "runtime-snapshot") {
+          runtimeSnapshots += 1;
           const { attentionComplete } = event.snapshot;
           setState((draft) => {
             draft.approvals = reconcilePendingRequests(
@@ -1767,14 +1770,21 @@ export function createWebWorkspace(
       return;
     const current = generation;
     const events = hostEvents;
+    const snapshots = runtimeSnapshots;
+    const requestedAt = Date.now();
     const before = { threadId: page.threadId, revision: page.revision, turnId: page.activeTurnId };
     turnSilenceMs = Math.min(TURN_SILENCE_MAX_MS, turnSilenceMs * 2);
     // The turn can be silent because it waits for the user on a card whose event was lost: a browser
     // takeover, an approval or a question. The chat read does not carry those; the runtime snapshot does.
+    const snapshotRequested = runtime.requestRuntimeSnapshot !== undefined;
     runtime.requestRuntimeSnapshot?.();
+    const replace = () => {
+      turnSilenceMs = TURN_SILENCE_MS;
+      runtime.replaceConnection?.("event-stall");
+    };
     turnCheck = load(id)
       .then(
-        () => {
+        async () => {
           if (disposed || current !== generation || hostEvents !== events || selectedId !== id) return;
           const after = state.conversations[id]?.page;
           if (!after) return;
@@ -1783,9 +1793,26 @@ export function createWebWorkspace(
             after.revision > before.revision ||
             after.activeTurnId !== before.turnId
           ) {
-            turnSilenceMs = TURN_SILENCE_MS;
-            runtime.replaceConnection?.("event-stall");
+            replace();
+            return;
           }
+          // The chat did not change: the turn can wait for a card. A working event stream answers the
+          // snapshot request on the same path as that card's event, so a snapshot that does not come
+          // while reads work means a stalled stream, which also lost the card. The connection is
+          // replaced, and the new stream starts with the snapshot that holds the card.
+          if (!snapshotRequested || runtimeSnapshots !== snapshots) return;
+          const wait = RUNTIME_SNAPSHOT_REPLY_MS - (Date.now() - requestedAt);
+          if (wait > 0) await new Promise((done) => setTimeout(done, wait));
+          if (
+            disposed ||
+            current !== generation ||
+            selectedId !== id ||
+            state.status !== "online" ||
+            connectionPromise ||
+            runtimeSnapshots !== snapshots
+          )
+            return;
+          replace();
         },
         // The peer checks its path after a late read, and the connection status shows a dead one.
         () => undefined,
@@ -2470,6 +2497,8 @@ const PANELS_RETRIES = 3;
 const TURN_SILENCE_MS = 30_000;
 const TURN_SILENCE_MAX_MS = 5 * 60_000;
 const TURN_SILENCE_CHECK_MS = 5_000;
+/** How long a requested runtime snapshot may take before the event stream counts as stalled. */
+const RUNTIME_SNAPSHOT_REPLY_MS = 10_000;
 
 /**
  * A failure that the connection status and its recovery own: a lost network, a late answer or a

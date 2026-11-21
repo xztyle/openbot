@@ -1,7 +1,11 @@
 import { createScrollFades } from "@openbot/ui/components/createScrollFades";
 import type { AgentMessage } from "@openbot/ui/data";
 import type { RoutineRunToggleMarkerModel } from "@openbot/ui/features/conversation/ChatActionMarker";
-import { chatHistoryBoundaryReached, createChatFlow } from "@openbot/ui/features/conversation/createChatFlow";
+import {
+  type ChatFlow,
+  chatHistoryBoundaryReached,
+  createChatFlow,
+} from "@openbot/ui/features/conversation/createChatFlow";
 import { scrollToLatestMessage } from "@openbot/ui/features/conversation/MessageNavigation";
 import {
   anchorNewMessages,
@@ -53,6 +57,8 @@ export interface ScrollStoreDeps {
   pendingMessages: () => AgentMessage[];
   elements: ScrollElements;
   sticky: ScrollStickyState;
+  /** While true, every row is drawn: the in-chat search reads the text of the drawn rows. */
+  drawAll: () => boolean;
 }
 
 /** Two values that draw the same: equal, or plain objects and arrays whose items are equal in turn. */
@@ -95,11 +101,8 @@ function switchedOff(message: AgentMessage, showReasoning: boolean, showAgentMes
 }
 
 export function createScrollStore(deps: ScrollStoreDeps) {
-  /*
-   * The rows are in the normal flow of the page, so a row can never be drawn over another; the
-   * browser skips the rows away from the screen. See `createChatFlow`.
-   */
-  const messageFlow = createChatFlow({ following: deps.sticky.getStickToLatest });
+  /** The flow, once it exists: the row keys below are read when it is made. */
+  let rowFlow: ChatFlow | undefined;
   const scrollFades = createScrollFades();
   const showReasoning = useShowAgentReasoning();
   const showAgentMessages = useShowAgentMessages();
@@ -237,9 +240,19 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     if (previous && previous.length === keys.length && previous.every((key, index) => key === keys[index]))
       return previous;
     // The rows change before they are drawn: take the reader's place now, so the flow keeps it.
-    messageFlow.notePlace();
+    rowFlow?.notePlace();
     return keys;
   });
+  /*
+   * The rows are in the normal flow of the page, so a row can never be drawn over another; a long
+   * chat draws only the rows around the view. See `createChatFlow`.
+   */
+  const messageFlow = createChatFlow({
+    following: deps.sticky.getStickToLatest,
+    keys: timelineRowKeys,
+    drawAll: deps.drawAll,
+  });
+  rowFlow = messageFlow;
   /*
    * Every row anchors the count, but only some rows add to it. A message of a folded agent turn does
    * not add to it, as it does not add to the unread count.

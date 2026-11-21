@@ -224,7 +224,7 @@ function ServerSettingsGlyph() {
     <svg
       aria-hidden="true"
       viewBox="0 0 20 20"
-      class="agent-context-icon ui-glyph-20"
+      class="agent-context-icon ui-glyph-20 ui-glyph-server"
       fill="none"
       stroke="currentColor"
     >

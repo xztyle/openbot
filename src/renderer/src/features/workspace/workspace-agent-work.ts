@@ -74,8 +74,18 @@ export function createAgentWork(input: {
   /** Each known message's thread: null for a top-level message. */
   const threadOf = createMemo(() => {
     const known = new Map<string, string | null>();
+    // Only the requests of the tasks are looked up: a long channel has thousands of messages, and
+    // this runs again on each change of the page.
+    const wanted = new Set(tasks().map((task) => task.requestMessageId));
+    if (wanted.size === 0) return known;
+    const read = new Set<readonly ChannelMessage[]>();
     const add = (messages: readonly ChannelMessage[] | undefined) => {
-      for (const message of messages ?? []) known.set(message.id, message.threadRootId ?? null);
+      if (!messages || read.has(messages)) return;
+      read.add(messages);
+      for (const message of messages) {
+        const id = message.id;
+        if (wanted.has(id)) known.set(id, message.threadRootId ?? null);
+      }
     };
     const page = ws.channels.state.page;
     if (page?.channel.id === input.channelId) add(page.messages);

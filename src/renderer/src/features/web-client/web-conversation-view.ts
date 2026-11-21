@@ -10,7 +10,7 @@ import {
 import { toast } from "@openbot/ui";
 import type { AgentMessage, AgentProfile } from "@openbot/ui/data";
 import { currentText } from "@openbot/ui/text";
-import { createEffect, createMemo, createProjection, createSignal, mapArray } from "solid-js";
+import { createEffect, createMemo, createSignal, mapArray } from "solid-js";
 import { toAgentMessage, toAgentMessages } from "../../app-message-projection";
 import type { createRemoteAgentAdmin } from "../agents/remote-agent-admin";
 import { messagePromptRequestKey, promptRequestKey } from "../conversation/conversation-keys";
@@ -23,6 +23,24 @@ type PromptEvent = Extract<AgentEvent, { type: "prompt" }>;
 function withoutPreviewUrls(message: AgentMessage): AgentMessage {
   if (!message.attachments) return message;
   return { ...message, attachments: message.attachments.map((attachment) => ({ ...attachment, previewUrl: null })) };
+}
+
+/** Two joined thinking rows that draw the same: the fields `toAgentMessages` sets on them. */
+function sameThinking(left: AgentMessage, right: AgentMessage): boolean {
+  const sameList = (a: readonly unknown[] | undefined, b: readonly unknown[] | undefined) =>
+    a === b ||
+    (a !== undefined && b !== undefined && a.length === b.length && a.every((item, index) => item === b[index]));
+  return (
+    left.id === right.id &&
+    left.turnId === right.turnId &&
+    left.time === right.time &&
+    left.createdAt === right.createdAt &&
+    left.streaming === right.streaming &&
+    left.trace === right.trace &&
+    sameList(left.items, right.items) &&
+    sameList(left.itemIds, right.itemIds) &&
+    sameList(left.itemCreatedAt, right.itemCreatedAt)
+  );
 }
 
 /** The selected agent's messages, and the prompt and approval that wait for the user. */
@@ -124,19 +142,32 @@ export function createWebConversationView(options: {
   const rows = mapArray(storedMessages, (message) => createMemo(() => row(message())), {
     keyed: (message) => message.id,
   });
-  /** The rows, with the thinking of a turn joined. The result is reconciled by id, so the other messages keep their rows. */
-  const messages = createProjection<AgentMessage[]>(
-    () => {
-      const converted = rows();
-      return toAgentMessages(
-        storedMessages(),
-        workspace.state.selectedId ?? undefined,
-        (message, index) => converted[index]?.() ?? row(message),
-      );
-    },
-    [],
-    { key: "id" },
-  );
+  /**
+   * The rows, with the thinking of a turn joined: plain objects, not a store, so the timeline's passes
+   * over a long chat read them at the cost of a plain read. A message keeps its object while it does
+   * not change (its own memo above), and a joined thinking row keeps the one it had while its parts are
+   * the same, so a stream chunk gives a new object only to the row that streams.
+   */
+  const messages = createMemo<AgentMessage[]>((previous) => {
+    const converted = rows();
+    const next = toAgentMessages(
+      storedMessages(),
+      workspace.state.selectedId ?? undefined,
+      (message, index) => converted[index]?.() ?? row(message),
+    );
+    if (!previous) return next;
+    const before = new Map<string, AgentMessage>();
+    for (const message of previous) if (message.kind === "thinking") before.set(message.id, message);
+    let same = next.length === previous.length;
+    next.forEach((message, index) => {
+      if (message.kind === "thinking") {
+        const kept = before.get(message.id);
+        if (kept && sameThinking(kept, message)) next[index] = kept;
+      }
+      if (next[index] !== previous[index]) same = false;
+    });
+    return same ? previous : next;
+  });
   /** The interactive block of the waiting prompt's message, when the agent asked with one. */
   const promptUiBlock = createMemo(() => {
     const question = prompt();
@@ -197,7 +228,9 @@ export function createWebConversationView(options: {
     alwaysAllowApproval,
     prompt,
     promptUiBlock,
-    messages,
+    get messages() {
+      return messages();
+    },
     messageReferences,
     missingMessageReferences,
     answerPrompt,

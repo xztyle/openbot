@@ -1,6 +1,6 @@
 import type { ChannelMessage, ChannelTask } from "@openbot/contracts/ipc";
 import { ArrowUp, Button, CheckCheck, ChevronDown } from "@openbot/ui";
-import { createChatFlow } from "@openbot/ui/features/conversation/createChatFlow";
+import { type ChatFlow, createChatFlow } from "@openbot/ui/features/conversation/createChatFlow";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
@@ -49,8 +49,8 @@ export interface WorkspaceMessageListProps {
 
 /**
  * The transcript of a channel. Each message is a row in the normal flow of the page, below the one
- * before it, so no row is ever drawn over another; the browser skips the layout and paint of the rows
- * away from the screen (see `createChatFlow`). It follows new messages while the reader is at the
+ * before it, so no row is ever drawn over another; a long channel draws only the rows around the
+ * view (see `createChatFlow`). It follows new messages while the reader is at the
  * end, keeps its place when older ones load above, and loads the next older page when the reader
  * reaches the top.
  */
@@ -62,7 +62,8 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
   const [atEnd, setAtEnd] = createSignal(true);
   const [loadingOlder, setLoadingOlder] = createSignal(false);
   let follow = true;
-  const flow = createChatFlow({ following: () => follow });
+  /** The flow, once it exists: the row keys below are read when it is made. */
+  let rowFlow: ChatFlow | undefined;
   let opened = false;
 
   const rows = createMemo<readonly WorkspaceMessageRowModel[]>((previous) =>
@@ -87,9 +88,12 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
     if (previous && previous.length === keys.length && previous.every((key, index) => key === keys[index]))
       return previous;
     // The rows change before they are drawn: take the reader's place now, so the flow keeps it.
-    flow.notePlace();
+    rowFlow?.notePlace();
     return keys;
   });
+  // A long channel draws a window of its rows around the view (see `createChatFlow`).
+  const flow = createChatFlow({ following: () => follow, keys: rowKeys });
+  rowFlow = flow;
   const unreadIndex = createMemo(() => rows().findIndex((row) => row.firstUnread));
   /** The messages of others from the "new" divider on, for "12 new messages since 10:15". */
   const unreadCount = createMemo(() => {
@@ -155,8 +159,10 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
       for (const element of rowList.children) {
         const box = element.getBoundingClientRect();
         if (box.bottom <= top) continue;
+        // The spacers in place of the rows out of the window have no key.
         const key = element.getAttribute("data-row-key");
-        if (key) saveScrollPlace(placeId, { key, offset: box.top - top });
+        if (!key) continue;
+        saveScrollPlace(placeId, { key, offset: box.top - top });
         return;
       }
     });
@@ -332,7 +338,8 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
           }}
           class="ws-timeline"
         >
-          <For each={rowKeys()}>
+          <div class="chat-flow-space" aria-hidden="true" style={{ height: `${flow.spaceBefore()}px` }} />
+          <For each={flow.rowKeys()}>
             {(key) => {
               const index = createMemo(() => indexByKey().get(key));
               const row = createMemo(() => {
@@ -355,6 +362,7 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
               );
             }}
           </For>
+          <div class="chat-flow-space" aria-hidden="true" style={{ height: `${flow.spaceAfter()}px` }} />
         </div>
       </div>
       <Show when={unreadAbove() && unreadIndex() >= 0}>

@@ -106,18 +106,21 @@ export function firstUnreadChannelMessageId(
   isOwnSender: (memberId: string) => boolean,
 ): string | null {
   if (unreadCount <= 0) return null;
-  const shown = entries.filter((entry) => !foldedEntry(entry));
+  // The walk goes back from the end and stops at the divider's row: it reads only the unread
+  // messages, not the whole page, which runs again on each change of a long channel.
   let remaining = unreadCount;
-  for (let index = shown.length - 1; index >= 0; index -= 1) {
-    const entry = shown[index];
-    if (!entry) continue;
+  let oldest: string | null = null;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (!entry || foldedEntry(entry)) continue;
+    oldest = entry.id;
     const message = channelConversationMessage(entry);
     const own = message.author === "you" && (!message.senderMember || isOwnSender(message.senderMember.id));
     if (own || message.actionMarker || message.kind === "plan" || message.itemType === "subagents") continue;
     remaining -= 1;
     if (remaining === 0) return entry.id;
   }
-  return shown[0]?.id ?? null;
+  return oldest;
 }
 
 /**

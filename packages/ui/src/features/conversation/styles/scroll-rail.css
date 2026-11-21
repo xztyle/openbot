@@ -41,7 +41,7 @@
 }
 
 .chat-scroll-rail-nav:hover,
-.chat-scroll-rail-nav:has(:focus-visible) {
+.chat-scroll-rail-nav[data-focus-visible] {
   pointer-events: auto;
 }
 
@@ -249,21 +249,21 @@
 }
 
 .chat-scroll-rail-nav:hover .chat-scroll-rail-surface,
-.chat-scroll-rail-nav:has(:focus-visible) .chat-scroll-rail-surface {
+.chat-scroll-rail-nav[data-focus-visible] .chat-scroll-rail-surface {
   backdrop-filter: blur(var(--openbot-space-4));
   opacity: 1;
   transition: opacity var(--openbot-duration-overlay) ease;
 }
 
 .chat-scroll-rail-nav:hover .chat-scroll-rail-eyebrow,
-.chat-scroll-rail-nav:has(:focus-visible) .chat-scroll-rail-eyebrow {
+.chat-scroll-rail-nav[data-focus-visible] .chat-scroll-rail-eyebrow {
   opacity: 1;
 }
 
 /* The titles come in one after another, but a long list does not make the reader wait: the delay
    stops growing after the first twelve. */
 .chat-scroll-rail-nav:hover .chat-scroll-rail-label,
-.chat-scroll-rail-nav:has(:focus-visible) .chat-scroll-rail-label {
+.chat-scroll-rail-nav[data-focus-visible] .chat-scroll-rail-label {
   --chat-scroll-rail-delay: calc(min(var(--chat-scroll-rail-index, 0), 12) * 18ms);
 
   opacity: 1;
@@ -283,9 +283,9 @@
   .chat-scroll-rail .chat-scroll-rail-nav *::before,
   .chat-scroll-rail .chat-scroll-rail-nav *::after,
   .chat-scroll-rail-nav:hover .chat-scroll-rail-surface,
-  .chat-scroll-rail-nav:has(:focus-visible) .chat-scroll-rail-surface,
+  .chat-scroll-rail-nav[data-focus-visible] .chat-scroll-rail-surface,
   .chat-scroll-rail-nav:hover .chat-scroll-rail-label,
-  .chat-scroll-rail-nav:has(:focus-visible) .chat-scroll-rail-label {
+  .chat-scroll-rail-nav[data-focus-visible] .chat-scroll-rail-label {
     transition: none;
   }
 }

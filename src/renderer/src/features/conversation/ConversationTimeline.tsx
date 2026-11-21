@@ -175,7 +175,6 @@ export function ConversationTimeline() {
     markingRead,
     messageFlow,
     newMessageCount,
-    timelineRowKeys,
     timelineMessages,
     toggleRoutineRun,
     toggleAgentMessage,
@@ -817,7 +816,8 @@ export function ConversationTimeline() {
             </Show>
           )}
           <div ref={setVirtualRootElement} class="virtual-chat-list">
-            <For each={timelineRowKeys()}>
+            <div class="chat-flow-space" aria-hidden="true" style={{ height: `${messageFlow.spaceBefore()}px` }} />
+            <For each={messageFlow.rowKeys()}>
               {(rowKey) => {
                 // The row's own message, found by id, so the row keeps it when rows load above.
                 const index = createMemo(() => timelineIndexById().get(rowKey));
@@ -1593,6 +1593,7 @@ export function ConversationTimeline() {
                 );
               }}
             </For>
+            <div class="chat-flow-space" aria-hidden="true" style={{ height: `${messageFlow.spaceAfter()}px` }} />
           </div>
           <div class="conversation-live" ref={setConversationLiveElement}>
             <Show when={!compactionBefore()}>

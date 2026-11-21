@@ -76,18 +76,24 @@ function FoldedText(props: LongMessageFoldProps): JSX.Element {
       const box = block.getBoundingClientRect();
       // A block that opens the message is cut as text: hidden, the fold would show nothing.
       const crosses = box.top - top >= line * 0.75 && box.top - top < limit && box.bottom - top > limit;
-      if (crosses) block.dataset.foldHidden = "";
-      else delete block.dataset.foldHidden;
+      // Only a change is written: a write makes the next row's read lay the page out again.
+      if (crosses !== (block.dataset.foldHidden !== undefined)) {
+        if (crosses) block.dataset.foldHidden = "";
+        else delete block.dataset.foldHidden;
+      }
     }
   }
 
-  // A message that stops streaming is measured again.
-  let live = false;
+  // A message that stops streaming is measured again. The first measure is the resize observer's:
+  // it runs after the layout of the frame, for all the rows that drew in it, so a page of rows that
+  // draws at once costs one layout, not one for each row.
+  let live = untrack(() => props.live);
   createEffect(
     () => props.live,
     (streaming) => {
+      const ended = live && !streaming;
       live = streaming;
-      measure();
+      if (ended) measure();
     },
   );
 
@@ -100,7 +106,6 @@ function FoldedText(props: LongMessageFoldProps): JSX.Element {
       if (entries.some((entry) => !entry.isIntersecting) && !live && !chosen.has(id)) setOpen(false);
     });
     view.observe(body);
-    measure();
     return () => {
       resize.disconnect();
       view.disconnect();

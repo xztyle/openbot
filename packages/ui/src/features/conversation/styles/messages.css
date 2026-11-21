@@ -234,8 +234,11 @@
    * paints them a fifth heavier than the grid they were drawn for. */
 }
 
-.message-action-button svg circle:not(:first-child),
-.message-action-button svg:has(circle:nth-child(3)) circle {
+/*
+ * No `svg:has(circle:nth-child(3))` here: no icon of the bar has three circles, and in Chromium that
+ * selector restyles every circle of the page (the agent faces) each time a row draws.
+ */
+.message-action-button svg circle:not(:first-child) {
   fill: currentColor;
   stroke: none;
 }

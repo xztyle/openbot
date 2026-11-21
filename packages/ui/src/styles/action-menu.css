@@ -235,8 +235,8 @@
 .ui-action-menu [class~="lucide-chart-area"] > path:first-child,
 .ui-action-menu [class~="lucide-bell-off"] > path:nth-child(3),
 .ui-action-menu [class~="lucide-app-window"] > path,
-.ui-action-menu [class~="lucide-bot"] > *,
-.ui-action-menu [class~="lucide-calendar-clock"] > * {
+.ui-action-menu [class~="lucide-bot"] > :is(path, rect, circle, line, polyline, polygon, ellipse),
+.ui-action-menu [class~="lucide-calendar-clock"] > :is(path, rect, circle, line, polyline, polygon, ellipse) {
   fill: none;
 }
 
@@ -248,12 +248,13 @@
   fill-opacity: 1;
 }
 
-/* Cut-outs: the window bar, and the lights on the server racks. */
+/*
+ * Cut-outs: the window bar, and the lights on the server racks. The racks go by their class, not by
+ * `:has(> rect + rect + circle)`: in Chromium that selector restyles every circle of the page (the
+ * agent faces) each time an element is added anywhere.
+ */
 .ui-action-menu :is(:hover, [data-highlighted], [aria-expanded="true"]) > [class~="lucide-app-window"] > path,
-.ui-action-menu
-  :is(:hover, [data-highlighted], [aria-expanded="true"])
-  > .ui-glyph-20:has(> rect + rect + circle)
-  > circle {
+.ui-action-menu :is(:hover, [data-highlighted], [aria-expanded="true"]) > .ui-glyph-server > circle {
   fill: var(--ui-menu-row-highlight);
   stroke: var(--ui-menu-row-highlight);
 }

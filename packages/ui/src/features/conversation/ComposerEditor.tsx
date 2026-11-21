@@ -432,12 +432,33 @@ export function ComposerEditor(props: ComposerEditorProps) {
       const mcpKey = mcpServers.map((server) => `${server.id}:${server.name}:${server.enabled}`).join("|");
       const draftChanged = agentId !== lastAgentId;
       const attachmentsChanged = attachmentKey !== lastAttachmentKey;
-      const renderedAttachments = new Set(
-        Array.from(
-          editor.querySelectorAll<HTMLElement>("[data-attachment-reference-id]"),
-          (token) => token.dataset.attachmentReferenceId,
-        ),
-      );
+      const skillsChanged = skillKey !== lastSkillKey;
+      const mcpChanged = mcpKey !== lastMcpKey;
+      const focusRequested = focusRequest > lastFocusRequest;
+      /*
+       * The props are read again when the chat around the composer changes, such as with each new
+       * message. With nothing new for the editor, it reads nothing from the page: a read of its
+       * scroll position or selection lays the whole page out.
+       */
+      if (
+        !draftChanged &&
+        value === lastEmittedValue &&
+        !attachmentsChanged &&
+        !skillsChanged &&
+        !mcpChanged &&
+        !focusRequested &&
+        skillPickerRequest <= lastSkillPickerRequest &&
+        !(quoteRequest && quoteRequest.id > lastQuoteRequest && !disabled)
+      )
+        return;
+      const renderedAttachments = attachmentsChanged
+        ? new Set(
+            Array.from(
+              editor.querySelectorAll<HTMLElement>("[data-attachment-reference-id]"),
+              (token) => token.dataset.attachmentReferenceId,
+            ),
+          )
+        : new Set<string | undefined>();
       const attachmentResolved =
         attachmentsChanged &&
         [...attachmentReferenceIds(value)].some(
@@ -447,9 +468,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
       const selection =
         !draftChanged && editor.ownerDocument.activeElement === editor ? readEditorSelection(editor) : null;
       const scrollTop = draftChanged ? 0 : editor.scrollTop;
-      const skillsChanged = skillKey !== lastSkillKey;
-      const mcpChanged = mcpKey !== lastMcpKey;
-      const focusRequested = focusRequest > lastFocusRequest;
       if (draftChanged) savedCaret = null;
       if (contentChanged) {
         lastAgentId = agentId;

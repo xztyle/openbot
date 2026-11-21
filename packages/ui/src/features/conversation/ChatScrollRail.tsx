@@ -3,7 +3,17 @@ import { Button } from "@openbot/ui";
 import { createDigitRoll } from "@openbot/ui/digit-roll";
 import { useText } from "@openbot/ui/text";
 import { prefersReducedMotion } from "@openbot/ui/utils";
-import { createEffect, createMemo, createSignal, createStore, For, onSettled, Show, untrack } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  createStore,
+  For,
+  onCleanup,
+  onSettled,
+  Show,
+  untrack,
+} from "solid-js";
 import type { DayMarkerOptions } from "./chat-day-markers";
 import type { ChatFlow } from "./createChatFlow";
 
@@ -13,6 +23,9 @@ import type { ChatFlow } from "./createChatFlow";
  * moment as the head.
  */
 const JUMP_MS = 450;
+
+/** The most often the rail reads the sections again while the rows grow, such as while a reply streams. */
+const SIZE_SETTLE_MS = 250;
 
 /** A transcript with fewer sections is short enough to find a place in without the rail. */
 const MIN_SECTIONS = 2;
@@ -168,19 +181,51 @@ export function createChatScrollRail<Row extends ChatScrollRow>(options: {
   const [scrollElement, setScrollElement] = createSignal<HTMLElement>();
   // The titles change only with the rows. A new measurement moves the starts, not the titles.
   let labels = new Map<string, string>();
-  const questions = createMemo(() => {
-    const read = chatScrollQuestions(options.rows(), options.question, labels);
-    labels = read.labels;
-    return read.questions;
-  });
+  /*
+   * The same questions keep the same array: a reply that streams changes the rows with each chunk, not
+   * the messages the reader wrote, and a new array would read the start of every section again.
+   */
+  const questions = createMemo(
+    () => {
+      const read = chatScrollQuestions(options.rows(), options.question, labels);
+      labels = read.labels;
+      return read.questions;
+    },
+    {
+      equals: (previous, next) =>
+        previous.length === next.length &&
+        previous.every((question, index) => {
+          const other = next[index];
+          return other?.index === question.index && other.key === question.key && other.label === question.label;
+        }),
+    },
+  );
+  /*
+   * The height of the rows, at most a few times a second: it changes with each frame of a reply that
+   * streams, and each change reads the start of every section and lays the rail out again.
+   */
+  const [totalSize, setTotalSize] = createSignal(untrack(options.flow.getTotalSize));
+  let sizeTimer: ReturnType<typeof setTimeout> | undefined;
+  createEffect(
+    () => options.flow.getTotalSize(),
+    () => {
+      sizeTimer ??= setTimeout(() => {
+        sizeTimer = undefined;
+        setTotalSize(options.flow.getTotalSize());
+      }, SIZE_SETTLE_MS);
+    },
+  );
+  onCleanup(() => clearTimeout(sizeTimer));
+  // Counts, not the rows: the rows change with each chunk of a reply that streams.
+  const rowCount = createMemo(() => options.rows().length);
+  const storedCount = createMemo(() => options.storedCount?.() ?? rowCount());
   const sections = createMemo(() => {
-    const rowCount = options.rows().length;
     return chatScrollSections({
       questions: questions(),
-      rowCount,
-      storedCount: options.storedCount?.() ?? rowCount,
+      rowCount: rowCount(),
+      storedCount: storedCount(),
       itemStart: options.flow.itemStart,
-      totalSize: options.flow.getTotalSize(),
+      totalSize: totalSize(),
       unloaded: options.unloaded(),
       text: { t, format },
     });
@@ -450,6 +495,8 @@ export function ChatScrollRail(props: ChatScrollRailProps) {
           aria-label={t("chat.scrollRail.label")}
           onPointerEnter={() => setHeld(true)}
           onPointerLeave={() => setHeld(false)}
+          onFocusIn={(event) => markFocusVisible(event.currentTarget)}
+          onFocusOut={(event) => markFocusVisible(event.currentTarget, event.relatedTarget)}
         >
           <span class="chat-scroll-rail-surface" aria-hidden="true" />
           <p class="chat-scroll-rail-eyebrow" aria-hidden="true">
@@ -531,6 +578,19 @@ export function ChatScrollRail(props: ChatScrollRailProps) {
 }
 
 const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
+
+/**
+ * Marks the rail open for the keyboard while a control in it has the visible focus. An attribute, not
+ * `:has(:focus-visible)` in the style sheet: Chromium then restyles every title of the rail, and the
+ * other elements that a `:has()` rule names, on each change to the page around the rail.
+ */
+function markFocusVisible(nav: HTMLElement, next?: EventTarget | null): void {
+  const focused = next === undefined ? nav.ownerDocument.activeElement : next;
+  const visible =
+    focused instanceof Element && nav.contains(focused) && focused !== nav && focused.matches(":focus-visible");
+  if (visible) nav.dataset.focusVisible = "";
+  else delete nav.dataset.focusVisible;
+}
 
 function editable(target: EventTarget | null): boolean {
   return (

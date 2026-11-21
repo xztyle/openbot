@@ -376,7 +376,14 @@ async function measure(browser: Browser, origin: string, profile: ProfileName, s
   if (config.throttle > 1) await cdp.send("Emulation.setCPUThrottlingRate", { rate: config.throttle });
   const key = await keystrokes(page, surface);
   await toEnd(page, surface);
-  const scroll = await scrollFrames(page, surface);
+  let scroll = { mean: 0, p95: 0, over: 0 };
+  await busy(
+    cdp,
+    async () => {
+      scroll = await scrollFrames(page, surface);
+    },
+    `${profile}-${surface.name}-${count}-scroll`,
+  );
   await toEnd(page, surface);
   await page.waitForTimeout(500);
   let streamMsPerToken: number;

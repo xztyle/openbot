@@ -319,6 +319,10 @@ export function createWebWorkspace(
   /** The conversation reads in flight by agent, and the deltas that wait for them to finish. */
   const conversationReads = new Map<string, number>();
   const heldDeltas = new Map<string, Array<Extract<AgentEvent, { type: "conversation-delta" }>>>();
+  /** The streamed deltas that wait for the next write, the timer of that write, and when the last one ran. */
+  let pendingDeltas: Array<Extract<AgentEvent, { type: "conversation-delta" }>> = [];
+  let deltaTimer: ReturnType<typeof setTimeout> | undefined;
+  let deltaWrittenAt = 0;
   const hostEventListeners = new Set<(event: AgentEvent | TeamRealtimeEvent) => void>();
   let connectionPromise: { hostId: string; opened: boolean; promise: Promise<void> } | null = null;
   let recoveryBlocked = false;
@@ -1448,42 +1452,62 @@ export function createWebWorkspace(
    * Appends streamed text to the selected conversation without a read. A delta that arrives during
    * a read waits for it: the page read may already hold the text, and its revision tells which
    * deltas are newer. A delta for another thread asks for a read.
+   *
+   * The deltas of a burst are written together, at most every `DELTA_WRITE_SPACING_MS`: each write
+   * runs the chat's derived rows again, and a provider can send dozens of deltas a second. The first
+   * delta after a pause is written at once.
    */
   function applyDelta(event: Extract<AgentEvent, { type: "conversation-delta" }>) {
     if (disposed || event.agentId !== selectedId) return;
-    if (conversationReads.has(event.agentId)) {
-      const held = heldDeltas.get(event.agentId);
-      if (held) held.push(event);
-      else heldDeltas.set(event.agentId, [event]);
-      return;
+    pendingDeltas.push(event);
+    if (deltaTimer !== undefined) return;
+    deltaTimer = setTimeout(writeDeltas, Math.max(0, deltaWrittenAt + DELTA_WRITE_SPACING_MS - Date.now()));
+  }
+  function writeDeltas() {
+    deltaTimer = undefined;
+    deltaWrittenAt = Date.now();
+    const events = pendingDeltas;
+    pendingDeltas = [];
+    if (disposed) return;
+    const ready: Array<Extract<AgentEvent, { type: "conversation-delta" }>> = [];
+    for (const event of events) {
+      if (event.agentId !== selectedId) continue;
+      if (conversationReads.has(event.agentId)) {
+        const held = heldDeltas.get(event.agentId);
+        if (held) held.push(event);
+        else heldDeltas.set(event.agentId, [event]);
+      } else ready.push(event);
     }
+    if (ready.length === 0) return;
     let otherThread = false;
     // The checks read the draft: a page that a read just wrote is not visible outside it until a flush.
     setState((draft) => {
-      const value = draft.conversations[event.agentId]?.page;
-      if (!value) return;
-      if (value.threadId !== event.threadId) {
-        otherThread = true;
-        return;
+      for (const event of ready) {
+        const value = draft.conversations[event.agentId]?.page;
+        if (!value) continue;
+        if (value.threadId !== event.threadId) {
+          otherThread = true;
+          continue;
+        }
+        if (event.revision <= value.revision) continue;
+        // The streamed message is at the end of the page.
+        const message = value.messages.findLast((item) => item.id === event.messageId);
+        if (message) {
+          message.text += event.delta;
+          message.status = "streaming";
+        } else
+          value.messages.push({
+            id: event.messageId,
+            turnId: event.turnId,
+            author: "assistant",
+            source: "assistant",
+            text: event.delta,
+            createdAt: event.createdAt,
+            status: "streaming",
+          });
+        value.revision = event.revision;
+        value.activeTurnId = event.turnId;
       }
-      if (event.revision <= value.revision) return;
-      // The streamed message is at the end of the page.
-      const message = value.messages.findLast((item) => item.id === event.messageId);
-      if (message) {
-        message.text += event.delta;
-        message.status = "streaming";
-      } else
-        value.messages.push({
-          id: event.messageId,
-          turnId: event.turnId,
-          author: "assistant",
-          source: "assistant",
-          text: event.delta,
-          createdAt: event.createdAt,
-          status: "streaming",
-        });
-      value.revision = event.revision;
-      value.activeTurnId = event.turnId;
     });
     if (otherThread) void refresh();
   }
@@ -2049,6 +2073,7 @@ export function createWebWorkspace(
       clearTimeout(readsTimer);
       clearTimeout(eventRefreshTimer);
       clearTimeout(refreshRetryTimer);
+      clearTimeout(deltaTimer);
       clearInterval(turnSilenceTimer);
       stopRestartRetry();
       recovery.dispose();
@@ -2483,6 +2508,8 @@ export function createWebWorkspace(
 const FOCUS_RESYNC_MS = 30_000;
 /** The shortest time between two reads of the open chat that host events start. */
 const EVENT_REFRESH_SPACING_MS = 500;
+/** The least time between two writes of streamed text: about ten a second. */
+const DELTA_WRITE_SPACING_MS = 100;
 /** The wait before a background read of the open chat that failed for a moment goes once more. */
 const REFRESH_RETRY_MS = 3_000;
 /** The wait before the panel reads that the connection lost go once more. */

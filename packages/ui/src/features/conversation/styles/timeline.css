@@ -43,6 +43,15 @@
 }
 
 /*
+ * The rows out of the drawn window of a long transcript: an empty block as tall as they were. It is
+ * never the row that scroll anchoring keeps in place: a row is.
+ */
+.chat-flow-space {
+  overflow-anchor: none;
+  pointer-events: none;
+}
+
+/*
  * The mark on a message that a quote opened. The band reaches 12px past the chat column, which is
  * the edge of the scroll area below the column width, and leaves out the gap above the row; it
  * holds, then fades out.

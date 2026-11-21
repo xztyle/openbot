@@ -28,8 +28,22 @@ function loadBaseImage(): Promise<HTMLImageElement | null> {
   return baseImage;
 }
 
-/** The colours of the badge, from the design tokens of the page. */
+/**
+ * The colours of the badge, from the design tokens of the page. They are read once per theme: a read
+ * of the computed style lays out the styles of the whole page, and the badge changes with each new
+ * message while the tab is in the background.
+ */
+let cachedColors: { key: string; colors: { fill: string; text: string; ring: string } } | undefined;
 function badgeColors(): { fill: string; text: string; ring: string } {
+  const root = document.documentElement;
+  const dark = typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
+  const key = `${root.className}|${root.getAttribute("style") ?? ""}|${JSON.stringify(root.dataset)}|${dark}`;
+  if (cachedColors?.key === key) return cachedColors.colors;
+  const colors = readBadgeColors();
+  cachedColors = { key, colors };
+  return colors;
+}
+function readBadgeColors(): { fill: string; text: string; ring: string } {
   const style = getComputedStyle(document.documentElement);
   const read = (name: string) => style.getPropertyValue(name).trim();
   return {
@@ -129,13 +143,17 @@ export function createWebTitleBadge(options: {
       document.title = title;
     },
   );
-  // A change of place keeps the icon; only a change of the badge draws it again.
+  // A change of place keeps the icon; only a change of the badge draws it again. The badge is read
+  // again with each message, and a drawing reads the page's computed style, so an unchanged badge
+  // draws nothing.
   createEffect(
     () => {
       const { count, unread } = options.badge();
-      return { count, unread };
+      return `${count}:${unread ? 1 : 0}`;
     },
-    (badge) => {
+    (key) => {
+      const [count, unread] = key.split(":");
+      const badge = { count: Number(count), unread: unread === "1" };
       const current = ++drawing;
       if (badge.count === 0 && !badge.unread) {
         restoreIcon();

@@ -516,6 +516,7 @@ export function createConversationViewScope(props: ConversationProps) {
       setStickToLatest,
       getCurrentUnreadCount: () => currentUnreadCount,
     },
+    drawAll: chatSearchOpen,
   });
   const {
     scrollFades,
@@ -1069,13 +1070,24 @@ export function createConversationViewScope(props: ConversationProps) {
     },
     ({ request, agentId, loaded }) => {
       if (!request || request.agentId !== agentId || !loaded || request.nonce === lastHandledMessageFocusNonce) return;
-      requestAnimationFrame(() => {
+      const reveal = (attempt: number) => {
         // A message in a group of agent messages has no row of its own, so the group row is the target.
         const messageId = CSS.escape(request.messageId);
         const target = scrollElement?.querySelector<HTMLElement>(
           `[data-chat-search-message="${messageId}"], [data-chat-search-group~="${messageId}"]`,
         );
-        if (!target) return;
+        if (!target) {
+          // A loaded row out of the drawn window: the window moves to it, and the row draws.
+          // The reader leaves the latest message first, or the window would stay at the end.
+          const index = untrack(timelineIndexById).get(request.messageId);
+          if (index === undefined || attempt >= 30 || request.nonce === lastHandledMessageFocusNonce) return;
+          if (attempt % 6 === 0) {
+            leaveLatest();
+            messageFlow.scrollToIndex(index);
+          }
+          requestAnimationFrame(() => reveal(attempt + 1));
+          return;
+        }
         lastHandledMessageFocusNonce = request.nonce;
         // The message the user picked replaces the opening at the unread divider.
         unreadOpening = { ...unreadOpening, pending: false };
@@ -1090,7 +1102,8 @@ export function createConversationViewScope(props: ConversationProps) {
         flashChatRow(target.closest<HTMLElement>(".virtual-chat-row") ?? target);
         updateScrollFade();
         updateUnreadDividerVisibility();
-      });
+      };
+      requestAnimationFrame(() => reveal(0));
     },
   );
 

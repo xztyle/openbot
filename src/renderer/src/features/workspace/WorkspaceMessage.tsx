@@ -179,7 +179,13 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
     // Attached files already show as file cards; the links to deliverables get a card of their own.
     props.row.pending
       ? []
-      : messageArtifacts(ws.directory(), entry(), props.channelName).filter((artifact) => artifact.url),
+      : messageArtifacts(ws.directory(), entry(), props.channelName)
+          .filter((artifact) => artifact.url)
+          // The host's picture of a page that it drew (aprendivo.com, Render, the apps), once per address.
+          .map((artifact) => {
+            const thumbnailUrl = artifact.url ? ws.artifactThumbnail(artifact.url, props.channelId) : undefined;
+            return thumbnailUrl ? { ...artifact, thumbnailUrl } : artifact;
+          }),
   );
   /** The host's steps of the turn, with tools and searches; the folded thinking of the messages until then. */
   const trail = createMemo((): WorkspaceStepTrailView | null => {
@@ -449,7 +455,11 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
               {(artifact) => (
                 <ArtifactCard
                   artifact={artifact()}
-                  compact={artifacts().length > 1}
+                  // A message with its own pictures, such as a share_preview card, keeps its link as a row.
+                  compact={
+                    artifacts().length > 1 ||
+                    Boolean(entry().message.attachments?.some((attachment) => attachment.kind === "image"))
+                  }
                   onOpen={() => {
                     const url = artifact().url;
                     if (url) void ws.channels.port().openUrl(url);

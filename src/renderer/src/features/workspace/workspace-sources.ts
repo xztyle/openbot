@@ -249,6 +249,16 @@ function artifactView(
   };
 }
 
+/** An address as the host keys an artifact: no fragment and no trailing slash. */
+function comparableUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.protocol}//${parsed.hostname.toLowerCase()}${parsed.pathname.replace(/\/+$/u, "")}${parsed.search}`;
+  } catch {
+    return url;
+  }
+}
+
 /**
  * The artifacts index of the host (`workspaceArtifacts`), for the whole workspace and for one
  * channel. Until it answers, or on a host without it, the artifacts of the messages read stand in.
@@ -268,6 +278,8 @@ export function createHostArtifactsSource(input: {
   const watched = new Set<string>();
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const scopeKey = (channelId?: string) => channelId ?? "*";
+  /** The reads again that wait for the host's first image of a page, per scope. */
+  const thumbnailRetries = new Map<string, number>();
   async function load(channelId?: string) {
     const read = input.port().agent.workspaceArtifacts;
     if (!read || failed) return;
@@ -277,6 +289,19 @@ export function createHostArtifactsSource(input: {
     try {
       const result = await read({ ...(channelId ? { channelId } : {}), limit: 200 });
       setRecords((current) => new Map(current).set(key, result.artifacts));
+      // The host draws a new page after the list that asked for it: one read later shows its image.
+      const waiting = result.artifacts.some(
+        (record) => record.url && !record.thumbnailVersion && !record.file && record.kind !== "doc",
+      );
+      const retries = thumbnailRetries.get(key) ?? 0;
+      if (waiting && retries < 3 && input.thumbnailUrl) {
+        thumbnailRetries.set(key, retries + 1);
+        clearTimeout(timers.get(key));
+        timers.set(
+          key,
+          setTimeout(() => void load(channelId), 20_000),
+        );
+      }
     } catch {
       failed = true;
     } finally {
@@ -311,6 +336,28 @@ export function createHostArtifactsSource(input: {
   };
   return {
     source,
+    /**
+     * The host's image of the page at `url`, as a link of a message in `channelId` names it. The first
+     * ask reads the channel's artifacts; the image shows when the host has drawn the page.
+     */
+    thumbnailFor: (url: string, channelId: string): string | undefined => {
+      const thumbnail = input.thumbnailUrl;
+      if (!thumbnail || failed) return undefined;
+      const key = scopeKey(channelId);
+      // Read outside the card's computation, which only reads.
+      if (!watched.has(key)) {
+        watched.add(key);
+        queueMicrotask(() => void load(channelId));
+      }
+      const wanted = comparableUrl(url);
+      const record = records()
+        .get(key)
+        ?.find((candidate) => candidate.url && comparableUrl(candidate.url) === wanted);
+      const version = record?.thumbnailVersion;
+      return record && version
+        ? (record.thumbnailUrl ?? thumbnail({ ...record, thumbnailVersion: version }))
+        : undefined;
+    },
     /** The record of an artifact, to open its file. */
     record: (id: string) => {
       for (const list of records().values()) {

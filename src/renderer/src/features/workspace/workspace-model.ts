@@ -740,6 +740,8 @@ function artifactKindOf(url: URL): WorkspaceArtifact["kind"] | null {
   if (DOC_EXTENSIONS.test(path)) return "doc";
   if (host === "openbot.site" || host.endsWith(".openbot.site")) return "website";
   if (host.endsWith(".pages.dev") || host.endsWith(".netlify.app") || host.endsWith(".vercel.app")) return "website";
+  // The owner's deliverables: the course landings and the sites on Render.
+  if (host === "aprendivo.com" || host.endsWith(".aprendivo.com") || host.endsWith(".onrender.com")) return "website";
   return null;
 }
 

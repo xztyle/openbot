@@ -68,7 +68,8 @@ function compact(value: number): string {
   const size = Math.abs(value);
   if (size >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/u, "")}M`;
   if (size >= 10_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/u, "")}k`;
-  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/u, "").replace(/\.$/u, "");
+  if (size >= 100 || Number.isInteger(value)) return String(Math.round(value));
+  return value.toFixed(2).replace(/0+$/u, "").replace(/\.$/u, "");
 }
 
 interface Series {

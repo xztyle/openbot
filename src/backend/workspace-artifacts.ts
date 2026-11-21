@@ -122,6 +122,11 @@ export function classifyArtifactUrl(url: URL): { kind: WorkspaceArtifactKind; na
     return { kind: "app", name: sub };
   }
   if (host.endsWith(HOSTED_SITE_SUFFIX)) return { kind: "website", name: host.slice(0, -HOSTED_SITE_SUFFIX.length) };
+  // The owner's deliverables: the course landings and the sites on Render.
+  if (host === "aprendivo.com" || host.endsWith(".aprendivo.com") || host.endsWith(".onrender.com")) {
+    if (DOC_EXTENSIONS.test(path) || DECK_EXTENSIONS.test(path) || FILE_EXTENSIONS.test(path)) return null;
+    return { kind: "website", name: host.replace(/^www\./u, "") };
+  }
   if (host === "docs.google.com") {
     if (path.startsWith("/document/")) return { kind: "doc", name: host };
     if (path.startsWith("/presentation/")) return { kind: "deck", name: host };

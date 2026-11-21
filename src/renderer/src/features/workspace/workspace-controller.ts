@@ -2590,6 +2590,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     fleet,
     artifacts,
     artifactRecord: hostArtifacts.record,
+    /** The host's image of a page that a message links, for its card. */
+    artifactThumbnail: hostArtifacts.thumbnailFor,
     steps,
     soleAgent: (channel: Parameters<typeof soleAgentOf>[1]) => soleAgentOf(directory(), channel),
     canManage,

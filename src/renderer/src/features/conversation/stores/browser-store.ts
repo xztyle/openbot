@@ -134,8 +134,72 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     }
     const lastShown = agentId ? lastShownTabs.get(agentId) : undefined;
     if (!lastShown) return tabs.find((tab) => tab.id === deps.props.browserTakeover?.tabId) ?? tabs[0];
-    return tabs.find((tab) => tab.id === lastShown.id) ?? tabs[lastShown.index] ?? tabs[lastShown.index - 1] ?? tabs[0];
+    // A popup that closed gives the view back to the page that opened it, as a browser does.
+    const opener = openerOf(lastShown.id);
+    return (
+      tabs.find((tab) => tab.id === lastShown.id) ??
+      (opener ? tabs.find((tab) => tab.id === opener) : undefined) ??
+      tabs[lastShown.index] ??
+      tabs[lastShown.index - 1] ??
+      tabs[0]
+    );
   });
+
+  /**
+   * A page that the person or the agent uses opens a new tab: a sign-in popup, or a link with
+   * `target=_blank`. The view goes to the new tab, and back to the page that opened it when the new
+   * tab closes. Main's active tab is one for every agent and client and can move again at once, so
+   * the view does not wait for it. A remote host's tab list does not carry the opener (the frozen
+   * Team API tab has no such field), so the tab that the view showed when the new one came is the
+   * opener here.
+   */
+  const localOpeners = new Map<string, string>();
+  const openerOf = (tabId: string) =>
+    allBrowserTabs().find((tab) => tab.id === tabId)?.openerTabId ?? localOpeners.get(tabId);
+  /** The tabs of each agent that this view has seen. A tab that is not in it is new. */
+  const seenTabs = new Map<string, Set<string>>();
+  /** The tab that each agent's view showed before the last change, which is the opener of a new tab. */
+  const viewedTabs = new Map<string, string>();
+  createEffect(
+    () => ({ agentId: deps.props.agent?.id, tabs: browserTabs() }),
+    ({ agentId, tabs }) => {
+      if (!agentId) return;
+      const ids = tabs.map((tab) => tab.id);
+      const seen = seenTabs.get(agentId);
+      seenTabs.set(agentId, new Set(ids));
+      const all = untrack(allBrowserTabs);
+      const viewed = viewedTabs.get(agentId);
+      // The page that the view showed closed: a popup gives the view back to its opener.
+      if (viewed && !ids.includes(viewed)) {
+        const opener = localOpeners.get(viewed) ?? all.find((tab) => tab.id === viewed)?.openerTabId;
+        const back = opener ? tabs.find((tab) => tab.id === opener) : undefined;
+        if (back) {
+          lastShownTabs.set(agentId, { id: back.id, index: ids.indexOf(back.id) });
+          viewedTabs.set(agentId, back.id);
+          untrack(() => activateBrowserTab(back.id));
+        }
+      }
+      // The first list of an agent, and many tabs at once, are not a tab that a page opened.
+      if (!seen || seen.size === 0) return;
+      const added = ids.filter((id) => !seen.has(id));
+      const newTabId = added.at(-1);
+      if (!newTabId || added.length > 2 || !viewed || !ids.includes(viewed)) return;
+      const opener = all.find((tab) => tab.id === newTabId)?.openerTabId;
+      if (opener && opener !== viewed) return;
+      localOpeners.set(newTabId, viewed);
+      // Closed tabs keep their entry so the view can go back; only the oldest are forgotten.
+      if (localOpeners.size > 200) localOpeners.delete(localOpeners.keys().next().value ?? "");
+      lastShownTabs.set(agentId, { id: newTabId, index: ids.indexOf(newTabId) });
+      viewedTabs.set(agentId, newTabId);
+      if (untrack(() => deps.props.activeBrowserTabId) !== newTabId) untrack(() => activateBrowserTab(newTabId));
+    },
+  );
+  createEffect(
+    () => ({ agentId: deps.props.agent?.id, tabId: activeBrowserTab()?.id }),
+    ({ agentId, tabId }) => {
+      if (agentId && tabId) viewedTabs.set(agentId, tabId);
+    },
+  );
   const browserTakeoverTab = createMemo(() => {
     const tabId = deps.props.browserTakeover?.tabId;
     // A channel has no agent of its own, so it finds the tab among all tabs. Main already checked that the

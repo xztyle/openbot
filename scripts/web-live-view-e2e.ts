@@ -22,17 +22,19 @@ import { buttonMask, namedKey, SHIFT_MODIFIER } from "../src/backend/browser-cdp
 declare global {
   interface Window {
     /** Exposed by this script: the host's side of the harness's live view. */
-    openbotLiveViewStart?: (tabId: string) => Promise<void>;
+    openbotLiveViewStart?: (tabId: string, viewport?: { width: number; height: number }) => Promise<void>;
     openbotLiveViewStop?: () => Promise<void>;
     openbotLiveViewInput?: (input: BrowserLiveViewInput) => Promise<void>;
     liveViewHost?: {
-      start(tabId: string): Promise<void>;
+      start(tabId: string, viewport?: { width: number; height: number }): Promise<void>;
       stop(): Promise<void>;
       input(input: BrowserLiveViewInput): Promise<void>;
     };
     liveViewBridge?: {
       frame(tabId: string, sequence: number, width: number, height: number, base64: string): void;
       connection(state: "online" | "offline"): void;
+      addTab(tabId: string, title: string): void;
+      removeTab(tabId: string): void;
     };
     takeoverResponses?: { requestId: string | number; decision: string }[];
   }
@@ -87,10 +89,29 @@ const TAB_PAGE = `<!doctype html>
     <h1>Create your account</h1>
     <label>Name <input id="name" autocomplete="off" /></label>
     <button id="next" type="button" onclick="this.dataset.clicks = String(Number(this.dataset.clicks || 0) + 1); this.textContent = 'Clicked ' + this.dataset.clicks">Next</button>
+    <button id="oauth" type="button" onclick="window.open('/popup', 'oauth', 'width=480,height=600')">Continue with Example</button>
+    <script>
+      addEventListener("message", (event) => {
+        if (event.data === "authorized") document.body.dataset.auth = "ok";
+      });
+    </script>
     <div class="tall"></div>
     <p id="end">End of page</p>
   </body>
 </html>`;
+
+/** The sign-in popup the tab opens, as an OAuth provider's window: it answers its opener and closes. */
+const POPUP_PAGE = `<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><title>Sign in to Example</title>
+    <style>body { font: 18px system-ui, sans-serif; margin: 24px; background: #eef4ff; } button { font: inherit; padding: 12px 24px; }</style>
+  </head>
+  <body>
+    <h1>Sign in to Example</h1>
+    <button id="authorize" type="button" onclick="window.opener.postMessage('authorized', '*'); window.close()">Authorize</button>
+  </body>
+</html>`;
+const POPUP_ID = "browser-tab-popup";
 
 /** Serves the harness at `/app` and every address under it, and the agent's page at `/tab`. */
 function harnessPages(): Plugin {
@@ -99,6 +120,11 @@ function harnessPages(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (request, response, next) => {
         const url = request.url ?? "";
+        if (url === "/popup") {
+          response.setHeader("Content-Type", "text/html; charset=utf-8");
+          response.end(POPUP_PAGE);
+          return;
+        }
         if (url === "/tab") {
           response.setHeader("Content-Type", "text/html; charset=utf-8");
           response.end(TAB_PAGE);
@@ -173,30 +199,51 @@ class TabHost {
   #button: "left" | "middle" | "right" | null = null;
   starts = 0;
   stops = 0;
+  /** The tab of the last stream the client started. */
+  current = "";
+  /** The host's pages by tab, the agent's tab and the popups it opened. */
+  readonly pages = new Map<string, Page>();
 
   constructor(
     readonly tab: Page,
     readonly client: Page,
-  ) {}
+  ) {
+    this.pages.set(TAB_ID, tab);
+  }
 
   async install(): Promise<void> {
-    await this.client.exposeFunction("openbotLiveViewStart", (tabId: string) => this.start(tabId));
+    await this.client.exposeFunction(
+      "openbotLiveViewStart",
+      (tabId: string, viewport?: { width: number; height: number }) => this.start(tabId, viewport),
+    );
     await this.client.exposeFunction("openbotLiveViewStop", () => this.stop());
     await this.client.exposeFunction("openbotLiveViewInput", (input: BrowserLiveViewInput) => this.input(input));
     await this.client.addInitScript(() => {
       window.liveViewHost = {
-        start: async (tabId) => window.openbotLiveViewStart?.(tabId),
+        start: async (tabId, viewport) => window.openbotLiveViewStart?.(tabId, viewport),
         stop: async () => window.openbotLiveViewStop?.(),
         input: async (input) => window.openbotLiveViewInput?.(input),
       };
     });
   }
 
-  async start(tabId: string): Promise<void> {
-    assert.equal(tabId, TAB_ID, "The client watches the tab of the takeover.");
+  /** The page sizes the client asked for, as the host's `browser-view-viewport` holds them. */
+  readonly viewports: Array<{ width: number; height: number }> = [];
+
+  async start(tabId: string, viewport?: { width: number; height: number }): Promise<void> {
+    const page = this.pages.get(tabId);
+    assert.ok(page, `The client watches a tab of the host: ${tabId}.`);
+    if (viewport) {
+      this.viewports.push(viewport);
+      await page.setViewportSize(viewport);
+    } else if (tabId === TAB_ID) {
+      // The host gives the page back its own size when the view that asked for one stops.
+      await page.setViewportSize(TAB_SIZE);
+    }
     await this.stop();
     this.starts += 1;
-    const cdp = await this.tab.context().newCDPSession(this.tab);
+    this.current = tabId;
+    const cdp = await page.context().newCDPSession(page);
     this.#cdp = cdp;
     cdp.on("Page.screencastFrame", (frame) => {
       void cdp.send("Page.screencastFrameAck", { sessionId: frame.sessionId }).catch(() => undefined);
@@ -300,6 +347,12 @@ const button = (scope: Page | Locator, name: string | RegExp) =>
 const takeoverCard = (page: Page) =>
   page.getByRole("region", { name: english("prompt.browser.label.pending"), exact: true });
 
+/** The dock over the page says "Hand back"; the card in the chat says "I'm done". Both end the takeover. */
+const handBackName = new RegExp(
+  `^(${[english("browser.dock.handBack"), english("prompt.browser.done")].map((text) => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join("|")})$`,
+  "u",
+);
+
 const liveView = (page: Page) => page.getByRole("img", { name: english("browser.liveView.label") }).last();
 
 /** Where a point of the agent's page is on the client's screen: the live view letterboxes the frame. */
@@ -308,9 +361,11 @@ async function onScreen(page: Page, tab: Page, selector: string, offset = { x: 0
   await liveView(page).evaluate((element) => element.scrollIntoView({ block: "center" }));
   const view = await liveView(page).boundingBox();
   assert.ok(target && view, `No box for ${selector} or for the live view.`);
-  const scale = Math.min(view.width / TAB_SIZE.width, view.height / TAB_SIZE.height);
-  const left = view.x + (view.width - TAB_SIZE.width * scale) / 2;
-  const top = view.y + (view.height - TAB_SIZE.height * scale) / 2;
+  // A popup has the size its opener asked for, not the tab's.
+  const size = tab.viewportSize() ?? TAB_SIZE;
+  const scale = Math.min(view.width / size.width, view.height / size.height);
+  const left = view.x + (view.width - size.width * scale) / 2;
+  const top = view.y + (view.height - size.height * scale) / 2;
   return {
     x: left + (target.x + target.width * offset.x) * scale,
     y: top + (target.y + target.height * offset.y) * scale,
@@ -472,7 +527,7 @@ async function phone(browser: Browser, origin: string): Promise<void> {
   });
 
   await step(page, viewport, "I'm done hands the page back once", async () => {
-    await button(page, english("prompt.browser.done")).last().tap();
+    await page.getByRole("button", { name: handBackName }).last().tap();
     await handedBack(page);
   });
 
@@ -569,10 +624,45 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
     await shot(page, "desktop-expanded");
   });
 
+  await step(page, viewport, "a sign-in popup opens in the view, and the view goes back when it closes", async () => {
+    const opened = tab.context().waitForEvent("page");
+    await tab.evaluate(() => window.scrollTo(0, 0));
+    const before = host.starts;
+    await waitUntil(() => host.inputs.filter((input) => input.type === "ack").length > 0, "Frames are drawn");
+    // The click goes through the live view, as the person's click on "Continue with Facebook" did.
+    const oauth = await onScreen(page, tab, "#oauth");
+    await page.mouse.click(oauth.x, oauth.y);
+    const popup = await opened;
+    await popup.waitForLoadState();
+    host.pages.set(POPUP_ID, popup);
+    const closed = popup.waitForEvent("close");
+    // The host lists the new tab and keeps its own active tab on the opener: the view follows the
+    // popup by itself, as main's active tab can belong to another agent's work.
+    await page.evaluate((id) => window.liveViewBridge?.addTab(id, "Sign in to Example"), POPUP_ID);
+    await waitUntil(() => host.current === POPUP_ID && host.starts > before, "The view shows the popup");
+    await viewing(page, host);
+    await page.waitForTimeout(300);
+    await shot(page, "desktop-popup");
+    const authorize = await onScreen(page, popup, "#authorize");
+    await page.mouse.click(authorize.x, authorize.y);
+    await closed;
+    await page.evaluate((id) => window.liveViewBridge?.removeTab(id), POPUP_ID);
+    host.pages.delete(POPUP_ID);
+    await waitUntil(() => host.current === TAB_ID, "The view goes back to the opener");
+    await waitForTab(
+      tab,
+      (expected) => document.body.dataset.auth === expected,
+      () => document.body.dataset.auth,
+      "ok",
+      "The popup answered its opener",
+    );
+    await viewing(page, host);
+  });
+
   await step(page, viewport, "Hand back ends the takeover once", async () => {
     await page.keyboard.press("Escape");
     // The full view's dock and the card both answer; two presses are one answer.
-    const done = button(page, english("prompt.browser.done")).last();
+    const done = page.getByRole("button", { name: handBackName }).last();
     await done.click();
     await done.click({ timeout: 2_000 }).catch(() => undefined);
     await handedBack(page);

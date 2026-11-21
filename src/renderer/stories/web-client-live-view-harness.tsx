@@ -41,7 +41,7 @@ const REQUEST = {
 };
 
 interface LiveViewHost {
-  start(tabId: string): Promise<void>;
+  start(tabId: string, viewport?: { width: number; height: number }): Promise<void>;
   stop(): Promise<void>;
   input(input: BrowserLiveViewInput): Promise<void>;
 }
@@ -57,6 +57,10 @@ interface HarnessWindow {
     closeTab(): Promise<void>;
     /** The connection to the host drops or comes back, as WebRTC reports it. */
     connection(state: "online" | "offline"): void;
+    /** The page of the tab opened a popup: the host lists it, with its own active tab unchanged. */
+    addTab(tabId: string, title: string): void;
+    /** The popup closed. */
+    removeTab(tabId: string): void;
   };
   takeoverResponses?: { requestId: string | number; decision: string }[];
 }
@@ -74,6 +78,7 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     browserControlState: { sessions: [] },
   });
   const listeners = new Set<(event: BrowserLiveViewEvent) => void>();
+  let tabs: BrowserTab[] = [TAB];
   const emit = (event: BrowserLiveViewEvent) => {
     for (const listener of listeners) listener(event);
   };
@@ -87,14 +92,24 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
       mock.emitAgentEvent({ type: "browser-takeover-resolved", requestId: REQUEST.requestId, agentId: "chief" }),
     closeTab: () => mock.api.browser.close(TAB.id),
     connection: (state) => events.connection({ hostId: "preview-host", state, message: null }),
+    addTab: (tabId, title) => {
+      tabs = [...tabs, { ...TAB, id: tabId, title, url: "https://auth.example.test/popup" }];
+      mock.emitAgentEvent({ type: "browser-changed", tabs, activeTabId: TAB.id });
+    },
+    removeTab: (tabId) => {
+      tabs = tabs.filter((tab) => tab.id !== tabId);
+      mock.emitAgentEvent({ type: "browser-changed", tabs, activeTabId: TAB.id });
+    },
   };
   const web = mockWebRuntimeFor(mock, events);
   return {
     ...web,
     browser: {
       ...mock.api.browser,
-      startLiveView: async (tabId) => {
-        if (harness.liveViewHost) await harness.liveViewHost.start(tabId);
+      // The host holds the page at the size of the view, as a host with `browser-view-viewport` does.
+      liveViewHoldsViewport: () => harness.liveViewHost !== undefined,
+      startLiveView: async (tabId, options) => {
+        if (harness.liveViewHost) await harness.liveViewHost.start(tabId, options?.viewport);
         else emit({ type: "stopped", tabId, reason: "The preview has no host to watch." });
       },
       stopLiveView: async () => harness.liveViewHost?.stop(),

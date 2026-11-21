@@ -81,9 +81,11 @@ import {
   decodeBrowserUserControlSnapshot,
 } from "@openbot/contracts/team-protocol/browser-user-control-v1";
 import {
+  type BrowserViewViewport,
   decodeBrowserViewInputValue,
   TEAM_BROWSER_VIEW_CLIPBOARD_CAPABILITY,
   TEAM_BROWSER_VIEW_FRAME_POINT_CAPABILITY,
+  TEAM_BROWSER_VIEW_VIEWPORT_CAPABILITY,
 } from "@openbot/contracts/team-protocol/browser-view-v1";
 import {
   TEAM_BROWSER_NAVIGATION_CAPABILITY,
@@ -774,11 +776,15 @@ export function createWebWorkspaceRuntime(
   }
   const routineFlows = teamRoutineFlowsApi(routineFlowsRequest);
   const agentRoutines = teamAgentRoutinesApi(teamApi);
+  /** The page size the next view asks for, from the view that starts it. */
+  let liveViewViewport: BrowserViewViewport | null = null;
+  const holdsViewport = () => capabilities.includes(TEAM_BROWSER_VIEW_VIEWPORT_CAPABILITY);
   const browserView = createRemoteBrowserView(
     (data) => peer.sendHostStreamData(data),
     request,
     () => capabilities.includes(TEAM_BROWSER_VIEW_FRAME_POINT_CAPABILITY),
     () => capabilities.includes(TEAM_BROWSER_VIEW_CLIPBOARD_CAPABILITY),
+    () => ({ cursor: false, contextMenu: false, viewport: holdsViewport() ? liveViewViewport : null }),
   );
   let liveView: RemoteBrowserView | null = null;
   let liveViewGeneration = 0;
@@ -867,8 +873,10 @@ export function createWebWorkspaceRuntime(
     admin,
     ...(hosts ? { hosts } : {}),
     browser: {
-      async startLiveView(tabId) {
+      liveViewHoldsViewport: holdsViewport,
+      async startLiveView(tabId, options) {
         const currentGeneration = ++liveViewGeneration;
+        liveViewViewport = options?.viewport ?? null;
         const next = await runTeamEffect(
           browserView.open(
             tabId,

@@ -3,7 +3,7 @@ import {
   type BrowserDesktopApi,
   type BrowserLiveViewInput,
 } from "@openbot/contracts/ipc";
-import { ErrorReference, IconButton, Input, Keyboard, Scan, toast } from "@openbot/ui";
+import { Button, ErrorReference, IconButton, Input, Keyboard, Scan, toast } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import { clamp, usesTouchLayout } from "@openbot/ui/utils";
 import { errorReference } from "@openbot/user-errors";
@@ -25,10 +25,18 @@ const CONTROL = 2;
 const META = 4;
 const SHIFT = 8;
 
-export type BrowserViewRuntime = Pick<
-  BrowserDesktopApi,
-  "startLiveView" | "stopLiveView" | "sendLiveViewInput" | "onLiveViewEvent"
->;
+/** What a view asks of the host when it starts. */
+export interface BrowserLiveViewStartOptions {
+  /** The page size, in CSS pixels, that the host holds while this view is open. */
+  viewport?: { width: number; height: number };
+}
+
+export interface BrowserViewRuntime
+  extends Pick<BrowserDesktopApi, "stopLiveView" | "sendLiveViewInput" | "onLiveViewEvent"> {
+  startLiveView(tabId: string, options?: BrowserLiveViewStartOptions): Promise<void>;
+  /** Whether the host holds the page at the size a view asks for. Absent: it does not. */
+  liveViewHoldsViewport?: () => boolean;
+}
 
 /** One frame of the host's screencast, as the renderer receives it. */
 interface LiveViewFrame {
@@ -52,6 +60,15 @@ interface BrowserLiveViewProps {
   online?: boolean | undefined;
   /** The pixel size of the frame on the canvas, so the panel can take the page's shape. */
   onFrameSize?: (size: { width: number; height: number }) => void;
+  /**
+   * The view asks the host to give the page the size of this view, so the page fills it at its own
+   * scale. Only a view that is the page's main surface asks: a card would make the page small.
+   */
+  fitPage?: boolean;
+  /** The agent is acting on the tab. The view holds the person's input and says so. */
+  locked?: boolean | undefined;
+  /** The person takes the tab from the agent. The input goes to the page at once. */
+  onTakeOver?: (() => void) | undefined;
 }
 
 /**
@@ -70,9 +87,24 @@ function liveViewOwner(runtime: BrowserViewRuntime) {
   return entry;
 }
 
-/** A stream that ends after it showed the page starts again, this many times, before the view gives up. */
-const MAX_RECONNECTS = 3;
-const RECONNECT_DELAY_MS = 1_000;
+/**
+ * A stream that ends after it showed the page starts again, this many times in a row, before the
+ * view gives up. A stream counts as steady again only after it has run for `STEADY_STREAM_MS`: the
+ * count used to go back to zero at the first frame, so a stream that ended a moment after each start
+ * started again for ever and the view said "Reconnecting" again and again.
+ */
+const MAX_RECONNECTS = 6;
+const RECONNECT_DELAY_MS = 500;
+const MAX_RECONNECT_DELAY_MS = 8_000;
+const STEADY_STREAM_MS = 10_000;
+/** A restart that shows the page again within this time says nothing. */
+const RECONNECT_NOTICE_DELAY_MS = 2_000;
+/** A started stream that sends no frame in this time is started again. */
+const FIRST_FRAME_TIMEOUT_MS = 15_000;
+/** The view asks for a new page size when its own size changes by more than this. */
+const VIEWPORT_STEP_PX = 24;
+const VIEWPORT_SETTLE_MS = 300;
+const VIEWPORT_LIMITS = { minWidth: 320, minHeight: 240, maxWidth: 2_560, maxHeight: 2_560 };
 /** A finger that moves less than this is a tap, not a scroll. */
 const TAP_SLOP_PX = 10;
 /** Two taps this close in time and place are a double click. */
@@ -155,16 +187,55 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
   let queuedFrame: LiveViewFrame | undefined;
   /** Which stream the frames belong to. Another tab, or the same tab again, is a new one. */
   let stream = 0;
+  /** The tab whose page the canvas shows. */
+  let shownTab: string | undefined;
   /** Whether the current stream has shown the page. Only such a stream starts again when it ends. */
   let streamShown = false;
   const [attempt, setAttempt] = createSignal(0);
   let reconnects = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+  let steadyTimer: ReturnType<typeof setTimeout> | undefined;
+  let firstFrameTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * A start is on its way. A runtime ends its previous stream as it opens the next one, and that
+   * end is not news: it is the stream this view replaced.
+   */
+  let starting = 0;
   const clearReconnect = () => {
     if (reconnectTimer !== undefined) clearTimeout(reconnectTimer);
     reconnectTimer = undefined;
   };
-  onCleanup(clearReconnect);
+  const clearTimers = () => {
+    clearReconnect();
+    if (noticeTimer !== undefined) clearTimeout(noticeTimer);
+    noticeTimer = undefined;
+    if (steadyTimer !== undefined) clearTimeout(steadyTimer);
+    steadyTimer = undefined;
+    if (firstFrameTimer !== undefined) clearTimeout(firstFrameTimer);
+    firstFrameTimer = undefined;
+  };
+  onCleanup(clearTimers);
+  /** Starts the stream again after a delay that grows with each restart in a row, with the page kept on the canvas. */
+  const scheduleReconnect = () => {
+    const delay = Math.min(RECONNECT_DELAY_MS * 2 ** reconnects, MAX_RECONNECT_DELAY_MS);
+    reconnects += 1;
+    if (steadyTimer !== undefined) clearTimeout(steadyTimer);
+    steadyTimer = undefined;
+    // A short gap shows nothing. The notice comes only when the page has not come back.
+    if (noticeTimer === undefined)
+      noticeTimer = setTimeout(() => {
+        noticeTimer = undefined;
+        setState((draft) => {
+          if (draft.live) draft.notice = t("browser.liveView.reconnecting");
+        });
+      }, RECONNECT_NOTICE_DELAY_MS);
+    clearReconnect();
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = undefined;
+      setAttempt((value) => value + 1);
+    }, delay);
+  };
 
   /** The touch controls show on a touch screen, and once a finger has touched the page. */
   const [touch, setTouch] = createSignal(usesTouchLayout());
@@ -250,30 +321,33 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
     }
     if (event.type === "stopped") {
       settleCopy(null);
-      const shown = streamShown;
+      if (starting > 0) return;
+      // A restart that ends before its first frame is part of the same gap.
+      const shown = streamShown || (reconnects > 0 && state.live);
       abandonStream();
-      // A stream that showed the page and ended while the view is still open is a dropped
-      // connection, a host that restarted its screencast, or a relay that fell behind. The view
-      // keeps the last page and starts again. A tab that closed ends the request, and the view
-      // closes with it.
+      // A stream that ended while the view is still open is a dropped connection, a host that
+      // restarted its screencast, or a relay that fell behind. The view keeps the last page and
+      // starts again. A tab that closed ends the request, and the view closes with it.
       if (shown && props.active && props.online !== false && reconnects < MAX_RECONNECTS) {
-        const delay = RECONNECT_DELAY_MS * 2 ** reconnects;
-        reconnects += 1;
-        setState((draft) => {
-          draft.notice = t("browser.liveView.reconnecting");
-        });
-        clearReconnect();
-        reconnectTimer = setTimeout(() => {
-          reconnectTimer = undefined;
-          setAttempt((value) => value + 1);
-        }, delay);
+        scheduleReconnect();
         return;
       }
+      clearTimers();
       setState(() => ({ live: false, message: sourceText(event.reason), reference: null, notice: null }));
       return;
     }
-    streamShown = true;
-    reconnects = 0;
+    if (!streamShown) {
+      streamShown = true;
+      if (firstFrameTimer !== undefined) clearTimeout(firstFrameTimer);
+      firstFrameTimer = undefined;
+      if (noticeTimer !== undefined) clearTimeout(noticeTimer);
+      noticeTimer = undefined;
+      if (steadyTimer !== undefined) clearTimeout(steadyTimer);
+      steadyTimer = setTimeout(() => {
+        steadyTimer = undefined;
+        reconnects = 0;
+      }, STEADY_STREAM_MS);
+    }
     if (!state.live || state.notice) setState(() => ({ live: true, message: "", reference: null, notice: null }));
     // One frame decodes at a time, and the newest of the rest waits behind it.
     if (pendingFrame) {
@@ -284,6 +358,61 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
   });
   onCleanup(stopListening);
 
+  /**
+   * The size of this view, for a host that gives the page the size the view asks for. It changes
+   * only by whole steps and after the view has stopped moving, because each change starts the
+   * stream again.
+   */
+  const [panel, setPanel] = createSignal<{ width: number; height: number } | null>(null, {
+    equals: (previous, next) => previous?.width === next?.width && previous?.height === next?.height,
+  });
+  const holdsViewport = () => props.fitPage === true && runtime.liveViewHoldsViewport?.() === true;
+  createEffect(
+    () => holdsViewport(),
+    (holds) => {
+      const element = root;
+      if (!holds || !element || typeof ResizeObserver === "undefined") return;
+      let settle: ReturnType<typeof setTimeout> | undefined;
+      const measure = () => {
+        settle = undefined;
+        const box = element.getBoundingClientRect();
+        if (box.width < 1 || box.height < 1) return;
+        const next = {
+          width: Math.round(clamp(box.width, VIEWPORT_LIMITS.minWidth, VIEWPORT_LIMITS.maxWidth)),
+          height: Math.round(clamp(box.height, VIEWPORT_LIMITS.minHeight, VIEWPORT_LIMITS.maxHeight)),
+        };
+        const current = untrack(panel);
+        if (
+          current &&
+          Math.abs(current.width - next.width) < VIEWPORT_STEP_PX &&
+          Math.abs(current.height - next.height) < VIEWPORT_STEP_PX
+        )
+          return;
+        setPanel(next);
+      };
+      const observer = new ResizeObserver(() => {
+        // The first size goes at once, so the stream does not wait for it.
+        if (untrack(panel) === null) {
+          measure();
+          return;
+        }
+        if (settle !== undefined) clearTimeout(settle);
+        settle = setTimeout(measure, VIEWPORT_SETTLE_MS);
+      });
+      observer.observe(element);
+      return () => {
+        observer.disconnect();
+        if (settle !== undefined) clearTimeout(settle);
+      };
+    },
+  );
+  /** The page size to ask for: null asks for none, undefined waits for the first measure. */
+  type AskedViewport = { width: number; height: number } | null | undefined;
+  const viewport = createMemo((): AskedViewport => (holdsViewport() ? (panel() ?? undefined) : null), {
+    equals: (previous: AskedViewport, next: AskedViewport) =>
+      previous === next || (previous?.width === next?.width && previous?.height === next?.height),
+  });
+
   createEffect(
     () => ({
       tabId: props.tabId,
@@ -291,10 +420,11 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
       online: props.online !== false,
       blocked: elsewhere(),
       attempt: attempt(),
+      viewport: viewport(),
     }),
-    ({ tabId, active, online, blocked, attempt: retry }) => {
+    ({ tabId, active, online, blocked, attempt: retry, viewport: size }) => {
       if (!active) {
-        clearReconnect();
+        clearTimers();
         reconnects = 0;
         return;
       }
@@ -305,31 +435,69 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
       }
       if (!online) {
         abandonStream();
-        clearReconnect();
+        clearTimers();
         setState((draft) => {
           if (draft.live) draft.notice = t("browser.liveView.reconnecting");
           else draft.message = t("browser.liveView.reconnecting");
         });
         return;
       }
+      // The first measure of the view is a moment away; a start before it would ask for no size.
+      if (size === undefined) return;
+      // A restart of the same tab, for a reconnect or a new page size, keeps the page on the canvas.
+      // Another tab shows the connecting text.
+      const sameTab = shownTab === tabId && untrack(() => state.live);
       abandonStream();
-      // A reconnect keeps the page on the canvas under its notice. A new start shows the connecting text.
-      if (retry === 0 || !state.live) setState(() => ({ live: false, message: null, reference: null, notice: null }));
+      if (!sameTab && (retry === 0 || !untrack(() => state.live)))
+        setState(() => ({ live: false, message: null, reference: null, notice: null }));
+      shownTab = tabId;
       ownership.setOwner(me);
-      void runtime.startLiveView(tabId).catch((error: unknown) => {
-        if (ownerNow() !== me) return;
-        setState(() => ({
-          live: false,
-          message: errorMessage(error, t("browser.liveView.failed")),
-          reference: errorReference(error),
-          notice: null,
-        }));
-      });
+      starting += 1;
+      if (firstFrameTimer !== undefined) clearTimeout(firstFrameTimer);
+      firstFrameTimer = undefined;
+      void runtime
+        .startLiveView(tabId, size ? { viewport: size } : undefined)
+        .then(
+          () => {
+            // A stream that never sends a frame is as good as a dropped one.
+            if (ownerNow() !== me || streamShown) return;
+            firstFrameTimer = setTimeout(() => {
+              firstFrameTimer = undefined;
+              if (streamShown || ownerNow() !== me || !props.active) return;
+              if (reconnects < MAX_RECONNECTS) scheduleReconnect();
+            }, FIRST_FRAME_TIMEOUT_MS);
+          },
+          (error: unknown) => {
+            if (ownerNow() !== me) return;
+            // A restart in a gap tries again while the page is still on the canvas.
+            if (reconnects > 0 && untrack(() => state.live) && reconnects < MAX_RECONNECTS && props.active) {
+              scheduleReconnect();
+              return;
+            }
+            clearTimers();
+            setState(() => ({
+              live: false,
+              message: errorMessage(error, t("browser.liveView.failed")),
+              reference: errorReference(error),
+              notice: null,
+            }));
+          },
+        )
+        .finally(() => {
+          starting -= 1;
+        });
       return () => {
         // A view that another view replaced leaves that view's stream running.
         if (ownerNow() !== me) return;
         ownership.setOwner(null);
-        void runtime.stopLiveView().catch(() => undefined);
+        // The end of a stream this view stops itself is not a dropped stream.
+        starting += 1;
+        void runtime
+          .stopLiveView()
+          .catch(() => undefined)
+          .finally(() => {
+            starting -= 1;
+          });
       };
     },
   );
@@ -345,6 +513,9 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
   );
 
   const send = (input: BrowserLiveViewInput) => {
+    // While the agent acts, the person's input waits for a take over: two hands on one page click
+    // each other's targets. The acknowledgement of a drawn frame is not input.
+    if (props.locked && input.type !== "ack") return;
     void runtime.sendLiveViewInput(input).catch(() => undefined);
   };
 
@@ -741,7 +912,13 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
   };
 
   return (
-    <div class="browser-live-view" ref={root} data-touch={touch() ? "" : undefined}>
+    <div
+      class="browser-live-view"
+      ref={root}
+      data-touch={touch() ? "" : undefined}
+      data-fit={props.fitPage ? "" : undefined}
+      data-locked={props.locked ? "" : undefined}
+    >
       <canvas
         ref={setCanvas}
         tabindex="0"
@@ -782,6 +959,18 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
         <div class="browser-empty-state">
           <span>{state.message ?? t("browser.liveView.connecting")}</span>
           <ErrorReference reference={state.reference} />
+        </div>
+      </Show>
+      <Show when={state.live && props.locked}>
+        <div class="browser-live-view-lock" role="status">
+          <span>{t("browser.liveView.agentUsing")}</span>
+          <Show when={props.onTakeOver}>
+            {(takeOver) => (
+              <Button variant="secondary" size="xs" onClick={() => takeOver()()}>
+                {t("island.action.takeOver")}
+              </Button>
+            )}
+          </Show>
         </div>
       </Show>
       <Show when={state.live && state.notice}>

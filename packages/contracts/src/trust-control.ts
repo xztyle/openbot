@@ -81,14 +81,15 @@ export const DEFAULT_TRUST_POLICY: TrustPolicy = {
   version: 1,
   enabled: true,
   roles: {
-    lead: { pay: "ask", launch_ads: "ask", publish: "allow", email: "ask", create_agent: "allow", delete: "ask" },
-    member: { pay: "ask", launch_ads: "ask", publish: "ask", email: "ask", create_agent: "ask", delete: "ask" },
+    // The owner's choice: only money waits for an approval. Every other action is allowed and kept in the audit trail.
+    lead: { pay: "ask", launch_ads: "ask", publish: "allow", email: "allow", create_agent: "allow", delete: "allow" },
+    member: { pay: "ask", launch_ads: "ask", publish: "allow", email: "allow", create_agent: "allow", delete: "allow" },
   },
   spaces: {},
   teams: {},
   agents: {},
   budgets: [],
-  sandbox: { landings: true, ads: true, emails: true },
+  sandbox: { landings: false, ads: false, emails: false },
   approvalPassMinutes: 30,
 };
 

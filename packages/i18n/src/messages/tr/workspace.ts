@@ -353,7 +353,14 @@ export const messages = {
   "workspace.app.composer.cancelEdit": "İptal",
   "workspace.app.composer.removeFile": "Kaldır: {name}",
   "workspace.app.composer.attachFailed": "Dosyalar eklenemedi.",
-  "workspace.app.composer.sendFailed": "Mesaj gönderilmedi. Hâlâ yazma kutusunda duruyor.",
+  "workspace.app.outbox.label": "Henüz gönderilmedi",
+  "workspace.app.outbox.waiting": "Bağlantı bekleniyor. Bağlantı gelince gönderilecek.",
+  "workspace.app.outbox.sending": "Gönderiliyor…",
+  "workspace.app.outbox.failed": "Gönderilmedi.",
+  "workspace.app.outbox.retry": "Tekrar dene",
+  "workspace.app.outbox.edit": "Düzenle",
+  "workspace.app.outbox.discard": "Sil",
+  "workspace.app.outbox.files": { one: "{count} dosya", other: "{count} dosya" },
   "workspace.app.composer.broadcast.title": {
     one: "{count} kişiye bildirilsin mi?",
     other: "{count} kişiye bildirilsin mi?",
@@ -363,7 +370,6 @@ export const messages = {
   "workspace.app.composer.broadcast.here":
     "@here, #{channel} içinde çevrimiçi olan herkese bildirim gönderir. Ajanlar sayılmaz.",
   "workspace.app.composer.broadcast.send": "Gönder",
-  "workspace.app.composer.offline": "Sunucu bağlı değil. Çevrimiçi olduğunda tekrar deneyin.",
   "workspace.app.message.edit": "Mesajı düzenle",
   "workspace.app.message.copyText": "Metni kopyala",
   "workspace.app.message.copyLink": "Bağlantıyı kopyala",

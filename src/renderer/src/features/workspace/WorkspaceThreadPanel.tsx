@@ -266,7 +266,8 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
             alsoSendTo={isChannel() ? name() : undefined}
             // A phone opens the keyboard only on a tap in the box, as Slack's app does.
             focusRequest={ws.env.phone() ? 0 : 1}
-            disabled={!ws.env.connectionReady() || archived()}
+            // The connection never locks the box: a message sent while it is away waits in the outbox.
+            disabled={archived()}
           />
         }
       />

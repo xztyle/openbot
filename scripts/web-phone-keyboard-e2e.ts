@@ -334,6 +334,120 @@ async function clearDraft(page: Page): Promise<void> {
   await settle(page);
 }
 
+declare global {
+  interface Window {
+    /** The harness's connection, from `web-client-inbox-harness.tsx`. */
+    harnessConnection?: { drop(holdMs: number): void; sent: { operationId: string; text: string }[] };
+    /** The editor this check watches, and how often it stopped taking text. */
+    composerNode?: Element;
+    composerLocked?: number;
+  }
+}
+
+/**
+ * A phone on a weak network loses and replaces its connection often. The box keeps the focus and
+ * takes every key through each loss, its editor stays the same element, and Send while the
+ * connection is away waits and sends once it is back.
+ */
+async function checkTypingThroughReconnects(browser: Browser, page: Page, phone: Phone): Promise<void> {
+  const surface = page.locator(".ws-composer .composer-editor-surface").filter({ visible: true }).last();
+  await surface.tap();
+  await settle(page);
+  await surface.evaluate((element) => {
+    window.composerNode = element;
+    window.composerLocked = 0;
+    new MutationObserver(() => {
+      if (element.getAttribute("contenteditable") !== "true") window.composerLocked = (window.composerLocked ?? 0) + 1;
+    }).observe(element, { attributes: true, attributeFilter: ["contenteditable"] });
+  });
+  const text = "cuales son los mejores productos para el lanzamiento";
+  // A drop every few keys, each held for a while, as a phone between cells sees it.
+  for (const [index, character] of [...text].entries()) {
+    if (index % 9 === 3) await page.evaluate(() => window.harnessConnection?.drop(500));
+    await page.keyboard.type(character);
+    await page.waitForTimeout(35);
+  }
+  await page.waitForTimeout(800);
+  await phoneShot(browser, page, phone, "09-channel-typed-through-reconnects");
+  await step(phone, "typing through connection drops: every key lands, focus and the editor stay", async () => {
+    const result = await surface.evaluate((element) => ({
+      text: (element instanceof HTMLElement ? element.innerText : "").replace(/\u00a0/gu, " ").trim(),
+      sameNode: window.composerNode === element,
+      focused: document.activeElement === element,
+      locked: window.composerLocked ?? 0,
+    }));
+    // Every check in one, so a failure says all that went wrong.
+    assert.deepEqual(
+      result,
+      { text, sameNode: true, focused: true, locked: 0 },
+      "Keys typed during a reconnect were lost, or the editor was locked, made again or lost the focus.",
+    );
+  });
+
+  // Send while the connection is away: the message waits under the conversation, the box is free
+  // at once, and the message goes once when the connection is back.
+  const sentCount = (message: string) =>
+    page.evaluate((body) => window.harnessConnection?.sent.filter((item) => item.text === body).length ?? 0, message);
+  const outbox = page.locator(".ws-outbox-message").filter({ visible: true });
+  await page.evaluate(() => window.harnessConnection?.drop(2_500));
+  await page.waitForTimeout(100);
+  await page.locator(".ws-composer button[aria-label='Send']").filter({ visible: true }).last().tap();
+  await settle(page);
+  await phoneShot(browser, page, phone, "10-channel-sent-while-offline");
+  await step(
+    phone,
+    "Send while offline: the message waits as not sent, and the box is empty and keeps the focus",
+    async () => {
+      await outbox.first().waitFor({ timeout: 2_000 });
+      assert.match((await outbox.first().innerText()).trim(), /^cuales son los mejores productos/u);
+      assert.match(await outbox.first().innerText(), /Waiting for the connection/u);
+      assert.equal(await sentCount(text), 0, "The host took the message while it was away.");
+      assert.equal((await surface.innerText()).trim(), "", "The box kept the sent text.");
+      assert.equal(
+        await surface.evaluate((element) => document.activeElement === element),
+        true,
+        "The box lost the focus.",
+      );
+      // The next message can be written at once.
+      await page.keyboard.type("y el precio");
+      assert.equal((await surface.innerText()).trim(), "y el precio");
+    },
+  );
+  await step(phone, "back online: the waiting message is delivered exactly once and leaves the outbox", async () => {
+    await page.waitForFunction(
+      (body) => (window.harnessConnection?.sent.filter((item) => item.text === body).length ?? 0) > 0,
+      text,
+      { timeout: 20_000 },
+    );
+    await outbox.first().waitFor({ state: "detached", timeout: 5_000 });
+    await page.waitForTimeout(1_000);
+    assert.equal(await sentCount(text), 1, "The message went more than once.");
+    const transcript = page.locator(".ws-message").filter({ hasText: text });
+    assert.equal(await transcript.count(), 1, "The message does not show once in the conversation.");
+    assert.equal((await surface.innerText()).trim(), "y el precio", "The draft typed meanwhile changed.");
+  });
+
+  // A page that reloads while a message waits keeps it, and sends it once it connects.
+  const queued = "mensaje que espera la conexion";
+  await clearDraft(page);
+  await page.evaluate(() => window.harnessConnection?.drop(60_000));
+  await page.waitForTimeout(100);
+  await page.keyboard.type(queued);
+  await page.locator(".ws-composer button[aria-label='Send']").filter({ visible: true }).last().tap();
+  await outbox.first().waitFor({ timeout: 2_000 });
+  await page.reload({ waitUntil: "commit" });
+  await step(phone, "a reload keeps the waiting message and sends it once on connect", async () => {
+    await page.waitForFunction(
+      (body) => (window.harnessConnection?.sent.filter((item) => item.text === body).length ?? 0) > 0,
+      queued,
+      { timeout: UI_WAIT_MS },
+    );
+    await page.waitForTimeout(1_000);
+    assert.equal(await sentCount(queued), 1, "The waiting message went more than once.");
+    assert.equal(await outbox.count(), 0, "The sent message still waits.");
+  });
+}
+
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 const server = await createServer({
@@ -442,6 +556,8 @@ try {
     await typeDraft(page, "Morning all");
     await phoneShot(browser, page, phone, "08-channel-keyboard");
     await step(phone, "a channel with the keyboard open", () => checkKeyboardLayout(page, phone));
+    await clearDraft(page);
+    await checkTypingThroughReconnects(browser, page, phone);
     await context.close();
   }
 

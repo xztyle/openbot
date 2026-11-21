@@ -293,6 +293,18 @@ export function createWebWorkspace(
   let generation = 0;
   let selectedId: string | null = null;
   let hostId: string | null = null;
+  /** Sends that wait for the opened host to be online again. Called when it is, or when the client closes. */
+  let onlineWaiters: (() => void)[] = [];
+  function wakeOnlineWaiters() {
+    const waiters = onlineWaiters;
+    onlineWaiters = [];
+    for (const wake of waiters) wake();
+  }
+  /** Resolves when the opened host is online, or the client closed. */
+  function untilOnline(): Promise<void> {
+    if (state.status === "online" || disposed) return Promise.resolve();
+    return new Promise((resolve) => onlineWaiters.push(resolve));
+  }
   let disposed = false;
   let running = false;
   let pendingReload = false;
@@ -1214,6 +1226,7 @@ export function createWebWorkspace(
         // The host is back, so a restart that it announced is over.
         draft.hostRestart = null;
       });
+      wakeOnlineWaiters();
       restartSince = null;
       stopRestartRetry();
       hostAway = false;
@@ -1904,7 +1917,8 @@ export function createWebWorkspace(
   }
   /**
    * Sends one message to an agent of the open host. The chat shows it as pending and the answer says
-   * whether it arrived; a failure is never resent here. `clientMessageId` lets the host drop a retry.
+   * whether it arrived. Only a send that a lost connection cut goes again, once, with the same
+   * `clientMessageId`, so the host drops the copy.
    */
   async function send(
     id: string,
@@ -1914,14 +1928,25 @@ export function createWebWorkspace(
     clientMessageId?: string,
   ): Promise<{ messageId: string } | { error: string }> {
     const { t, errorMessage } = currentText();
-    if (state.status !== "online") return { error: t("chat.errorStatus.send") };
     if (text.length > INPUT_LIMITS.messageText) return { error: t("webClient.error.messageTooLong") };
-    const current = generation;
-    let messageId: string;
-    try {
-      messageId = await runtime.send(id, text, attachmentDraftIds, replyToMessageId, clientMessageId);
-    } catch (error) {
-      return { error: errorMessage(error, t("webClient.error.deliveryUnconfirmed")) };
+    // A phone between cells keeps the message as sending and sends it when the host is back. With a
+    // `clientMessageId` the host drops a second copy, so a send that the lost connection cut goes
+    // again once, as the same message.
+    const sendingHost = hostId;
+    let attempts = clientMessageId ? 2 : 1;
+    let messageId: string | undefined;
+    let current = generation;
+    while (messageId === undefined) {
+      await untilOnline();
+      if (disposed || hostId !== sendingHost || state.status !== "online") return { error: t("chat.errorStatus.send") };
+      current = generation;
+      attempts -= 1;
+      try {
+        messageId = await runtime.send(id, text, attachmentDraftIds, replyToMessageId, clientMessageId);
+      } catch (error) {
+        if (attempts > 0 && state.status !== "online" && !disposed) continue;
+        return { error: errorMessage(error, t("webClient.error.deliveryUnconfirmed")) };
+      }
     }
     // The next pending send of the chat waits for this answer, so the history reload runs beside it.
     if (current === generation && !disposed)
@@ -2069,6 +2094,7 @@ export function createWebWorkspace(
     window.addEventListener("blur", pageFocus);
     return () => {
       disposed = true;
+      wakeOnlineWaiters();
       generation += 1;
       clearTimeout(readsTimer);
       clearTimeout(eventRefreshTimer);

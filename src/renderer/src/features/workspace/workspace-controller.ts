@@ -72,6 +72,7 @@ import {
   type WorkspaceDirectory,
   type WorkspacePerson,
 } from "./workspace-model";
+import { createWorkspaceOutbox, type OutboxMessage } from "./workspace-outbox";
 import { createWorkspaceSearch } from "./workspace-search";
 import { localSectionPrefs, sidebarSections, withSectionOrder } from "./workspace-sidebar-sections";
 import {
@@ -1454,12 +1455,23 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     void refreshActivity();
   });
   let draftTimer: ReturnType<typeof setTimeout> | undefined;
+  function writePendingDrafts() {
+    if (!draftTimer) return;
+    clearTimeout(draftTimer);
+    draftTimer = undefined;
+    writeDrafts(env.storageKey(), state.drafts);
+    writeDraftTimes(env.storageKey(), state.drafts, draftTimes);
+  }
+  // A phone can close a page in the background without another task: the last keys are stored as it goes.
+  const storeOnHide = () => {
+    if (document.visibilityState === "hidden") writePendingDrafts();
+  };
+  window.addEventListener("pagehide", writePendingDrafts);
+  document.addEventListener("visibilitychange", storeOnHide);
   onCleanup(() => {
-    if (draftTimer) {
-      clearTimeout(draftTimer);
-      writeDrafts(env.storageKey(), state.drafts);
-      writeDraftTimes(env.storageKey(), state.drafts, draftTimes);
-    }
+    window.removeEventListener("pagehide", writePendingDrafts);
+    document.removeEventListener("visibilitychange", storeOnHide);
+    writePendingDrafts();
   });
 
   // ---------------------------------------------------------------- activity
@@ -1936,18 +1948,6 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       else delete current[key];
     });
   }
-  /**
-   * The operation id of a send whose answer did not come, by draft key. The same message sent again
-   * reuses it, so a host that stored the first one answers with its receipt and stores no copy.
-   */
-  const unansweredSends = new Map<string, { fingerprint: string; operationId: string }>();
-  function sendOperationId(key: string, fingerprint: string): string {
-    const unanswered = unansweredSends.get(key);
-    if (unanswered?.fingerprint === fingerprint) return unanswered.operationId;
-    const operationId = crypto.randomUUID();
-    unansweredSends.set(key, { fingerprint, operationId });
-    return operationId;
-  }
 
   function setDraft(key: string, text: string) {
     const changed = (state.drafts[key] ?? "") !== text;
@@ -2066,37 +2066,64 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     return { agentId, answerMode, ...(own?.focus ? { focus: own.focus } : {}) };
   }
 
-  async function send(input: {
+  /** Sends one message of the outbox, with the operation id it got when the reader sent it. */
+  async function deliver(message: OutboxMessage): Promise<void> {
+    const mention = chatTagReferences(message.text).find(
+      (reference) => reference.kind === "agent" && !message.text.slice(0, reference.start).trim(),
+    );
+    await channels.send({
+      type: "send",
+      operationId: message.id,
+      channelId: message.channelId,
+      text: message.text,
+      recipientAgentId: message.threadRootId ? null : (mention?.id ?? null),
+      replyToMessageId: null,
+      attachmentDraftIds: message.attachmentDraftIds,
+      ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
+      ...(message.threadRootId && message.alsoToChannel ? { alsoToChannel: true } : {}),
+    });
+    if (message.threadRootId && state.thread?.rootId === message.threadRootId)
+      void loadThread(message.channelId, message.threadRootId, true);
+    scheduleActivity(3_000);
+  }
+  const outbox = createWorkspaceOutbox({
+    storageKey: env.storageKey,
+    ready: () => channels.supported() && env.connectionReady(),
+    deliver,
+    describe: (error) => failureText(error, "workspace.app.outbox.failed"),
+  });
+  onCleanup(() => outbox.dispose());
+  // The messages that waited for the connection leave when it is back, in the order they were written.
+  createEffect(
+    () => channels.supported() && env.connectionReady(),
+    (ready) => {
+      if (ready) outbox.connected();
+    },
+  );
+  // The messages follow the reader and the server, as the drafts do.
+  createEffect(env.storageKey, (key, previous) => {
+    if (previous !== undefined && key !== previous) outbox.reload();
+  });
+
+  /**
+   * Sends a message. It never waits for the connection: the outbox keeps it, shows it as sending, and
+   * sends it once the host is reachable, so a phone between cells loses nothing the reader wrote.
+   */
+  function send(input: {
     channelId: string;
     text: string;
     attachmentDraftIds: string[];
     threadRootId?: string | null;
     alsoToChannel?: boolean;
-  }): Promise<void> {
-    if (!env.connectionReady()) throw new Error(currentText().t("workspace.app.composer.offline"));
-    const mention = chatTagReferences(input.text).find(
-      (reference) => reference.kind === "agent" && !input.text.slice(0, reference.start).trim(),
-    );
-    const key = draftKey(input.channelId, input.threadRootId);
-    const operationId = sendOperationId(
-      key,
-      JSON.stringify([input.text, input.attachmentDraftIds, input.alsoToChannel === true]),
-    );
-    await channels.send({
-      type: "send",
-      operationId,
+  }): OutboxMessage {
+    return outbox.add({
+      key: draftKey(input.channelId, input.threadRootId),
       channelId: input.channelId,
+      threadRootId: input.threadRootId ?? null,
       text: input.text,
-      recipientAgentId: input.threadRootId ? null : (mention?.id ?? null),
-      replyToMessageId: null,
       attachmentDraftIds: input.attachmentDraftIds,
-      ...(input.threadRootId ? { threadRootId: input.threadRootId } : {}),
-      ...(input.threadRootId && input.alsoToChannel ? { alsoToChannel: true } : {}),
+      alsoToChannel: input.threadRootId ? input.alsoToChannel === true : false,
     });
-    if (unansweredSends.get(key)?.operationId === operationId) unansweredSends.delete(key);
-    if (input.threadRootId && state.thread?.rootId === input.threadRootId)
-      void loadThread(input.channelId, input.threadRootId, true);
-    scheduleActivity(3_000);
   }
 
   function findMessage(channelId: string, messageId: string): ChannelMessage | undefined {
@@ -2650,6 +2677,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     typingIn,
     refreshActivity,
     send,
+    outbox,
     toggleReaction,
     startEditing,
     stopEditing,

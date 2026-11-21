@@ -455,7 +455,19 @@ export const messages = {
   "workspace.app.composer.cancelEdit": "Anuluj",
   "workspace.app.composer.removeFile": "Usuń {name}",
   "workspace.app.composer.attachFailed": "Nie udało się załączyć plików.",
-  "workspace.app.composer.sendFailed": "Wiadomość nie została wysłana. Nadal jest w polu tekstowym.",
+  "workspace.app.outbox.label": "Jeszcze niewysłane",
+  "workspace.app.outbox.waiting": "Czeka na połączenie. Zostanie wysłana, gdy wróci.",
+  "workspace.app.outbox.sending": "Wysyłanie…",
+  "workspace.app.outbox.failed": "Nie wysłano.",
+  "workspace.app.outbox.retry": "Spróbuj ponownie",
+  "workspace.app.outbox.edit": "Edytuj",
+  "workspace.app.outbox.discard": "Usuń",
+  "workspace.app.outbox.files": {
+    one: "{count} plik",
+    few: "{count} pliki",
+    many: "{count} plików",
+    other: "{count} pliku",
+  },
   "workspace.app.composer.broadcast.title": {
     one: "Powiadomić {count} osobę?",
     few: "Powiadomić {count} osoby?",
@@ -467,7 +479,6 @@ export const messages = {
   "workspace.app.composer.broadcast.here":
     "@here wysyła powiadomienie do każdej osoby w #{channel}, która jest online. Agenci nie są liczeni.",
   "workspace.app.composer.broadcast.send": "Wyślij",
-  "workspace.app.composer.offline": "Serwer nie jest połączony. Spróbuj ponownie, gdy będzie online.",
   "workspace.app.message.edit": "Edytuj wiadomość",
   "workspace.app.message.copyText": "Kopiuj tekst",
   "workspace.app.message.copyLink": "Kopiuj link",

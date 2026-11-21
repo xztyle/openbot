@@ -426,7 +426,6 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
               label={placeholder()}
               // A phone opens the keyboard only on a tap in the box, as Slack's app does.
               focusRequest={ws.env.phone() ? 0 : 1}
-              disabled={!ws.env.connectionReady()}
             />
           </Show>
         </Show>

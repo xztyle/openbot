@@ -1046,3 +1046,73 @@
     white-space: nowrap;
   }
 }
+
+/*
+ * The reader's messages the host has not taken yet, at the end of the conversation. One on its way
+ * shows only when the host is slow to answer, so a normal send does not flash.
+ */
+.ws-outbox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1-5);
+  margin: 0 0 var(--openbot-space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.ws-outbox-message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-0-5);
+  border-left: 2px solid var(--ws-line);
+  padding: var(--openbot-space-0-5) var(--openbot-space-2);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-md);
+}
+
+.ws-outbox-message:not([data-state="failed"])[data-online] {
+  animation: ws-outbox-late 0s linear 0.8s both;
+}
+
+.ws-outbox-message[data-state="failed"] {
+  border-left-color: var(--openbot-danger-text);
+}
+
+@keyframes ws-outbox-late {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ws-outbox-text {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--openbot-text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.ws-outbox-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+/* The status takes its own line, and the actions sit together under it. */
+.ws-outbox-status > span {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.ws-outbox-message[data-state="failed"] .ws-outbox-status {
+  color: var(--openbot-danger-text);
+}

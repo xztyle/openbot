@@ -330,7 +330,14 @@ export const messages = {
   "workspace.app.composer.cancelEdit": "Annulla",
   "workspace.app.composer.removeFile": "Rimuovi {name}",
   "workspace.app.composer.attachFailed": "Impossibile allegare i file.",
-  "workspace.app.composer.sendFailed": "Il messaggio non è stato inviato. È ancora nella casella.",
+  "workspace.app.outbox.label": "Non ancora inviati",
+  "workspace.app.outbox.waiting": "In attesa della connessione. Partirà quando torna.",
+  "workspace.app.outbox.sending": "Invio…",
+  "workspace.app.outbox.failed": "Non inviato.",
+  "workspace.app.outbox.retry": "Riprova",
+  "workspace.app.outbox.edit": "Modifica",
+  "workspace.app.outbox.discard": "Elimina",
+  "workspace.app.outbox.files": { one: "{count} file", other: "{count} file" },
   "workspace.app.composer.broadcast.title": {
     one: "Notificare {count} persona?",
     other: "Notificare {count} persone?",
@@ -340,7 +347,6 @@ export const messages = {
   "workspace.app.composer.broadcast.here":
     "@here invia una notifica a ogni persona in #{channel} che è online. Gli agenti non sono contati.",
   "workspace.app.composer.broadcast.send": "Invia",
-  "workspace.app.composer.offline": "Il server non è connesso. Riprova quando è online.",
   "workspace.app.message.edit": "Modifica messaggio",
   "workspace.app.message.copyText": "Copia testo",
   "workspace.app.message.copyLink": "Copia link",

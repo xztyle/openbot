@@ -12,7 +12,8 @@ import { PartialAttachmentImportError } from "../channels/channels-port";
 import { composerToolbar, useComposerSources } from "./workspace-composer-sources";
 import { useWorkspace } from "./workspace-context";
 import { draftKey } from "./workspace-controller";
-import { broadcastAudience, draftBroadcast } from "./workspace-model";
+import { broadcastAudience, draftBroadcast, previewText } from "./workspace-model";
+import type { OutboxMessage } from "./workspace-outbox";
 
 /**
  * A broadcast that would notify this many people or more asks first, as Slack does in a channel of
@@ -32,7 +33,10 @@ export interface WorkspaceComposerProps {
   label: string;
   /** In a thread of a channel: the name for "Also send to #name". */
   alsoSendTo?: string | undefined;
-  /** The agents a mention offers first: the members of the conversation. */
+  /**
+   * Only for a conversation the reader cannot write in, such as an archived one. The connection
+   * never locks the box: typing always lands, and a message sent while it is away waits in the outbox.
+   */
   disabled?: boolean;
   /** Asks the editor for the focus, such as when the conversation opens. */
   focusRequest?: number;
@@ -223,33 +227,23 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
       }
       return;
     }
-    const text = value();
     const files = attachments();
-    const body = text.trim();
-    // The answer can come after the reader opened another conversation; the draft is this one's.
+    const body = value().trim();
+    // The message goes to the outbox, which sends it now or once the connection is back: the box
+    // is free for the next one at once, and nothing the reader wrote waits on the network.
     const sentKey = key();
-    setSending(true);
+    ws.send({
+      channelId: props.channelId,
+      text: body,
+      attachmentDraftIds: files.map((file) => file.id),
+      threadRootId: props.threadRootId ?? null,
+      alsoToChannel: alsoSend(),
+    });
     ws.setDraft(sentKey, "");
     ws.noteTyping(props.channelId, props.threadRootId ?? null, false, true);
     setAttachments([], sentKey);
-    try {
-      await ws.send({
-        channelId: props.channelId,
-        text: body,
-        attachmentDraftIds: files.map((file) => file.id),
-        threadRootId: props.threadRootId ?? null,
-        alsoToChannel: alsoSend(),
-      });
-      setAlsoSend(false);
-    } catch (cause) {
-      // The message stays in the box, so nothing the reader wrote is lost.
-      if (!ws.draft(sentKey)) ws.setDraft(sentKey, text);
-      setAttachments((current) => (current.length ? current : files), sentKey);
-      setError(errorMessage(cause, t("workspace.app.composer.sendFailed")));
-    } finally {
-      setSending(false);
-      setFocus((request) => request + 1);
-    }
+    setAlsoSend(false);
+    setFocus((request) => request + 1);
   }
 
   /** ↑ in an empty box edits the reader's last message, as in Slack. Escape ends an edit. */
@@ -294,6 +288,23 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
         element.addEventListener("keydown", keyDown);
       }}
     >
+      <Show when={!editing() && ws.outbox.of(key()).length > 0}>
+        <OutboxList
+          messages={ws.outbox.of(key())}
+          online={ws.env.connectionReady()}
+          onRetry={(message) => ws.outbox.retry(message.id)}
+          onDiscard={(message) => ws.outbox.discard(message.id)}
+          onEdit={
+            value().trim()
+              ? undefined
+              : (message) => {
+                  ws.outbox.discard(message.id);
+                  setValue(message.text);
+                  setFocus((request) => request + 1);
+                }
+          }
+        />
+      </Show>
       <MessageComposer
         label={props.label}
         class={editing() ? "ws-composer-editing" : undefined}
@@ -409,5 +420,60 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
         }}
       />
     </div>
+  );
+}
+
+/**
+ * The reader's messages that the host has not taken yet, under the conversation as Slack shows
+ * them: one that waits for the connection says so, one on its way says Sending, and one the host
+ * refused offers Retry. Edit takes it back into an empty box.
+ */
+function OutboxList(props: {
+  messages: readonly OutboxMessage[];
+  online: boolean;
+  onRetry: (message: OutboxMessage) => void;
+  onDiscard: (message: OutboxMessage) => void;
+  onEdit: ((message: OutboxMessage) => void) | undefined;
+}) {
+  const { t } = useText();
+  return (
+    <ul class="ws-outbox" aria-label={t("workspace.app.outbox.label")}>
+      <For each={props.messages} keyed={(message) => message.id}>
+        {(message) => (
+          <li class="ws-outbox-message" data-state={message().state} data-online={props.online ? "" : undefined}>
+            <p class="ws-outbox-text">
+              {previewText(message().text, 400) ||
+                t("workspace.app.outbox.files", { count: message().attachmentDraftIds.length })}
+            </p>
+            <div class="ws-outbox-status" role="status">
+              <span>
+                {message().state === "failed"
+                  ? (message().error ?? t("workspace.app.outbox.failed"))
+                  : message().state === "sending" || props.online
+                    ? t("workspace.app.outbox.sending")
+                    : t("workspace.app.outbox.waiting")}
+              </span>
+              <Show when={message().state === "failed"}>
+                <Button variant="link" size="xs" onClick={() => props.onRetry(message())}>
+                  {t("workspace.app.outbox.retry")}
+                </Button>
+              </Show>
+              <Show when={message().state !== "sending" && props.onEdit}>
+                {(edit) => (
+                  <Button variant="link" size="xs" onClick={() => edit()(message())}>
+                    {t("workspace.app.outbox.edit")}
+                  </Button>
+                )}
+              </Show>
+              <Show when={message().state !== "sending"}>
+                <Button variant="link" size="xs" onClick={() => props.onDiscard(message())}>
+                  {t("workspace.app.outbox.discard")}
+                </Button>
+              </Show>
+            </div>
+          </li>
+        )}
+      </For>
+    </ul>
   );
 }

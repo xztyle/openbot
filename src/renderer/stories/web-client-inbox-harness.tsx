@@ -22,6 +22,18 @@ const SAVED = [
   { messageId: "general-m5", state: "done" },
 ] as const;
 
+/**
+ * A lost connection on demand, for `scripts/web-phone-keyboard-e2e.ts`: `drop(ms)` reports the host
+ * offline, as a dropped or replaced connection does, and holds the next connect for `ms`, so the
+ * workspace stays "connecting" that long. Until the connection is back, a channel command fails as
+ * on a dead connection. `sent` lists every send the host took, so a test sees a message that went twice.
+ */
+declare global {
+  interface Window {
+    harnessConnection?: { drop(holdMs: number): void; sent: { operationId: string; text: string }[] };
+  }
+}
+
 const runtime: WebRuntimeFactory = (_accountId, events) => {
   const mock = createMockOpenBot({
     channels: seeds(WEB_PREVIEW_MEMBER_ID, { unread: true }),
@@ -37,9 +49,39 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
   });
   for (const item of SAVED)
     void mock.api.agent.workspaceSetSaved?.({ operationId: crypto.randomUUID(), channelId: "general", ...item });
-  return mockWebRuntimeFor(mock, events);
+  const web = mockWebRuntimeFor(mock, events);
+  let hold = 0;
+  let down = false;
+  const sent: { operationId: string; text: string }[] = [];
+  window.harnessConnection = {
+    drop(holdMs) {
+      hold = holdMs;
+      down = true;
+      events.connection({ hostId: "preview-host", state: "offline", message: null });
+    },
+    sent,
+  };
+  const agent = web.channels;
+  if (agent) {
+    const channelCommand = agent.channelCommand.bind(agent);
+    agent.channelCommand = async (command) => {
+      if (down) throw new Error("The connection was lost.");
+      const result = await channelCommand(command);
+      if (command.type === "send") sent.push({ operationId: command.operationId, text: command.text });
+      return result;
+    };
+  }
+  return {
+    ...web,
+    connect: async (host) => {
+      const wait = hold;
+      hold = 0;
+      if (wait) await new Promise((done) => setTimeout(done, wait));
+      down = false;
+      return web.connect(host);
+    },
+  };
 };
-
 const root = document.getElementById("root");
 if (root)
   render(

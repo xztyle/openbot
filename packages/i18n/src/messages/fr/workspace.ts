@@ -337,7 +337,14 @@ export const messages = {
   "workspace.app.composer.cancelEdit": "Annuler",
   "workspace.app.composer.removeFile": "Retirer {name}",
   "workspace.app.composer.attachFailed": "Impossible de joindre les fichiers.",
-  "workspace.app.composer.sendFailed": "Le message n’a pas été envoyé. Il est toujours dans la zone de saisie.",
+  "workspace.app.outbox.label": "Pas encore envoyés",
+  "workspace.app.outbox.waiting": "En attente de la connexion. Il partira dès son retour.",
+  "workspace.app.outbox.sending": "Envoi…",
+  "workspace.app.outbox.failed": "Non envoyé.",
+  "workspace.app.outbox.retry": "Réessayer",
+  "workspace.app.outbox.edit": "Modifier",
+  "workspace.app.outbox.discard": "Supprimer",
+  "workspace.app.outbox.files": { one: "{count} fichier", other: "{count} fichiers" },
   "workspace.app.composer.broadcast.title": {
     one: "Notifier {count} personne ?",
     other: "Notifier {count} personnes ?",
@@ -347,7 +354,6 @@ export const messages = {
   "workspace.app.composer.broadcast.here":
     "@here envoie une notification à chaque personne de #{channel} qui est en ligne. Les agents ne sont pas comptés.",
   "workspace.app.composer.broadcast.send": "Envoyer",
-  "workspace.app.composer.offline": "Le serveur n’est pas connecté. Réessayez quand il sera en ligne.",
   "workspace.app.message.edit": "Modifier le message",
   "workspace.app.message.copyText": "Copier le texte",
   "workspace.app.message.copyLink": "Copier le lien",

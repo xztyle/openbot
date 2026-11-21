@@ -455,7 +455,19 @@ export const messages = {
   "workspace.app.composer.cancelEdit": "Отмена",
   "workspace.app.composer.removeFile": "Удалить {name}",
   "workspace.app.composer.attachFailed": "Не удалось прикрепить файлы.",
-  "workspace.app.composer.sendFailed": "Сообщение не отправлено. Оно осталось в поле ввода.",
+  "workspace.app.outbox.label": "Ещё не отправлены",
+  "workspace.app.outbox.waiting": "Ждёт подключения. Отправится, когда оно вернётся.",
+  "workspace.app.outbox.sending": "Отправка…",
+  "workspace.app.outbox.failed": "Не отправлено.",
+  "workspace.app.outbox.retry": "Повторить",
+  "workspace.app.outbox.edit": "Изменить",
+  "workspace.app.outbox.discard": "Удалить",
+  "workspace.app.outbox.files": {
+    one: "{count} файл",
+    few: "{count} файла",
+    many: "{count} файлов",
+    other: "{count} файла",
+  },
   "workspace.app.composer.broadcast.title": {
     one: "Уведомить {count} человека?",
     few: "Уведомить {count} человека?",
@@ -467,7 +479,6 @@ export const messages = {
   "workspace.app.composer.broadcast.here":
     "@here отправляет уведомление каждому участнику #{channel}, который в сети. Агенты не учитываются.",
   "workspace.app.composer.broadcast.send": "Отправить",
-  "workspace.app.composer.offline": "Сервер не подключён. Повторите попытку, когда он будет в сети.",
   "workspace.app.message.edit": "Изменить сообщение",
   "workspace.app.message.copyText": "Копировать текст",
   "workspace.app.message.copyLink": "Копировать ссылку",

@@ -45,7 +45,11 @@ import {
 } from "./workspace-model";
 
 /** The body of a message: Markdown, files and images, as the agent chat draws them. */
-export function WorkspaceMessageBody(props: { entry: ChannelMessage }) {
+export function WorkspaceMessageBody(props: {
+  entry: ChannelMessage;
+  /** A long text folds to its first lines; the images and files under it always show. */
+  fold?: { id: string; enabled: boolean; live: boolean } | undefined;
+}) {
   const ws = useWorkspace();
   const message = createMemo((): AgentMessage => {
     const row = toAgentMessage(
@@ -111,6 +115,19 @@ export function WorkspaceMessageBody(props: { entry: ChannelMessage }) {
         onAttachmentAction={attachmentAction}
         onDownload={download}
         mediaSource={port().attachmentMedia}
+        foldText={
+          props.fold
+            ? (text) => (
+                <LongMessageFold
+                  id={props.fold?.id ?? ""}
+                  enabled={props.fold?.enabled === true}
+                  live={props.fold?.live === true}
+                >
+                  {text}
+                </LongMessageFold>
+              )
+            : undefined
+        }
       />
       <Show when={viewer()}>
         {(open) => (
@@ -207,6 +224,8 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
         !deleted() &&
         !note() &&
         !current.message.questionPrompt &&
+        // Only text folds: a message of files alone shows them whole.
+        current.message.text.trim() !== "" &&
         !editingHere(),
       live: current.message.status === "streaming",
     };
@@ -419,9 +438,7 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
           )}
         </Show>
         <Show when={!props.row.pending && !plain()}>
-          <LongMessageFold id={fold().id} enabled={fold().enabled} live={fold().live}>
-            <WorkspaceMessageBody entry={shownEntry()} />
-          </LongMessageFold>
+          <WorkspaceMessageBody entry={shownEntry()} fold={fold()} />
         </Show>
         <Show when={!props.row.pending && !note() && condensed.condensed()}>
           <CondensedNote showingOriginal={condensed.showingOriginal()} onToggle={condensed.toggle} />

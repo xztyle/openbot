@@ -4,7 +4,7 @@
  * the directory of people and agents, so the desktop and the browser client build the same view.
  */
 
-import { channelAgentNoteLine } from "@openbot/contracts/channel-agent-note";
+import { addressesPerson, channelAgentNoteLine } from "@openbot/contracts/channel-agent-note";
 import { chatTagReferences } from "@openbot/contracts/chat-tag-references";
 import {
   CHANNEL_RESULT_MESSAGE_PREFIX,
@@ -374,28 +374,41 @@ export interface WorkspaceAgentNoteView {
 
 const LEADING_AGENT_MENTIONS = /^(?:\s*@\[[^\]\r\n]+\]\(agent:[^)\r\n]+\))+\s*/u;
 
+/** The names of the people of the workspace, the reader's too: a message that opens with one speaks to people. */
+export function peopleNames(directory: WorkspaceDirectory): string[] {
+  return [
+    directory.reader.name,
+    ...directory.people.map((person) => person.name),
+    ...Object.values(directory.names ?? {}),
+  ].filter(Boolean);
+}
+
 /** `agentNoteOf` for the messages of one page: the agents and the tasks it reads stay the same. */
 export function agentNotes(
   agents: readonly { id: string; name: string }[],
   tasks: readonly ChannelTask[],
+  people: readonly string[] = [],
 ): (entry: ChannelMessage) => WorkspaceAgentNoteView | null {
   const byId = new Map(tasks.map((task) => [task.id, task]));
-  return (entry) => agentNoteOf(entry, agents, byId);
+  return (entry) => agentNoteOf(entry, agents, byId, people);
 }
 
 /**
  * Whether a channel message is one agent talking to others, and how its row reads. The host marks
  * such a message (`agentNote`): a handoff, a brief that assigns work, a relayed message, a subtask
  * result. A message stored before that mark is read from its shape: a handoff note ("Designer: …")
- * of an agent, or the answer of a subtask, whose task an agent assigned. A question for the people
- * and a deleted message are never notes.
+ * of an agent, or the answer of a subtask, whose task an agent assigned, unless it opens with the
+ * name of a person (`people`). A question for the people, a message that the host marks as for the
+ * people (`audience`) and a deleted message are never notes.
  */
 export function agentNoteOf(
   entry: ChannelMessage,
   agents: readonly { id: string; name: string }[],
   tasks: ReadonlyMap<string, ChannelTask>,
+  people: readonly string[] = [],
 ): WorkspaceAgentNoteView | null {
   if (entry.author.kind !== "agent" || entry.deletedAt || entry.message.questionPrompt) return null;
+  if (entry.audience === "people") return null;
   const text = entry.message.text;
   const view = (to: readonly string[], summary: string, body: string): WorkspaceAgentNoteView | null => {
     const line = summary.trim();
@@ -421,10 +434,13 @@ export function agentNoteOf(
   }
   // The answer of a subtask goes to the agent that assigned it, which answers the people.
   const task = entry.taskId ? tasks.get(entry.taskId) : undefined;
-  const assigner = task?.parentTaskId ? tasks.get(task.parentTaskId)?.ownerAgentId : null;
-  if (entry.message.author === "assistant" && assigner && assigner !== entry.author.id)
-    return view([assigner], channelAgentNoteLine(text), text);
-  return null;
+  const parent = task?.parentTaskId ? tasks.get(task.parentTaskId) : undefined;
+  const assigner = parent?.ownerAgentId;
+  if (entry.message.author !== "assistant" || !assigner || assigner === entry.author.id) return null;
+  // A result that opens with a person's name, "Alejandro, rehice el copy…", answers the people.
+  const briefs = [task?.instruction ?? "", parent.instruction];
+  if (addressesPerson(text, { people, agents: agents.map((agent) => agent.name), briefs })) return null;
+  return view([assigner], channelAgentNoteLine(text), text);
 }
 
 function stepLabel(entry: ChannelMessage): string {

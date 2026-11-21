@@ -351,6 +351,43 @@ export function agentTalkSeeds(reader = "local"): MockChannelSeed[] {
     { task: task("cocina-research", "research", rootId, "cocina-task"), threadRootId: rootId },
     { task: task("cocina-sales", "sales", rootId, "cocina-task"), threadRootId: rootId },
   ];
+  // Ad mockups alone, and a short line with two of them: images never fold.
+  const mockups = message("nicho-cocina", 12, research, "");
+  mockups.message.attachments = [MEDIA_FILES.a1, MEDIA_FILES.a3, MEDIA_FILES.phone];
+  const captioned = message("nicho-cocina", 13, research, "Las dos maquetas para revisar:");
+  captioned.message.attachments = [MEDIA_FILES.a1, MEDIA_FILES.a3];
+  // Subtask results for the person, not the lead: one stored before `audience`, which opens with the
+  // person's name as the lead's brief calls them, and one that the agent marked for the people.
+  const copyTask = {
+    ...task("cocina-copy", "research", rootId, "cocina-task"),
+    state: "completed" as const,
+    instruction: "Tarea COC-41. Alejandro dijo el 20-nov: el copy es muy aburrido. Rehaz el copy de A1 y A3.",
+  };
+  const campaignTask = { ...task("cocina-campaign", "sales", rootId, "cocina-task"), state: "completed" as const };
+  const copyResult: ChannelMessage = {
+    ...message(
+      "nicho-cocina",
+      14,
+      research,
+      [
+        "Alejandro, rehice el copy de A1 y A3: ya no arranca con la lista de temas sino con una escena o una decisión. Las maquetas nuevas van arriba; nada publicado, 0 USD.",
+        "",
+        "- **Hook A1:** «Tres pavos. Una sola mesa. Falta decidir cuál se sirve.»",
+        "- **Hook A3:** «La cena de Navidad no se improvisa. Se ordena.»",
+      ].join("\n"),
+    ),
+    taskId: copyTask.id,
+  };
+  const campaignResult: ChannelMessage = {
+    ...message(
+      "nicho-cocina",
+      15,
+      sales,
+      "La campaña quedó en borrador con el tope de 98 USD. Entra a Facebook desde la tarjeta de COC-35 cuando puedas.",
+    ),
+    taskId: campaignTask.id,
+    audience: "people",
+  };
   // A long report to the people: it folds to its first lines, above the table.
   const report = message(
     "nicho-cocina",
@@ -360,6 +397,7 @@ export function agentTalkSeeds(reader = "local"): MockChannelSeed[] {
       "Resumen de la semana para la Cena Navideña. Los 11 copys tienen OK de Cumplimiento y las cuatro fotos de la landing se pueden usar con el crédito en el texto del anuncio.",
       "La imagen única de 1080×1350 está en revisión; el carrusel de tres piezas queda como plan B si la imagen no rinde en los primeros tres días.",
       "El presupuesto queda en 7 USD por día del 10 al 23 de diciembre, con el tope acumulado de 98 USD en la cuenta publicitaria.",
+      "El copy de A1 y A3 ya no arranca con la lista de temas sino con una escena o una decisión, y Cumplimiento lo revisa en COC-39 antes del sábado. Ninguna pieza está publicada todavía y el gasto sigue en 0 USD; el Estratega deja el calendario de publicación en el dossier §5.15 para que lo apruebes junto con la imagen.",
       "",
       "| Pieza | Estado | Responsable |",
       "| --- | --- | --- |",
@@ -370,5 +408,9 @@ export function agentTalkSeeds(reader = "local"): MockChannelSeed[] {
       "Pendiente de Alejandro: aprobar la imagen el sábado 21 y confirmar si el anuncio corre también el 24.",
     ].join("\n"),
   );
-  return [{ channel: room, messages: [root, ...replies, report], work }, ...base];
+  work.push({ task: copyTask }, { task: campaignTask });
+  return [
+    { channel: room, messages: [root, ...replies, mockups, captioned, copyResult, campaignResult, report], work },
+    ...base,
+  ];
 }

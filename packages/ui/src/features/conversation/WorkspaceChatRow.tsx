@@ -107,29 +107,37 @@ export function WorkspaceChatRow(props: WorkspaceChatRowProps): JSX.Element {
         {(origin) => <EventCheckMark origin={origin()} iconUrl={props.eventCheckIconUrl} />}
       </Show>
       {props.before}
-      <LongMessageFold id={`chat:${props.message.id}`} enabled={foldable()} live={props.message.streaming === true}>
-        <div class="ws-message-content" data-author={props.message.author === "you" ? "user" : "assistant"}>
-          <MessageBody
-            animate={props.animate}
-            message={shown()}
-            referencedMessage={props.referencedMessage}
-            referencedAuthorName={props.referencedAuthorName}
-            onOpenReference={props.onOpenReference}
-            referenceState={props.referenceState}
-            agents={props.agents}
-            skills={props.skills}
-            onSelectAgent={props.onSelectAgent}
-            onOpenLink={props.onOpenLink}
-            onPreview={props.onPreview}
-            onAttachmentAction={props.onAttachmentAction}
-            onOpenSharedFile={props.onOpenSharedFile}
-            onOpenWorkspaceFile={props.onOpenWorkspaceFile}
-            onOpenQuote={props.onOpenQuote}
-            onDownload={props.onDownload}
-            mediaSource={props.mediaSource}
-          />
-        </div>
-      </LongMessageFold>
+      <div class="ws-message-content" data-author={props.message.author === "you" ? "user" : "assistant"}>
+        <MessageBody
+          animate={props.animate}
+          message={shown()}
+          referencedMessage={props.referencedMessage}
+          referencedAuthorName={props.referencedAuthorName}
+          onOpenReference={props.onOpenReference}
+          referenceState={props.referenceState}
+          agents={props.agents}
+          skills={props.skills}
+          onSelectAgent={props.onSelectAgent}
+          onOpenLink={props.onOpenLink}
+          onPreview={props.onPreview}
+          onAttachmentAction={props.onAttachmentAction}
+          onOpenSharedFile={props.onOpenSharedFile}
+          onOpenWorkspaceFile={props.onOpenWorkspaceFile}
+          onOpenQuote={props.onOpenQuote}
+          onDownload={props.onDownload}
+          mediaSource={props.mediaSource}
+          // Only the text folds: the images and files under it always show.
+          foldText={(text) => (
+            <LongMessageFold
+              id={`chat:${props.message.id}`}
+              enabled={foldable()}
+              live={props.message.streaming === true}
+            >
+              {text}
+            </LongMessageFold>
+          )}
+        />
+      </div>
       <Show when={condensed.condensed()}>
         <CondensedNote showingOriginal={condensed.showingOriginal()} onToggle={condensed.toggle} />
       </Show>

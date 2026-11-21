@@ -44,3 +44,35 @@ function clip(text: string, limit: number): string {
   const space = cut.lastIndexOf(" ");
   return `${(space > limit * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
+
+/** A greeting before the name that a message opens with: "Hola Alejandro, …". */
+const GREETING = /^(?:hola|hi|hello|hey|buenas|bonjour|salut|hallo|ciao|olá|oi|привет)[\s,!]+/iu;
+/** The name a message opens with, before a comma or a colon: "Alejandro, …", "Ana María: …". */
+const VOCATIVE = /^([\p{Lu}][\p{L}\p{M}'’-]*(?: [\p{Lu}][\p{L}\p{M}'’-]*){0,2})\s*([,:])/u;
+
+/**
+ * Whether an agent's message opens by speaking to a person of the channel: a mention of a person,
+ * or a name that is not an agent's, such as "Alejandro, rehice el copy…". `people` are the names of
+ * the people; `briefs` are the texts the agent was given, which name the people as the team calls
+ * them ("Alejandro dijo…"), so a name found there counts too when a comma follows it.
+ */
+export function addressesPerson(
+  text: string,
+  names: { people: readonly string[]; agents: readonly string[]; briefs?: readonly string[] },
+): boolean {
+  const start = text.trimStart().slice(0, 400);
+  if (/^@\[[^\]\r\n]+\]\(member:/u.test(start)) return true;
+  if (start.startsWith("@[")) return false;
+  const match = VOCATIVE.exec(start.replace(GREETING, ""));
+  const name = match?.[1];
+  if (!name) return false;
+  const lower = name.toLocaleLowerCase();
+  const firstWord = (full: string) => full.trim().split(/\s+/u)[0]?.toLocaleLowerCase() ?? "";
+  if (names.agents.some((agent) => agent.trim().toLocaleLowerCase() === lower || firstWord(agent) === lower))
+    return false;
+  if (names.people.some((person) => person.trim().toLocaleLowerCase() === lower || firstWord(person) === lower))
+    return true;
+  if (match[2] !== ",") return false;
+  const word = new RegExp(`(?<![\\p{L}\\p{M}])${name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?![\\p{L}\\p{M}])`, "u");
+  return (names.briefs ?? []).some((brief) => word.test(brief));
+}

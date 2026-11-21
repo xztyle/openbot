@@ -329,6 +329,11 @@ button.ws-profile-trigger.ws-message-author:hover {
   white-space: nowrap;
 }
 
+/* Open, the text under the line says it all: the summary would repeat its first sentence. */
+.ws-note-line[aria-expanded="true"] .ws-note-summary {
+  display: none;
+}
+
 .ws-note-time {
   flex: 0 0 auto;
   color: var(--openbot-text-dim);

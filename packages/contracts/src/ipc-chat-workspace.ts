@@ -224,6 +224,11 @@ export interface ChannelMessageWorkspaceFields {
    * people see one line, its summary, and open the full text when they want it.
    */
   agentNote?: ChannelAgentNote;
+  /**
+   * `people`: an agent's message that speaks to the people of the channel, such as the result of a
+   * subtask that answers the person who asked. It never folds as a message between agents.
+   */
+  audience?: "people";
 }
 
 /** The longest summary line of a message between agents. */
@@ -490,7 +495,8 @@ export function hasValidChannelMessageWorkspaceFields(value: DynamicRecord): boo
         isBoundedString(value.condensed.original, 100_000) &&
         value.condensed.original.trim().length > 0)) &&
     (value.pinned === undefined || isChannelPin(value.pinned)) &&
-    (value.agentNote === undefined || isChannelAgentNote(value.agentNote))
+    (value.agentNote === undefined || isChannelAgentNote(value.agentNote)) &&
+    (value.audience === undefined || value.audience === "people")
   );
 }
 

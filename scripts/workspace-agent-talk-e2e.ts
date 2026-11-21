@@ -3,7 +3,10 @@
 // line each that opens the full text, the lead's answer to the person shows whole, no step trail
 // shows, and the three working agents share one line that opens their lines with Stop. A long report
 // in the channel folds to its first lines with "Show more", and "Show less" keeps the button where it
-// was. Debug mode (⌘⇧D / Ctrl+Shift+D) shows everything whole, with a "Debug" badge. It runs on a
+// was, and the text is gone where "Show more" lies over the fold. Ad mockups never fold, alone or
+// under a short line, and the subtask results that speak to the person ("Alejandro, rehice…", or
+// marked `audience: "people"`) show whole, once, not as a line between agents. Debug mode
+// (⌘⇧D / Ctrl+Shift+D) shows everything whole, with a "Debug" badge. It runs on a
 // computer and on an iPhone against a running Storybook:
 // `bun scripts/workspace-agent-talk-e2e.ts --storybook=http://localhost:6006`.
 // `--browser-executable=<path>` picks a Chromium build; Playwright's own is the default.
@@ -41,6 +44,18 @@ interface SurfaceResult {
   reportFolds: boolean;
   reportOpens: boolean;
   toggleMovedPx: number;
+  /** The darkest letter pixel left under "Show more" on a folded message: 0 means the text is gone. */
+  inkUnderToggle: number;
+  /** "Show more" on the messages of images: none, alone or under a short line. */
+  imageFolds: number;
+  /** Images that show on the messages of images. */
+  imagesShown: number;
+  /** Subtask results for the person: lines between agents in the channel, and their texts shown once. */
+  channelNotes: number;
+  personResultsShown: number;
+  personResultCopies: number;
+  /** A note opened shows its text once: the line hides its summary. */
+  openNoteSummaryHidden: boolean;
   /** Debug mode: the badge shows, and nothing folds. */
   debugBadge: boolean;
   debugNotes: number;
@@ -69,18 +84,36 @@ async function run(browser: Browser, options: BrowserContextOptions, touch: bool
   // The long report folds; "Show more" opens it, "Show less" folds it with the button in place.
   const fold = channel.locator(".ws-fold").last();
   await fold.locator(".ws-fold-toggle").waitFor({ timeout: 30_000 });
+  await fold.scrollIntoViewIfNeeded();
   const reportFolds = (await fold.getAttribute("data-folded")) !== null;
+  const inkUnderToggle = await inkUnder(page, fold);
   await page.screenshot({ path: resolve(OUT, `${name}-1-channel.png`) });
   const toggle = fold.locator(".ws-fold-toggle");
   await press(toggle);
-  await page.waitForFunction(() => !document.querySelector(".ws-channel-pane .ws-fold[data-folded]"));
+  await fold.and(page.locator(":not([data-folded])")).waitFor({ timeout: 10_000 });
   const reportOpens = await channel.getByText("Pendiente de Alejandro").isVisible();
   await page.screenshot({ path: resolve(OUT, `${name}-2-report-open.png`) });
   const before = (await toggle.boundingBox())?.y ?? 0;
   await press(toggle);
-  await page.waitForFunction(() => Boolean(document.querySelector(".ws-channel-pane .ws-fold[data-folded]")));
+  await fold.and(page.locator("[data-folded]")).waitFor({ timeout: 10_000 });
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
   const toggleMovedPx = Math.abs(((await toggle.boundingBox())?.y ?? 0) - before);
+
+  // The ad mockups: no "Show more" on images, alone or under a short line.
+  const images = channel.locator(".ws-message").filter({ has: page.locator("[data-attachment-id]") });
+  await images.first().scrollIntoViewIfNeeded();
+  for (let tries = 0; tries < 60 && (await images.locator("img").count()) < 5; tries += 1)
+    await page.waitForTimeout(500);
+  const imageFolds = await images.locator(".ws-fold-toggle").count();
+  const imagesShown = await images.locator("img").count();
+  // The subtask results that speak to the person show whole, each once, not as a line between agents.
+  const copyResult = channel.getByText("Alejandro, rehice el copy de A1 y A3", { exact: false });
+  await copyResult.first().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: resolve(OUT, `${name}-2b-channel-results.png`) });
+  const channelNotes = await channel.locator(".ws-note-line").count();
+  const campaign = channel.getByText("La campaña quedó en borrador", { exact: false });
+  const personResultsShown = Number(await copyResult.first().isVisible()) + Number(await campaign.first().isVisible());
+  const personResultCopies = (await copyResult.count()) + (await campaign.count());
 
   // The thread: handoffs and a subtask answer as one line each, the answer whole, no steps.
   await press(channel.locator(".ws-thread-summary").first());
@@ -93,6 +126,7 @@ async function run(browser: Browser, options: BrowserContextOptions, touch: bool
   await page.screenshot({ path: resolve(OUT, `${name}-3-thread.png`) });
   await press(notes.first());
   const noteOpens = await thread.getByText("No publicas ni creas nada en Meta").isVisible();
+  const openNoteSummaryHidden = !(await notes.first().locator(".ws-note-summary").isVisible());
   const group = thread.locator(".ws-typing-group");
   await group.waitFor({ timeout: 30_000 });
   const workingLine = (await group.innerText()).trim();
@@ -129,11 +163,76 @@ async function run(browser: Browser, options: BrowserContextOptions, touch: bool
     reportFolds,
     reportOpens,
     toggleMovedPx,
+    inkUnderToggle,
+    imageFolds,
+    imagesShown,
+    channelNotes,
+    personResultsShown,
+    personResultCopies,
+    openNoteSummaryHidden,
     debugBadge,
     debugNotes,
     debugFolds,
     debugStepTrails,
   } satisfies SurfaceResult;
+}
+
+/**
+ * How much of the text still shows on the line of "Show more" of a folded message: the share of
+ * the pixels of that line, beside the button, that differ from the background. The page is drawn
+ * once with the text and once with the fold body hidden; 0 means the line is blank.
+ */
+async function inkUnder(page: Page, fold: Locator): Promise<number> {
+  const toggle = await fold.locator(".ws-fold-actions").boundingBox();
+  const body = await fold.locator(".ws-fold-body").boundingBox();
+  if (!toggle || !body) return 1;
+  const clip = { x: body.x, y: toggle.y, width: body.width, height: toggle.height };
+  const shown = await page.screenshot({ clip });
+  const parts = fold.locator(".ws-fold-body, .ws-fold-actions");
+  const hide = (hidden: boolean) =>
+    parts.evaluateAll(
+      (elements, value) => {
+        for (const element of elements) if (element instanceof HTMLElement) element.style.visibility = value;
+      },
+      hidden ? "hidden" : "",
+    );
+  await hide(true);
+  const blank = await page.screenshot({ clip });
+  await hide(false);
+  // The button itself is drawn in both: compare only the part of the line right of it.
+  return page.evaluate(
+    async ({ shown, blank, from, width }) => {
+      const read = async (data: string) => {
+        const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("No canvas.");
+        context.drawImage(bitmap, 0, 0);
+        return context.getImageData(0, 0, bitmap.width, bitmap.height);
+      };
+      const [a, b] = await Promise.all([read(shown), read(blank)]);
+      const start = Math.round(from * (a.width / width));
+      let differ = 0;
+      let total = 0;
+      for (let y = 0; y < a.height; y += 1)
+        for (let x = start; x < a.width; x += 1) {
+          const i = (y * a.width + x) * 4;
+          total += 1;
+          const delta =
+            Math.abs((a.data[i] ?? 0) - (b.data[i] ?? 0)) +
+            Math.abs((a.data[i + 1] ?? 0) - (b.data[i + 1] ?? 0)) +
+            Math.abs((a.data[i + 2] ?? 0) - (b.data[i + 2] ?? 0));
+          if (delta > 24) differ += 1;
+        }
+      return total ? differ / total : 0;
+    },
+    {
+      shown: shown.toString("base64"),
+      blank: blank.toString("base64"),
+      from: Math.ceil(toggle.x + toggle.width - body.x) + 4,
+      width: clip.width,
+    },
+  );
 }
 
 mkdirSync(OUT, { recursive: true });
@@ -153,6 +252,13 @@ try {
     assert.equal(result.reportFolds, true, "A long report must fold.");
     assert.equal(result.reportOpens, true, "Show more must open the report.");
     assert.ok(result.toggleMovedPx <= 2, "Show less must keep the button in place.");
+    assert.ok(result.inkUnderToggle <= 0.02, "The text must be gone where Show more lies.");
+    assert.equal(result.imageFolds, 0, "Images must never fold.");
+    assert.equal(result.imagesShown, 5, "Every mockup must show.");
+    assert.equal(result.channelNotes, 0, "A result for the person must not fold as a line between agents.");
+    assert.equal(result.personResultsShown, 2, "Both results for the person must show.");
+    assert.equal(result.personResultCopies, 2, "Each result for the person must show once.");
+    assert.equal(result.openNoteSummaryHidden, true, "An open note must not repeat its text in the line.");
     assert.equal(result.debugBadge, true, "Debug mode must show its badge.");
     assert.equal(result.debugNotes, 0, "Debug mode must show messages between agents whole.");
     assert.equal(result.debugFolds, 0, "Debug mode must fold no message.");

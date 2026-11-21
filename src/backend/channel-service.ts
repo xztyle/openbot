@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, normalize, sep } from "node:path";
-import { channelAgentNoteLine, givenAgentNoteLine } from "@openbot/contracts/channel-agent-note";
+import { addressesPerson, channelAgentNoteLine, givenAgentNoteLine } from "@openbot/contracts/channel-agent-note";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   type AgentAccessLevel,
@@ -832,6 +832,8 @@ export class ChannelService {
       recipientAgentIds: readonly string[];
       /** With recipients: the one line that the people read instead of the text. */
       summary?: string | undefined;
+      /** `people`: the message speaks to the people too, so it shows whole even when it gives work. */
+      audience?: "people" | "lead" | undefined;
       threadRootId: string | null;
       operationId: string;
     },
@@ -857,20 +859,21 @@ export class ChannelService {
         const mentions = channelMentions(input.text);
         const recipients = [...new Set(input.recipientAgentIds)];
         // A brief that gives members work is for them: the people read one line of it.
-        const agentNote: ChannelAgentNote | undefined = recipients.length
-          ? {
-              to: recipients,
-              summary:
-                givenAgentNoteLine(input.summary) ||
-                channelAgentNoteLine(
-                  input.text,
-                  this.hooks
-                    .agents()
-                    .filter((agent) => recipients.includes(agent.id))
-                    .map((agent) => agent.name),
-                ),
-            }
-          : undefined;
+        const agentNote: ChannelAgentNote | undefined =
+          recipients.length && input.audience !== "people"
+            ? {
+                to: recipients,
+                summary:
+                  givenAgentNoteLine(input.summary) ||
+                  channelAgentNoteLine(
+                    input.text,
+                    this.hooks
+                      .agents()
+                      .filter((agent) => recipients.includes(agent.id))
+                      .map((agent) => agent.name),
+                  ),
+              }
+            : undefined;
         const message: ChannelMessage = {
           id,
           channelId: channel.id,
@@ -881,6 +884,7 @@ export class ChannelService {
           ...(root ? { threadRootId: root.id } : {}),
           ...(mentions.length ? { mentions } : {}),
           ...(agentNote ? { agentNote } : {}),
+          ...(input.audience === "people" ? { audience: "people" as const } : {}),
           message: {
             id,
             text: input.text,
@@ -3824,10 +3828,22 @@ export class ChannelService {
       );
       message.id = `channel-result-${assignment.id}-revision-${assignment.taskRevision}`;
       message.message.id = message.id;
-      // The result of a subtask is for the agent that assigned it, which answers the people itself.
-      const assigner = task.parentTaskId ? tasks.find((item) => item.id === task.parentTaskId)?.ownerAgentId : null;
-      if (assigner && assigner !== agentId)
-        message.agentNote = { to: [assigner], summary: channelAgentNoteLine(args.text) };
+      // The result of a subtask is for the agent that assigned it, which answers the people itself,
+      // unless it speaks to the people: the agent says so, or it opens with a person's name.
+      const parent = task.parentTaskId ? tasks.find((item) => item.id === task.parentTaskId) : undefined;
+      const assigner = parent?.ownerAgentId;
+      if (assigner && assigner !== agentId) {
+        const forPeople =
+          args.audience === "people" ||
+          (args.audience !== "lead" &&
+            addressesPerson(args.text, {
+              people: (channel.humanMemberIds ?? []).flatMap((id) => this.hooks.person?.(id)?.name ?? []),
+              agents: this.hooks.agents().map((agent) => agent.name),
+              briefs: [task.instruction, parent.instruction],
+            }));
+        if (forPeople) message.audience = "people";
+        else message.agentNote = { to: [assigner], summary: channelAgentNoteLine(args.text) };
+      }
       message.message.author = "assistant";
       message.message.turnId = turnId;
       yield* channelSync(() => this.store.update(channel, { messages: [message] }, operationId));

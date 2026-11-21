@@ -70,12 +70,17 @@ export const AgentWorking: Story = { args: { createRuntime: agentWorkingRuntime 
 /**
  * #nicho-cocina: in the thread, the lead's long Spanish handoffs and a subtask answer fold to one
  * line each, the lead's answer to the person stays whole, and three working agents share one line.
+ * In the channel, ad mockups show whole, and subtask results that speak to the person show whole.
  */
-const agentTalkRuntime: WebRuntimeFactory = (_accountId, events) =>
-  mockWebRuntimeFor(
+const agentTalkRuntime: WebRuntimeFactory = (_accountId, events) => ({
+  ...mockWebRuntimeFor(
     createMockOpenBot({ channels: agentTalkSeeds(WEB_PREVIEW_MEMBER_ID), channelMemberId: WEB_PREVIEW_MEMBER_ID }),
     events,
-  );
+  ),
+  // The ad mockups in the channel.
+  download: (id) => mediaFile(id, "full"),
+  attachmentPreview: (id) => mediaFile(id, "inline"),
+});
 
 export const AgentTalk: Story = { args: { createRuntime: agentTalkRuntime } };
 

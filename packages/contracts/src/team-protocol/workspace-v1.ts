@@ -52,6 +52,7 @@
 //   at (80) }`), set while the message is pinned to its channel.
 // - Later still: on each message `agentNote` (`{ to, summary (240) }`, at most 32 agent ids), set on
 //   a message that an agent wrote for other agents; a client shows the summary and opens the text.
+//   And `audience?: "people"` on an agent's message that speaks to the people: it never folds.
 // - Later: on each message `condensed` (`{ original (100000) }`), set on an agent's answer that the
 //   host condensed for people; the text is the short version. In the workspace settings `condense?`
 //   (`{ enabled, words }`): whether the host condenses long agent answers, and past how many words. A
@@ -206,6 +207,7 @@ const MESSAGE_FIELDS: Record<string, Decoder> = {
   condensed: fields({ original: nonEmpty(100_000) }),
   pinned: fields({ by: actor, at: string(80) }),
   agentNote: fields({ to: uniqueIdentifiers(32), summary: string(240) }),
+  audience: oneOf("people"),
 };
 
 function present(source: unknown, decoders: Record<string, Decoder>): JsonObject {

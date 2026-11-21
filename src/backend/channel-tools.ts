@@ -59,7 +59,15 @@ export const CHANNEL_TOOL_DEFINITIONS: readonly { name: string; description: str
     name: "channel_result",
     description:
       "Publish the requested task result once in the shared chat when answering an assigned or transferred task. Do not use it to restate an answer that your reply already gives. End your turn without repeating it.",
-    shape: { text: z.string().min(1).max(INPUT_LIMITS.messageText) },
+    shape: {
+      text: z.string().min(1).max(INPUT_LIMITS.messageText),
+      audience: z
+        .enum(["people", "lead"])
+        .optional()
+        .describe(
+          "Who the result speaks to. people: the people of the channel, such as the person who asked; it shows whole. lead: the agent that assigned the task, which answers the people; the people see one line of it. Absent: people when the text opens with a person's name, else lead.",
+        ),
+    },
   },
   {
     name: "channel_remember",

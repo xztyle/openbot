@@ -13,6 +13,7 @@ import type { AttachmentMediaSource } from "@openbot/ui/features/conversation/At
 import type { AgentSkillCalls } from "../../skills-port";
 import type { AgentTemplatePublishCalls } from "../agent-templates/agent-templates-port";
 import type { BrowserProfileCalls } from "../browser/browser-profiles-port";
+import type { EfficiencyCalls } from "../efficiency/efficiency-port";
 import type { AgentChannelDefaultsApi } from "./AgentChannelDefaults";
 import type { SharedTableCalls } from "./conversation-port";
 import type { ConversationProps } from "./conversation-types";
@@ -107,6 +108,8 @@ export interface ConversationRuntime {
         eventCheckTemplates?: Pick<EventCheckTemplateApi, "list" | "discoverCheck"> | undefined;
         /** The workspace settings of the host (`fork-host-v1`), for the channel defaults of an agent. */
         workspaceSettings?: AgentChannelDefaultsApi | undefined;
+        /** The sleep, review and playbook calls of the host (`fork-host-v1`). */
+        efficiency?: EfficiencyCalls | undefined;
         sessionSettings?:
           | {
               read(agentId: string): Promise<AgentSessionSettings>;

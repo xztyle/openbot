@@ -34,6 +34,7 @@ import type { ConversationRuntime } from "../conversation/conversation-runtime";
 import { webEventRoutinesApi } from "../conversation/routine-webhooks-api";
 import { webMemoriesPort } from "../conversation/web-memories-port";
 import { webRoutinesPort } from "../conversation/web-routines-port";
+import { hostEfficiencyCalls } from "../efficiency/efficiency-port";
 import { createWebAttachmentMedia } from "./web-attachment-media";
 import { createWebAttachmentFiles, openWebLink } from "./web-attachments";
 import { webBrowserProfileCalls } from "./web-browser-profiles";
@@ -118,6 +119,7 @@ function webHostAdmin(
     },
     memories: (agentId, agentName) => webMemoriesPort(agentId, agentName, (...args) => request()(...args), onHostEvent),
     // The caller shows it only for a host with `fork-host-v1`; an older host answers 404.
+    efficiency: hostEfficiencyCalls(() => request()),
     workspaceSettings: {
       read: () => request()("POST", WORKSPACE_ROUTES.settings, decodeWorkspaceSettings, {}),
       write: (settings) =>

@@ -14,6 +14,7 @@ import {
   Bot,
   Button,
   FormDialog,
+  Gauge,
   HardDrive,
   Hash,
   Inbox,
@@ -78,6 +79,7 @@ const VIEW_ICON: Record<WorkspaceView, () => JSX.Element> = {
   "space-agents": () => <Bot />,
   storage: () => <HardDrive />,
   secrets: () => <KeyRound />,
+  reviews: () => <Gauge />,
   routines: () => <Workflow />,
   search: () => <Search />,
 };
@@ -147,6 +149,7 @@ export function useJumpEntries() {
       "space-agents",
       "storage",
       "secrets",
+      "reviews",
       "routines",
     ] as const
   ).map((view) => ({ view, label: () => workspaceViewLabel(view, t) }));

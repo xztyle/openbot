@@ -3,7 +3,7 @@ import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 import { avatarHueSwatch } from "../../bloub-avatar";
 import { buttonVariants } from "../../button";
-import { ArrowDown, ArrowUp, Bot, Pencil, Plus, Trash2 } from "../../icons";
+import { ArrowDown, ArrowUp, Bot, Moon, Pencil, Plus, Trash2 } from "../../icons";
 import { useText } from "../../text";
 import { LabelTooltip, LabelTooltipTrigger } from "../../tooltip";
 import { WorkspaceContextMenu } from "../workspace/WorkspaceContextMenu";
@@ -19,6 +19,8 @@ export interface SpaceRailItem {
   unread: boolean;
   /** Mentions of the reader in the space that are not read. */
   mentionCount: number;
+  /** Every agent of the space sleeps. */
+  sleeping?: boolean | undefined;
   /** The space that every host has. It cannot be deleted. */
   general: boolean;
 }
@@ -38,6 +40,8 @@ export interface SpaceRailProps {
         onMove: (spaceId: string, direction: -1 | 1) => void;
       }
     | undefined;
+  /** Puts every agent of the space to sleep, or wakes them. Absent: no sleep item. */
+  onSleep?: ((spaceId: string, sleeping: boolean) => void) | undefined;
 }
 
 /** The first letters of the words of a name, for a space without an emoji. */
@@ -76,6 +80,16 @@ export function SpaceRail(props: SpaceRailProps): JSX.Element {
         icon: <Bot aria-hidden="true" />,
         onSelect: () => props.onOpenAgents(space.id),
       },
+      ...(props.onSleep
+        ? [
+            {
+              id: "sleep",
+              label: space.sleeping ? t("efficiency.sleep.spaceWake") : t("efficiency.sleep.space"),
+              icon: <Moon aria-hidden="true" />,
+              onSelect: () => props.onSleep?.(space.id, !space.sleeping),
+            },
+          ]
+        : []),
       ...(manage
         ? [
             {

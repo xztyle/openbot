@@ -8,6 +8,7 @@ import {
   Bookmark,
   Bot,
   Ellipsis,
+  Gauge,
   Hand,
   HardDrive,
   Hash,
@@ -264,6 +265,13 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
         label: t("workspace.view.secrets"),
         icon: <KeyRound />,
         onSelect: () => openView("secrets"),
+      });
+    if (ws.viewAvailable("reviews"))
+      rows.push({
+        id: "reviews",
+        label: t("efficiency.view.title"),
+        icon: <Gauge />,
+        onSelect: () => openView("reviews"),
       });
     const apps = ws.env.openApps;
     if (apps) rows.push({ id: "apps", label: t("workspace.view.apps"), icon: <Blocks />, onSelect: apps });

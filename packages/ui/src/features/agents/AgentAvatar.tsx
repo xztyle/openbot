@@ -68,11 +68,12 @@ const FACE_STATES: Readonly<Record<AvatarMood, FaceState>> = {
   // An unread reply rests; the end of the work itself smiles for a moment (AgentFace).
   responded: "idle",
   connecting: "working",
-  asleep: "idle",
+  // A hidden or sleeping agent: closed eyes and a floating "z".
+  asleep: "sleeping",
 };
 
 type AvatarAgent = Pick<AgentProfile, "avatarSeed" | "avatarHue" | "avatarUrl"> &
-  Partial<Pick<AgentProfile, "name" | "title" | "faceStyle" | "faceSeed" | "faceSkin">>;
+  Partial<Pick<AgentProfile, "name" | "title" | "faceStyle" | "faceSeed" | "faceSkin" | "sleepingSince">>;
 
 interface AgentAvatarProps {
   agent?: AvatarAgent | undefined;
@@ -105,7 +106,9 @@ export function AgentAvatar(props: AgentAvatarProps) {
   const hue = () => (props.hue !== undefined ? props.hue : (props.agent?.avatarHue ?? null));
   const motion = () => props.motion ?? "hover";
   const url = () => (props.url !== undefined ? props.url : (props.agent?.avatarUrl ?? null));
-  const mood = (): AvatarMood => props.mood ?? "idle";
+  // A sleeping agent shows asleep whatever the place says, as long as no turn of it runs.
+  const mood = (): AvatarMood =>
+    props.agent?.sleepingSince !== undefined && props.mood !== "working" ? "asleep" : (props.mood ?? "idle");
   const presentation = () => avatarMoodPresentation(mood());
   const [imageFailed, setImageFailed] = createSignal(false);
   createEffect(

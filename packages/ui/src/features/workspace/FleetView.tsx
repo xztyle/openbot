@@ -21,6 +21,9 @@ export interface FleetAgent {
   currentStep?: string | undefined;
   todayCostUsd?: number | undefined;
   todayDurationMs?: number | undefined;
+  /** The model that the automatic model policy chose for the running turn, and why. */
+  model?: string | undefined;
+  modelReason?: string | undefined;
 }
 
 type FleetFilter = "all" | AgentWorkStatus["state"];

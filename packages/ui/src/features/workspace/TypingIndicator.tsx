@@ -17,6 +17,8 @@ export interface TypingAgent {
   state: "thinking" | "routing" | "waiting" | "working";
   /** What it works on, such as "Running the level tests". */
   label?: string | undefined;
+  /** The model of its turn when the automatic policy chose it, such as "on Haiku · routine run". */
+  model?: string | undefined;
   /** The steps of its turn so far. They open from the line, so a person can see what it does. */
   trail?: { steps: readonly AgentStepView[]; durationMs?: number | undefined } | undefined;
   /** Stops the agent's work here, as Slack's Stop on an agent that works. A working or waiting agent has it. */
@@ -75,6 +77,9 @@ export function TypingIndicator(props: TypingIndicatorProps): JSX.Element {
             <span class="ws-typing-agent-text">{t(STATE_TEXT[agent().state], { name: agent().member.name })}</span>
             <Show when={agent().label}>
               <span class="ws-typing-agent-label">{agent().label}</span>
+            </Show>
+            <Show when={agent().model}>
+              <span class="ws-typing-agent-label ws-typing-agent-model">{agent().model}</span>
             </Show>
             <Show when={agent().state === "working" || agent().state === "waiting" ? agent().onStop : undefined}>
               {(stop) => (

@@ -66,6 +66,9 @@ export function toAgentProfile(stored: ClientAgentSummary): AgentProfile {
     faceStyle: stored.faceStyle,
     faceSeed: stored.faceSeed,
     faceSkin: stored.faceSkin,
+    modelPolicy: stored.modelPolicy,
+    role: stored.role,
+    sleepingSince: stored.sleepingSince,
     threadId: stored.threadId,
     workspacePath: stored.workspacePath,
     avatarSeed: stored.avatarSeed,
@@ -651,6 +654,9 @@ export function agentProfilesEqual(left: AgentProfile, right: AgentProfile): boo
     left.faceStyle === right.faceStyle &&
     left.faceSeed === right.faceSeed &&
     left.faceSkin === right.faceSkin &&
+    left.modelPolicy === right.modelPolicy &&
+    left.role === right.role &&
+    left.sleepingSince === right.sleepingSince &&
     left.threadId === right.threadId &&
     left.avatarSeed === right.avatarSeed &&
     left.avatarHue === right.avatarHue &&

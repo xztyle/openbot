@@ -1,10 +1,14 @@
+import { type AutoModelReason, isAutoModelReason } from "@openbot/contracts/agent-efficiency";
 import type { ChannelMessage, ChannelPage, ChannelTask, WorkspaceSteps } from "@openbot/contracts/ipc";
+import type { AppTextKey } from "@openbot/i18n";
 import { toast } from "@openbot/ui";
 import type { TypingAgent } from "@openbot/ui/features/workspace/TypingIndicator";
 import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
 import { type Accessor, createEffect, createMemo, createSignal } from "solid-js";
+import { shortModelName } from "../efficiency/efficiency-port";
 import { useWorkspace } from "./workspace-context";
+import { debugMode } from "./workspace-debug";
 import { memberById, thinkingAgents, workingAgents } from "./workspace-model";
 
 /** How often the steps of a working agent are read again. */
@@ -25,6 +29,19 @@ const STATE_RANK: Record<TypingAgent["state"], number> = { thinking: 0, routing:
  * of the agent is in the place, every active task of the agent in the channel is stopped: the line
  * shows the agent at work, so Stop must stop it.
  */
+
+const REASON_TEXT = {
+  routine: "efficiency.model.reason.routine",
+  note: "efficiency.model.reason.note",
+  status: "efficiency.model.reason.status",
+  event: "efficiency.model.reason.event",
+  default: "efficiency.model.reason.default",
+  plan: "efficiency.model.reason.plan",
+  retry: "efficiency.model.reason.retry",
+  escalated: "efficiency.model.reason.escalated",
+  large: "efficiency.model.reason.large",
+} as const satisfies Record<AutoModelReason, AppTextKey>;
+
 export function agentRunsToStop(
   tasks: readonly ChannelTask[],
   agentId: string,
@@ -237,15 +254,24 @@ export function createAgentWork(input: {
         const onStop = canStop ? () => void stop(id, member.name) : undefined;
         if (state === "waiting") return { member, state, onStop, stopping: halting.has(id) };
         const trail = steps[id];
+        const record = fleet.find((agent) => agent.member.id === id);
+        const model = record?.model ? modelNote(record.model, record.modelReason) : undefined;
         return {
           member,
           state,
-          label: fleet.find((agent) => agent.member.id === id)?.currentStep,
+          label: record?.currentStep,
+          ...(model ? { model } : {}),
           trail: trail ? { steps: trail.steps, durationMs: trail.durationMs || undefined } : undefined,
           onStop,
           stopping: halting.has(id),
         };
       });
   });
+  /** "on Haiku", and in debug mode why the automatic policy chose it: "on Haiku · routine run". */
+  function modelNote(model: string, reason: string | undefined): string {
+    const line = t("efficiency.model.working", { model: shortModelName(model) });
+    const why = reason && isAutoModelReason(reason) ? t(REASON_TEXT[reason]) : null;
+    return debugMode() && why ? `${line} · ${why}` : line;
+  }
   return { agents, humans };
 }

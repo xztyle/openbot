@@ -22,6 +22,7 @@ import { toAgentMessages } from "../../app-message-projection";
 import { agentTemplatesPort } from "../agent-templates/agent-templates-port";
 import { createPublishAgent } from "../agent-templates/PublishAgent";
 import { desktopBrowserProfileCalls } from "../browser/browser-profiles-port";
+import type { EfficiencyCalls } from "../efficiency/efficiency-port";
 import type { AgentFilesOptions } from "../files/AgentFilesSettings";
 import { canManageStorage, serverHasStorage } from "../files/storage-usage";
 import { serverCanAdminister, serverSupportsCapability } from "../servers/server-capabilities";
@@ -170,6 +171,11 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
       read: () => window.openbot.hostAdmin.getWorkspaceSettings(serverId),
       write: (settings) => window.openbot.hostAdmin.setWorkspaceSettings(settings, serverId),
     };
+  });
+  /** The sleep and review calls of the host. The web client asks the host; desktop shows the policy only. */
+  const efficiency = createMemo((): EfficiencyCalls | undefined => {
+    if (!serverCanAdminister(props.server, FORK_HOST_CAPABILITY)) return undefined;
+    return props.runtime?.admin?.efficiency;
   });
   let browserPreviewTrigger: HTMLButtonElement | undefined;
   /** The panes this chat can open. The web client has no Files pane, and a chat without a thread has no files. */
@@ -612,6 +618,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
               eventRoutines={desktopChatEventRoutinesApi(props.server, props.runtime)}
               routines={props.runtime?.routines}
               channelDefaults={channelDefaults()}
+              efficiency={efficiency()}
             />
           </Loading>
         )}

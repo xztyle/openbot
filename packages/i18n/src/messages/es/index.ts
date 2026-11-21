@@ -17,6 +17,7 @@ import { messages as conversation } from "./conversation";
 import { messages as customProvider } from "./customProvider";
 import { messages as diagram } from "./diagram";
 import { messages as dialog } from "./dialog";
+import { messages as efficiency } from "./efficiency";
 import { messages as files } from "./files";
 import { messages as importAgent } from "./import";
 import { messages as island } from "./island";
@@ -107,5 +108,6 @@ export const es = {
   ...uiBlock,
   ...sitePage,
   ...workspace,
+  ...efficiency,
   ...storageHygiene,
 } as const satisfies PartialTranslation<AppMessages>;

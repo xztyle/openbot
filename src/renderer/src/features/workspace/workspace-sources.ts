@@ -195,6 +195,7 @@ export function createHostFleetSource(input: {
         title: agent.title || undefined,
         status: work,
         currentStep: record?.currentStep,
+        ...(status?.kind === "working" && status.model ? { model: status.model, modelReason: status.modelReason } : {}),
         todayCostUsd: record?.todayCostUsd,
         todayDurationMs: record?.todayDurationMs,
       };

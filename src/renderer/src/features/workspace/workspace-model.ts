@@ -73,6 +73,8 @@ export function agentMember(agent: AgentProfile, working = false): WorkspaceMemb
     avatarSeed: agent.avatarSeed,
     avatarHue: agent.avatarHue ?? null,
     working,
+    // A sleeping agent's face sleeps, unless the turn it finishes still runs.
+    ...(agent.sleepingSince !== undefined && !working ? { mood: "asleep" as const } : {}),
   };
 }
 

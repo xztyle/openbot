@@ -25,6 +25,8 @@ import { createSettingsPanelWidth, saveSettingsPanelWidth } from "../../componen
 import { agentSkillCalls, skillsPort } from "../../skills-port";
 import type { BrowserProfileCalls } from "../browser/browser-profiles-port";
 import { createBrowserProfilesStore } from "../browser/stores/browser-profiles-store";
+import { AgentEfficiencySettings } from "../efficiency/AgentEfficiencySettings";
+import type { EfficiencyCalls } from "../efficiency/efficiency-port";
 import { type AgentFilesOptions, AgentFilesSettings } from "../files/AgentFilesSettings";
 import { createStorageUsage } from "../files/storage-usage";
 import { AgentChannelDefaults, type AgentChannelDefaultsApi } from "./AgentChannelDefaults";
@@ -92,6 +94,8 @@ interface AgentSettingsPanelProps
   onManageBrowserProfiles?: ((trigger: HTMLElement) => void) | undefined;
   /** The workspace settings of the server that runs the agent, for an owner or admin of a fork host. */
   channelDefaults?: AgentChannelDefaultsApi | undefined;
+  /** The sleep and review calls of the host, for an owner or admin of a fork host. */
+  efficiency?: EfficiencyCalls | undefined;
 }
 
 export type { AgentSkillsMode };
@@ -444,6 +448,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
           <Show when={props.channelDefaults}>
             {(api) => <AgentChannelDefaults agentId={props.agent.id} api={api()} />}
           </Show>
+          <AgentEfficiencySettings agent={props.agent} onUpdateAgent={props.onUpdateAgent} calls={props.efficiency} />
           <Show when={memoriesVisible() || skillsMode() !== "hidden" || props.tablesVisible !== false || props.files}>
             <SettingsLinkGroup inset title={t("agentSettings.groups.knows")}>
               <Show when={memoriesVisible()}>

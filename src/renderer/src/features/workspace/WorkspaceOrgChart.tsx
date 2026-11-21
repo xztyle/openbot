@@ -54,6 +54,7 @@ export function WorkspaceOrgChart() {
         queued: queued || undefined,
         preview: profile.preview || undefined,
         background: profile.background,
+        sleeping: profile.sleepingSince !== undefined,
       };
     });
   });
@@ -96,12 +97,25 @@ export function WorkspaceOrgChart() {
       );
     });
   };
+  /** Puts the agent and everyone under it to sleep, or wakes them, and says how many changed. */
+  const sleepTeam = async (agentId: string, sleeping: boolean) => {
+    const calls = ws.env.efficiency?.();
+    if (!calls) return;
+    try {
+      const result = await calls.sleep({ kind: "team", id: agentId }, sleeping);
+      const count = result.changedAgentIds.length;
+      toast(sleeping ? t("efficiency.sleep.done", { count }) : t("efficiency.sleep.woke", { count }));
+    } catch (error) {
+      toast.error(t("efficiency.sleep.failed"), { error, fallback: t("efficiency.sleep.failed") });
+    }
+  };
   return (
     <OrgChartView
       agents={agents()}
       messages={messages()}
       onOpenChat={(agentId) => ws.openAgent(agentId)}
       onChangeManager={ws.env.setAgentManager ? changeManager : undefined}
+      onSleepTeam={ws.env.efficiency?.() ? sleepTeam : undefined}
       onBack={() => ws.back()}
     />
   );

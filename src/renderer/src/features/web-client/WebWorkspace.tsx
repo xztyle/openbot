@@ -38,6 +38,7 @@ import {
 } from "@openbot/contracts/team-protocol/event-check-api-v1";
 import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
 import { EVENTS_CAPABILITY } from "@openbot/contracts/team-protocol/events-v1";
+import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
 import { HOST_RELEASE_CAPABILITY } from "@openbot/contracts/team-protocol/host-release-v1";
 import { HOST_TURN_LIMITS_ROUTES } from "@openbot/contracts/team-protocol/host-turn-limits-v1";
 import { HOSTED_SITES_CAPABILITY } from "@openbot/contracts/team-protocol/hosted-sites-v1";
@@ -149,6 +150,8 @@ import {
   Switch,
   untrack,
 } from "solid-js";
+import { hostEfficiencyCalls } from "../efficiency/efficiency-port";
+import { serverSupportsCapability } from "../servers/server-capabilities";
 // Copying a selection with a formula in it gives its LaTeX source, as on desktop.
 import "katex/contrib/copy-tex";
 import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
@@ -1242,6 +1245,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   );
   const saveFile = createWebFileSaver();
   const storageHygieneCalls = hostStorageHygieneCalls(() => hostRequest());
+  const efficiencyCalls = hostEfficiencyCalls(() => hostRequest());
   const storageCalls: FilesPort = {
     agent: { listAgents: () => workspace.runtime.listAgents() },
     storage: {
@@ -2117,6 +2121,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     needsYou: needsYouList,
     ownerAway,
     secrets: () => canAdministerServer(workspace.state.host?.role),
+    efficiency: () =>
+      canAdministerServer(workspace.state.host?.role) && serverSupportsCapability(server(), FORK_HOST_CAPABILITY)
+        ? efficiencyCalls
+        : undefined,
     openBrowserTab: (tabId, agentId) => {
       workspace.activateBrowserTab(tabId);
       setSettingsRequest({ agentId, nonce: Date.now(), browser: true });

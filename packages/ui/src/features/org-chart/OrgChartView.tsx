@@ -63,6 +63,8 @@ export interface OrgChartAgent {
   preview?: string | undefined;
   /** A background teammate: the user does not talk to it. */
   background?: boolean | undefined;
+  /** It sleeps: no routine, check or message starts a turn of it. */
+  sleeping?: boolean | undefined;
 }
 
 /** A message from one agent to another. Each new id sends a pulse along the chart. */
@@ -80,6 +82,8 @@ export interface OrgChartViewProps {
   onOpenChat: (agentId: string) => void;
   /** Changes an agent's manager; `null` is the top level. Absent, the chart cannot be changed. */
   onChangeManager?: ((agentId: string, managerId: string | null) => Promise<void>) | undefined;
+  /** Puts the agent and every agent under it to sleep, or wakes them. Absent: no sleep button. */
+  onSleepTeam?: ((agentId: string, sleeping: boolean) => Promise<void>) | undefined;
   /** The agent whose panel shows first, such as from a link. */
   initialAgentId?: string | null | undefined;
   onBack?: (() => void) | undefined;
@@ -907,6 +911,12 @@ export function OrgChartView(props: OrgChartViewProps): JSX.Element {
                     jumpTo(agent().member.id);
                   }}
                   onClose={() => select(null)}
+                  {...(props.onSleepTeam
+                    ? {
+                        onSleepTeam: (sleeping: boolean) =>
+                          props.onSleepTeam?.(agent().member.id, sleeping) ?? Promise.resolve(),
+                      }
+                    : {})}
                 />
               </aside>
             )}

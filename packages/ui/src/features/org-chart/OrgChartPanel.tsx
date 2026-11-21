@@ -26,6 +26,8 @@ export interface OrgChartPanelProps {
   /** Centres another agent's card and shows its panel. */
   onJump: (agentId: string) => void;
   onChangeManager: (managerId: string | null) => Promise<void>;
+  /** Puts this agent and its reports to sleep, or wakes them. */
+  onSleepTeam?: ((sleeping: boolean) => Promise<void>) | undefined;
   onClose: () => void;
 }
 
@@ -93,6 +95,21 @@ export function OrgChartPanel(props: OrgChartPanelProps): JSX.Element {
             <MessageSquare aria-hidden="true" />
             {t("workspace.org.openChat")}
           </Button>
+          <Show when={props.onSleepTeam}>
+            {(sleepTeam) => (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={saving()}
+                onClick={() => {
+                  setSaving(true);
+                  void sleepTeam()(!props.agent.sleeping).finally(() => setSaving(false));
+                }}
+              >
+                {props.agent.sleeping ? t("efficiency.sleep.teamWake") : t("efficiency.sleep.team")}
+              </Button>
+            )}
+          </Show>
           <Show when={props.canChangeManager}>
             <Button
               size="sm"

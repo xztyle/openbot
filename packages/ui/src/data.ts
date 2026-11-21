@@ -333,6 +333,12 @@ export interface AgentProfile {
   faceSeed?: string | undefined;
   /** The agent's own skin tone. Absent: the workspace default. */
   faceSkin?: AgentFaceSkin | undefined;
+  /** `auto`: each turn takes the model its work needs. Absent: a fixed model. */
+  modelPolicy?: "auto" | undefined;
+  /** The agent's role for the playbooks. Absent: its name and title count. */
+  role?: string | undefined;
+  /** When the agent went to sleep. Absent: it is awake. */
+  sleepingSince?: string | undefined;
   threadId: string | null;
   /** The agent's working directory. Absent for profiles built before it was tracked. */
   workspacePath?: string;

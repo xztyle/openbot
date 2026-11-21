@@ -1,3 +1,4 @@
+import type { EfficiencyCalls } from "../efficiency/efficiency-port";
 /*
  * The workspace controller: which conversation or view is open, which right panel shows, the open
  * thread, the drafts, the activity feed, and every workspace command. The desktop and the browser
@@ -246,6 +247,8 @@ export interface WorkspaceEnvironment {
   storageHygiene?: (() => StorageHygieneCalls | undefined) | undefined;
   /** True when the reader may see the agent key store: the server owner or an admin. */
   secrets?: (() => boolean) | undefined;
+  /** The sleep, review and playbook calls of the host, for an owner or admin of a fork host. */
+  efficiency?: (() => EfficiencyCalls | undefined) | undefined;
   /** Opens Server settings > Storage, where the cleanup rules are. */
   openStorageRules?: (() => void) | undefined;
   /**
@@ -328,6 +331,7 @@ const SAVED_VIEWS: readonly WorkspaceView[] = [
   "storage",
   "routines",
   "secrets",
+  "reviews",
   "space-agents",
   "drafts",
 ];
@@ -1732,6 +1736,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   function viewAvailable(view: WorkspaceView): boolean {
     if (view === "secrets") return env.secrets?.() === true && Boolean(channels.port().agent.workspaceSecrets);
     if (view === "storage") return Boolean(env.storageHygiene?.());
+    if (view === "reviews") return Boolean(env.efficiency?.());
     if (view === "routines") return env.routines?.available() === true;
     if (view === "later") return later.supported();
     if (view === "search") return search.supported();

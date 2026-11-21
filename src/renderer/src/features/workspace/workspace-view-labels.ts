@@ -30,6 +30,8 @@ export function workspaceViewLabel(view: WorkspaceView, t: TextValue["t"]): stri
       return t("storageHygiene.title");
     case "secrets":
       return t("workspace.view.secrets");
+    case "reviews":
+      return t("efficiency.view.title");
     case "routines":
       return t("workspace.app.menu.routines");
     case "search":

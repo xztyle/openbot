@@ -38,6 +38,7 @@ import socketserver
 import struct
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -179,12 +180,12 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def run(cmd, check=True, timeout=None, user=None, capture=True, ok_codes=(0,)):
+def run(cmd, check=True, timeout=None, user=None, capture=True, ok_codes=(0,), stdin=None):
     """Runs a command; `user` (a uid) drops root first, so SQLite and agent files are never root's."""
     kwargs = {}
     if user is not None and os.geteuid() == 0 and user != 0:
         kwargs.update(user=user, group=user, extra_groups=[])
-    result = subprocess.run(cmd, text=True, timeout=timeout, capture_output=capture, **kwargs)
+    result = subprocess.run(cmd, text=True, timeout=timeout, capture_output=capture, input=stdin, **kwargs)
     if check and result.returncode not in ok_codes:
         detail = (result.stderr or result.stdout or "").strip()[-800:] if capture else ""
         raise Refused(f"{cmd[0]} failed ({result.returncode}): {detail}", 500)
@@ -246,10 +247,11 @@ def running_job():
 # ---- SQLite (runs as the owner of the data, never as root) ------------------------------------
 
 def sqlite_helper(args, uid, timeout=1800):
-    """Runs `backupd.py _sqlite <op> ...` as `uid` and returns its JSON line."""
+    """Runs `backupd.py _sqlite <op> ...` as `uid` and returns its JSON line. The script goes in on
+    stdin, because `uid` (Motion's user) may not be able to reach this folder."""
     try:
-        result = run([sys.executable, "-I", str(Path(__file__).resolve()), "_sqlite", *args, str(timeout)],
-                     user=uid, timeout=timeout + 60)
+        result = run([sys.executable, "-I", "-", "_sqlite", *args, str(timeout)],
+                     user=uid, timeout=timeout + 60, stdin=Path(__file__).resolve().read_text())
     except subprocess.TimeoutExpired:
         raise Refused(f"SQLite {args[0]} of {args[1]} timed out.", 504) from None
     return json.loads(result.stdout.strip().splitlines()[-1])
@@ -443,8 +445,10 @@ def backup(reason="manual", spaces=True):
         work = ROOT / "work" / ident
         uid = c["data_uid"]
         try:
-            # Each owner writes only its own folder; 0711 lets the Motion user pass through the first.
-            for path, owner, mode in ((work, uid, 0o711), (work / "motion", c["motion"]["uid"], 0o700)):
+            # Each owner writes only its own folder. The Motion user can't reach ROOT (its parents are
+            # private), so its folder is a private one under /var/tmp, removed after the copy.
+            motion_work = Path(tempfile.mkdtemp(prefix=f"atelier-backup-{ident}-", dir="/var/tmp"))
+            for path, owner, mode in ((work, uid, 0o711), (motion_work, c["motion"]["uid"], 0o700)):
                 path.mkdir(parents=True, exist_ok=True)
                 os.chmod(path, mode)
                 if os.geteuid() == 0:
@@ -459,9 +463,10 @@ def backup(reason="manual", spaces=True):
             if motion.get("enabled") and motion_db.exists():
                 set_current("backup", ident, "motion")
                 try:
-                    manifest["motion"] = db_copy(motion_db, work / "motion", "motion", motion["uid"], "", partial)
+                    manifest["motion"] = db_copy(motion_db, motion_work, "motion", motion["uid"], "", partial)
                 except Refused as error:
                     manifest["motion"] = {"error": str(error)}
+            shutil.rmtree(motion_work, ignore_errors=True)
             files = partial / "files"
 
             def component(name, src, dst, excludes, max_size=None, guard=False, delete=True):

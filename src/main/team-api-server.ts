@@ -261,6 +261,7 @@ import { routeSkillsAdmin } from "./team-api/route-skills-admin";
 import { routeStorage } from "./team-api/route-storage";
 import { routeStorageHygiene } from "./team-api/route-storage-hygiene";
 import { routeTeam } from "./team-api/route-team";
+import { routeTrustControl } from "./team-api/route-trust-control";
 import { routeWebPush } from "./team-api/route-web-push";
 import { routeWorkflows } from "./team-api/route-workflows";
 import { routeWorkspace } from "./team-api/route-workspace";
@@ -1063,6 +1064,7 @@ export class TeamApiServer {
 
       if ((await routeEventChecks(context, this.#options.eventChecks)) === "handled") return;
       if ((await routeSecurityAudit(context, this.#options.securityAudit)) === "handled") return;
+      if ((await routeTrustControl(context, this.#options.trust)) === "handled") return;
       if ((await routeMcpChat(context, this.#options.chatMcp)) === "handled") return;
       if ((await routeMcpOAuth(context, this.#options.mcpOAuth)) === "handled") return;
       return this.#json(response, 404, { error: sourceText("error.team.routeNotFound") });

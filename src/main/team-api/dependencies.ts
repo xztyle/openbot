@@ -4,6 +4,7 @@ import type { EventCheckScheduler } from "../../backend/event-check-scheduler";
 import type { OwnerAwayService } from "../../backend/owner-away";
 import type { SecurityAuditLog } from "../../backend/security-audit-log";
 import type { SpaceService } from "../../backend/spaces/space-service";
+import type { TrustService } from "../../backend/trust/trust-service";
 import type { AcpRegistry } from "../acp-registry";
 import type { AgentAccessStore } from "../agent-access-store";
 import type { AgentAdminSettingsService } from "../agent-admin-settings";
@@ -540,6 +541,8 @@ export interface TeamApiOptions {
   ownerAway?: OwnerAwayService | undefined;
   /** `host-backups-v1` (`fork-host-v1`): the host's backup broker, for Server settings > Backups. */
   hostBackups?: HostBackups | undefined;
+  /** `trust-control-v1` (`fork-host-v1`): the trust policy and the audit trail, for an owner or admin. */
+  trust?: TrustService | undefined;
   /** `web-push-v1`: a member's browser gives its push subscription, and the host sends it push messages. */
   webPush?: Pick<WebPushService, "publicKey" | "register" | "remove"> | undefined;
   /** `file-tickets-v1`: signed links that a browser downloads from the host's own download address. */

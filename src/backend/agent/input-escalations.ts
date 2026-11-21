@@ -53,8 +53,8 @@ export interface InputEscalationsOptions {
  * Owns the list, which it derives again from the attention registry and the mailbox at each change,
  * and the set of requests already noted. It holds no request state of its own: an answer anywhere
  * goes to the registry, and the next refresh drops the entry. Only a request in the main chat of its
- * agent counts. A channel and a task show their requests in their own views. It never imports the
- * agent service facade.
+ * agent counts. A channel and a task show their requests in their own views. A request that the
+ * channel of its work shows gets no note. It never imports the agent service facade.
  */
 export class InputEscalations {
   readonly #store: InputEscalationsOptions["store"];
@@ -129,6 +129,9 @@ export class InputEscalations {
       const key = requestKey(escalation);
       if (this.#noted.has(key)) continue;
       this.#noted.add(key);
+      // The channel that the work belongs to shows the request to the people as a card, Needs you
+      // lists it and a notification names the agent, so no teammate needs to pass it on.
+      if (request.kind !== "prompt" && request.channelId) continue;
       Effect.runFork(this.#note(request, escalation));
     }
   }

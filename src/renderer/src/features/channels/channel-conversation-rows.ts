@@ -6,6 +6,8 @@
 
 import {
   type AgentApproval,
+  type AgentAttentionItem,
+  agentAttentionKey,
   type BrowserTakeoverRequest,
   type ChannelMessage,
   type ChannelPage,
@@ -207,14 +209,19 @@ export function waitingChannelPrompt(
 /**
  * Whether a request of an agent belongs to this channel. A host with channel-attention-v1 names the
  * thread of each member. An older host does not, so a request of a member whose task runs here is
- * taken as the channel's, as the channel view took it before.
+ * taken as the channel's, as the channel view took it before. The host's list of what waits for the
+ * user also names the channel of a teammate's delegated request, which asks in the teammate's own
+ * thread (`attention`): only the person can act on it, so the channel of its work shows it too.
  */
 function channelOwnsRequest(
   page: ChannelPage,
   threads: readonly ChannelThread[] | undefined,
-  request: { agentId: string; threadId: string },
+  request: { agentId: string; threadId: string; requestId: string | number },
+  attention: readonly AgentAttentionItem[],
 ): boolean {
   if (page.channel.archived) return false;
+  const key = agentAttentionKey(request);
+  if (attention.some((item) => item.channelId === page.channel.id && agentAttentionKey(item) === key)) return true;
   if (threads)
     return threads.some((thread) => thread.agentId === request.agentId && thread.threadId === request.threadId);
   return page.tasks.some((task) => task.ownerAgentId === request.agentId && task.state === "running");
@@ -225,8 +232,9 @@ export function channelApproval(
   page: ChannelPage,
   threads: readonly ChannelThread[] | undefined,
   approvals: readonly AgentApproval[],
+  attention: readonly AgentAttentionItem[] = [],
 ): AgentApproval | undefined {
-  return approvals.findLast((approval) => channelOwnsRequest(page, threads, approval));
+  return approvals.findLast((approval) => channelOwnsRequest(page, threads, approval, attention));
 }
 
 /** The newest browser takeover that this channel's work waits for. */
@@ -234,8 +242,9 @@ export function channelBrowserTakeover(
   page: ChannelPage,
   threads: readonly ChannelThread[] | undefined,
   takeovers: readonly BrowserTakeoverRequest[],
+  attention: readonly AgentAttentionItem[] = [],
 ): BrowserTakeoverRequest | undefined {
-  return takeovers.findLast((request) => channelOwnsRequest(page, threads, request));
+  return takeovers.findLast((request) => channelOwnsRequest(page, threads, request, attention));
 }
 
 /**

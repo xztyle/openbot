@@ -15,6 +15,8 @@
 // 4. The owner answers through the Team API route: the publisher's tool call gets "completed", and the
 //    list, the escalations and the request clear.
 // 5. A tab whose handover does not end still shows its card after the wait, and an answer clears it.
+// 6. Once the two agents share a channel, the publisher's takeover names that channel in the list, and
+//    its web push names the publisher and the channel and opens the channel.
 //
 // `bun scripts/needs-you-host-e2e.ts`. Writes .openbot-build/needs-you-host-e2e/report.json.
 import assert from "node:assert/strict";
@@ -490,6 +492,61 @@ try {
       assert.equal(JSON.parse(answerText(await stuck.answer())).status, "cancelled");
       await waitFor("the empty list", () => attentionItems()?.length === 0);
       return { waitedMs };
+    },
+    (value) => value,
+  );
+
+  await step(
+    "A teammate's takeover for work of a channel shows in that channel, and its push opens the channel",
+    async () => {
+      // The orchestrator and the publisher now share a channel: the publisher's delegated work belongs to it.
+      const channel = await runCauseEffect(
+        service().channels.command(
+          {
+            type: "save",
+            operationId: randomUUID(),
+            channelId: randomUUID(),
+            draft: {
+              name: "nicho-cocina",
+              title: "",
+              instructions: "",
+              members: [{ agentId: orchestrator.id }, { agentId: publisher.id }],
+              leadAgentId: orchestrator.id,
+            },
+          },
+          { id: owner.id, name: "Owner" },
+        ),
+      );
+      tabs.push({
+        id: "tab-facebook",
+        title: "Log in to Facebook",
+        url: "https://www.facebook.com/login/",
+        loading: false,
+        ownerAgentId: publisher.id,
+        ownerThreadId: publisherThread,
+      });
+      const before = pushes.length;
+      const signIn = callTool(publisherTurn, "openbot_browser", "request_takeover", { tabId: "tab-facebook" });
+      const listed = await waitFor("the channel's card", () =>
+        attentionItems()?.find((entry) => entry.agentId === publisher.id),
+      );
+      assert.equal(listed.channelId, channel.id, "The list does not name the channel of the work.");
+      assert.equal(listed.threadId, publisherThread, "The request moved out of the publisher's thread.");
+      assert.equal(listed.origin, "www.facebook.com");
+      const push = await waitFor("the push", () => pushes.slice(before).find((entry) => entry.message.kind));
+      assert.equal(push.message.kind, "needs-takeover");
+      assert.equal(push.message.agentId, publisher.id, "The push does not name the agent that waits.");
+      assert.match(String(push.message.title), /GTA 6 - Publisher/u);
+      assert.match(String(push.message.title), /nicho-cocina/u);
+      assert.match(String(push.message.path), new RegExp(`/c/${channel.id}$`, "u"));
+      const response = await e2e.call("POST", TEAM_API_ROUTES.respond.browserTakeover, {
+        token: owner.token,
+        body: { requestId: listed.requestId, decision: "complete" },
+      });
+      assert.equal(response.status, 204);
+      assert.equal(JSON.parse(answerText(await signIn.answer())).status, "completed");
+      await waitFor("the empty list", () => attentionItems()?.length === 0);
+      return { channelId: listed.channelId, title: push.message.title, path: push.message.path };
     },
     (value) => value,
   );

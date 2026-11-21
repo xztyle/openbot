@@ -11,6 +11,7 @@ import { resolveLocale, translateFor } from "@openbot/i18n";
 import { redactText, toLogValue } from "@openbot/logging";
 import {
   type AgentNotificationChannel,
+  agentEventAttentionChannel,
   agentEventCanNotify,
   agentEventRequestThread,
   notificationForAgentEvent,
@@ -47,7 +48,8 @@ export type NotificationRelayRequest =
   | { platform: "ios"; push: NotificationRelayPush }
   | { platform: "android"; push: AndroidNotificationRelayPush };
 
-type PushNotificationAgents = Pick<TeamApiAgents, "on" | "off" | "listAgents" | "readConversationPageFor">;
+type PushNotificationAgents = Pick<TeamApiAgents, "on" | "off" | "listAgents" | "readConversationPageFor"> &
+  Partial<Pick<TeamApiAgents, "attentionItems">>;
 
 interface PushNotificationOptions {
   agents: PushNotificationAgents;
@@ -70,6 +72,8 @@ interface PushNotificationOptions {
   liveActivityShows(sessionId: string, alert: LiveActivityRelayPush["alert"], startedAt: number | null): boolean;
   /** The channel whose execution thread `threadId` is, or `null` for an agent's own thread. */
   channelForThread?(threadId: string): AgentNotificationChannel | null;
+  /** The channel with this id, or `null`: the channel that a teammate's delegated request belongs to. */
+  channelById?(channelId: string): AgentNotificationChannel | null;
   randomBytes(size: number): Uint8Array;
   now?: () => number;
   logger?: { warn(message: string, ...values: unknown[]): void };
@@ -207,7 +211,11 @@ export class PushNotificationService {
     const agents = this.#options.agents.listAgents();
     // A prompt, an approval or a takeover on a channel thread names the channel, as on desktop.
     const requestThread = agentEventRequestThread(event);
-    const channel = requestThread ? (this.#options.channelForThread?.(requestThread) ?? null) : null;
+    // A teammate's delegated work can ask in its own thread for work of a channel: the channel shows it.
+    const attentionChannelId = agentEventAttentionChannel(this.#options.agents.attentionItems?.() ?? [], event);
+    const channel =
+      (attentionChannelId ? (this.#options.channelById?.(attentionChannelId) ?? null) : null) ??
+      (requestThread ? (this.#options.channelForThread?.(requestThread) ?? null) : null);
     let answer: string | null | undefined;
     for (const registration of targets) {
       const { stored } = registration;

@@ -373,8 +373,17 @@ export type PendingAttentionRequest =
       threadId: string;
       turnId: string;
       approvalKind: AgentApprovalKind;
+      /** The team channel that shows the request (see `AgentAttentionItem.channelId`). */
+      channelId?: string;
     }
-  | { kind: "browser-takeover"; requestId: RequestId; agentId: string; threadId: string; turnId: string };
+  | {
+      kind: "browser-takeover";
+      requestId: RequestId;
+      agentId: string;
+      threadId: string;
+      turnId: string;
+      channelId?: string;
+    };
 
 export type LocalAttentionResponse =
   | { kind: "prompt"; requestId: string; answers: Record<string, string[]> }
@@ -414,6 +423,8 @@ export class AttentionRegistry {
   readonly #takeovers = new Map<RequestId, PendingBrowserTakeover>();
   /** When `attentionItems` first listed each request. */
   readonly #listedAt = new WeakMap<PendingPrompt | PendingApproval | PendingBrowserTakeover, string>();
+  /** The team channel of each approval and takeover, once looked up; null for none. */
+  readonly #channels = new WeakMap<PendingApproval | PendingBrowserTakeover, string | null>();
 
   constructor(options: AttentionRegistryOptions) {
     this.#conversation = options.conversation;
@@ -480,6 +491,28 @@ export class AttentionRegistry {
     return `Not shown in your own chat: this work belongs to ${channel}, so Atelier posted your question there for the people. Do not wait: end your turn, or continue with work that does not depend on the answer. The answer comes back to you as channel work in the thread of your question. Ask privately only for something private to one person: openbot.ask_ui with private true.`;
   }
 
+  /**
+   * The team channel that shows an approval or a takeover, as a card, in Needs you and in its
+   * notification: the channel of its channel task, or the channel that a teammate's delegated work
+   * belongs to. Only the person can act on these, so the request must reach them where the work is,
+   * not only the agent's own chat, which nobody opens for a teammate. Null for a person's own chat with
+   * the agent, other work, and a channel in hands-off mode.
+   */
+  #channelOf(pending: PendingApproval | PendingBrowserTakeover): string | null {
+    const known = this.#channels.get(pending);
+    if (known !== undefined) return known;
+    const { agentId, turnId } = "approval" in pending ? pending.approval : pending.request;
+    let channelId: string | null = null;
+    try {
+      const context = this.#teamQuestion?.context(agentId, turnId);
+      channelId = context && !context.handsOff ? context.channelId : null;
+    } catch {
+      channelId = null;
+    }
+    this.#channels.set(pending, channelId);
+    return channelId;
+  }
+
   /** The agent that asks `requestId`: a prompt, an approval, a browser takeover or a browser secret. */
   agentIdForRequest(requestId: RequestId): string | undefined {
     return (
@@ -524,27 +557,34 @@ export class AttentionRegistry {
         turnId: pending.turnId,
         questions: pending.questions,
       })),
-      ...[...this.#approvals.values()].map(({ approval }) => ({
-        kind: "approval" as const,
-        requestId: approval.requestId,
-        agentId: approval.agentId,
-        threadId: approval.threadId,
-        turnId: approval.turnId,
-        approvalKind: approval.kind,
-      })),
-      ...[...this.#takeovers.values()].flatMap(({ request, surfaced }) =>
-        surfaced
-          ? [
-              {
-                kind: "browser-takeover" as const,
-                requestId: request.requestId,
-                agentId: request.agentId,
-                threadId: request.threadId,
-                turnId: request.turnId,
-              },
-            ]
-          : [],
-      ),
+      ...[...this.#approvals.values()].map((pending) => {
+        const { approval } = pending;
+        const channelId = this.#channelOf(pending);
+        return {
+          kind: "approval" as const,
+          requestId: approval.requestId,
+          agentId: approval.agentId,
+          threadId: approval.threadId,
+          turnId: approval.turnId,
+          approvalKind: approval.kind,
+          ...(channelId ? { channelId } : {}),
+        };
+      }),
+      ...[...this.#takeovers.values()].flatMap((pending) => {
+        const { request, surfaced } = pending;
+        if (!surfaced) return [];
+        const channelId = this.#channelOf(pending);
+        return [
+          {
+            kind: "browser-takeover" as const,
+            requestId: request.requestId,
+            agentId: request.agentId,
+            threadId: request.threadId,
+            turnId: request.turnId,
+            ...(channelId ? { channelId } : {}),
+          },
+        ];
+      }),
     ];
   }
 
@@ -587,6 +627,7 @@ export class AttentionRegistry {
     }
     for (const pending of this.#approvals.values()) {
       const { approval } = pending;
+      const channelId = this.#channelOf(pending);
       items.push({
         kind: "approval",
         requestId: approval.requestId,
@@ -594,6 +635,7 @@ export class AttentionRegistry {
         threadId: approval.threadId,
         turnId: approval.turnId,
         createdAt: listedAt(pending),
+        ...(channelId ? { channelId } : {}),
       });
     }
     for (const pending of this.#takeovers.values()) {
@@ -601,6 +643,7 @@ export class AttentionRegistry {
       const { request } = pending;
       const tab = tabs.get(request.tabId);
       const origin = request.secret?.origin ?? tab?.url;
+      const channelId = this.#channelOf(pending);
       items.push({
         kind: request.secret ? "secret" : request.reason === "sign-in-blocked" ? "sign-in" : "browser-takeover",
         requestId: request.requestId,
@@ -610,6 +653,7 @@ export class AttentionRegistry {
         createdAt: listedAt(pending),
         ...optionalText("summary", attentionLine(tab?.title)),
         ...optionalText("origin", attentionLine(origin ? urlHost(origin) : undefined)),
+        ...(channelId ? { channelId } : {}),
       });
     }
     return items.sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(0, AGENT_ATTENTION_ITEMS_LIMIT);

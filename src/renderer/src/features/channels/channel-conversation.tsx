@@ -5,7 +5,7 @@
  */
 
 import { chatTagReferences } from "@openbot/contracts/chat-tag-references";
-import type { AgentApproval, AgentEvent, BrowserTakeoverRequest } from "@openbot/contracts/ipc";
+import type { AgentApproval, AgentAttentionItem, AgentEvent, BrowserTakeoverRequest } from "@openbot/contracts/ipc";
 import type { AgentMessage } from "@openbot/ui/data";
 import { unloadedHistory } from "@openbot/ui/features/conversation/ChatScrollRail";
 import { useText } from "@openbot/ui/text";
@@ -50,6 +50,8 @@ export interface ChannelConversationEnvironment {
   approvals: () => readonly AgentApproval[];
   /** Every browser takeover that waits on the host. */
   takeovers: () => readonly BrowserTakeoverRequest[];
+  /** The host's list of what waits for the user: it names the channel of a teammate's delegated request. */
+  attentionItems?: () => readonly AgentAttentionItem[] | null;
 }
 
 /** Must run inside the view that shows the channel: it reads the channel store and the interface text. */
@@ -116,11 +118,13 @@ export function createChannelConversation(env: ChannelConversationEnvironment) {
   });
   const approval = createMemo(() => {
     const current = page();
-    return current ? channelApproval(current, threads(), env.approvals()) : undefined;
+    return current ? channelApproval(current, threads(), env.approvals(), env.attentionItems?.() ?? []) : undefined;
   });
   const browserTakeover = createMemo(() => {
     const current = page();
-    return current ? channelBrowserTakeover(current, threads(), env.takeovers()) : undefined;
+    return current
+      ? channelBrowserTakeover(current, threads(), env.takeovers(), env.attentionItems?.() ?? [])
+      : undefined;
   });
   const activeRuns = createMemo(() => {
     const current = page();

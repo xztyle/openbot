@@ -8,6 +8,8 @@
 // listed it (`createdAt`), and may carry `summary` (a question that is not private, the name of an API
 // key, or the title of the tab of a takeover) and `origin` (the host name of that tab). An approval has
 // no summary: its command can hold a secret. The cards keep coming from the released events and pages.
+// Added later, optional: `channelId`, the team channel that the work of the request belongs to. A
+// client of before drops it, as it drops any key it does not know, and shows the request as before.
 //
 // The host sends the event after each runtime snapshot that it sends to a peer, and again at each
 // change, to a peer that has `fork-host-v1` only. It leaves out each request of an agent that the peer
@@ -57,6 +59,7 @@ function item(value: unknown): AgentAttentionItem {
   if (!isString(value.createdAt) || value.createdAt.length > 64 || Number.isNaN(Date.parse(value.createdAt))) invalid();
   const summary = text(value.summary);
   const origin = text(value.origin);
+  const channelId = value.channelId === undefined ? undefined : identifier(value.channelId);
   return {
     kind: value.kind,
     requestId: requestId(value.requestId),
@@ -66,6 +69,7 @@ function item(value: unknown): AgentAttentionItem {
     createdAt: value.createdAt,
     ...(summary === undefined ? {} : { summary }),
     ...(origin === undefined ? {} : { origin }),
+    ...(channelId === undefined ? {} : { channelId }),
   };
 }
 

@@ -1,7 +1,9 @@
 import { agentProviderName } from "@openbot/contracts/agent-providers";
 import {
+  type AgentAttentionItem,
   type AgentEvent,
   type AgentInputEscalation,
+  agentAttentionKey,
   type ClientAgentSummary,
   inputEscalationOf,
   inputEscalationRoot,
@@ -155,6 +157,23 @@ export function inputEscalationDelegator(
           ? inputEscalationOf(escalations, "browser-takeover", event.request.agentId, event.request.requestId)
           : undefined;
   return found ? inputEscalationRoot(found) : null;
+}
+
+/**
+ * The team channel that shows the request of this event, from the host's list of what waits for the
+ * user (`AgentAttentionItem.channelId`): a teammate's delegated work can ask in its own thread, which no
+ * channel owns, for work that belongs to a channel. Null for an event that is not such a request.
+ */
+export function agentEventAttentionChannel(items: readonly AgentAttentionItem[], event: AgentEvent): string | null {
+  const request =
+    event.type === "approval"
+      ? { agentId: event.approval.agentId, requestId: event.approval.requestId }
+      : event.type === "browser-takeover-requested"
+        ? { agentId: event.request.agentId, requestId: event.request.requestId }
+        : null;
+  if (!request) return null;
+  const key = agentAttentionKey(request);
+  return items.find((item) => agentAttentionKey(item) === key)?.channelId ?? null;
 }
 
 /** The thread that an event waits on, or null when it is not a request. A channel can own that thread. */

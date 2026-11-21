@@ -40,6 +40,7 @@ import type { LiveActivityRelayPush } from "@openbot/contracts/live-activity-rel
 import type { HostRestartState } from "@openbot/contracts/team-protocol/host-update-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
+import { agentEventAttentionChannel } from "@openbot/team-client/agent-notifications";
 import { Cause, Context, Deferred, Effect, Fiber, Layer, ManagedRuntime, Result, Semaphore } from "effect";
 import type { AgentService } from "../backend/agent-service";
 import type { ChannelService } from "../backend/channel-service";
@@ -382,6 +383,7 @@ export class HostService extends EventEmitter<HostEvents> {
             liveActivityShows: (sessionId, alert, startedAt) =>
               this.#liveActivityPush?.showsEvent(sessionId, alert, startedAt) ?? false,
             channelForThread: (threadId) => this.channelForThread(threadId),
+            channelById: (channelId) => this.#channelById(channelId),
             logger,
           })
         : undefined;
@@ -1700,6 +1702,20 @@ export class HostService extends EventEmitter<HostEvents> {
       .filter((member) => !member.disabled && member.id !== actor.id && member.id !== self)
       .map((member) => ({ id: member.id, name: teamPersonName(member) }));
     return [{ id: actor.id, name: actor.name }, ...members];
+  }
+
+  /**
+   * The channel that shows the request of `event` (`AgentAttentionItem.channelId`): a teammate's
+   * delegated work asks in its own thread for work of a channel. Null for any other event.
+   */
+  channelForRequest(event: AgentEvent): { id: string; name: string } | null {
+    const channelId = agentEventAttentionChannel(this.#options.agents.attentionItems(), event);
+    return channelId ? this.#channelById(channelId) : null;
+  }
+
+  #channelById(channelId: string): { id: string; name: string } | null {
+    const store = this.#options.channels?.store;
+    return store?.exists(channelId) ? { id: channelId, name: store.get(channelId).name } : null;
   }
 
   /** The channel whose execution thread `threadId` is, or null for an agent's own thread. */

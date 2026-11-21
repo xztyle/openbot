@@ -326,7 +326,10 @@ export function createRendererForwarders({
   ): AgentNotificationChannel | null | Promise<AgentNotificationChannel | null> {
     const threadId = agentEventRequestThread(event);
     if (threadId === null) return null;
-    if (serverId === LOCAL_SERVER_ID) return getHostService()?.channelForThread(threadId) ?? null;
+    if (serverId === LOCAL_SERVER_ID) {
+      const host = getHostService();
+      return host?.channelForRequest(event) ?? host?.channelForThread(threadId) ?? null;
+    }
     const cached = channelForThread(channelLists.get(serverId) ?? [], threadId);
     if (cached) return cached;
     // A new channel, or a member that joined after the last list: its thread is not in the list yet.

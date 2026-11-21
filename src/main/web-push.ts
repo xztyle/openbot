@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  type AgentAttentionItem,
   type AgentEvent,
   type AgentInputEscalation,
   type AgentSummary,
@@ -12,6 +13,7 @@ import type { WebPushRegistration } from "@openbot/contracts/team-protocol/web-p
 import { type AppTranslate, resolveLocale, translateFor } from "@openbot/i18n";
 import { toLogValue } from "@openbot/logging";
 import {
+  agentEventAttentionChannel,
   agentEventRequestThread,
   inputEscalationDelegator,
   notificationForAgentEvent,
@@ -83,6 +85,8 @@ export interface WebPushOptions {
     on(event: "event", listener: (event: AgentEvent) => void): void;
     off(event: "event", listener: (event: AgentEvent) => void): void;
     listAgents(): AgentSummary[];
+    /** The host's list of what waits for the user, for the channel of a teammate's request. */
+    attentionItems?(): AgentAttentionItem[];
   };
   store: WebPushStore;
   /** The id that the account service and the browser know this host by. */
@@ -272,8 +276,13 @@ export class WebPushService {
     const agents = this.#options.agents.listAgents();
     const { workspace } = this.#options;
     const thread = eventThread(event);
-    const channel = thread && workspace ? workspace.channelForThread(thread) : null;
-    const delegator = inputEscalationDelegator(this.#escalations, event);
+    // A teammate's delegated work asks in its own thread for work of a channel: the channel shows it.
+    const attentionChannelId = agentEventAttentionChannel(this.#options.agents.attentionItems?.() ?? [], event);
+    const channel = !workspace
+      ? null
+      : ((attentionChannelId ? workspace.channel(attentionChannelId) : null) ??
+        (thread ? workspace.channelForThread(thread) : null));
+    const delegator = channel ? null : inputEscalationDelegator(this.#escalations, event);
     const hostId = this.#options.hostId();
     for (const subscription of subscriptions) {
       const content = notificationForAgentEvent(

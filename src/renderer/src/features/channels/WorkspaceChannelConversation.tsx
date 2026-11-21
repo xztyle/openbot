@@ -47,7 +47,7 @@ function DesktopChannelConversation(props: { channelId: string; account: () => C
   const { serverSettingsOpen } = useServerSettings();
   const { appSettingsOpen, skillsMarketplaceOpen, generalSettings } = useSettings();
   const { agentStatus, agentList, updateAgent, setAgentAvatar } = useAgents();
-  const { approvals, pendingPrompts } = useTurns();
+  const { approvals, pendingPrompts, attentionItems } = useTurns();
   const {
     browserTabs,
     activeBrowserTabId,
@@ -84,6 +84,7 @@ function DesktopChannelConversation(props: { channelId: string; account: () => C
     },
     approvals,
     takeovers,
+    attentionItems,
   });
   return (
     <Conversation

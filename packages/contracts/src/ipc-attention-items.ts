@@ -35,6 +35,9 @@ export const AGENT_ATTENTION_TEXT_LIMIT = 200;
  * `summary` is text that is safe to show anywhere the agent shows: the question (never a private
  * one), the name of an API key, or the title of the tab of a takeover. An approval has none, because
  * its command can hold a secret. `origin` is the host name of the tab of a takeover or a secret.
+ * `channelId` is the team channel that the work of the request belongs to, also when the turn runs
+ * outside a channel task (a teammate's delegated work): the channel shows its card, and a
+ * notification opens the channel.
  */
 export interface AgentAttentionItem {
   kind: AgentAttentionKind;
@@ -46,6 +49,7 @@ export interface AgentAttentionItem {
   createdAt: string;
   summary?: string;
   origin?: string;
+  channelId?: string;
 }
 
 export function isAgentAttentionItem(value: unknown): value is AgentAttentionItem {
@@ -58,7 +62,8 @@ export function isAgentAttentionItem(value: unknown): value is AgentAttentionIte
     isIdentifier(value.turnId) &&
     isBoundedString(value.createdAt, 64) &&
     (value.summary === undefined || isBoundedString(value.summary, AGENT_ATTENTION_TEXT_LIMIT)) &&
-    (value.origin === undefined || isBoundedString(value.origin, AGENT_ATTENTION_TEXT_LIMIT))
+    (value.origin === undefined || isBoundedString(value.origin, AGENT_ATTENTION_TEXT_LIMIT)) &&
+    (value.channelId === undefined || isIdentifier(value.channelId))
   );
 }
 

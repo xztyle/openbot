@@ -2503,9 +2503,12 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       for (const thread of channel.threads ?? []) byThread.set(`${thread.agentId}\n${thread.threadId}`, channel.id);
     return byThread;
   });
-  /** Where a request is answered: the channel of its work, else the agent's chat. */
+  /**
+   * Where a request is answered: the channel of its work (that the host names for a teammate's
+   * delegated request, or that owns the thread), else the agent's chat.
+   */
   function needsYouPlace(item: AgentAttentionItem): { channelId: string } | { agentId: string } {
-    const channelId = channelOfThread().get(`${item.agentId}\n${item.threadId}`);
+    const channelId = item.channelId ?? channelOfThread().get(`${item.agentId}\n${item.threadId}`);
     return channelId ? { channelId } : { agentId: item.agentId };
   }
   /** The requests that wait for the reader in the space that shows, oldest first. */

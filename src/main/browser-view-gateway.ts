@@ -19,7 +19,9 @@ import type { Duplex } from "node:stream";
 import {
   BROWSER_VIEW_MAX_CLIPBOARD_TEXT,
   type BrowserViewContextMenu,
+  type BrowserViewFrame,
   type BrowserViewHostMessage,
+  type BrowserViewInput,
   type BrowserViewSessionResponse,
   type BrowserViewViewport,
   browserViewClientAcksFrames,
@@ -46,12 +48,17 @@ const webSockets: typeof Ws = requireModule(join(dirname(requireModule.resolve("
  */
 const MAX_BUFFERED_FRAME_BYTES = 4 * 1024 * 1024;
 /**
- * Frames kept after the one the client has drawn. A client that asked to name frames and then
- * stops saying which one is on screen would otherwise keep one entry per frame for the whole
- * view. Past this the view is closed. The drawn frame is not dropped in place: that is what made
- * a click land on the wrong page.
+ * Frames sent to a client that acknowledges frames and not yet acknowledged. The next frame waits
+ * until the client says that it has drawn one of them; only the newest waiting frame is kept.
+ *
+ * The socket's own buffer is not a limit for every client. A member on WebRTC reaches this socket
+ * through the host's tunnel, which reads each message at once and queues it for the data channel.
+ * The socket here then never fills, a slow relayed path queued every frame of a busy page, the
+ * member saw the page seconds late, and after 120 frames the view closed as "fell too far behind".
+ * The client started again and fell behind again: the "Reconnecting to the page" loop. A window
+ * of frames in flight paces the stream at the speed of the member's link, whatever is in between.
  */
-const MAX_UNACKNOWLEDGED_FRAMES = 120;
+const MAX_FRAMES_IN_FLIGHT = 3;
 
 /** Frames older than the one on the member's screen. The named frame itself stays, so a click on it still expands. */
 function forgetFramesBefore(sizes: Map<number, { width: number; height: number }>, drawn: number): void {
@@ -114,6 +121,10 @@ interface ManagedViewSession {
    */
   frameSizes: Map<number, { width: number; height: number }>;
   rememberFrames: boolean;
+  /** The newest frame the client acknowledged. Frames after it are in flight. */
+  acknowledged: number;
+  /** The newest frame that waits for room in the window. A newer frame replaces it. */
+  heldFrame: BrowserViewFrame | null;
   /**
    * One input at a time, in the order the member sent them. A paste takes several CDP calls, and a
    * key typed after it must not land first.
@@ -158,6 +169,8 @@ export class BrowserViewGateway {
       frameHeight: 0,
       frameSizes: new Map(),
       rememberFrames: false,
+      acknowledged: 0,
+      heldFrame: null,
       input: Semaphore.makeUnsafe(1),
       views: Semaphore.makeUnsafe(1),
       reportCursor: false,
@@ -242,6 +255,8 @@ export class BrowserViewGateway {
     session.frameWidth = 0;
     session.frameHeight = 0;
     session.frameSizes.clear();
+    session.acknowledged = 0;
+    session.heldFrame = null;
     session.rememberFrames = browserViewClientAcksFrames(url);
     session.reportCursor = browserViewClientWantsCursor(url);
     session.reportContextMenu = browserViewClientWantsContextMenu(url);
@@ -274,6 +289,9 @@ export class BrowserViewGateway {
     recordRestartActivity();
     client.on("message", (data, binary) => {
       if (binary || session.socket !== client) return;
+      // An acknowledgement does not wait behind input to open the window: a click that waits for
+      // the page would otherwise hold the next frame back for as long as the page takes.
+      this.#acknowledge(session, client, data);
       this.#dispatch(session.input.withPermits(1)(this.#handleInput(session, data)));
     });
     client.once("close", () => this.#dispatch(this.#detach(session, client)));
@@ -288,22 +306,7 @@ export class BrowserViewGateway {
       const browser = yield* BrowserViewPort;
       const stopView = yield* browser.start(
         session.tabId,
-        (frame) => {
-          if (session.socket !== client || client.readyState !== webSockets.WebSocket.OPEN) return;
-          // A dropped frame is one the client never sees, so it cannot be the frame a fraction is a
-          // fraction of. Recording its shape here would expand the client's next point with a size
-          // only this side knows about, and the click would land somewhere the user never pointed.
-          if (client.bufferedAmount > MAX_BUFFERED_FRAME_BYTES) return;
-          client.send(encodeBrowserViewFrame(frame), { binary: true });
-          session.frameWidth = frame.width;
-          session.frameHeight = frame.height;
-          if (session.rememberFrames) {
-            session.frameSizes.set(frame.sequence, { width: frame.width, height: frame.height });
-            if (session.frameSizes.size > MAX_UNACKNOWLEDGED_FRAMES) {
-              this.#dispatch(this.#closeSession(session, "The live view fell too far behind."));
-            }
-          }
-        },
+        (frame) => this.#sendFrame(session, client, frame),
         (reason) => {
           this.#dispatch(this.#closeSession(session, reason));
         },
@@ -329,6 +332,57 @@ export class BrowserViewGateway {
     );
   });
 
+  /**
+   * Sends a frame now, or holds it until the client has room for it. A held frame is the page as
+   * it is now, so it replaces an older held frame and goes out with the next acknowledgement.
+   */
+  #sendFrame(session: ManagedViewSession, client: Ws.WebSocket, frame: BrowserViewFrame): void {
+    if (session.socket !== client || client.readyState !== webSockets.WebSocket.OPEN) return;
+    if (session.rememberFrames && this.#framesInFlight(session) >= MAX_FRAMES_IN_FLIGHT) {
+      session.heldFrame = frame;
+      return;
+    }
+    // A dropped frame is one the client never sees, so it cannot be the frame a fraction is a
+    // fraction of. Recording its shape here would expand the client's next point with a size
+    // only this side knows about, and the click would land somewhere the user never pointed.
+    if (client.bufferedAmount > MAX_BUFFERED_FRAME_BYTES) {
+      if (session.rememberFrames) session.heldFrame = frame;
+      return;
+    }
+    session.heldFrame = null;
+    client.send(encodeBrowserViewFrame(frame), { binary: true });
+    session.frameWidth = frame.width;
+    session.frameHeight = frame.height;
+    if (session.rememberFrames) session.frameSizes.set(frame.sequence, { width: frame.width, height: frame.height });
+  }
+
+  #framesInFlight(session: ManagedViewSession): number {
+    let count = 0;
+    for (const sequence of session.frameSizes.keys()) {
+      if (sequence > session.acknowledged) count += 1;
+    }
+    return count;
+  }
+
+  /**
+   * Opens the window for the client's acknowledgement of a drawn frame at once, and sends the frame
+   * that waited for room. A frame this session did not send is not a frame to trust. The message
+   * still goes through the input queue, which forgets the older frames in order with the input.
+   */
+  #acknowledge(session: ManagedViewSession, client: Ws.WebSocket, data: Ws.RawData): void {
+    if (rawDataSize(data) > 256) return;
+    let input: BrowserViewInput;
+    try {
+      input = decodeBrowserViewInput(rawDataText(data));
+    } catch {
+      return;
+    }
+    if (input.type !== "ack" || !session.frameSizes.has(input.sequence)) return;
+    session.acknowledged = Math.max(session.acknowledged, input.sequence);
+    const held = session.heldFrame;
+    if (held) this.#sendFrame(session, client, held);
+  }
+
   readonly #handleInput = Effect.fn("BrowserViewGateway.handleInput")(function* (
     this: BrowserViewGateway,
     session: ManagedViewSession,
@@ -344,7 +398,7 @@ export class BrowserViewGateway {
     }
     const input = attempt1.success;
     // The client has drawn this frame. Older ones are no longer on screen, including when the
-    // member never moves the pointer. A frame this session did not send is not a frame to trust.
+    // member never moves the pointer. The message handler already opened the window for it.
     if (input.type === "ack") {
       if (!session.frameSizes.has(input.sequence)) return;
       forgetFramesBefore(session.frameSizes, input.sequence);

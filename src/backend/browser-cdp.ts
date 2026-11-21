@@ -8,7 +8,7 @@ import type {
   BrowserTarget,
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isBoolean, isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
-import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
+import { Deferred, Effect, Exit, Fiber, Result, Scope } from "effect";
 import type { NativeImage, WebContents } from "electron";
 import {
   BROWSER_CARD_FIELDS,
@@ -105,6 +105,13 @@ export interface SnapshotContext {
   diagnostics: BrowserDiagnosticEntry[];
   actions: BrowserActionHistoryEntry[];
 }
+
+/**
+ * How many times in a row a live view's screencast starts again after a lease fails before it ends.
+ * A lease fails when an agent operation that missed its deadline detaches the debugger under it.
+ */
+const SCREENCAST_RESTARTS = 5;
+const SCREENCAST_RESTART_DELAY_MS = 200;
 
 export interface BrowserScreencastOptions {
   quality: number;
@@ -636,6 +643,11 @@ export class BrowserCdpEngine {
    * perfectly healthy.
    */
   #activeLeases = 0;
+  /**
+   * The live view streams to tell when this engine detaches the debugger itself. Electron's own
+   * `detach` event is documented only for a closed page or opened DevTools.
+   */
+  readonly #detachListeners = new Set<() => void>();
   #highlightSessionId: string | undefined;
   readonly #uploadDocumentIds = new Set<string>();
   readonly #targetSessions = new Map<string, { sessionId: string; url: string }>();
@@ -1770,6 +1782,10 @@ export class BrowserCdpEngine {
     };
     // A stalled agent operation can detach the debugger under the stream, which ends the screencast
     // without a word. The stream then starts again on a new lease, so the view does not freeze.
+    // The detach can also come while this lease sends a command: the command fails with "target
+    // closed". That is the same detach, so a stream that has shown the page starts again then too,
+    // a few times in a row, and ends only when the tab itself has gone.
+    let failuresInARow = 0;
     const running = yield* Effect.forkIn(
       Effect.gen({ self: this }, function* () {
         yield* Effect.gen({ self: this }, function* () {
@@ -1778,11 +1794,13 @@ export class BrowserCdpEngine {
             const onDetach = () => {
               Deferred.doneUnsafe(detached, Effect.void);
             };
-            yield* this.#leaseEffect(
+            let streamed = false;
+            const attempt = this.#leaseEffect(
               (send) =>
                 Effect.gen({ self: this }, function* () {
                   this.#contents.debugger.on("message", listener);
                   this.#contents.debugger.on("detach", onDetach);
+                  this.#detachListeners.add(onDetach);
                   yield* Effect.gen({ self: this }, function* () {
                     yield* send("Page.startScreencast", {
                       format: "jpeg",
@@ -1792,6 +1810,8 @@ export class BrowserCdpEngine {
                       everyNthFrame: 1,
                     });
                     live = true;
+                    streamed = true;
+                    failuresInARow = 0;
                     started();
                     yield* Effect.raceFirst(Deferred.await(stopped), Deferred.await(detached));
                   }).pipe(
@@ -1799,6 +1819,7 @@ export class BrowserCdpEngine {
                       Effect.gen({ self: this }, function* () {
                         this.#contents.debugger.off("message", listener);
                         this.#contents.debugger.off("detach", onDetach);
+                        this.#detachListeners.delete(onDetach);
                         if (!stopRequested) return;
                         yield* send("Page.stopScreencast").pipe(Effect.ignore);
                         // The debugger can stay attached for an agent, and the page keeps an
@@ -1816,6 +1837,14 @@ export class BrowserCdpEngine {
                 }),
               false,
             );
+            const outcome = yield* Effect.result(attempt);
+            if (Result.isSuccess(outcome)) continue;
+            const tabGone = this.#disposed || this.#closing || this.#contents.isDestroyed();
+            if (!live || stopRequested || tabGone || (!streamed && failuresInARow >= SCREENCAST_RESTARTS)) {
+              return yield* Effect.fail(outcome.failure);
+            }
+            if (!streamed) failuresInARow += 1;
+            yield* Effect.sleep(SCREENCAST_RESTART_DELAY_MS * Math.max(1, failuresInARow));
           }
         }).pipe(
           Effect.ensuring(
@@ -2759,6 +2788,7 @@ export class BrowserCdpEngine {
     this.#clearDebuggerSessions();
     if (this.#closing || this.#contents.isDestroyed() || !this.#contents.debugger.isAttached()) return;
     this.#contents.debugger.detach();
+    for (const listener of [...this.#detachListeners]) listener();
   }
 
   #clearDebuggerSessions(): void {

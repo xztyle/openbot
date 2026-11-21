@@ -129,6 +129,7 @@ import { MessagingOperationFailed, MessagingService } from "../backend/messaging
 import { slackDriver } from "../backend/messaging/slack/slack-driver";
 import { telegramDriver } from "../backend/messaging/telegram/telegram-driver";
 import { OpenBotDatabase } from "../backend/openbot-database";
+import { type OwnerAlert, type OwnerAwayNotice, OwnerAwayService } from "../backend/owner-away";
 import { passwordVaultRouter } from "../backend/password-vault-router";
 import { sweepProviderTemp } from "../backend/provider-temp";
 import { SidebarLayoutStore } from "../backend/sidebar-layout-store";
@@ -258,6 +259,7 @@ import { MessagingCredentialStore } from "./messaging-credential-store";
 import { NotificationPreferenceStore } from "./notification-preference-store";
 import { OnePasswordConnectorService } from "./onepassword-connector-service";
 import { OnePasswordConnectorStore } from "./onepassword-connector-store";
+import { wireOwnerAway } from "./owner-away-wiring";
 import { PromptCacheTtlPreferenceStore } from "./prompt-cache-ttl-preference-store";
 import { ProviderAccountsHost } from "./provider-accounts-host";
 import { createProviderCliAppVersionStore } from "./provider-cli-app-version-store";
@@ -372,6 +374,7 @@ const APPROVAL_AUTOMATION_FILE = "openbot-approval-automation-v3.json";
 const V2_APPROVAL_AUTOMATION_FILE = "openbot-approval-automation-v2.json";
 /** The VAPID key pair and the push subscriptions of browsers. A file of the profile, kept apart from the database. */
 const WEB_PUSH_FILE = "openbot-web-push-v1.json";
+const OWNER_AWAY_FILE = "openbot-owner-away-v1.json";
 const ROUTINE_FEED_FILE = "openbot-routine-feed-v1.json";
 const LEGACY_APPROVAL_AUTOMATION_FILE = "openbot-approval-automation-v1.json";
 const LANGUAGE_PREFERENCE_FILE = "openbot-language-preference-v1.json";
@@ -1744,6 +1747,18 @@ export async function createApplicationServices({
   await Effect.runPromise(agentApiKeys.registerSaved());
   // The schedule triggers of workflows share the routine timer; built after the workflows below.
   let workflowTriggers: WorkflowTriggers | null = null;
+  // The owner's quiet hours, focus and held requests. Its answers and pushes go to the agent service
+  // and the web push sender, which are made below.
+  let ownerAwayDeliver: ((agentId: string, text: string, key: string) => void) | null = null;
+  let ownerAwayPush: ((notice: OwnerAwayNotice) => void) | null = null;
+  let ownerAwayAlert: ((alert: OwnerAlert) => void) | null = null;
+  const ownerAway = new OwnerAwayService({
+    file: join(app.getPath("userData"), OWNER_AWAY_FILE),
+    serverTimezone: () => serverTimezone.effective(),
+    deliver: (agentId, text, key) => ownerAwayDeliver?.(agentId, text, key),
+    push: (notice) => ownerAwayPush?.(notice),
+    alert: (alert) => ownerAwayAlert?.(alert),
+  });
   // Draws the pages of the workspace artifacts, one at a time, in a window that is never shown.
   const workspaceThumbnailCapturer = new WorkspaceThumbnailCapturer();
   const workspaceThumbnails = new WorkspaceThumbnails({
@@ -1760,6 +1775,8 @@ export async function createApplicationServices({
     browser,
     workspaceArtifactsPath: join(app.getPath("userData"), WORKSPACE_ARTIFACTS_FILE),
     workspaceThumbnails,
+    sharePreviews: { drawNow: (url, revision) => workspaceThumbnails.drawNow(url, revision) },
+    ownerAway,
     visualPreview: new ChatVisualPreviewer(),
     prepareMcpTest: (config) =>
       prepareToolRuntimeForTest(config, {
@@ -2413,9 +2430,29 @@ export async function createApplicationServices({
       },
       hostViewer: () => pushHost?.channelViewer() ?? null,
     }),
+    // Quiet hours and focus hold the owner's pushes, except urgent alerts.
+    away: {
+      appliesTo: (memberId) => teamStore.getMember(memberId)?.role === "owner",
+      allowPush: (key, urgent) => ownerAway.allowPush(key, urgent),
+    },
     logger,
   });
   teardown.push(TEARDOWN_ORDER.webPush, "the web push service", () => webPush.dispose());
+  wireOwnerAway({
+    ownerAway,
+    webPush,
+    service,
+    agentName: (agentId) => service.listAgents().find((agent) => agent.id === agentId)?.name,
+    timezone: () => serverTimezone.effective(),
+    logger,
+    set: {
+      deliver: (value) => (ownerAwayDeliver = value),
+      push: (value) => (ownerAwayPush = value),
+      alert: (value) => (ownerAwayAlert = value),
+    },
+  });
+  ownerAway.start();
+  teardown.push(TEARDOWN_ORDER.webPush, "the owner away clock", () => ownerAway.stop());
   const attachmentPreviews = new AttachmentPreviews(join(app.getPath("userData"), "attachment-previews"));
   const downloadTickets = new DownloadTickets({
     keyPath: join(app.getPath("userData"), "download-ticket.key"),
@@ -2526,6 +2563,8 @@ export async function createApplicationServices({
     // Present, so the host advertises the push routes. The key pair and the subscriptions are in a file
     // of this profile, not in the database.
     webPush,
+    // The owner's quiet hours, focus and "When you're back" list (`owner-away-v1`, `fork-host-v1`).
+    ownerAway,
     // Signed links for large downloads from the operator's download host. Without the address file the
     // route answers 400 and the browser keeps using the connection.
     downloadTickets,

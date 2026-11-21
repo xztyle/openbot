@@ -102,6 +102,7 @@ interface HostServiceOptions {
   securityAudit?: ForwardedApiOptions["securityAudit"];
   /** Present, so the host advertises the push routes. Its owner stops it with the application. */
   webPush?: ForwardedApiOptions["webPush"];
+  ownerAway?: ForwardedApiOptions["ownerAway"];
   downloadTickets?: ForwardedApiOptions["downloadTickets"];
   attachmentPreviews?: ForwardedApiOptions["attachmentPreviews"];
   mcpToolRuntimePreparation?: ForwardedApiOptions["mcpToolRuntimePreparation"];
@@ -407,6 +408,7 @@ export class HostService extends EventEmitter<HostEvents> {
       ...(options.eventChecks === undefined ? {} : { eventChecks: options.eventChecks }),
       ...(options.securityAudit === undefined ? {} : { securityAudit: options.securityAudit }),
       ...(options.webPush === undefined ? {} : { webPush: options.webPush }),
+      ...(options.ownerAway === undefined ? {} : { ownerAway: options.ownerAway }),
       ...(options.downloadTickets === undefined ? {} : { downloadTickets: options.downloadTickets }),
       ...(options.attachmentPreviews === undefined ? {} : { attachmentPreviews: options.attachmentPreviews }),
       ...(options.mcpToolRuntimePreparation === undefined

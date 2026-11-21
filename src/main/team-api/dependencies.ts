@@ -1,6 +1,7 @@
 import type { Effect } from "effect";
 import type { ChannelService } from "../../backend/channel-service";
 import type { EventCheckScheduler } from "../../backend/event-check-scheduler";
+import type { OwnerAwayService } from "../../backend/owner-away";
 import type { SecurityAuditLog } from "../../backend/security-audit-log";
 import type { SpaceService } from "../../backend/spaces/space-service";
 import type { AcpRegistry } from "../acp-registry";
@@ -528,6 +529,8 @@ export interface TeamApiOptions {
   eventChecks?: EventCheckScheduler | undefined;
   /** `security-audit-v1`: admin-only read of the security audit file. */
   securityAudit?: Pick<SecurityAuditLog, "read"> | undefined;
+  /** `owner-away-v1` (`fork-host-v1`): the owner's quiet hours, focus and held requests. */
+  ownerAway?: OwnerAwayService | undefined;
   /** `web-push-v1`: a member's browser gives its push subscription, and the host sends it push messages. */
   webPush?: Pick<WebPushService, "publicKey" | "register" | "remove"> | undefined;
   /** `file-tickets-v1`: signed links that a browser downloads from the host's own download address. */

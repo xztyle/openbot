@@ -33,6 +33,21 @@ export const messages = defineMessages("notification", {
   "notification.mentionedYou": "Mentioned you.",
   "notification.directMessage": "Sent you a message.",
   "notification.threadReply": "Replied in a thread you follow.",
+  // The owner's quiet hours: what waited, and the requests held for when they are back.
+  "notification.away.digestTitle": "While you were away",
+  "notification.away.digestBody": {
+    one: "{count} notification waited for the end of your quiet time.",
+    other: "{count} notifications waited for the end of your quiet time.",
+  },
+  "notification.away.heldBody": {
+    one: "{count} request waits for you in When you're back.",
+    other: "{count} requests wait for you in When you're back.",
+  },
+  "notification.away.bundleTitle": "When you're back",
+  "notification.alert.money": "Money alert: {amount} at stake.",
+  "notification.alert.moneyNoAmount": "Money alert.",
+  "notification.alert.outage": "Outage: something live is down.",
+  "notification.alert.security": "Security alert.",
   // One notice for several messages of one conversation that came within a short time.
   "notification.newMessages": { one: "{count} new message.", other: "{count} new messages." },
   "notification.usageLimit.title": "{provider} account reached its limit",

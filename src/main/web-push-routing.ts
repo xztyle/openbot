@@ -122,6 +122,11 @@ export function webPushChannelPath(
   return `${spacePath(hostId, space)}/c/${pathPart(channelId)}${thread}${message}`;
 }
 
+/** The web client address of a view of a space, such as `/app/s/<host>/<space>/activity`. */
+export function webPushViewPath(hostId: string | null, space: string, view: "activity"): string {
+  return `${spacePath(hostId, space)}/${view}`;
+}
+
 /** The web client address of the chat with an agent: `/app/s/<host>/<space>/dm/<agent>`. */
 export function webPushAgentPath(hostId: string | null, space: string, agentId: string): string {
   return `${spacePath(hostId, space)}/dm/${pathPart(agentId)}`;

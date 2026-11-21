@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { readFileSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { BlockList, isIP } from "node:net";
 import { join } from "node:path";
 import {
@@ -57,6 +57,11 @@ export type WorkspaceThumbnailCapture = (
   url: string,
   allow: (url: string) => Effect.Effect<boolean>,
 ) => Effect.Effect<WorkspaceThumbnailImage, WorkspaceThumbnailCaptureFailed>;
+
+/** Draws one page now for `share_preview` (`WorkspaceThumbnails.drawNow`). */
+export interface SharePreviewDrawer {
+  drawNow(url: string, revision: string): Effect.Effect<WorkspaceThumbnailImage | null>;
+}
 
 export interface WorkspaceThumbnailsOptions {
   /** The images and their state file, host only: `<userData>/workspace-thumbnails`. */
@@ -419,6 +424,36 @@ export class WorkspaceThumbnails {
     );
     if (Result.isFailure(saved))
       logger.warn("The workspace thumbnail state could not be saved.", { operation: saved.failure.operation });
+  });
+
+  /**
+   * Draws the page at `url` now, for `share_preview`, and gives its image, or null when the page may
+   * not be drawn or did not draw. One page and revision is drawn once: a later call within the
+   * refresh time gets the saved image, so a card costs one capture.
+   */
+  readonly drawNow = Effect.fn("WorkspaceThumbnails.drawNow")(function* (
+    this: WorkspaceThumbnails,
+    url: string,
+    revision: string,
+  ) {
+    if (this.#stopped) return null;
+    this.#load();
+    const id = `artifact-${createHash("sha256").update(`share\n${url}\n${revision}`).digest("hex").slice(0, 32)}`;
+    const now = this.#now();
+    const cached = this.#entries.get(id);
+    const fresh = cached?.okAt !== undefined && now - cached.okAt < (this.#options.refreshAfterMs ?? REFRESH_AFTER_MS);
+    if (!fresh) {
+      if (cached?.failedAt !== undefined && now - cached.failedAt < 60_000) return null;
+      if (!this.#entries.has(id)) this.#remember(id, { requestedAt: now });
+      yield* this.#drawOne(id, url);
+      yield* this.#saveState();
+    }
+    const entry = this.#entries.get(id);
+    const path = entry?.mimeType && entry.okAt !== undefined ? this.#path(id, entry.mimeType) : null;
+    if (!entry?.mimeType || !path) return null;
+    const mimeType = entry.mimeType;
+    const bytes = yield* Effect.promise(() => readFile(path).catch(() => null));
+    return bytes ? { bytes: new Uint8Array(bytes), mimeType } : null;
   });
 
   /** Waits until no page waits or draws, and the state is written. */

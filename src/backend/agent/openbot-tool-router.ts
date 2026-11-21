@@ -63,11 +63,13 @@ import {
   routineReportFailureToolSchema,
   saveApiKeyToolSchema,
 } from "../openbot-tools";
+import type { OwnerAwayService } from "../owner-away";
 import { type AppServerRequest, type DynamicToolCallParams, type DynamicToolResult, isRecord } from "../protocol";
 import { handleRoutineFlowTool, type RoutineFlowTools } from "../routine-flows/routine-flow-tools";
 import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "../security-audit-log";
 import { agentSeesChannel, crossSpaceRefusal } from "../spaces/space-scope";
 import type { StoredStateFailure } from "../stored-state-effects";
+import type { SharePreviewDrawer } from "../workspace-thumbnails";
 import { AgentInterruptTool } from "./agent-interrupt-tool";
 import type { AgentMemories } from "./agent-memories";
 import { type ApprovalAutomationPolicy, NO_APPROVAL_AUTOMATION } from "./approval-automation";
@@ -98,6 +100,7 @@ import {
   requestedToolModel,
   requireReasoningEffort,
 } from "./model-tools";
+import { OWNER_TOOL_NAMES, OwnerTools } from "./owner-tools";
 import {
   createAgentToolSchema,
   listModelsToolSchema,
@@ -245,6 +248,10 @@ export interface OpenBotToolRouterOptions {
   mcpServers?: AgentMcpServers | null | undefined;
   /** The API keys that users saved for agents; null where nothing can save them. */
   apiKeys?: AgentApiKeys | null | undefined;
+  /** `hold_for_owner`, `alert_owner` and `share_preview`; absent, they answer that this host has none. */
+  ownerAway?: OwnerAwayService | null | undefined;
+  /** Draws the pages of `share_preview`; null where no window can draw one. */
+  sharePreviews?: SharePreviewDrawer | null | undefined;
   hooks: OpenBotToolRouterHooks;
 }
 
@@ -297,6 +304,7 @@ export class OpenBotToolRouter {
   readonly #apiKeys: AgentApiKeys | null;
   readonly #hooks: OpenBotToolRouterHooks;
   readonly #interruptTool: AgentInterruptTool;
+  readonly #ownerTools: OwnerTools;
 
   constructor(options: OpenBotToolRouterOptions) {
     this.#history = new HistoryTools({
@@ -332,6 +340,15 @@ export class OpenBotToolRouter {
     this.#mcpServers = options.mcpServers ?? null;
     this.#apiKeys = options.apiKeys ?? null;
     this.#hooks = options.hooks;
+    this.#ownerTools = new OwnerTools({
+      ownerAway: options.ownerAway ?? null,
+      thumbnails: options.sharePreviews ?? null,
+      visualPreview: options.visualPreview ?? null,
+      attachments: options.attachments,
+      mailbox: options.mailbox,
+      conversation: options.conversation,
+      teamChannel: (agentId, turnId) => options.channels.teamContext(agentId, turnId)?.channelId ?? null,
+    });
     this.#interruptTool = new AgentInterruptTool({
       store: options.store,
       mailbox: options.mailbox,
@@ -1214,6 +1231,11 @@ export class OpenBotToolRouter {
     }
 
     if (params.tool === "react_to_user_message") return yield* this.#react(params, senderAgentId);
+
+    if (OWNER_TOOL_NAMES.has(params.tool)) {
+      const owned = yield* this.#ownerTools.handle(params, senderAgentId, executionThreadId);
+      if (owned) return owned;
+    }
 
     if (params.tool === "log_decision") {
       const parsed = logDecisionToolSchema.safeParse(params.arguments);

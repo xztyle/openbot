@@ -265,6 +265,7 @@ import type { McpSignInOpener } from "./mcp-oauth-provider";
 import type { McpEndpoint, McpEndpointRefusal } from "./mcp-provider-shapes";
 import { McpServerStore } from "./mcp-server-store";
 import { MessagingThreads, toMessagingThreadFailed } from "./messaging/messaging-threads";
+import type { OwnerAwayService } from "./owner-away";
 import type { PasswordVault } from "./password-vault";
 import { decodeRecordResponse, getString } from "./protocol";
 import { NO_PROVIDER_CREDENTIALS, type ProviderClientContext } from "./provider-drivers";
@@ -289,6 +290,7 @@ import {
   resolveWorkspaceFile,
 } from "./workspace-paths";
 import { WorkspaceSecretsService } from "./workspace-secrets";
+import type { SharePreviewDrawer } from "./workspace-thumbnails";
 
 const logger = createOpenBotLogger("agent-service");
 
@@ -462,6 +464,10 @@ export interface AgentServiceOptions {
   workspaceArtifactsPath?: string | null;
   /** The thumbnails of the workspace artifacts that are web pages. Omitted or null, none is drawn. */
   workspaceThumbnails?: WorkspaceInsightsOptions["thumbnails"];
+  /** The owner's quiet hours, focus and held requests: `hold_for_owner`, `alert_owner`, the turn note. */
+  ownerAway?: OwnerAwayService | null;
+  /** Draws the pages of `share_preview`. Omitted or null, a url preview tells the agent to send the link. */
+  sharePreviews?: SharePreviewDrawer | null;
 }
 
 /** How long a user send's `clientMessageId` answers a retry. A retry follows a lost reply, not a day. */
@@ -1484,6 +1490,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       usageLimits: this.#usageLimits,
       followUp: this.#followUp,
       tasks: this.#tasks,
+      ...(options.ownerAway ? { ownerNote: () => options.ownerAway?.turnNote() ?? null } : {}),
       hooks: {
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
         redactMcp: (text) => this.#mcp.redact(text),
@@ -1703,6 +1710,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       ...(this.#routineFlowTools === undefined ? {} : { routineFlowTools: this.#routineFlowTools }),
       ...(options.approvalAutomation === undefined ? {} : { approvalAutomation: options.approvalAutomation }),
       ...(options.visualPreview === undefined ? {} : { visualPreview: options.visualPreview }),
+      ownerAway: options.ownerAway ?? null,
+      sharePreviews: options.sharePreviews ?? null,
       ...(options.screenCapture === undefined ? {} : { screenCapture: options.screenCapture }),
       mcpServers: mcpServersFromGateway(this.#mcp, options.prepareMcpTest),
       apiKeys: options.agentApiKeys ?? null,

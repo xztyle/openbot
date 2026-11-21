@@ -138,6 +138,8 @@ export interface DrainSchedulerOptions {
   hooks: DrainHooks;
   channels?: ChannelService;
   messaging?: MessagingThreads;
+  /** One line about the owner, such as quiet hours, for the start of each turn; null for none. */
+  ownerNote?: () => string | null;
 }
 
 /**
@@ -155,6 +157,7 @@ export interface DrainSchedulerOptions {
  */
 export class DrainScheduler {
   readonly #store: AgentStore;
+  readonly #ownerNote: (() => string | null) | undefined;
   readonly #mailbox: MailboxStore;
   readonly #mailboxSync: MailboxSync;
   readonly #conversation: ConversationRuntime;
@@ -217,6 +220,7 @@ export class DrainScheduler {
 
   constructor(options: DrainSchedulerOptions) {
     this.#store = options.store;
+    this.#ownerNote = options.ownerNote;
     this.#mailbox = options.mailbox;
     this.#mailboxSync = options.mailboxSync;
     this.#conversation = options.conversation;
@@ -758,8 +762,15 @@ export class DrainScheduler {
       // session can change from here to the retry below, as when the provider cannot resume it.
       const delta = channelDelivery ? channels?.delta(delivery.id) : undefined;
       const deltaInput = delta ? promptInput(delta.text) : null;
+      // Read once for the turn: quiet hours that end while it starts change nothing for it.
+      const ownerNote = this.#ownerNote?.() ?? null;
       const inputForThread = (providerThreadId: string) => {
-        const input = deltaInput && channels?.sendsDelta(delivery.id, providerThreadId) ? deltaInput : completeInput;
+        const chosen = deltaInput && channels?.sendsDelta(delivery.id, providerThreadId) ? deltaInput : completeInput;
+        const input = ownerNote
+          ? chosen.map((item, index) =>
+              index === 0 && item.type === "text" ? { ...item, text: `${item.text}\n\n${ownerNote}` } : item,
+            )
+          : chosen;
         const handoff = this.#threads.consumePendingHandoff(providerThreadId);
         if (!handoff) return input;
         return input.map((item, index) =>

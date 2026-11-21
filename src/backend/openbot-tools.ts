@@ -317,6 +317,78 @@ export const saveApiKeyToolSchema = z.strictObject({
   shared: sharedApiKeySchema.optional(),
 });
 
+export const holdForOwnerToolSchema = z.strictObject({
+  kind: z
+    .enum(["question", "approval", "takeover", "fyi"])
+    .describe(
+      "question: a choice or answer; approval: an action that waits for a yes; takeover: a step the owner does in a page (url); fyi: news that needs no answer.",
+    ),
+  title: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .describe(
+      "One line the owner reads in the list: the question, the action to approve, the step, or the news, with your default (“ok to launch at €20/day?”).",
+    ),
+  detail: z.string().trim().max(2000).optional().describe("What the owner needs to decide, in a few short lines."),
+  options: z
+    .array(z.string().trim().min(1).max(80))
+    .max(4)
+    .optional()
+    .describe("Up to 4 answers for a question, as buttons. The owner can always write another answer."),
+  url: z
+    .string()
+    .trim()
+    .max(2048)
+    .regex(/^https?:\/\//iu)
+    .optional()
+    .describe("The page for a takeover, or the thing to review."),
+});
+
+export const alertOwnerToolSchema = z.strictObject({
+  category: z
+    .enum(["money", "outage", "security"])
+    .describe(
+      "money: a loss or spend at stake; outage: a live site, app or ad account is down; security: a breach or a leaked key.",
+    ),
+  summary: z.string().trim().min(1).max(200).describe("One line: what happened and what you need from the owner."),
+  amountUsd: z
+    .number()
+    .finite()
+    .optional()
+    .describe("For money: the amount at stake, in US dollars. Below the owner's limit it waits in quiet hours."),
+});
+
+export const sharePreviewToolSchema = z
+  .strictObject({
+    url: z
+      .string()
+      .trim()
+      .max(2048)
+      .regex(/^https?:\/\//iu)
+      .optional()
+      .describe("A public page you published or changed: Atelier draws it and shows a card with its picture."),
+    paths: z
+      .array(z.string().min(1).max(INPUT_LIMITS.path))
+      .min(1)
+      .max(8)
+      .optional()
+      .describe(
+        "Local files in your workspace or Shared: images (shown as a grid), a CSV file (drawn as a chart with its first rows), or an HTML page (drawn as a picture).",
+      ),
+    caption: z.string().trim().min(1).max(300).describe("One line under the preview: what it is and what changed."),
+    revision: z
+      .string()
+      .trim()
+      .max(64)
+      .optional()
+      .describe("A version of the page, such as a deploy id. The same url and revision is drawn only once."),
+  })
+  .refine((value) => (value.url === undefined) !== (value.paths === undefined), {
+    message: "Pass either url or paths.",
+  });
+
 /** Shared declarations for Codex, Grok, and Claude. Service handlers enforce execution rules. */
 export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   ...EVENT_CHECK_TOOL_DEFINITIONS,
@@ -367,6 +439,12 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     description:
       "Attach existing local files to the current response for the user. Use this after creating screenshots, charts, diagrams, reports, ZIP archives, or other files that the user should receive. Atelier copies each file and shows image previews in the conversation.",
     shape: { paths: z.array(z.string().min(1).max(INPUT_LIMITS.path)).min(1).max(INPUT_LIMITS.attachments) },
+  },
+  {
+    name: "share_preview",
+    description:
+      "Show the owner a deliverable instead of describing it: a page you published or updated (url), images, a CSV file as a chart, or an HTML page, as a preview card with your caption in this conversation. Use it whenever you deliver a landing page, a site, a design, images, a chart or a data file, then keep your text to what the card does not show. Each url and revision is drawn once. In a channel, each member who reads the channel sees it.",
+    shape: sharePreviewToolSchema.shape,
   },
   {
     name: "html_preview",
@@ -642,6 +720,18 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
         .max(3),
       private: privateQuestionSchema,
     },
+  },
+  {
+    name: "hold_for_owner",
+    description:
+      "Put a request for the owner that can wait in their “When you're back” list instead of asking now: a question, an approval, a step in a page (takeover) or an FYI. It does not wait: continue other work or end your turn. The owner sees the list when they come back, or at a time they chose, as one bundle; their answer comes to you later as a message from them. Use it for anything that is not urgent, and always while the owner is in quiet hours or focus. Ask with ask_user only when you cannot continue any work without the answer and it matters now.",
+    shape: holdForOwnerToolSchema.shape,
+  },
+  {
+    name: "alert_owner",
+    description:
+      "Push an urgent alert to the owner's phone, also in quiet hours and focus: money at stake at or over the owner's limit, an outage of a live site, app or ad account, or a security event. Anything else waits in quiet hours: hold it with hold_for_owner. One alert of each kind per 15 minutes. Then tell the owner the details in your answer.",
+    shape: alertOwnerToolSchema.shape,
   },
   {
     name: "log_decision",

@@ -22,6 +22,20 @@ export const messages = {
   "notification.mentionedYou": "Te mencionó.",
   "notification.directMessage": "Te envió un mensaje.",
   "notification.threadReply": "Respondió en un hilo que sigues.",
+  "notification.away.digestTitle": "Mientras no estabas",
+  "notification.away.digestBody": {
+    one: "{count} notificación esperó al final de tu tiempo de descanso.",
+    other: "{count} notificaciones esperaron al final de tu tiempo de descanso.",
+  },
+  "notification.away.heldBody": {
+    one: "{count} solicitud te espera en Cuando vuelvas.",
+    other: "{count} solicitudes te esperan en Cuando vuelvas.",
+  },
+  "notification.away.bundleTitle": "Cuando vuelvas",
+  "notification.alert.money": "Alerta de dinero: {amount} en juego.",
+  "notification.alert.moneyNoAmount": "Alerta de dinero.",
+  "notification.alert.outage": "Caída: algo en producción no funciona.",
+  "notification.alert.security": "Alerta de seguridad.",
   "notification.newMessages": { one: "{count} mensaje nuevo.", other: "{count} mensajes nuevos." },
   "notification.usageLimit.title": "La cuenta de {provider} alcanzó su límite",
   "notification.usageLimit.body": {

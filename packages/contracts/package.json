@@ -190,6 +190,7 @@
     "./team-protocol/connection-report-v1": "./src/team-protocol/connection-report-v1.ts",
     "./team-protocol/input-escalations-v1": "./src/team-protocol/input-escalations-v1.ts",
     "./team-protocol/attention-items-v1": "./src/team-protocol/attention-items-v1.ts",
+    "./team-protocol/owner-away-v1": "./src/team-protocol/owner-away-v1.ts",
     "./team-protocol/security-audit-v1": "./src/team-protocol/security-audit-v1.ts",
     "./team-protocol/web-push-v1": "./src/team-protocol/web-push-v1.ts",
     "./team-protocol/file-tickets-v1": "./src/team-protocol/file-tickets-v1.ts",

@@ -240,6 +240,7 @@ import { routeMcpOAuth } from "./team-api/route-mcp-oauth";
 import { routeMcpSignIn } from "./team-api/route-mcp-sign-in";
 import { routeMcpSignInApp } from "./team-api/route-mcp-sign-in-app";
 import { routeOnePasswordConnector } from "./team-api/route-onepassword-connector";
+import { routeOwnerAway } from "./team-api/route-owner-away";
 import { routePromptCacheTtl } from "./team-api/route-prompt-cache-ttl";
 import { routeProviderAccountPool, routeProviderAccounts } from "./team-api/route-provider-accounts";
 import { routeProviderEnvironment } from "./team-api/route-provider-environment";
@@ -1043,6 +1044,7 @@ export class TeamApiServer {
       )
         return;
       if ((await routeWebPush(context, this.#options.webPush)) === "handled") return;
+      if ((await routeOwnerAway(context, this.#options.ownerAway)) === "handled") return;
       if ((await routePushNotifications(context, this.#options.pushNotifications)) === "handled") return;
       if (
         (await routeFocusUse(context, this.#options.focusUse ? (id) => this.#recordFocusUse(id) : undefined)) ===

@@ -31,6 +31,7 @@ import {
   webPushAllowed,
   webPushChannelKind,
   webPushChannelPath,
+  webPushViewPath,
 } from "./web-push-routing";
 import type { WebPushStore, WebPushSubscription } from "./web-push-store";
 
@@ -100,11 +101,37 @@ export interface WebPushOptions {
    * sends agent events only, without the address of a channel or a space.
    */
   workspace?: WebPushWorkspace;
+  /**
+   * The owner's quiet hours and focus (`OwnerAwayService`): a notice to a member it applies to waits
+   * unless it is urgent, and counts once for the summary at the end.
+   */
+  away?: WebPushAway;
   /** The time in which the notices of one conversation become one. Scripts make it short. */
   burstMs?: number;
   fetch?: typeof fetch;
   now?: () => number;
   logger?: { warn(message: string, ...values: unknown[]): void };
+}
+
+/** The quiet hours and focus of the owner, as the push sender asks them. */
+export interface WebPushAway {
+  /** Whether quiet hours and focus apply to this member's browsers: the owner's. */
+  appliesTo(memberId: string): boolean;
+  /** Whether a notice may go now; one that waits counts once by `key`. */
+  allowPush(key: string, urgent: boolean): boolean;
+}
+
+/** A summary notice of the owner's away time, or an urgent alert. */
+export interface WebPushOwnerNotice {
+  kind: "summary" | "alert";
+  /** The title and the body in the language of each browser. */
+  text: (translate: AppTranslate) => { title: string; body: string };
+  /** The agent the notice is about, for the space of the address; empty for none. */
+  agentId: string;
+  /** The view that a tap opens: Activity for a summary, the agent's chat for an alert. */
+  view: "activity" | "agent";
+  /** Goes through quiet hours and focus. */
+  urgent: boolean;
 }
 
 /** What the push sender reads of the workspace of the host. Each read is of the moment of the event. */
@@ -146,7 +173,9 @@ function eventThread(event: AgentEvent): string | null {
 
 /** One notice for one browser, before the burst of its conversation decides when it goes. */
 interface Notice {
-  kind: WebPushKind;
+  kind: WebPushKind | "summary" | "alert";
+  /** Goes through quiet hours and focus: an urgent alert, or the summary of what waited. */
+  urgent?: boolean;
   title: string;
   body: string;
   /** The title of the notice that counts a burst: the conversation, without one author. */
@@ -393,7 +422,7 @@ export class WebPushService {
    * part of a burst: each one waits for the member.
    */
   #notify(subscription: WebPushSubscription, conversation: string, notice: Notice, now: number): void {
-    if (isWebPushRequest(notice.kind)) {
+    if (notice.kind !== "summary" && notice.kind !== "alert" && isWebPushRequest(notice.kind)) {
       this.#send(subscription, `request:${notice.agentId}`, notice, false);
       return;
     }
@@ -443,7 +472,50 @@ export class WebPushService {
     for (const [key, burst] of this.#bursts) if (now >= burst.until && !burst.pending) this.#bursts.delete(key);
   }
 
+  /**
+   * Sends one notice to the owner's browsers: the summary of what waited while they were away, or an
+   * urgent alert. A browser set to Nothing, or a muted one, gets none.
+   */
+  notifyOwner(notice: WebPushOwnerNotice): void {
+    const now = this.#now();
+    const { workspace, away } = this.#options;
+    const hostId = this.#options.hostId();
+    const space = workspace ? (notice.agentId ? workspace.agentSpace(notice.agentId) : workspace.agentSpace("")) : null;
+    const path =
+      space === null
+        ? null
+        : notice.view === "agent" && notice.agentId
+          ? webPushAgentPath(hostId, space, notice.agentId)
+          : webPushViewPath(hostId, space, "activity");
+    for (const subscription of this.#readers(now)) {
+      if (away && !away.appliesTo(subscription.memberId)) continue;
+      if (notice.agentId && this.#options.hiddenAgentIds(subscription.protocol).has(notice.agentId)) continue;
+      const { title, body } = notice.text(this.#translator(subscription));
+      this.#send(
+        subscription,
+        `owner:${notice.kind}`,
+        {
+          kind: notice.kind,
+          urgent: notice.urgent,
+          title,
+          body,
+          burstTitle: title,
+          agentId: notice.agentId,
+          threadId: null,
+          path,
+        },
+        false,
+      );
+    }
+  }
+
   #send(subscription: WebPushSubscription, tag: string, notice: Notice, update: boolean): void {
+    const away = this.#options.away;
+    if (
+      away?.appliesTo(subscription.memberId) &&
+      !away.allowPush(`${notice.kind}\n${notice.path ?? notice.agentId}\n${notice.burstTitle}`, notice.urgent === true)
+    )
+      return;
     const message = JSON.stringify({
       v: 1,
       kind: notice.kind,
@@ -471,7 +543,7 @@ export class WebPushService {
     return translate;
   }
 
-  async #deliver(subscription: WebPushSubscription, message: string, kind: WebPushKind): Promise<void> {
+  async #deliver(subscription: WebPushSubscription, message: string, kind: Notice["kind"]): Promise<void> {
     const { store, logger } = this.#options;
     // The address is a capability, so a log names only the push service.
     const service = new URL(subscription.endpoint).origin;
@@ -491,7 +563,7 @@ export class WebPushService {
           "Content-Encoding": "aes128gcm",
           "Content-Type": "application/octet-stream",
           TTL: String(TTL_SECONDS),
-          Urgency: kind === "finished" ? "normal" : "high",
+          Urgency: kind === "finished" || kind === "summary" ? "normal" : "high",
         },
         body: new Uint8Array(encryptWebPushMessage(Buffer.from(message), subscription)),
       });

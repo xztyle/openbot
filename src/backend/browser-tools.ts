@@ -317,6 +317,18 @@ const BROWSER_TOOL_DEFINITIONS = [
         .refine((targets) => !(targets.expiry && (targets.expMonth || targets.expYear)), {
           message: "Use expiry, or expMonth and expYear, not both.",
         }),
+      amount: z
+        .number()
+        .min(0)
+        .optional()
+        .describe(
+          "The total you will pay on this page. The trust policy checks it against your budget; without it, a budget asks the owner.",
+        ),
+      currency: z
+        .string()
+        .regex(/^[A-Za-z]{3}$/u)
+        .optional()
+        .describe("The currency of amount, such as USD."),
       timeoutMs: timeout,
     },
   }),

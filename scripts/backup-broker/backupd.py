@@ -89,10 +89,10 @@ DEFAULT_CONFIG = {
     "data_uid": 1000,
     "motion": {"enabled": True, "dir": "/opt/motion", "compose_file": "/opt/motion/compose.yaml",
                "service": "server", "container": "motion-server", "uid": 10001},
-    "keep_daily": 7,
-    "keep_weekly": 4,
-    "keep_pre_restore": 2,
-    "keep_manual": 3,
+    "keep_daily": 1,
+    "keep_weekly": 0,
+    "keep_pre_restore": 1,
+    "keep_manual": 1,
     "spaces": "all",
     "max_file_mb": 50,
     "min_free_gb": 20,
@@ -1303,7 +1303,7 @@ def install():
     # 0755: the SQLite helper runs as the owner of each database (uid 1000, Motion 10001).
     os.chmod(ROOT / "backupd.py", 0o755)
     if not (ROOT / "config.json").exists():
-        write_json(ROOT / "config.json", {"keep_daily": 7, "keep_weekly": 4, "spaces": "all", "max_file_mb": 50,
+        write_json(ROOT / "config.json", {"keep_daily": 1, "keep_weekly": 0, "keep_manual": 1, "spaces": "all", "max_file_mb": 50,
                                           "min_free_gb": 20}, 0o600)
     script = ROOT / "backupd.py"
     units = Path("/etc/systemd/system")

@@ -370,7 +370,7 @@ export function parseRemoveRolePlaybookInput(value: unknown): { id: string } {
  * holds the role's words. Case and accents do not count.
  */
 export function agentHasPlaybookRole(
-  agent: { name: string; title?: string | undefined; role?: string | undefined },
+  agent: { name: string; title?: string | undefined; playbookRole?: string | undefined },
   roles: readonly string[],
 ): boolean {
   const fold = (text: string) =>
@@ -381,7 +381,7 @@ export function agentHasPlaybookRole(
       .replace(/\s+/gu, " ")
       .trim();
   const wanted = roles.map(fold).filter(Boolean);
-  if (agent.role !== undefined) return wanted.includes(fold(agent.role));
+  if (agent.playbookRole !== undefined) return wanted.includes(fold(agent.playbookRole));
   const haystack = fold(`${agent.name} ${agent.title ?? ""}`);
   return wanted.some((role) => haystack.includes(role));
 }

@@ -327,11 +327,11 @@ export interface AgentSummary {
   faceSkin?: AgentFaceSkin;
   /**
    * `auto`: each turn takes the model that its work needs. Absent: every turn runs on `model`. A remote
-   * host sends it, `role` and `sleepingSince` beside the frozen agent projection; see `agent-efficiency-v1.ts`.
+   * host sends it, `playbookRole` and `sleepingSince` beside the frozen agent projection; see `agent-efficiency-v1.ts`.
    */
   modelPolicy?: "auto";
   /** The agent's role, such as "QA", for the playbooks of that role. Absent: its name and title count. */
-  role?: string;
+  playbookRole?: string;
   /** ISO 8601 time when the agent went to sleep: no routine, check or message starts a turn until it wakes. */
   sleepingSince?: string;
   threadId: string | null;
@@ -408,7 +408,7 @@ function hasAgentSummaryFields(value: DynamicRecord): boolean {
     (value.faceSeed === undefined || isAgentFaceSeed(value.faceSeed)) &&
     (value.faceSkin === undefined || isAgentFaceSkin(value.faceSkin)) &&
     (value.modelPolicy === undefined || value.modelPolicy === "auto") &&
-    (value.role === undefined || isAgentRole(value.role)) &&
+    (value.playbookRole === undefined || isAgentRole(value.playbookRole)) &&
     (value.sleepingSince === undefined || isSleepingSince(value.sleepingSince)) &&
     (value.threadId === null || isIdentifier(value.threadId)) &&
     isBoundedString(value.workspacePath, INPUT_LIMITS.path) &&
@@ -490,7 +490,7 @@ export interface UpdateAgentInput {
   /** `auto` chooses the model of each turn; `fixed` keeps every turn on the agent's model. */
   modelPolicy?: AgentModelPolicy;
   /** The agent's role for the playbooks, or `null` to match by its name and title. */
-  role?: string | null;
+  playbookRole?: string | null;
   avatarSeed?: string;
   avatarHue?: AvatarHue | null;
 }

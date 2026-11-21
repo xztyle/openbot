@@ -3,9 +3,9 @@
 // What it adds, recorded here because freezing it makes it permanent:
 //
 // - On an agent summary, beside the frozen agent projection exactly as `faceStyle` rides (see
-//   `agent-face-v1.ts`): `modelPolicy` (`auto`; absent is a fixed model), `role` (1 to 80 characters,
+//   `agent-face-v1.ts`): `modelPolicy` (`auto`; absent is a fixed model), `playbookRole` (1 to 80 characters,
 //   no line break) and `sleepingSince` (an ISO 8601 time, at most 40 characters). The agent update
-//   request can set `modelPolicy` (`fixed` or `auto`) and `role` (or clear it with `null`). An older
+//   request can set `modelPolicy` (`fixed` or `auto`) and `playbookRole` (or clear it with `null`). An older
 //   client or host drops the keys; a value that this build does not read is dropped from a summary.
 // - `POST /v1/workspace/agents/sleep` `{ target: { kind: "agent" | "team" | "space", id }, sleeping }`
 //   puts the agent, the agent and every agent under it in the org chart, or every agent of the space
@@ -59,7 +59,7 @@ import type { TeamProtocolV6BaseJsonObject, TeamProtocolV6BaseJsonValue } from "
 export const AGENT_EFFICIENCY_CAPABILITY = FORK_HOST_CAPABILITY;
 
 /** The fields of an agent update request that this contract adds. */
-export const AGENT_EFFICIENCY_UPDATE_KEYS = ["modelPolicy", "role"] as const;
+export const AGENT_EFFICIENCY_UPDATE_KEYS = ["modelPolicy", "playbookRole"] as const;
 
 /** The `modelPolicy` and `role` fields of an agent update request: a known value, or `null` to clear the role. */
 export function decodeAgentEfficiencyRequest(value: unknown): TeamProtocolV6BaseJsonObject {
@@ -69,9 +69,9 @@ export function decodeAgentEfficiencyRequest(value: unknown): TeamProtocolV6Base
     if (!isAgentModelPolicy(value.modelPolicy)) throw new Error("Invalid model policy.");
     result.modelPolicy = value.modelPolicy;
   }
-  if (value.role !== undefined) {
-    if (value.role !== null && !isAgentRole(value.role)) throw new Error("Invalid agent role.");
-    result.role = value.role;
+  if (value.playbookRole !== undefined) {
+    if (value.playbookRole !== null && !isAgentRole(value.playbookRole)) throw new Error("Invalid agent role.");
+    result.playbookRole = value.playbookRole;
   }
   return result;
 }
@@ -86,7 +86,7 @@ export function withAgentEfficiency(
     if (!isDynamicRecord(agent) || !isString(agent.id)) continue;
     const mark: TeamProtocolV6BaseJsonObject = {};
     if (agent.modelPolicy === "auto") mark.modelPolicy = "auto";
-    if (isAgentRole(agent.role)) mark.role = agent.role;
+    if (isAgentRole(agent.playbookRole)) mark.playbookRole = agent.playbookRole;
     if (isSleepingSince(agent.sleepingSince)) mark.sleepingSince = agent.sleepingSince;
     if (Object.keys(mark).length > 0) marks.set(agent.id, mark);
   }

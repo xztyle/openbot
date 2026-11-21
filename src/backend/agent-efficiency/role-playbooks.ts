@@ -214,9 +214,10 @@ export class RolePlaybooks {
       playbooks: current.playbooks.filter((candidate) => candidate.id !== id),
       proposals: current.proposals.filter((proposal) => proposal.playbookId !== id),
     }));
-    // The marked folders go; an agent that made its own copy keeps it.
+    // The agents keep the skill as their own: only the mark goes, so nothing manages it any more.
     yield* Effect.promise(async () => {
-      for (const agent of this.#options.agents()) await removeMarked(agent.workspacePath, playbook.slug, playbook.id);
+      for (const agent of this.#options.agents())
+        await removeMarked(agent.workspacePath, playbook.slug, playbook.id, true);
     });
     this.#installed.delete(id);
     return yield* this.snapshot();
@@ -364,7 +365,7 @@ export class RolePlaybooks {
         const counts = new Map<string, number>();
         for (const id of agentIds) {
           const agent = byId.get(id);
-          const role = agent ? (agent.role ?? nameRole(agent.name)) : null;
+          const role = agent ? (agent.playbookRole ?? nameRole(agent.name)) : null;
           if (role) counts.set(role, (counts.get(role) ?? 0) + 1);
         }
         const suggestedRole = [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? null;
@@ -462,15 +463,19 @@ async function writePlaybook(workspacePath: string, playbook: StoredPlaybook): P
   return installed;
 }
 
-/** Removes the folders that this playbook marked. Anything else in them stays, and so does the folder. */
-async function removeMarked(workspacePath: string, slug: string, playbookId: string): Promise<void> {
+/**
+ * Removes the folders that this playbook marked: an agent that left the role loses the skill.
+ * `keepSkill` takes only the mark away, so the agent keeps the skill as its own. Anything else in a
+ * folder stays, and so does the folder then.
+ */
+async function removeMarked(workspacePath: string, slug: string, playbookId: string, keepSkill = false): Promise<void> {
   for (const folder of SKILL_FOLDERS) {
     const parent = await containedFolder(workspacePath, folder, false).catch(() => null);
     if (!parent) continue;
     const target = join(parent, slug);
     const owned = await markerOf(target);
     if (owned?.playbookId !== playbookId) continue;
-    await unlink(join(target, "SKILL.md")).catch(() => undefined);
+    if (!keepSkill) await unlink(join(target, "SKILL.md")).catch(() => undefined);
     await unlink(join(target, MARKER)).catch(() => undefined);
     await rmdir(target).catch(() => undefined);
   }

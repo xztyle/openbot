@@ -2370,14 +2370,14 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
           faceSeed,
           faceSkin,
           modelPolicy,
-          role,
+          playbookRole,
           ...updates
         } = input;
         const updated: ClientAgentSummary = { ...current, ...updates };
         if (modelPolicy === "fixed") delete updated.modelPolicy;
         else if (modelPolicy === "auto") updated.modelPolicy = "auto";
-        if (role === null) delete updated.role;
-        else if (role !== undefined) updated.role = role;
+        if (playbookRole === null) delete updated.playbookRole;
+        else if (playbookRole !== undefined) updated.playbookRole = playbookRole;
         // `null` returns the agent to the default face.
         if (faceStyle === null) delete updated.faceStyle;
         else if (faceStyle !== undefined) updated.faceStyle = faceStyle;

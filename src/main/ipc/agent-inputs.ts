@@ -674,9 +674,9 @@ export function parseUpdateAgent(value: unknown): UpdateAgentInput {
     result.modelPolicy = value.modelPolicy;
   }
   // `null` matches the agent to playbooks by its name and title again.
-  if (value.role !== undefined) {
-    if (value.role !== null && !isAgentRole(value.role)) throw new Error("Invalid agent role.");
-    result.role = value.role;
+  if (value.playbookRole !== undefined) {
+    if (value.playbookRole !== null && !isAgentRole(value.playbookRole)) throw new Error("Invalid agent role.");
+    result.playbookRole = value.playbookRole;
   }
   if (value.allowNewChat !== undefined) {
     if (value.allowNewChat !== null && !isBoolean(value.allowNewChat)) throw new Error("Invalid new chat value.");

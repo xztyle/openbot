@@ -438,11 +438,11 @@ export function agentUpdate(value: DynamicRecord, agentId: string): UpdateAgentI
     if (!isAgentModelPolicy(value.modelPolicy)) throw new HttpError(400, sourceText("error.team.agentSettingInvalid"));
     result.modelPolicy = value.modelPolicy;
   }
-  if (value.role !== undefined) {
-    if (value.role !== null && !isAgentRole(value.role)) {
+  if (value.playbookRole !== undefined) {
+    if (value.playbookRole !== null && !isAgentRole(value.playbookRole)) {
       throw new HttpError(400, sourceText("error.team.agentSettingInvalid"));
     }
-    result.role = value.role;
+    result.playbookRole = value.playbookRole;
   }
   if (value.provider !== undefined) {
     if (!isAgentProvider(value.provider)) {

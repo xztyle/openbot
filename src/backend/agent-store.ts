@@ -152,7 +152,7 @@ type PersistedStoredAgent = Omit<StoredAgent, "avatarUrl" | "provider" | "access
   // Written only as "auto", only as a set role, and only while the agent sleeps. Absent on every
   // agent stored before them: a fixed model, a role from the name and title, and awake.
   modelPolicy?: "auto";
-  role?: string;
+  playbookRole?: string;
   sleepingSince?: string;
 };
 type StoredAgentBase = Omit<PersistedStoredAgent, "avatarSeed" | "avatarHue"> & DynamicRecord;
@@ -899,10 +899,10 @@ export class AgentStore {
       }
       if (input.modelPolicy === "fixed") delete next.modelPolicy;
       else if (input.modelPolicy === "auto") next.modelPolicy = "auto";
-      if (input.role === null) delete next.role;
-      else if (input.role !== undefined) {
-        if (!isAgentRole(input.role)) throw new Error("Invalid agent role.");
-        next.role = input.role.trim();
+      if (input.playbookRole === null) delete next.playbookRole;
+      else if (input.playbookRole !== undefined) {
+        if (!isAgentRole(input.playbookRole)) throw new Error("Invalid agent role.");
+        next.playbookRole = input.playbookRole.trim();
       }
       if (input.faceSkin === null) delete next.faceSkin;
       else if (input.faceSkin !== undefined) {
@@ -994,7 +994,7 @@ export class AgentStore {
       if (next.faceSeed === undefined) delete agent.faceSeed;
       if (next.faceSkin === undefined) delete agent.faceSkin;
       if (next.modelPolicy === undefined) delete agent.modelPolicy;
-      if (next.role === undefined) delete agent.role;
+      if (next.playbookRole === undefined) delete agent.playbookRole;
       try {
         this.#persist(modelChange ? "agent.model-changed" : "agent.updated", modelChange);
       } catch (error) {
@@ -1006,7 +1006,7 @@ export class AgentStore {
         if (previous.faceSeed === undefined) delete agent.faceSeed;
         if (previous.faceSkin === undefined) delete agent.faceSkin;
         if (previous.modelPolicy === undefined) delete agent.modelPolicy;
-        if (previous.role === undefined) delete agent.role;
+        if (previous.playbookRole === undefined) delete agent.playbookRole;
         if (previous.taskLimit === undefined) delete agent.taskLimit;
         if (previous.providerAccountId === undefined) delete agent.providerAccountId;
         if (previous.backupModels === undefined) delete agent.backupModels;
@@ -2071,7 +2071,7 @@ function isStoredAgent(value: unknown): value is PersistedStoredAgent {
     (record.faceSeed === undefined || isAgentFaceSeed(record.faceSeed)) &&
     (record.faceSkin === undefined || isAgentFaceSkin(record.faceSkin)) &&
     (record.modelPolicy === undefined || record.modelPolicy === "auto") &&
-    (record.role === undefined || isAgentRole(record.role)) &&
+    (record.playbookRole === undefined || isAgentRole(record.playbookRole)) &&
     (record.sleepingSince === undefined || isSleepingSince(record.sleepingSince)) &&
     isAvatarSeed(record.avatarSeed) &&
     (record.avatarHue === null || isAvatarHue(record.avatarHue)) &&
@@ -2222,7 +2222,11 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
       : value.modelPolicy === undefined
         ? undefined
         : reset("modelPolicy", undefined);
-  const role = isAgentRole(value.role) ? value.role : value.role === undefined ? undefined : reset("role", undefined);
+  const playbookRole = isAgentRole(value.playbookRole)
+    ? value.playbookRole
+    : value.playbookRole === undefined
+      ? undefined
+      : reset("playbookRole", undefined);
   const sleepingSince = isSleepingSince(value.sleepingSince)
     ? value.sleepingSince
     : value.sleepingSince === undefined
@@ -2288,7 +2292,7 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     ...(faceSeed === undefined ? {} : { faceSeed }),
     ...(faceSkin === undefined ? {} : { faceSkin }),
     ...(modelPolicy === undefined ? {} : { modelPolicy }),
-    ...(role === undefined ? {} : { role }),
+    ...(playbookRole === undefined ? {} : { playbookRole }),
     ...(sleepingSince === undefined ? {} : { sleepingSince }),
     ...(sessionSettingOverrides === undefined ? {} : { sessionSettingOverrides }),
     ...(sessionSettingResets === undefined ? {} : { sessionSettingResets }),

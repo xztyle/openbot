@@ -64,7 +64,7 @@ export function AgentEfficiencySettings(props: {
     ([agentId, calls]) => {
       const current = ++generation;
       setState((draft) => {
-        draft.role = props.agent.role ?? "";
+        draft.role = props.agent.playbookRole ?? "";
         draft.review = null;
         draft.reviewLoaded = false;
         draft.error = null;
@@ -115,8 +115,11 @@ export function AgentEfficiencySettings(props: {
 
   function commitRole(): void {
     const next = state.role.trim();
-    if (next === (props.agent.role ?? "")) return;
-    void run(() => props.onUpdateAgent(props.agent.id, { role: next ? next : null }), t("agentSettings.saveFailed"));
+    if (next === (props.agent.playbookRole ?? "")) return;
+    void run(
+      () => props.onUpdateAgent(props.agent.id, { playbookRole: next ? next : null }),
+      t("agentSettings.saveFailed"),
+    );
   }
 
   async function reviewNow(calls: EfficiencyCalls): Promise<void> {

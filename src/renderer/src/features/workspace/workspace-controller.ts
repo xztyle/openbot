@@ -54,6 +54,7 @@ import { applyWorkspaceAppearance } from "../../atelier-theme";
 import type { ChannelsController } from "../channels/channels-controller";
 import type { MessagingApi } from "../connectors/messaging-connector";
 import type { StorageHygieneCalls } from "../storage-hygiene/storage-hygiene-port";
+import type { OwnerAwayStore } from "./owner-away-store";
 import { createWorkspaceFrecency } from "./workspace-frecency";
 import { createWorkspaceLater } from "./workspace-later";
 import { createWorkspaceMarks } from "./workspace-marks";
@@ -223,6 +224,8 @@ export interface WorkspaceEnvironment {
    * the top bar, Activity and the phone's Home.
    */
   needsYou?: (() => readonly AgentAttentionItem[]) | undefined;
+  /** The owner's quiet hours, focus and "When you're back" list. Only the owner's web client has it. */
+  ownerAway?: OwnerAwayStore | undefined;
   /** Whether the host is this computer: a browser secret can then be saved to the Vault. */
   localHost?: (() => boolean) | undefined;
   /** Opens the browser tab of a takeover, where the shell has the browser. */

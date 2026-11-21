@@ -151,6 +151,7 @@ import {
 } from "solid-js";
 // Copying a selection with a formula in it gives its LaTeX source, as on desktop.
 import "katex/contrib/copy-tex";
+import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import { actionToast } from "../../action-toast";
 import { desktopAnalytics } from "../../analytics";
@@ -246,6 +247,7 @@ import { isReaderAuthor } from "../team/reader-identity";
 import { RailHelpMenu } from "../window/RailHelpMenu";
 import { ServerSettingsPageTitle, SettingsPageFrame } from "../window/SettingsPageFrame";
 import type { SettingsKind, WindowPage } from "../window/window-page-context";
+import { createOwnerAwayStore } from "../workspace/owner-away-store";
 import { WorkspaceSidebarPane } from "../workspace/WorkspaceSidebarPane";
 import { WorkspaceAgentFrame, WorkspaceChrome, WorkspaceMain } from "../workspace/WorkspaceView";
 import { workspaceAttention } from "../workspace/workspace-attention";
@@ -1960,6 +1962,19 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   );
   const artifactThumbnails = createWebArtifactThumbnails(workspace.runtime, () => workspace.state.host?.hostId ?? "");
   onCleanup(() => artifactThumbnails.dispose());
+  // The owner's quiet hours, focus and held requests; the bundle shows once when the owner comes back.
+  const ownerAway = createOwnerAwayStore({
+    request: () => workspace.runtime.admin?.request,
+    enabled: () =>
+      workspace.state.status === "online" &&
+      workspace.state.capabilities.includes(FORK_HOST_CAPABILITY) &&
+      canAdministerServer(workspace.state.host?.role),
+    hostId: () => workspace.state.host?.hostId ?? "",
+    onWelcome: (welcome) =>
+      toast(t("workspace.away.welcome", welcome), {
+        action: { label: t("workspace.away.welcomeShow"), onClick: () => ws.openView("activity") },
+      }),
+  });
   const workspaceController = createWorkspaceController({
     channels,
     artifactThumbnailUrl: artifactThumbnails.url,
@@ -2100,6 +2115,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     approvals: () => workspace.state.approvals,
     takeovers: () => workspace.state.takeovers,
     needsYou: needsYouList,
+    ownerAway,
     secrets: () => canAdministerServer(workspace.state.host?.role),
     openBrowserTab: (tabId, agentId) => {
       workspace.activateBrowserTab(tabId);

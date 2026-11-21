@@ -14,6 +14,7 @@ import { useText } from "@openbot/ui/text";
 import { onCleanup, Show } from "solid-js";
 import { currentDevicePlatform } from "../../send-shortcut-preference";
 import { WorkspaceNeedsYouButton } from "./WorkspaceNeedsYou";
+import { WorkspaceFocusButton } from "./WorkspaceOwnerAway";
 import { useJumpEntries } from "./WorkspaceSwitcher";
 import { useWorkspace } from "./workspace-context";
 import { debugMode, setDebugMode } from "./workspace-debug";
@@ -49,7 +50,12 @@ export function WorkspaceTopBar() {
       <Show when={ws.env.phone() && debugMode()}>
         <WorkspaceDebugBadge floating />
       </Show>
-      <Show when={!ws.env.phone() && (ws.search.supported() || ws.needsYou().length > 0 || debugMode())}>
+      <Show
+        when={
+          !ws.env.phone() &&
+          (ws.search.supported() || ws.needsYou().length > 0 || Boolean(ws.env.ownerAway?.supported()) || debugMode())
+        }
+      >
         <div class="ws-topbar" ref={(div) => (element = div)}>
           <Show when={ws.search.supported()}>
             <WorkspaceSearchBar
@@ -74,6 +80,7 @@ export function WorkspaceTopBar() {
             />
           </Show>
           <WorkspaceNeedsYouButton />
+          <WorkspaceFocusButton />
           <Show when={debugMode()}>
             <WorkspaceDebugBadge />
           </Show>

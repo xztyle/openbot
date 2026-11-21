@@ -649,6 +649,10 @@
   box-shadow: inset 3px 0 0 var(--openbot-warning);
 }
 
+.ws-feed-kind[data-kind="when-back"] {
+  background: var(--openbot-accent);
+}
+
 .ws-feed-kind[data-kind="needs-you"] {
   background: var(--openbot-warning);
   color: var(--openbot-text-on-status);
@@ -736,4 +740,136 @@
   width: 22px;
   justify-content: center;
   padding: 0;
+}
+
+/* "When you're back": the requests that agents held for the owner, answered in place. */
+.ws-when-back {
+  border-bottom: 1px solid var(--ws-line, var(--openbot-border));
+  background: var(--openbot-accent-soft);
+}
+
+.ws-when-back-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-2) var(--openbot-space-4);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-when-back-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-1-5);
+  margin: 0;
+  padding: var(--openbot-space-3) var(--openbot-space-4) var(--openbot-space-1);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-bold);
+}
+
+.ws-when-back-icon {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-when-back-list {
+  margin: 0;
+  padding: 0 0 var(--openbot-space-2);
+  list-style: none;
+}
+
+.ws-when-back-item {
+  display: flex;
+  gap: var(--openbot-space-3);
+  padding: var(--openbot-space-2) var(--openbot-space-4);
+}
+
+.ws-when-back-item > .ws-feed-avatar {
+  align-self: flex-start;
+}
+
+.ws-when-back-item[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.ws-when-back-body {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+}
+
+.ws-when-back-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--openbot-space-1-5);
+}
+
+.ws-when-back-name {
+  color: var(--openbot-text-primary);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-when-back-time {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-when-back-title {
+  margin: 0;
+  color: var(--openbot-text-primary);
+  line-height: var(--openbot-leading-md);
+  overflow-wrap: anywhere;
+}
+
+.ws-when-back-detail {
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-md);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.ws-when-back-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-1-5);
+  padding-top: var(--openbot-space-1);
+}
+
+.ws-when-back-reply {
+  display: flex;
+  max-width: 520px;
+  align-items: center;
+  gap: var(--openbot-space-1-5);
+}
+
+.ws-when-back-reply > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ui-button.ws-focus-button {
+  flex: 0 0 auto;
+  gap: var(--openbot-space-1-5);
+}
+
+.ui-button.ws-focus-button > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-focus-menu {
+  min-width: 220px;
+}
+
+.ws-away-times {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--openbot-space-3);
 }

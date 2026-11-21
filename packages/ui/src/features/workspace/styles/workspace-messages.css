@@ -381,8 +381,19 @@ button.ws-profile-trigger.ws-message-author:hover {
 }
 
 .ws-fold[data-folded] > .ws-fold-body {
-  -webkit-mask-image: linear-gradient(to bottom, currentColor max(40%, calc(100% - 3em)), transparent 100%);
-  mask-image: linear-gradient(to bottom, currentColor max(40%, calc(100% - 3em)), transparent 100%);
+  /* The text is gone before the line that "Show more" sits on, so the button never lies over letters. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    currentColor max(30%, calc(100% - 4em)),
+    transparent calc(100% - 1.75em),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    currentColor max(30%, calc(100% - 4em)),
+    transparent calc(100% - 1.75em),
+    transparent 100%
+  );
 }
 
 /* A code block or a table that crosses the fold hides until the message opens. */

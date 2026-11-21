@@ -20,10 +20,13 @@ import type { TrustApprovalAnswer, TrustService, TrustSubject } from "./trust-se
 
 export { TRUST_CHECK_METHOD } from "./trust-classifier";
 
+/** What the gate uses of a provider client: it answers the request. */
+export type TrustClient = Pick<AgentClient, "respond" | "running">;
+
 /** What the attention registry gives the gate: an approval card and a decision card. */
 export interface TrustAttention {
   awaitToolApproval(
-    client: AgentClient,
+    client: TrustClient,
     request: AppServerRequest,
     approval: {
       requestId: string | number;
@@ -40,7 +43,7 @@ export interface TrustAttention {
     options: { readonly alwaysAsk?: boolean; readonly ownerOnly?: boolean },
   ): Effect.Effect<TrustApprovalAnswer>;
   surfaceUiBlock(
-    client: AgentClient,
+    client: TrustClient,
     request: AppServerRequest,
     block: SurfacedUiBlock,
     autoAnswer?: { actionId: string; afterMs: number },
@@ -78,7 +81,7 @@ export class TrustToolGate {
   }
 
   #approve(
-    client: AgentClient,
+    client: TrustClient,
     request: AppServerRequest,
     subject: Required<Pick<TrustSubject, "agentId" | "threadId" | "turnId">>,
     action: TrustClassification,
@@ -113,7 +116,7 @@ export class TrustToolGate {
    */
   readonly checkBrowser = Effect.fn("TrustToolGate.checkBrowser")(function* (
     this: TrustToolGate,
-    client: AgentClient,
+    client: TrustClient,
     request: AppServerRequest,
     params: DynamicToolCallParams,
     agentId: string,
@@ -166,7 +169,7 @@ export class TrustToolGate {
   /** Checks an `openbot` tool. Today that is `create_agent`. */
   readonly checkOpenBotTool = Effect.fn("TrustToolGate.checkOpenBotTool")(function* (
     this: TrustToolGate,
-    client: AgentClient,
+    client: TrustClient,
     request: AppServerRequest,
     params: DynamicToolCallParams,
   ) {
@@ -195,7 +198,7 @@ export class TrustToolGate {
    */
   readonly handleTrustCheck = Effect.fn("TrustToolGate.handleTrustCheck")(function* (
     this: TrustToolGate,
-    client: AgentClient,
+    client: TrustClient,
     request: AppServerRequest,
   ) {
     const params = isDynamicRecord(request.params) ? request.params : {};
@@ -215,7 +218,7 @@ export class TrustToolGate {
   });
 
   /** Shows the decision card of `request_decision`. It answers the call when the person answers. */
-  requestDecision(client: AgentClient, request: AppServerRequest, params: DynamicToolCallParams): undefined {
+  requestDecision(client: TrustClient, request: AppServerRequest, params: DynamicToolCallParams): undefined {
     const refuse = (message: string): undefined => {
       client.respond(request.id, openBotToolFailure(message));
       return undefined;

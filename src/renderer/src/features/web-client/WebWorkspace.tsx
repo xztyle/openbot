@@ -160,6 +160,7 @@ import { hostEfficiencyCalls } from "../efficiency/efficiency-port";
 import { serverSupportsCapability } from "../servers/server-capabilities";
 // Copying a selection with a formula in it gives its LaTeX source, as on desktop.
 import "katex/contrib/copy-tex";
+import { TRUST_CONTROL_CAPABILITY } from "@openbot/contracts/team-protocol/trust-control-v1";
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import { actionToast } from "../../action-toast";
 import { desktopAnalytics } from "../../analytics";
@@ -253,6 +254,7 @@ import type { HostPromptCacheTtlCalls } from "../settings/provider-prompt-cache"
 import { createCommunityCardVisibility } from "../sidebar/community-card";
 import { hostStorageHygieneCalls, serverHasStorageHygiene } from "../storage-hygiene/storage-hygiene-port";
 import { isReaderAuthor } from "../team/reader-identity";
+import { hostTrustCalls } from "../trust/trust-port";
 import { RailHelpMenu } from "../window/RailHelpMenu";
 import { ServerSettingsPageTitle, SettingsPageFrame } from "../window/SettingsPageFrame";
 import type { SettingsKind, WindowPage } from "../window/window-page-context";
@@ -1252,6 +1254,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   const saveFile = createWebFileSaver();
   const storageHygieneCalls = hostStorageHygieneCalls(() => hostRequest());
   const efficiencyCalls = hostEfficiencyCalls(() => hostRequest());
+  const trustCalls = hostTrustCalls(() => hostRequest());
   const storageCalls: FilesPort = {
     agent: { listAgents: () => workspace.runtime.listAgents() },
     storage: {
@@ -2141,6 +2144,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     efficiency: () =>
       canAdministerServer(workspace.state.host?.role) && serverSupportsCapability(server(), FORK_HOST_CAPABILITY)
         ? efficiencyCalls
+        : undefined,
+    trust: () =>
+      workspace.state.capabilities.includes(TRUST_CONTROL_CAPABILITY) && canAdministerServer(workspace.state.host?.role)
+        ? trustCalls
         : undefined,
     openBrowserTab: (tabId, agentId) => {
       workspace.activateBrowserTab(tabId);

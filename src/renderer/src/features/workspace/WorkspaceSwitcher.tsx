@@ -29,6 +29,7 @@ import {
   Pencil,
   Plus,
   Search,
+  ShieldCheck,
   Target,
   Workflow,
 } from "@openbot/ui";
@@ -84,6 +85,7 @@ const VIEW_ICON: Record<WorkspaceView, () => JSX.Element> = {
   reviews: () => <Gauge />,
   loops: () => <Kanban />,
   insights: () => <Target />,
+  trust: () => <ShieldCheck />,
   routines: () => <Workflow />,
   search: () => <Search />,
 };
@@ -156,6 +158,7 @@ export function useJumpEntries() {
       "reviews",
       "loops",
       "insights",
+      "trust",
       "routines",
     ] as const
   ).map((view) => ({ view, label: () => workspaceViewLabel(view, t) }));

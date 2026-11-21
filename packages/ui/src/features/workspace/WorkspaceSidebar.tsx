@@ -31,6 +31,7 @@ import {
   Network,
   Pencil,
   Plus,
+  ShieldCheck,
   SquarePen,
   Target,
   Trash2,
@@ -62,6 +63,8 @@ export type WorkspaceView =
   | "loops"
   /** Goals, money, agent costs and the briefing, for the owner and the admins. */
   | "insights"
+  /** Trust and control: what agents may do, their budgets, and the audit trail. */
+  | "trust"
   /** The agents of the space that shows. */
   | "space-agents"
   /** Slack's Drafts & sent: the unsent drafts of each conversation, and the reader's sent messages. */
@@ -168,6 +171,8 @@ export interface WorkspaceSidebarProps {
   showReviews?: boolean | undefined;
   /** Goals, money, agent costs and the briefing, for the owner and the admins of a host that has them. */
   showInsights?: boolean | undefined;
+  /** The Trust view (rules, budgets, audit trail), for the owner and the admins. */
+  showTrust?: boolean | undefined;
   /** Shows the Agents view of the space that shows, on a host with spaces. */
   showSpaceAgents?: boolean | undefined;
   /** Opens the server's apps (Discord, Slack, Telegram and other connectors), for an owner or an admin. */
@@ -220,6 +225,7 @@ const MORE_VIEWS = [
   "secrets",
   "reviews",
   "insights",
+  "trust",
 ] as const satisfies readonly WorkspaceView[];
 type MoreView = (typeof MORE_VIEWS)[number];
 
@@ -287,7 +293,9 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
             ? Boolean(props.showReviews)
             : view === "insights"
               ? Boolean(props.showInsights)
-              : true;
+              : view === "trust"
+                ? Boolean(props.showTrust)
+                : true;
   const MORE_ICON: Record<MoreView, () => JSX.Element> = {
     dms: () => <MessagesSquare aria-hidden="true" />,
     loops: () => <Kanban aria-hidden="true" />,
@@ -298,6 +306,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
     secrets: () => <KeyRound aria-hidden="true" />,
     reviews: () => <Gauge aria-hidden="true" />,
     insights: () => <Target aria-hidden="true" />,
+    trust: () => <ShieldCheck aria-hidden="true" />,
   };
   const moreLabel = (view: MoreView) =>
     view === "dms"
@@ -316,7 +325,9 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                   ? t("efficiency.view.title")
                   : view === "insights"
                     ? t("insight.title")
-                    : t("workspace.view.secrets");
+                    : view === "trust"
+                      ? t("trust.title")
+                      : t("workspace.view.secrets");
   /** The view under More that shows now: it gets a row of its own above More while it shows. */
   const activeMore = () => MORE_VIEWS.find((view) => view === props.activeView && moreAvailable(view));
   const moreItems = (): WorkspaceMenuItem[] => [

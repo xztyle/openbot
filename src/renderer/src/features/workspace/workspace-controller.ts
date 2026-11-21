@@ -56,6 +56,7 @@ import { applyWorkspaceAppearance } from "../../atelier-theme";
 import type { ChannelsController } from "../channels/channels-controller";
 import type { MessagingApi } from "../connectors/messaging-connector";
 import type { StorageHygieneCalls } from "../storage-hygiene/storage-hygiene-port";
+import type { TrustCalls } from "../trust/trust-port";
 import type { OwnerAwayStore } from "./owner-away-store";
 import { createWorkspaceFrecency } from "./workspace-frecency";
 import { createWorkspaceLater } from "./workspace-later";
@@ -250,6 +251,8 @@ export interface WorkspaceEnvironment {
   secrets?: (() => boolean) | undefined;
   /** The sleep, review and playbook calls of the host, for an owner or admin of a fork host. */
   efficiency?: (() => EfficiencyCalls | undefined) | undefined;
+  /** The trust and control calls of the host, for an owner or admin. Absent, there is no Trust view. */
+  trust?: (() => TrustCalls | undefined) | undefined;
   /** Opens Server settings > Storage, where the cleanup rules are. */
   openStorageRules?: (() => void) | undefined;
   /**
@@ -335,6 +338,7 @@ const SAVED_VIEWS: readonly WorkspaceView[] = [
   "reviews",
   "loops",
   "insights",
+  "trust",
   "space-agents",
   "drafts",
 ];
@@ -1743,6 +1747,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (view === "storage") return Boolean(env.storageHygiene?.());
     if (view === "reviews") return Boolean(env.efficiency?.());
     if (view === "loops") return Boolean(channels.port().agent.workspaceLoops);
+    if (view === "trust") return Boolean(env.trust?.());
     if (view === "routines") return env.routines?.available() === true;
     if (view === "later") return later.supported();
     if (view === "search") return search.supported();

@@ -22,6 +22,7 @@ import {
   Pencil,
   Plus,
   Search,
+  ShieldCheck,
   Target,
   Workflow,
 } from "@openbot/ui";
@@ -283,6 +284,13 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
         label: t("insight.title"),
         icon: <Target />,
         onSelect: () => openView("insights"),
+      });
+    if (ws.viewAvailable("trust"))
+      rows.push({
+        id: "trust",
+        label: t("trust.title"),
+        icon: <ShieldCheck />,
+        onSelect: () => openView("trust"),
       });
     const apps = ws.env.openApps;
     if (apps) rows.push({ id: "apps", label: t("workspace.view.apps"), icon: <Blocks />, onSelect: apps });

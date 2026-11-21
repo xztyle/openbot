@@ -5,6 +5,7 @@ import { toast } from "@openbot/ui";
 import { type OrgChartAgent, type OrgChartMessage, OrgChartView } from "@openbot/ui/features/org-chart/OrgChartView";
 import { useText } from "@openbot/ui/text";
 import { createMemo } from "solid-js";
+import { openTrustForAgent } from "../trust/WorkspaceTrustView";
 import { useWorkspace } from "./workspace-context";
 import { agentMember } from "./workspace-model";
 
@@ -115,6 +116,14 @@ export function WorkspaceOrgChart() {
       agents={agents()}
       messages={messages()}
       onOpenChat={(agentId) => ws.openAgent(agentId)}
+      onOpenPermissions={
+        ws.viewAvailable("trust")
+          ? (agentId) => {
+              openTrustForAgent(agentId);
+              ws.openView("trust");
+            }
+          : undefined
+      }
       onChangeManager={ws.env.setAgentManager ? changeManager : undefined}
       onSleepTeam={ws.env.efficiency?.() ? sleepTeam : undefined}
       onBack={() => ws.back()}

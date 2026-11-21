@@ -83,6 +83,8 @@ export interface OrgChartViewProps {
   messages?: readonly OrgChartMessage[] | undefined;
   /** Opens the agent's chat. */
   onOpenChat: (agentId: string) => void;
+  /** Opens the agent's trust rules and budgets. Absent, the panel has no Permissions button. */
+  onOpenPermissions?: ((agentId: string) => void) | undefined;
   /** Changes an agent's manager; `null` is the top level. Absent, the chart cannot be changed. */
   onChangeManager?: ((agentId: string, managerId: string | null) => Promise<void>) | undefined;
   /** Puts the agent and every agent under it to sleep, or wakes them. Absent: no sleep button. */
@@ -908,6 +910,9 @@ export function OrgChartView(props: OrgChartViewProps): JSX.Element {
                   layoutInput={input()}
                   canChangeManager={canMove()}
                   onOpenChat={() => props.onOpenChat(agent().member.id)}
+                  onOpenPermissions={
+                    props.onOpenPermissions ? () => props.onOpenPermissions?.(agent().member.id) : undefined
+                  }
                   onJump={jumpTo}
                   onChangeManager={async (managerId) => {
                     await props.onChangeManager?.(agent().member.id, managerId);

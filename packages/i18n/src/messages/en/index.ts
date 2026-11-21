@@ -47,6 +47,7 @@ import { source } from "./source";
 import { messages as startup } from "./startup";
 import { messages as storageHygiene } from "./storageHygiene";
 import { messages as team } from "./team";
+import { messages as trust } from "./trust";
 import { messages as uiBlock } from "./uiBlock";
 import { messages as update } from "./update";
 import { messages as usage } from "./usage";
@@ -124,6 +125,7 @@ export const en = {
   ...workspace,
   ...efficiency,
   ...storageHygiene,
+  ...trust,
 } as const satisfies MessageCatalog;
 
 export type AppMessages = typeof en;

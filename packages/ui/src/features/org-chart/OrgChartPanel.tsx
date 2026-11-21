@@ -8,7 +8,7 @@ import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { Button } from "../../button";
 import { Input } from "../../form";
-import { Check, MessageSquare, Search, UserRoundCog } from "../../icons";
+import { Check, MessageSquare, Search, ShieldCheck, UserRoundCog } from "../../icons";
 import { useText } from "../../text";
 import { AgentStatusLine } from "../workspace/MemberProfileCard";
 import { AiBadge, MemberAvatar } from "../workspace/WorkspaceAvatar";
@@ -28,6 +28,8 @@ export interface OrgChartPanelProps {
   onChangeManager: (managerId: string | null) => Promise<void>;
   /** Puts this agent and its reports to sleep, or wakes them. */
   onSleepTeam?: ((sleeping: boolean) => Promise<void>) | undefined;
+  /** Opens what the agent may do: its trust rules and budgets. Absent, there is no button. */
+  onOpenPermissions?: (() => void) | undefined;
   onClose: () => void;
 }
 
@@ -107,6 +109,14 @@ export function OrgChartPanel(props: OrgChartPanelProps): JSX.Element {
                 }}
               >
                 {props.agent.sleeping ? t("efficiency.sleep.teamWake") : t("efficiency.sleep.team")}
+              </Button>
+            )}
+          </Show>
+          <Show when={props.onOpenPermissions}>
+            {(open) => (
+              <Button size="sm" variant="secondary" onClick={() => open()()}>
+                <ShieldCheck aria-hidden="true" />
+                {t("trust.org.permissions")}
               </Button>
             )}
           </Show>

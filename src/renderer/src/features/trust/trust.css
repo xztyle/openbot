@@ -1,0 +1,225 @@
+/* The Trust view: rules by role, sandbox first, budgets, overrides and the audit trail. */
+
+.trust-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--openbot-space-1-5);
+  padding: var(--openbot-space-2) var(--openbot-space-4);
+}
+
+.trust-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-5);
+  padding-top: var(--openbot-space-3);
+  padding-bottom: var(--openbot-space-6);
+}
+
+.trust-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+}
+
+.trust-heading {
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.trust-muted {
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.trust-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  margin: 0;
+  color: var(--openbot-danger-text);
+  font-size: var(--openbot-text-sm);
+}
+
+.trust-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1-5);
+}
+
+.trust-grid-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(2, minmax(0, 9rem));
+  align-items: center;
+  gap: var(--openbot-space-3);
+  font-size: var(--openbot-text-md);
+}
+
+.trust-agent .trust-grid-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 14rem);
+}
+
+.trust-grid-head {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.trust-agent,
+.trust-override,
+.trust-budget {
+  border: 1px solid var(--ws-line);
+  border-radius: var(--openbot-radius-lg);
+  padding: var(--openbot-space-3);
+}
+
+.trust-agent {
+  background: var(--openbot-accent-soft);
+}
+
+.trust-agent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-2);
+}
+
+.trust-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  font-size: var(--openbot-text-md);
+}
+
+.trust-budget {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--openbot-space-2);
+}
+
+.trust-field {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 8rem;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.trust-field-short {
+  flex: 0 1 5rem;
+}
+
+.trust-spent {
+  flex: 1 1 100%;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.trust-override {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+}
+
+.trust-override-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-2);
+}
+
+.trust-add,
+.trust-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+.trust-search {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 10rem;
+}
+
+.trust-search > * {
+  flex: 1 1 auto;
+}
+
+.trust-audit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trust-audit-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+  border-bottom: 1px solid var(--ws-line);
+  padding-bottom: var(--openbot-space-2);
+}
+
+.trust-audit-meta,
+.trust-audit-what,
+.trust-audit-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  font-size: var(--openbot-text-sm);
+}
+
+.trust-audit-meta time {
+  color: var(--openbot-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.trust-audit-who {
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.trust-audit-action {
+  color: var(--openbot-text-muted);
+}
+
+.trust-audit-summary {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--openbot-text-md);
+}
+
+.trust-save-bar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-2);
+  border-top: 1px solid var(--ws-line);
+  padding: var(--openbot-space-2) var(--openbot-space-4);
+}
+
+.trust-save-actions {
+  display: flex;
+  gap: var(--openbot-space-2);
+}
+
+@media (max-width: 640px) {
+  .trust-grid-row {
+    grid-template-columns: minmax(0, 1fr) repeat(2, minmax(0, 7rem));
+    gap: var(--openbot-space-2);
+  }
+
+  .trust-agent .trust-grid-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 11rem);
+  }
+}

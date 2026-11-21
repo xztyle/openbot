@@ -377,6 +377,7 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
         showSecrets={ws.env.secrets?.() === true && Boolean(ws.channels.port().agent.workspaceSecrets)}
         showReviews={ws.viewAvailable("reviews")}
         showInsights={ws.viewAvailable("insights")}
+        showTrust={ws.viewAvailable("trust")}
         onOpenApps={ws.env.openApps}
         channels={ws.sidebarChannels()}
         directMessages={ws.sidebarDirectMessages()}

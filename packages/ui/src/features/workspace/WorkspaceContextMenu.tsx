@@ -27,13 +27,15 @@ export interface WorkspaceContextMenuProps {
  * A field, a link or selected text keeps the browser's own menu, for copy, paste and spelling.
  * `currentTarget` is the trigger: a selection inside it is text the person means to copy.
  */
+const NATIVE_MENU_TARGETS = "input, textarea, select, [contenteditable=''], [contenteditable='true'], a[href]";
+
+/** A field or a link: a press there selects text or opens the link, never the workspace menu. */
+function isNativeTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(NATIVE_MENU_TARGETS) !== null;
+}
+
 function wantsNativeMenu(event: MouseEvent): boolean {
-  const target = event.target;
-  if (
-    target instanceof Element &&
-    target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true'], a[href]")
-  )
-    return true;
+  if (isNativeTarget(event.target)) return true;
   const selection = globalThis.getSelection?.();
   const trigger = event.currentTarget;
   return Boolean(
@@ -70,7 +72,10 @@ export function WorkspaceContextMenu(props: WorkspaceContextMenuProps): JSX.Elem
       <ContextMenu.Trigger
         class={cx("ws-context-trigger", props.class)}
         disabled={touch}
-        onPointerDown={press.onPointerDown}
+        // A long press or a double tap in the message box selects a word; it must not open the sheet.
+        onPointerDown={(event: PointerEvent) => {
+          if (!isNativeTarget(event.target)) press.onPointerDown(event);
+        }}
         onPointerMove={press.onPointerMove}
         onPointerUp={press.onPointerUp}
         onPointerCancel={press.onPointerCancel}

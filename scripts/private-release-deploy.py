@@ -143,6 +143,36 @@ def deploy_host(image):
     probe_ready("openbot", "host-ready", online=True)
 
 
+BACKUPD = Path("/opt/openbot/backups/atelier/backupd.py")
+
+
+def staging_first(image, before, expected_schema):
+    """--staging-first: the new image opens a fresh copy of the live database (and the files of the
+    newest backup) in the staging container, isolated and with every provider off, before the live
+    host is touched. Its migrations must pass the same checks as the live deploy. --staging-only stops
+    the deploy there and leaves the staging copy running for a look (backupd.py staging down)."""
+    if not BACKUPD.is_file():
+        raise RuntimeError(f"--staging-first needs the backup broker ({BACKUPD}); see scripts/backup-broker/README.md.")
+    output = run(["sudo", "-n", "python3", "-I", str(BACKUPD), "staging", "up", "--image", image, "--fresh-db",
+                  "--no-view", "--json"], "staging-up")
+    state = json.loads(output.strip().splitlines()[-1])
+    (RELEASE / "staging.json").write_text(json.dumps(state, indent=2))
+    database = state.get("database") or {}
+    problems = []
+    if database.get("integrity") != "ok":
+        problems.append(f"integrity {database.get('integrity')}")
+    if database.get("schema") != expected_schema:
+        problems.append(f"schema {database.get('schema')} (expected {expected_schema})")
+    for name, count in before["counts"].items():
+        if database.get("counts", {}).get(name, 0) < count and "--allow-row-drop" not in sys.argv[2:]:
+            problems.append(f"{name} fell from {count} to {database.get('counts', {}).get(name, 0)}")
+    if "--staging-only" not in sys.argv[2:] or problems:
+        run(["sudo", "-n", "python3", "-I", str(BACKUPD), "staging", "down"], "staging-down")
+    if problems:
+        raise RuntimeError("The staging copy failed: " + "; ".join(problems) + ". The live host was not touched.")
+    return state
+
+
 def validate_after(before, expected_schema, environment_hash):
     after = database_state(BASE / "data/.config/OpenBot/openbot.db")
     if after["schema"] != expected_schema or after["integrity"] != "ok" or after["foreign_key_violations"]:
@@ -181,6 +211,13 @@ def main():
     if arch != "amd64" or revision != REVISION:
         raise RuntimeError("Image architecture or revision does not match this release.")
     expected_schema = smoke_test(IMAGE)
+    if "--staging-first" in sys.argv[2:] or "--staging-only" in sys.argv[2:]:
+        staged = staging_first(IMAGE, before, expected_schema)
+        if "--staging-only" in sys.argv[2:]:
+            print(json.dumps(dict(image=IMAGE, staging=dict(schema=staged["database"]["schema"],
+                                                            from_backup=staged.get("from")),
+                                  host_touched=False, note="staging copy left running: backupd.py staging down")))
+            return
     worker = deploy_worker()
     current = database_state(BASE / "data/.config/OpenBot/openbot.db")
     if (current["active"] or current["pending"]) and not interrupt:

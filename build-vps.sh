@@ -9,6 +9,8 @@
 #     --check    also run the translation check and the typechecks (they are not part of the image)
 #     --tarball  also write image.tar.gz (only a remote deploy needs it)
 #     --worker-only  build only the website/Worker export (deploy it with --worker-only)
+#     --staging-first  with --deploy: run the new image on a staging copy of the live data first
+#                      (scripts/backup-broker); the live host is touched only if that copy passes
 set -euo pipefail
 umask 077
 cd "$(dirname "$0")"
@@ -29,13 +31,14 @@ while :; do
   sleep 30; waited=$((waited + 30))
 done
 
-ref=fork/main deploy=0 check=0 tarball=0 worker_only=0
+ref=fork/main deploy=0 check=0 tarball=0 worker_only=0 staging_first=0
 for argument in "$@"; do
   case "$argument" in
     --deploy) deploy=1 ;;
     --check) check=1 ;;
     --tarball) tarball=1 ;;
     --worker-only) worker_only=1 ;;
+    --staging-first) staging_first=1 ;;
     -*) echo "Unknown option $argument" >&2; exit 2 ;;
     *) ref=$argument ;;
   esac
@@ -199,6 +202,7 @@ sudo -n chown -R ubuntu:ubuntu "$release"
 }
 deploy_args=(--existing-image)
 [[ $worker_only == 1 ]] && deploy_args=(--existing-image --worker-only)
+[[ $staging_first == 1 && $worker_only == 0 ]] && deploy_args+=(--staging-first)
 if [[ $deploy == 1 ]]; then
   # wrangler sometimes answers 7403 while it refreshes its login; that step runs before the host is
   # touched, so one more attempt is safe.

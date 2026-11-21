@@ -48,6 +48,11 @@ export interface TurnPlace {
 const STATUS_TEXT_LIMIT = 160;
 /** A teammate's note or a routine run up to this length stays on the small model. */
 const SMALL_INPUT_LIMIT = 2_000;
+/**
+ * A routine run whose instruction is up to this long runs on the small model. Every routine of the
+ * live host in the week of 2026-11-14 was under it.
+ */
+const ROUTINE_INPUT_LIMIT = 4_000;
 /** Input past this length is never small work. */
 const LARGE_INPUT_LIMIT = 6_000;
 /** A person's message to a lead past this length is a planning turn. */
@@ -108,7 +113,7 @@ export function classifyTurn(
   }
   if (size > LARGE_INPUT_LIMIT) return { tier: "medium", reason: "large" };
   if (deliveries.length > 0 && deliveries.every((delivery) => delivery.senderKind === "routine"))
-    return size <= SMALL_INPUT_LIMIT ? { tier: "small", reason: "routine" } : { tier: "medium", reason: "large" };
+    return size <= ROUTINE_INPUT_LIMIT ? { tier: "small", reason: "routine" } : { tier: "medium", reason: "large" };
   // A teammate's note or an fyi digest: nobody waits for an answer, and it asks for no work.
   const notes = deliveries.filter((delivery) => delivery.senderKind === "agent");
   if (

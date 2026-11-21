@@ -6,6 +6,7 @@ import type { OptionalRouteCodec } from "./admin-wire";
 import { AGENT_ACCESS_CODECS } from "./agent-access-v1";
 import { AGENT_ADMIN_CODECS } from "./agent-admin-v1";
 import { AGENT_BACKUP_MODELS_CODECS } from "./agent-backup-models-v1";
+import { AGENT_EFFICIENCY_CODECS } from "./agent-efficiency-v1";
 import { AGENT_HIDDEN_CODECS } from "./agent-hidden-v1";
 import { AGENT_HOST_SETTINGS_CODECS } from "./agent-host-settings-v1";
 import { AGENT_IMPORT_CODECS } from "./agent-import-v1";
@@ -89,6 +90,7 @@ import { WORKSPACE_CODECS } from "./workspace-v1";
 export type { OptionalRouteCodec } from "./admin-wire";
 
 const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
+  ...AGENT_EFFICIENCY_CODECS,
   ...EVENT_CHECKS_CODECS,
   ...EVENT_CHECK_API_CODECS,
   ...EVENT_CHECK_TEMPLATES_CODECS,

@@ -17,6 +17,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { isAgentRole, isSleepingSince } from "@openbot/contracts/agent-efficiency";
 import {
   type AgentFaceSkin,
   type AgentFaceStyle,
@@ -148,6 +149,11 @@ type PersistedStoredAgent = Omit<StoredAgent, "avatarUrl" | "provider" | "access
   faceStyle?: AgentFaceStyle;
   faceSeed?: string;
   faceSkin?: AgentFaceSkin;
+  // Written only as "auto", only as a set role, and only while the agent sleeps. Absent on every
+  // agent stored before them: a fixed model, a role from the name and title, and awake.
+  modelPolicy?: "auto";
+  role?: string;
+  sleepingSince?: string;
 };
 type StoredAgentBase = Omit<PersistedStoredAgent, "avatarSeed" | "avatarHue"> & DynamicRecord;
 
@@ -891,6 +897,13 @@ export class AgentStore {
         if (!isAgentFaceSeed(input.faceSeed)) throw new Error("Invalid face seed.");
         next.faceSeed = input.faceSeed;
       }
+      if (input.modelPolicy === "fixed") delete next.modelPolicy;
+      else if (input.modelPolicy === "auto") next.modelPolicy = "auto";
+      if (input.role === null) delete next.role;
+      else if (input.role !== undefined) {
+        if (!isAgentRole(input.role)) throw new Error("Invalid agent role.");
+        next.role = input.role.trim();
+      }
       if (input.faceSkin === null) delete next.faceSkin;
       else if (input.faceSkin !== undefined) {
         if (!isAgentFaceSkin(input.faceSkin)) throw new Error("Invalid face skin.");
@@ -980,6 +993,8 @@ export class AgentStore {
       if (next.faceStyle === undefined) delete agent.faceStyle;
       if (next.faceSeed === undefined) delete agent.faceSeed;
       if (next.faceSkin === undefined) delete agent.faceSkin;
+      if (next.modelPolicy === undefined) delete agent.modelPolicy;
+      if (next.role === undefined) delete agent.role;
       try {
         this.#persist(modelChange ? "agent.model-changed" : "agent.updated", modelChange);
       } catch (error) {
@@ -990,6 +1005,8 @@ export class AgentStore {
         if (previous.faceStyle === undefined) delete agent.faceStyle;
         if (previous.faceSeed === undefined) delete agent.faceSeed;
         if (previous.faceSkin === undefined) delete agent.faceSkin;
+        if (previous.modelPolicy === undefined) delete agent.modelPolicy;
+        if (previous.role === undefined) delete agent.role;
         if (previous.taskLimit === undefined) delete agent.taskLimit;
         if (previous.providerAccountId === undefined) delete agent.providerAccountId;
         if (previous.backupModels === undefined) delete agent.backupModels;
@@ -1028,6 +1045,38 @@ export class AgentStore {
       throw error;
     }
     return { ...agent };
+  }
+
+  /**
+   * Puts the agents to sleep at `since`, or wakes them when `since` is null. An agent that already
+   * sleeps keeps its first time. Answers the ids that changed. One roster event holds them all.
+   */
+  setSleeping(agentIds: readonly string[], since: string | null): string[] {
+    if (since !== null && !isSleepingSince(since)) throw new Error("Invalid sleep time.");
+    const agents = agentIds.map((id) => this.#requireAgent(id));
+    const changed = agents.filter((agent) => (since === null) !== (agent.sleepingSince === undefined));
+    if (changed.length === 0) return [];
+    const previous = new Map(changed.map((agent) => [agent.id, agent.sleepingSince] as const));
+    for (const agent of changed) {
+      if (since === null) delete agent.sleepingSince;
+      else agent.sleepingSince = since;
+    }
+    try {
+      this.#persist("agent.updated");
+    } catch (error) {
+      for (const agent of changed) {
+        const before = previous.get(agent.id);
+        if (before === undefined) delete agent.sleepingSince;
+        else agent.sleepingSince = before;
+      }
+      throw error;
+    }
+    return changed.map((agent) => agent.id);
+  }
+
+  /** Whether the agent sleeps. An unknown agent does not. */
+  isSleeping(agentId: string): boolean {
+    return this.#state.agents.some((agent) => agent.id === agentId && agent.sleepingSince !== undefined);
   }
 
   /** Whether a user hid the agent. An unknown agent is not hidden. */
@@ -2021,6 +2070,9 @@ function isStoredAgent(value: unknown): value is PersistedStoredAgent {
     (record.faceStyle === undefined || isAgentFaceStyle(record.faceStyle)) &&
     (record.faceSeed === undefined || isAgentFaceSeed(record.faceSeed)) &&
     (record.faceSkin === undefined || isAgentFaceSkin(record.faceSkin)) &&
+    (record.modelPolicy === undefined || record.modelPolicy === "auto") &&
+    (record.role === undefined || isAgentRole(record.role)) &&
+    (record.sleepingSince === undefined || isSleepingSince(record.sleepingSince)) &&
     isAvatarSeed(record.avatarSeed) &&
     (record.avatarHue === null || isAvatarHue(record.avatarHue)) &&
     isMarketplaceSource(record.marketplaceSource)
@@ -2163,6 +2215,19 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     : value.faceSkin === undefined
       ? undefined
       : reset("faceSkin", undefined);
+  // Dropped when unreadable: the agent then runs on its fixed model, matches by name, and is awake.
+  const modelPolicy =
+    value.modelPolicy === "auto"
+      ? "auto"
+      : value.modelPolicy === undefined
+        ? undefined
+        : reset("modelPolicy", undefined);
+  const role = isAgentRole(value.role) ? value.role : value.role === undefined ? undefined : reset("role", undefined);
+  const sleepingSince = isSleepingSince(value.sleepingSince)
+    ? value.sleepingSince
+    : value.sleepingSince === undefined
+      ? undefined
+      : reset("sleepingSince", undefined);
   let marketplaceSource: StoredAgent["marketplaceSource"];
   if (value.marketplaceSource !== undefined) {
     if (isMarketplaceSource(value.marketplaceSource)) {
@@ -2222,6 +2287,9 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     ...(faceStyle === undefined ? {} : { faceStyle }),
     ...(faceSeed === undefined ? {} : { faceSeed }),
     ...(faceSkin === undefined ? {} : { faceSkin }),
+    ...(modelPolicy === undefined ? {} : { modelPolicy }),
+    ...(role === undefined ? {} : { role }),
+    ...(sleepingSince === undefined ? {} : { sleepingSince }),
     ...(sessionSettingOverrides === undefined ? {} : { sessionSettingOverrides }),
     ...(sessionSettingResets === undefined ? {} : { sessionSettingResets }),
     ...(marketplaceSource === undefined ? {} : { marketplaceSource }),

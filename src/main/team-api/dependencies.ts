@@ -188,7 +188,7 @@ export type TeamApiAgents = TeamApiAgentMethods & {
   secrets: Pick<WorkspaceSecretsService, "list" | "read" | "save" | "remove">;
   on: (event: "event", listener: (event: AgentEvent) => void) => void;
   off: (event: "event", listener: (event: AgentEvent) => void) => void;
-};
+} & Partial<Pick<AgentService, "setAgentsSleeping" | "modelSavings" | "playbooks" | "reviews">>;
 
 /**
  * The MCP half of `AgentService`, kept as its own option rather than folded into `TeamApiAgents`:

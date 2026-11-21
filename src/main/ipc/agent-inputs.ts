@@ -1,3 +1,4 @@
+import { isAgentModelPolicy, isAgentRole } from "@openbot/contracts/agent-efficiency";
 import { isAgentFaceSeed, isAgentFaceSkin, isAgentFaceStyle } from "@openbot/contracts/agent-face";
 import { isAgentManagerValue } from "@openbot/contracts/agent-org";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
@@ -667,6 +668,15 @@ export function parseUpdateAgent(value: unknown): UpdateAgentInput {
   if (value.faceSkin !== undefined) {
     if (value.faceSkin !== null && !isAgentFaceSkin(value.faceSkin)) throw new Error("Invalid face skin.");
     result.faceSkin = value.faceSkin;
+  }
+  if (value.modelPolicy !== undefined) {
+    if (!isAgentModelPolicy(value.modelPolicy)) throw new Error("Invalid model policy.");
+    result.modelPolicy = value.modelPolicy;
+  }
+  // `null` matches the agent to playbooks by its name and title again.
+  if (value.role !== undefined) {
+    if (value.role !== null && !isAgentRole(value.role)) throw new Error("Invalid agent role.");
+    result.role = value.role;
   }
   if (value.allowNewChat !== undefined) {
     if (value.allowNewChat !== null && !isBoolean(value.allowNewChat)) throw new Error("Invalid new chat value.");

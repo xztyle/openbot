@@ -2369,9 +2369,15 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
           faceStyle,
           faceSeed,
           faceSkin,
+          modelPolicy,
+          role,
           ...updates
         } = input;
         const updated: ClientAgentSummary = { ...current, ...updates };
+        if (modelPolicy === "fixed") delete updated.modelPolicy;
+        else if (modelPolicy === "auto") updated.modelPolicy = "auto";
+        if (role === null) delete updated.role;
+        else if (role !== undefined) updated.role = role;
         // `null` returns the agent to the default face.
         if (faceStyle === null) delete updated.faceStyle;
         else if (faceStyle !== undefined) updated.faceStyle = faceStyle;

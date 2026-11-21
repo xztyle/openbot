@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { SetAgentsSleepingInput, SetAgentsSleepingResult, SleepTarget } from "@openbot/contracts/agent-efficiency";
 import { agentManagers } from "@openbot/contracts/agent-org";
 import { chatVisualItemType } from "@openbot/contracts/chat-visual";
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
@@ -207,6 +208,13 @@ export interface OpenBotToolRouterHooks {
   reportRoutineFailure(agentId: string, turnId: string, reason: string): boolean;
   /** Starts a new chat with the agent when its turn ends and its queue is empty. */
   requestNewChat(agentId: string): void;
+  /** The next turn of the agent runs on the large model. False when the agent has a fixed model. */
+  escalateModel(agentId: string): boolean;
+  /** The agents that a sleep request names (`AgentService.sleepTargetAgentIds`). */
+  sleepTargetAgentIds(target: SleepTarget): string[];
+  setAgentsSleeping(input: SetAgentsSleepingInput): Effect.Effect<SetAgentsSleepingResult, ToolOperationFailed>;
+  /** Records an agent's proposal for a playbook it has. Answers an error for the agent, or null. */
+  proposePlaybook(agentId: string, slug: string, content: string, note: string): Effect.Effect<string | null>;
   /** The host user of this computer, the owner of the server: the person of a channel that an agent makes. */
   channelHost(): { id: string; name: string };
   /** Puts a channel that does not exist yet in a space, and tells the readers of the spaces. */
@@ -1124,6 +1132,54 @@ export class OpenBotToolRouter {
       });
     }
 
+    if (params.tool === "escalate_model") {
+      if (!this.#hooks.escalateModel(senderAgentId))
+        return openBotToolFailure(
+          "Your model policy is Fixed, so every turn runs on your model. Ask the user to set it to Automatic, or to change your model.",
+        );
+      return openBotToolResult({
+        status: "escalated",
+        note: "Your next turn runs on the largest model. Finish this turn now, and say what you will try next.",
+      });
+    }
+
+    if (params.tool === "set_team_sleep") {
+      const args = z
+        .object({ agentId: z.string().min(1), team: z.boolean().optional(), sleeping: z.boolean() })
+        .parse(params.arguments ?? {});
+      if (args.agentId === senderAgentId) return openBotToolFailure("You cannot put yourself to sleep.");
+      const mine = new Set(this.#hooks.sleepTargetAgentIds({ kind: "team", id: senderAgentId }));
+      if (!mine.has(args.agentId))
+        return openBotToolFailure(
+          "That agent is not under you in the org chart. Only its own lead or a person can change it.",
+        );
+      const result = yield* this.#hooks.setAgentsSleeping({
+        target: { kind: args.team ? "team" : "agent", id: args.agentId },
+        sleeping: args.sleeping,
+      });
+      const names = new Map(this.#hooks.listAgents().map((agent) => [agent.id, agent.name]));
+      return openBotToolResult({
+        status: args.sleeping ? "asleep" : "awake",
+        changed: result.changedAgentIds.map((id) => names.get(id) ?? id),
+      });
+    }
+
+    if (params.tool === "propose_playbook_update") {
+      const args = z
+        .object({
+          slug: z.string().min(1).max(64),
+          content: z.string().min(1).max(64_000),
+          note: z.string().min(1).max(600),
+        })
+        .parse(params.arguments ?? {});
+      const refused = yield* this.#hooks.proposePlaybook(senderAgentId, args.slug, args.content, args.note);
+      if (refused) return openBotToolFailure(refused);
+      return openBotToolResult({
+        status: "proposed",
+        note: "The owner sees the proposal in Settings → Playbooks. Nothing changes until they approve it.",
+      });
+    }
+
     if (params.tool === ROUTINE_NO_UPDATE_TOOL) {
       const outcome = this.#hooks.requestNoUpdate(senderAgentId, executionThreadId, params.turnId);
       if (outcome === null) return openBotToolFailure("Use this tool only in a routine run.");
@@ -2016,6 +2072,13 @@ export class OpenBotToolRouter {
       // A held note starts no turn. The sender learns it here, so work it meant to start is sent again
       // without fyi.
       if (fyi) return openBotToolResult({ ...receipt, note: sourceText("status.agent.messageHeld") });
+      // A sleeping teammate keeps the message in its queue until a person or its lead wakes it.
+      const sleeping = recipientValues.filter((recipient) => known.get(recipient)?.sleepingSince !== undefined);
+      if (sleeping.length > 0)
+        return openBotToolResult({
+          ...receipt,
+          note: `Asleep, so the message waits until it wakes: ${sleeping.map((id) => known.get(id)?.name ?? id).join(", ")}. Do not wait for an answer now.`,
+        });
       return openBotToolResult(receipt);
     },
     Effect.catchDefect((cause) => Effect.fail(new ToolOperationFailed({ cause }))),

@@ -1,3 +1,4 @@
+import { type AgentModelPolicy, isAgentRole, isSleepingSince } from "./agent-efficiency";
 import {
   type AgentFaceSkin,
   type AgentFaceStyle,
@@ -324,6 +325,15 @@ export interface AgentSummary {
   faceSeed?: string;
   /** The agent's own skin tone. Absent: the workspace default. */
   faceSkin?: AgentFaceSkin;
+  /**
+   * `auto`: each turn takes the model that its work needs. Absent: every turn runs on `model`. A remote
+   * host sends it, `role` and `sleepingSince` beside the frozen agent projection; see `agent-efficiency-v1.ts`.
+   */
+  modelPolicy?: "auto";
+  /** The agent's role, such as "QA", for the playbooks of that role. Absent: its name and title count. */
+  role?: string;
+  /** ISO 8601 time when the agent went to sleep: no routine, check or message starts a turn until it wakes. */
+  sleepingSince?: string;
   threadId: string | null;
   workspacePath: string;
   preview: string;
@@ -397,6 +407,9 @@ function hasAgentSummaryFields(value: DynamicRecord): boolean {
     (value.faceStyle === undefined || isAgentFaceStyle(value.faceStyle)) &&
     (value.faceSeed === undefined || isAgentFaceSeed(value.faceSeed)) &&
     (value.faceSkin === undefined || isAgentFaceSkin(value.faceSkin)) &&
+    (value.modelPolicy === undefined || value.modelPolicy === "auto") &&
+    (value.role === undefined || isAgentRole(value.role)) &&
+    (value.sleepingSince === undefined || isSleepingSince(value.sleepingSince)) &&
     (value.threadId === null || isIdentifier(value.threadId)) &&
     isBoundedString(value.workspacePath, INPUT_LIMITS.path) &&
     isBoundedString(value.preview, INPUT_LIMITS.messageText) &&
@@ -474,6 +487,10 @@ export interface UpdateAgentInput {
   faceSeed?: string | null;
   /** The agent's own skin tone, or `null` for the workspace default. */
   faceSkin?: AgentFaceSkin | null;
+  /** `auto` chooses the model of each turn; `fixed` keeps every turn on the agent's model. */
+  modelPolicy?: AgentModelPolicy;
+  /** The agent's role for the playbooks, or `null` to match by its name and title. */
+  role?: string | null;
   avatarSeed?: string;
   avatarHue?: AvatarHue | null;
 }

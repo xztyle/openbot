@@ -203,6 +203,7 @@ import {
   routeAgentHostSettings,
   routeAgentTaskLimit,
 } from "./team-api/route-agent-admin";
+import { routeAgentEfficiency } from "./team-api/route-agent-efficiency";
 import { routeAgentHidden, visibleSnapshot } from "./team-api/route-agent-hidden";
 import { routeAgentImport } from "./team-api/route-agent-import";
 import { routeAgentInstall } from "./team-api/route-agent-install";
@@ -963,6 +964,7 @@ export class TeamApiServer {
       if ((await routeWorkspaceSearch(context, this.#options.channels, hidden)) === "handled") return;
       if ((await routeWorkspaceSaved(context, this.#options.channels)) === "handled") return;
       if ((await routeWorkspaceFleet(context, this.#options.agents, hidden)) === "handled") return;
+      if ((await routeAgentEfficiency(context, this.#options.agents, hidden)) === "handled") return;
       if ((await routeWorkspaceSidebar(context, this.#options.workspaceSidebar)) === "handled") return;
       if ((await routeWorkspaceSpaces(context, this.#options.spaces, this.#options.agents, hidden)) === "handled")
         return;

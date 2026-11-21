@@ -1,3 +1,4 @@
+import type { AutoModelReason } from "@openbot/contracts/agent-efficiency";
 import {
   type AgentEvent,
   type AgentSummary,
@@ -33,6 +34,8 @@ export interface WorkspaceFleetTrackerOptions {
   mailbox: Pick<MailboxStore, "fleetWork">;
   attention: Pick<AttentionRegistry, "waitingAgents">;
   liveTrace(turnId: string): ConversationTurnTrace | null;
+  /** The model that the automatic policy chose for a running turn, and why. */
+  turnModel?(turnId: string): { model: string; reason: AutoModelReason } | null;
   channelWork(deliveryId: string): FleetChannelWork | null;
   agentTaskTitle(taskId: string): string | null;
   /** The usage limit that holds an agent's work now: `resetsAt` in epoch seconds, or null. Null when none. */
@@ -193,6 +196,8 @@ export class WorkspaceFleetTracker {
             ...(channel ? { taskId: channel.taskId } : running.taskId ? { taskId: running.taskId } : {}),
             startedAt: Number.isFinite(started) ? started : now,
           };
+          const chosen = running.turnId ? this.#options.turnModel?.(running.turnId) : null;
+          if (chosen) status = { ...status, model: chosen.model, modelReason: chosen.reason };
         } else if (agentWork?.queued) {
           status = { kind: "queued", count: agentWork.queued };
         } else {

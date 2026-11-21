@@ -1,3 +1,4 @@
+import { type AutoModelReason, isAutoModelReason } from "./agent-efficiency";
 // The fleet, step trail and artifact views of the Slack-style workspace (phase 7): what each agent
 // does now, the steps of the turn that wrote an agent's channel answer, and the deliverables that
 // agents shared. The host derives all three from state it already keeps; the artifact index and
@@ -51,6 +52,9 @@ export type WorkspaceFleetStatus =
       /** A channel task or an agent task. */
       taskId?: string;
       startedAt: number;
+      /** The model that the automatic model policy chose for this turn, and why. Absent with a fixed model. */
+      model?: string;
+      modelReason?: AutoModelReason;
     }
   | {
       kind: "waiting";
@@ -243,7 +247,9 @@ export function isWorkspaceFleetStatus(value: unknown): value is WorkspaceFleetS
         optional(value.channelId, isIdentifier) &&
         optional(value.threadRootId, isIdentifier) &&
         optional(value.taskId, isIdentifier) &&
-        isTime(value.startedAt)
+        isTime(value.startedAt) &&
+        optional(value.model, (model) => isBoundedString(model, 120)) &&
+        optional(value.modelReason, isAutoModelReason)
       );
     case "waiting":
       return (

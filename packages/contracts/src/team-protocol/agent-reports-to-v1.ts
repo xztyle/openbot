@@ -20,11 +20,17 @@ import {
   decodeAgentBackgroundRequest,
   withAgentBackground,
 } from "./agent-background-v1";
+import { AGENT_EFFICIENCY_UPDATE_KEYS, decodeAgentEfficiencyRequest, withAgentEfficiency } from "./agent-efficiency-v1";
 import { AGENT_FACE_UPDATE_KEYS, decodeAgentFaceRequest, withAgentFace } from "./agent-face-v1";
 import type { TeamProtocolV6BaseJsonObject, TeamProtocolV6BaseJsonValue } from "./v6-base";
 
 /** The fields of an agent update request that ride beside the frozen update projection. */
-const SIDE_UPDATE_KEYS = ["background", "reportsToAgentId", ...AGENT_FACE_UPDATE_KEYS] as const;
+const SIDE_UPDATE_KEYS = [
+  "background",
+  "reportsToAgentId",
+  ...AGENT_FACE_UPDATE_KEYS,
+  ...AGENT_EFFICIENCY_UPDATE_KEYS,
+] as const;
 
 /**
  * The `reportsToAgentId` field of an agent update request. A present value must be an id or null:
@@ -45,6 +51,7 @@ export function decodeAgentSideFieldsRequest(value: unknown): TeamProtocolV6Base
     ...decodeAgentBackgroundRequest(value),
     ...decodeAgentReportsToRequest(value),
     ...decodeAgentFaceRequest(value),
+    ...decodeAgentEfficiencyRequest(value),
   };
 }
 
@@ -106,5 +113,8 @@ export function withAgentSideFields(
   projected: TeamProtocolV6BaseJsonValue,
   source: unknown,
 ): TeamProtocolV6BaseJsonValue {
-  return withAgentFace(withAgentReportsTo(withAgentBackground(projected, source), source), source);
+  return withAgentEfficiency(
+    withAgentFace(withAgentReportsTo(withAgentBackground(projected, source), source), source),
+    source,
+  );
 }

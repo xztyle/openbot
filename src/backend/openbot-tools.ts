@@ -544,6 +544,32 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     shape: {},
   },
   {
+    name: "escalate_model",
+    description:
+      "Ask for a stronger model for your next turn when you are stuck: an attempt failed, the work is harder than it looked, or a plan needs more thought. It works only when your model policy is Automatic; your next turn then runs on the largest model, and later turns go back down by themselves. Say why in reason. Do not call it for routine work.",
+    shape: { reason: z.string().min(1).max(300) },
+  },
+  {
+    name: "set_team_sleep",
+    description:
+      'Put agents of your own team (the agents under you in the org chart) to sleep, or wake them, when the user asks, such as "put the Abogados team to sleep". A sleeping agent runs no routines or event checks and starts no turn, so it costs nothing; messages to it wait until it wakes. agentId names one agent under you; with team true it also covers every agent under that agent. You cannot put yourself to sleep. The result lists the agents that changed.',
+    shape: {
+      agentId: z.string().min(1).max(INPUT_LIMITS.identifier),
+      team: z.boolean().optional(),
+      sleeping: z.boolean(),
+    },
+  },
+  {
+    name: "propose_playbook_update",
+    description:
+      "Propose a better version of a role playbook skill that you have (a skill that Atelier installed for your role, listed in Settings → Playbooks). Send the whole new SKILL.md in content, with its front matter, and say in note what changed and why. The owner approves or dismisses it; until then nothing changes. Use it when the work showed that the playbook is wrong or missing a rule.",
+    shape: {
+      slug: z.string().min(1).max(64),
+      content: z.string().min(1).max(64_000),
+      note: z.string().min(1).max(600),
+    },
+  },
+  {
     name: "list_routines",
     description:
       "List routines for this agent, or for another local agent when agentId is provided. Use this before updating or deleting a routine. routines has the schedule routines; webhookRoutines has the webhook routines with their event type, filters and URL.",

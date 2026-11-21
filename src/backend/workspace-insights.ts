@@ -1,3 +1,4 @@
+import type { AutoModelReason } from "@openbot/contracts/agent-efficiency";
 import type {
   AgentEvent,
   AgentSummary,
@@ -51,6 +52,7 @@ export interface WorkspaceInsightsOptions {
   attention: Pick<AttentionRegistry, "waitingAgents">;
   /** The steps of a running turn so far. */
   liveTrace(turnId: string): ConversationTurnTrace | null;
+  turnModel?(turnId: string): { model: string; reason: AutoModelReason } | null;
   /**
    * Whether the host still runs this turn. The stored row closes a moment after the turn ends, so the
    * step trail of a finished turn reads this to stop streaming at once.
@@ -91,6 +93,7 @@ export class WorkspaceInsights {
       mailbox: options.mailbox,
       attention: options.attention,
       liveTrace: options.liveTrace,
+      ...(options.turnModel ? { turnModel: options.turnModel } : {}),
       agentTaskTitle: options.agentTaskTitle,
       ...(options.usageLimit ? { usageLimit: options.usageLimit } : {}),
       emit: options.emit,

@@ -65,6 +65,8 @@ export interface EventCheckSchedulerOptions {
   scope(): Scope.Scope;
   timer: RoutineTimer;
   agentExists(id: string): boolean;
+  /** Whether the agent sleeps: its checks do not run, and their due times move on. */
+  sleeping?(agentId: string): boolean;
   running(): boolean;
   audit?: SecurityAuditSink;
   /** Deliveries per check per hour. Defaults to EVENT_CHECK_HOURLY_DELIVERY_CAP. */
@@ -604,7 +606,7 @@ export class EventCheckScheduler implements RoutineDueSource {
       if (index > 0) yield* Effect.yieldNow;
       if (!active()) break;
       yield* mcpSync(() => this.options.store.advance(check, now));
-      if (this.#running.has(check.id)) continue;
+      if (this.#running.has(check.id) || this.options.sleeping?.(check.agentId)) continue;
       this.#running.add(check.id);
       yield* this.#execute(check).pipe(
         Effect.ensuring(Effect.sync(() => this.#running.delete(check.id))),

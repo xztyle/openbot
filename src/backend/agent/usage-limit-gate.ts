@@ -97,6 +97,14 @@ export class UsageLimitGate {
     return !agent || !this.#limits.has(limitKey(providerForAgent(agent), accountOf(agent), agent.model));
   }
 
+  /** Whether a usage limit or a provider error holds `model` for this agent's provider account. */
+  holdsModel(agentId: string, model: string): boolean {
+    const agent = this.#agent(agentId);
+    if (!agent) return false;
+    const key = limitKey(providerForAgent(agent), accountOf(agent), model);
+    return this.#limits.has(key) || this.#failures.has(key);
+  }
+
   /** Whether a limit holds this provider account and model. */
   isLimited(limit: UsageLimitKey): boolean {
     return this.#limits.has(limitKey(limit.provider, limit.accountId, limit.model));

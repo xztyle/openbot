@@ -46,6 +46,10 @@
 //   them there, each `{ id, agentId, text (8000, without the decision prefix), createdAt,
 //   threadRootId? }`. Any member who can see the channel may read them; another channel answers 404.
 //
+// - Later: `model?` (120) and `modelReason?` (`routine`, `note`, `status`, `event`, `default`, `plan`,
+//   `retry`, `escalated`, `large`) on a working status: the model that the automatic model policy
+//   (agent-efficiency-v1) chose for the turn, and why. Absent for an agent with a fixed model.
+//
 // A fork host built before these routes answers 404, so a client fails closed there. A present
 // malformed value fails closed. The bounds are written out: this file must not move with an IPC limit.
 import { isDynamicRecord } from "../runtime-values";
@@ -134,7 +138,13 @@ const status = variant({
   idle: fields({ kind: oneOf("idle") }),
   working: fields(
     { kind: oneOf("working"), what: string(240), startedAt: count },
-    { channelId: identifier, threadRootId: identifier, taskId: identifier },
+    {
+      channelId: identifier,
+      threadRootId: identifier,
+      taskId: identifier,
+      model: string(120),
+      modelReason: oneOf("routine", "note", "status", "event", "default", "plan", "retry", "escalated", "large"),
+    },
   ),
   waiting: fields(
     { kind: oneOf("waiting"), reason: oneOf("question", "approval", "browser", "usage-limit"), what: string(240) },

@@ -1163,6 +1163,9 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
             // The login shell's `PATH`, so the Bash tool and hooks find Homebrew and `~/.local/bin`
             // tools when Finder starts OpenBot. An `env.PATH` in the Claude settings still wins.
             ...(launchPath ? { PATH: launchPath } : {}),
+            // Subagents (the Task tool) run on Sonnet unless this server's variables name another
+            // model: an Opus lead's subagents on Opus cost twice as much for work that needs less.
+            ...(process.env.CLAUDE_CODE_SUBAGENT_MODEL ? {} : { CLAUDE_CODE_SUBAGENT_MODEL: CLAUDE_SUBAGENT_MODEL }),
             ...queryOptions.env,
             // Last: the agent environment ends with the provider variables of this server, which an
             // admin sets, so they win over OpenBot's own values of the same name.
@@ -2395,6 +2398,9 @@ function spawnClaudeWrapper({ command, args, cwd, env, signal }: SpawnOptions): 
   if (signal.aborted) abort();
   return child;
 }
+
+/** The model of the subagents of every Claude agent, unless the server's provider variables set one. */
+const CLAUDE_SUBAGENT_MODEL = "sonnet";
 
 function claudeEnvironment(cli: ClaudeCliInfo): NodeJS.ProcessEnv {
   return {

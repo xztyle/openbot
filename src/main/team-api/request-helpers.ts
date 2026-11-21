@@ -10,6 +10,7 @@ import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-
 // property of the reader, not something ~50 routes each have to remember.
 
 import type { IncomingMessage } from "node:http";
+import { isAgentModelPolicy, isAgentRole } from "@openbot/contracts/agent-efficiency";
 import { isAgentFaceSeed, isAgentFaceSkin, isAgentFaceStyle } from "@openbot/contracts/agent-face";
 import { isAgentManagerValue } from "@openbot/contracts/agent-org";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
@@ -432,6 +433,16 @@ export function agentUpdate(value: DynamicRecord, agentId: string): UpdateAgentI
       throw new HttpError(400, sourceText("error.team.agentSettingInvalid"));
     }
     result.faceSkin = value.faceSkin;
+  }
+  if (value.modelPolicy !== undefined) {
+    if (!isAgentModelPolicy(value.modelPolicy)) throw new HttpError(400, sourceText("error.team.agentSettingInvalid"));
+    result.modelPolicy = value.modelPolicy;
+  }
+  if (value.role !== undefined) {
+    if (value.role !== null && !isAgentRole(value.role)) {
+      throw new HttpError(400, sourceText("error.team.agentSettingInvalid"));
+    }
+    result.role = value.role;
   }
   if (value.provider !== undefined) {
     if (!isAgentProvider(value.provider)) {

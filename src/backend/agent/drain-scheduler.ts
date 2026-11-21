@@ -23,6 +23,7 @@ import type { DuplicationGate } from "./duplication-gate";
 import { HeldReplyTimer } from "./held-reply-timer";
 import type { MailboxSync } from "./mailbox-sync";
 import type { MemoryHold } from "./memory-hold";
+import type { ModelPolicy } from "./model-policy";
 import type { ProfileSave } from "./profile-save";
 import { isPlanLimitDiagnostic } from "./provider-diagnostics";
 import type { ProviderRuntime } from "./provider-runtime";
@@ -140,6 +141,8 @@ export interface DrainSchedulerOptions {
   messaging?: MessagingThreads;
   /** One line about the owner, such as quiet hours, for the start of each turn; null for none. */
   ownerNote?: () => string | null;
+  /** The automatic model policy. Absent: every turn runs on the agent's model. */
+  modelPolicy?: ModelPolicy;
 }
 
 /**
@@ -178,6 +181,7 @@ export class DrainScheduler {
   readonly #hooks: DrainHooks;
   readonly #channels: ChannelService | undefined;
   readonly #messaging: MessagingThreads | undefined;
+  readonly #modelPolicy: ModelPolicy | undefined;
   readonly #drainingLanes = new Set<string>();
   /**
    * Agents whose channel task a spent plan refused and gave back to its channel. Their queue can be
@@ -235,6 +239,7 @@ export class DrainScheduler {
     this.#followUp = options.followUp;
     this.#tasks = options.tasks;
     this.#hooks = options.hooks;
+    this.#modelPolicy = options.modelPolicy;
     this.#channels = options.channels;
     this.#messaging = options.messaging;
     this.#holdTimer = new HeldReplyTimer({
@@ -331,6 +336,8 @@ export class DrainScheduler {
       return "agent-client-changing";
     // A hidden agent finishes the turn that runs. Its queued messages wait until the user restores it.
     if (agent?.hiddenAt !== undefined) return "hidden";
+    // A sleeping agent finishes the turn that runs too. Its queued messages wait until it wakes.
+    if (agent?.sleepingSince !== undefined) return "sleeping";
     // Channel work holds only the agent's own chat. Its tasks run beside a channel turn.
     if (taskId === null && !(this.#channels?.mayDrain(agentId) ?? true)) return "channel";
     if (!this.#profileSave.mayDrain(agentId)) return "profile-save";
@@ -639,7 +646,23 @@ export class DrainScheduler {
         this.#mailboxSync.emitQueue(delivery.recipientAgentId);
       }
       const agent = yield* this.#store.getOrCreate(delivery.recipientAgentId).pipe(toDeliveryStartFailed);
-      requestedModel = agent.model;
+      // The model of this turn: the agent's own, or the one the automatic policy chooses for this work.
+      // A chosen model that the catalogue no longer serves falls back to the agent's own.
+      const place = { ownSession, lane: laneKey({ agentId: agent.id, taskId }) };
+      const chosen = this.#modelPolicy?.choose(
+        agent,
+        batch.map(({ delivery: item }) => ({
+          senderKind: item.sender.kind,
+          text: item.text,
+          attachments: item.attachments.length,
+          expectsReply: item.expectsReply !== false,
+          fyi: item.fyi === true,
+          replyToMessageId: item.replyToMessageId,
+        })),
+        place,
+      );
+      const turnModel = chosen && this.#hooks.servesModel(chosen.model) ? chosen.model : agent.model;
+      requestedModel = turnModel;
       // The endpoint was removed while this agent was busy, so no other model could be given to it
       // then. The old process would still answer on the removed endpoint, with the credentials it
       // started with, until it restarts. Thrown rather than failed here: the catch below also ends
@@ -810,7 +833,7 @@ export class DrainScheduler {
               "turn/start",
               {
                 threadId: providerThreadId,
-                model: agent.model,
+                model: turnModel,
                 effort: agent.reasoningEffort,
                 sessionSettings: sessionSettingsOverrides(
                   this.#store.list().find((current) => current.id === agent.id) ?? agent,
@@ -888,7 +911,11 @@ export class DrainScheduler {
       // event would end it, and it would hold every message of this agent.
       if (!this.#hooks.turnEnded(response.turn.id)) snapshot.activeTurnId = response.turn.id;
       confirmedTurnId = response.turn.id;
-      this.#turnModels.set(laneKey({ agentId: agent.id, taskId }), { turnId: response.turn.id, model: agent.model });
+      this.#turnModels.set(laneKey({ agentId: agent.id, taskId }), { turnId: response.turn.id, model: turnModel });
+      if (chosen && agent.modelPolicy === "auto") {
+        this.#modelPolicy?.started(agent.id, response.turn.id, { ...chosen, model: turnModel }, place);
+        logger.info("Chose the model of a turn.", { agentId: agent.id, model: turnModel, reason: chosen.reason });
+      }
       for (const item of batch)
         yield* this.#mailbox.markRunning(item.delivery.id, response.turn.id).pipe(toDeliveryStartFailed);
       if (this.#channels)

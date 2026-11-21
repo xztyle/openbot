@@ -1,6 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { join } from "node:path";
+import {
+  type ModelSavingsSnapshot,
+  type SetAgentsSleepingInput,
+  type SleepTarget,
+  teamAgentIds,
+} from "@openbot/contracts/agent-efficiency";
+import { agentManagers } from "@openbot/contracts/agent-org";
 import { AGENT_PROVIDERS, agentProviderDescriptor, customAgentIdOfModel } from "@openbot/contracts/agent-providers";
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
 import { developmentStartingModel } from "@openbot/contracts/development-defaults";
@@ -190,6 +197,7 @@ import {
   startingChoice,
   startingModel,
 } from "./agent/model-choice";
+import { ModelPolicy, tierModel } from "./agent/model-policy";
 import { OpenBotToolRouter } from "./agent/openbot-tool-router";
 import { ProfileClients } from "./agent/profile-clients";
 import {
@@ -237,6 +245,9 @@ import type { WebhookRoutineWriter } from "./agent/webhook-routine-tool";
 import type { AgentApiKeys } from "./agent-api-keys";
 import type { AgentProvider } from "./agent-client";
 import type { SpaceAgentTables } from "./agent-data/space-agent-tables";
+import { modelSavings } from "./agent-efficiency/model-savings";
+import { PERFORMANCE_REVIEWS_FILE, PerformanceReviews } from "./agent-efficiency/performance-reviews";
+import { ROLE_PLAYBOOKS_FILE, RolePlaybooks } from "./agent-efficiency/role-playbooks";
 import type { AgentStore } from "./agent-store";
 import { AgentTaskStore } from "./agent-tasks/agent-task-store";
 import { AgentTasks } from "./agent-tasks/agent-tasks";
@@ -517,6 +528,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #reader: ConversationReader;
   readonly #memories: AgentMemories;
   readonly #memoryReview: MemoryReview;
+  /** The playbooks of roles, which every agent of a role gets as a skill. */
+  readonly playbooks: RolePlaybooks;
+  /** The weekly performance reviews of the agents. */
+  readonly reviews: PerformanceReviews;
   readonly #waits: AgentWaits;
   readonly #tasks: AgentTasks;
   readonly #tables: SpaceAgentTables | null;
@@ -541,6 +556,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #memoryHold: MemoryHold;
   readonly #usageLimits: UsageLimitGate;
   readonly #drain: DrainScheduler;
+  readonly #modelPolicy: ModelPolicy;
   readonly #sessionSettings: SessionSettings;
   readonly #queue: QueueControls;
   readonly #attachments: AttachmentGateway;
@@ -687,6 +703,18 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
       ...(options.agentMemoryLimit ? { limit: options.agentMemoryLimit } : {}),
     });
+    this.playbooks = new RolePlaybooks({
+      path: join(store.database.userDataPath, ROLE_PLAYBOOKS_FILE),
+      agents: () => this.#store.list(),
+    });
+    this.reviews = new PerformanceReviews({
+      path: join(store.database.userDataPath, PERFORMANCE_REVIEWS_FILE),
+      database: () => this.#store.database.connection,
+      agents: () => this.#store.list(),
+      running: () => this.#initialized && !this.#stopping,
+      generate: (agent, prompt) => this.#generateReview(agent, prompt),
+      applyInstruction: (agentId, text) => this.#applyReviewInstruction(agentId, text),
+    });
     const skillLearner = options.skillLearner;
     this.#memoryReview = new MemoryReview({
       memories: this.#memories,
@@ -763,7 +791,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         listAgents: () => this.listAgents(),
         // A hidden agent keeps its routines, but they do not run until the user restores it.
         excludedAgents: () =>
-          new Set([...this.#duplication.pendingAgents(), ...this.#removal.deleting(), ...this.#hiddenAgentIds()]),
+          new Set([
+            ...this.#duplication.pendingAgents(),
+            ...this.#removal.deleting(),
+            ...this.#hiddenAgentIds(),
+            ...this.#sleepingAgentIds(),
+          ]),
         isRunning: () => this.#initialized && !this.#stopping,
         usageLimited: (agentId) => !this.#usageLimits.mayDrain(agentId),
       },
@@ -1207,7 +1240,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     });
     this.channels = new ChannelService(store.database, mailbox, {
       agents: () => this.listAgents(),
-      hidden: (agentId) => this.#store.isHidden(agentId),
+      // A sleeping member takes no channel work either: a channel task would hold the channel until it wakes.
+      hidden: (agentId) => this.#store.isHidden(agentId) || this.#store.isSleeping(agentId),
       inChannelSpace: (agentId, channel) => agentSeesChannel(this.#store.spaces, agentId, channel),
       channelSpaceId: (channel) => this.#store.spaces.channelSpaceId(channel),
       generate: (lead, prompt) =>
@@ -1404,6 +1438,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         this.#store.list().some((agent) => agent.id === id) &&
         !this.#removal.deleting().has(id) &&
         !this.#duplication.isPending(id),
+      sleeping: (id) => this.#store.isSleeping(id),
       running: () => this.#initialized && !this.#stopping && !this.#routineTimer.held,
       audit: options.securityAudit,
       // The agent event "error" with these codes reaches every client without a new protocol field.
@@ -1484,7 +1519,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           ),
       },
     });
+    this.#modelPolicy = new ModelPolicy({
+      agents: () => this.#store.list(),
+      models: () => this.#providers.listModels(),
+      limited: (agentId, model) => this.#usageLimits.holdsModel(agentId, model),
+    });
     this.#drain = new DrainScheduler({
+      modelPolicy: this.#modelPolicy,
       channels: this.channels,
       messaging: this.messaging,
       store,
@@ -1652,6 +1693,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       mailbox,
       attention: this.#attention,
       liveTrace: (turnId) => this.#turn.liveTrace(turnId),
+      turnModel: (turnId) => {
+        const chosen = this.#modelPolicy.running(turnId);
+        return chosen ? { model: chosen.model, reason: chosen.reason } : null;
+      },
       turnRunning: (turnId) => this.#turn.turnStartedAt(turnId) !== null,
       loadedSnapshot: (threadId) => this.#conversation.loadedExecutionSnapshot(threadId),
       agentTaskTitle: (taskId) => this.#tasks.title(taskId),
@@ -1769,6 +1814,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         requestNewChat: (agentId) => {
           this.#requestedNewChats.add(agentId);
         },
+        escalateModel: (agentId) => this.escalateModel(agentId),
+        sleepTargetAgentIds: (target) => this.sleepTargetAgentIds(target),
+        setAgentsSleeping: (input) => this.setAgentsSleeping(input).pipe(toToolOperationFailed),
+        proposePlaybook: (agentId, slug, content, note) => this.playbooks.propose(agentId, slug, content, note),
         // The first person is the host user of this computer; signed out, the signed-out reader.
         channelHost: () => options.channelPeople?.()[0] ?? { id: SIGNED_OUT_CHANNEL_MEMBER_ID, name: "You" },
         placeChannel: (channelId, spaceId) => this.spaces.place("channel", channelId, spaceId),
@@ -2551,6 +2600,54 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     return effort ? { ...model, defaultReasoningEffort: effort } : model;
   }
 
+  /**
+   * Runs a performance review prompt on the agent's small model (its background model when the
+   * provider lists none). Null when no model can run it. Its usage is saved like a memory review's.
+   */
+  #generateReview(agent: AgentSummary, prompt: string) {
+    return Effect.gen({ self: this }, function* () {
+      yield* this.#providers.ensureProvider(agent.provider);
+      const listed = this.#endpoints.available();
+      const smallId = tierModel(agent, "small", listed);
+      const model =
+        listed.find((candidate) => candidate.provider === agent.provider && candidate.id === smallId) ??
+        this.#backgroundModel(agent);
+      if (!model) return null;
+      const client = this.#providers.createProfileClient(agent.provider);
+      const text = yield* this.#profileClients.run(client, (cancelled) =>
+        generateTextWithoutTools(
+          client,
+          model,
+          prompt,
+          cancelled,
+          memoryReviewUsageObserver(this.#store.database.usage, agent.provider, model.id, agent.id),
+        ),
+      );
+      return { text, costUsd: null };
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.sync(() => {
+          this.#emitError("performance_review_failed", cause, agent.id);
+          return null;
+        }),
+      ),
+    );
+  }
+
+  /**
+   * Adds an approved review instruction to the agent's instructions, or to its memories when the
+   * instructions have no room left for it.
+   */
+  #applyReviewInstruction(agentId: string, text: string) {
+    return Effect.gen({ self: this }, function* () {
+      const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+      if (!agent) return;
+      const description = `${agent.description.trimEnd()}\n\n${text}`;
+      if (description.length <= INPUT_LIMITS.agentDescription) yield* this.updateAgent({ agentId, description });
+      else this.#memories.create({ agentId, text });
+    });
+  }
+
   /** Adds a line of a background memory review to the agent's own chat. It wakes nobody. */
   #appendReviewMessage(agentId: string, message: ConversationMessage): void {
     const database = this.#store.database;
@@ -3086,6 +3183,69 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     };
   }
 
+  #sleepingAgentIds(): string[] {
+    return this.#store
+      .list()
+      .filter((agent) => agent.sleepingSince !== undefined)
+      .map((agent) => agent.id);
+  }
+
+  /** The agents that a sleep request names: one agent, a lead and every agent under it, or a space. */
+  sleepTargetAgentIds(target: SleepTarget): string[] {
+    const agents = this.#store.list();
+    if (target.kind === "space")
+      return agents.filter((agent) => this.#store.spaces.agentSpaceId(agent.id) === target.id).map((agent) => agent.id);
+    if (!agents.some((agent) => agent.id === target.id))
+      throw new Error(sourceText("error.agent.unknown", { id: target.id }));
+    if (target.kind === "agent") return [target.id];
+    const space = agents.filter((agent) => this.#store.spaces.sameSpace(target.id, agent.id));
+    const managers = agentManagers(space);
+    return teamAgentIds(
+      target.id,
+      space.map((agent) => agent.id),
+      (agentId) => managers.get(agentId) ?? null,
+    );
+  }
+
+  /**
+   * Puts agents to sleep or wakes them. A sleeping agent keeps all of its data and finishes the turn
+   * that runs; no routine, event check, channel task or message starts a turn of it, so it costs
+   * nothing. Messages to it wait in its queue. On wake, the routine occurrences that came due while it
+   * slept are skipped, and its queue drains again.
+   */
+  readonly setAgentsSleeping = Effect.fn("AgentService.setAgentsSleeping")(function* (
+    this: AgentService,
+    input: SetAgentsSleepingInput,
+  ) {
+    const changed = yield* lifecycleStep("set agents sleeping", () => {
+      const ids = this.sleepTargetAgentIds(input.target);
+      const now = new Date();
+      // While the agents still sleep, so the timer cannot fire an occurrence that this skips.
+      if (!input.sleeping) for (const id of ids) if (this.#store.isSleeping(id)) this.#routines.skipMissedFor(id, now);
+      return this.#store.setSleeping(ids, input.sleeping ? now.toISOString() : null);
+    });
+    if (changed.length > 0) {
+      this.#routines.arm();
+      for (const agentId of changed) {
+        if (input.sleeping) {
+          // The channel work that waits in its queue goes back to the channel, so it holds nothing.
+          yield* this.channels
+            .releaseAgent(agentId)
+            .pipe(
+              Effect.catch((failure) =>
+                Effect.sync(() => this.#emitError("channel_coordination_failed", failure.cause)),
+              ),
+            );
+        } else {
+          this.#mailboxSync.emitQueue(agentId);
+          this.#drain.scheduleDrain(agentId);
+        }
+      }
+      this.#emit({ type: "agents-changed", agents: this.listAgents() });
+    }
+    return { changedAgentIds: changed, sleepingAgentIds: this.#sleepingAgentIds() };
+  }).bind(this);
+
   #hiddenAgentIds(): string[] {
     return this.#store
       .list()
@@ -3133,6 +3293,27 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#emit({ type: "agents-changed", agents: this.listAgents() });
     return snapshot;
   }).bind(this);
+
+  /** The agent asked for the large model for its next turn. Only an agent on the automatic policy has one. */
+  escalateModel(agentId: string): boolean {
+    const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+    if (agent?.modelPolicy !== "auto") return false;
+    this.#modelPolicy.escalate(agentId);
+    return true;
+  }
+
+  /** What the automatic model policy did in the last week. */
+  modelSavings(): ModelSavingsSnapshot {
+    return {
+      ...modelSavings(this.#store.database.connection, this.#store.list()),
+      warmSwitches: this.#modelPolicy.warmSwitches(),
+    };
+  }
+
+  /** The model that the automatic policy chose for a running turn, and why, or null. */
+  turnModelChoice(turnId: string) {
+    return this.#modelPolicy.running(turnId);
+  }
 
   /** Refuses new work for a hidden agent. A turn that already runs is not affected. */
   #requireNotHidden(agentId: string): void {
@@ -4195,6 +4376,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       this.#channelRoutines.skipMissed(new Date(), options.heldRoutines);
       this.#initialized = true;
       this.#memoryHold.start();
+      this.reviews.start();
+      Effect.runFork(this.playbooks.sync());
     });
     yield* this.#providers
       .start()
@@ -4731,6 +4914,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#conversation.dispose();
     this.#threads.dispose();
     yield* this.#memoryReview.dispose();
+    this.reviews.dispose();
+    this.playbooks.dispose();
     this.#memories.clearPending();
     this.#tables?.dispose();
     this.#attention.clearPrompts();
@@ -5743,6 +5928,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     // Before the event: a client learns who delegated a request before the request arrives.
     this.#escalations?.observe(event);
     this.#observeAttention(event);
+    this.#modelPolicy.observe(event);
+    if (event.type === "agents-changed") this.playbooks.scheduleSync();
     // Before the channels and the tasks take theirs: the fleet follows the turns of channel threads too.
     this.workspace?.observe(event);
     if (this.channels?.event(event) || this.messaging?.event(event, this.#scope) || this.#tasks?.event(event)) return;

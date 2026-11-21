@@ -16,14 +16,18 @@
 import assert from "node:assert/strict";
 import { createECDH, randomBytes, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { open } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, AgentSummary } from "@openbot/contracts/ipc";
+import type { AgentEvent, AgentSummary, ConversationSnapshot } from "@openbot/contracts/ipc";
+import { Effect } from "effect";
+import { OwnerTools } from "../src/backend/agent/owner-tools";
 import { type OwnerAwayNotice, OwnerAwayService, OwnerHoldRefused, quietWindow } from "../src/backend/owner-away";
 import { WebPushService } from "../src/main/web-push";
 import { WebPushStore } from "../src/main/web-push-store";
 
+const ONE_PIXEL_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 const directory = mkdtempSync(join(tmpdir(), "owner-away-e2e-"));
 const ZONE = "Europe/Madrid";
 // 2026-11-21 23:30 in Madrid (UTC+1).
@@ -251,6 +255,75 @@ assert.equal(summaries.length, 2, "Not while the owner uses the app.");
   assert.equal(again.state().held.length, away.state().held.length);
   assert.equal(again.state().settings.quietHours.start, "23:00");
 }
+
+// The agent tools: hold_for_owner, alert_owner and share_preview, with the stores replaced.
+const csvPath = join(directory, "sales.csv");
+writeFileSync(csvPath, "day,sales\nMon,12\nTue,19\nWed,15\n");
+const imagePath = join(directory, "hero.png");
+writeFileSync(imagePath, Buffer.from(ONE_PIXEL_PNG, "base64"));
+const shown: { text: string; names: string[] }[] = [];
+const snapshot: ConversationSnapshot = JSON.parse(
+  JSON.stringify({ agentId: "agent-a", threadId: "thread-a", messages: [], revision: 0 }),
+);
+const tools = new OwnerTools({
+  ownerAway: away,
+  thumbnails: { drawNow: () => Effect.succeed(null) },
+  visualPreview: {
+    capture: ({ html }) => {
+      assert.match(html, /<svg/u, "The CSV page has its chart.");
+      return Effect.succeed({ imageUrl: `data:image/png;base64,${ONE_PIXEL_PNG}`, contentHeight: 300, console: [] });
+    },
+  },
+  attachments: {
+    openSources: (_agentId, paths) =>
+      Effect.promise(async () => Promise.all(paths.map(async (path) => ({ path, handle: await open(path, "r") })))),
+  },
+  mailbox: {
+    stageGeneratedBytes: (input) =>
+      Effect.succeed({
+        id: `file-${randomUUID()}`,
+        name: input.name,
+        size: input.bytes.byteLength,
+        kind: "image",
+        mimeType: input.mimeType,
+        previewKind: "image",
+        previewUrl: null,
+      }),
+    persistGeneratedAttachmentsWithConversation: (current) => {
+      const last = current.messages.at(-1);
+      shown.push({ text: last?.text ?? "", names: (last?.attachments ?? []).map((file) => file.name) });
+      return current;
+    },
+    discardStagedGeneratedAttachments: () => Effect.void,
+  },
+  conversation: { ensureSnapshot: () => snapshot, publishConversation: () => undefined },
+  teamChannel: () => "channel-launch",
+});
+const call = (tool: string, args: unknown) =>
+  Effect.runPromise(
+    tools.handle(
+      { threadId: "thread-a", turnId: randomUUID(), callId: randomUUID(), namespace: "openbot", tool, arguments: args },
+      "agent-a",
+      "thread-a",
+    ),
+  );
+const resultOf = (response: Awaited<ReturnType<typeof call>>) => {
+  const item = response?.contentItems[0];
+  return item?.type === "inputText" ? JSON.parse(item.text) : null;
+};
+const held = await call("hold_for_owner", { kind: "approval", title: "Raise the cap to €50/day" });
+assert.equal(resultOf(held).status, "held");
+assert.equal(away.state().held.at(-1)?.channelId, "channel-launch", "The held item names the channel of the work.");
+assert.equal((await call("hold_for_owner", { kind: "nope", title: "x" }))?.success, false);
+const alert = resultOf(await call("alert_owner", { category: "outage", summary: "aprendivo.com is down" }));
+assert.deepEqual([alert.status, alert.urgent], ["sent", true]);
+assert.equal(resultOf(await call("alert_owner", { category: "outage", summary: "still down" })).status, "not_sent");
+const csv = resultOf(await call("share_preview", { paths: [csvPath, imagePath], caption: "Sales this week" }));
+assert.equal(csv.status, "shown");
+assert.deepEqual(shown.at(-1), { text: "Sales this week", names: ["sales.png", "hero.png"] });
+const page = await call("share_preview", { url: "https://aprendivo.com/curso", caption: "New landing" });
+assert.equal(page?.success, false, "A page that could not be drawn says so.");
+assert.equal((await call("share_preview", { caption: "Nothing" }))?.success, false, "url or paths is required.");
 
 await settle();
 rmSync(directory, { recursive: true, force: true });

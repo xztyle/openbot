@@ -154,7 +154,6 @@ import { hostEfficiencyCalls } from "../efficiency/efficiency-port";
 import { serverSupportsCapability } from "../servers/server-capabilities";
 // Copying a selection with a formula in it gives its LaTeX source, as on desktop.
 import "katex/contrib/copy-tex";
-import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import { actionToast } from "../../action-toast";
 import { desktopAnalytics } from "../../analytics";

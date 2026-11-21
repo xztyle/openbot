@@ -143,6 +143,14 @@ export function toolGuidance(
       return "The owner's time is the scarcest thing on the team. Anything for them that can wait (a question, an approval, a step in a page, an FYI) goes into their When you're back list with openbot.hold_for_owner: it never pings them, and they answer the whole list at once when they come back. Do not wait for it: continue with other work; the answer arrives as a message from the owner. Fold several small things into one held item. While the owner is in quiet hours or focus (your turn says so), hold everything; only a real emergency goes through openbot.alert_owner: money at stake at or over their limit, an outage of something live, or a security event.";
     case "share_preview":
       return "Show, don't tell: when you deliver something visual, call openbot.share_preview so the owner sees it as a card with a picture: url for a page you published or changed (pass a revision such as a deploy id so it is drawn again only when it changed), paths for images (a grid), a CSV file (a chart and its first rows) or an HTML page. Write a one-line caption, then keep your answer to what the card does not show. Do not attach a screenshot you took yourself of a public page.";
+    case "list_loops":
+    case "save_loop":
+    case "save_loop_item":
+    case "move_loop_item":
+    case "propose_experiment":
+    case "update_experiment":
+    case "escalate_loop_item":
+      return "A loop is the space's pipeline that the owner or an orchestrator defines, such as products, leads, videos or buyer questions moving through stages. Keep an item's numbers current with openbot.save_loop_item (values by field key) and tick the stage checklist as you finish each entry. Move an item on with openbot.move_loop_item when its exit criteria hold; blocked lists what is missing. A gate (money, publish or another decision) and an experiment budget wait for the owner in Needs you: never spend, publish or affiliate before the approval note reaches you, never ask again while it waits, and do not wait for it either. Put each paid test in an experiment (openbot.propose_experiment) and record its result and winner with openbot.update_experiment. Use openbot.escalate_loop_item for a question only the owner can answer. Values come from tools or pages you read: never invent a number; leave it empty instead.";
     case "log_decision":
       return "When a team channel is in hands-off mode, nobody answers questions or approvals there. Never wait for a person: take the path the team recommends, within the rules the people already set, and record each decision that a person would normally have made with openbot.log_decision (the decision, why, the rejected alternatives). Then continue. When your work belongs to a team channel that is not hands-off, a question you ask goes to that channel, not to your own chat, and you do not wait for its answer: the answer comes back as channel work.";
     case "request_api_key":

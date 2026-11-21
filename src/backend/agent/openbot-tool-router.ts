@@ -47,6 +47,7 @@ import type { ChannelService } from "../channel-service";
 import { AGENT_CREATION_WINDOW_MS, AGENT_MESSAGE_LIMIT, AGENT_MESSAGE_WINDOW_MS } from "../collaboration-limits";
 import type { ProviderSession } from "../database/provider-sessions";
 import type { EventCheckScheduler } from "../event-check-scheduler";
+import type { LoopService } from "../loops/loop-service";
 import type { MailboxStore } from "../mailbox-store";
 import { agentMcpServers } from "../mcp-provider-shapes";
 import type { MessagingThreads } from "../messaging/messaging-threads";
@@ -89,6 +90,7 @@ import { handleEventCheckTool } from "./event-check-tools";
 import { HistoryTools } from "./history-tools";
 import type { HostedSiteCoordinator } from "./hosted-site-coordinator";
 import { isHostedSiteMutationTool } from "./hosted-site-events";
+import { handleLoopTool } from "./loop-tools";
 import type { MailboxSync } from "./mailbox-sync";
 import { type AgentMcpServers, handleMcpServerTool, isMcpServerTool } from "./mcp-tools";
 import {
@@ -247,6 +249,8 @@ export interface OpenBotToolRouterOptions {
   sidebarLayout: AgentSidebar | null;
   localSkillTools?: (() => LocalSkillTools) | undefined;
   routineFlowTools?: (() => RoutineFlowTools) | undefined;
+  /** The loops of the spaces, for the loop tools. */
+  loops?: (() => LoopService | null) | undefined;
   approvalAutomation?: ApprovalAutomationPolicy | undefined;
   /** Draws pages for `html_preview`; null where no window can draw one. */
   visualPreview?: ChatVisualPreviewHost | null | undefined;
@@ -305,6 +309,7 @@ export class OpenBotToolRouter {
   readonly #sidebarLayout: AgentSidebar | null;
   readonly #localSkillTools: (() => LocalSkillTools) | undefined;
   readonly #routineFlowTools: (() => RoutineFlowTools) | undefined;
+  readonly #loops: (() => LoopService | null) | undefined;
   readonly #approvalAutomation: ApprovalAutomationPolicy;
   readonly #visualPreview: ChatVisualPreviewHost | null;
   readonly #screenCapture: ScreenCaptureHost | null;
@@ -342,6 +347,7 @@ export class OpenBotToolRouter {
     this.#sidebarLayout = options.sidebarLayout;
     this.#localSkillTools = options.localSkillTools;
     this.#routineFlowTools = options.routineFlowTools;
+    this.#loops = options.loops;
     this.#approvalAutomation = options.approvalAutomation ?? NO_APPROVAL_AUTOMATION;
     this.#visualPreview = options.visualPreview ?? null;
     this.#screenCapture = options.screenCapture ?? null;
@@ -1270,6 +1276,9 @@ export class OpenBotToolRouter {
       this.#tables?.forAgent(senderAgentId) ?? null,
     );
     if (tableResult) return tableResult;
+
+    const loopResult = yield* handleLoopTool(params.tool, params.arguments, senderAgentId, this.#loops?.() ?? null);
+    if (loopResult) return loopResult;
 
     if (params.tool === "suggest_marketplace_app") {
       const args = params.arguments;

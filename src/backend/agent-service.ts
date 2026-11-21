@@ -270,6 +270,8 @@ import type { EventCheckReader } from "./event-check-reader";
 import type { EventCheckScheduler } from "./event-check-scheduler";
 import type { EventCheckTemplates } from "./event-check-templates";
 import type { HostMemory } from "./host-memory";
+import { motionTicketCreator } from "./loops/loop-motion";
+import { LoopService } from "./loops/loop-service";
 import type { MailboxStore } from "./mailbox-store";
 import { type McpAgent, personalizeMcpConfig } from "./mcp-agent-values";
 import { type McpOperationError, toMcpOperationError } from "./mcp-effects";
@@ -498,6 +500,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly secrets: WorkspaceSecretsService;
   /** The spaces, and the space of each agent and channel. Agents see and reach only their own space. */
   readonly spaces: SpaceService;
+  /** The owner's loops (pipelines) of each space, their items, experiments and decisions. */
+  readonly loops: LoopService;
   readonly messaging: MessagingThreads;
   readonly #profileSave: ProfileSave;
   readonly #profileClients = new ProfileClients();
@@ -1683,6 +1687,25 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         taskFailed: (taskId, message) => this.#tasks.failed(taskId, this.#mcp.redact(message)),
       },
     });
+    this.loops = LoopService.create(store.database, {
+      agents: () => this.listAgents(),
+      agentSpace: (agentId) => store.spaces.agentSpaceId(agentId),
+      spaceExists: (spaceId) => store.spaces.get(spaceId) !== undefined,
+      notifyAgent: (agentId, text) =>
+        Effect.runFork(
+          this.sendMessage({ agentId, text }, undefined, undefined, "operator-note").pipe(
+            Effect.catch((failure) => Effect.sync(() => this.#emitError("loop_note_failed", failure.cause, agentId))),
+          ),
+        ),
+      runRoutine: (agentId, routineId) =>
+        Effect.runPromise(this.testRoutine({ agentId, routineId }).pipe(Effect.asVoid)),
+      createTicket: motionTicketCreator({
+        mcpServers: () => this.enabledMcpServers(),
+        mcpAgent: (agentId) => this.mcpAgent(agentId),
+        agentName: (agentId) => this.listAgents().find((agent) => agent.id === agentId)?.name ?? null,
+        secret: (scope, agentId, name) => options.agentApiKeys?.readNow(scope, agentId, name) ?? null,
+      }),
+    });
     this.secrets = new WorkspaceSecretsService(options.agentApiKeys ?? null, (agentId) =>
       this.listAgents().some((agent) => agent.id === agentId),
     );
@@ -1764,6 +1787,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       sidebarLayout: this.#sidebarLayout,
       ...(this.#localSkillTools === undefined ? {} : { localSkillTools: this.#localSkillTools }),
       ...(this.#routineFlowTools === undefined ? {} : { routineFlowTools: this.#routineFlowTools }),
+      loops: () => this.loops,
       ...(options.approvalAutomation === undefined ? {} : { approvalAutomation: options.approvalAutomation }),
       ...(options.visualPreview === undefined ? {} : { visualPreview: options.visualPreview }),
       ownerAway: options.ownerAway ?? null,

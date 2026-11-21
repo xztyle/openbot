@@ -860,9 +860,10 @@ export function ConversationComposer() {
                 <DropdownMenu.Content aria-label={t("composer.add.label")}>
                   <DropdownMenu.Item
                     disabled={attachmentBusy()}
-                    onPointerDown={(event) => {
-                      if (event.button === 0) openAttachmentPicker();
-                    }}
+                    // The chooser opens in the tap's own click: Safari on a phone ignores a file input
+                    // opened from a touch's pointerdown, and the menu must stay until that click.
+                    closeOnSelect={false}
+                    onClick={openAttachmentPicker}
                     onKeyDown={(event) => openAttachmentPickerFromKey(event)}
                   >
                     <Image aria-hidden="true" />
@@ -884,9 +885,10 @@ export function ConversationComposer() {
                   </Show>
                   <DropdownMenu.Item
                     disabled={attachmentBusy()}
-                    onPointerDown={(event) => {
-                      if (event.button === 0) openAttachmentPicker();
-                    }}
+                    // The chooser opens in the tap's own click: Safari on a phone ignores a file input
+                    // opened from a touch's pointerdown, and the menu must stay until that click.
+                    closeOnSelect={false}
+                    onClick={openAttachmentPicker}
                     onKeyDown={(event) => openAttachmentPickerFromKey(event)}
                   >
                     <File aria-hidden="true" />

@@ -19,8 +19,17 @@ export function chooseFiles(options: { multiple?: boolean; accept?: string } = {
     input.type = "file";
     input.multiple = options.multiple ?? true;
     if (options.accept) input.accept = options.accept;
-    input.addEventListener("change", () => resolve(Array.from(input.files ?? [])), { once: true });
-    input.addEventListener("cancel", () => resolve([]), { once: true });
+    // In the page while the chooser is open: Safari on a phone can collect a detached input before
+    // the person picks, and its `change` never comes.
+    input.hidden = true;
+    input.tabIndex = -1;
+    document.body.append(input);
+    const done = (files: File[]) => {
+      input.remove();
+      resolve(files);
+    };
+    input.addEventListener("change", () => done(Array.from(input.files ?? [])), { once: true });
+    input.addEventListener("cancel", () => done([]), { once: true });
     // The chooser needs the click that started this call, so nothing may be awaited before it.
     input.click();
   });

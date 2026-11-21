@@ -194,6 +194,27 @@ function installKeyboardModel(keyboard: number): void {
   });
 }
 
+/**
+ * Safari's rule for the file chooser, which Chromium's touch emulation does not have: a tap is a user
+ * gesture only from its `touchend` and the `click` after it, so `input.click()` on a file input
+ * from a touch's `pointerdown` or `touchstart` does nothing. The model drops such a click and counts it.
+ */
+function installFileChooserGestureModel(): void {
+  const click = HTMLInputElement.prototype.click;
+  const gesture = (event: Event | undefined) => {
+    if (!event) return false;
+    if (["click", "touchend", "keydown", "keyup", "mousedown", "mouseup"].includes(event.type)) return true;
+    return event instanceof PointerEvent && event.pointerType === "mouse";
+  };
+  HTMLInputElement.prototype.click = function (this: HTMLInputElement) {
+    if (this.type === "file" && !gesture(window.event)) {
+      window.blockedFileChoosers = (window.blockedFileChoosers ?? 0) + 1;
+      return;
+    }
+    click.call(this);
+  };
+}
+
 interface Step {
   phone: string;
   name: string;
@@ -297,6 +318,7 @@ async function newPhone(browser: Browser, phone: Phone): Promise<{ context: Brow
       "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
   });
   await context.addInitScript(installKeyboardModel, phone.keyboard);
+  await context.addInitScript(installFileChooserGestureModel);
   const page = await context.newPage();
   page.on("pageerror", (error) => report.pageErrors.push(error.stack ?? error.message));
   const cdp = await context.newCDPSession(page);
@@ -334,10 +356,33 @@ async function clearDraft(page: Page): Promise<void> {
   await settle(page);
 }
 
+/**
+ * A tap opens the system file chooser only inside the tap's own gesture: Safari and Chromium let a
+ * file input open on a touch's `pointerup`/`touchend`, not on its `pointerdown`. Each attach control
+ * must open the chooser from the tap itself.
+ */
+async function checkAttachOpensChooser(page: Page, phone: Phone, name: string, open: () => Promise<void>) {
+  await step(phone, `${name} opens the file chooser on a tap`, async () => {
+    const chooser = page.waitForEvent("filechooser", { timeout: 3_000 });
+    await open();
+    const picked = await chooser.catch(async () => {
+      const blocked = await page.evaluate(() => window.blockedFileChoosers ?? 0);
+      throw new Error(
+        blocked ? "The chooser was opened outside the tap's gesture, which Safari ignores." : "No file chooser opened.",
+      );
+    });
+    assert.equal(picked.isMultiple(), true, "The chooser takes one file only.");
+  });
+  await page.keyboard.press("Escape");
+  await settle(page);
+}
+
 declare global {
   interface Window {
     /** The harness's connection, from `web-client-inbox-harness.tsx`. */
     harnessConnection?: { drop(holdMs: number): void; sent: { operationId: string; text: string }[] };
+    /** File choosers that Safari would not open, from `installFileChooserGestureModel`. */
+    blockedFileChoosers?: number;
     /** The editor this check watches, and how often it stopped taking text. */
     composerNode?: Element;
     composerLocked?: number;
@@ -487,6 +532,12 @@ try {
     const { context, page } = await newPhone(browser, phone);
     await load(page, `${origin}${DM_PATH}`);
     await phoneShot(browser, page, phone, "01-dm-idle");
+    const addMenu = async (item: string) => {
+      await page.getByRole("button", { name: "Add to prompt" }).filter({ visible: true }).last().tap();
+      await page.getByRole("menuitem", { name: item }).tap();
+    };
+    await checkAttachOpensChooser(page, phone, "the DM's + menu, Attach image,", () => addMenu("Attach image"));
+    await checkAttachOpensChooser(page, phone, "the DM's + menu, Add context,", () => addMenu("Add context"));
     await step(phone, "the idle DM fills the screen, with the box over the home indicator", async () => {
       const bottom = await box(page, composer(page));
       const gap = phone.height - bottom.bottom;
@@ -552,6 +603,9 @@ try {
 
     await load(page, `${origin}${CHANNEL_PATH}`);
     await phoneShot(browser, page, phone, "07-channel-idle");
+    await checkAttachOpensChooser(page, phone, "the channel's Attach files", () =>
+      page.getByRole("button", { name: "Attach files" }).filter({ visible: true }).last().tap(),
+    );
     await editor(page).tap();
     await typeDraft(page, "Morning all");
     await phoneShot(browser, page, phone, "08-channel-keyboard");

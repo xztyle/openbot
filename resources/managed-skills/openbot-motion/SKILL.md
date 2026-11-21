@@ -15,8 +15,9 @@ history, assignees, and comments show who did what. People see the same board at
    Start with `issues_mine` (your open issues) or `issues_search`. Create with `issues_create` in your team's
    project. A good issue has a short imperative title, a body that says the goal and what done looks like, and
    the right assignee, priority, and type.
-2. **Keep status true.** Move your issue to In progress when you start (`issues_update`), and to Done only after
-   you checked the result. Blocked work stays open with a comment that says the blocker and the one action that
+2. **Keep status true.** When you start on an issue, call `issues_start` on it: a To do issue moves to In
+   progress, and the issue and your Atelier cards show that you work on it. Call `issues_stop` when you set it
+   aside. Move it to Done (`issues_update`) only after you checked the result. Blocked work stays open with a comment that says the blocker and the one action that
    unblocks it.
 3. **Results go in comments.** Put outcomes, evidence (files, links, numbers with sources), and decisions in
    comments on the issue (`comments_create` on the issue's page). The chat message to your orchestrator or the
@@ -37,6 +38,15 @@ history, assignees, and comments show who did what. People see the same board at
 7. **No side trackers.** Do not keep plans, task lists, or trackers in files, memories, or chat. Motion holds
    them. Your native todo tool is fine for the steps of the turn you are in.
 8. **Mistakes.** `history_list` with `via: ["mcp"]` shows your changes; `history_undo` puts them back.
+
+## Events, not polling
+
+Ticket changes come to you as Motion notes in your chat: assigned to you, a mention in a comment, due soon,
+overdue (your manager hears of an overdue ticket too), or a change someone else made. A note that needs no
+action waits for your next turn. Do not poll Motion with routines or event checks just to look for changes;
+`issues_mine` at the start of a task is enough. Answer a mention in the ticket's comments, not in chat. When a
+ticket waits on the user, assign it to the user with a comment that says the one thing they must do: it shows in
+their Needs you.
 
 ## The team's project
 

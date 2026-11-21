@@ -43,7 +43,19 @@ export interface BrowserFullViewProps {
   liveViewClipboard: boolean;
   /** False while the connection to the host is down: the live view waits and starts again. */
   liveViewOnline?: boolean | undefined;
+  /** An agent acts on the tab now: the live view holds the input and says so. */
+  liveViewLocked?: boolean | undefined;
+  /** The person takes the tab from the agent, and the input works at once. */
+  onLiveViewTakeOver?: (() => void) | undefined;
   canCloseTabs?: boolean;
+  /**
+   * The row shows the tabs of all agents, not only the tabs of this agent. Absent: the view has no
+   * such choice, and `tabs` is the full list.
+   */
+  showAllTabs?: boolean | undefined;
+  onShowAllTabs?: ((show: boolean) => void) | undefined;
+  /** Closes the tabs of this agent that nobody uses now. Absent when there is no such tab. */
+  onCloseInactiveTabs?: (() => void) | undefined;
   /** False where the page cannot leave the window, such as the web app. */
   canEnterPip?: boolean;
   onBack: () => void;
@@ -75,6 +87,31 @@ export interface BrowserFullViewProps {
 /** Only a host that reports the history state can stop a load, so an older host keeps Reload. */
 export function browserTabStoppable(tab: BrowserTab | undefined): boolean {
   return tab?.loading === true && tab.canGoBack !== undefined;
+}
+
+/** How the address bar marks the connection of a page: secure, not secure, or neither (a new tab, `about:`). */
+export function browserConnection(url: string | undefined): "secure" | "insecure" | "none" {
+  if (!url) return "none";
+  if (url.startsWith("https:")) return "secure";
+  if (url.startsWith("http:")) return "insecure";
+  return "none";
+}
+
+/**
+ * The parts of an address as the bar shows it when nobody edits it: the host is strong, the rest is
+ * dim, and `https://` and `www.` are not shown. Null for an address that is not a web page.
+ */
+export function browserAddressParts(url: string | undefined): { host: string; rest: string } | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    const host = parsed.host.replace(/^www\./u, "");
+    const rest = `${parsed.pathname === "/" ? "" : parsed.pathname}${parsed.search}${parsed.hash}`;
+    return { host: parsed.protocol === "http:" ? `http://${host}` : host, rest };
+  } catch {
+    return null;
+  }
 }
 
 /** The label of a tab's browser profile. The session of one agent has no name. */

@@ -7,6 +7,8 @@ import {
   Globe2,
   Input,
   Listbox,
+  Lock,
+  LockOpen,
   Search,
   TriangleAlert,
   UserRound,
@@ -19,12 +21,19 @@ import {
   BrowserStopIcon,
 } from "@openbot/ui/features/conversation/ConversationIcons";
 import { useText } from "@openbot/ui/text";
-import { createMemo, createStore, createUniqueId, flush, Show } from "solid-js";
+import type { JSX } from "@solidjs/web";
+import { createMemo, createSignal, createStore, createUniqueId, flush, Show } from "solid-js";
 import { BrowserPageMenu } from "./BrowserPageMenu";
 import { BrowserProfileDot } from "./BrowserProfileColor";
 import { BrowserOwnerIcon } from "./BrowserTabIcon";
 import { browserActionLabel } from "./browser-action-labels";
-import { type BrowserFullViewProps, browserTabProfileLabel, browserTabStoppable } from "./browser-full-view-types";
+import {
+  type BrowserFullViewProps,
+  browserAddressParts,
+  browserConnection,
+  browserTabProfileLabel,
+  browserTabStoppable,
+} from "./browser-full-view-types";
 import { useBrowserPageCover } from "./browser-page-cover";
 import {
   type BrowserSuggestion,
@@ -78,12 +87,15 @@ export function BrowserAddressRow(props: {
   ref: (input: HTMLInputElement) => void;
   narrow: boolean;
   onNewTab: () => void;
+  /** The controls at the start of the one bar of a narrow view: hide, and the tab count. */
+  leading?: JSX.Element;
 }) {
   const { t } = useText();
   const listId = createUniqueId();
   const [address, setAddress] = createStore<AddressState>({ ...CLOSED_ADDRESS });
   let input: HTMLInputElement | undefined;
   let selectOnPointerUp = false;
+  const [focused, setFocused] = createSignal(false);
   const suggestionPress = createFieldListPress();
 
   const tab = () => props.view.activeTab;
@@ -184,23 +196,24 @@ export function BrowserAddressRow(props: {
   };
 
   return (
-    <div class="browser-full-address-row">
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label={t("browser.goBack")}
-        aria-keyshortcuts={browserAriaShortcut("back", props.view.shortcuts)}
-        disabled={!tab() || tab()?.canGoBack === false}
-        data-cuelume-tap="navigate"
-        onClick={() => {
-          const current = tab();
-          if (current) props.view.onNavigate(current.id, "back");
-        }}
-      >
-        <BrowserBackIcon />
-      </Button>
-      {/* A narrow row keeps Back here; Forward and Reload go in the page menu. */}
+    <div class="browser-full-address-row" data-narrow={props.narrow ? "" : undefined}>
+      {props.leading}
+      {/* A narrow bar has room for the address only: Back, Forward and Reload go in the page menu. */}
       <Show when={!props.narrow}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={t("browser.goBack")}
+          aria-keyshortcuts={browserAriaShortcut("back", props.view.shortcuts)}
+          disabled={!tab() || tab()?.canGoBack === false}
+          data-cuelume-tap="navigate"
+          onClick={() => {
+            const current = tab();
+            if (current) props.view.onNavigate(current.id, "back");
+          }}
+        >
+          <BrowserBackIcon />
+        </Button>
         <Button
           variant="ghost"
           size="icon-sm"
@@ -260,7 +273,34 @@ export function BrowserAddressRow(props: {
             </span>
           )}
         </Show>
+        <Show when={browserConnection(tab()?.url) !== "none"}>
+          <span
+            class="browser-full-connection"
+            data-connection={browserConnection(tab()?.url)}
+            role="img"
+            aria-label={
+              browserConnection(tab()?.url) === "secure" ? t("browser.address.secure") : t("browser.address.notSecure")
+            }
+            title={
+              browserConnection(tab()?.url) === "secure" ? t("browser.address.secure") : t("browser.address.notSecure")
+            }
+          >
+            <Show when={browserConnection(tab()?.url) === "secure"} fallback={<LockOpen aria-hidden="true" />}>
+              <Lock aria-hidden="true" />
+            </Show>
+          </span>
+        </Show>
+        {/* The address as other browsers show it while nobody edits it: the site is strong, the rest dim. */}
+        <Show when={!focused() && address.text === undefined && browserAddressParts(tab()?.url)}>
+          {(parts) => (
+            <span class="browser-full-capsule-display" aria-hidden="true">
+              <span class="browser-full-capsule-host">{parts().host}</span>
+              <span class="browser-full-capsule-rest">{parts().rest}</span>
+            </span>
+          )}
+        </Show>
         <Input
+          data-display={!focused() && address.text === undefined && browserAddressParts(tab()?.url) ? "" : undefined}
           ref={(element: HTMLInputElement) => {
             input = element;
             props.ref(element);
@@ -289,6 +329,7 @@ export function BrowserAddressRow(props: {
           }
           onKeyDown={onKeyDown}
           onFocus={(event: FocusEvent & { currentTarget: HTMLInputElement }) => {
+            setFocused(true);
             setAddress(() => ({ ...CLOSED_ADDRESS, open: true }));
             flush();
             event.currentTarget.select();
@@ -302,6 +343,7 @@ export function BrowserAddressRow(props: {
             selectOnPointerUp = false;
           }}
           onBlur={() => {
+            setFocused(false);
             // A tap on a suggestion keeps the field; the suggestion it picks closes the list.
             if (!suggestionPress.pressing()) setAddress(() => ({ ...CLOSED_ADDRESS }));
           }}
@@ -380,6 +422,9 @@ export function BrowserAddressRow(props: {
         )}
       </Show>
       <BrowserPageMenu view={props.view} narrow={props.narrow} onNewTab={props.onNewTab} />
+      <Show when={tab()?.loading}>
+        <div class="browser-full-progress" role="progressbar" aria-label={t("browser.loadingPage")} />
+      </Show>
     </div>
   );
 }

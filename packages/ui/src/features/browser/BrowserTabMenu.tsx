@@ -1,5 +1,5 @@
 import type { BrowserTab } from "@openbot/contracts/ipc";
-import { ContextMenu } from "@openbot/ui";
+import { Check, ContextMenu, DropdownMenu } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import { Show } from "solid-js";
 import { BrowserShortcutHint } from "./BrowserTabIcon";
@@ -80,5 +80,41 @@ export function BrowserTabMenu(props: {
         </ContextMenu.Item>
       </ContextMenu.Content>
     </ContextMenu.Portal>
+  );
+}
+
+/**
+ * The rows that change which tabs the row shows: the tabs of all agents, and a close of the tabs that
+ * nobody uses now. Each row shows only where the view offers it. For a dropdown menu.
+ */
+export function BrowserTabListOptions(props: { view: BrowserFullViewProps; separatorBefore?: boolean }) {
+  const { t } = useText();
+  const hasOptions = () => Boolean(props.view.onShowAllTabs || props.view.onCloseInactiveTabs);
+  return (
+    <Show when={hasOptions()}>
+      <Show when={props.separatorBefore}>
+        <DropdownMenu.Separator />
+      </Show>
+      <Show when={props.view.onShowAllTabs}>
+        {(show) => (
+          <DropdownMenu.CheckboxItem checked={props.view.showAllTabs === true} onChange={(on: boolean) => show()(on)}>
+            <span class="browser-menu-check" aria-hidden="true">
+              <Show when={props.view.showAllTabs}>
+                <Check />
+              </Show>
+            </span>
+            {t("browser.tabs.allAgents")}
+          </DropdownMenu.CheckboxItem>
+        )}
+      </Show>
+      <Show when={props.view.onCloseInactiveTabs}>
+        {(closeInactive) => (
+          <DropdownMenu.Item onSelect={() => closeInactive()()}>
+            <span class="browser-menu-check" aria-hidden="true" />
+            {t("browser.tabs.closeInactive")}
+          </DropdownMenu.Item>
+        )}
+      </Show>
+    </Show>
   );
 }

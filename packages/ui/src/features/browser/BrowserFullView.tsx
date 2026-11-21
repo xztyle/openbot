@@ -194,6 +194,7 @@ export default function BrowserFullView(props: BrowserFullViewProps) {
       class={[
         "browser-full-view",
         {
+          "browser-full-view-narrow": narrow(),
           "browser-full-view-mac-controls": props.macWindowControls === true,
         },
       ]}
@@ -206,33 +207,27 @@ export default function BrowserFullView(props: BrowserFullViewProps) {
       value={props.activeTab?.id ?? "__empty"}
       activationMode="automatic"
     >
-      <div class="browser-full-top window-drag">
-        <BrowserPageCover value={cover}>
-          <Show
-            when={narrow()}
-            fallback={
-              <>
-                <BrowserTabStrip view={props} onNewTab={newTab} onClose={closeTabs} />
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  class="no-drag"
-                  aria-label={t("browser.newTab")}
-                  aria-keyshortcuts={browserAriaShortcut("newTab", props.shortcuts)}
-                  title={t("browser.newTab")}
-                  onClick={() => newTab()}
-                >
-                  <PlusIcon />
-                </Button>
-              </>
-            }
-          >
-            <BrowserTabSwitcher view={props} onNewTab={() => newTab()} onClose={closeTabs} />
-          </Show>
-        </BrowserPageCover>
-        <div class="browser-full-top-spacer" />
-        {hideBrowserButton()}
-      </div>
+      {/* A narrow view has one bar: the address row takes the hide button and the tab count. */}
+      <Show when={!narrow()}>
+        <div class="browser-full-top window-drag">
+          <BrowserPageCover value={cover}>
+            <BrowserTabStrip view={props} onNewTab={newTab} onClose={closeTabs} />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              class="no-drag"
+              aria-label={t("browser.newTab")}
+              aria-keyshortcuts={browserAriaShortcut("newTab", props.shortcuts)}
+              title={t("browser.newTab")}
+              onClick={() => newTab()}
+            >
+              <PlusIcon />
+            </Button>
+          </BrowserPageCover>
+          <div class="browser-full-top-spacer" />
+          {hideBrowserButton()}
+        </div>
+      </Show>
       <div class="browser-full-card">
         {/* The narrow row has no tab list, so the panel names itself. */}
         <Tabs.Content
@@ -246,6 +241,14 @@ export default function BrowserFullView(props: BrowserFullViewProps) {
               view={props}
               narrow={narrow()}
               onNewTab={() => newTab()}
+              leading={
+                narrow() ? (
+                  <>
+                    {hideBrowserButton()}
+                    <BrowserTabSwitcher view={props} onNewTab={() => newTab()} onClose={closeTabs} compact />
+                  </>
+                ) : undefined
+              }
               ref={(element) => {
                 address = element;
               }}
@@ -284,6 +287,9 @@ export default function BrowserFullView(props: BrowserFullViewProps) {
                   active={props.open}
                   clipboard={props.liveViewClipboard}
                   online={props.liveViewOnline}
+                  locked={props.liveViewLocked}
+                  onTakeOver={props.onLiveViewTakeOver}
+                  fitPage
                   onFrameSize={setFrameSize}
                 />
               )}

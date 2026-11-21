@@ -223,6 +223,40 @@
   box-shadow: var(--openbot-shadow-raised);
 }
 
+/* An agent acts on the page: the input is held, and the chip says why and offers to take the page. */
+.browser-live-view-lock {
+  position: absolute;
+  top: var(--openbot-space-2);
+  left: 50%;
+  display: flex;
+  max-width: calc(100% - 2 * var(--openbot-space-2));
+  align-items: center;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-1) var(--openbot-space-1) var(--openbot-space-1) var(--openbot-space-3);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-bg-surface-raised);
+  box-shadow: var(--openbot-shadow-raised);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.browser-live-view-lock > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.browser-live-view-lock .ui-button {
+  flex: none;
+  border-radius: var(--openbot-radius-pill);
+}
+
+.browser-live-view[data-locked] canvas {
+  cursor: not-allowed;
+}
+
 .browser-empty-state {
   display: grid;
   height: 100%;

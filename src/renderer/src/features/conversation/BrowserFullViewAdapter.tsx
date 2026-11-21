@@ -1,9 +1,10 @@
 import type { BrowserTab } from "@openbot/contracts/ipc";
 import { BROWSER_PROFILES_CAPABILITY } from "@openbot/contracts/team-protocol/browser-profiles-v1";
+import { BROWSER_USER_CONTROL_CAPABILITY } from "@openbot/contracts/team-protocol/browser-user-control-v1";
 import BrowserFullView from "@openbot/ui/features/browser/BrowserFullView";
 import BrowserLocalSignInDialog from "@openbot/ui/features/browser/BrowserLocalSignInDialog";
 import { BROWSER_NEW_TAB_URL } from "@openbot/ui/features/browser/browser-suggestions";
-import { createEffect, createMemo, onCleanup, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js";
 import { desktopBrowserProfileCalls } from "../browser/browser-profiles-port";
 import {
   browserSessionHistory,
@@ -47,9 +48,42 @@ export default function BrowserFullViewAdapter() {
     showBrowserPip,
     showBrowserTabOf,
     localSignIn,
+    takeBrowserControl,
   } = useConversationViewScope();
   const serverId = () => props.server?.id ?? "";
   const tabs = createMemo(() => orderedBrowserTabs(serverId(), allBrowserTabs()));
+  /** The row shows the tabs of this agent unless the user asks for the tabs of all agents. */
+  const [showAllTabs, setShowAllTabs] = createSignal(false);
+  const shownTabs = createMemo(() => {
+    if (showAllTabs()) return tabs();
+    const own = new Set(browserTabs().map((tab) => tab.id));
+    return tabs().filter((tab) => own.has(tab.id));
+  });
+  /**
+   * The tabs of this agent that nobody uses now: not the tab on the screen, not a tab that a person
+   * controls, and not the tab the agent asked the user to use.
+   */
+  /** An agent acts on the tab on the screen, and nobody has taken it: the live view holds the input. */
+  const liveViewLocked = () => {
+    const tab = activeBrowserTab();
+    return Boolean(
+      tab &&
+        !tab.userControl &&
+        props.browserTakeover?.tabId !== tab.id &&
+        browserControlForTab(tab)?.phase === "acting",
+    );
+  };
+  const takeOverLiveView = () => {
+    const tab = activeBrowserTab();
+    if (tab) void takeBrowserControl(tab.id);
+  };
+  const inactiveTabIds = createMemo(() => {
+    const activeId = activeBrowserTab()?.id;
+    const takeoverId = props.browserTakeover?.tabId;
+    return browserTabs()
+      .filter((tab) => tab.id !== activeId && tab.id !== takeoverId && !tab.userControl)
+      .map((tab) => tab.id);
+  });
   // Any member who sees a tab reads its profile label, from a host that serves `browser-profiles-v1`.
   const readTabProfiles = createMemo(() => {
     if (props.runtime) return props.runtime.browserProfiles?.tabProfiles;
@@ -121,8 +155,12 @@ export default function BrowserFullViewAdapter() {
       open={browserExpandedOpen()}
       macWindowControls={props.platform === "darwin"}
       shortcuts={props.runtime ? undefined : props.platform === "darwin" ? "mac" : "pc"}
-      tabs={tabs()}
+      tabs={shownTabs()}
       activeTab={activeBrowserTab()}
+      showAllTabs={showAllTabs()}
+      // A view with tabs of one agent only has nothing more to show.
+      onShowAllTabs={tabs().length > browserTabs().length || showAllTabs() ? setShowAllTabs : undefined}
+      onCloseInactiveTabs={inactiveTabIds().length > 0 ? () => closeTabs(inactiveTabIds()) : undefined}
       history={browserSessionHistory(serverId())}
       canReopen={canReopenBrowserTab(serverId())}
       controlForTab={browserControlForTab}
@@ -136,7 +174,13 @@ export default function BrowserFullViewAdapter() {
         const tab = tabs().find((entry) => entry.id === tabId);
         if (tab) void openTab(tab.url, { afterId: tab.id });
       }}
-      onMoveTab={(tabId, index) => moveBrowserTab(serverId(), tabs(), tabId, index)}
+      onMoveTab={(tabId, index) => {
+        // The index is a place in the row as it shows now. The order covers all tabs, so it moves the tab
+        // to the place of the tab it lands on.
+        const target = shownTabs()[index];
+        const to = target ? tabs().findIndex((tab) => tab.id === target.id) : index;
+        moveBrowserTab(serverId(), tabs(), tabId, to < 0 ? index : to);
+      }}
       onReopenTab={() => {
         const closed = takeClosedBrowserTab(serverId());
         if (closed) void openTab(closed.url, { index: closed.index });
@@ -155,6 +199,10 @@ export default function BrowserFullViewAdapter() {
       liveViewRuntime={props.browserRuntime ?? conversationPort().browser}
       liveViewClipboard={serverSupportsCapability(props.server, "browser-view-clipboard")}
       liveViewOnline={props.server?.state === "online"}
+      liveViewLocked={liveViewLocked()}
+      onLiveViewTakeOver={
+        serverSupportsCapability(props.server, BROWSER_USER_CONTROL_CAPABILITY) ? takeOverLiveView : undefined
+      }
       onBack={() => setActiveRightPanel("browser")}
       onEnterPip={props.runtime ? () => undefined : showBrowserPip}
       onSignInLocally={localSignIn.canStart(activeBrowserTab()) ? localSignIn.start : undefined}

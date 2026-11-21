@@ -2,6 +2,7 @@ import { buttonVariants, DropdownMenu, Ellipsis } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import { createSignal, Show } from "solid-js";
 import { BrowserShortcutHint } from "./BrowserTabIcon";
+import { BrowserTabListOptions } from "./BrowserTabMenu";
 import { type BrowserFullViewProps, browserTabStoppable } from "./browser-full-view-types";
 import { useBrowserPageCover } from "./browser-page-cover";
 
@@ -22,6 +23,15 @@ export function BrowserPageMenu(props: { view: BrowserFullViewProps; narrow: boo
       <DropdownMenu.Portal>
         <DropdownMenu.Content>
           <Show when={props.narrow}>
+            <DropdownMenu.Item
+              disabled={!tab() || tab()?.canGoBack === false}
+              onSelect={() => {
+                const current = tab();
+                if (current) props.view.onNavigate(current.id, "back");
+              }}
+            >
+              {t("browser.goBack")}
+            </DropdownMenu.Item>
             <DropdownMenu.Item
               disabled={!tab() || tab()?.canGoForward === false}
               onSelect={() => {
@@ -83,6 +93,9 @@ export function BrowserPageMenu(props: { view: BrowserFullViewProps; narrow: boo
                 {t("browser.signIn.local")}
               </DropdownMenu.Item>
             )}
+          </Show>
+          <Show when={props.narrow}>
+            <BrowserTabListOptions view={props.view} separatorBefore />
           </Show>
           <DropdownMenu.Separator />
           <DropdownMenu.Item onSelect={props.view.onBack}>{t("browser.hide")}</DropdownMenu.Item>

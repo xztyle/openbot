@@ -80,7 +80,7 @@ export function BrowserIslandFace(props: BrowserIslandFaceProps) {
     <Switch>
       <Match when={activity()}>
         {(current) => (
-          <div class="browser-dock-island-face browser-dock-island-activity">
+          <div class="browser-dock-island-face browser-dock-island-activity" data-control={current().control}>
             <output class="browser-dock-status">
               <Show when={current().control === "agent"} fallback={<MousePointer2 aria-hidden="true" />}>
                 <LoaderCircle class="browser-dock-spin" aria-hidden="true" />
@@ -96,7 +96,7 @@ export function BrowserIslandFace(props: BrowserIslandFaceProps) {
                   loading={props.handoffPending === true}
                   onClick={() => handoff()()}
                 >
-                  {current().control === "agent" ? t("island.action.takeOver") : t("prompt.browser.done")}
+                  {current().control === "agent" ? t("island.action.takeOver") : t("browser.dock.handBack")}
                 </Button>
               )}
             </Show>

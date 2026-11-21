@@ -372,3 +372,23 @@ body:has(.browser-dock-surface),
     transition: none;
   }
 }
+
+/* The person has the page: the bar says so plainly, and Hand back is the one strong button. */
+.browser-dock-island-activity:not([data-control="agent"]) .browser-dock-status {
+  color: var(--openbot-text-primary);
+  font-weight: 500;
+}
+
+.browser-dock-island-activity:not([data-control="agent"]) .browser-dock-status svg {
+  color: var(--openbot-accent);
+}
+
+.browser-dock-island-activity:not([data-control="agent"]) .browser-dock-handoff {
+  background: var(--openbot-accent);
+  color: var(--openbot-text-on-accent);
+}
+
+.browser-dock-island-activity:not([data-control="agent"]) .browser-dock-handoff:hover:not(:disabled) {
+  background: var(--openbot-accent-hover);
+  color: var(--openbot-text-on-accent);
+}

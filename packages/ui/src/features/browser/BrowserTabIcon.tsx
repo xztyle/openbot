@@ -4,6 +4,7 @@ import type { AgentProfile } from "@openbot/ui/data";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
 import { useText } from "@openbot/ui/text";
 import { Show } from "solid-js";
+import { AVATAR_HUE_CHOICES, avatarHueSwatch } from "../../bloub-avatar";
 import type { BrowserFullViewProps } from "./browser-full-view-types";
 import { browserDisplayUrl } from "./browser-suggestions";
 import { type BrowserShortcutName, browserShortcutGlyph } from "./browser-view-shortcuts";
@@ -22,13 +23,55 @@ export function BrowserOwnerIcon(props: { agent: AgentProfile | undefined; actin
   );
 }
 
+/** The site of an address, for its mark: the host without `www.`. Empty for a page that is not on the web. */
+function siteHost(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.hostname.replace(/^www\./u, "") : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The mark of a site: its first letter on a color that the host name selects, so each site keeps its
+ * color. The client does not load the page's own icon: that request would tell a third party which
+ * pages the agents visit.
+ */
+export function BrowserSiteIcon(props: { url: string; acting?: boolean }) {
+  const host = () => siteHost(props.url);
+  const hue = () => {
+    let hash = 0;
+    for (const character of host()) hash = (hash * 31 + (character.codePointAt(0) ?? 0)) >>> 0;
+    return (AVATAR_HUE_CHOICES[hash % AVATAR_HUE_CHOICES.length] ?? AVATAR_HUE_CHOICES[0])?.hue ?? 215;
+  };
+  return (
+    <Show when={host()} fallback={<Globe2 class="browser-full-owner-globe" aria-hidden="true" />}>
+      <span
+        class="browser-site-icon"
+        data-acting={props.acting ? "" : undefined}
+        style={{ background: avatarHueSwatch(hue()) }}
+        aria-hidden="true"
+      >
+        {host().charAt(0).toUpperCase()}
+      </span>
+    </Show>
+  );
+}
+
+/**
+ * The icon of a tab: a spinner while it loads, else the mark of its site. When the row shows the tabs
+ * of all agents, the avatar of the tab's agent is on the mark.
+ */
 export function BrowserTabIcon(props: { view: BrowserFullViewProps; tab: BrowserTab }) {
+  const acting = () => props.view.controlForTab(props.tab)?.phase === "acting";
+  const owner = () => (props.view.showAllTabs ? props.view.ownerForTab(props.tab) : undefined);
   return (
     <Show when={!props.tab.loading} fallback={<LoaderCircle class="browser-full-spin" aria-hidden="true" />}>
-      <BrowserOwnerIcon
-        agent={props.view.ownerForTab(props.tab)}
-        acting={props.view.controlForTab(props.tab)?.phase === "acting"}
-      />
+      <span class="browser-tab-icon">
+        <BrowserSiteIcon url={props.tab.url} acting={acting()} />
+        <Show when={owner()}>{(agent) => <AgentAvatar agent={agent()} class="browser-tab-icon-owner" />}</Show>
+      </span>
     </Show>
   );
 }

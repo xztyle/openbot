@@ -12,6 +12,8 @@ export function BrowserTabSwitcher(props: {
   view: BrowserFullViewProps;
   onNewTab: () => void;
   onClose: (tabIds: readonly string[]) => void;
+  /** Only the tab count, for the one bar of a phone. The address next to it names the page. */
+  compact?: boolean;
 }) {
   const { t } = useText();
   const tabTitle = useBrowserTabTitle();
@@ -37,24 +39,26 @@ export function BrowserTabSwitcher(props: {
     // Modal, so the focus goes into the list and Escape closes the list, not the browser view.
     <Popover.Root modal open={open()} onOpenChange={setOpen} placement="bottom-start" gutter={4}>
       <Popover.Trigger
-        class={`${buttonVariants({ variant: "ghost", size: "sm" })} browser-full-switch no-drag`}
+        class={`${buttonVariants({ variant: "ghost", size: props.compact ? "icon-sm" : "sm" })} browser-full-switch no-drag`}
         aria-label={label()}
       >
-        <Show
-          when={active()}
-          fallback={
-            <>
-              <Globe2 class="browser-full-owner-globe" aria-hidden="true" />
-              <span class="browser-full-switch-title">{t("browser.panel.label")}</span>
-            </>
-          }
-        >
-          {(tab) => (
-            <>
-              <BrowserTabIcon view={props.view} tab={tab()} />
-              <span class="browser-full-switch-title">{tabTitle(tab())}</span>
-            </>
-          )}
+        <Show when={!props.compact}>
+          <Show
+            when={active()}
+            fallback={
+              <>
+                <Globe2 class="browser-full-owner-globe" aria-hidden="true" />
+                <span class="browser-full-switch-title">{t("browser.panel.label")}</span>
+              </>
+            }
+          >
+            {(tab) => (
+              <>
+                <BrowserTabIcon view={props.view} tab={tab()} />
+                <span class="browser-full-switch-title">{tabTitle(tab())}</span>
+              </>
+            )}
+          </Show>
         </Show>
         <span class="browser-full-switch-count" aria-hidden="true">
           {props.view.tabs.length}

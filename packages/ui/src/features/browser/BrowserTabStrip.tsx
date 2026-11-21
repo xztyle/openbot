@@ -5,7 +5,7 @@ import { clamp, motionDuration, prefersReducedMotion } from "@openbot/ui/utils";
 import { createEffect, createSignal, createStore, For, onSettled, Show } from "solid-js";
 import { browserProfileColor } from "./BrowserProfileColor";
 import { BrowserTabIcon, useBrowserTabTitle } from "./BrowserTabIcon";
-import { BrowserTabMenu } from "./BrowserTabMenu";
+import { BrowserTabListOptions, BrowserTabMenu } from "./BrowserTabMenu";
 import { type BrowserFullViewProps, browserTabProfileLabel } from "./browser-full-view-types";
 import { useBrowserPageCover } from "./browser-page-cover";
 
@@ -97,8 +97,9 @@ function createChipMotion(chips: () => HTMLElement[]) {
  * - A middle click, Delete or the X closes a tab. After a close with the pointer, the chips keep their
  *   width until the pointer leaves the row, so the next X is under the pointer.
  * - A right click (or Control-click) opens the tab menu.
- * - When the chips do not fit, the row scrolls (also with a vertical wheel), its edges fade, and a
- *   menu lists the tabs out of view.
+ * - When the chips do not fit, the row scrolls (also with a vertical wheel), its edges fade, and the
+ *   "N more" menu lists the tabs out of view. The same menu shows the tabs of all agents and closes
+ *   the inactive tabs.
  */
 export function BrowserTabStrip(props: {
   view: BrowserFullViewProps;
@@ -109,15 +110,7 @@ export function BrowserTabStrip(props: {
   const tabTitle = useBrowserTabTitle();
   const [row, setRow] = createStore<TabRow>({ hidden: [], fadeStart: false, fadeEnd: false, frozen: 0 });
   const [hiddenMenuOpen, setHiddenMenuOpen] = createSignal(false);
-  // The menu goes away with its button when every tab fits again, without a close, and a new button
-  // starts closed.
-  createEffect(
-    () => row.hidden.length > 0,
-    (shown) => {
-      if (!shown) setHiddenMenuOpen(false);
-    },
-  );
-  useBrowserPageCover(() => hiddenMenuOpen() && row.hidden.length > 0);
+  useBrowserPageCover(hiddenMenuOpen);
   let strip: HTMLElement | undefined;
   let drag: TabDrag | undefined;
   let swallowClick = false;
@@ -413,25 +406,9 @@ export function BrowserTabStrip(props: {
                   }}
                   onDragStart={(event: DragEvent) => event.preventDefault()}
                 >
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    class="side-panel-tab-close"
-                    tabindex={-1}
-                    aria-hidden="true"
-                    disabled={!canClose()}
-                    title={
-                      tab().title ? t("browser.tab.closeNamed", { name: tab().title }) : t("browser.tab.closeUnnamed")
-                    }
-                    data-cuelume-close=""
-                    data-cuelume-emphasis="subtle"
-                    onClick={() => closeWithPointer(tab().id)}
-                  >
-                    <span class="side-panel-tab-icon">
-                      <BrowserTabIcon view={props.view} tab={tab()} />
-                    </span>
-                    <X class="side-panel-tab-x" aria-hidden="true" />
-                  </Button>
+                  <span class="browser-full-chip-icon">
+                    <BrowserTabIcon view={props.view} tab={tab()} />
+                  </span>
                   <Tabs.Trigger
                     as="button"
                     value={tab().id}
@@ -461,6 +438,24 @@ export function BrowserTabStrip(props: {
                   >
                     <span class="side-panel-tab-label">{title()}</span>
                   </Tabs.Trigger>
+                  <Show when={canClose()}>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      type="button"
+                      class="browser-full-chip-close"
+                      tabindex={-1}
+                      aria-hidden="true"
+                      title={
+                        tab().title ? t("browser.tab.closeNamed", { name: tab().title }) : t("browser.tab.closeUnnamed")
+                      }
+                      data-cuelume-close=""
+                      data-cuelume-emphasis="subtle"
+                      onClick={() => closeWithPointer(tab().id)}
+                    >
+                      <X aria-hidden="true" />
+                    </Button>
+                  </Show>
                 </ContextMenu.Trigger>
                 <BrowserTabMenu view={props.view} tab={tab()} onNewTab={props.onNewTab} onClose={close} />
               </ContextMenu.Root>
@@ -468,35 +463,42 @@ export function BrowserTabStrip(props: {
           }}
         </For>
       </Tabs.List>
-      <Show when={row.hidden.length > 0}>
-        <DropdownMenu.Root modal={false} placement="bottom-end" gutter={4} onOpenChange={setHiddenMenuOpen}>
-          <DropdownMenu.Trigger
-            class={`${buttonVariants({ variant: "ghost", size: "icon-sm" })} no-drag`}
-            aria-label={t("browser.tabs.more", { count: row.hidden.length })}
-            title={t("browser.tabs.showHidden")}
-          >
-            <ChevronDown aria-hidden="true" />
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content class="browser-full-hidden-tabs">
-              <For each={hiddenTabs()} keyed={(tab) => tab.id}>
-                {(tab) => (
-                  <DropdownMenu.Item
-                    aria-current={activeId() === tab().id ? "true" : undefined}
-                    onSelect={() => {
-                      props.view.onActivateTab(tab().id);
-                      reveal(tab().id);
-                    }}
-                  >
-                    <BrowserTabIcon view={props.view} tab={tab()} />
-                    <span>{tabTitle(tab())}</span>
-                  </DropdownMenu.Item>
-                )}
-              </For>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
-      </Show>
+      <DropdownMenu.Root modal={false} placement="bottom-end" gutter={4} onOpenChange={setHiddenMenuOpen}>
+        <DropdownMenu.Trigger
+          class={`${buttonVariants({ variant: "ghost", size: row.hidden.length > 0 ? "xs" : "icon-sm" })} browser-full-more no-drag`}
+          aria-label={
+            row.hidden.length > 0 ? t("browser.tabs.more", { count: row.hidden.length }) : t("browser.tabs.menu")
+          }
+          title={row.hidden.length > 0 ? t("browser.tabs.showHidden") : t("browser.tabs.menu")}
+        >
+          <Show when={row.hidden.length > 0}>
+            <span>{t("browser.tabs.moreVisible", { count: row.hidden.length })}</span>
+          </Show>
+          <ChevronDown aria-hidden="true" />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content class="browser-full-hidden-tabs">
+            <For each={hiddenTabs()} keyed={(tab) => tab.id}>
+              {(tab) => (
+                <DropdownMenu.Item
+                  aria-current={activeId() === tab().id ? "true" : undefined}
+                  onSelect={() => {
+                    props.view.onActivateTab(tab().id);
+                    reveal(tab().id);
+                  }}
+                >
+                  <BrowserTabIcon view={props.view} tab={tab()} />
+                  <span class="browser-full-hidden-title">{tabTitle(tab())}</span>
+                </DropdownMenu.Item>
+              )}
+            </For>
+            <Show when={hiddenTabs().length > 0}>
+              <DropdownMenu.Separator />
+            </Show>
+            <BrowserTabListOptions view={props.view} />
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
     </>
   );
 }

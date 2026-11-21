@@ -52,6 +52,8 @@ export interface ChannelsPort {
         | "workspaceSecretSave"
         | "workspaceSecretRemove"
         | "workspaceDecisions"
+        | "workspaceLoops"
+        | "workspaceLoopAction"
         | "workspaceSidebar"
         | "setWorkspaceSidebar"
         | "workspaceSpaces"

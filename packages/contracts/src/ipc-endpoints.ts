@@ -573,6 +573,7 @@ import type {
   WorkspaceSteps,
   WorkspaceStepsInput,
 } from "./ipc-workspace-fleet";
+import type { WorkspaceLoopAction, WorkspaceLoopActionResult, WorkspaceLoopsInput } from "./ipc-workspace-loops";
 import type {
   WorkspacePins,
   WorkspaceSavedInput,
@@ -1455,6 +1456,9 @@ export const IPC_ENDPOINTS = {
     workspaceSecretRemove: scopedRequest<WorkspaceSecretInput, void>()("agent:workspace:secret-remove"),
     // The decisions that agents made without a person in a hands-off channel the reader can see.
     workspaceDecisions: scopedRequest<WorkspaceDecisionsInput, WorkspaceDecisions>()("agent:workspace:decisions"),
+    // The loops (pipelines) of a space: a joined server answers through workspace-loops-v1 (`fork-host-v1`).
+    workspaceLoops: scopedRequest<WorkspaceLoopsInput, WorkspaceLoopActionResult>()("agent:workspace:loops"),
+    workspaceLoopAction: scopedRequest<WorkspaceLoopAction, WorkspaceLoopActionResult>()("agent:workspace:loop-action"),
     // The reader's own sidebar order and mutes, kept on the host per member. A joined server answers
     // through workspace-sidebar-v1 (`fork-host-v1`); one without it fails, and the window keeps the
     // value on this computer.

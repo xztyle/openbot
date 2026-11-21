@@ -4,6 +4,8 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { migrateOpenBotDatabase } from "./openbot-database-schema";
 
+const LOOP_TABLES = { loops: [], loop_items: [], loop_events: [], loop_experiments: [], loop_decisions: [] };
+
 // Failure modes: the upgrade changes or loses a row of any table; the index misses a stored message or
 // finds a deleted, streaming, empty or activity one; a later insert, edit, deletion or completion of a
 // streaming answer leaves the index behind; a failed upgrade leaves the index, its triggers or the
@@ -108,7 +110,7 @@ function searchObjects(db: DatabaseSync) {
 }
 
 function expectHealthy(db: DatabaseSync): void {
-  expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 54 });
+  expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 55 });
   expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
   expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
   expect(db.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
@@ -128,7 +130,7 @@ describe("channel search migration", () => {
       if (version < 52) migrateUpTo(db, 52);
       const before = contents(db);
       migrateOpenBotDatabase(db);
-      expect(contents(db)).toEqual({ ...before, projection_channel_saved: [] });
+      expect(contents(db)).toEqual({ ...before, projection_channel_saved: [], ...LOOP_TABLES });
       expect(found(db, "menu")).toEqual(["plain", "reply"]);
       // Diacritics fold: "cafe" finds "Café".
       expect(found(db, "cafe")).toEqual(["plain"]);
@@ -150,7 +152,7 @@ describe("channel search migration", () => {
     seedChannel(db);
     const before = contents(db);
     migrateOpenBotDatabase(db);
-    expect(contents(db)).toEqual({ ...before, projection_channel_saved: [] });
+    expect(contents(db)).toEqual({ ...before, projection_channel_saved: [], ...LOOP_TABLES });
     expect(found(db, "menu")).toEqual(["plain", "reply"]);
     expectHealthy(db);
   });
@@ -201,7 +203,7 @@ describe("channel search migration", () => {
     expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
     db.exec("DROP TRIGGER fail_marker");
     migrateOpenBotDatabase(db);
-    expect(contents(db)).toEqual({ ...before, projection_channel_saved: [] });
+    expect(contents(db)).toEqual({ ...before, projection_channel_saved: [], ...LOOP_TABLES });
     expect(found(db, "menu")).toEqual(["plain", "reply"]);
     expectHealthy(db);
   });
@@ -210,9 +212,9 @@ describe("channel search migration", () => {
     const db = databaseAt(52);
     seedChannel(db);
     const before = contents(db);
-    db.exec("INSERT INTO schema_migrations VALUES(55,'now')");
+    db.exec("INSERT INTO schema_migrations VALUES(56,'now')");
     expect(() => migrateOpenBotDatabase(db)).toThrow("newer than this application supports");
-    db.exec("DELETE FROM schema_migrations WHERE version=55; DELETE FROM schema_migrations WHERE version=20");
+    db.exec("DELETE FROM schema_migrations WHERE version=56; DELETE FROM schema_migrations WHERE version=20");
     expect(() => migrateOpenBotDatabase(db)).toThrow("missing version 20");
     expect(contents(db)).toEqual(before);
     expect(searchObjects(db)).toEqual([]);

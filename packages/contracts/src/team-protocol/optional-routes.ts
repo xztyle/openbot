@@ -80,6 +80,7 @@ import { WEBHOOK_TESTS_CODECS } from "./webhook-tests-v1";
 import { WORKFLOWS_CODECS } from "./workflows-v1";
 import { WORKSPACE_DIRECTORY_CODECS } from "./workspace-directory-v1";
 import { WORKSPACE_FLEET_CODECS } from "./workspace-fleet-v1";
+import { WORKSPACE_LOOPS_CODECS } from "./workspace-loops-v1";
 import { WORKSPACE_READ_STATE_CODECS } from "./workspace-read-state-v1";
 import { WORKSPACE_SAVED_CODECS } from "./workspace-saved-v1";
 import { WORKSPACE_SEARCH_CODECS } from "./workspace-search-v1";
@@ -168,6 +169,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...WORKSPACE_CODECS,
   ...WORKSPACE_FLEET_CODECS,
   ...OWNER_AWAY_CODECS,
+  ...WORKSPACE_LOOPS_CODECS,
   ...WORKSPACE_SIDEBAR_CODECS,
   ...WORKSPACE_SPACES_CODECS,
   ...WORKSPACE_READ_STATE_CODECS,

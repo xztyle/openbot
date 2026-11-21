@@ -56,6 +56,7 @@ import type {
 import type { Logger } from "@openbot/logging";
 import type { AgentService } from "../../backend/agent-service";
 import type { BrowserHost } from "../../backend/browser-host";
+import type { LoopService } from "../../backend/loops/loop-service";
 import type { MailboxStore } from "../../backend/mailbox-store";
 import type { MessagingService } from "../../backend/messaging/messaging-service";
 import type { RoutineFlowsHandle } from "../../backend/routine-flows/routine-flows";
@@ -186,6 +187,8 @@ export type TeamApiAgents = TeamApiAgentMethods & {
   >;
   /** workspace-fleet-v1 (`fork-host-v1`): the agent key store, for the owner and the admins. */
   secrets: Pick<WorkspaceSecretsService, "list" | "read" | "save" | "remove">;
+  /** workspace-loops-v1 (`fork-host-v1`): the loops of each space. */
+  loops?: Pick<LoopService, "board" | "apply">;
   on: (event: "event", listener: (event: AgentEvent) => void) => void;
   off: (event: "event", listener: (event: AgentEvent) => void) => void;
 } & Partial<Pick<AgentService, "setAgentsSleeping" | "modelSavings" | "playbooks" | "reviews">>;

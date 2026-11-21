@@ -107,6 +107,8 @@ export function createWebChannelsPort(
       workspaceSecretSave: channels?.workspaceSecretSave,
       workspaceSecretRemove: channels?.workspaceSecretRemove,
       workspaceDecisions: channels?.workspaceDecisions,
+      workspaceLoops: channels?.workspaceLoops,
+      workspaceLoopAction: channels?.workspaceLoopAction,
       workspaceSidebar: channels?.workspaceSidebar,
       setWorkspaceSidebar: channels?.setWorkspaceSidebar,
       workspaceSpaces: channels?.workspaceSpaces,

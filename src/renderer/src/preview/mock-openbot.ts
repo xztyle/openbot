@@ -1962,6 +1962,18 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       workspaceSecretRemove: async ({ scope, name }) => {
         mockSecrets.delete(`${scope}/${name}`);
       },
+      workspaceLoops: async ({ spaceId }) => ({
+        spaceId,
+        loops: [],
+        items: [],
+        experiments: [],
+        decisions: [],
+        events: [],
+        templates: [],
+      }),
+      workspaceLoopAction: async () => {
+        throw new Error("Loops are not available in the preview.");
+      },
       workspaceDecisions: async () => {
         const [first] = agents;
         if (!first) return { decisions: [] };

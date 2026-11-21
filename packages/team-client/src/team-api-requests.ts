@@ -36,6 +36,7 @@ import {
   decodeWorkspaceDecisions,
   decodeWorkspaceDmAgents,
   decodeWorkspaceFleet,
+  decodeWorkspaceLoops,
   decodeWorkspacePins,
   decodeWorkspaceReadPosition,
   decodeWorkspaceSavedPage,
@@ -90,6 +91,7 @@ import { CONTEXT_RESET_ROUTES } from "@openbot/contracts/team-protocol/context-r
 import { ROUTINE_FLOWS_ROUTES } from "@openbot/contracts/team-protocol/routine-flows-v1";
 import { decodeTeamProtocolV2Json, type TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { WORKSPACE_FLEET_ROUTES } from "@openbot/contracts/team-protocol/workspace-fleet-v1";
+import { WORKSPACE_LOOPS_ROUTES } from "@openbot/contracts/team-protocol/workspace-loops-v1";
 import { WORKSPACE_READ_STATE_ROUTES } from "@openbot/contracts/team-protocol/workspace-read-state-v1";
 import { WORKSPACE_SAVED_ROUTES } from "@openbot/contracts/team-protocol/workspace-saved-v1";
 import { WORKSPACE_SEARCH_ROUTES } from "@openbot/contracts/team-protocol/workspace-search-v1";
@@ -349,6 +351,8 @@ export type TeamChannelsApi = Pick<
   | "workspaceSecretSave"
   | "workspaceSecretRemove"
   | "workspaceDecisions"
+  | "workspaceLoops"
+  | "workspaceLoopAction"
   | "workspaceSidebar"
   | "setWorkspaceSidebar"
   | "workspaceSpaces"
@@ -435,6 +439,9 @@ export function teamChannelsApi(request: TeamApiRequest, options: TeamChannelsOp
       await workspacePost(WORKSPACE_FLEET_ROUTES.secretRemove, ignoreResponse, input);
     },
     workspaceDecisions: (input) => workspacePost(WORKSPACE_FLEET_ROUTES.decisions, decodeWorkspaceDecisions, input),
+    // A fork host built before workspace-loops-v1 answers 404; the caller then offers no Loops view.
+    workspaceLoops: (input) => workspacePost(WORKSPACE_LOOPS_ROUTES.board, decodeWorkspaceLoops, input),
+    workspaceLoopAction: (action) => workspacePost(WORKSPACE_LOOPS_ROUTES.action, decodeWorkspaceLoops, action),
     // A fork host built before workspace-sidebar-v1 answers 404; the caller then keeps the value locally.
     workspaceSidebar: () => workspacePost(WORKSPACE_SIDEBAR_ROUTES.read, decodeWorkspaceSidebar, {}),
     setWorkspaceSidebar: (prefs) => workspacePost(WORKSPACE_SIDEBAR_ROUTES.save, decodeWorkspaceSidebar, prefs),

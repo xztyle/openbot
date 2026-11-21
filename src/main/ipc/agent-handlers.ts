@@ -29,6 +29,7 @@ import {
   decodeWorkspaceDecisions,
   decodeWorkspaceDmAgents,
   decodeWorkspaceFleet,
+  decodeWorkspaceLoops,
   decodeWorkspaceSecrets,
   decodeWorkspaceSecretValue,
   decodeWorkspaceSidebar,
@@ -56,6 +57,8 @@ import {
   parseWorkspaceArtifactsInput,
   parseWorkspaceDecisionsInput,
   parseWorkspaceFleetInput,
+  parseWorkspaceLoopAction,
+  parseWorkspaceLoopsInput,
   parseWorkspaceSecretInput,
   parseWorkspaceSecretSaveInput,
   parseWorkspaceSpaceAction,
@@ -83,6 +86,7 @@ import {
   WORKSPACE_FLEET_CAPABILITY,
   WORKSPACE_FLEET_ROUTES,
 } from "@openbot/contracts/team-protocol/workspace-fleet-v1";
+import { WORKSPACE_LOOPS_ROUTES } from "@openbot/contracts/team-protocol/workspace-loops-v1";
 import {
   WORKSPACE_SIDEBAR_CAPABILITY,
   WORKSPACE_SIDEBAR_ROUTES,
@@ -528,6 +532,17 @@ export function agentIpcHandlers({
         local: (input) => service.workspace.decisions(input, host.channelViewer()),
         remote: (input, serverId) =>
           remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.decisions, input, decodeWorkspaceDecisions),
+      }),
+      // The person at this computer is the host's owner, so every loop action is theirs to take.
+      workspaceLoops: scopedHandler(parseWorkspaceLoopsInput, {
+        local: (input) => service.loops.board(input.spaceId),
+        remote: (input, serverId) =>
+          remoteWorkspace(serverId, WORKSPACE_LOOPS_ROUTES.board, input, decodeWorkspaceLoops),
+      }),
+      workspaceLoopAction: scopedHandler(parseWorkspaceLoopAction, {
+        local: (action) => service.loops.apply(action, { kind: "person" }),
+        remote: (action, serverId) =>
+          remoteWorkspace(serverId, WORKSPACE_LOOPS_ROUTES.action, action, decodeWorkspaceLoops),
       }),
       workspaceAgentPairs: scopedHandler(parseWorkspaceAgentPairsInput, {
         local: (input) => service.workspace.agentPairs(input),

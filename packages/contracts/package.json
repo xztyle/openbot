@@ -127,6 +127,7 @@
     "./team-protocol/claude-context-v1": "./src/team-protocol/claude-context-v1.ts",
     "./team-protocol/workspace-v1": "./src/team-protocol/workspace-v1.ts",
     "./team-protocol/workspace-fleet-v1": "./src/team-protocol/workspace-fleet-v1.ts",
+    "./team-protocol/workspace-loops-v1": "./src/team-protocol/workspace-loops-v1.ts",
     "./team-protocol/workspace-sidebar-v1": "./src/team-protocol/workspace-sidebar-v1.ts",
     "./team-protocol/workspace-spaces-v1": "./src/team-protocol/workspace-spaces-v1.ts",
     "./team-protocol/workspace-read-state-v1": "./src/team-protocol/workspace-read-state-v1.ts",

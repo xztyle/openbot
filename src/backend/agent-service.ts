@@ -298,6 +298,7 @@ import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "./securit
 import type { SidebarLayoutStore } from "./sidebar-layout-store";
 import { agentSeesChannel } from "./spaces/space-scope";
 import { SpaceService } from "./spaces/space-service";
+import type { TrustService } from "./trust/trust-service";
 import type { VaultItems } from "./vault-items";
 import type { WorkflowRunEnd } from "./workflows/workflows";
 import { WorkspaceInsights, type WorkspaceInsightsOptions } from "./workspace-insights";
@@ -349,6 +350,8 @@ export interface AgentServiceOptions {
   eventCheckTemplates?: EventCheckTemplates;
   /** Where changes that move trust are recorded. Without it nothing is recorded. */
   securityAudit?: SecurityAuditSink;
+  /** The trust policy that gates spend, publishing, email and deletes, and its audit trail. */
+  trust?: TrustService;
   store: AgentStore;
   mailbox: MailboxStore;
   browser: AgentBrowserHost;
@@ -1805,6 +1808,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       ...(options.screenCapture === undefined ? {} : { screenCapture: options.screenCapture }),
       mcpServers: mcpServersFromGateway(this.#mcp, options.prepareMcpTest),
       apiKeys: options.agentApiKeys ?? null,
+      trust: options.trust ?? null,
       hooks: {
         listAgents: () => this.listAgents(),
         listModels: () => this.listModels(),

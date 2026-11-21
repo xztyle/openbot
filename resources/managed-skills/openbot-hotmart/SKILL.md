@@ -103,8 +103,9 @@ Every change needs `--approved` (exit code 3 without it), and goes to `audit.jso
 - `hotmart create-coupon <product id> --code BLACK10 --discount 10 [--start 2026-11-20 --end 2026-11-30] [--offer-ids a,b]`
   and `hotmart delete-coupon <coupon id>`.
 
-Before you add `--approved`, get the person's approval with `openbot.ask_ui` (a confirm block with the sale or
-subscriber, the product, the value and the reason). In a hands-off channel, where nobody answers, decide yourself
+Before you add `--approved`, get the person's approval with `openbot.request_decision` (the sale or subscriber,
+the product, the value in `amount`, and the reason). Atelier's trust policy also checks refunds, coupons and
+cancellations at the tool layer. In a hands-off channel, where nobody answers, decide yourself
 only within the person's saved rules and call `openbot.log_decision` once for each change. Never refund or cancel
 without one of these. Do not edit `audit.jsonl`.
 

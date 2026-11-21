@@ -214,6 +214,70 @@ export const goalsToolSchema = z.strictObject({
   note: z.string().trim().max(200).optional().describe("For progress: what moved it, in a few words."),
 });
 
+/** `request_decision`: the action ids of its card besides the options (`option1`…`option3`). */
+export const REQUEST_DECISION_ACTIONS = { change: "change", no: "no" } as const;
+
+export const requestDecisionToolSchema = z.strictObject({
+  title: uiTextSchema(UI_BLOCK_LIMITS.title).describe(
+    "The decision in one short question, such as Launch the Black Friday ad set at 7 USD a day?",
+  ),
+  options: z
+    .array(
+      z.strictObject({
+        label: uiLabelSchema.describe("The button, such as Approve, or Launch at 7 USD/day."),
+        consequence: z.string().max(400).optional().describe("What happens if the person picks it, in one line."),
+      }),
+    )
+    .min(1)
+    .max(3)
+    .describe("One option for a yes/no decision (its button approves), or up to three alternatives."),
+  defaultOption: z
+    .number()
+    .int()
+    .min(1)
+    .max(4)
+    .optional()
+    .describe("The option (1 to 3, or 4 for No) that Atelier picks when nobody answers in timeoutMinutes."),
+  timeoutMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 60)
+    .optional()
+    .describe(
+      "Wait at most this long, then take defaultOption. Without it the card waits for the answer. A timed-out answer never approves money or a go-live.",
+    ),
+  amount: z
+    .strictObject({
+      value: z.number().min(0),
+      currency: z
+        .string()
+        .regex(/^[A-Za-z]{3}$/u)
+        .optional(),
+      platform: z.string().max(32).optional().describe("Such as meta, google, hotmart."),
+      perDay: z.boolean().optional().describe("True when the amount is per day, as an ad budget."),
+    })
+    .optional(),
+  previewUrl: z
+    .string()
+    .max(2_048)
+    .regex(/^https?:\/\/\S+$/u)
+    .optional()
+    .describe("The staged preview the person checks before it goes live."),
+  preview: z
+    .string()
+    .max(UI_BLOCK_LIMITS.preview)
+    .optional()
+    .describe("The text that goes out, such as the email body. Markdown."),
+  goLive: z
+    .enum(["landings", "ads", "emails"])
+    .optional()
+    .describe("Sandbox first: approving lets you publish this staged landing, ad or email for the policy's pass time."),
+  ticket: z.string().max(64).optional().describe("The Motion ticket of the work, such as UO-123."),
+  changeLabel: uiLabelSchema.optional().describe("The button that asks for changes. Default: Change…"),
+  noLabel: uiLabelSchema.optional().describe("The button that says no. Default: No"),
+});
+
 export const askUiToolSchema = z.object({
   private: privateQuestionSchema,
   blockId: uiBlockIdSchema.optional().describe("Your id for this block. Atelier makes one when you omit it."),
@@ -794,6 +858,16 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
       "Write in the user's language. It works only when the user turned it on in your settings, and not in a Slack, Discord or Telegram chat. In a channel, each member who reads the channel sees it.",
     ].join(" "),
     shape: acknowledgeRequestToolSchema.shape,
+  },
+  {
+    name: "request_decision",
+    description: [
+      "Ask the owner for a decision that only they can make: spend, a payment, a launch, a go-live, an email to customers, or a choice between options with consequences. The card shows in this chat and in Needs you, and the owner gets a push; they answer with one tap.",
+      "Use it instead of a message such as I need you to decide, and instead of ask_ui for these decisions. Write every label in the person's language. Put the money in amount and the staged preview in previewUrl or preview.",
+      "Your work waits until the answer, or until timeoutMinutes when you set it with defaultOption. Continue only with work that does not depend on it in other turns.",
+      'The result is JSON {"status":"answered","option":1-3|"change"|"no","label",…}: an option means do it; "change" means ask in one sentence what to change and end the turn; "no" means do not do it. With goLive and an approved option, run the publish command now. {"status":"skipped"} or {"status":"expired"} means it was not decided.',
+    ].join(" "),
+    shape: requestDecisionToolSchema.shape,
   },
   {
     name: "ask_ui",

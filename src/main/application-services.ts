@@ -20,6 +20,8 @@ import { createRoutineFlows, type RoutineFlowsHandle } from "../backend/routine-
 import { RoutineResultStore } from "../backend/routine-results/routine-result-store";
 import { createRoutineResults, type RoutineResultsHandle } from "../backend/routine-results/routine-results";
 import { SecurityAuditLog } from "../backend/security-audit-log";
+import { TrustAuditLog } from "../backend/trust/trust-audit-log";
+import { TrustService } from "../backend/trust/trust-service";
 import { WorkflowRunStore } from "../backend/workflows/workflow-run-store";
 import { WorkflowStore } from "../backend/workflows/workflow-store";
 import { WorkflowTriggers, workflowScheduleDueAt } from "../backend/workflows/workflow-triggers";
@@ -1787,7 +1789,14 @@ export async function createApplicationServices({
     await Effect.runPromise(workspaceThumbnails.stop());
     workspaceThumbnailCapturer.close();
   });
+  // Trust and control: the policy file and the append-only audit trail of this profile.
+  const trust = new TrustService({
+    file: join(app.getPath("userData"), "trust-policy.json"),
+    audit: new TrustAuditLog(join(app.getPath("userData"), "trust-audit")),
+    directory: { agents: () => store.list(), spaceOf: (agentId) => store.spaces.agentSpaceId(agentId) },
+  });
   const service: AgentService = new AgentService({
+    trust,
     store,
     mailbox,
     browser,
@@ -2602,6 +2611,7 @@ export async function createApplicationServices({
     chatMcp: chatMcp?.api,
     eventChecks: service.eventChecks,
     securityAudit,
+    trust,
     // Present, so the host advertises the push routes. The key pair and the subscriptions are in a file
     // of this profile, not in the database.
     webPush,

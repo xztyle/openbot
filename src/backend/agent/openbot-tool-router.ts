@@ -73,6 +73,8 @@ import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "../securi
 import { agentSeesChannel, crossSpaceRefusal } from "../spaces/space-scope";
 import type { StoredStateFailure } from "../stored-state-effects";
 import type { SharePreviewDrawer } from "../workspace-thumbnails";
+import type { TrustService } from "../trust/trust-service";
+import { TRUST_CHECK_METHOD, TrustToolGate } from "../trust/trust-tool-gate";
 import { AgentInterruptTool } from "./agent-interrupt-tool";
 import type { AgentMemories } from "./agent-memories";
 import { type ApprovalAutomationPolicy, NO_APPROVAL_AUTOMATION } from "./approval-automation";
@@ -275,6 +277,8 @@ export interface OpenBotToolRouterOptions {
   ownerAway?: OwnerAwayService | null | undefined;
   /** Draws the pages of `share_preview`; null where no window can draw one. */
   sharePreviews?: SharePreviewDrawer | null | undefined;
+  /** The trust policy and audit trail; null where nothing enforces one. */
+  trust?: TrustService | null | undefined;
   hooks: OpenBotToolRouterHooks;
 }
 
@@ -329,6 +333,7 @@ export class OpenBotToolRouter {
   readonly #hooks: OpenBotToolRouterHooks;
   readonly #interruptTool: AgentInterruptTool;
   readonly #ownerTools: OwnerTools;
+  readonly #trust: TrustToolGate | null;
 
   constructor(options: OpenBotToolRouterOptions) {
     this.#history = new HistoryTools({
@@ -374,6 +379,16 @@ export class OpenBotToolRouter {
       conversation: options.conversation,
       teamChannel: (agentId, turnId) => options.channels.teamContext(agentId, turnId)?.channelId ?? null,
     });
+    this.#trust = options.trust
+      ? new TrustToolGate({
+          trust: options.trust,
+          attention: options.attention,
+          agentForThread: (threadId) => options.conversation.agentForThread(threadId),
+          publicThreadId: (agentId, threadId) => options.conversation.publicThreadId(agentId, threadId),
+          listTabs: () => options.browser.listTabs(),
+          messagingThread: (threadId) => options.messaging.linkForThread(threadId) !== null,
+        })
+      : null;
     this.#interruptTool = new AgentInterruptTool({
       store: options.store,
       mailbox: options.mailbox,
@@ -526,6 +541,8 @@ export class OpenBotToolRouter {
               const arrivedAt = Date.now();
               logger.info("A browser takeover call arrived.", takeoverContext);
               const result = yield* this.#attention.surfaceBrowserTakeover(client, toolRequest);
+              if (toolRequest.params.tool === "submit_secret")
+                this.#trust?.recordSecret(agentId, toolRequest.params, result);
               logger.info("A browser takeover call answered.", {
                 ...takeoverContext,
                 success: result.success,
@@ -548,6 +565,12 @@ export class OpenBotToolRouter {
               threadId: this.#conversation.publicThreadId(agentId, toolRequest.params.threadId),
               ownerAgentId: agentId,
             };
+            // The trust policy checks a payment or an action on an ads or checkout page first.
+            const refused = this.#trust ? yield* this.#trust.checkBrowser(client, toolRequest, params, agentId) : null;
+            if (refused) {
+              if (!toolRequest.signal?.aborted && client.running) client.respond(toolRequest.id, refused);
+              return;
+            }
             // While the user controls the tab, the call waits for the release and does not run.
             const userControl = (tabId: string) =>
               this.#browser.awaitUserControlRelease(tabId).pipe(Effect.as(browserUserControlResult()));
@@ -595,6 +618,19 @@ export class OpenBotToolRouter {
             // Every provider gets ask_ui, Claude too: its call arrives here through the SDK MCP server.
             if (toolRequest.params.tool === "ask_ui") {
               this.#askUi(client, toolRequest, toolRequest.params);
+              return;
+            }
+            if (toolRequest.params.tool === "request_decision") {
+              if (this.#trust) this.#trust.requestDecision(client, toolRequest, toolRequest.params);
+              else
+                client.respond(toolRequest.id, openBotToolFailure("This Atelier server cannot show decision cards."));
+              return;
+            }
+            const refused = this.#trust
+              ? yield* this.#trust.checkOpenBotTool(client, toolRequest, toolRequest.params)
+              : null;
+            if (refused) {
+              if (!toolRequest.signal?.aborted && client.running) client.respond(toolRequest.id, refused);
               return;
             }
             if (toolRequest.params.tool === "acknowledge_request") {
@@ -653,6 +689,10 @@ export class OpenBotToolRouter {
           return;
         case "mcpServer/elicitation/request":
           this.#attention.surfaceMcpElicitation(client, request);
+          return;
+        case TRUST_CHECK_METHOD:
+          if (this.#trust) yield* this.#trust.handleTrustCheck(client, request);
+          else client.respond(request.id, { decision: "allow" });
           return;
         case "currentTime/read":
           client.respond(request.id, { currentTimeAt: Math.floor(Date.now() / 1_000) });

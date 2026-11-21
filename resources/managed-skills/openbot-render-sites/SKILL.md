@@ -78,6 +78,12 @@ Telegram chat.
 
 ## Publish a new landing
 
+**Sandbox first.** Atelier's trust policy holds a public landing until the owner approves a preview (on by
+default). Create or deploy the staging copy `<name>-preview` first (it needs no approval), then call
+`openbot.request_decision` with `previewUrl` set to its `onrender.com` URL and `goLive: "landings"`. When the owner
+approves, run the real `create`, `deploy` or `domain add` within the pass time the result names. Without the
+approval the command is refused with these steps.
+
 1. **Build the folder.** Put the finished site in one folder, with `index.html` at its top and relative links to
    its CSS, images and scripts. Plain HTML needs no build. For a framework (for example Vite), push the source and
    add `--build-command "npm ci && npm run build" --publish-path dist`. `.git` and `node_modules` are not sent.

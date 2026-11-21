@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import {
   type CanUseTool,
   createSdkMcpServer,
+  type HookCallbackMatcher,
   type ModelInfo,
   type Options,
   type PermissionResult,
@@ -133,6 +134,7 @@ import {
   toProviderClientOperationError,
 } from "./provider-client-effects";
 import type { ReadProviderHistory } from "./provider-history";
+import { classifyToolUse, TRUST_CHECK_METHOD } from "./trust/trust-classifier";
 
 const execFileAsync = promisify(execFile);
 const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -993,6 +995,34 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     }
     const input = new AsyncMessageQueue();
     const appliedEffort = this.#resolveEffort(config.model, config.effort);
+    /** Tool uses that the trust hook answered with `ask`, so the permission prompt waits for the owner. */
+    const trustAsks = new Set<string>();
+    const trustHooks: HookCallbackMatcher = {
+      matcher: "Bash|mcp__.*",
+      // The check answers at once; a wait for the owner happens in the permission prompt.
+      timeout: 120,
+      hooks: [
+        async (hookInput) => {
+          if (hookInput.hook_event_name !== "PreToolUse" || config.profileGeneration) return {};
+          if (!classifyToolUse(hookInput.tool_name, hookInput.tool_input)) return {};
+          const answer = await runCauseEffect(
+            this.#trustCheck(threadId, hookInput.tool_name, hookInput.tool_input, "check"),
+          ).catch(() => ({
+            decision: "deny" as const,
+            reason: "Atelier could not check the trust policy for this action. Try again in a moment.",
+          }));
+          if (answer.decision === "allow") return {};
+          if (answer.decision === "ask") trustAsks.add(hookInput.tool_use_id);
+          return {
+            hookSpecificOutput: {
+              hookEventName: "PreToolUse",
+              permissionDecision: answer.decision,
+              permissionDecisionReason: answer.reason ?? "The trust policy asks the owner first.",
+            },
+          };
+        },
+      ],
+    };
     const canUseTool: CanUseTool = (toolName, toolInput, options) =>
       runCauseEffect(
         Effect.gen({ self: this }, function* () {
@@ -1011,6 +1041,13 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
                 toolInput,
                 options.toolUseID ?? randomUUID(),
               );
+          }
+          // The trust hook asked first: the owner's approval card answers this tool use.
+          const toolUseId = options.toolUseID;
+          if (toolUseId && trustAsks.delete(toolUseId)) {
+            const answer = yield* this.#trustCheck(threadId, toolName, toolInput, "approve");
+            if (answer.decision !== "allow")
+              return { behavior: "deny", message: answer.reason ?? "The trust policy did not allow this action." };
           }
           if (toolName !== "AskUserQuestion") {
             return yield* providerCall(
@@ -1152,10 +1189,15 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           ...(config.workspaceOnly
             ? {
                 sandbox: claudeWorkspaceSandbox(config.additionalDirectories),
-                hooks: claudeWorkspaceHooks(config.cwd, config.additionalDirectories),
+                hooks: {
+                  PreToolUse: [
+                    ...(claudeWorkspaceHooks(config.cwd, config.additionalDirectories).PreToolUse ?? []),
+                    trustHooks,
+                  ],
+                },
                 managedSettings: CLAUDE_WORKSPACE_MANAGED_SETTINGS,
               }
-            : {}),
+            : { hooks: { PreToolUse: [trustHooks] } }),
           ...(plugins.length ? { plugins } : {}),
           mcpServers,
           env: {
@@ -2234,6 +2276,32 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
    * A Workspace only agent's file write outside its roots, shown as a file-change approval. The
    * approval registry never answers it without the user, as for a Codex write outside the sandbox.
    */
+
+  /**
+   * Asks the host's trust gate about a Bash or MCP tool use. `check` answers at once; `approve` waits
+   * for the owner's approval card when the policy asks.
+   */
+  readonly #trustCheck = Effect.fn("ClaudeAgentClient.trustCheck")(function* (
+    this: ClaudeAgentClient,
+    threadId: string,
+    toolName: string,
+    toolInput: unknown,
+    phase: "check" | "approve",
+  ): Effect.fn.Return<{ decision: "allow" | "deny" | "ask"; reason?: string }, ProviderClientOperationError> {
+    const result = yield* this.#awaitHost(
+      threadId,
+      this.#serverRequests.call(TRUST_CHECK_METHOD, {
+        threadId,
+        turnId: this.#threads.get(threadId)?.activeTurn?.id ?? randomUUID(),
+        toolName,
+        toolInput,
+        phase,
+      }),
+    ).pipe(toProviderClientOperationError);
+    if (!isRecord(result)) return { decision: "allow" };
+    const decision = result.decision === "deny" || result.decision === "ask" ? result.decision : "allow";
+    return { decision, ...(isString(result.reason) ? { reason: result.reason } : {}) };
+  });
 
   readonly #requestWriteApprovalEffect = Effect.fn("ClaudeAgentClient.requestWriteApproval")(function* (
     this: ClaudeAgentClient,

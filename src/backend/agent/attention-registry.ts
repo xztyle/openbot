@@ -124,6 +124,16 @@ export interface SurfacedUiBlock {
   spec: UiBlockSpec;
   /** `shared`: saved for every agent of the server, not only the asking one. */
   apiKey?: { name: string; shared?: true };
+  /** Always a card here, also for work of a team channel: a decision waits for its answer. */
+  card?: true;
+  /**
+   * Sees the answer before the agent does, such as a decision that grants a go-live. A result it
+   * returns replaces the block's own. A skipped block gives `null`.
+   */
+  onAnswer?: (
+    response: UiBlockResponse | null,
+    responder: PromptResponder | undefined,
+  ) => DynamicToolResult | undefined;
 }
 
 /**
@@ -857,7 +867,13 @@ export class AttentionRegistry {
                     Object.entries(input.answers).map(([id, values]) => [id, { answers: values }]),
                   ),
                 };
-      pending.client.respond(pending.id, result);
+      let answered: DynamicToolResult | undefined;
+      try {
+        answered = pending.uiBlock?.onAnswer?.(uiBlockResponse, responder);
+      } catch (error) {
+        logger.warn("A block's answer hook failed", { error: toLogValue(error) });
+      }
+      pending.client.respond(pending.id, answered ?? result);
       this.#prompts.delete(input.requestId);
       clearTimeout(pending.autoAnswer?.timer);
       this.#emitInputResolved("prompt", input.requestId, pending.agentId);
@@ -1690,12 +1706,13 @@ export class AttentionRegistry {
       return;
     }
     // A block that answers itself, such as the plan card, never holds the agent.
-    const routed = autoAnswer
-      ? null
-      : this.#routeTeamQuestion(agentId, turnId, questions, {
-          private: getRecord(request.params, "arguments")?.private === true,
-          ...(block.apiKey ? { apiKey: block.apiKey.name, purpose: block.spec.title } : {}),
-        });
+    const routed =
+      autoAnswer || block.card
+        ? null
+        : this.#routeTeamQuestion(agentId, turnId, questions, {
+            private: getRecord(request.params, "arguments")?.private === true,
+            ...(block.apiKey ? { apiKey: block.apiKey.name, purpose: block.spec.title } : {}),
+          });
     if (routed) {
       client.respond(request.id, {
         success: true,

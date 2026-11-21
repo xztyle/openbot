@@ -114,8 +114,10 @@ The helper refuses a change that can raise spend (exit code 3) unless you add `-
 - a bid that rises more than 20% (`guard.maxBidIncreasePercent`), or a change to the bid strategy or spend cap;
 - a total active daily budget above `guard.dailyBudgetCap`.
 
-Before you add `--approved`, get the person's approval with `openbot.ask_ui` (a confirm block with the object,
-the old and new value, and the reason). In a hands-off channel, where nobody answers, decide yourself within
+Before you add `--approved`, get the person's approval with `openbot.request_decision` (the object, the old and new
+value in the options, the amount, and the reason). Atelier's trust policy also checks every spend change at the tool
+layer: over a budget, or when the policy asks, the command waits for the owner's approval card; a refusal comes back
+as the tool error. Turning an ad on is sandboxed by default: send the ad preview link with `goLive: "ads"` first. In a hands-off channel, where nobody answers, decide yourself within
 the person's saved rules and call `openbot.log_decision` once for each such change. Never add `--approved`
 without one of these. A weaker guard (`config set guard.* ...`) also needs `--approved`, and only the person
 can ask for it. Every change, refusal and error is written to `audit.jsonl`; do not edit that file.

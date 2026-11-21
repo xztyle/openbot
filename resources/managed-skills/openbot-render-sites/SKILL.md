@@ -78,8 +78,8 @@ Telegram chat.
 
 ## Publish a new landing
 
-**Sandbox first.** Atelier's trust policy holds a public landing until the owner approves a preview (on by
-default). Create or deploy the staging copy `<name>-preview` first (it needs no approval), then call
+**Sandbox first.** Atelier's trust policy can hold a public landing until the owner approves a preview (when the
+owner turns sandbox first on). Create or deploy the staging copy `<name>-preview` first (it needs no approval), then call
 `openbot.request_decision` with `previewUrl` set to its `onrender.com` URL and `goLive: "landings"`. When the owner
 approves, run the real `create`, `deploy` or `domain add` within the pass time the result names. Without the
 approval the command is refused with these steps.

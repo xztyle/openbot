@@ -1568,19 +1568,42 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
 
   // ---------------------------------------------------------------- live events
 
+  /*
+   * Each read of the thread counts one, and only the newest answer shows: an older read that answers
+   * last put back a page without the newer replies. The live messages that arrive while a read runs
+   * wait here with their revision: the answer can be older than they are, and a reply or the end of
+   * an answer that came meanwhile would be missing until the next change of the thread.
+   */
+  let threadRun = 0;
+  let threadReading = false;
+  let threadLive: { message: ChannelMessage; revision: number }[] = [];
   async function loadThread(channelId: string, rootId: string, quiet = false): Promise<void> {
-    if (!quiet)
+    const run = ++threadRun;
+    threadReading = true;
+    if (!quiet) {
+      threadLive = [];
       setState((draft) => {
         draft.thread = { channelId, rootId, page: null, loading: true, error: null };
       });
+    }
     try {
       const page = await channels.port().agent.readChannel({ channelId, threadRootId: rootId });
+      if (run !== threadRun) return;
+      threadReading = false;
+      const live = threadLive.filter((entry) => entry.revision > page.channel.revision);
+      threadLive = [];
       const current = state.thread;
       if (current?.channelId !== channelId || current.rootId !== rootId) return;
       setState((draft) => {
-        if (draft.thread) Object.assign(draft.thread, { page, loading: false, error: null });
+        if (!draft.thread) return;
+        Object.assign(draft.thread, { page, loading: false, error: null });
+        const target = draft.thread.page;
+        if (target) for (const entry of live) placeThreadMessage(target, entry.message);
       });
     } catch (error) {
+      if (run !== threadRun) return;
+      threadReading = false;
+      threadLive = [];
       const current = state.thread;
       if (current?.channelId !== channelId || current.rootId !== rootId) return;
       const text = currentText();
@@ -1594,28 +1617,33 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     }
   }
 
-  function patchThread(message: ChannelMessage) {
+  function patchThread(message: ChannelMessage, revision?: number) {
     const thread = state.thread;
-    if (!thread?.page || thread.channelId !== message.channelId) return;
+    if (!thread || thread.channelId !== message.channelId) return;
     if (message.id !== thread.rootId && message.threadRootId !== thread.rootId) return;
+    if (threadReading && revision !== undefined) threadLive.push({ message, revision });
+    if (!thread.page) return;
     setState((draft) => {
       const page = draft.thread?.page;
-      if (!page) return;
-      const index = page.messages.findIndex((entry) => entry.id === message.id);
-      if (index >= 0) page.messages[index] = message;
-      else {
-        let at = page.messages.length;
-        while (at > 1 && (page.messages[at - 1]?.sequence ?? 0) > message.sequence) at -= 1;
-        page.messages.splice(at, 0, message);
-      }
-      if (message.sequence > page.throughSequence) page.throughSequence = message.sequence;
+      if (page) placeThreadMessage(page, message);
     });
+  }
+  /** Puts a message of the open thread in its page: a changed one in place, a new one at its sequence. */
+  function placeThreadMessage(page: ChannelPage, message: ChannelMessage) {
+    const index = page.messages.findIndex((entry) => entry.id === message.id);
+    if (index >= 0) page.messages[index] = message;
+    else {
+      let at = page.messages.length;
+      while (at > 1 && (page.messages[at - 1]?.sequence ?? 0) > message.sequence) at -= 1;
+      page.messages.splice(at, 0, message);
+    }
+    if (message.sequence > page.throughSequence) page.throughSequence = message.sequence;
   }
 
   const unsubscribe = env.onHostEvent((event) => {
     if (event.type === "channel-message") {
       channels.applyMessage(event.message, event.revision);
-      patchThread(event.message);
+      patchThread(event.message, event.revision);
       noteStepsChange(event.message);
       const author = event.message.author;
       if (!(author.kind === "member" && env.isReader(author.id))) scheduleActivity();

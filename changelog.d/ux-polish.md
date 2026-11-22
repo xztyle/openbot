@@ -33,9 +33,8 @@
 - A settings address keeps its section: `?page=settings&section=notifications` opens Notifications,
   survives a reload, and follows the tab the user picks. Old `section=preferences` links open
   Appearance, and `section=backups` opens Backups.
-- An agent DM's header stays on one row on a computer. "Why is this slow?" sat on a row of its own
-  above the model picker while a request waited, and a narrow window pushed the buttons over each
-  other; the topic, the effort and then the model name now give way first.
+- In a narrow window, an agent DM's header stays on one row: the topic, the effort and then the
+  model name give way first, where the buttons were pushed over each other.
 - On a phone, every control a finger hits is at least 44 px: the channel header icons, the composer
   buttons, saved replies, attachment buttons and the model picker. Links inside text (an agent's
   name, "Show more", "Show original", reactions) get a 44 px hit area without moving the text.

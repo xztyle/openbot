@@ -9,3 +9,6 @@
   `in:#dm-…`, which matched nothing and showed "Nothing matches a filter".
 - Search's Channels and People tabs match without accents, as Messages does: `jose` finds José and
   `diseno` finds a channel about diseño.
+- Recent searches: a tap on the words of a recent search runs it (before, only the small search
+  icon did). On a phone, emptying the search field and pressing Search shows the recent searches
+  again.

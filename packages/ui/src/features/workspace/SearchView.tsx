@@ -178,8 +178,16 @@ export function SearchView(props: SearchViewProps): JSX.Element {
                 <For each={props.recent}>
                   {(query) => (
                     <WorkspaceListRow
+                      class="ws-search-recent-row"
                       leading={<History aria-hidden="true" />}
-                      title={query}
+                      // A row with buttons is no button itself: the query is, so a tap on it searches.
+                      title={
+                        <Show when={props.onRemoveRecent} fallback={query}>
+                          <Button variant="ghost" class="ws-search-recent-run" onClick={() => props.onSubmit(query)}>
+                            {query}
+                          </Button>
+                        </Show>
+                      }
                       onOpen={props.onRemoveRecent ? undefined : () => props.onSubmit(query)}
                       actions={
                         <Show when={props.onRemoveRecent}>

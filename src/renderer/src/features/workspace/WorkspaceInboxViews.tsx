@@ -474,7 +474,9 @@ export function WorkspaceSearchView() {
       query={search.state.query}
       onSubmit={(query) => {
         setTab("messages");
-        search.submit(query);
+        // A phone's field emptied and sent goes back to the recent searches, as Slack's does.
+        if (!query.trim()) search.reset();
+        else search.submit(query);
       }}
       tab={tab()}
       onTabChange={setTab}

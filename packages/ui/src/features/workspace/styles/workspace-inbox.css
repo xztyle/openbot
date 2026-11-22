@@ -333,6 +333,30 @@
   font-weight: var(--openbot-weight-medium);
 }
 
+/* The query of a recent search runs it; the row's whole width takes the tap, as in Slack. */
+.ws-search-recent-row .ws-row-title {
+  flex: 1 1 auto;
+}
+
+.ws-search-recent-run.ui-button {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 32px;
+  overflow: hidden;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-search-recent-run.ui-button:hover {
+  background: none;
+  text-decoration: underline;
+}
+
 .ws-search-tips {
   margin: var(--openbot-space-4) var(--openbot-space-1) 0;
   color: var(--openbot-text-muted);

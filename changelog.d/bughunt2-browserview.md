@@ -9,3 +9,5 @@
   page itself. Before, the popup had no Hand back until it closed.
 - On a phone, a finger held still on the agent's page in the live view no longer opens the
   workspace's menu (New channel, Browse channels…) over the page.
+- A phone on its side shows the browser view with the one bar of a phone, so the page has more of
+  the short screen. Before, it had the tab row and the address row of a computer.

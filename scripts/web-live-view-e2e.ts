@@ -644,6 +644,32 @@ async function phone(browser: Browser, origin: string): Promise<void> {
     await shot(page, "phone-popup-closed");
   });
 
+  await step(page, viewport, "a turn of the phone gives the page the new shape", async () => {
+    const asked = host.viewports.length;
+    await page.setViewportSize({ width: 844, height: 390 });
+    await waitUntil(
+      () => host.viewports.slice(asked).some((size) => size.width > size.height),
+      "The view asks the host for a wide page",
+    );
+    await viewing(page, host);
+    let fit = await fullViewFit(page);
+    for (let tries = 0; tries < 40 && !(fit && fit.drawn.width >= fit.panel.width - 2); tries += 1) {
+      await page.waitForTimeout(250);
+      fit = await fullViewFit(page);
+    }
+    await shot(page, "phone-landscape");
+    // A phone on its side keeps the one bar of a phone: the page needs the little height there is.
+    assert.equal(await page.locator("#browser-expanded-panel .browser-full-top").count(), 0, "The view has two bars.");
+    assert.ok(fit && fit.drawn.width >= fit.panel.width - 2, `The page fills the turned view: ${JSON.stringify(fit)}.`);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await waitUntil(
+      () =>
+        host.viewports.at(-1) !== undefined &&
+        (host.viewports.at(-1)?.width ?? 0) < (host.viewports.at(-1)?.height ?? 0),
+      "The view asks for a tall page again",
+    );
+  });
+
   await step(page, viewport, "I'm done hands the page back once", async () => {
     await page.getByRole("button", { name: handBackName }).last().tap();
     await handedBack(page);

@@ -13,8 +13,11 @@ import { type BrowserViewCommand, browserAriaShortcut, browserViewCommand } from
 
 export type { BrowserFullViewProps } from "./browser-full-view-types";
 
-/** Below this width the chips do not fit: one button with the tab count opens the list of tabs. */
-const NARROW_QUERY = "(max-width: 720px)";
+/**
+ * Below this width the chips do not fit: one button with the tab count opens the list of tabs. A
+ * phone on its side is wide but short, and two bars left the page a third of its screen.
+ */
+const NARROW_QUERY = "(max-width: 720px), (max-height: 480px)";
 
 function createNarrow() {
   const query = window.matchMedia(NARROW_QUERY);

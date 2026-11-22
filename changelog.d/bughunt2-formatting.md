@@ -10,3 +10,6 @@
 - "Focus until tomorrow" ends when quiet hours end in their own time zone. Before, it used the
   browser's zone, five hours off in Colombia for a server in UTC. The quiet hours settings start on
   your own time zone when none is set, and the focus time shows in your language's format.
+- The Guardrails tab of Trust renders when the host sends a time that does not parse. Its times read
+  "Mon 3:05 PM" as in Money. An amount in the audit trail shows its currency's sign, and the audit
+  export is named after your own day, not the UTC day.

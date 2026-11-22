@@ -18,6 +18,7 @@ import {
 } from "@openbot/contracts/trust-control";
 import { Badge, Button, Input, NativeSelect, ShieldCheck, SwitchField, Text, Trash2, toast } from "@openbot/ui";
 import { WorkspacePaneHeader } from "@openbot/ui/features/workspace/WorkspacePaneHeader";
+import { zoneDay } from "@openbot/ui/features/workspace/workspace-format";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, flush, onSettled, Show } from "solid-js";
 import { useWorkspace } from "../workspace/workspace-context";
@@ -820,7 +821,7 @@ export function TrustAuditPanel(props: {
     if (!trust) return;
     try {
       const rows = await trust.audit({ ...query(), limit: 2_000 });
-      downloadText(`atelier-audit-${new Date().toISOString().slice(0, 10)}.csv`, trustAuditCsv(rows), "text/csv");
+      downloadText(`atelier-audit-${zoneDay(Date.now())}.csv`, trustAuditCsv(rows), "text/csv");
     } catch (failure) {
       toast.error(t("trust.audit.loadFailed"), { error: failure, fallback: t("trust.audit.loadFailed") });
     }
@@ -917,7 +918,9 @@ export function TrustAuditPanel(props: {
                     <Badge variant={OUTCOME_TONE[entry.outcome]}>{t(OUTCOME_LABEL[entry.outcome])}</Badge>
                     <Show when={entry.amount !== undefined}>
                       <strong>
-                        {format.number(entry.amount ?? 0)} {entry.currency ?? ""}
+                        {entry.currency
+                          ? format.currency(entry.amount ?? 0, entry.currency)
+                          : format.number(entry.amount ?? 0)}
                       </strong>
                     </Show>
                     <Show when={entry.platform}>{(platform) => <span class="trust-muted">{platform()}</span>}</Show>

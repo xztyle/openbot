@@ -107,12 +107,15 @@ export function TrustGuardrailsPanel(props: {
     const current = draft();
     if (current) setDraft(update(current));
   };
-  const time = (iso: string | number) =>
-    format.date(typeof iso === "number" ? iso * 1000 : new Date(iso), {
-      weekday: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  /**
+   * A meter's time is in epoch seconds; a pause's and an event's is an ISO time. Empty for a time that
+   * does not parse: a date format throws on it, and the panel would not render. The clock is written
+   * as in Money: "Mon 3:05 PM", not "Mon 03:05 PM".
+   */
+  const time = (iso: string | number) => {
+    const ms = typeof iso === "number" ? iso * 1000 : Date.parse(iso);
+    return Number.isFinite(ms) ? format.date(ms, { weekday: "short", hour: "numeric", minute: "2-digit" }) : "";
+  };
   const kpi = (kinds: GuardrailEventKind[]) => kinds.reduce((sum, kind) => sum + (view()?.kpis[kind] ?? 0), 0);
   const busiest = createMemo(() =>
     (view()?.usage ?? [])

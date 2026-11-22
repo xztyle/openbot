@@ -14,9 +14,11 @@ import {
   Bot,
   Briefcase,
   Button,
+  Check,
   Coins,
   FormDialog,
   Gauge,
+  Hand,
   HardDrive,
   Hash,
   Inbox,
@@ -31,10 +33,13 @@ import {
   Pencil,
   Plus,
   Search,
+  Send,
   ShieldCheck,
+  Square,
   Sunrise,
   Target,
   Workflow,
+  X,
 } from "@openbot/ui";
 import { AiBadge, MemberAvatar } from "@openbot/ui/features/workspace/WorkspaceAvatar";
 import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSidebar";
@@ -43,6 +48,7 @@ import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-t
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { type CommandAction, useCommandActions } from "./workspace-commands";
 import { useWorkspace } from "./workspace-context";
 import {
   AGENT_DM_PREFIX,
@@ -58,7 +64,7 @@ export interface JumpEntry {
   /** A conversation id, `agent:<id>`, `person:<id>`, `view:<view>` or `create:<name>`. */
   id: string;
   label: string;
-  kind: "channel" | "dm" | "agent" | "person" | "view" | "create" | "search";
+  kind: "channel" | "dm" | "agent" | "person" | "view" | "create" | "search" | "action";
   private?: boolean | undefined;
   member?: WorkspaceMember | undefined;
   unread?: boolean | undefined;
@@ -68,7 +74,18 @@ export interface JumpEntry {
   space?: string | undefined;
   /** The view that a `view` entry opens, for its icon. */
   view?: WorkspaceView | undefined;
+  /** What an `action` entry does (`useCommandActions`). */
+  action?: CommandAction | undefined;
 }
+
+const ACTION_ICON: Record<CommandAction["kind"], () => JSX.Element> = {
+  ask: () => <Send />,
+  approve: () => <Check />,
+  decline: () => <X />,
+  stop: () => <Square />,
+  goal: () => <Target />,
+  today: () => <Hand />,
+};
 
 /** The icon of each view, as on its sidebar row, so a view does not look like a channel. */
 const VIEW_ICON: Record<WorkspaceView, () => JSX.Element> = {
@@ -286,17 +303,39 @@ export function useJumpEntries() {
   return { entries, open };
 }
 
-/** ⌘K: jump to a conversation, a person, an agent or a view by name. */
+/**
+ * ⌘K, the command bar: jump to a conversation, a person, an agent or a view by name, search the
+ * messages, and run actions: ask or assign an agent, approve or decline what waits, stop an agent,
+ * set a goal.
+ */
 export function QuickSwitcher(props: { onClose: () => void }) {
   const { t } = useText();
   const jump = useJumpEntries();
+  const commands = useCommandActions();
   const [query, setQuery] = createSignal("");
   const [active, setActive] = createSignal(0);
-  const entries = createMemo(() => jump.entries(query()));
+  const entries = createMemo((): JumpEntry[] => {
+    const actions = commands.actions(query());
+    // A command does something: the "Create #channel" that its words would make is only noise.
+    const names = jump.entries(query()).filter((entry) => !(actions.length > 0 && entry.kind === "create"));
+    return [
+      ...actions.map(
+        (action): JumpEntry => ({
+          id: `action:${action.id}`,
+          label: action.label,
+          kind: "action",
+          action,
+          member: action.agentId && action.kind !== "ask" ? commands.member(action.agentId) : undefined,
+        }),
+      ),
+      ...names,
+    ];
+  });
   const choose = (entry: JumpEntry | undefined) => {
     if (!entry) return;
     props.onClose();
-    jump.open(entry);
+    if (entry.action) entry.action.run();
+    else jump.open(entry);
   };
   return (
     <FormDialog
@@ -334,8 +373,8 @@ export function QuickSwitcher(props: { onClose: () => void }) {
           }}
         />
       </div>
-      <Show when={!query().trim() && entries().length > 0}>
-        <p class="ws-switcher-hint">{t("workspace.jump.hint")}</p>
+      <Show when={!query().trim()}>
+        <p class="ws-switcher-hint">{t("workspace.command.help")}</p>
       </Show>
       <ul class="ws-switcher-list" aria-label={t("workspace.app.switcher.results")}>
         <For each={entries()} fallback={<li class="ws-details-empty">{t("workspace.app.switcher.empty")}</li>}>
@@ -357,23 +396,30 @@ export function QuickSwitcher(props: { onClose: () => void }) {
                     when={entry.member}
                     fallback={
                       <Show
-                        when={entry.kind === "create" || entry.kind === "search"}
+                        when={entry.action}
                         fallback={
                           <Show
-                            when={entry.view}
+                            when={entry.kind === "create" || entry.kind === "search"}
                             fallback={
-                              <Show when={entry.private} fallback={<Hash />}>
-                                <Lock />
+                              <Show
+                                when={entry.view}
+                                fallback={
+                                  <Show when={entry.private} fallback={<Hash />}>
+                                    <Lock />
+                                  </Show>
+                                }
+                              >
+                                {(view) => VIEW_ICON[view()]()}
                               </Show>
                             }
                           >
-                            {(view) => VIEW_ICON[view()]()}
+                            <Show when={entry.kind === "search"} fallback={<Plus />}>
+                              <Search />
+                            </Show>
                           </Show>
                         }
                       >
-                        <Show when={entry.kind === "search"} fallback={<Plus />}>
-                          <Search />
-                        </Show>
+                        {(action) => ACTION_ICON[action().kind]()}
                       </Show>
                     }
                   >
@@ -387,6 +433,7 @@ export function QuickSwitcher(props: { onClose: () => void }) {
                 <Show when={entry.kind === "view"}>
                   <span class="ws-switcher-space">{t("workspace.jump.view")}</span>
                 </Show>
+                <Show when={entry.action}>{(action) => <span class="ws-switcher-space">{action().hint}</span>}</Show>
                 <Show when={entry.space}>{(space) => <span class="ws-switcher-space">{space()}</span>}</Show>
                 <Show when={(entry.mentions ?? 0) > 0}>
                   <span class="ws-mention-badge">{entry.mentions}</span>

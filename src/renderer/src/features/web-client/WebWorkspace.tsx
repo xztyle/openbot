@@ -2182,6 +2182,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       const id = server()?.id;
       if (id) void openHostPage(id, "usage", null);
     },
+    sendToAgent: async (agentId, text) => {
+      const result = await workspace.send(agentId, text, [], null, crypto.randomUUID());
+      if ("error" in result) throw new Error(result.error);
+    },
     messageLink: (channelId, messageId, threadRootId) =>
       placeLink({ kind: "channel", channelId, threadRootId }, messageId, ws.rowSpace(channelId)),
     channelLink: (channelId) =>

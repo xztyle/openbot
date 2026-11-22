@@ -7,6 +7,10 @@
   workspace gets a short guide to goals, #general, the morning briefing, loops and costs.
 - Money: one page for what the agents cost today, this week and this month, revenue and ad spend,
   the spending that waits for your OK, each agent's cost, the plan's limits and the spend alert.
+- Ctrl+K (⌘K) runs actions: "ask Research compare the prices" sends the line to Research,
+  "approve" lists what waits with Approve and Decline, "stop" stops an agent at work, "goal" opens a
+  new goal. A sentence that names no one goes to the lead agent as a task. The phone's Jump to has
+  the same actions.
 - The phone has new tabs: Today, Chat, Agents and Inbox, with a "+" in the middle to ask an agent
   or start a message, a channel, a loop or a goal. Only Today has a count, in amber.
 
@@ -15,7 +19,9 @@
 - "Needs you" counts every space, not only the one that shows, and the top bar, the sidebar's Today
   row and the phone's Today tab show the same number. Before, a loop decision or a request in
   another space did not reach you.
-- A loop decision opens Loops on that loop, in its own space.
+- A loop decision opens Loops on that loop, in its own space, with the card in view.
+- The owner and the admins can change loops and decide gates; "New loop" says when no template
+  loaded and offers to describe the loop to the lead agent.
 
 ### Fixed
 

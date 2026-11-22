@@ -1,9 +1,10 @@
 import type { WorkspaceLoopAction, WorkspaceLoops } from "@openbot/contracts/ipc";
 import { LoopsView } from "@openbot/ui/features/workspace/LoopsView";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createMemo, createSignal } from "solid-js";
+import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 import { useLoopDecisions } from "./loop-decisions-feed";
 import { useWorkspace } from "./workspace-context";
+import { loopFocus, setLoopFocus } from "./workspace-decisions";
 import { memberById } from "./workspace-model";
 
 /** While the view shows, the board is read again this often, so agents' moves appear. */
@@ -44,6 +45,11 @@ export function WorkspaceLoopsView() {
   );
 
   const feed = useLoopDecisions(ws);
+  // The decision that Today or Needs you opened: the board shows its loop and scrolls to it once.
+  const focus = untrack(loopFocus);
+  setLoopFocus(null);
+  /** The space's lead (its first agent), who makes a loop from a description in words. */
+  const lead = () => ws.spaceAgents()[0];
   const agents = createMemo(() => ws.spaceAgents().map((agent) => memberById(ws.directory(), agent.id, agent.name)));
 
   async function act(action: WorkspaceLoopAction) {
@@ -64,7 +70,18 @@ export function WorkspaceLoopsView() {
         void load(ws.spaces.current());
       }}
       agents={agents()}
-      canEdit={ws.env.secrets?.() === true}
+      // The owner and the admins change loops and decide gates.
+      canEdit={ws.isAdmin()}
+      initialLoopId={focus?.loopId}
+      focusDecisionId={focus?.decisionId}
+      onAskLead={
+        lead()
+          ? () => {
+              const agent = lead();
+              if (agent) ws.openAgent(agent.id);
+            }
+          : undefined
+      }
       onAction={act}
       onOpenAgent={(agentId) => ws.openAgent(agentId)}
       onBack={() => ws.back()}

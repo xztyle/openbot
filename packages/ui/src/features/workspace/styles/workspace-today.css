@@ -625,3 +625,19 @@
   font-weight: var(--openbot-weight-regular);
   white-space: normal;
 }
+
+/* Loops: the decision that a link opened, and the sheet of a new loop without templates. */
+.ws-loops-decision[data-focused] {
+  outline: 2px solid var(--openbot-warning);
+  outline-offset: 2px;
+}
+
+.ws-loops-templates-empty {
+  margin: 0 0 var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+}
+
+.ui-button.ws-loops-ask-lead {
+  align-self: flex-start;
+  margin-bottom: var(--openbot-space-3);
+}

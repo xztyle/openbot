@@ -21,7 +21,19 @@ import { Button } from "../../button";
 import { Checkbox } from "../../checkbox";
 import { Field, Input } from "../../form";
 import { FormDialog } from "../../form-dialog";
-import { ArrowRight, Clock, FlaskConical, History, Kanban, Lock, Pencil, Plus, Trash2, X } from "../../icons";
+import {
+  ArrowRight,
+  Clock,
+  FlaskConical,
+  History,
+  Kanban,
+  Lock,
+  MessageSquare,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState, ErrorState, LoadingState } from "../../view-state";
@@ -50,6 +62,10 @@ export interface LoopsViewProps {
   onBack?: (() => void) | undefined;
   /** The loop to show first, such as from a link in Needs you. */
   initialLoopId?: string | undefined;
+  /** The decision that a link opened: its card scrolls into view and stands out. */
+  focusDecisionId?: string | undefined;
+  /** Opens the chat of the space's lead agent, to describe a loop in words instead of the form. */
+  onAskLead?: (() => void) | undefined;
   class?: string;
 }
 
@@ -208,6 +224,7 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
                     void run({ kind: "decide", decisionId, approve, ...(note ? { note } : {}) })
                   }
                   onOpenItem={setItemId}
+                  focusDecisionId={props.focusDecisionId}
                 />
               </Show>
               <Show when={formError() && !item()}>
@@ -322,6 +339,24 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
           setEditing({ loop: null });
         }}
       >
+        <Show when={(props.board?.templates ?? []).length === 0}>
+          <p class="ws-loops-templates-empty">{t("workspace.loops.noTemplates")}</p>
+        </Show>
+        <Show when={props.onAskLead}>
+          {(ask) => (
+            <Button
+              variant="secondary"
+              class="ws-loops-ask-lead"
+              onClick={() => {
+                setCreating(false);
+                ask()();
+              }}
+            >
+              <MessageSquare aria-hidden="true" />
+              {t("workspace.loops.askLead")}
+            </Button>
+          )}
+        </Show>
         <div class="ws-loops-templates">
           <For each={props.board?.templates ?? []} keyed={(template) => template.id}>
             {(template) => (
@@ -504,6 +539,7 @@ function DecisionList(props: {
   agent: (id: string | undefined) => WorkspaceMember | undefined;
   canEdit: boolean;
   busy: boolean;
+  focusDecisionId?: string | undefined;
   onDecide: (decisionId: string, approve: boolean, note: string) => void;
   onOpenItem: (itemId: string) => void;
 }): JSX.Element {
@@ -512,7 +548,9 @@ function DecisionList(props: {
     <section class="ws-loops-decisions" aria-label={t("workspace.loops.decisions")}>
       <h3 class="ws-loops-heading">{t("workspace.loops.decisions")}</h3>
       <For each={props.decisions} keyed={(decision) => decision.id}>
-        {(decision) => <DecisionCard decision={decision()} {...props} />}
+        {(decision) => (
+          <DecisionCard decision={decision()} {...props} focused={decision().id === props.focusDecisionId} />
+        )}
       </For>
     </section>
   );
@@ -528,13 +566,22 @@ export function DecisionCard(props: {
   onOpenItem?: ((itemId: string) => void) | undefined;
   /** The loop's name, where the card shows outside its loop. */
   loopName?: string | undefined;
+  /** A link opened this decision. */
+  focused?: boolean | undefined;
 }): JSX.Element {
   const { t, format } = useText();
   const [note, setNote] = createSignal("");
   const requester = () => props.agent(props.decision.requestedBy);
   const question = () => props.decision.subject === "question";
   return (
-    <article class={cx("ws-loops-decision", `ws-loops-decision-${props.decision.kind}`)}>
+    <article
+      class={cx("ws-loops-decision", `ws-loops-decision-${props.decision.kind}`)}
+      data-focused={props.focused ? "" : undefined}
+      ref={(element) => {
+        // A link from Today or Needs you opened this decision: show it.
+        if (props.focused) requestAnimationFrame(() => element.scrollIntoView({ block: "center" }));
+      }}
+    >
       <div class="ws-loops-decision-head">
         <span class="ws-loops-gate">
           <GateIcon kind={props.decision.kind} />

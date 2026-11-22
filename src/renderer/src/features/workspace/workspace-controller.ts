@@ -265,6 +265,11 @@ export interface WorkspaceEnvironment {
   /** Opens the plan's usage and limits page of the server, for Money. Absent where the shell has none. */
   openUsage?: (() => void) | undefined;
   /**
+   * Sends a message to an agent's main chat, as the owner does there: the command bar's "Ask Chief…".
+   * It throws with the reason when the host did not take it. Absent where the reader has no main chat.
+   */
+  sendToAgent?: ((agentId: string, text: string) => Promise<void>) | undefined;
+  /**
    * The runtime state that the org chart reads beside the fleet: each agent's queue, for the agents
    * that message each other, and the last failed turn of each agent. Absent, the chart shows the
    * fleet state only.

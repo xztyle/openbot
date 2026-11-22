@@ -1,3 +1,4 @@
+import { atelierTheme } from "@openbot/brand/atelier-appearance";
 import { agentProviderDescriptor } from "@openbot/contracts/agent-providers";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
@@ -245,42 +246,46 @@ export function AgentAppearanceFields(props: {
   const { t } = useText();
   return (
     <>
-      <fieldset class="first-agent-avatar-fieldset first-agent-color-fieldset" disabled={props.submitting}>
-        <legend class="sr-only">{t("agent.setup.color")}</legend>
-        <div class="first-agent-color-options">
-          <Button
-            variant="ghost"
-            type="button"
-            size="sm"
-            class="first-agent-color-choice"
-            aria-label={t("agent.setup.colorAutomatic")}
-            aria-pressed={props.value.avatarHue === null ? "true" : "false"}
-            data-cuelume-tap="select"
-            onClick={() => props.editor.update({ avatarHue: null })}
-          >
-            <span
-              class="first-agent-color-swatch"
-              style={{ background: avatarHeadColor(props.value.avatarSeed, null) }}
-            />
-          </Button>
-          <For each={AVATAR_HUE_CHOICES}>
-            {(option) => (
-              <Button
-                variant="ghost"
-                type="button"
-                size="sm"
-                class="first-agent-color-choice"
-                aria-label={t("agent.setup.colorOption", { color: t(AVATAR_HUE_LABEL[option.hue]) })}
-                aria-pressed={props.value.avatarHue === option.hue ? "true" : "false"}
-                data-cuelume-tap="select"
-                onClick={() => props.editor.update({ avatarHue: option.hue })}
-              >
-                <span class="first-agent-color-swatch" style={{ background: avatarHueSwatch(option.hue) }} />
-              </Button>
-            )}
-          </For>
-        </div>
-      </fieldset>
+      {/* An Atelier face keeps its own colors, so a color here would change nothing: the agent's
+          settings show no color in these themes either. */}
+      <Show when={!atelierTheme()}>
+        <fieldset class="first-agent-avatar-fieldset first-agent-color-fieldset" disabled={props.submitting}>
+          <legend class="sr-only">{t("agent.setup.color")}</legend>
+          <div class="first-agent-color-options">
+            <Button
+              variant="ghost"
+              type="button"
+              size="sm"
+              class="first-agent-color-choice"
+              aria-label={t("agent.setup.colorAutomatic")}
+              aria-pressed={props.value.avatarHue === null ? "true" : "false"}
+              data-cuelume-tap="select"
+              onClick={() => props.editor.update({ avatarHue: null })}
+            >
+              <span
+                class="first-agent-color-swatch"
+                style={{ background: avatarHeadColor(props.value.avatarSeed, null) }}
+              />
+            </Button>
+            <For each={AVATAR_HUE_CHOICES}>
+              {(option) => (
+                <Button
+                  variant="ghost"
+                  type="button"
+                  size="sm"
+                  class="first-agent-color-choice"
+                  aria-label={t("agent.setup.colorOption", { color: t(AVATAR_HUE_LABEL[option.hue]) })}
+                  aria-pressed={props.value.avatarHue === option.hue ? "true" : "false"}
+                  data-cuelume-tap="select"
+                  onClick={() => props.editor.update({ avatarHue: option.hue })}
+                >
+                  <span class="first-agent-color-swatch" style={{ background: avatarHueSwatch(option.hue) }} />
+                </Button>
+              )}
+            </For>
+          </div>
+        </fieldset>
+      </Show>
 
       <fieldset class="first-agent-avatar-fieldset first-agent-face-fieldset" disabled={props.submitting}>
         <legend class="sr-only">{t("agent.setup.face")}</legend>

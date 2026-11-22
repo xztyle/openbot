@@ -1,5 +1,6 @@
 // Checks the ways into an agent's settings in the web client, on an iPhone and on a desktop: the
 // gear of a Fleet card opens the settings of that agent, also the agent whose chat was open last.
+// The New agent dialog of an Atelier theme offers faces and no color, which an Atelier face ignores.
 // It serves the web client on a mock host (`src/renderer/stories/web-client-harness.tsx`) at every
 // address under `/app`, as the site does, and drives it in Chromium. No account service, host or
 // provider is needed.
@@ -164,6 +165,21 @@ try {
     });
     await page.close();
   }
+
+  // 2. New agent in an Atelier theme (the harness default): faces to pick, and no color picker.
+  const page = await newPage(phone);
+  await step(page, "phone", "New agent offers faces and no color in an Atelier theme", async () => {
+    await openFleet(page, "phone");
+    const add = page
+      .getByRole("region", { name: english("workspace.view.fleet"), exact: true })
+      .getByRole("button", { name: english("workspace.fleet.addAgent"), exact: true });
+    await add.waitFor({ timeout: UI_WAIT_MS });
+    await add.tap();
+    const dialog = page.getByRole("dialog", { name: english("workspace.fleet.addAgent") });
+    await dialog.getByRole("group", { name: english("agent.setup.face") }).waitFor({ timeout: UI_WAIT_MS });
+    assert.equal(await dialog.getByRole("group", { name: english("agent.setup.color") }).count(), 0);
+  });
+  await page.close();
 
   report.passed = report.steps.every((item) => item.passed) && report.pageErrors.length === 0;
 } finally {

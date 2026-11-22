@@ -10,3 +10,5 @@
   policy hint touched the Role label under it.
 - Agent settings: the Role field shows the agent's role after a Roll back or a change from another
   device. Before, it kept the old role, and a tap in and out of the field saved the old role again.
+- New agent, in the Craft Studio, Modern Atelier and Riso Press themes: the dialog no longer shows
+  an Agent color row. An Atelier face keeps its own colors, so a color there changed nothing.

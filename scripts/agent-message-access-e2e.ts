@@ -207,6 +207,7 @@ const agents = new AgentService({
     personId === MEMBER.id && agentId === hidden.agentId ? "none" : "chat",
   approvalAutomation: {
     autoApproves: () => true,
+    set: () => Effect.succeed({ defaultAutoApprove: true, autoApproveOverrides: {} }),
   },
 });
 

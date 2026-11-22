@@ -927,6 +927,7 @@ export class DrainScheduler {
                 cwd: agent.workspacePath,
                 runtimeWorkspaceRoots: workspaceWritableRoots(agent, this.#store.spaces.agentSharedDirectory(agent.id)),
                 approvalPolicy: "on-request",
+                approvalsReviewer: "user",
                 sandboxPolicy: codexSandboxPolicy(agent, this.#store.spaces.agentSharedDirectory(agent.id)),
                 ...(client.provider === "codex"
                   ? codexServiceTier(

@@ -106,6 +106,11 @@ type CodexToolApprovals = Array<[string, DynamicRecord]>;
  * Codex offers `update_plan` only when this is on, and without it a turn sends no
  * `turn/plan/updated`, so the conversation shows no task list.
  */
+const CODEX_COMPUTER_USE_PLUGINS_OFF = {
+  "plugins.computer-use@openai-bundled.enabled": false,
+  "plugins.unified-computer-use@openai-bundled.enabled": false,
+} as const;
+
 const CODEX_TOOLS_CONFIG = { update_plan: { enabled: true } } as const;
 
 /**
@@ -569,6 +574,10 @@ export class ThreadLifecycle {
       cwd: agent.workspacePath,
       runtimeWorkspaceRoots: workspaceWritableRoots(agent, this.#store.spaces.agentSharedDirectory(agent.id)),
       approvalPolicy: "on-request",
+      // A Codex `approvals_reviewer` in the user's config would send approvals to its own reviewer, which
+      // ignores OpenBot cards. A resumed thread keeps its last reviewer, so each request names the user
+      // (upstream d4518b386).
+      approvalsReviewer: "user",
       sandbox: codexSandboxMode(agent),
       ...this.#workspaceOnlyParam(agent, client),
       ...this.#computerUseParam(agent, client),
@@ -756,7 +765,8 @@ export class ThreadLifecycle {
         tools: typeof CODEX_TOOLS_CONFIG;
         "features.code_mode.direct_only_tool_namespaces": string[];
         [variable: `shell_environment_policy.set.${string}`]: string;
-      } & ReturnType<typeof codexSandboxConfig>;
+      } & Partial<typeof CODEX_COMPUTER_USE_PLUGINS_OFF> &
+        ReturnType<typeof codexSandboxConfig>;
     },
     ThreadOperationFailed
   > {
@@ -769,6 +779,9 @@ export class ThreadLifecycle {
       config: {
         ...(Object.keys(mcpServers).length > 0 ? { mcp_servers: mcpServers } : {}),
         tools: CODEX_TOOLS_CONFIG,
+        // Codex's own bundled Computer Use plugins would still control the screen of an agent with
+        // Computer Use off (upstream 83bb21d0e). A thread value wins over the user's Codex file.
+        ...(agentComputerUseEnabled(agent) ? {} : CODEX_COMPUTER_USE_PLUGINS_OFF),
         "features.code_mode.direct_only_tool_namespaces": [
           ...CODEX_DIRECT_ONLY_NAMESPACES,
           ...codexMcpNamespaces(servers),
@@ -896,6 +909,8 @@ export class ThreadLifecycle {
             ...(workspaceAccessEnforced(agent) ? ["workspace"] : []),
             ...(agentAutomationAllowed(agent, this.#store.agentDefaults()) ? ["automation"] : []),
             ...(agentQuickAcknowledgementEnabled(agent, this.#store.agentDefaults()) ? ["quick-acknowledgement"] : []),
+            // A loaded session from before Codex's own Computer Use was turned off is replaced once.
+            ...(agentComputerUseEnabled(agent) ? [] : ["codex-computer-use-off"]),
           ],
           ...(Object.keys(environment).length > 0 ? [Object.entries(environment).sort()] : []),
           ...(section ? [section.members.map((member) => member.id).sort()] : []),
@@ -1104,6 +1119,10 @@ export class ThreadLifecycle {
       cwd: agent.workspacePath,
       runtimeWorkspaceRoots: workspaceWritableRoots(agent, this.#store.spaces.agentSharedDirectory(agent.id)),
       approvalPolicy: "on-request",
+      // A Codex `approvals_reviewer` in the user's config would send approvals to its own reviewer, which
+      // ignores OpenBot cards. A resumed thread keeps its last reviewer, so each request names the user
+      // (upstream d4518b386).
+      approvalsReviewer: "user",
       sandbox: codexSandboxMode(agent),
       ...this.#workspaceOnlyParam(agent, client),
       ...this.#computerUseParam(agent, client),

@@ -6,7 +6,7 @@
 // `web-client-today-harness.tsx` with `?harness=today`) and drives it in Chromium. No account
 // service, host or provider is needed.
 //
-// `bun scripts/web-a11y-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>]`
+// `bun scripts/web-a11y-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>] [--cpu-throttle=<n>]`
 // Writes report.json to .openbot-build/web-a11y-e2e, or to --out.
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -138,7 +138,7 @@ async function focusSettles(
   what: string,
   matches: (focus: Awaited<ReturnType<typeof focused>>) => boolean,
 ) {
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + 15_000;
   let last = await focused(page);
   while (Date.now() < deadline) {
     last = await focused(page);
@@ -169,6 +169,12 @@ async function newPage(browser: Browser, phone: boolean): Promise<{ context: Bro
   );
   const page = await context.newPage();
   page.on("pageerror", (error) => report.pageErrors.push(error.stack ?? error.message));
+  // `--cpu-throttle=4` slows the page as a busy machine does, to find steps that race the app.
+  const throttle = Number(option("cpu-throttle") ?? 1);
+  if (throttle > 1) {
+    const session = await context.newCDPSession(page);
+    await session.send("Emulation.setCPUThrottlingRate", { rate: throttle });
+  }
   return { context, page };
 }
 
@@ -249,6 +255,8 @@ try {
       await focusMenuItem(page, "Move to a new section");
       await page.keyboard.press("Enter");
       await dialogs(page).filter({ hasText: "New section" }).waitFor();
+      // The menu closes as the dialog opens: Escape goes to the dialog once it has the focus.
+      await focusSettles(page, "the dialog's field", (focus) => focus.tag === "input");
       await page.keyboard.press("Escape");
       await dialogs(page).first().waitFor({ state: "detached" });
       await focusSettles(page, "the options of general", (focus) => focus.name === "Options for general");

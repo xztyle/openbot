@@ -47,6 +47,7 @@ function createTextValue(locale: () => TranslatedLocale, formatLocale: () => str
       compact: (value) => current().compact(value),
       percent: (value, options) => current().percent(value, options),
       currencyUsd: (value, options) => current().currencyUsd(value, options),
+      currency: (value, code, options) => current().currency(value, code, options),
       date: (value, options) => current().date(value, options),
       get hour12() {
         return current().hour12;

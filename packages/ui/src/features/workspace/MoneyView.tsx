@@ -74,19 +74,29 @@ export function MoneyView(props: MoneyViewProps): JSX.Element {
     if (!current || current.previousWeekUsd <= 0) return null;
     return (current.weekUsd - current.previousWeekUsd) / current.previousWeekUsd;
   };
-  /** Revenue and ad spend of the period, in dollars: entries in other currencies show apart. */
+  /**
+   * Revenue and ad spend of the period, in dollars, and apart for each other currency: a shop in
+   * Colombia sells in pesos. Agent costs are dollars, so only the dollar net takes them off.
+   */
   const money = createMemo(() => {
     let revenue = 0;
     let spend = 0;
-    let other = false;
+    const others = new Map<string, { revenue: number; spend: number }>();
     for (const entry of props.report?.money ?? []) {
-      if (entry.currency.toUpperCase() !== "USD") {
-        other = true;
+      const code = entry.currency.toUpperCase();
+      if (code !== "USD") {
+        const known = others.get(code) ?? { revenue: 0, spend: 0 };
+        if (entry.kind === "revenue") known.revenue += entry.amount;
+        else known.spend += entry.amount;
+        others.set(code, known);
         continue;
       }
       if (entry.kind === "revenue") revenue += entry.amount;
       else spend += entry.amount;
     }
+    const other = [...others]
+      .filter(([, total]) => total.revenue > 0 || total.spend > 0)
+      .map(([code, total]) => ({ code, ...total }));
     return { revenue, spend, other };
   });
   /** The team's cost per day of the period, for the bars. */
@@ -161,9 +171,23 @@ export function MoneyView(props: MoneyViewProps): JSX.Element {
               </dd>
             </div>
           </Show>
+          <For each={money().other}>
+            {(total) => (
+              <>
+                <div>
+                  <dt>{t("workspace.money.revenue")}</dt>
+                  <dd>{format.currency(total.revenue, total.code)}</dd>
+                </div>
+                <div>
+                  <dt>{t("workspace.money.adSpend")}</dt>
+                  <dd>{format.currency(total.spend, total.code)}</dd>
+                </div>
+              </>
+            )}
+          </For>
         </dl>
-        <Show when={money().other}>
-          <p class="ws-insight-note">{t("workspace.money.otherCurrency")}</p>
+        <Show when={money().other.length > 0}>
+          <p class="ws-insight-note">{t("workspace.money.otherCurrencyNet")}</p>
         </Show>
         <Show when={daily().length > 1 && peak() > 0}>
           <figure class="ws-money-chart" aria-label={t("insight.costs.daily")}>

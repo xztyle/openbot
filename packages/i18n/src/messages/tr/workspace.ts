@@ -598,7 +598,8 @@ export const messages = {
   "workspace.money.revenue": "Gelir",
   "workspace.money.adSpend": "Reklam harcaması",
   "workspace.money.net": "Net",
-  "workspace.money.otherCurrency": "Diğer para birimlerindeki kayıtlar bu toplamlara dahil değil.",
+  "workspace.money.otherCurrencyNet":
+    "Ajan maliyetleri dolar cinsindendir: net tutar onları yalnızca dolar kayıtlarından düşer.",
   "workspace.money.waiting": { one: "Onayınızı bekliyor ({count})", other: "Onayınızı bekliyor ({count})" },
   "workspace.money.noSpendWaiting": "Onay bekleyen harcama yok.",
   "workspace.money.byAgent": "Ajana göre",

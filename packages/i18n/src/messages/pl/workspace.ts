@@ -739,7 +739,8 @@ export const messages = {
   "workspace.money.revenue": "Przychód",
   "workspace.money.adSpend": "Wydatki na reklamy",
   "workspace.money.net": "Netto",
-  "workspace.money.otherCurrency": "Wpisy w innych walutach nie są w tych sumach.",
+  "workspace.money.otherCurrencyNet":
+    "Koszty agentów są w dolarach: wynik netto odejmuje je tylko od wpisów w dolarach.",
   "workspace.money.waiting": {
     one: "Czeka na zgodę ({count})",
     few: "Czekają na zgodę ({count})",

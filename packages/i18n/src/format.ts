@@ -21,6 +21,12 @@ export interface AppFormat {
   /** `value` is a ratio: 0.25 renders 25%. */
   percent: (value: number, options?: Intl.NumberFormatOptions) => string;
   currencyUsd: (value: number, options?: Intl.NumberFormatOptions) => string;
+  /**
+   * An amount in the currency of an ISO 4217 code, with its sign in the reader's format: "$ 50.000"
+   * for COP in `es-CO`, "50.000 COP" in `es`. A code that `Intl` does not take ("USDT") renders as
+   * the number and the code.
+   */
+  currency: (value: number, code: string, options?: Intl.NumberFormatOptions) => string;
   date: (value: Date | number, options?: Intl.DateTimeFormatOptions) => string;
   /** The date locale writes a 12-hour clock with AM and PM: true for `en-US`, false for `fr` and `ja`. */
   readonly hour12: boolean;
@@ -111,6 +117,13 @@ export function createFormat(locale: TranslatedLocale, intlLocale: string | null
     percent: (value, options) => numberFormat(tag, { style: "percent", ...options }).format(value),
     currencyUsd: (value, options) =>
       numberFormat(tag, { style: "currency", currency: "USD", ...options }).format(value),
+    currency: (value, code, options) => {
+      try {
+        return numberFormat(tag, { style: "currency", currency: code, ...options }).format(value);
+      } catch {
+        return `${numberFormat(tag, { maximumFractionDigits: 2, ...options }).format(value)} ${code}`;
+      }
+    },
     date: (value, options) => dateFormat(tag, options).format(value),
     hour12: usesHour12(tag),
     list: (items) => {

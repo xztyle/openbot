@@ -580,14 +580,14 @@ function InsightMoney(props: SectionProps): JSX.Element {
     values.size === 0
       ? format.number(0)
       : [...values]
-          .map(([currency, amount]) => `${format.number(amount, { maximumFractionDigits: 2 })} ${currency}`)
+          .map(([currency, amount]) => format.currency(amount, currency, { maximumFractionDigits: 2 }))
           .join(" + ");
   const net = (money: MoneyTotals) => {
     const currencies = new Set([...money.spend.keys(), ...money.revenue.keys()]);
     if (currencies.size !== 1) return null;
     const [currency] = currencies;
     const value = (money.revenue.get(currency ?? "") ?? 0) - (money.spend.get(currency ?? "") ?? 0);
-    return `${format.number(value, { maximumFractionDigits: 2, signDisplay: "exceptZero" })} ${currency}`;
+    return format.currency(value, currency ?? "", { maximumFractionDigits: 2, signDisplay: "exceptZero" });
   };
   const spaces = createMemo(() =>
     props.spaces
@@ -722,7 +722,7 @@ function InsightMoney(props: SectionProps): JSX.Element {
                     {(entry) => (
                       <WorkspaceListRow
                         title={`${calendarDay(entry().date)} · ${t(MONEY_KIND_KEY[entry().kind])}`}
-                        titleEnd={`${format.number(entry().amount, { maximumFractionDigits: 2 })} ${entry().currency}`}
+                        titleEnd={format.currency(entry().amount, entry().currency, { maximumFractionDigits: 2 })}
                         actions={
                           <IconButton
                             variant="ghost"

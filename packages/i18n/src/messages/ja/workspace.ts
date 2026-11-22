@@ -593,7 +593,7 @@ export const messages = {
   "workspace.money.revenue": "売上",
   "workspace.money.adSpend": "広告費",
   "workspace.money.net": "純額",
-  "workspace.money.otherCurrency": "他の通貨の記録はこの合計に含まれません。",
+  "workspace.money.otherCurrencyNet": "エージェントの費用はドル建てです。純額はドルの記録からのみ差し引きます。",
   "workspace.money.waiting": { other: "承認待ち（{count}）" },
   "workspace.money.noSpendWaiting": "承認待ちの支出はありません。",
   "workspace.money.byAgent": "エージェント別",

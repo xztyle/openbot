@@ -598,7 +598,8 @@ export const messages = {
   "workspace.money.revenue": "Receita",
   "workspace.money.adSpend": "Gasto com anúncios",
   "workspace.money.net": "Líquido",
-  "workspace.money.otherCurrency": "Lançamentos em outras moedas ficam fora destes totais.",
+  "workspace.money.otherCurrencyNet":
+    "Os custos dos agentes estão em dólares: o líquido só os desconta das entradas em dólares.",
   "workspace.money.waiting": { one: "Esperando seu OK ({count})", other: "Esperando seu OK ({count})" },
   "workspace.money.noSpendWaiting": "Nenhum gasto espera seu OK.",
   "workspace.money.byAgent": "Por agente",

@@ -1134,7 +1134,7 @@ export const messages = defineMessages("workspace", {
   "workspace.money.revenue": "Revenue",
   "workspace.money.adSpend": "Ad spend",
   "workspace.money.net": "Net",
-  "workspace.money.otherCurrency": "Entries in other currencies are left out of these totals.",
+  "workspace.money.otherCurrencyNet": "Agent costs are in dollars: the net counts them only against dollar entries.",
   "workspace.money.waiting": { one: "Waiting for your OK ({count})", other: "Waiting for your OK ({count})" },
   "workspace.money.noSpendWaiting": "No spending waits for your OK.",
   "workspace.money.byAgent": "By agent",

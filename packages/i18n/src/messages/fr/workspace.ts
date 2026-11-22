@@ -588,7 +588,8 @@ export const messages = {
   "workspace.money.revenue": "Revenus",
   "workspace.money.adSpend": "Dépenses pub",
   "workspace.money.net": "Net",
-  "workspace.money.otherCurrency": "Les entrées dans d’autres devises ne sont pas comptées.",
+  "workspace.money.otherCurrencyNet":
+    "Les coûts des agents sont en dollars : le net ne les déduit que des entrées en dollars.",
   "workspace.money.waiting": {
     one: "En attente de votre accord ({count})",
     other: "En attente de votre accord ({count})",

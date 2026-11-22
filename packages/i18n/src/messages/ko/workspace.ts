@@ -588,7 +588,7 @@ export const messages = {
   "workspace.money.revenue": "매출",
   "workspace.money.adSpend": "광고비",
   "workspace.money.net": "순이익",
-  "workspace.money.otherCurrency": "다른 통화 항목은 이 합계에서 빠져요.",
+  "workspace.money.otherCurrencyNet": "에이전트 비용은 달러 기준입니다. 순액은 달러 항목에서만 차감합니다.",
   "workspace.money.waiting": { other: "승인 대기 ({count})" },
   "workspace.money.noSpendWaiting": "승인을 기다리는 지출이 없어요.",
   "workspace.money.byAgent": "에이전트별",

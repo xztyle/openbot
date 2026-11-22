@@ -579,7 +579,7 @@ export const messages = {
   "workspace.money.revenue": "收入",
   "workspace.money.adSpend": "广告支出",
   "workspace.money.net": "净额",
-  "workspace.money.otherCurrency": "其他货币的记录不计入这些合计。",
+  "workspace.money.otherCurrencyNet": "智能体费用以美元计：净额只从美元条目中扣除。",
   "workspace.money.waiting": { other: "等你批准（{count}）" },
   "workspace.money.noSpendWaiting": "没有等你批准的支出。",
   "workspace.money.byAgent": "按智能体",

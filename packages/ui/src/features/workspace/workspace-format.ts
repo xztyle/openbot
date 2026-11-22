@@ -20,17 +20,25 @@ export function useMessageTime(): (at: number) => string {
   return (at) => format.date(at, { hour: "numeric", minute: "2-digit" });
 }
 
-/** A time near now: the hour today, the weekday this week, else the date. Nothing for an unknown time. */
+/**
+ * A time near now: the hour today, "Yesterday", the weekday earlier this week, else the date.
+ * Nothing for an unknown time; the year only for another year. A time ahead of now on another day is a date: a weekday alone would
+ * read as this past week.
+ */
 export function useRecentTime(): (at: number, now?: number) => string {
-  const { format } = useText();
+  const { t, format } = useText();
   return (at, now = Date.now()) => {
     // A date the host could not give (0, or a text that did not parse) is not 1 January 1970.
     if (!Number.isFinite(at) || at <= 0) return "";
     const day = 86_400_000;
     const sameDay = new Date(at).toDateString() === new Date(now).toDateString();
     if (sameDay) return format.date(at, { hour: "numeric", minute: "2-digit" });
-    if (now - at < 6 * day) return format.date(at, { weekday: "short" });
-    return format.date(at, { month: "short", day: "numeric" });
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (new Date(at).toDateString() === yesterday.toDateString()) return t("workspace.day.yesterday");
+    if (at < now && now - at < 6 * day) return format.date(at, { weekday: "short" });
+    const otherYear = new Date(at).getFullYear() !== new Date(now).getFullYear();
+    return format.date(at, { month: "short", day: "numeric", ...(otherYear ? { year: "numeric" } : {}) });
   };
 }
 

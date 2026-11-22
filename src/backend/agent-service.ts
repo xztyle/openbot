@@ -1634,6 +1634,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
         staleTurnSettlement: (agentId, threadId, turnId) =>
           this.#turnRunsNowhere(agentId, turnId) ? this.#settleStaleOwnTurn(agentId, threadId, turnId) : null,
+        orphanedDeliveryRecovery: (agentId) =>
+          this.#mayRecoverOrphanedDeliveries(agentId) ? this.#recoverOrphanedDeliveries(agentId) : null,
         redactMcp: (text) => this.#mcp.redact(text),
         isStopping: () => this.#stopping,
         isDeployDraining: () => this.#deployDrainUntil !== null && Date.now() < this.#deployDrainUntil,
@@ -2159,6 +2161,29 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       turnId,
     });
     yield* this.#turn.settleOrphanedTurn(agentId, threadId, turnId, "interrupted");
+  });
+
+  /** The agent's own chat has an orphaned delivery, and its provider is up to read the history. */
+  #mayRecoverOrphanedDeliveries(agentId: string): boolean {
+    if (this.#stopping || !this.#boot.hasOrphanedOwnChatDelivery(agentId)) return false;
+    const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+    return agent !== undefined && this.#providers.clientFor(providerForAgent(agent)) !== null;
+  }
+
+  readonly #recoverOrphanedDeliveries = Effect.fn("AgentService.recoverOrphanedDeliveries")(function* (
+    this: AgentService,
+    agentId: string,
+  ) {
+    if (!this.#mayRecoverOrphanedDeliveries(agentId)) return;
+    logger.warn("A message that no provider runs held the agent's queue. It is settled again.", { agentId });
+    yield* this.#boot
+      .reconcileUnresolvedDeliveries(agentId)
+      .pipe(
+        Effect.catch((failure) =>
+          Effect.sync(() => this.#emitError("delivery_reconcile_failed", failure.cause, agentId)),
+        ),
+      );
+    if (!this.#boot.hasOrphanedOwnChatDelivery(agentId)) this.#drain.scheduleDrain(agentId);
   });
 
   getRuntimeSnapshot(): AgentRuntimeSnapshot {

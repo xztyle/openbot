@@ -139,8 +139,28 @@ export class BootRecovery {
     }
   }
 
+  /** Whether a delivery of this agent's own chat is still marked orphaned and starting or running. */
+  hasOrphanedOwnChatDelivery(agentId: string): boolean {
+    for (const id of this.#orphanedDeliveryIds) {
+      const delivery = this.#mailbox.getDelivery(id)?.delivery;
+      if (
+        delivery &&
+        (delivery.status === "starting" || delivery.status === "running") &&
+        this.#inOwnChatOf(delivery, agentId)
+      )
+        return true;
+    }
+    return false;
+  }
+
+  #inOwnChatOf(delivery: { id: string; recipientAgentId: string }, agentId: string): boolean {
+    return delivery.recipientAgentId === agentId && this.#mailbox.taskIdForDelivery(delivery.id) === null;
+  }
+
+  /** `ownChatAgentId` settles only the deliveries of that agent's own chat. */
   readonly reconcileUnresolvedDeliveries = Effect.fn("BootRecovery.reconcileUnresolvedDeliveries")(function* (
     this: BootRecovery,
+    ownChatAgentId?: string,
   ) {
     const unresolved = yield* recoveryStep(() => this.#mailbox.unresolvedDeliveries());
     // A delivery settled by another path never becomes unresolved again, so its mark goes too.
@@ -160,6 +180,7 @@ export class BootRecovery {
       unconfirmedStarts.set(laneOf(delivery), ids.add(delivery.id));
     }
     for (const { delivery } of unresolved) {
+      if (ownChatAgentId !== undefined && !this.#inOwnChatOf(delivery, ownChatAgentId)) continue;
       if (!this.#orphanedDeliveryIds.delete(delivery.id)) continue;
       const batchIds = delivery.turnId ? null : (unconfirmedStarts.get(laneOf(delivery)) ?? null);
       // One delivery that cannot settle must not leave the others of this pass running (#2214).

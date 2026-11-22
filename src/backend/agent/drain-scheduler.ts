@@ -71,6 +71,11 @@ export interface DrainHooks {
    */
   staleTurnSettlement(agentId: string, threadId: string, turnId: string): Effect.Effect<void> | null;
   /**
+   * Settles again the orphaned deliveries of the agent's own chat that boot recovery could not settle,
+   * or null when there is none or the agent's provider is not up.
+   */
+  orphanedDeliveryRecovery(agentId: string): Effect.Effect<void> | null;
+  /**
    * Whether the catalogue still serves this model. A removed endpoint's models stay in the running
    * OpenCode process until it restarts, and the restart waits for a busy agent, so this is what
    * keeps a delivery off an endpoint the user has taken out.
@@ -224,6 +229,7 @@ export class DrainScheduler {
   readonly #reportedHolds = new Map<string, string>();
   /** The stale turns of the agents' own chats that a settle ends now, so a drain starts only one. */
   readonly #settlingTurns = new Set<string>();
+  readonly #recoveringAgents = new Set<string>();
   /**
    * The model each lane's running turn was started with, by lane key. The agent record can be moved
    * to another model while that turn runs, but the CLI keeps the session it opened, so this is the
@@ -387,6 +393,27 @@ export class DrainScheduler {
   }
 
   /**
+   * After a restart a delivery can stay "running" with no turn behind it, when the boot reconcile did
+   * not run or failed. It then holds the agent's own chat: new messages wait, the chat has no Stop,
+   * and `interrupt_agent` is refused. The drain runs the reconcile again for that chat. A failed one
+   * waits for the next drain, so it cannot loop.
+   */
+  #recoverIdleLane(lane: Lane): void {
+    const { agentId, taskId } = lane;
+    if (
+      taskId !== null ||
+      this.#recoveringAgents.has(agentId) ||
+      this.#laneTurnActive(lane) ||
+      !this.#mailbox.laneActive(agentId, taskId)
+    )
+      return;
+    const recovery = this.#hooks.orphanedDeliveryRecovery(agentId);
+    if (!recovery) return;
+    this.#recoveringAgents.add(agentId);
+    Effect.runFork(recovery.pipe(Effect.ensuring(Effect.sync(() => this.#recoveringAgents.delete(agentId)))));
+  }
+
+  /**
    * Logs once why a queued message of this lane waits, and again only when the reason changes. A
    * queue that never starts again then names the clause that holds it.
    */
@@ -463,6 +490,7 @@ export class DrainScheduler {
       (this.#heldByMachine(lane) && "machine");
     if (hold) this.#reportHold(lane, hold);
     if (hold === "active-turn") this.#settleStaleOwnTurn(lane);
+    if (hold === "machine") this.#recoverIdleLane(lane);
     if (followUsageLimit && (!hold || hold === "usage-limit") && this.#hooks.followUsageLimit(lane.agentId))
       return true;
     if (hold) return false;
@@ -574,6 +602,7 @@ export class DrainScheduler {
     if (hold) {
       this.#reportHold(lane, hold);
       if (hold === "active-turn") this.#settleStaleOwnTurn(lane);
+      if (hold === "machine") this.#recoverIdleLane(lane);
       return;
     }
     this.#reportedHolds.delete(key);
@@ -582,6 +611,7 @@ export class DrainScheduler {
       if (this.#laneTurnActive(lane)) return;
       const context = this.#mailbox.nextQueued(agentId, taskId);
       if (!context) {
+        this.#recoverIdleLane(lane);
         // Here, so that a message that arrives during the new chat waits for this drain to end.
         if (taskId === null) yield* this.#hooks.startRequestedNewChat(agentId);
         return;

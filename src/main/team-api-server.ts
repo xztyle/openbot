@@ -996,7 +996,7 @@ export class TeamApiServer {
       if ((await routeProviderAccounts(context, this.#options.providerAccounts)) === "handled") return;
       if ((await routeProviderAccountPool(context, this.#options.providerAccounts)) === "handled") return;
       if ((await routeProviderUsageReset(context, this.#options.providerUsageResets)) === "handled") return;
-      if ((await routeStorage(context, this.#options.storage)) === "handled") return;
+      if ((await routeStorage(context, this.#options.storage, hidden)) === "handled") return;
       if ((await routeStorageHygiene(context, this.#options.storageHygiene)) === "handled") return;
       if ((await routeHostedSites(context, this.#options.hostedSites)) === "handled") return;
       if ((await routeAgentAdmin(context, this.#options.admin, hidden)) === "handled") return;

@@ -7,3 +7,4 @@
 - When a Claude Code session starts OpenBot, its session variables no longer reach the agents.
 - The web app and the iPhone app pin the first key that they see for a joined server. A later key change is accepted only with a handover that both keys signed; without one, only the connection to that server fails, not the server list. Before, they used any key that the account service listed for a server with no pin. (Upstream 21d080a49.)
 - A tab that a member opens in an agent's browser panel on a joined server opens in that agent's browser profile again, not in the shared profile, where its sign-in reached every agent. (Upstream 2357441bb.)
+- A member's Storage view lists the chats and files only of the agents that they can see. Before, it also listed the chats and files of agents that their role closes to them, and a file id was enough to download the file. (Upstream ceb099ce3.)

@@ -4,11 +4,13 @@ import type {
   RolePlaybook,
   RolePlaybooksSnapshot,
 } from "@openbot/contracts/agent-efficiency";
+import type { LearningReviewItem, LearningSettings } from "@openbot/contracts/agent-learning";
 import { Button, Input, SwitchField, Text, Textarea, toast } from "@openbot/ui";
 import { WorkspacePaneHeader } from "@openbot/ui/features/workspace/WorkspacePaneHeader";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, onSettled, Show } from "solid-js";
 import { useWorkspace } from "../workspace/workspace-context";
+import { LearningCard } from "./LearningCard";
 import { ReviewCard } from "./ReviewCard";
 import "./efficiency.css";
 
@@ -23,14 +25,17 @@ interface PlaybookDraft {
 
 /**
  * The Reviews view: what the automatic model policy saved, the newest weekly review of each agent of
- * the space with its proposal to approve, and the role playbooks with the changes agents proposed.
+ * the space with its proposal to approve, the role playbooks with the changes agents proposed, and
+ * what the nightly memory cleanup and the task lessons propose for the agents of the space.
  * For an owner or an admin of a host with agent-efficiency-v1.
  */
 export function WorkspaceReviewsView() {
   const { t, errorMessage } = useText();
   const ws = useWorkspace();
   const calls = () => ws.env.efficiency?.();
-  const [tab, setTab] = createSignal<"reviews" | "playbooks">("reviews");
+  const [tab, setTab] = createSignal<"reviews" | "playbooks" | "learning">("reviews");
+  const [learning, setLearning] = createSignal<LearningReviewItem[] | null>(null);
+  const [learningSettings, setLearningSettings] = createSignal<LearningSettings | null>(null);
   const [reviews, setReviews] = createSignal<PerformanceReview[] | null>(null);
   const [enabled, setEnabled] = createSignal(true);
   const [savings, setSavings] = createSignal<ModelSavingsSnapshot | null>(null);
@@ -52,6 +57,10 @@ export function WorkspaceReviewsView() {
       setSavings(saved);
       setPlaybooks(books);
       setError(null);
+      // A host before agent-learning-v1 answers 404: the tab then stays empty.
+      const learned = await api.learning({}).catch(() => null);
+      setLearning(learned?.items ?? null);
+      setLearningSettings(learned?.settings ?? null);
     } catch (failure) {
       setError(errorMessage(failure, t("efficiency.view.loadFailed")));
     }
@@ -67,6 +76,24 @@ export function WorkspaceReviewsView() {
       }),
   );
   const pendingCount = () => shown().filter((review) => review.proposal?.state === "pending").length;
+  const learned = createMemo(() => (learning() ?? []).filter((item) => item.agentId === null || inSpace(item.agentId)));
+  const learningPending = () => learned().filter((item) => item.state === "pending");
+  const learningDone = () =>
+    learned()
+      .filter((item) => item.state !== "pending")
+      .slice(0, 20);
+  const replaceItem = (next: LearningReviewItem) =>
+    setLearning((list) => (list ?? []).map((item) => (item.id === next.id ? next : item)));
+  function setLearningSetting(change: Partial<LearningSettings>): void {
+    const api = calls();
+    const before = learningSettings();
+    if (!api || !before) return;
+    setLearningSettings({ ...before, ...change });
+    void api.learning({ settings: change }).then(
+      (page) => setLearningSettings(page.settings),
+      () => setLearningSettings(before),
+    );
+  }
 
   async function act(run: () => Promise<RolePlaybooksSnapshot>): Promise<boolean> {
     setBusy(true);
@@ -127,6 +154,15 @@ export function WorkspaceReviewsView() {
           >
             {t("efficiency.view.tab.playbooks")}
           </Button>
+          <Show when={learningSettings()}>
+            <Button
+              variant={tab() === "learning" ? "secondary" : "ghost"}
+              aria-pressed={tab() === "learning" ? "true" : "false"}
+              onClick={() => setTab("learning")}
+            >
+              {t("efficiency.view.tab.learning")}
+            </Button>
+          </Show>
         </div>
         <Show when={error()}>
           {(message) => (
@@ -192,6 +228,65 @@ export function WorkspaceReviewsView() {
                 </Show>
               )}
             </For>
+          </div>
+        </Show>
+        <Show when={tab() === "learning"}>
+          <div class="efficiency-section">
+            <h3>{t("efficiency.learning.title")}</h3>
+            <Text tone="muted">{t("efficiency.learning.hint")}</Text>
+            <Show when={learningSettings()}>
+              {(settings) => (
+                <>
+                  <SwitchField
+                    label={t("efficiency.learning.dreaming")}
+                    checked={settings().dreaming}
+                    onChange={(dreaming) => setLearningSetting({ dreaming })}
+                  />
+                  <SwitchField
+                    label={t("efficiency.learning.taskLearning")}
+                    checked={settings().taskLearning}
+                    onChange={(taskLearning) => setLearningSetting({ taskLearning })}
+                  />
+                </>
+              )}
+            </Show>
+            <Show
+              when={learningPending().length > 0}
+              fallback={<Text tone="muted">{t("efficiency.learning.empty")}</Text>}
+            >
+              <Text>{t("efficiency.learning.pending", { count: learningPending().length })}</Text>
+            </Show>
+            <For each={learningPending()} keyed={(item) => item.id}>
+              {(item) => (
+                <Show when={calls()}>
+                  {(api) => (
+                    <LearningCard
+                      item={item()}
+                      calls={api()}
+                      agentName={item().agentId ? agentName(item().agentId ?? "") : undefined}
+                      onDecided={replaceItem}
+                    />
+                  )}
+                </Show>
+              )}
+            </For>
+            <Show when={learningDone().length > 0}>
+              <h3>{t("efficiency.learning.recent")}</h3>
+              <For each={learningDone()} keyed={(item) => item.id}>
+                {(item) => (
+                  <Show when={calls()}>
+                    {(api) => (
+                      <LearningCard
+                        item={item()}
+                        calls={api()}
+                        agentName={item().agentId ? agentName(item().agentId ?? "") : undefined}
+                        onDecided={replaceItem}
+                      />
+                    )}
+                  </Show>
+                )}
+              </For>
+            </Show>
           </div>
         </Show>
         <Show when={tab() === "playbooks"}>

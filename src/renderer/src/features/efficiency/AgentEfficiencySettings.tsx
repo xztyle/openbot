@@ -15,6 +15,7 @@ import { SettingsField, SettingsLinkGroup } from "@openbot/ui/components/Setting
 import type { AgentProfile } from "@openbot/ui/data";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createStore, onCleanup, Show } from "solid-js";
+import { AgentLearningSettings } from "./AgentLearningSettings";
 import type { EfficiencyCalls } from "./efficiency-port";
 import { ReviewCard } from "./ReviewCard";
 
@@ -43,6 +44,8 @@ export function AgentEfficiencySettings(props: {
   agent: AgentProfile;
   onUpdateAgent: (agentId: string, updates: Omit<UpdateAgentInput, "agentId">) => Promise<void>;
   calls?: EfficiencyCalls | undefined;
+  /** The name of another agent, for the author of a settings change. */
+  agentName?: ((agentId: string) => string) | undefined;
 }) {
   const { t, errorMessage } = useText();
   const [state, setState] = createStore<State>({
@@ -235,6 +238,11 @@ export function AgentEfficiencySettings(props: {
                 {state.reviewing ? t("efficiency.review.running") : t("efficiency.review.run")}
               </Button>
             </SettingsField>
+            <AgentLearningSettings
+              agentId={props.agent.id}
+              calls={calls()}
+              agentName={(agentId) => props.agentName?.(agentId) ?? agentId}
+            />
           </>
         )}
       </Show>

@@ -10,8 +10,18 @@ import type {
   SetAgentsSleepingResult,
   SleepTarget,
 } from "@openbot/contracts/agent-efficiency";
+import type {
+  DecisionQueueEntry,
+  ForgetConversationResult,
+  LearningDecision,
+  LearningReviewItem,
+  LearningReviewsInput,
+  LearningReviewsPage,
+  SettingsCheckpoint,
+} from "@openbot/contracts/agent-learning";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { AGENT_EFFICIENCY_ROUTES } from "@openbot/contracts/team-protocol/agent-efficiency-v1";
+import { AGENT_LEARNING_ROUTES } from "@openbot/contracts/team-protocol/agent-learning-v1";
 import type { TeamApiRequest } from "@openbot/team-client/team-api-requests";
 
 /** The sleep, savings, review and playbook calls of a host, for an owner or an admin (agent-efficiency-v1). */
@@ -26,6 +36,14 @@ export interface EfficiencyCalls {
   importPlaybook(input: ImportRolePlaybookInput): Promise<RolePlaybooksSnapshot>;
   removePlaybook(id: string): Promise<RolePlaybooksSnapshot>;
   decidePlaybook(proposalId: string, decision: "approve" | "dismiss"): Promise<RolePlaybooksSnapshot>;
+  /** agent-learning-v1: the review items of the nightly cleanup and the task lessons. */
+  learning(input: LearningReviewsInput): Promise<LearningReviewsPage>;
+  decideLearning(itemId: string, decision: LearningDecision): Promise<LearningReviewItem>;
+  dream(agentId: string): Promise<LearningReviewItem[]>;
+  decisionQueue(): Promise<DecisionQueueEntry[]>;
+  settingsHistory(agentId: string): Promise<SettingsCheckpoint[]>;
+  rollback(checkpointId: string): Promise<SettingsCheckpoint>;
+  forgetConversation(agentId: string, confirm: boolean): Promise<ForgetConversationResult>;
 }
 
 // The route codecs of agent-efficiency-v1 check each answer on the way in; these only name its type.
@@ -49,6 +67,29 @@ function isPlaybooks(value: unknown): value is RolePlaybooksSnapshot {
     Array.isArray(value.candidates)
   );
 }
+
+function isLearningPage(value: unknown): value is LearningReviewsPage {
+  return isDynamicRecord(value) && Array.isArray(value.items) && isDynamicRecord(value.settings);
+}
+function isForgetResult(value: unknown): value is ForgetConversationResult {
+  return isDynamicRecord(value) && Array.isArray(value.memories) && typeof value.forgotten === "number";
+}
+
+/** The list or record under `key` of an answer that the route codec already checked. */
+function field<T>(key: string, guard: (value: unknown) => value is T): (value: unknown) => T {
+  return (value) => {
+    const inner = isDynamicRecord(value) ? value[key] : undefined;
+    if (!guard(inner)) throw new Error("Invalid answer.");
+    return inner;
+  };
+}
+const isItem = (value: unknown): value is LearningReviewItem => isDynamicRecord(value) && typeof value.id === "string";
+const isItems = (value: unknown): value is LearningReviewItem[] => Array.isArray(value) && value.every(isItem);
+const isEntries = (value: unknown): value is DecisionQueueEntry[] => Array.isArray(value);
+const isCheckpoint = (value: unknown): value is SettingsCheckpoint =>
+  isDynamicRecord(value) && typeof value.id === "string" && Array.isArray(value.changes);
+const isCheckpoints = (value: unknown): value is SettingsCheckpoint[] =>
+  Array.isArray(value) && value.every(isCheckpoint);
 
 function decoder<T>(guard: (value: unknown) => value is T): (value: unknown) => T {
   return (value) => {
@@ -86,6 +127,24 @@ export function hostEfficiencyCalls(request: () => TeamApiRequest): EfficiencyCa
     removePlaybook: (id) => request()("POST", AGENT_EFFICIENCY_ROUTES.removePlaybook, playbooks, { id }),
     decidePlaybook: (proposalId, decision) =>
       request()("POST", AGENT_EFFICIENCY_ROUTES.decidePlaybook, playbooks, { proposalId, decision }),
+    learning: (input) =>
+      request()("POST", AGENT_LEARNING_ROUTES.reviews, decoder(isLearningPage), {
+        ...input,
+        ...(input.settings ? { settings: { ...input.settings } } : {}),
+      }),
+    decideLearning: (itemId, decision) =>
+      request()("POST", AGENT_LEARNING_ROUTES.decide, field("item", isItem), { itemId, decision }),
+    dream: (agentId) => request()("POST", AGENT_LEARNING_ROUTES.dream, field("items", isItems), { agentId }),
+    decisionQueue: () => request()("POST", AGENT_LEARNING_ROUTES.queue, field("entries", isEntries), {}),
+    settingsHistory: (agentId) =>
+      request()("POST", AGENT_LEARNING_ROUTES.history, field("checkpoints", isCheckpoints), { agentId }),
+    rollback: (checkpointId) =>
+      request()("POST", AGENT_LEARNING_ROUTES.rollback, field("checkpoint", isCheckpoint), { checkpointId }),
+    forgetConversation: (agentId, confirm) =>
+      request()("POST", AGENT_LEARNING_ROUTES.forgetConversation, decoder(isForgetResult), {
+        agentId,
+        ...(confirm ? { confirm: true } : {}),
+      }),
   };
 }
 

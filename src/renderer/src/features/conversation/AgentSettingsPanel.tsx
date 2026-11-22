@@ -448,7 +448,12 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
           <Show when={props.channelDefaults}>
             {(api) => <AgentChannelDefaults agentId={props.agent.id} api={api()} />}
           </Show>
-          <AgentEfficiencySettings agent={props.agent} onUpdateAgent={props.onUpdateAgent} calls={props.efficiency} />
+          <AgentEfficiencySettings
+            agent={props.agent}
+            onUpdateAgent={props.onUpdateAgent}
+            calls={props.efficiency}
+            agentName={(agentId) => props.agents?.find((agent) => agent.id === agentId)?.name ?? agentId}
+          />
           <Show when={memoriesVisible() || skillsMode() !== "hidden" || props.tablesVisible !== false || props.files}>
             <SettingsLinkGroup inset title={t("agentSettings.groups.knows")}>
               <Show when={memoriesVisible()}>

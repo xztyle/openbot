@@ -482,4 +482,11 @@ export const messages = {
   "workspace.emoji.tone.mediumDark": "やや暗い",
   "workspace.emoji.tone.dark": "暗い",
   "workspace.emoji.previewHint": "絵文字にポインタを合わせると名前が表示されます。",
+  "workspace.secretHygiene.marker": "[非表示: {label}]",
+  "workspace.secretHygiene.title": "Atelier がメッセージ内の {label} を非表示にしました",
+  "workspace.secretHygiene.body":
+    "送信も保存もされていません。エージェントが使えるようにシークレットに保存し、他の場所で共有していた場合は再発行してください。",
+  "workspace.secretHygiene.save": "シークレットに保存",
+  "workspace.secretHygiene.saved": "{name} としてシークレットに保存しました。エージェントが使えます。",
+  "workspace.secretHygiene.saveFailed": "シークレットを保存できませんでした。シークレット画面から追加してください。",
 } as const satisfies PartialTranslation<typeof source>;

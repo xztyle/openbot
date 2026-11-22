@@ -1007,4 +1007,11 @@ export const messages = {
   "workspace.loops.editor.delete": "Borrar ciclo",
   "workspace.needsYou.action.ticket": "Revisar un ticket de Motion",
   "workspace.ticket.open": "Abrir {key} en Motion: {title}",
+  "workspace.secretHygiene.marker": "[oculto: {label}]",
+  "workspace.secretHygiene.title": "Atelier ocultó un {label} de tu mensaje",
+  "workspace.secretHygiene.body":
+    "No se envió ni se guardó. Guárdalo en Secretos para que los agentes puedan usarlo, y cámbialo si lo compartiste en otro sitio.",
+  "workspace.secretHygiene.save": "Guardar como secreto",
+  "workspace.secretHygiene.saved": "Guardado como {name} en Secretos. Los agentes ya pueden usarlo.",
+  "workspace.secretHygiene.saveFailed": "El secreto no se guardó. Añádelo en Secretos.",
 } as const satisfies PartialTranslation<typeof source>;

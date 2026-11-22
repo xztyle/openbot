@@ -471,4 +471,12 @@ export const messages = {
   "workspace.emoji.tone.mediumDark": "Mitteldunkel",
   "workspace.emoji.tone.dark": "Dunkel",
   "workspace.emoji.previewHint": "Zeige auf ein Emoji, um seinen Namen zu sehen.",
+  "workspace.secretHygiene.marker": "[verborgen: {label}]",
+  "workspace.secretHygiene.title": "Atelier hat ein {label} aus deiner Nachricht entfernt",
+  "workspace.secretHygiene.body":
+    "Es wurde weder gesendet noch gespeichert. Speichere es unter Geheimnisse, damit Agenten es nutzen können, und erneuere es, falls es anderswo geteilt wurde.",
+  "workspace.secretHygiene.save": "Als Geheimnis speichern",
+  "workspace.secretHygiene.saved": "Als {name} unter Geheimnisse gespeichert. Agenten können es jetzt nutzen.",
+  "workspace.secretHygiene.saveFailed":
+    "Das Geheimnis wurde nicht gespeichert. Füge es stattdessen unter Geheimnisse hinzu.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -465,4 +465,11 @@ export const messages = {
   "workspace.emoji.tone.mediumDark": "Medio-scura",
   "workspace.emoji.tone.dark": "Scura",
   "workspace.emoji.previewHint": "Passa sopra un’emoji per vederne il nome.",
+  "workspace.secretHygiene.marker": "[nascosto: {label}]",
+  "workspace.secretHygiene.title": "Atelier ha nascosto un {label} dal tuo messaggio",
+  "workspace.secretHygiene.body":
+    "Non è stato inviato né salvato. Salvalo in Segreti perché gli agenti possano usarlo, e rinnovalo se l'hai condiviso altrove.",
+  "workspace.secretHygiene.save": "Salva come segreto",
+  "workspace.secretHygiene.saved": "Salvato come {name} in Segreti. Gli agenti possono usarlo ora.",
+  "workspace.secretHygiene.saveFailed": "Il segreto non è stato salvato. Aggiungilo in Segreti.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -607,4 +607,11 @@ export const messages = {
   "workspace.emoji.tone.mediumDark": "Średnio ciemny",
   "workspace.emoji.tone.dark": "Ciemny",
   "workspace.emoji.previewHint": "Wskaż emoji, aby zobaczyć jego nazwę.",
+  "workspace.secretHygiene.marker": "[ukryto: {label}]",
+  "workspace.secretHygiene.title": "Atelier ukrył {label} w twojej wiadomości",
+  "workspace.secretHygiene.body":
+    "Nie został wysłany ani zapisany. Zapisz go w Sekretach, aby agenci mogli go używać, i zmień go, jeśli udostępniono go gdzie indziej.",
+  "workspace.secretHygiene.save": "Zapisz jako sekret",
+  "workspace.secretHygiene.saved": "Zapisano jako {name} w Sekretach. Agenci mogą go teraz używać.",
+  "workspace.secretHygiene.saveFailed": "Nie zapisano sekretu. Dodaj go w Sekretach.",
 } as const satisfies PartialTranslation<typeof source>;

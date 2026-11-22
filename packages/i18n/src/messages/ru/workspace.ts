@@ -608,4 +608,11 @@ export const messages = {
   "workspace.emoji.tone.mediumDark": "Умеренно тёмный",
   "workspace.emoji.tone.dark": "Тёмный",
   "workspace.emoji.previewHint": "Наведите на эмодзи, чтобы увидеть его название.",
+  "workspace.secretHygiene.marker": "[скрыто: {label}]",
+  "workspace.secretHygiene.title": "Atelier скрыл {label} в вашем сообщении",
+  "workspace.secretHygiene.body":
+    "Он не был отправлен или сохранён. Сохраните его в секретах, чтобы агенты могли его использовать, и замените, если он попал куда-то ещё.",
+  "workspace.secretHygiene.save": "Сохранить как секрет",
+  "workspace.secretHygiene.saved": "Сохранено как {name} в секретах. Агенты уже могут его использовать.",
+  "workspace.secretHygiene.saveFailed": "Секрет не сохранён. Добавьте его в разделе секретов.",
 } as const satisfies PartialTranslation<typeof source>;

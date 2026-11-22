@@ -486,4 +486,11 @@ export const messages = {
   "workspace.emoji.tone.mediumDark": "Orta koyu",
   "workspace.emoji.tone.dark": "Koyu",
   "workspace.emoji.previewHint": "Adını görmek için bir emojinin üzerine gelin.",
+  "workspace.secretHygiene.marker": "[gizlendi: {label}]",
+  "workspace.secretHygiene.title": "Atelier mesajınızdaki {label} değerini gizledi",
+  "workspace.secretHygiene.body":
+    "Gönderilmedi ve saklanmadı. Ajanların kullanabilmesi için Gizli bilgilere kaydedin ve başka bir yerde paylaşıldıysa yenileyin.",
+  "workspace.secretHygiene.save": "Gizli olarak kaydet",
+  "workspace.secretHygiene.saved": "Gizli bilgilere {name} olarak kaydedildi. Ajanlar artık kullanabilir.",
+  "workspace.secretHygiene.saveFailed": "Gizli bilgi kaydedilmedi. Gizli bilgiler bölümünden ekleyin.",
 } as const satisfies PartialTranslation<typeof source>;

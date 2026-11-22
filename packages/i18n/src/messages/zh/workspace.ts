@@ -470,4 +470,10 @@ export const messages = {
   "workspace.emoji.tone.mediumDark": "中等深色",
   "workspace.emoji.tone.dark": "深色",
   "workspace.emoji.previewHint": "指向一个表情即可查看名称。",
+  "workspace.secretHygiene.marker": "[已隐藏：{label}]",
+  "workspace.secretHygiene.title": "Atelier 已从你的消息中隐藏 {label}",
+  "workspace.secretHygiene.body": "它未被发送或保存。请保存到密钥中供智能体使用；如果在其他地方分享过，请更换它。",
+  "workspace.secretHygiene.save": "保存为密钥",
+  "workspace.secretHygiene.saved": "已保存为密钥 {name}，智能体现在可以使用。",
+  "workspace.secretHygiene.saveFailed": "未能保存该密钥，请在密钥页面中添加。",
 } as const satisfies PartialTranslation<typeof source>;

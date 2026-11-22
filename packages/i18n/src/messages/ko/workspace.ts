@@ -478,4 +478,11 @@ export const messages = {
   "workspace.emoji.tone.mediumDark": "중간 어두운 톤",
   "workspace.emoji.tone.dark": "어두운 톤",
   "workspace.emoji.previewHint": "이모지를 가리키면 이름이 보여요.",
+  "workspace.secretHygiene.marker": "[숨김: {label}]",
+  "workspace.secretHygiene.title": "Atelier가 메시지에서 {label}을(를) 숨겼습니다",
+  "workspace.secretHygiene.body":
+    "전송되거나 저장되지 않았습니다. 에이전트가 사용할 수 있도록 시크릿에 저장하고, 다른 곳에 공유했다면 교체하세요.",
+  "workspace.secretHygiene.save": "시크릿으로 저장",
+  "workspace.secretHygiene.saved": "시크릿에 {name}(으)로 저장했습니다. 이제 에이전트가 사용할 수 있습니다.",
+  "workspace.secretHygiene.saveFailed": "시크릿을 저장하지 못했습니다. 시크릿 화면에서 추가하세요.",
 } as const satisfies PartialTranslation<typeof source>;

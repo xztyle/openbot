@@ -14,6 +14,7 @@ import { useWorkspace } from "./workspace-context";
 import { draftKey } from "./workspace-controller";
 import { broadcastAudience, draftBroadcast, previewText } from "./workspace-model";
 import type { OutboxMessage } from "./workspace-outbox";
+import { useSecretHygiene } from "./workspace-secret-offer";
 
 /**
  * A broadcast that would notify this many people or more asks first, as Slack does in a channel of
@@ -50,6 +51,7 @@ export interface WorkspaceComposerProps {
  */
 export function WorkspaceComposer(props: WorkspaceComposerProps) {
   const { t, errorMessage } = useText();
+  const secrets = useSecretHygiene();
   const ws = useWorkspace();
   const platform = usePlatform();
   const id = Symbol("composer");
@@ -215,11 +217,13 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     setError(null);
     const current = editing();
     if (current) {
-      const text = value().trim();
+      const scanned = secrets.scan(value().trim());
+      const text = scanned.text;
       if (!text && !editedHasFiles()) return;
       setSending(true);
       try {
         await ws.editMessage(current.channelId, current.messageId, text);
+        secrets.offer(scanned.found);
       } catch (cause) {
         setError(errorMessage(cause, t("workspace.app.error.edit")));
       } finally {
@@ -228,7 +232,10 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
       return;
     }
     const files = attachments();
-    const body = value().trim();
+    // A pasted key or password never reaches the host: a marker takes its place, and a notice
+    // offers to save it in Secrets.
+    const scanned = secrets.scan(value().trim());
+    const body = scanned.text;
     // The message goes to the outbox, which sends it now or once the connection is back: the box
     // is free for the next one at once, and nothing the reader wrote waits on the network.
     const sentKey = key();
@@ -244,6 +251,7 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     setAttachments([], sentKey);
     setAlsoSend(false);
     setFocus((request) => request + 1);
+    secrets.offer(scanned.found);
   }
 
   /** ↑ in an empty box edits the reader's last message, as in Slack. Escape ends an edit. */

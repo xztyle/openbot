@@ -1018,4 +1018,11 @@ export const messages = defineMessages("workspace", {
   "workspace.loops.editor.delete": "Delete loop",
   "workspace.needsYou.action.ticket": "Look at a Motion ticket",
   "workspace.ticket.open": "Open {key} in Motion: {title}",
+  "workspace.secretHygiene.marker": "[hidden: {label}]",
+  "workspace.secretHygiene.title": "Atelier hid a {label} from your message",
+  "workspace.secretHygiene.body":
+    "It was not sent or stored. Save it in Secrets so agents can use it, and rotate it if it was shared anywhere else.",
+  "workspace.secretHygiene.save": "Save as secret",
+  "workspace.secretHygiene.saved": "Saved as {name} in Secrets. Agents can use it now.",
+  "workspace.secretHygiene.saveFailed": "The secret was not saved. Add it in Secrets instead.",
 });

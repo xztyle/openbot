@@ -40,6 +40,7 @@ import { createWebAttachmentMedia } from "./web-attachment-media";
 import { createWebAttachmentFiles, openWebLink } from "./web-attachments";
 import { webBrowserProfileCalls } from "./web-browser-profiles";
 import { webMessageLinks } from "./web-message-link-relay";
+import { convertIphonePhotos } from "./web-photo-convert";
 import type { WebWorkspaceRuntime } from "./web-runtime";
 import { workspaceSettingsBody } from "./web-server-settings";
 import { isHostFileTypeError, planUploads, type UploadRejection, uploadRejectionNotice } from "./web-upload-plan";
@@ -366,7 +367,7 @@ export function createWebConversationRuntime(
         try {
           // Every file is checked before the first one goes up, so a refused file never costs an upload
           // and never takes the valid files down with it.
-          const plan = planUploads(files, options?.room);
+          const plan = planUploads(await convertIphonePhotos(files), options?.room);
           const rejected: UploadRejection[] = [...plan.rejected];
           const attachments = await uploadFiles(plan.accepted, serverId, () => job.cancelled, rejected);
           if (!attachments) {

@@ -5,6 +5,7 @@ import { type ChannelsPort, PartialAttachmentImportError } from "../channels/cha
 import { webEventRoutinesApi } from "../conversation/routine-webhooks-api";
 import { createWebAttachmentMedia } from "./web-attachment-media";
 import { createWebAttachmentFiles, openWebLink } from "./web-attachments";
+import { convertIphonePhotos } from "./web-photo-convert";
 import type { WebWorkspaceRuntime } from "./web-runtime";
 import { isHostFileTypeError, planUploads, type UploadRejection, uploadRejectionNotice } from "./web-upload-plan";
 
@@ -62,13 +63,14 @@ export function createWebChannelsPort(
     const text = currentText();
     // The upload that starts last cancels the one before it, so a second pick waits and says so.
     if (uploading) throw new Error(text.t("webClient.upload.busy"));
-    // Every file is checked before the first one goes up. A refused file is named, and the rest attach.
-    const plan = planUploads(chosen, room);
-    const rejected: UploadRejection[] = [...plan.rejected];
+    uploading = true;
     const serverId = hostId();
     const uploaded: AttachmentSummary[] = [];
-    uploading = true;
+    let rejected: UploadRejection[] = [];
     try {
+      // Every file is checked before the first one goes up. A refused file is named, and the rest attach.
+      const plan = planUploads(await convertIphonePhotos(chosen), room);
+      rejected = [...plan.rejected];
       for (const [index, file] of plan.accepted.entries()) {
         setImportProgress({ current: index + 1, total: plan.accepted.length });
         try {

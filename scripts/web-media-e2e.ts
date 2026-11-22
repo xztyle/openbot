@@ -4,6 +4,9 @@
 //   says why, and gives the rest back, since the host refuses such a message at Send;
 // - a file dropped on the conversation goes up as a draft of its box, and a file dropped elsewhere
 //   in the app does not make the browser leave the app to show it;
+// - an iPhone photo in HEIC that the browser can draw goes up as a JPEG with the same name, and one
+//   it cannot draw is named as a type the host refuses. Chromium draws no HEIC, so the drawable photo
+//   holds PNG bytes: an image element reads the bytes, not the type;
 // - on a phone, the image viewer steps with a swipe and closes with a drag down.
 //
 // `bun scripts/web-media-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>]`
@@ -166,6 +169,31 @@ async function checkDrop(browser: Browser) {
   await page.context().close();
 }
 
+/** The bytes of a 2 by 2 PNG. */
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP438AARAwQCgAt7gX9iz9uhAAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+async function checkIphonePhoto(browser: Browser) {
+  const page = await newPage(browser, true);
+  const chooser = page.waitForEvent("filechooser", { timeout: 5_000 });
+  await composer(page).getByRole("button", { name: "Attach files" }).tap();
+  await (await chooser).setFiles([
+    { name: "IMG_4021.HEIC", mimeType: "image/heic", buffer: PNG },
+    { name: "IMG_4022.HEIC", mimeType: "image/heic", buffer: Buffer.from("not a photo") },
+  ]);
+  await page.waitForTimeout(1_500);
+  await step("phone", "an iPhone photo the browser can draw goes up as a JPEG with its name", async () => {
+    assert.deepEqual(await uploads(page), ["IMG_4021.jpeg"]);
+    assert.match(await chips(page).first().innerText(), /IMG_4021\.jpeg/u);
+  });
+  await step("phone", "an iPhone photo the browser cannot draw is named as a refused type", async () => {
+    assert.match((await composer(page).locator(".ws-composer-error").textContent()) ?? "", /IMG_4022\.HEIC/u);
+  });
+  await page.context().close();
+}
+
 async function checkPhoneViewer(browser: Browser) {
   const page = await newPage(browser, true);
   const cdp = await page.context().newCDPSession(page);
@@ -224,6 +252,7 @@ try {
   });
   await checkLimit(browser);
   await checkDrop(browser);
+  await checkIphonePhoto(browser);
   await checkPhoneViewer(browser);
 } finally {
   await browser?.close();

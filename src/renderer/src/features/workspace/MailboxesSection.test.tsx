@@ -1,6 +1,6 @@
 import type { AgentMailboxesState } from "@openbot/contracts/team-protocol/agent-mailboxes-v1";
 import { MailboxesSection } from "@openbot/ui/features/workspace/MailboxesSection";
-import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 
 const STATE: AgentMailboxesState = {
@@ -96,5 +96,16 @@ describe("MailboxesSection", () => {
     fireEvent.click(screen.getByRole("button", { name: "New mail secret" }));
     await waitFor(() => expect(props.onNewSecret).toHaveBeenCalled());
     expect(await screen.findByDisplayValue("ams_secret")).toBeTruthy();
+  });
+
+  it("keeps the remove question open with the reason when the host refuses", async () => {
+    const props = setup();
+    props.onRemove.mockRejectedValueOnce(new Error("The host is offline."));
+    fireEvent.click(screen.getByRole("button", { name: "Remove address" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Remove address" }));
+    expect(await within(dialog).findByText("The host is offline.")).toBeTruthy();
+    expect(props.onRemove).toHaveBeenCalledWith("m1");
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
   });
 });

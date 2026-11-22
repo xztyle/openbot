@@ -58,6 +58,7 @@ export function MailboxesSection(props: MailboxesSectionProps): JSX.Element {
   const { t, format, errorMessage } = useText();
   const [draft, setDraft] = createSignal<Draft | null>(null);
   const [removing, setRemoving] = createSignal<AgentMailbox | null>(null);
+  const [removeError, setRemoveError] = createSignal<string | null>(null);
   const [workerOpen, setWorkerOpen] = createSignal(false);
   const [workerUrl, setWorkerUrl] = createSignal("");
   const [secret, setSecret] = createSignal<string | null>(null);
@@ -172,7 +173,10 @@ export function MailboxesSection(props: MailboxesSectionProps): JSX.Element {
                         variant="ghost"
                         size="icon-xs"
                         label={t("workspace.mailboxes.remove")}
-                        onClick={() => setRemoving(mailbox())}
+                        onClick={() => {
+                          setRemoveError(null);
+                          setRemoving(mailbox());
+                        }}
                       >
                         <Trash2 />
                       </IconButton>
@@ -325,11 +329,17 @@ export function MailboxesSection(props: MailboxesSectionProps): JSX.Element {
         title={t("workspace.mailboxes.removeTitle")}
         description={t("workspace.mailboxes.removeDescription", { address: removing()?.address ?? "" })}
         confirmLabel={t("workspace.mailboxes.remove")}
+        error={removeError()}
         onCancel={() => setRemoving(null)}
         onConfirm={async () => {
           const mailbox = removing();
-          if (mailbox) await props.onRemove(mailbox.id);
-          setRemoving(null);
+          // A refused removal keeps the question open with the reason: the address still gets mail.
+          try {
+            if (mailbox) await props.onRemove(mailbox.id);
+            setRemoving(null);
+          } catch (cause) {
+            setRemoveError(errorMessage(cause, t("workspace.mailboxes.failed")));
+          }
         }}
       />
     </>

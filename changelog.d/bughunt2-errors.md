@@ -10,3 +10,5 @@
   nothing was said.
 - Insights: while the host does not answer, a failed refresh shows one toast. Before, a new one
   stacked every two minutes and each time the page showed again.
+- Mailboxes: when the host refuses to remove an address, the question stays open with the reason.
+  Before, it stayed open with no word, and the address still got mail.

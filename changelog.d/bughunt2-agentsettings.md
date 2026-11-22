@@ -8,3 +8,5 @@
   showed there, and the button forgot from the agent on the screen.
 - Agent settings, Cost and performance: each hint sits under its own field. Before, the model
   policy hint touched the Role label under it.
+- Agent settings: the Role field shows the agent's role after a Roll back or a change from another
+  device. Before, it kept the old role, and a tap in and out of the field saved the old role again.

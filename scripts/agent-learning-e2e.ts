@@ -1,7 +1,8 @@
 // Checks the learning card and the agent's learning settings on a phone: Undo of a cleanup that
 // applied by itself, Apply of a lesson, the settings history with its diff and Roll back, and the
 // forget of one chat with its confirm step, and a forget preview that comes back after the panel
-// moved to another agent, which must not show there. The page runs on fake host calls
+// moved to another agent, which must not show there. The Role field follows a role that the host
+// rolled back, and a tap in and out of it does not save the old role again. The page runs on fake host calls
 // (`src/renderer/stories/agent-learning-harness.tsx`); each call it makes is checked.
 //
 // `bun scripts/agent-learning-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>]`
@@ -131,6 +132,30 @@ try {
   assert.equal(await page.getByRole("button", { name: "Forget 1 item learned in this chat" }).count(), 0);
   assert.equal(await page.getByText("The bakery opens at 8 on Sundays.").count(), 0);
   assert.deepEqual((await calls()).slice(5), ["forget:chief:false"]);
+
+  const role = page.getByRole("textbox", { name: "Role", exact: true });
+  assert.equal(await role.inputValue(), "Writer");
+  await page.evaluate(() => {
+    location.hash = "role-rolled-back";
+  });
+  await role.evaluate(
+    (input: HTMLInputElement) =>
+      new Promise<void>((resolve, reject) => {
+        const deadline = setTimeout(() => reject(new Error(`Role still shows "${input.value}".`)), 5_000);
+        const check = () => {
+          if (input.value !== "") return requestAnimationFrame(check);
+          clearTimeout(deadline);
+          resolve();
+        };
+        check();
+      }),
+  );
+  await role.focus();
+  await role.blur();
+  assert.deepEqual(
+    (await calls()).filter((call) => call.startsWith("update:")),
+    [],
+  );
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   assert.ok(overflow <= 0, `The page scrolls sideways by ${overflow}px on a phone.`);

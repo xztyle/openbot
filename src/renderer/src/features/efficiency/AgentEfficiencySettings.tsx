@@ -14,13 +14,15 @@ import {
 import { SettingsField, SettingsLinkGroup } from "@openbot/ui/components/SettingsPanel";
 import type { AgentProfile } from "@openbot/ui/data";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createStore, onCleanup, Show } from "solid-js";
+import { createEffect, createStore, onCleanup, Show, untrack } from "solid-js";
 import { AgentLearningSettings } from "./AgentLearningSettings";
 import type { EfficiencyCalls } from "./efficiency-port";
 import { ReviewCard } from "./ReviewCard";
 
 interface State {
   role: string;
+  /** The user typed in Role and has not saved it yet: a new role from the host does not replace it. */
+  roleDirty: boolean;
   busy: boolean;
   error: string | null;
   review: PerformanceReview | null;
@@ -50,6 +52,7 @@ export function AgentEfficiencySettings(props: {
   const { t, errorMessage } = useText();
   const [state, setState] = createStore<State>({
     role: "",
+    roleDirty: false,
     busy: false,
     error: null,
     review: null,
@@ -68,6 +71,7 @@ export function AgentEfficiencySettings(props: {
       const current = ++generation;
       setState((draft) => {
         draft.role = props.agent.playbookRole ?? "";
+        draft.roleDirty = false;
         draft.review = null;
         draft.reviewLoaded = false;
         draft.error = null;
@@ -89,6 +93,18 @@ export function AgentEfficiencySettings(props: {
             });
         },
       );
+    },
+  );
+
+  // The role can change without this field: a Roll back in the settings history, or another client.
+  // The field follows it, else the next blur would save the old role back over the change.
+  createEffect(
+    () => props.agent.playbookRole ?? "",
+    (role) => {
+      if (untrack(() => state.roleDirty)) return;
+      setState((draft) => {
+        draft.role = role;
+      });
     },
   );
 
@@ -118,6 +134,9 @@ export function AgentEfficiencySettings(props: {
 
   function commitRole(): void {
     const next = state.role.trim();
+    setState((draft) => {
+      draft.roleDirty = false;
+    });
     if (next === (props.agent.playbookRole ?? "")) return;
     void run(
       () => props.onUpdateAgent(props.agent.id, { playbookRole: next ? next : null }),
@@ -188,6 +207,7 @@ export function AgentEfficiencySettings(props: {
           onValueChange={(value) =>
             setState((draft) => {
               draft.role = value;
+              draft.roleDirty = true;
             })
           }
           onBlur={() => commitRole()}

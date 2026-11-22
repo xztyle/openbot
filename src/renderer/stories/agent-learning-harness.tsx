@@ -1,15 +1,19 @@
 // The learning card and the agent's learning settings on fake host calls, for
 // `scripts/agent-learning-e2e.ts`. Each call the page makes lands in the body's `data-learning-calls`.
 // While the body has `data-hold-forget`, the forget preview waits; the "lead" link of the hash
-// (`#lead`) shows the settings of another agent.
+// (`#lead`) shows the settings of another agent. The Cost and performance settings show too; the
+// `#role-rolled-back` hash clears the agent's role, as a Roll back of it on the host does.
 import type { LearningReviewItem, SettingsCheckpoint } from "@openbot/contracts/agent-learning";
+import type { AgentProfile } from "@openbot/ui/data";
 import { render } from "@solidjs/web";
-import { createSignal, For } from "solid-js";
+import { createSignal, createStore, For } from "solid-js";
+import { AgentEfficiencySettings } from "../src/features/efficiency/AgentEfficiencySettings";
 import { AgentLearningSettings } from "../src/features/efficiency/AgentLearningSettings";
 import type { EfficiencyCalls } from "../src/features/efficiency/efficiency-port";
 import { LearningCard } from "../src/features/efficiency/LearningCard";
 import { StaticI18nProvider } from "../src/i18n-context";
 import "../src/styles.css";
+import { STORY_AGENT } from "./fixtures";
 
 /** The calls the page made, one per line in `data-learning-calls` of the body, for the script to read. */
 const made: string[] = [];
@@ -127,7 +131,14 @@ function Page() {
   const [list, setList] = createSignal(items);
   const agentOfHash = () => (location.hash === "#lead" ? "lead" : "chief");
   const [agentId, setAgentId] = createSignal(agentOfHash());
-  window.addEventListener("hashchange", () => setAgentId(agentOfHash()));
+  const [agent, setAgent] = createStore<AgentProfile>({ ...STORY_AGENT, playbookRole: "Writer" });
+  window.addEventListener("hashchange", () => {
+    if (location.hash === "#role-rolled-back")
+      setAgent((draft) => {
+        draft.playbookRole = undefined;
+      });
+    else setAgentId(agentOfHash());
+  });
   return (
     <div style={{ display: "flex", "flex-direction": "column", gap: "16px", padding: "16px", "max-width": "880px" }}>
       <For each={list()} keyed={(item) => item.id}>
@@ -140,6 +151,15 @@ function Page() {
           />
         )}
       </For>
+      <AgentEfficiencySettings
+        agent={agent}
+        onUpdateAgent={async (_agentId, updates) => {
+          record(`update:${JSON.stringify(updates)}`);
+          setAgent((draft) => {
+            if ("playbookRole" in updates) draft.playbookRole = updates.playbookRole ?? undefined;
+          });
+        }}
+      />
       <AgentLearningSettings agentId={agentId()} calls={calls} agentName={(id) => (id === "lead" ? "Lead" : id)} />
     </div>
   );

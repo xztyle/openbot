@@ -757,7 +757,12 @@ export const messages = {
   "workspace.money.planHint": "Сколько тарифа каждого провайдера израсходовано и когда обновится.",
   "workspace.money.openPlan": "Открыть использование",
   "workspace.money.rules": "Оповещения",
-  "workspace.money.rule": "Сообщать, когда агент тратит больше {amount} за {days} дн. без продаж.",
+  "workspace.money.rule": {
+    one: "Сообщать, когда агент тратит больше {amount} за {count} день без продаж.",
+    few: "Сообщать, когда агент тратит больше {amount} за {count} дня без продаж.",
+    many: "Сообщать, когда агент тратит больше {amount} за {count} дней без продаж.",
+    other: "Сообщать, когда агент тратит больше {amount} за {count} дня без продаж.",
+  },
   "workspace.money.editRules": "Изменить",
   "workspace.phone.waiting": {
     one: "{count} ждёт вас",

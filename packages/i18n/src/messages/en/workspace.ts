@@ -1144,7 +1144,10 @@ export const messages = defineMessages("workspace", {
   "workspace.money.planHint": "How much of each provider plan the agents used, and when it resets.",
   "workspace.money.openPlan": "Open plan usage",
   "workspace.money.rules": "Alerts",
-  "workspace.money.rule": "Tell me when an agent spends more than {amount} for {days} days with no sale.",
+  "workspace.money.rule": {
+    one: "Tell me when an agent spends more than {amount} for {count} day with no sale.",
+    other: "Tell me when an agent spends more than {amount} for {count} days with no sale.",
+  },
   "workspace.money.editRules": "Change",
   "workspace.phone.waiting": { one: "{count} waits on you", other: "{count} wait on you" },
   "workspace.phone.chat": "Chat",

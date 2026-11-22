@@ -598,7 +598,7 @@ export const messages = {
   "workspace.money.planHint": "각 제공업체 요금제를 얼마나 썼는지, 언제 초기화되는지.",
   "workspace.money.openPlan": "요금제 사용량 열기",
   "workspace.money.rules": "알림",
-  "workspace.money.rule": "에이전트가 {days}일 동안 판매 없이 {amount} 넘게 쓰면 알려 줘요.",
+  "workspace.money.rule": { other: "에이전트가 {count}일 동안 판매 없이 {amount} 넘게 쓰면 알려 줘요." },
   "workspace.money.editRules": "변경",
   "workspace.phone.waiting": { other: "{count}개가 기다려요" },
   "workspace.phone.chat": "채팅",

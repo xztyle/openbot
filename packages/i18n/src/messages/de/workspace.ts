@@ -597,7 +597,10 @@ export const messages = {
   "workspace.money.planHint": "Wie viel jedes Anbietertarifs die Agenten genutzt haben und wann er zurückgesetzt wird.",
   "workspace.money.openPlan": "Tarifnutzung öffnen",
   "workspace.money.rules": "Warnungen",
-  "workspace.money.rule": "Sag mir Bescheid, wenn ein Agent {days} Tage lang mehr als {amount} ohne Verkauf ausgibt.",
+  "workspace.money.rule": {
+    one: "Sag mir Bescheid, wenn ein Agent {count} Tag lang mehr als {amount} ohne Verkauf ausgibt.",
+    other: "Sag mir Bescheid, wenn ein Agent {count} Tage lang mehr als {amount} ohne Verkauf ausgibt.",
+  },
   "workspace.money.editRules": "Ändern",
   "workspace.phone.waiting": { one: "{count} wartet auf dich", other: "{count} warten auf dich" },
   "workspace.phone.chat": "Chat",

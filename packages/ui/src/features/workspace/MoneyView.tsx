@@ -314,7 +314,7 @@ export function MoneyView(props: MoneyViewProps): JSX.Element {
                 <p class="ws-today-briefing-text">
                   {t("workspace.money.rule", {
                     amount: format.currencyUsd(rules().alertMinSpend),
-                    days: rules().alertDays,
+                    count: rules().alertDays,
                   })}
                 </p>
                 <Show when={props.onOpenRules}>

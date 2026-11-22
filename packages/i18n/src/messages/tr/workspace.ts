@@ -609,7 +609,10 @@ export const messages = {
   "workspace.money.planHint": "Ajanların her sağlayıcı planından ne kadar kullandığı ve ne zaman sıfırlanacağı.",
   "workspace.money.openPlan": "Plan kullanımını aç",
   "workspace.money.rules": "Uyarılar",
-  "workspace.money.rule": "Bir ajan {days} gün boyunca satış olmadan {amount} üzerinde harcarsa bana haber ver.",
+  "workspace.money.rule": {
+    one: "Bir ajan {count} gün boyunca satış olmadan {amount} üzerinde harcarsa bana haber ver.",
+    other: "Bir ajan {count} gün boyunca satış olmadan {amount} üzerinde harcarsa bana haber ver.",
+  },
   "workspace.money.editRules": "Değiştir",
   "workspace.phone.waiting": { one: "{count} öğe sizi bekliyor", other: "{count} öğe sizi bekliyor" },
   "workspace.phone.chat": "Sohbet",

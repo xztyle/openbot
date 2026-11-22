@@ -1132,7 +1132,10 @@ export const messages = {
   "workspace.money.planHint": "Cuánto de cada plan de proveedor usaron los agentes y cuándo se reinicia.",
   "workspace.money.openPlan": "Abrir uso del plan",
   "workspace.money.rules": "Alertas",
-  "workspace.money.rule": "Avísame cuando un agente gaste más de {amount} durante {days} días sin una venta.",
+  "workspace.money.rule": {
+    one: "Avísame cuando un agente gaste más de {amount} durante {count} día sin una venta.",
+    other: "Avísame cuando un agente gaste más de {amount} durante {count} días sin una venta.",
+  },
   "workspace.money.editRules": "Cambiar",
   "workspace.phone.waiting": { one: "{count} te espera", other: "{count} te esperan" },
   "workspace.phone.chat": "Chat",

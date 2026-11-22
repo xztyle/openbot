@@ -589,7 +589,7 @@ export const messages = {
   "workspace.money.planHint": "智能体用了各服务商套餐的多少，以及何时重置。",
   "workspace.money.openPlan": "打开套餐用量",
   "workspace.money.rules": "提醒",
-  "workspace.money.rule": "当智能体连续 {days} 天花费超过 {amount} 且没有销售时提醒我。",
+  "workspace.money.rule": { other: "当智能体连续 {count} 天花费超过 {amount} 且没有销售时提醒我。" },
   "workspace.money.editRules": "更改",
   "workspace.phone.waiting": { other: "{count} 项等你处理" },
   "workspace.phone.chat": "聊天",

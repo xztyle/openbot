@@ -21,7 +21,7 @@ const entry = (kind: "revenue" | "spend", amount: number, currency: string): Ins
   updatedAt: "2026-11-21T12:00:00Z",
 });
 
-const report = (money: InsightMoneyEntry[]): WorkspaceInsight => ({
+const report = (money: InsightMoneyEntry[], alertDays = 3): WorkspaceInsight => ({
   at: Date.parse("2026-11-22T12:00:00Z"),
   days: 30,
   timeZone: "America/Bogota",
@@ -30,7 +30,13 @@ const report = (money: InsightMoneyEntry[]): WorkspaceInsight => ({
   money,
   sources: [],
   alerts: [],
-  briefing: { settings: DEFAULT_INSIGHT_BRIEFING, channelId: null, lastSentAt: null, lastText: null, routines: [] },
+  briefing: {
+    settings: { ...DEFAULT_INSIGHT_BRIEFING, alertDays },
+    channelId: null,
+    lastSentAt: null,
+    lastText: null,
+    routines: [],
+  },
 });
 
 describe("Money in other currencies", () => {
@@ -62,5 +68,14 @@ describe("Money in other currencies", () => {
     const format = createFormat("en", "en-US");
     expect(format.currency(50_000, "COP").replace(/\s/gu, " ")).toBe("COP 50,000");
     expect(format.currency(12.5, "USDT")).toBe("12.5 USDT");
+  });
+
+  it("says one day of an alert rule in the singular", () => {
+    render(() => (
+      <TextProvider locale="en" formatLocale="en-US">
+        <MoneyView report={report([], 1)} todayUsd={0} spend={[]} agents={[]} />
+      </TextProvider>
+    ));
+    expect(screen.getByText(/for 1 day with no sale/u)).toBeTruthy();
   });
 });

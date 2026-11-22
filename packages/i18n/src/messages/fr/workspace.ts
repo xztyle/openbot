@@ -602,7 +602,10 @@ export const messages = {
   "workspace.money.planHint": "La part de chaque forfait utilisée par les agents et quand elle se réinitialise.",
   "workspace.money.openPlan": "Ouvrir l’usage du forfait",
   "workspace.money.rules": "Alertes",
-  "workspace.money.rule": "Prévenez-moi quand un agent dépense plus de {amount} pendant {days} jours sans vente.",
+  "workspace.money.rule": {
+    one: "Prévenez-moi quand un agent dépense plus de {amount} pendant {count} jour sans vente.",
+    other: "Prévenez-moi quand un agent dépense plus de {amount} pendant {count} jours sans vente.",
+  },
   "workspace.money.editRules": "Modifier",
   "workspace.phone.waiting": { one: "{count} vous attend", other: "{count} vous attendent" },
   "workspace.phone.chat": "Discussions",

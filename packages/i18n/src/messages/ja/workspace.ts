@@ -603,7 +603,7 @@ export const messages = {
   "workspace.money.planHint": "各プロバイダーのプランをどれだけ使ったか、いつリセットされるか。",
   "workspace.money.openPlan": "プランの使用量を開く",
   "workspace.money.rules": "アラート",
-  "workspace.money.rule": "エージェントが売上なしで {days} 日間 {amount} を超えて使ったら知らせる。",
+  "workspace.money.rule": { other: "エージェントが売上なしで {count} 日間 {amount} を超えて使ったら知らせる。" },
   "workspace.money.editRules": "変更",
   "workspace.phone.waiting": { other: "{count} 件が対応待ち" },
   "workspace.phone.chat": "チャット",

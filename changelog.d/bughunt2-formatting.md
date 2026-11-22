@@ -13,3 +13,4 @@
 - The Guardrails tab of Trust renders when the host sends a time that does not parse. Its times read
   "Mon 3:05 PM" as in Money. An amount in the audit trail shows its currency's sign, and the audit
   export is named after your own day, not the UTC day.
+- The Money alert rule says "for 1 day" in the singular when it is set to one day.

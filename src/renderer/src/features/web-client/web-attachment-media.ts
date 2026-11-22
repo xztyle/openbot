@@ -3,7 +3,7 @@ import type { AttachmentSummary } from "@openbot/contracts/ipc";
 import { base64ToBytes } from "@openbot/team-client/base64";
 import { MOBILE_ATTACHMENT_BYTES } from "@openbot/team-client/remote-peer";
 import type { AttachmentMediaSource } from "@openbot/ui/features/conversation/AttachmentCards";
-import { createSignal } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
 import type { WebFile, WebWorkspaceRuntime } from "./web-runtime";
 
 /**
@@ -60,11 +60,19 @@ export function createWebAttachmentMedia(
     create: (blob) => URL.createObjectURL(blob),
     revoke: (url) => URL.revokeObjectURL(url),
   },
+  /**
+   * Whether the host connection is up. A read that a lost connection cut is tried again when it
+   * comes back: a phone that wakes the app reads while it reconnects, and its images would otherwise
+   * stay file cards. Reactive.
+   */
+  online?: () => boolean,
 ): WebAttachmentMedia {
   // Insertion order is the use order: the first entry is the least recently used.
   const entries = new Map<string, Entry>();
   const [shown, setShown] = createSignal<ReadonlyMap<string, string>>(new Map());
   const [failures, setFailures] = createSignal<ReadonlySet<string>>(new Set());
+  /** Failures of a read that threw, as a lost connection does, rather than of a file that cannot show. */
+  const cut = new Set<string>();
   const loading = new Map<string, Promise<boolean>>();
   /** Inline copies that are the original file, so the viewer needs no second download. */
   const originals = new Set<string>();
@@ -166,13 +174,24 @@ export function createWebAttachmentMedia(
       if (variant === "inline" && file.original) originals.add(key);
       return true;
     } catch {
-      // The card keeps its icon and its download button.
-      if (generation === started) fail(key);
+      // The card keeps its icon and its download button, until the connection comes back.
+      if (generation === started) {
+        cut.add(key);
+        fail(key);
+      }
       return false;
     } finally {
       release();
     }
   }
+
+  if (online)
+    createEffect(online, (up, wasUp) => {
+      if (!up || wasUp !== false || cut.size === 0) return;
+      const retry = new Set(cut);
+      cut.clear();
+      setFailures((current) => new Set([...current].filter((key) => !retry.has(key))));
+    });
 
   const begin = (key: string, run: () => Promise<boolean>) => {
     const entry = entries.get(key);

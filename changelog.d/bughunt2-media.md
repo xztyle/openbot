@@ -13,3 +13,5 @@
 - Browser client: Open on a document in Artifacts, or under Shipped on Today, shows it in the file
   viewer, as a file in a message does. Before, it only started a download, which on an iPhone asks
   where to save it, and a failed download said nothing.
+- Browser client: images that could not load while the connection was down load again when it is
+  back. Before, they stayed file cards until the page was loaded again, as after waking a phone.

@@ -48,6 +48,8 @@ export function createWebChannelsPort(
   eventsEnabled: () => boolean,
   routineRecoveryEnabled: () => boolean,
   webhookTestsEnabled: () => boolean,
+  /** Whether the host connection is up: an image that a lost connection cut is read again. */
+  online?: () => boolean,
 ): ChannelsPort {
   const files = createWebAttachmentFiles(remote, hostId);
   const channels = remote.channels;
@@ -55,7 +57,7 @@ export function createWebChannelsPort(
   const eventRoutines = admin
     ? webEventRoutinesApi(admin.request, routineRecoveryEnabled, webhookTestsEnabled)
     : undefined;
-  const attachmentMedia = createWebAttachmentMedia(remote, hostId);
+  const attachmentMedia = createWebAttachmentMedia(remote, hostId, undefined, online);
   onCleanup(() => attachmentMedia.dispose());
   const [importProgress, setImportProgress] = createSignal<{ current: number; total: number } | null>(null);
   let uploading = false;

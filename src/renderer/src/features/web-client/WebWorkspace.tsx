@@ -1005,6 +1005,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     () => eventsEnabled() && workspace.state.capabilities.includes(EVENT_CHECKS_CAPABILITY),
     () => workspace.state.capabilities.includes(EVENT_CHECK_API_CAPABILITY),
     () => workspace.state.capabilities.includes(EVENT_CHECK_DELIVERY_CAPABILITY),
+    () => workspace.state.status === "online",
   );
   const remoteAgentAdmin = createRemoteAgentAdmin(
     () => {
@@ -1461,6 +1462,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     eventsEnabled,
     routineRecoveryEnabled,
     webhookTestsEnabled,
+    () => workspace.state.status === "online",
   );
   const channelsSupported = () =>
     workspace.state.status === "online" &&

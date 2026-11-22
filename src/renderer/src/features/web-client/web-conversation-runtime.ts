@@ -162,6 +162,8 @@ export function createWebConversationRuntime(
   checksEnabled?: () => boolean,
   apiChecksEnabled?: () => boolean,
   deliveryChecksEnabled?: () => boolean,
+  /** Whether the host connection is up: an image that a lost connection cut is read again. */
+  online?: () => boolean,
 ): ConversationRuntime {
   const listeners = new Set<(event: AttachmentImportEvent) => void>();
   const files = createWebAttachmentFiles(remote, hostId);
@@ -235,7 +237,7 @@ export function createWebConversationRuntime(
     emit({ type: "started", serverId, requestId });
     emit({ type: "error", serverId, requestId, message });
   };
-  const attachmentMedia = createWebAttachmentMedia(remote, hostId);
+  const attachmentMedia = createWebAttachmentMedia(remote, hostId, undefined, online);
   onCleanup(() => {
     void cancelImportFiles();
     attachmentMedia.dispose();

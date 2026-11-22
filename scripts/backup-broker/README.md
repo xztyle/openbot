@@ -144,6 +144,32 @@ given). A failure stops the deploy with the live host untouched. `--staging-only
 check and leaves the copy running. The default deploy path is unchanged. It needs the broker
 installed and at least one backup.
 
+## QA with real Claude on the staging copy
+
+The copy has no internet, so agents cannot run. For a QA pass with the real Claude subscription,
+open exactly one way out, to the model API, and keep everything else shut. This was done by hand on
+2026-11-22 (branch `live-fixes`); the steps, after `staging up --no-view`:
+
+1. `docker stop atelier-staging`, then, as the data owner on the copy's database: disable every
+   `projection_mcp_servers` row that points outside (GitHub, Render, Linear...), and point the
+   `motion` row at a Motion copy (`http://motion:8080/mcp`) if Motion is part of the test.
+2. Copy `provider-runtimes/claude/<version>` (and `bun/<version>`) from the live data folder, and
+   `.claude/.credentials.json` **without** `refreshToken`/`refreshTokenExpiresAt`: the copy can use
+   the access token until it expires but can never rotate the live host's sign-in. Take Claude out of
+   the `off` list in `openbot-provider-use-v1.json`.
+3. Start the copy with a compose override that adds `staging-egress.py` (an allowlist CONNECT proxy
+   that passes only `api.anthropic.com:443` and logs every refusal) on the isolated network and a
+   second, non-internal network, and gives OpenBot `HTTPS_PROXY`/`HTTP_PROXY=http://egress:3128` and
+   `NO_PROXY` for the local services. Override `OPENBOT_MOTION_EVENTS_LISTEN`/`OPENBOT_CONNECTOR_LISTEN`
+   to `0.0.0.0:<port>`: the live addresses do not exist on the copy's network.
+4. Optionally a Motion copy (`motion.db.zst` and `files/motion/data` without `.ssh`, so git sync can
+   never push), with `MOTION_AGENT_EVENTS_URL` at the copy and an empty `MOTION_AGENT_EVENTS_WARN_HOURS`.
+
+Before any agent runs, check from inside the copy that Discord, Telegram, GitHub and the OAuth token
+hosts (`console.anthropic.com`, `platform.claude.com`) are refused, directly and through the proxy,
+and that `api.anthropic.com` answers. The copy's UI stays at "Service unavailable" (no account), so
+Team API features (Today, Money, Portfolio, cards) cannot be driven there yet.
+
 ## Tests
 
 `scripts/backup-broker` was tested end to end on a throwaway host in the scratchpad: a copy of the

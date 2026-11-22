@@ -1,8 +1,9 @@
 ### Fixed
 
-- On a phone, a host that does not answer on the first load shows the connection screen with Retry.
-  Before, the phone showed an empty Today ("Nothing waits on you") and a first-run guide that asked
-  you to make agents and channels that the host already had.
+- On a phone, a host that does not answer on the first load shows a bar with the error and Retry
+  over the tabs, and More stays open for the other servers and the account. Before, the phone showed
+  an empty Today and a first-run guide that asked you to make agents and channels that the host
+  already had.
 - The Today guide waits for the host's channels before it shows its steps, so a slow first load does
   not show done steps as undone.
 - The Today guide of a host or a space with no agent starts with New agent.

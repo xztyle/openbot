@@ -44,6 +44,8 @@ export interface ServerConnectionNoticeProps {
   name: string;
   phase: ServerWorkspacePhase;
   initial: boolean;
+  /** A bar even before the first load, where a screen over the app would hide its way out (a phone's tabs). */
+  bar?: boolean | undefined;
   issue?: HostedServerIssue | null;
   /** The step of a hosted start, shown with its time while the phase is `waking`. */
   start?: HostedServerStart | null;
@@ -178,7 +180,7 @@ export function ServerConnectionNotice(props: ServerConnectionNoticeProps) {
   );
   return (
     <Show
-      when={props.initial}
+      when={props.initial && !props.bar}
       fallback={
         <section class="server-connection-notice" role="status" aria-live="polite">
           <div>

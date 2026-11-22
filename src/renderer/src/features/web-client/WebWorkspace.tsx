@@ -2410,14 +2410,16 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   const phoneShell = () => phone() && workspaceOn() && !noHost();
   /**
    * The notices about the server: its connection, a reload, and panels that did not load. On a phone
-   * they show over the conversation and, as a bar, at the top of the tabs.
+   * they show over the conversation and, as a bar, at the top of the tabs: there the first load too,
+   * so More, with the other servers and the account, stays in reach.
    */
-  const serverNotices = () => (
+  const serverNotices = (bar?: boolean) => (
     <>
       <Show when={!noHost() && workspace.state.status !== "online" && !blockedServer()}>
         <ServerConnectionNotice
           name={workspace.state.host?.name ?? t("webClient.notice.findingHosts")}
           initial={!workspace.state.workspaceLoaded}
+          bar={bar}
           issue={workspace.state.hostedIssue}
           start={workspace.state.hostedStart}
           updateVersion={workspace.state.hostRestart?.version ?? null}
@@ -3398,7 +3400,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                           }))}
                           onSelectServer={selectServer}
                           moreSections={phoneMoreSections()}
-                          banner={serverNotices()}
+                          banner={serverNotices(true)}
                         />
                       </div>
                     </Show>

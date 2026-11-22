@@ -1,6 +1,6 @@
 // Checks the first run and the empty states of the web client: on an iPhone a host that does not
-// answer on the first load shows the error with Retry instead of an empty Today with a first-run
-// guide; a host with no agent has a New agent step in the guide, which opens the form; a new space
+// answer on the first load shows the error with Retry, and More, instead of an empty Today with a
+// first-run guide; a host with no agent has a New agent step in the guide, which opens the form; a new space
 // offers a channel of its own rather than #general of General, and stays in that space; a template
 // import shows its validation score when the host has it, without leaving the tab, and clears the
 // name of the new space. It serves the web
@@ -182,6 +182,17 @@ try {
       .waitFor({ timeout: UI_WAIT_MS });
     // The steps would read as undone: no agent and no channel came from the host.
     assert.equal(await guide(downPage).count(), 0, "The first-run guide shows.");
+    // The notice is a bar: More, with the other servers and the account, stays in reach.
+    await downPage
+      .getByRole("button", { name: english("workspace.phone.more") })
+      .filter({ visible: true })
+      .first()
+      .tap({ timeout: UI_WAIT_MS });
+    await downPage
+      .getByText(english("workspace.phone.views"))
+      .filter({ visible: true })
+      .first()
+      .waitFor({ timeout: UI_WAIT_MS });
   });
   await shot(downPage, "01-phone-host-down");
   await down.close();

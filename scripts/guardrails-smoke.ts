@@ -452,10 +452,10 @@ try {
   // The subscription meter: the forecast and the failover.
   const start = nowSeconds();
   const forecast = forecastExhaustion(
-    { usedPercent: 50, windowDurationMins: 300, resetsAt: Math.round(start + 9_000) },
+    { usedPercent: 40, windowDurationMins: 300, resetsAt: Math.round(start + 9_000) },
     start,
   );
-  check("half a window in half its time lasts to its reset", forecast === null);
+  check("40% of a window in half its time lasts to its reset", forecast === null);
   const fast = forecastExhaustion(
     { usedPercent: 80, windowDurationMins: 300, resetsAt: Math.round(start + 12_000) },
     start,

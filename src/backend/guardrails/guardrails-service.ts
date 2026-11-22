@@ -42,6 +42,7 @@ const TURN_COUNT_DELAY_MS = 3_000;
 /** How long two agents that only messaged each other stay paused. */
 const LOOP_PAUSE_MS = 60 * 60_000;
 const WEEK_MS = 7 * 24 * 60 * 60_000;
+const METER_CACHE_MS = 30_000;
 
 /** Today's work of one agent. */
 interface Tally {
@@ -164,6 +165,7 @@ export class GuardrailsService {
   readonly #threads = new Map<string, string>();
   #day = "";
   #sharesReadAt = 0;
+  #meterCache: { at: number; rows: SubscriptionPoolMeter[] } | null = null;
   #timer: ReturnType<typeof setInterval> | null = null;
   #saveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -493,6 +495,7 @@ export class GuardrailsService {
     policy: GuardrailPolicy,
   ) {
     this.#state.policy = policy;
+    this.#meterCache = null;
     const lifted = this.#state.pauses.filter((pause) => {
       const key = GUARDRAIL_PAUSE_REASON_LIMIT[pause.reason];
       if (!key) return false;
@@ -724,14 +727,18 @@ export class GuardrailsService {
 
   // --- Subscription meter and failover ---
 
+  /** The meter, read again at most every 30 seconds: each drain of an agent asks for the failover. */
   #meter(): SubscriptionPoolMeter[] {
     const runtime = this.#runtime;
     if (!runtime) return [];
+    if (this.#meterCache && this.#now() - this.#meterCache.at < METER_CACHE_MS) return this.#meterCache.rows;
     const nowSeconds = this.#now() / 1000;
-    return runtime
+    const rows = runtime
       .meterAccounts()
       .slice(0, GUARDRAIL_VIEW_LIMITS.meter)
       .map((account) => meterRow(account, this.#state.policy.failover.thresholdPercent, nowSeconds));
+    this.#meterCache = { at: this.#now(), rows };
+    return rows;
   }
 
   /** True when every account that an agent on this provider could use is nearly run out. */

@@ -13,7 +13,7 @@ import type {
 import { toast } from "@openbot/ui";
 import { type InsightTab, InsightView } from "@openbot/ui/features/workspace/InsightView";
 import { useText } from "@openbot/ui/text";
-import { createMemo, createSignal, onCleanup, onSettled } from "solid-js";
+import { createMemo, createSignal, flush, onCleanup, onSettled } from "solid-js";
 import { useWorkspace } from "./workspace-context";
 import { setInsightAlerts } from "./workspace-insight-alerts";
 import { memberById } from "./workspace-model";
@@ -53,16 +53,26 @@ export function WorkspaceInsightView() {
     setInsightAlerts(next.alerts);
   }
 
+  /*
+   * Each read and each change counts one, and only the newest answer shows: a read of the old period
+   * that answers after the new one, or a timed read that began before a change, showed the report
+   * from before.
+   */
+  let asked = 0;
   async function refresh() {
     const read = agent().workspaceInsight;
     if (!read) {
       setLoadError(t("error.team.workspaceUnsupported"));
       return;
     }
+    const mine = ++asked;
     try {
-      show(await read({ days: days(), timeZone: readerZone(), language: format.locale }));
+      const next = await read({ days: days(), timeZone: readerZone(), language: format.locale });
+      if (mine !== asked) return;
+      show(next);
       setLoadError(null);
     } catch (error) {
+      if (mine !== asked) return;
       if (report() === null) setLoadError(errorMessage(error, t("insight.loadFailed")));
       else toast.error(t("insight.loadFailed"));
     }
@@ -86,7 +96,17 @@ export function WorkspaceInsightView() {
   async function act(action: WorkspaceInsightAction, done?: string) {
     const send = agent().workspaceInsightAction;
     if (!send) throw new Error(t("error.team.workspaceUnsupported"));
-    show(await send(action));
+    const mine = ++asked;
+    const next = await send(action);
+    if (mine === asked) {
+      // The host answers a change with the report of its own period, a week. Another period that
+      // shows keeps its numbers until its own read answers.
+      if (next.days === days()) show(next);
+      else {
+        setInsightAlerts(next.alerts);
+        void refresh();
+      }
+    }
     if (done) toast.success(done);
   }
   /** A change from a row button: the failure shows as a toast. */
@@ -120,7 +140,8 @@ export function WorkspaceInsightView() {
       }}
       days={days()}
       onDaysChange={(next) => {
-        setDays(next);
+        // The read asks for the new period: a signal shows a write only after its flush.
+        flush(() => setDays(next));
         void refresh();
       }}
       spaces={spaces()}

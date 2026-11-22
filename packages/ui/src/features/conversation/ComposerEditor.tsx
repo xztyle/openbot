@@ -31,6 +31,7 @@ import {
   editorTextOffset,
   insertLineBreak,
   insertPlainText,
+  isEditCommandRunning,
   mentionTokenAtCaretBoundary,
   placeCaretAtChildOffset,
   placeCaretAtEnd,
@@ -717,7 +718,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
    * with Shift+1 sends the "!" key, and Chromium delivers the phrase as that key's text.
    */
   function handleBeforeInput(event: InputEvent) {
-    if (!editor || props.disabled || isComposing || event.isComposing) return;
+    if (!editor || props.disabled || isComposing || event.isComposing || isEditCommandRunning()) return;
     const lineBreak = event.inputType === "insertLineBreak" || event.inputType === "insertParagraph";
     if (!lineBreak && (event.inputType !== "insertText" || !event.data)) return;
     event.preventDefault();

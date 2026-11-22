@@ -13,7 +13,7 @@ import {
   Bookmark,
   Bot,
   Briefcase,
-  Button,
+  buttonVariants,
   Check,
   Coins,
   FormDialog,
@@ -30,6 +30,8 @@ import {
   MessageSquareText,
   MessagesSquare,
   Network,
+  OptionGrid,
+  OptionGridOption,
   Pencil,
   Plus,
   Search,
@@ -47,7 +49,7 @@ import { slugChannelName } from "@openbot/ui/features/workspace/workspace-format
 import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createMemo, createSignal, createUniqueId, For, Show } from "solid-js";
 import { type CommandAction, useCommandActions } from "./workspace-commands";
 import { useWorkspace } from "./workspace-context";
 import {
@@ -314,6 +316,14 @@ export function QuickSwitcher(props: { onClose: () => void }) {
   const commands = useCommandActions();
   const [query, setQuery] = createSignal("");
   const [active, setActive] = createSignal(0);
+  // The field is a combobox over the list: the arrows move a highlight, and a screen reader hears
+  // the highlighted row through `aria-activedescendant` while the focus stays in the field.
+  const listId = createUniqueId();
+  const optionId = (index: number) => `${listId}-${index}`;
+  const moveTo = (index: number) => {
+    setActive(index);
+    document.getElementById(optionId(index))?.scrollIntoView({ block: "nearest" });
+  };
   const entries = createMemo((): JumpEntry[] => {
     const actions = commands.actions(query());
     // A command does something: the "Create #channel" that its words would make is only noise.
@@ -358,14 +368,19 @@ export function QuickSwitcher(props: { onClose: () => void }) {
           }}
           placeholder={t("workspace.app.switcher.placeholder")}
           aria-label={t("workspace.app.switcher.placeholder")}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded="true"
+          aria-controls={listId}
+          aria-activedescendant={entries().length ? optionId(active()) : undefined}
           onKeyDown={(event: KeyboardEvent) => {
             const count = entries().length;
             if (event.key === "ArrowDown" && count) {
               event.preventDefault();
-              setActive((index) => (index + 1) % count);
+              moveTo((active() + 1) % count);
             } else if (event.key === "ArrowUp" && count) {
               event.preventDefault();
-              setActive((index) => (index - 1 + count) % count);
+              moveTo((active() - 1 + count) % count);
             } else if (event.key === "Enter") {
               event.preventDefault();
               choose(entries()[active()]);
@@ -376,73 +391,77 @@ export function QuickSwitcher(props: { onClose: () => void }) {
       <Show when={!query().trim()}>
         <p class="ws-switcher-hint">{t("workspace.command.help")}</p>
       </Show>
-      <ul class="ws-switcher-list" aria-label={t("workspace.app.switcher.results")}>
-        <For each={entries()} fallback={<li class="ws-details-empty">{t("workspace.app.switcher.empty")}</li>}>
+      <Show when={entries().length === 0}>
+        <p class="ws-details-empty">{t("workspace.app.switcher.empty")}</p>
+      </Show>
+      <OptionGrid id={listId} class="ws-switcher-list" aria-label={t("workspace.app.switcher.results")}>
+        <For each={entries()}>
           {(entry, index) => (
-            <li>
-              <Button
-                variant="ghost"
-                class="ws-switcher-item"
-                data-active={active() === index() ? "" : undefined}
-                data-unread={entry.unread ? "" : undefined}
-                // Only a mouse moves the highlight: a finger that lifts over a new list must not pick its row.
-                onPointerMove={(event: PointerEvent) => {
-                  if (event.pointerType === "mouse") setActive(index());
-                }}
-                onClick={() => choose(entry)}
-              >
-                <span class="ws-switcher-glyph" aria-hidden="true">
-                  <Show
-                    when={entry.member}
-                    fallback={
-                      <Show
-                        when={entry.action}
-                        fallback={
-                          <Show
-                            when={entry.kind === "create" || entry.kind === "search"}
-                            fallback={
-                              <Show
-                                when={entry.view}
-                                fallback={
-                                  <Show when={entry.private} fallback={<Hash />}>
-                                    <Lock />
-                                  </Show>
-                                }
-                              >
-                                {(view) => VIEW_ICON[view()]()}
-                              </Show>
-                            }
-                          >
-                            <Show when={entry.kind === "search"} fallback={<Plus />}>
-                              <Search />
+            <OptionGridOption
+              class={`${buttonVariants({ variant: "ghost" })} ws-switcher-item`}
+              id={optionId(index())}
+              active={active() === index()}
+              // The focus stays in the field: the options are not tab stops.
+              tabindex={-1}
+              data-active={active() === index() ? "" : undefined}
+              data-unread={entry.unread ? "" : undefined}
+              // Only a mouse moves the highlight: a finger that lifts over a new list must not pick its row.
+              onPointerMove={(event: PointerEvent) => {
+                if (event.pointerType === "mouse") setActive(index());
+              }}
+              onClick={() => choose(entry)}
+            >
+              <span class="ws-switcher-glyph" aria-hidden="true">
+                <Show
+                  when={entry.member}
+                  fallback={
+                    <Show
+                      when={entry.action}
+                      fallback={
+                        <Show
+                          when={entry.kind === "create" || entry.kind === "search"}
+                          fallback={
+                            <Show
+                              when={entry.view}
+                              fallback={
+                                <Show when={entry.private} fallback={<Hash />}>
+                                  <Lock />
+                                </Show>
+                              }
+                            >
+                              {(view) => VIEW_ICON[view()]()}
                             </Show>
+                          }
+                        >
+                          <Show when={entry.kind === "search"} fallback={<Plus />}>
+                            <Search />
                           </Show>
-                        }
-                      >
-                        {(action) => ACTION_ICON[action().kind]()}
-                      </Show>
-                    }
-                  >
-                    {(member) => <MemberAvatar member={member()} size="xs" />}
-                  </Show>
-                </span>
-                <span class="ws-switcher-label">{entry.label}</span>
-                <Show when={entry.kind === "agent"}>
-                  <AiBadge />
+                        </Show>
+                      }
+                    >
+                      {(action) => ACTION_ICON[action().kind]()}
+                    </Show>
+                  }
+                >
+                  {(member) => <MemberAvatar member={member()} size="xs" />}
                 </Show>
-                <Show when={entry.kind === "view"}>
-                  <span class="ws-switcher-space">{t("workspace.jump.view")}</span>
-                </Show>
-                <Show when={entry.action}>{(action) => <span class="ws-switcher-space">{action().hint}</span>}</Show>
-                <Show when={entry.space}>{(space) => <span class="ws-switcher-space">{space()}</span>}</Show>
-                <Show when={(entry.mentions ?? 0) > 0}>
-                  <span class="ws-mention-badge">{entry.mentions}</span>
-                </Show>
-              </Button>
-            </li>
+              </span>
+              <span class="ws-switcher-label">{entry.label}</span>
+              <Show when={entry.kind === "agent"}>
+                <AiBadge />
+              </Show>
+              <Show when={entry.kind === "view"}>
+                <span class="ws-switcher-space">{t("workspace.jump.view")}</span>
+              </Show>
+              <Show when={entry.action}>{(action) => <span class="ws-switcher-space">{action().hint}</span>}</Show>
+              <Show when={entry.space}>{(space) => <span class="ws-switcher-space">{space()}</span>}</Show>
+              <Show when={(entry.mentions ?? 0) > 0}>
+                <span class="ws-mention-badge">{entry.mentions}</span>
+              </Show>
+            </OptionGridOption>
           )}
         </For>
-      </ul>
+      </OptionGrid>
     </FormDialog>
   );
 }

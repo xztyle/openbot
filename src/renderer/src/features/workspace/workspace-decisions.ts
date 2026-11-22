@@ -10,7 +10,7 @@ import { agentAttentionKey, isTicketAttention, type LoopDecision } from "@openbo
 import type { NeedsYouRow } from "@openbot/ui/features/workspace/NeedsYou";
 import type { TodayDecision } from "@openbot/ui/features/workspace/TodayView";
 import { useText } from "@openbot/ui/text";
-import { createMemo, createSignal } from "solid-js";
+import { createMemo, createSignal, untrack } from "solid-js";
 import { needsYouAction } from "../agents/needs-you";
 import { useLoopDecisions } from "./loop-decisions-feed";
 import { useWorkspace } from "./workspace-context";
@@ -45,6 +45,46 @@ const LEARNING_KEY = "learning:";
 const PAUSE_KEY = "pause:";
 const INJECTION_KEY = "injection:";
 
+/** The blocked injections that the reader dismissed, at most this many per workspace. */
+const SEEN_LIMIT = 200;
+const seenCache = new Map<string, readonly string[]>();
+const [seenVersion, setSeenVersion] = createSignal(0, { ownedWrite: true });
+
+function seenStorageKey(workspaceKey: string): string {
+  return `openbot:today-seen-injections:${workspaceKey}`;
+}
+
+/**
+ * The blocked injections that the reader dismissed in this workspace. One list for every surface, so
+ * Today, the top bar, the sidebar and the phone's tab count the same, and kept on this device, so a
+ * dismissed one does not come back when Today opens again.
+ */
+function seenInjections(workspaceKey: string): ReadonlySet<string> {
+  seenVersion();
+  let ids = seenCache.get(workspaceKey);
+  if (!ids) {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(seenStorageKey(workspaceKey)) ?? "[]");
+      ids = Array.isArray(saved) ? saved.filter((id): id is string => typeof id === "string") : [];
+    } catch {
+      ids = [];
+    }
+    seenCache.set(workspaceKey, ids);
+  }
+  return new Set(ids);
+}
+
+function dismissInjection(workspaceKey: string, eventId: string): void {
+  const ids = [...untrack(() => seenInjections(workspaceKey)), eventId].slice(-SEEN_LIMIT);
+  seenCache.set(workspaceKey, ids);
+  try {
+    window.localStorage.setItem(seenStorageKey(workspaceKey), JSON.stringify(ids));
+  } catch {
+    // Private mode: it stays dismissed until the page reloads.
+  }
+  setSeenVersion((version) => version + 1);
+}
+
 /** What a learning proposal asks, by where it comes from. */
 const PROPOSAL_KEY = {
   learning: "workspace.today.proposal.learning",
@@ -52,9 +92,15 @@ const PROPOSAL_KEY = {
   review: "workspace.today.proposal.review",
 } as const satisfies Record<DecisionQueueSource, string>;
 
-/** The dollar amount of an effect line ("Pay $19.00 to …"), for the money order of the queue. */
-function amountIn(text: string): number | undefined {
-  const match = /\$\s?([\d,]+(?:\.\d+)?)/u.exec(text);
+/**
+ * The dollar amount of a money approval's effect line, for the money order of the queue and the card:
+ * "Hotmart · pay 19.00 USD · product X", "Meta ads · daily budget 10 USD → 50 USD" (the new amount,
+ * after the arrow) or "$19". An amount in another currency is not dollars, and gives none.
+ */
+export function amountIn(text: string): number | undefined {
+  const line = text.split("\n")[0] ?? "";
+  const after = line.split("→").at(-1) ?? line;
+  const match = /\$\s?(\d[\d,]*(?:\.\d+)?)/u.exec(after) ?? /(\d[\d,]*(?:\.\d+)?)\s?USD\b/u.exec(after);
   const value = match?.[1] ? Number(match[1].replaceAll(",", "")) : Number.NaN;
   return Number.isFinite(value) ? value : undefined;
 }
@@ -65,7 +111,7 @@ export function useDecisionQueue() {
   const { t, format } = useText();
   const loops = useLoopDecisions(ws);
   // The insight alerts of the owner and the admins: money spent with no sale, a goal behind.
-  pollInsightAlerts(() => {
+  pollInsightAlerts(ws, () => {
     const read = ws.channels.port().agent.workspaceInsight;
     return ws.viewAvailable("insights") && read ? async () => (await read({ days: 1 })).alerts : undefined;
   });
@@ -215,7 +261,6 @@ export function useDecisionQueue() {
 
   // The guardrails: an agent or a space that a budget paused, and a blocked prompt injection.
   const guardrails = useGuardrails(ws);
-  const [seen, setSeen] = createSignal<ReadonlySet<string>>(new Set());
   const guarded = createMemo((): TodayDecision[] => {
     const view = guardrails.value();
     if (!view) return [];
@@ -243,8 +288,10 @@ export function useDecisionQueue() {
       };
     });
     const day = Date.now() - 24 * 3_600_000;
+    const workspaceKey = ws.env.storageKey();
+    const seen = seenInjections(workspaceKey);
     const injections = view.events
-      .filter((event) => event.kind === "injection-blocked" && Date.parse(event.at) >= day && !seen().has(event.id))
+      .filter((event) => event.kind === "injection-blocked" && Date.parse(event.at) >= day && !seen.has(event.id))
       .map(
         (event): TodayDecision => ({
           key: `${INJECTION_KEY}${event.id}`,
@@ -258,9 +305,7 @@ export function useDecisionQueue() {
           blocking: false,
           at: Date.parse(event.at) || 0,
           // The host keeps the event; the owner who read it does not need it here again.
-          reject: async () => {
-            setSeen((current) => new Set([...current, event.id]));
-          },
+          reject: async () => dismissInjection(workspaceKey, event.id),
           rejectLabel: t("workspace.today.dismiss"),
           openLabel: t("workspace.needsYou.open"),
           open: () => ws.openView("trust"),

@@ -127,7 +127,7 @@ export function ServerConnectionNotice(props: ServerConnectionNoticeProps) {
     startProgress() ??
     props.detail ??
     (props.remainingSeconds
-      ? t("server.connection.nextRetry", { seconds: props.remainingSeconds })
+      ? t("server.connection.nextRetry", { count: props.remainingSeconds })
       : props.phase === "sleeping"
         ? t("server.connection.wakeHint")
         : props.issue === "plan_ended"

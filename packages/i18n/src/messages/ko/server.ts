@@ -14,7 +14,7 @@ export const messages = {
   "server.connection.connecting": "{name}에 연결하는 중",
   "server.connection.reconnecting": "{name}에 다시 연결하는 중",
   "server.connection.blocked": "{name}에 확인이 필요해요",
-  "server.connection.nextRetry": "{seconds}초 후에 다시 시도해요.",
+  "server.connection.nextRetry": { other: "{count}초 후에 다시 시도해요." },
   "server.connection.wakeHint": "이 워크스페이스를 사용하거나 다시 시도를 선택하면 서버가 시작돼요.",
   "server.connection.planHint": "계정 설정을 열어 서버 요금제를 확인하세요.",
   "server.connection.loadingHint": "서버를 불러오는 동안 다른 서버를 선택할 수 있어요.",

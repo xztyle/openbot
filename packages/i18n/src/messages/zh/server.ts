@@ -14,7 +14,7 @@ export const messages = {
   "server.connection.connecting": "正在连接 {name}",
   "server.connection.reconnecting": "正在重新连接 {name}",
   "server.connection.blocked": "{name} 需要你的处理",
-  "server.connection.nextRetry": "{seconds} 秒后重试。",
+  "server.connection.nextRetry": { other: "{count} 秒后重试。" },
   "server.connection.wakeHint": "使用该工作区，或选择“重试”来启动服务器。",
   "server.connection.planHint": "打开账号设置查看服务器套餐。",
   "server.connection.loadingHint": "加载期间你可以切换到其他服务器。",

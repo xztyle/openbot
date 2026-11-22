@@ -15,7 +15,12 @@ export const messages = {
   "server.connection.connecting": "Подключение к {name}",
   "server.connection.reconnecting": "Повторное подключение к {name}",
   "server.connection.blocked": "{name} требует вашего внимания",
-  "server.connection.nextRetry": "Следующая попытка через {seconds} с.",
+  "server.connection.nextRetry": {
+    one: "Следующая попытка через {count} с.",
+    few: "Следующая попытка через {count} с.",
+    many: "Следующая попытка через {count} с.",
+    other: "Следующая попытка через {count} с.",
+  },
   "server.connection.wakeHint":
     "Воспользуйтесь этим рабочим пространством или нажмите «Повторить», чтобы запустить сервер.",
   "server.connection.planHint": "Откройте настройки аккаунта, чтобы проверить тариф сервера.",

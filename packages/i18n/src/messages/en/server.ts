@@ -13,7 +13,7 @@ export const messages = defineMessages("server", {
   "server.connection.connecting": "Connecting to {name}",
   "server.connection.reconnecting": "Reconnecting to {name}",
   "server.connection.blocked": "{name} needs your attention",
-  "server.connection.nextRetry": "Next attempt in {seconds} seconds.",
+  "server.connection.nextRetry": { one: "Next attempt in {count} second.", other: "Next attempt in {count} seconds." },
   "server.connection.wakeHint": "Use this workspace or select Retry to start the server.",
   "server.connection.planHint": "Open account settings to check the server plan.",
   "server.connection.loadingHint": "You can select another server while this one loads.",

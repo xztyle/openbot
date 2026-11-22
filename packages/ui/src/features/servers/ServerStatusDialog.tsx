@@ -79,7 +79,7 @@ export function ServerStatusDialog(props: ServerStatusDialogProps) {
   const stepDetail = (step: Step): string => {
     if (step === "connect" && current() === "connect") {
       if (props.phase === "blocked" && props.detail) return props.detail;
-      if (props.remainingSeconds) return t("server.connection.nextRetry", { seconds: props.remainingSeconds });
+      if (props.remainingSeconds) return t("server.connection.nextRetry", { count: props.remainingSeconds });
     }
     return t(STEP_TEXT[step].detail);
   };

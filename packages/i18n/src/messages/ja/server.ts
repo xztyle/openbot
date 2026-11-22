@@ -15,7 +15,7 @@ export const messages = {
   "server.connection.connecting": "{name} に接続しています",
   "server.connection.reconnecting": "{name} に再接続しています",
   "server.connection.blocked": "{name} で対応が必要です",
-  "server.connection.nextRetry": "{seconds} 秒後に再試行します。",
+  "server.connection.nextRetry": { other: "{count} 秒後に再試行します。" },
   "server.connection.wakeHint": "このワークスペースを使用するか、「再試行」を選択してサーバーを起動してください。",
   "server.connection.planHint": "アカウント設定を開いて、サーバーのプランを確認してください。",
   "server.connection.loadingHint": "このサーバーの読み込み中に、別のサーバーを選択できます。",

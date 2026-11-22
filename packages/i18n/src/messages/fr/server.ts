@@ -15,7 +15,10 @@ export const messages = {
   "server.connection.connecting": "Connexion à {name}",
   "server.connection.reconnecting": "Reconnexion à {name}",
   "server.connection.blocked": "{name} requiert votre attention",
-  "server.connection.nextRetry": "Prochaine tentative dans {seconds} secondes.",
+  "server.connection.nextRetry": {
+    one: "Prochaine tentative dans {count} seconde.",
+    other: "Prochaine tentative dans {count} secondes.",
+  },
   "server.connection.wakeHint":
     "Utilisez cet espace de travail ou sélectionnez « Réessayer » pour démarrer le serveur.",
   "server.connection.planHint": "Ouvrez les réglages du compte pour vérifier le forfait du serveur.",

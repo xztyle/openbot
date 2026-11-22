@@ -15,7 +15,10 @@ export const messages = {
   "server.connection.connecting": "{name} sunucusuna bağlanılıyor",
   "server.connection.reconnecting": "{name} sunucusuna yeniden bağlanılıyor",
   "server.connection.blocked": "{name} için işleminiz gerekiyor",
-  "server.connection.nextRetry": "Sonraki deneme {seconds} saniye içinde.",
+  "server.connection.nextRetry": {
+    one: "Sonraki deneme {count} saniye içinde.",
+    other: "Sonraki deneme {count} saniye içinde.",
+  },
   "server.connection.wakeHint": "Sunucuyu başlatmak için bu çalışma alanını kullanın veya Tekrar dene'yi seçin.",
   "server.connection.planHint": "Sunucu planını kontrol etmek için hesap ayarlarını açın.",
   "server.connection.loadingHint": "Bu sunucu yüklenirken başka bir sunucu seçebilirsiniz.",

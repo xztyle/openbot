@@ -14,7 +14,10 @@ export const messages = {
   "server.connection.connecting": "Connessione a {name}",
   "server.connection.reconnecting": "Riconnessione a {name}",
   "server.connection.blocked": "{name} richiede la tua attenzione",
-  "server.connection.nextRetry": "Prossimo tentativo tra {seconds} secondi.",
+  "server.connection.nextRetry": {
+    one: "Prossimo tentativo tra {count} secondo.",
+    other: "Prossimo tentativo tra {count} secondi.",
+  },
   "server.connection.wakeHint": "Usa questo workspace o seleziona «Riprova» per avviare il server.",
   "server.connection.planHint": "Apri le impostazioni dell'account per controllare il piano del server.",
   "server.connection.loadingHint": "Puoi selezionare un altro server mentre questo si carica.",

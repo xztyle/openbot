@@ -19,3 +19,4 @@
 - The daily cost bars in Money name each day as "Sun, Nov 22", not "2026-11-22".
 - Workspace lists (Activity, Unreads, Threads, Later, Drafts, Search) say "Yesterday" for
   yesterday, give a date of another year its year, and show a date, not a weekday, for a time ahead.
+- The reconnect countdown says "Next attempt in 1 second", not "1 seconds".

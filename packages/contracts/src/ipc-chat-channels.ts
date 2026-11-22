@@ -346,6 +346,20 @@ export function normalizeChannelDraft(value: unknown): DynamicRecord | undefined
   return { title: "", instructions: isString(purpose) ? purpose : "", ...rest };
 }
 
+/**
+ * A saved channel on the way in: the old `purpose` key renamed, and a lead that is not a member read as
+ * the first member, as `removeDeletedMembers` moves it, or as no lead when no member is left. Such a row
+ * made the channel unreadable, and startup reads every channel, so no provider started. A command with
+ * such a lead is still refused.
+ */
+function normalizeSavedChannel(value: unknown): DynamicRecord | undefined {
+  const channel = normalizeChannelDraft(value);
+  if (!channel || !isIdentifier(channel.leadAgentId) || !Array.isArray(channel.members)) return channel;
+  const members = channel.members.filter(isChannelMember);
+  if (members.some((member) => member.agentId === channel.leadAgentId)) return channel;
+  return { ...channel, leadAgentId: members[0]?.agentId ?? null };
+}
+
 export function isChannelDraft(value: unknown): value is ChannelDraft {
   return (
     isDynamicRecord(value) &&
@@ -451,13 +465,13 @@ export function withoutChannelGateDecisions(message: ChannelMessage): ChannelMes
 }
 
 export function decodeChannel(value: unknown): Channel {
-  const channel = normalizeChannelDraft(value);
+  const channel = normalizeSavedChannel(value);
   if (!isChannel(channel)) throw new Error("Invalid channel response.");
   return channel;
 }
 
 export function decodeChannelPage(value: unknown): ChannelPage {
-  const channel = isDynamicRecord(value) ? normalizeChannelDraft(value.channel) : undefined;
+  const channel = isDynamicRecord(value) ? normalizeSavedChannel(value.channel) : undefined;
   if (
     !isDynamicRecord(value) ||
     !isChannel(channel) ||
@@ -482,7 +496,7 @@ export function decodeChannelPage(value: unknown): ChannelPage {
 
 export function decodeChannelSummaries(value: unknown): ChannelSummary[] {
   if (!Array.isArray(value)) throw new Error("Invalid channel list response.");
-  const summaries: unknown[] = value.map(normalizeChannelDraft);
+  const summaries: unknown[] = value.map(normalizeSavedChannel);
   if (!summaries.every(isChannelSummary)) throw new Error("Invalid channel list response.");
   return summaries;
 }

@@ -90,7 +90,8 @@ export const messages = {
   "webClient.settings.workspaceHeading": "Это рабочее пространство",
   "webClient.settings.quietHours.open": "Настроить тихие часы",
   "webClient.settings.agentNoise.title": "Обновления от агентов",
-  "webClient.settings.agentNoise.description": "Сколько уведомлений дают ответы агента о ходе работы. Вопросы, одобрения, сбои, завершённые задачи и упоминания приходят всегда. Сводка присылает одно уведомление через час после первого обновления.",
+  "webClient.settings.agentNoise.description":
+    "Сколько уведомлений дают ответы агента о ходе работы. Вопросы, одобрения, сбои, завершённые задачи и упоминания приходят всегда. Сводка присылает одно уведомление через час после первого обновления.",
   "webClient.settings.agentNoise.label": "Обновления от {name}",
   "webClient.settings.agentNoise.all": "Все",
   "webClient.settings.agentNoise.important": "Только важное",

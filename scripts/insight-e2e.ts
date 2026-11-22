@@ -300,7 +300,11 @@ async function serviceFlow(): Promise<void> {
     assert.ok(!posted[0]?.text.includes("evil.example"), "a link that the facts did not have is refused");
     assert.match(prompt, /Spanish/u);
     assert.match(prompt, /Ventas de noviembre/u);
-    assert.match(prompt, /Bajar el curso a 49 USD \(Tres competidores cobran menos\)/u, "the decision log reaches the briefing");
+    assert.match(
+      prompt,
+      /Bajar el curso a 49 USD \(Tres competidores cobran menos\)/u,
+      "the decision log reaches the briefing",
+    );
     assert.ok(report.briefing.channelId, "the briefing channel is made once");
     generated =
       "Ayer: 1 tarea terminada y gasto de 40 USD en Universidad Online.\n- Meta Ventas de noviembre en camino";

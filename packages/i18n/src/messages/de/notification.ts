@@ -35,5 +35,8 @@ export const messages = {
   "notification.toast.close": "Benachrichtigung schließen",
   "notification.digest.title": { one: "{count} Update deiner Agenten", other: "{count} Updates deiner Agenten" },
   "notification.digest.fromOne": "Von {agent}.",
-  "notification.digest.fromMany": { one: "Von {agent} und {count} weiteren.", other: "Von {agent} und {count} weiteren." },
+  "notification.digest.fromMany": {
+    one: "Von {agent} und {count} weiteren.",
+    other: "Von {agent} und {count} weiteren.",
+  },
 } as const satisfies PartialTranslation<typeof source>;

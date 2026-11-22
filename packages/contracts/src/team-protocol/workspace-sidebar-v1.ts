@@ -93,10 +93,7 @@ const save = fields(
   { order: fields({ channels: ids, direct: ids }), muted: ids },
   { ...sidebarFields, baseRevision: count },
 );
-const answer = fields(
-  { sidebar: nullable(sidebar) },
-  { notifyLevels: boolean, agentNoise: boolean, revision: count },
-);
+const answer = fields({ sidebar: nullable(sidebar) }, { notifyLevels: boolean, agentNoise: boolean, revision: count });
 
 export const WORKSPACE_SIDEBAR_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [WORKSPACE_SIDEBAR_ROUTES.read, adminRoute(empty, answer)],

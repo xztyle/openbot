@@ -82,7 +82,8 @@ export const messages = {
   "webClient.settings.workspaceHeading": "此工作区",
   "webClient.settings.quietHours.open": "设置免打扰时段",
   "webClient.settings.agentNoise.title": "智能体更新",
-  "webClient.settings.agentNoise.description": "每个智能体的进度回复推送多少。提问、审批、失败、完成的任务和提及始终推送。摘要会在第一条更新一小时后发送一条通知。",
+  "webClient.settings.agentNoise.description":
+    "每个智能体的进度回复推送多少。提问、审批、失败、完成的任务和提及始终推送。摘要会在第一条更新一小时后发送一条通知。",
   "webClient.settings.agentNoise.label": "{name} 的更新",
   "webClient.settings.agentNoise.all": "全部",
   "webClient.settings.agentNoise.important": "仅重要",

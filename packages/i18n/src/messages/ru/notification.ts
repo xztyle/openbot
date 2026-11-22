@@ -42,7 +42,17 @@ export const messages = {
   "notification.welcome": "Atelier сообщит здесь, когда вы понадобитесь агенту.",
   "notification.toast.region": "Уведомления",
   "notification.toast.close": "Закрыть уведомление",
-  "notification.digest.title": { one: "{count} обновление от ваших агентов", few: "{count} обновления от ваших агентов", many: "{count} обновлений от ваших агентов", other: "{count} обновления от ваших агентов" },
+  "notification.digest.title": {
+    one: "{count} обновление от ваших агентов",
+    few: "{count} обновления от ваших агентов",
+    many: "{count} обновлений от ваших агентов",
+    other: "{count} обновления от ваших агентов",
+  },
   "notification.digest.fromOne": "От {agent}.",
-  "notification.digest.fromMany": { one: "От {agent} и ещё {count}.", few: "От {agent} и ещё {count}.", many: "От {agent} и ещё {count}.", other: "От {agent} и ещё {count}." },
+  "notification.digest.fromMany": {
+    one: "От {agent} и ещё {count}.",
+    few: "От {agent} и ещё {count}.",
+    many: "От {agent} и ещё {count}.",
+    other: "От {agent} и ещё {count}.",
+  },
 } as const satisfies PartialTranslation<typeof source>;

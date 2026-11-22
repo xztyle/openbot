@@ -92,7 +92,8 @@ export const messages = {
   "webClient.settings.workspaceHeading": "Dieser Workspace",
   "webClient.settings.quietHours.open": "Ruhezeiten festlegen",
   "webClient.settings.agentNoise.title": "Updates von Agenten",
-  "webClient.settings.agentNoise.description": "Wie viel die Zwischenstände jedes Agenten pushen. Fragen, Freigaben, Fehler, erledigte Aufgaben und Erwähnungen pushen immer. Zusammenfassung schickt eine Mitteilung eine Stunde nach dem ersten Update.",
+  "webClient.settings.agentNoise.description":
+    "Wie viel die Zwischenstände jedes Agenten pushen. Fragen, Freigaben, Fehler, erledigte Aufgaben und Erwähnungen pushen immer. Zusammenfassung schickt eine Mitteilung eine Stunde nach dem ersten Update.",
   "webClient.settings.agentNoise.label": "Updates von {name}",
   "webClient.settings.agentNoise.all": "Alles",
   "webClient.settings.agentNoise.important": "Nur Wichtiges",

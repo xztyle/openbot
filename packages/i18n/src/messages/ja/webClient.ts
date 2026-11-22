@@ -90,7 +90,8 @@ export const messages = {
   "webClient.settings.workspaceHeading": "このワークスペース",
   "webClient.settings.quietHours.open": "おやすみ時間を設定",
   "webClient.settings.agentNoise.title": "エージェントからの更新",
-  "webClient.settings.agentNoise.description": "各エージェントの進捗返信をどれだけ通知するか。質問、承認、失敗、完了したタスク、メンションは常に通知します。まとめは最初の更新の 1 時間後に 1 件だけ通知します。",
+  "webClient.settings.agentNoise.description":
+    "各エージェントの進捗返信をどれだけ通知するか。質問、承認、失敗、完了したタスク、メンションは常に通知します。まとめは最初の更新の 1 時間後に 1 件だけ通知します。",
   "webClient.settings.agentNoise.label": "{name} からの更新",
   "webClient.settings.agentNoise.all": "すべて",
   "webClient.settings.agentNoise.important": "重要なものだけ",

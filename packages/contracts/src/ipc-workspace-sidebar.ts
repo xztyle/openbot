@@ -258,7 +258,9 @@ export function decodeWorkspaceSidebarPrefs(value: unknown): WorkspaceSidebarPre
     ...(value.agentNoiseImportant === undefined
       ? {}
       : { agentNoiseImportant: idList(value.agentNoiseImportant, "agent noise") }),
-    ...(value.agentNoiseDigest === undefined ? {} : { agentNoiseDigest: idList(value.agentNoiseDigest, "agent noise") }),
+    ...(value.agentNoiseDigest === undefined
+      ? {}
+      : { agentNoiseDigest: idList(value.agentNoiseDigest, "agent noise") }),
     ...(value.starred === undefined ? {} : { starred: idList(value.starred, "starred conversations") }),
     ...(value.sections === undefined ? {} : { sections: sections(value.sections) }),
     ...(value.groupOptions === undefined ? {} : { groupOptions: groupOptions(value.groupOptions) }),

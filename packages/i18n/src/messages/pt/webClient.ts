@@ -90,7 +90,8 @@ export const messages = {
   "webClient.settings.workspaceHeading": "Este espaço de trabalho",
   "webClient.settings.quietHours.open": "Definir horas de silêncio",
   "webClient.settings.agentNoise.title": "Atualizações dos agentes",
-  "webClient.settings.agentNoise.description": "Quanto as respostas de progresso de cada agente notificam. Perguntas, aprovações, falhas, tarefas concluídas e menções sempre notificam. Resumo envia um aviso uma hora após a primeira atualização.",
+  "webClient.settings.agentNoise.description":
+    "Quanto as respostas de progresso de cada agente notificam. Perguntas, aprovações, falhas, tarefas concluídas e menções sempre notificam. Resumo envia um aviso uma hora após a primeira atualização.",
   "webClient.settings.agentNoise.label": "Atualizações de {name}",
   "webClient.settings.agentNoise.all": "Tudo",
   "webClient.settings.agentNoise.important": "Só o importante",

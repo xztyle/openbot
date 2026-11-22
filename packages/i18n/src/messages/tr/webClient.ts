@@ -87,7 +87,8 @@ export const messages = {
   "webClient.settings.workspaceHeading": "Bu çalışma alanı",
   "webClient.settings.quietHours.open": "Sessiz saatleri ayarla",
   "webClient.settings.agentNoise.title": "Ajanlardan güncellemeler",
-  "webClient.settings.agentNoise.description": "Her ajanın ilerleme yanıtlarının ne kadar bildirim göndereceği. Sorular, onaylar, hatalar, biten görevler ve bahsetmeler her zaman bildirilir. Özet, ilk güncellemeden bir saat sonra tek bir bildirim gönderir.",
+  "webClient.settings.agentNoise.description":
+    "Her ajanın ilerleme yanıtlarının ne kadar bildirim göndereceği. Sorular, onaylar, hatalar, biten görevler ve bahsetmeler her zaman bildirilir. Özet, ilk güncellemeden bir saat sonra tek bir bildirim gönderir.",
   "webClient.settings.agentNoise.label": "{name} güncellemeleri",
   "webClient.settings.agentNoise.all": "Tümü",
   "webClient.settings.agentNoise.important": "Yalnızca önemli",

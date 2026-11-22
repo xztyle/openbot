@@ -3507,7 +3507,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                         workspaceOn() && workspaceController.agentNoiseSupported()
                           ? {
                               agents: workspace.state.agents
-                                .filter((agent) => !workspace.state.userHiddenAgents.some((hidden) => hidden.agentId === agent.id))
+                                .filter(
+                                  (agent) =>
+                                    !workspace.state.userHiddenAgents.some((hidden) => hidden.agentId === agent.id),
+                                )
                                 .map((agent) => ({ id: agent.id, name: agent.name })),
                               level: workspaceController.agentNoise,
                               onChange: workspaceController.setAgentNoise,

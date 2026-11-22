@@ -1,10 +1,6 @@
 import type { AppAppearance } from "@openbot/contracts/app-appearance";
 import type { AppLanguage } from "@openbot/contracts/app-language";
-import {
-  type CentralAuthUser,
-  WORKSPACE_AGENT_NOISE_LEVELS,
-  type WorkspaceAgentNoise,
-} from "@openbot/contracts/ipc";
+import { type CentralAuthUser, WORKSPACE_AGENT_NOISE_LEVELS, type WorkspaceAgentNoise } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
 import {
   Archive,

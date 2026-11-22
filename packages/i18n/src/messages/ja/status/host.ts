@@ -8,6 +8,7 @@ export const messages = {
   "status.host.identityUpdated": "サーバーの ID を更新しました。",
   "status.host.starting": "WebRTC ホストを起動しています…",
   "status.host.ready": "この Atelier は WebRTC 接続の準備ができています。",
+  "status.host.signalLost": "現在、ほかのデバイスからこの Atelier に接続できません。再接続しています。",
   "status.host.stopping": "この Atelier を非公開にしています…",
   "status.host.private": "この Atelier は非公開です。",
 } as const satisfies PartialTranslation<typeof source>;

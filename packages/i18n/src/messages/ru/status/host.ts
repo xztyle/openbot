@@ -7,6 +7,7 @@ export const messages = {
   "status.host.identityUpdated": "Идентификатор сервера обновлён.",
   "status.host.starting": "Запуск хоста WebRTC…",
   "status.host.ready": "Этот Atelier готов к подключениям WebRTC.",
+  "status.host.signalLost": "Другие устройства сейчас не могут подключиться к этому Atelier. Он подключается снова.",
   "status.host.stopping": "Перевод этого Atelier в приватный режим…",
   "status.host.private": "Этот Atelier приватный.",
 } as const satisfies PartialTranslation<typeof source>;

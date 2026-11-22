@@ -7,7 +7,7 @@ import { ArrowRight, CirclePause, Coins, Gauge, Hand, TriangleAlert } from "../.
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState, LoadingState } from "../../view-state";
-import { type TodayDecision, TodayDecisionCard } from "./TodayView";
+import { createDecisionFocus, type TodayDecision, TodayDecisionCard } from "./TodayView";
 import { MemberAvatar } from "./WorkspaceAvatar";
 import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { useCost } from "./workspace-format";
@@ -61,6 +61,7 @@ export interface MoneyViewProps {
 export function MoneyView(props: MoneyViewProps): JSX.Element {
   const { t, format } = useText();
   const uid = createUniqueId();
+  const decisionFocus = createDecisionFocus(() => props.spend);
   const cost = useCost();
   const costs = () => props.report?.costs;
   const change = () => {
@@ -173,10 +174,17 @@ export function MoneyView(props: MoneyViewProps): JSX.Element {
             </ol>
           </figure>
         </Show>
-        <section class="ws-today-section" aria-labelledby={`ws-money-waiting-${uid}`}>
+        <section
+          ref={decisionFocus.ref}
+          class="ws-today-section"
+          aria-labelledby={`ws-money-waiting-${uid}`}
+          onFocusIn={decisionFocus.onFocusIn}
+          onFocusOut={decisionFocus.onFocusOut}
+        >
           <h3
             id={`ws-money-waiting-${uid}`}
             class="ws-today-heading"
+            tabindex="-1"
             data-tone={props.spend.length ? "warn" : undefined}
           >
             <Hand aria-hidden="true" />

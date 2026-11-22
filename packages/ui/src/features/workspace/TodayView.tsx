@@ -1,6 +1,6 @@
 import { type InsightGoal, insightGoalPace, type WorkspaceInsight } from "@openbot/contracts/ipc";
 import { Dynamic, type JSX } from "@solidjs/web";
-import { createSignal, createUniqueId, For, Show } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, Show } from "solid-js";
 import { Button } from "../../button";
 import { Input } from "../../form";
 import {
@@ -157,6 +157,46 @@ function greetingKey(hour: number) {
  * that work now, with Stop; and the briefing as cards: spend, goals and what the agents made. A new
  * workspace also gets a short guide to goals, loops, the briefing and costs.
  */
+/**
+ * Keeps the focus in a list of decision cards when the card that holds it goes away, as one does
+ * after Approve, Decline or an answer: the next card takes it, or the heading when none is left.
+ * Without it the focus fell to the page, and a keyboard or a screen reader started at the top.
+ */
+export function createDecisionFocus(items: () => readonly unknown[]) {
+  let section: HTMLElement | undefined;
+  let held: { card: HTMLElement; index: number } | null = null;
+  const cards = () => Array.from(section?.querySelectorAll<HTMLElement>(".ws-today-decision") ?? []);
+  createEffect(
+    () => items().length,
+    () => {
+      const lost = held;
+      if (!lost || lost.card.isConnected) return;
+      held = null;
+      requestAnimationFrame(() => {
+        const active = document.activeElement;
+        if (active && active !== document.body) return;
+        const rest = cards();
+        const target = rest[Math.min(lost.index, rest.length - 1)] ?? section?.querySelector<HTMLElement>("h3");
+        target?.focus();
+      });
+    },
+  );
+  return {
+    ref: (element: HTMLElement) => {
+      section = element;
+    },
+    onFocusIn: (event: FocusEvent) => {
+      const card = event.target instanceof Element ? event.target.closest<HTMLElement>(".ws-today-decision") : null;
+      held = card ? { card, index: cards().indexOf(card) } : null;
+    },
+    onFocusOut: (event: FocusEvent) => {
+      // A removed card's focus leaves with no next element: keep it held for the effect above.
+      const next = event.relatedTarget;
+      if (next instanceof Node && !section?.contains(next)) held = null;
+    },
+  };
+}
+
 export function TodayView(props: TodayViewProps): JSX.Element {
   const { t, format } = useText();
   // A phone mounts Today twice (its tab, and the pane behind it): the heading ids must not clash.
@@ -168,6 +208,7 @@ export function TodayView(props: TodayViewProps): JSX.Element {
     const at = Date.parse(props.report?.briefing.lastSentAt ?? "");
     return Number.isFinite(at) ? at : undefined;
   };
+  const decisionFocus = createDecisionFocus(() => props.decisions);
   return (
     <section class={cx("ws-view ws-today", props.class)} aria-label={t("workspace.view.today")}>
       <WorkspacePaneHeader
@@ -178,10 +219,17 @@ export function TodayView(props: TodayViewProps): JSX.Element {
         actions={props.actions}
       />
       <div class="ws-view-scroll ws-today-scroll">
-        <section class="ws-today-section" aria-labelledby={`ws-today-waiting-${uid}`}>
+        <section
+          ref={decisionFocus.ref}
+          class="ws-today-section"
+          aria-labelledby={`ws-today-waiting-${uid}`}
+          onFocusIn={decisionFocus.onFocusIn}
+          onFocusOut={decisionFocus.onFocusOut}
+        >
           <h3
             id={`ws-today-waiting-${uid}`}
             class="ws-today-heading"
+            tabindex="-1"
             data-tone={props.decisions.length ? "warn" : undefined}
           >
             <Hand aria-hidden="true" />
@@ -300,6 +348,7 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
   const [error, setError] = createSignal<string | null>(null);
   const [answer, setAnswer] = createSignal("");
   const decision = () => props.decision;
+  let card: HTMLElement | undefined;
   async function run(action: () => Promise<void>) {
     if (busy()) return;
     setBusy(true);
@@ -307,7 +356,11 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
     try {
       await action();
       // The host's list drops the request soon; until then the card says it went.
+      const focused = document.activeElement;
+      const hadFocus = !focused || focused === document.body || card?.contains(focused) === true;
       setSent(true);
+      // The pressed button goes away with the actions: the card keeps the focus and reads "Sent".
+      if (hadFocus) card?.querySelector<HTMLElement>(".ws-today-decision-sent")?.focus();
     } catch (failure) {
       setError(errorMessage(failure, t("workspace.today.answerFailed")));
     } finally {
@@ -316,6 +369,8 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
   }
   return (
     <article
+      ref={card}
+      tabindex="-1"
       class={cx("ws-today-decision", props.compact && "ws-today-decision-compact")}
       data-kind={decision().kind}
       data-blocking={decision().blocking ? "" : undefined}
@@ -346,7 +401,7 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
       <Show
         when={!sent()}
         fallback={
-          <p class="ws-today-decision-sent" role="status">
+          <p class="ws-today-decision-sent" role="status" tabindex="-1">
             <Check aria-hidden="true" />
             {t("workspace.today.sent")}
           </p>

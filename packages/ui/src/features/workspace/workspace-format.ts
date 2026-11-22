@@ -20,10 +20,12 @@ export function useMessageTime(): (at: number) => string {
   return (at) => format.date(at, { hour: "numeric", minute: "2-digit" });
 }
 
-/** A time near now: the hour today, the weekday this week, else the date. */
+/** A time near now: the hour today, the weekday this week, else the date. Nothing for an unknown time. */
 export function useRecentTime(): (at: number, now?: number) => string {
   const { format } = useText();
   return (at, now = Date.now()) => {
+    // A date the host could not give (0, or a text that did not parse) is not 1 January 1970.
+    if (!Number.isFinite(at) || at <= 0) return "";
     const day = 86_400_000;
     const sameDay = new Date(at).toDateString() === new Date(now).toDateString();
     if (sameDay) return format.date(at, { hour: "numeric", minute: "2-digit" });

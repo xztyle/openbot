@@ -303,13 +303,19 @@ function MoneyGuardrailsSection(props: { guard: MoneyGuardrails }): JSX.Element 
   const [busy, setBusy] = createSignal<string | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const view = () => props.guard.view;
-  /** A meter's time is in epoch seconds; a pause's and a failover's is an ISO time. */
-  const time = (at: string | number) =>
-    format.date(typeof at === "number" ? at * 1000 : Date.parse(at), {
-      weekday: "short",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+  /**
+   * A meter's time is in epoch seconds; a pause's and a failover's is an ISO time. Null for a time that
+   * does not parse: a date format throws on it, and the view would not render.
+   */
+  const time = (at: string | number) => {
+    const ms = typeof at === "number" ? at * 1000 : Date.parse(at);
+    return Number.isFinite(ms) ? format.date(ms, { weekday: "short", hour: "numeric", minute: "2-digit" }) : null;
+  };
+  const pauseEnd = (until: string | null) => {
+    if (until === null) return t("trust.guardrails.untilOwner");
+    const at = time(until);
+    return at ? t("trust.guardrails.until", { time: at }) : null;
+  };
   const windowLabel = (window: SubscriptionWindowMeter) =>
     window.windowDurationMins === null
       ? ""
@@ -348,10 +354,7 @@ function MoneyGuardrailsSection(props: { guard: MoneyGuardrails }): JSX.Element 
                   <span class="ws-money-row-copy">
                     <strong>{props.guard.name(pause().scope, pause().id)}</strong>
                     <span class="ws-today-card-meta">
-                      {pause().detail} ·{" "}
-                      {pause().until
-                        ? t("trust.guardrails.until", { time: time(pause().until ?? "") })
-                        : t("trust.guardrails.untilOwner")}
+                      {[pause().detail, pauseEnd(pause().until)].filter(Boolean).join(" · ")}
                     </span>
                   </span>
                   <Button
@@ -403,9 +406,9 @@ function MoneyGuardrailsSection(props: { guard: MoneyGuardrails }): JSX.Element 
                           windowLabel(window),
                           t("trust.guardrails.window.used", { percent: Math.round(window.usedPercent) }),
                           window.exhaustsAt
-                            ? t("trust.guardrails.window.runsOut", { time: time(window.exhaustsAt) })
+                            ? t("trust.guardrails.window.runsOut", { time: time(window.exhaustsAt) ?? "" })
                             : window.resetsAt
-                              ? t("trust.guardrails.window.resets", { time: time(window.resetsAt) })
+                              ? t("trust.guardrails.window.resets", { time: time(window.resetsAt) ?? "" })
                               : "",
                         ]
                           .filter(Boolean)

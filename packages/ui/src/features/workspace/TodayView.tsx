@@ -164,6 +164,10 @@ export function TodayView(props: TodayViewProps): JSX.Element {
   const cost = useCost();
   const now = new Date();
   const title = () => t(greetingKey(now.getHours()), { name: props.name });
+  const sentAt = () => {
+    const at = Date.parse(props.report?.briefing.lastSentAt ?? "");
+    return Number.isFinite(at) ? at : undefined;
+  };
   return (
     <section class={cx("ws-view ws-today", props.class)} aria-label={t("workspace.view.today")}>
       <WorkspacePaneHeader
@@ -266,10 +270,11 @@ export function TodayView(props: TodayViewProps): JSX.Element {
                   <h4 class="ws-today-card-title">
                     <Sunrise aria-hidden="true" />
                     {t("workspace.today.lastBriefing")}
-                    <Show when={props.report?.briefing.lastSentAt}>
+                    {/* A time that does not parse shows nothing: a date format throws on it. */}
+                    <Show when={sentAt()}>
                       {(at) => (
                         <span class="ws-today-card-meta">
-                          {format.date(Date.parse(at()), { weekday: "short", hour: "numeric", minute: "2-digit" })}
+                          {format.date(at(), { weekday: "short", hour: "numeric", minute: "2-digit" })}
                         </span>
                       )}
                     </Show>

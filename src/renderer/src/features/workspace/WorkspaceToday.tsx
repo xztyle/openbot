@@ -3,6 +3,7 @@
  * one-tap answers, the agents that work now with Stop, and the briefing as cards (spend, goals, what
  * the agents made). A new workspace also gets a short guide to goals, loops, the briefing and costs.
  */
+import { GENERAL_SPACE_ID } from "@openbot/contracts/ipc";
 import { toast } from "@openbot/ui";
 import { type TodayStep, TodayView, type TodayWorker } from "@openbot/ui/features/workspace/TodayView";
 import { useText } from "@openbot/ui/text";
@@ -126,10 +127,26 @@ export function WorkspaceTodayView(props: { actions?: JSX.Element; onBack?: (() 
   };
   const steps = createMemo((): TodayStep[] => {
     visits();
-    if (hidden() || !ws.isAdmin()) return [];
+    // Until the host lists its channels the steps would read as undone, as on a host that did not answer.
+    if (hidden() || !ws.isAdmin() || !ws.channels.state.listed) return [];
     const report = insight.report();
     const chief = ws.spaceAgents()[0] ?? ws.env.agents()[0];
+    const createAgent = ws.env.createAgent;
+    // #general lives in General: in another space the step makes a channel of that space instead.
+    const otherSpace = ws.spaces.available() && ws.spaces.current() !== GENERAL_SPACE_ID;
     const list: TodayStep[] = [
+      // A new space, or a new workspace, has no agent to give a goal or a channel to yet.
+      ...(createAgent && ws.spaceAgents().length === 0
+        ? [
+            {
+              id: "agent",
+              title: t("workspace.fleet.addAgent"),
+              hint: t("workspace.fleet.noAgentsHint"),
+              done: false,
+              onSelect: () => createAgent(),
+            },
+          ]
+        : []),
       {
         id: "goal",
         title: t("workspace.today.guide.goal"),
@@ -140,11 +157,11 @@ export function WorkspaceTodayView(props: { actions?: JSX.Element; onBack?: (() 
       },
       {
         id: "channel",
-        title: t("workspace.today.guide.channel"),
+        title: otherSpace ? t("workspace.app.welcome.createChannel") : t("workspace.today.guide.channel"),
         hint: t("workspace.today.guide.channelHint"),
         done: ws.sidebarChannels().length > 0,
         // #general with the whole team and its agents, as the welcome's button makes it.
-        onSelect: () => void ws.ensureGeneral(),
+        onSelect: () => (otherSpace ? ws.openDialog({ kind: "create-channel" }) : void ws.ensureGeneral()),
       },
       ...(insights()
         ? [

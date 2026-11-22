@@ -59,9 +59,11 @@ import {
   frameAutomationContextId,
   isFiniteNumber,
   isRecord,
+  isSessionGone,
   numberValue,
   recordValue,
   type SendCommand,
+  skipGoneFrame,
   stringValue,
 } from "./browser-cdp-values";
 import { type ChallengeWidget, readChallengeWidget } from "./browser-challenge";
@@ -677,13 +679,16 @@ export class BrowserCdpEngine {
         }
       }
       if (method === "Target.detachedFromTarget" && isRecord(params)) {
-        const detached = stringValue(params.sessionId);
-        for (const [targetId, target] of this.#targetSessions) {
-          if (target.sessionId === detached) this.#targetSessions.delete(targetId);
-        }
+        this.#forgetTargetSession(stringValue(params.sessionId));
       }
     });
     contents.debugger.on("detach", () => this.#clearDebuggerSessions());
+  }
+
+  #forgetTargetSession(sessionId: string): void {
+    for (const [targetId, target] of this.#targetSessions) {
+      if (target.sessionId === sessionId) this.#targetSessions.delete(targetId);
+    }
   }
 
   readonly snapshot = Effect.fn("BrowserCdp.snapshot")(function* (
@@ -2337,9 +2342,10 @@ export class BrowserCdpEngine {
         return yield* browserFailure(new Error("Stale browser reference. Take a fresh snapshot before acting."));
       }
       const record = this.#targets.get(target.ref);
-      if (!record)
+      const sessionId = record?.targetId ? this.#targetSessions.get(record.targetId)?.sessionId : undefined;
+      // A frame in another process that went away: its node id can name another node in the page's session.
+      if (!record || (record.targetId && sessionId === undefined))
         return yield* browserFailure(new Error("Element reference is no longer available. Take a fresh snapshot."));
-      const sessionId = record.targetId ? this.#targetSessions.get(record.targetId)?.sessionId : undefined;
       if (deadline !== undefined) {
         yield* browserSync(() => assertBeforeDeadline(deadline));
         const current = yield* this.#targetFingerprint(send, record.backendNodeId, sessionId).pipe(
@@ -2368,7 +2374,9 @@ export class BrowserCdpEngine {
       let ambiguous = false;
       yield* Effect.gen({ self: this }, function* () {
         for (const capture of this.#snapshotTargets(Number.POSITIVE_INFINITY)) {
-          const match = yield* cssObjectMatch(send, target.selector, capture.sessionId);
+          const match = yield* cssObjectMatch(send, target.selector, capture.sessionId).pipe(
+            skipGoneFrame(capture.sessionId, { ambiguous: false, objectId: undefined }),
+          );
           ambiguous ||= match.ambiguous;
           if (match.objectId)
             matches.push({
@@ -2429,7 +2437,9 @@ export class BrowserCdpEngine {
     const candidates: SemanticMatch[] = [];
     const seen = new Set<string>();
     for (const capture of this.#snapshotTargets(Number.POSITIVE_INFINITY)) {
-      for (const candidate of yield* semanticAxMatches(send, capture, target, allowNonActionableRole, deadline)) {
+      for (const candidate of yield* semanticAxMatches(send, capture, target, allowNonActionableRole, deadline).pipe(
+        skipGoneFrame(capture.sessionId, []),
+      )) {
         const key = `${capture.targetId ?? "main"}:${candidate.backendNodeId}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -2438,10 +2448,15 @@ export class BrowserCdpEngine {
       }
       if (candidates.length >= 2) break;
       if (target.kind === "text") {
-        const objectIds = yield* visibleTextObjectMatches(send, capture, target, deadline);
+        const objectIds = yield* visibleTextObjectMatches(send, capture, target, deadline).pipe(
+          skipGoneFrame(capture.sessionId, []),
+        );
         yield* Effect.gen({ self: this }, function* () {
           for (const objectId of objectIds) {
-            const described = yield* send("DOM.describeNode", { objectId, depth: 0 }, capture.sessionId);
+            const described = yield* send("DOM.describeNode", { objectId, depth: 0 }, capture.sessionId).pipe(
+              skipGoneFrame(capture.sessionId, undefined),
+            );
+            if (!described) continue;
             const node = recordValue(described.node);
             const backendNodeId = numberValue(node?.backendNodeId);
             if (!backendNodeId) continue;
@@ -2759,7 +2774,14 @@ export class BrowserCdpEngine {
     this.#activeLeases += 1;
     const send: SendCommand = (method, params = {}, sessionId) =>
       Effect.gen({ self: this }, function* () {
-        const result = yield* browserCall(() => this.#contents.debugger.sendCommand(method, params, sessionId));
+        const result = yield* browserCall(() => this.#contents.debugger.sendCommand(method, params, sessionId)).pipe(
+          // Chromium can end a frame's session and send no detach event for it. Forget that session.
+          Effect.tapError((failure) =>
+            Effect.sync(() => {
+              if (sessionId !== undefined && isSessionGone(failure)) this.#forgetTargetSession(sessionId);
+            }),
+          ),
+        );
         if (!isDynamicRecord(result))
           return yield* browserFailure(new Error(`CDP ${method} returned an invalid result.`));
         return result;
@@ -3016,6 +3038,8 @@ const waitForDomQuietAcrossTargets = Effect.fn("Browser.waitForDomQuietAcrossTar
           capture.sessionId,
         );
       }).pipe(
+        // A frame that went away has no more changes.
+        skipGoneFrame(capture.sessionId, { result: { type: "boolean", value: true } }),
         // A frame whose timers do not run, such as a 1x1 cross-origin ad frame, never reaches the
         // deadline timer above, and a frame that answers nothing never returns. Either one would hold
         // every caller until the caller's own deadline.

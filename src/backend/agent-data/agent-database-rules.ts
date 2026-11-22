@@ -17,6 +17,8 @@ interface ScannedStatement {
   hasTrailingStatement: boolean;
   /** An unterminated string, identifier or block comment. */
   unterminated: boolean;
+  /** The `?` placeholders outside strings and comments, or null when the statement names or numbers one. */
+  placeholders: number | null;
 }
 
 function scanStatement(sql: string): ScannedStatement {
@@ -25,9 +27,19 @@ function scanStatement(sql: string): ScannedStatement {
   let index = 0;
   let sawSemicolon = false;
   let hasTrailingStatement = false;
+  let placeholders: number | null = 0;
 
   while (index < sql.length) {
     const character = sql[index];
+
+    // `?NNN`, `:name`, `@name` and `$name` bind by number or name, so only plain `?` are counted.
+    if (character === "?") {
+      if (placeholders !== null) placeholders = /[0-9]/.test(sql.charAt(index + 1)) ? null : placeholders + 1;
+      if (sawSemicolon) hasTrailingStatement = true;
+      index += 1;
+      continue;
+    }
+    if (character === ":" || character === "@" || character === "$") placeholders = null;
 
     if (character === "-" && sql[index + 1] === "-") {
       const newline = sql.indexOf("\n", index);
@@ -36,14 +48,14 @@ function scanStatement(sql: string): ScannedStatement {
     }
     if (character === "/" && sql[index + 1] === "*") {
       const end = sql.indexOf("*/", index + 2);
-      if (end === -1) return { words, hasTrailingStatement, unterminated: true };
+      if (end === -1) return { words, hasTrailingStatement, unterminated: true, placeholders: null };
       index = end + 2;
       continue;
     }
     // `x'…'` is a blob literal; the `x` must not also be read as a keyword.
     if ((character === "x" || character === "X") && sql[index + 1] === "'") {
       const end = sql.indexOf("'", index + 2);
-      if (end === -1) return { words, hasTrailingStatement, unterminated: true };
+      if (end === -1) return { words, hasTrailingStatement, unterminated: true, placeholders: null };
       index = end + 1;
       continue;
     }
@@ -51,7 +63,7 @@ function scanStatement(sql: string): ScannedStatement {
       index += 1;
       for (;;) {
         const end = sql.indexOf(character, index);
-        if (end === -1) return { words, hasTrailingStatement, unterminated: true };
+        if (end === -1) return { words, hasTrailingStatement, unterminated: true, placeholders: null };
         // A doubled quote is an escaped one, not the end of the literal.
         if (sql[end + 1] === character) {
           index = end + 2;
@@ -64,7 +76,7 @@ function scanStatement(sql: string): ScannedStatement {
     }
     if (character === "[") {
       const end = sql.indexOf("]", index + 1);
-      if (end === -1) return { words, hasTrailingStatement, unterminated: true };
+      if (end === -1) return { words, hasTrailingStatement, unterminated: true, placeholders: null };
       index = end + 1;
       continue;
     }
@@ -96,7 +108,7 @@ function scanStatement(sql: string): ScannedStatement {
     index += 1;
   }
 
-  return { words, hasTrailingStatement, unterminated: false };
+  return { words, hasTrailingStatement, unterminated: false, placeholders };
 }
 
 const READ_KEYWORDS = new Set(["select", "values", "explain"]);
@@ -192,8 +204,8 @@ export function schemaChange(sql: string): AgentSchemaChange | null {
  * Booleans become 1 and 0 here rather than at the binding, because SQLite has no boolean type and
  * the conversion should be one the caller can read in the rejection message when it goes wrong.
  */
-export function checkAgentParameters(value: unknown): AgentDatabaseCheck<AgentDatabaseParameter[]> {
-  if (value === undefined || value === null) return { ok: true, value: [] };
+export function checkAgentParameters(value: unknown, sql: string): AgentDatabaseCheck<AgentDatabaseParameter[]> {
+  if (value === undefined || value === null) return matchPlaceholders(sql, []);
   if (!Array.isArray(value)) {
     return { ok: false, message: "params must be an array of values, one for each ? placeholder in order." };
   }
@@ -227,5 +239,25 @@ export function checkAgentParameters(value: unknown): AgentDatabaseCheck<AgentDa
   if (bytes > AGENT_DATABASE_LIMITS.maxParameterBytes) {
     return { ok: false, message: "The parameters together are too large. Write fewer rows per call." };
   }
-  return { ok: true, value: parameters };
+  return matchPlaceholders(sql, parameters);
+}
+
+/**
+ * Refuses a statement whose values do not match its `?` placeholders. SQLite binds a missing value
+ * as NULL, so a write with fewer values saved NULLs with no error (upstream 46039412d). A statement
+ * that binds by number or name, or that the scan cannot read, is left to SQLite.
+ */
+function matchPlaceholders(
+  sql: string,
+  parameters: AgentDatabaseParameter[],
+): AgentDatabaseCheck<AgentDatabaseParameter[]> {
+  const scanned = scanStatement(sql);
+  const expected = scanned.unterminated || scanned.hasTrailingStatement ? null : scanned.placeholders;
+  if (expected === null || expected === parameters.length) return { ok: true, value: parameters };
+  const placeholders = expected === 1 ? "1 ? placeholder" : `${expected} ? placeholders`;
+  const values = parameters.length === 1 ? "1 value" : `${parameters.length} values`;
+  return {
+    ok: false,
+    message: `This statement has ${placeholders}, but params has ${values}. Give one value for each ? in order.`,
+  };
 }

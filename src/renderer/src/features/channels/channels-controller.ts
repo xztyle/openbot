@@ -494,15 +494,26 @@ export function createChannelsController(env: ChannelsEnvironment) {
     },
   );
   onSettled(() => {
+    // iOS Safari may not send `focus` when the reader comes back from another app, so a page that
+    // becomes visible reads again too. Both often come together: the second within 2 s is skipped.
+    let lastReturn = 0;
     const focus = () => {
+      const now = Date.now();
+      if (now - lastReturn < 2_000) return;
+      lastReturn = now;
       void refresh();
     };
+    const visible = () => {
+      if (document.visibilityState === "visible") focus();
+    };
     window.addEventListener("focus", focus);
+    document.addEventListener("visibilitychange", visible);
     return () => {
       disposed = true;
       clearTimeout(listTimer);
       settleListWait?.();
       window.removeEventListener("focus", focus);
+      document.removeEventListener("visibilitychange", visible);
     };
   });
   /** Marks the open channel read through a message that arrived while the reader looks at it. */

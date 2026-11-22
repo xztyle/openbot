@@ -16,10 +16,21 @@ function commandOf(input: unknown): string | null {
   return isDynamicRecord(input) && isString(input.command) ? input.command : null;
 }
 
+/**
+ * The fields of Claude's own tools that only tell people what a call is for. The model rewrites them on
+ * every call ("check 3 of 12"), so they would make identical calls look different.
+ */
+const NOTE_FIELDS = new Set(["description"]);
+
 /** What makes two calls of a tool the same, so the stuck watch can count repeats. */
 export function toolInputDigest(name: string, input: unknown): string {
+  const builtIn = !name.startsWith("mcp__");
+  const compared =
+    builtIn && isDynamicRecord(input)
+      ? Object.fromEntries(Object.entries(input).filter(([key]) => !NOTE_FIELDS.has(key)))
+      : input;
   return createHash("sha256")
-    .update(JSON.stringify([name, input ?? null]) ?? "")
+    .update(JSON.stringify([name, compared ?? null]) ?? "")
     .digest("hex")
     .slice(0, 24);
 }

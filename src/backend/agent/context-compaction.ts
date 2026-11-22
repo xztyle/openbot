@@ -290,6 +290,15 @@ export class ContextCompaction {
     this.#armPrecompact(threadId, IDLE_PRECOMPACT_AFTER_MS);
   }
 
+  /** A failed idle compaction leaves the thread to the wake handoff, and its timer is not armed again. */
+  #precompactFailed(threadId: string): void {
+    const entry = this.#precompactEntries.get(threadId);
+    if (!entry) return;
+    entry.precompacted = false;
+    entry.lastTurnEndAt = 0;
+    this.#precompactState.save(this.#precompactEntries);
+  }
+
   /** Whether the thread compacted while idle since its last turn. Its wake needs no handoff. */
   precompactedSinceLastTurn(threadId: string): boolean {
     return this.#precompactEntries.get(threadId)?.precompacted === true;
@@ -681,8 +690,18 @@ export class ContextCompaction {
             if (budget.phase === "running" || budget.phase === "stopping") return;
             this.#precompacting.delete(threadId);
             budget.lastCompactedTokens = budget.usedTokens;
-            this.#emitError("context_compaction_failed", failure.cause, agentId);
-            this.#countFailure(threadId, agentId);
+            if (precompact) {
+              // Nobody asked for this compaction, so its failure is quiet: the thread keeps its
+              // context and its wake falls back to the idle handoff. It is not tried again.
+              logger.warn("An idle Claude session could not compact; its wake hands off instead.", {
+                agentId,
+                reason: String(failure.cause),
+              });
+              this.#precompactFailed(threadId);
+            } else {
+              this.#emitError("context_compaction_failed", failure.cause, agentId);
+              this.#countFailure(threadId, agentId);
+            }
             this.observeCompaction(threadId, "failed");
             this.#release(agentId, threadId);
             this.#scheduleDrain(agentId);
@@ -730,7 +749,10 @@ export class ContextCompaction {
     if (budget && status !== "completed") {
       budget.lastCompactedTokens = budget.usedTokens;
       // A compaction that the deadline stopped was already reported as timed out.
-      if (budget.phase !== "stopping") {
+      if (this.#precompacting.has(threadId)) {
+        logger.warn("An idle Claude session could not compact; its wake hands off instead.", { agentId, status });
+        this.#precompactFailed(threadId);
+      } else if (budget.phase !== "stopping") {
         this.#emitError("context_compaction_failed", `Codex context compaction ended with status ${status}.`, agentId);
         this.#countFailure(threadId, agentId);
       }
@@ -911,11 +933,16 @@ export class ContextCompaction {
   #armDeadline(agentId: string, threadId: string, client: AgentClient, ms: number): void {
     this.#clearTimer(threadId);
     const timer = setTimeout(() => {
-      this.#emitError(
-        "context_compaction_timeout",
-        "Codex context compaction timed out; queued work will continue.",
-        agentId,
-      );
+      if (this.#precompacting.has(threadId)) {
+        logger.warn("An idle Claude session took too long to compact; its wake hands off instead.", { agentId });
+        this.#precompacting.delete(threadId);
+        this.#precompactFailed(threadId);
+      } else
+        this.#emitError(
+          "context_compaction_timeout",
+          "Codex context compaction timed out; queued work will continue.",
+          agentId,
+        );
       const budget = this.#budgets.get(threadId);
       const turnId = budget?.compactionTurnId;
       if (budget?.phase === "running" && turnId) this.#stop(agentId, threadId, client, turnId);

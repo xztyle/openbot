@@ -109,6 +109,13 @@ export function MoneyView(props: MoneyViewProps): JSX.Element {
     }));
   });
   const peak = () => Math.max(0, ...daily().map((entry) => entry.usd));
+  /** A report day ("2026-11-22", in the report's zone) as the reader writes it: "Sun, Nov 22". */
+  const dayName = (day: string) => {
+    const at = Date.parse(`${day}T12:00:00Z`);
+    return Number.isFinite(at)
+      ? format.date(at, { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" })
+      : day;
+  };
   const settings = () => props.report?.briefing.settings;
   return (
     <section class={cx("ws-view ws-money", props.class)} aria-label={t("workspace.view.money")}>
@@ -196,10 +203,10 @@ export function MoneyView(props: MoneyViewProps): JSX.Element {
               <For each={daily()}>
                 {(entry) => (
                   <li
-                    title={`${entry.day}: ${cost(entry.usd)}`}
+                    title={`${dayName(entry.day)}: ${cost(entry.usd)}`}
                     style={{ height: `${Math.max(2, Math.round((entry.usd / peak()) * 100))}%` }}
                   >
-                    <span class="sr-only">{`${entry.day}: ${cost(entry.usd)}`}</span>
+                    <span class="sr-only">{`${dayName(entry.day)}: ${cost(entry.usd)}`}</span>
                   </li>
                 )}
               </For>

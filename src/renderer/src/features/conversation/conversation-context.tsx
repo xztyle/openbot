@@ -964,13 +964,17 @@ const Conversation = createSimpleContext({
       if (scopeIsCurrent()) applyConversationReadState(agentId, state);
     }
 
-    /** Marks each unread agent chat read through its newest message, which may not be loaded yet. */
-    async function markAllAgentMessagesRead(): Promise<void> {
+    /**
+     * Marks each unread agent chat read through its newest message, which may not be loaded yet.
+     * `agentIds` limits it to those agents, as the agents of one space.
+     */
+    async function markAllAgentMessagesRead(agentIds?: readonly string[]): Promise<void> {
       const serverId = activeServerId();
+      const only = agentIds ? new Set(agentIds) : null;
       // Only listed agents: a read of an id the host no longer knows creates that agent again.
       const unread = agentList()
         .map((agent) => agent.id)
-        .filter((agentId) => (unreadReplies()[agentId] ?? 0) > 0);
+        .filter((agentId) => (unreadReplies()[agentId] ?? 0) > 0 && (!only || only.has(agentId)));
       await Promise.all(
         unread.map(async (agentId) => {
           try {

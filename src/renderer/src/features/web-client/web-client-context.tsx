@@ -2027,14 +2027,18 @@ export function createWebWorkspace(
       setUnread(draft, id, readState.unreadCount);
     });
   }
-  /** Marks every agent with unread messages read through its newest one, loaded or not. */
-  async function markAllRead() {
+  /**
+   * Marks every agent with unread messages read through its newest one, loaded or not. `agentIds`
+   * limits it to those agents, as the agents of one space.
+   */
+  async function markAllRead(agentIds?: readonly string[]) {
     if (state.status !== "online") return;
     const current = generation;
     const reads = await runtime.conversationReads();
     if (disposed || current !== generation) return;
+    const only = agentIds ? new Set(agentIds) : null;
     const unread = Object.entries(reads)
-      .filter(([, read]) => read.unreadCount > 0)
+      .filter(([id, read]) => read.unreadCount > 0 && (!only || only.has(id)))
       .map(([id]) => id);
     const writes = unread.map((id) => {
       const write = (readWrites.get(id) ?? Promise.resolve())

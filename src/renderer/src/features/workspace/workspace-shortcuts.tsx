@@ -207,7 +207,8 @@ export function WorkspaceKeyboard() {
       }
       if (event.key !== "Escape" || mod || event.altKey) return;
       if (event.shiftKey) {
-        if (unreadInSpace().length) {
+        // An unread agent chat of the space counts too: the confirm marks it read.
+        if (unreadInSpace().length || ws.spaceUnread().get(ws.spaces.current())?.unread) {
           event.preventDefault();
           ws.openDialog({ kind: "mark-all-read" });
         }
@@ -248,7 +249,8 @@ export function WorkspaceKeyboard() {
         onConfirm={async () => {
           setMarking(true);
           try {
-            await ws.channels.markAllRead(unreadInSpace());
+            // The channels and the agent chats of the space, as the confirm says.
+            await ws.markSpaceRead();
             void ws.refreshActivity();
             ws.openDialog(null);
           } catch {

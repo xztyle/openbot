@@ -174,10 +174,8 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
         id: "mark-read",
         label: t("workspace.app.menu.markAllRead"),
         icon: <CheckCheck aria-hidden="true" />,
-        onSelect: () => {
-          void markAllAgentMessagesRead();
-          void channels.markAllRead();
-        },
+        // The space that shows, as Slack's menu marks its workspace.
+        onSelect: () => void controller.markSpaceRead().catch(() => undefined),
       },
     ];
     if (server)
@@ -223,6 +221,7 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     modelName: (provider, model) => modelNameOf(modelOptions(), provider, model),
     hiddenAgentIds: userHiddenAgentIds,
     agentStates,
+    markAgentsRead: markAllAgentMessagesRead,
     people: () =>
       teamPresence()
         .members.filter((member) => !member.disabled)

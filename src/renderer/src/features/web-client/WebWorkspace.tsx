@@ -2154,10 +2154,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           id: "mark-read",
           label: t("workspace.app.menu.markAllRead"),
           icon: <CheckCheck aria-hidden="true" />,
-          onSelect: () => {
-            void workspace.markAllRead().catch(() => undefined);
-            void channels.markAllRead();
-          },
+          // The space that shows, as Slack's menu marks its workspace.
+          onSelect: () => void workspaceController.markSpaceRead().catch(() => undefined),
         },
         ...(id
           ? [
@@ -2213,6 +2211,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       const result = await workspace.send(agentId, text, [], null, crypto.randomUUID());
       if ("error" in result) throw new Error(result.error);
     },
+    markAgentsRead: (agentIds) => workspace.markAllRead(agentIds),
     messageLink: (channelId, messageId, threadRootId) =>
       placeLink({ kind: "channel", channelId, threadRootId }, messageId, ws.rowSpace(channelId)),
     channelLink: (channelId) =>

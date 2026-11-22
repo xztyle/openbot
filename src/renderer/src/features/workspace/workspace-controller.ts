@@ -283,6 +283,11 @@ export interface WorkspaceEnvironment {
    */
   sendToAgent?: ((agentId: string, text: string) => Promise<void>) | undefined;
   /**
+   * Marks the main chats of these agents read through their newest messages, or of every agent when
+   * the list is absent. Absent, Mark all as read leaves the agents' chats as they are.
+   */
+  markAgentsRead?: ((agentIds?: readonly string[]) => Promise<void>) | undefined;
+  /**
    * The runtime state that the org chart reads beside the fleet: each agent's queue, for the agents
    * that message each other, and the last failed turn of each agent. Absent, the chart shows the
    * fleet state only.
@@ -2600,6 +2605,28 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   }
 
   /**
+   * Mark all as read: every channel and agent chat of the space that shows, as Slack marks one
+   * workspace. The other spaces keep their unread marks on the rail. A host without spaces has one.
+   */
+  async function markSpaceRead() {
+    const inSpace = spaces.available();
+    const channelIds = channels.state.channels
+      .filter((channel) => channel.unreadCount > 0 && (!inSpace || spaces.channelInCurrent(channel.id)))
+      .map((channel) => channel.id);
+    const agentIds = inSpace
+      ? env
+          .agents()
+          .filter((agent) => spaces.agentInCurrent(agent.id))
+          .map((agent) => agent.id)
+      : undefined;
+    const [channelsRead] = await Promise.allSettled([
+      channels.markAllRead(channelIds),
+      env.markAgentsRead?.(agentIds) ?? Promise.resolve(),
+    ]);
+    if (channelsRead.status === "rejected") throw channelsRead.reason;
+  }
+
+  /**
    * Moves agents or channels to a space; the sidebar reads the spaces again from the answer. The
    * conversation that shows goes along with its space, so its row stays on the sidebar beside it.
    */
@@ -2706,6 +2733,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     spaceActivity,
     spaceThreads,
     moveToSpace,
+    markSpaceRead,
     /** Shows why a move to another space failed. */
     spaceFailure: (error: unknown) => failureToast(error, "workspace.spaces.moveFailed"),
     /** The agents of the space that shows, for pickers and views. */

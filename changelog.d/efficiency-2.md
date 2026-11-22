@@ -15,6 +15,9 @@
   expired, so the old session would have been written to the cache again in full.- Agents can pause in the browser with `wait_for` and `delayMs`, alone or as a `run_steps` step,
   and run one `evaluate` script up to 50 times in one call with `repeat`, to collect a list across
   pages without a model step for each page.
+- A message from a teammate waits up to two minutes before it wakes an agent, and the teammate
+  messages that arrive meanwhile start the same turn. A message from you never waits, and `fyi`
+  notes still wake nobody. A message that wakes its recipients goes to at most 10 teammates.
 
 ### Fixed
 

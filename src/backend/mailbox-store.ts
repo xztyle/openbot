@@ -49,7 +49,7 @@ import {
   type StoredGeneratedAttachment,
   toAttachmentSummary,
 } from "./attachment-files";
-import { ANSWER_HOLD_LIMIT_MS } from "./collaboration-limits";
+import { AGENT_WAKE_COALESCE_MS, ANSWER_HOLD_LIMIT_MS } from "./collaboration-limits";
 import { eventCheckMarker, isEventCheckOrigin } from "./event-check-marker";
 import { StoredStateFailure, storedIO, storedSync, toStoredStateFailure } from "./stored-state-effects";
 
@@ -1583,7 +1583,8 @@ export class MailboxStore {
       (candidate) =>
         this.#taskIdOf(candidate, messages) === taskId &&
         !this.#holdsReply(candidate, now) &&
-        !this.#isHeldNote(candidate, messages),
+        !this.#isHeldNote(candidate, messages) &&
+        !this.#coalesces(candidate, now, messages),
     );
     return delivery && this.#mayStart(delivery) ? this.#context(delivery, undefined, messages) : null;
   }
@@ -1598,10 +1599,38 @@ export class MailboxStore {
     if (!next) return [];
     const messages = this.#messagesById();
     if (this.#taskIdOf(next, messages)) return [];
+    // A teammate message that waits to start with the rest of its burst joins this turn too.
+    const now = Date.now();
     return this.#contexts(
       this.#queuedFor(next.recipientAgentId).filter(
-        (candidate) => candidate.id !== next.id && this.#mayStart(candidate) && this.#isHeldNote(candidate, messages),
+        (candidate) =>
+          candidate.id !== next.id &&
+          this.#mayStart(candidate) &&
+          (this.#isHeldNote(candidate, messages) || this.#coalesces(candidate, now, messages)),
       ),
+    );
+  }
+
+  /**
+   * A new message from a teammate in the agent's own chat that is younger than
+   * `AGENT_WAKE_COALESCE_MS`: it starts no turn yet, so the messages of a burst start one turn. An
+   * answer that waits for other teammates keeps its own hold, and a note is held anyway.
+   */
+  #coalesces(delivery: StoredDelivery, now: number, messages?: ReadonlyMap<string, StoredMessage>): boolean {
+    if (delivery.status !== "queued" || delivery.resumeAfterUsageLimit) return false;
+    if (now - (Date.parse(delivery.createdAt) || 0) >= AGENT_WAKE_COALESCE_MS) return false;
+    const message = (messages ?? this.#index().messageById).get(delivery.messageId);
+    return (
+      message !== undefined &&
+      message.sender.kind === "agent" &&
+      message.sender.agentId !== delivery.recipientAgentId &&
+      !message.notice &&
+      !message.channelId &&
+      !message.messaging &&
+      !message.taskId &&
+      !message.eventCheck &&
+      !isNote(message, delivery.recipientAgentId) &&
+      !this.#holdsReply(delivery, now)
     );
   }
 
@@ -1853,9 +1882,16 @@ export class MailboxStore {
   heldReplyReleaseTimes(): Map<string, number> {
     const releases = new Map<string, number>();
     const now = Date.now();
+    const messages = this.#index().messageById;
     for (const delivery of this.#state.deliveries) {
-      if (delivery.status !== "queued" || !this.#holdsReply(delivery, now)) continue;
-      const release = (Date.parse(delivery.createdAt) || 0) + ANSWER_HOLD_LIMIT_MS;
+      if (delivery.status !== "queued") continue;
+      const created = Date.parse(delivery.createdAt) || 0;
+      const release = this.#holdsReply(delivery, now)
+        ? created + ANSWER_HOLD_LIMIT_MS
+        : this.#coalesces(delivery, now, messages)
+          ? created + AGENT_WAKE_COALESCE_MS
+          : null;
+      if (release === null) continue;
       releases.set(delivery.recipientAgentId, Math.min(releases.get(delivery.recipientAgentId) ?? release, release));
     }
     return releases;

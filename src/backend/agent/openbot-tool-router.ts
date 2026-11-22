@@ -44,7 +44,12 @@ import type { AgentTasks } from "../agent-tasks/agent-tasks";
 import type { AgentWaits } from "../agent-waits/agent-waits";
 import { OPENBOT_BROWSER_NAMESPACE } from "../browser-tools";
 import type { ChannelService } from "../channel-service";
-import { AGENT_CREATION_WINDOW_MS, AGENT_MESSAGE_LIMIT, AGENT_MESSAGE_WINDOW_MS } from "../collaboration-limits";
+import {
+  AGENT_CREATION_WINDOW_MS,
+  AGENT_MESSAGE_FANOUT_LIMIT,
+  AGENT_MESSAGE_LIMIT,
+  AGENT_MESSAGE_WINDOW_MS,
+} from "../collaboration-limits";
 import type { ProviderSession } from "../database/provider-sessions";
 import type { EventCheckScheduler } from "../event-check-scheduler";
 import type { LoopService } from "../loops/loop-service";
@@ -2069,6 +2074,10 @@ export class OpenBotToolRouter {
       if (fyiValue !== undefined && typeof fyiValue !== "boolean") throw new Error("fyi must be a boolean.");
       // A reply is never held, so fyi marks only a new message.
       const fyi = fyiValue === true && !replyToMessageId?.trim();
+      if (!fyi && recipientValues.length > AGENT_MESSAGE_FANOUT_LIMIT)
+        throw new Error(
+          `A message that wakes its recipients goes to at most ${AGENT_MESSAGE_FANOUT_LIMIT} teammates. Post an announcement in a channel, send it with fyi true, or message only the teammates who must act.`,
+        );
 
       // A retried call finds its own message by the tool call id, so the guards below never turn the
       // retry of a send that worked into a failure.

@@ -1,4 +1,4 @@
-# Agent mailboxes per business (design, not built)
+# Agent mailboxes per business (design)
 
 Goal: a customer-facing agent has its own address on the business's domain (for example
 `ventas@aprendivo.com`). Mail to it becomes work in that agent's thread, and the agent answers as
@@ -53,5 +53,6 @@ that address. State on 2026-11-22, from a read-only check of the production serv
   and ask the owner before the first mail to a new recipient.
 - One dependency: when the Worker or Cloudflare is down, mail bounces. Show that to the owner.
 
-Not built in this stream: it needs the owner's Cloudflare steps first, and Email Sending must be
-confirmed for the account.
+Built on 2026-11-22: see [Agent mailboxes](../agent-mailboxes.md). It still needs the owner's
+Cloudflare steps, and Email Sending must be confirmed for the account. Not built from this design:
+binding an address to a channel, and keeping the original message as an attachment.

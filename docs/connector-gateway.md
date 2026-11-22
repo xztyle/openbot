@@ -5,7 +5,8 @@ The connector gateway is the host's inbound HTTP door for outside systems. It se
 - `/mcp`: the owner's MCP endpoint. A chat app such as Claude or ChatGPT reaches the agents with
   text tools.
 - `/hooks/<route id>`: the inbox of a webhook routine. Stripe, Hotmart, YouTube or any system that
-  signs with Atelier's scheme starts the routine directly.
+  signs with Atelier's scheme starts the routine directly. One route is the inbox of the
+  [agent mailboxes](agent-mailboxes.md), where the mail Worker posts each mail.
 
 Each path authenticates on its own. Anything else answers 404.
 

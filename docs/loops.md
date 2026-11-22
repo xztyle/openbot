@@ -61,6 +61,7 @@ escalates what only the owner can answer with `escalate_loop_item`.
 
 | Channel | Connector | Credentials |
 |---|---|---|
+| Business address on Cloudflare | [Agent mailboxes](agent-mailboxes.md): each mail adds or updates a card by itself | None in the agent: Email Routing, the mail Worker and its secret. |
 | Gmail | `gmail-inbox` template | The Gmail address and an app password (`GMAIL_APP_PASSWORD`). |
 | Proton Mail | `protonmail-inbox` template | Proton Mail Bridge on the host and its password (`PROTONMAIL_BRIDGE_PASSWORD`). |
 | Other mail (IMAP) | Write a check with the `openbot-event-checks` skill | IMAP host, user and app password. |

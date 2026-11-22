@@ -465,9 +465,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--openbot-space-2);
-  border: 1px solid var(--openbot-border-strong);
+  border: 1px solid var(--openbot-border);
+  border-left: 4px solid var(--openbot-accent);
   border-radius: var(--atelier-radius-card, var(--openbot-radius-lg));
-  background: var(--openbot-accent-soft);
+  background: var(--openbot-bg-surface);
   padding: var(--openbot-space-3) var(--openbot-space-4);
 }
 
@@ -497,7 +498,7 @@
   gap: var(--openbot-space-3);
   border: 0;
   border-radius: var(--openbot-radius-md);
-  background: var(--openbot-bg-surface);
+  background: var(--openbot-bg-canvas);
   padding: var(--openbot-space-2) var(--openbot-space-3);
   color: var(--openbot-text-primary);
   font: inherit;
@@ -613,7 +614,8 @@
   }
 
   .ui-button.ws-today-shipped-item,
-  .ui-button.ws-money-agent {
+  .ui-button.ws-money-agent,
+  .ws-today-guide-head > .ui-button {
     min-height: var(--openbot-touch-target);
   }
 }

@@ -26,8 +26,9 @@
 :root[data-atelier-theme] :is(.ws-sidebar, .ws-frame-sidebar, .space-rail, .window-rail) {
   --openbot-text-primary: var(--atelier-sidebar-text);
   --openbot-text-secondary: color-mix(in srgb, var(--atelier-sidebar-text) 84%, var(--atelier-sidebar));
-  --openbot-text-muted: color-mix(in srgb, var(--atelier-sidebar-text) 66%, var(--atelier-sidebar));
-  --openbot-text-dim: color-mix(in srgb, var(--atelier-sidebar-text) 48%, var(--atelier-sidebar));
+  /* At least 4.5:1 on the sidebar in every theme: a phone shows its tabs on this ink too. */
+  --openbot-text-muted: color-mix(in srgb, var(--atelier-sidebar-text) 80%, var(--atelier-sidebar));
+  --openbot-text-dim: color-mix(in srgb, var(--atelier-sidebar-text) 72%, var(--atelier-sidebar));
   --openbot-text-placeholder: color-mix(in srgb, var(--atelier-sidebar-text) 62%, var(--atelier-sidebar));
   --openbot-hover: color-mix(in srgb, var(--atelier-sidebar-text) 8%, transparent);
   --openbot-border: color-mix(in srgb, var(--atelier-sidebar-text) 14%, transparent);

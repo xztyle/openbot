@@ -15,6 +15,17 @@ const KEYBOARD_ATTRIBUTE = "data-web-keyboard";
 /** A phone or a tablet, where `web-client.css` fixes the app to the visible part of the screen. */
 const TOUCH_QUERY = "(max-width: 720px), (pointer: coarse)";
 
+/**
+ * Where the web client's toasts stand on a screen wider than their mobile offset. On a computer they
+ * stand under the top bar and the conversation header, so they do not cover the header's buttons. A
+ * phone on its side is also that wide: `web-client.css` sets `--web-toast-top` while its keyboard is
+ * open, so the toasts show in the part of the page over the keyboard, and they keep clear of the notch.
+ */
+export const WEB_TOAST_OFFSET = {
+  top: "var(--web-toast-top, 104px)",
+  right: "calc(env(safe-area-inset-right, 0px) + 16px)",
+};
+
 const TEXT_FIELD = "input:not([type='checkbox'], [type='radio'], [type='range']), textarea, [contenteditable='true']";
 
 /**

@@ -173,6 +173,15 @@ body {
   }
 
   /*
+   * The screen is wider than the toasts' mobile offset, so they take the computer's place, 104px
+   * down the page. Safari pans the visible part down the page for the keyboard, so they showed
+   * over the part under the keyboard, out of sight. They show at the top of the visible part.
+   */
+  html[data-web-keyboard] .web-app {
+    --web-toast-top: calc(var(--web-viewport-top, 0px) + env(safe-area-inset-top, 0px) + var(--openbot-space-2));
+  }
+
+  /*
    * A form keeps its title, its fields and its actions. The handle, the description and the gap
    * over the sheet step aside: with them, the header and the actions took the whole visible part,
    * and the field being typed in was under the actions.

@@ -542,7 +542,7 @@ async function checkLandscapeForm(browser: Browser, page: Page, phone: Phone, ur
   await field.tap();
   await page.keyboard.type("launch");
   await settle(page);
-  await phoneShot(browser, page, phone, "05-form-keyboard");
+  await phoneShot(browser, page, phone, "06-form-keyboard");
   await step(phone, "landscape form: clear of the notch, the field and the actions over the keyboard", async () => {
     assert.equal((await visible(page)).open, true, "The keyboard model did not open.");
     const typed = await box(page, field);
@@ -705,6 +705,32 @@ try {
     await step(phone, "rotated back with the keyboard open: the box stays on the keyboard", () =>
       checkKeyboardLayout(page, phone),
     );
+    await step(phone, "landscape: a toast shows over the keyboard, clear of the notch", async () => {
+      // The app's own toast, from the module the page already loaded.
+      await page.evaluate(async () => {
+        const url = performance
+          .getEntriesByType("resource")
+          .map((entry) => entry.name)
+          .find((name) => name.includes("/packages/ui/src/toast.tsx"));
+        if (!url) throw new Error("The toast module did not load.");
+        const module: { toast: { error: (text: string) => void } } = await import(url);
+        module.toast.error("Saved on the host");
+      });
+      await settle(page);
+      const shown = await box(page, page.locator("[data-sonner-toast]").first());
+      assert.ok(
+        shown.top >= 0 && shown.bottom <= shown.view.height,
+        `The toast is at ${shown.top}px to ${shown.bottom}px, out of the visible part.`,
+      );
+      const right = await page
+        .locator("[data-sonner-toast]")
+        .first()
+        .evaluate((element) => {
+          return window.innerWidth - element.getBoundingClientRect().right;
+        });
+      assert.ok(right >= phone.insets.right, `The toast ends ${right}px from the edge, under the notch.`);
+    });
+    await phoneShot(browser, page, phone, "05-toast-keyboard");
     await checkLandscapeForm(browser, page, phone, `${origin}/app`);
     await context.close();
   }

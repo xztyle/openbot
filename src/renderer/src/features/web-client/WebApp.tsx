@@ -23,6 +23,7 @@ import type { WebRuntimeFactory } from "./web-client-context";
 import { takeHostingReturn } from "./web-hosted-servers";
 import { createWebLanguagePreference } from "./web-language-preference";
 import { webNetworkFailureMessage } from "./web-network-error";
+import { WEB_TOAST_OFFSET } from "./web-visual-viewport";
 
 /** An account request that has no answer by now is over, so the screen shows Retry and not a wait without end. */
 const ACCOUNT_REQUEST_TIMEOUT_MS = 15_000;
@@ -418,9 +419,7 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
     >
       <NotificationObserver onShown={reportNotification}>
         <div class="web-app">
-          {/* On a computer the toasts stand under the top bar and the conversation header, so they do not
-              cover the header's buttons. A phone keeps the mobile offset. */}
-          <Toaster onToastShown={reportNotification} offset={{ top: "104px", right: "16px" }} />
+          <Toaster onToastShown={reportNotification} offset={WEB_TOAST_OFFSET} />
           <Show when={state.loaded}>
             <Show
               keyed

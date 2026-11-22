@@ -9,6 +9,7 @@ import { Toaster } from "@openbot/ui";
 import { render } from "@solidjs/web";
 import { WebWorkspace } from "../src/features/web-client/WebWorkspace";
 import type { WebRuntimeFactory } from "../src/features/web-client/web-client-context";
+import { WEB_TOAST_OFFSET } from "../src/features/web-client/web-visual-viewport";
 import { StaticI18nProvider } from "../src/i18n-context";
 import { createMockOpenBot } from "../src/preview/mock-openbot";
 import { mockWebRuntimeFor, WEB_PREVIEW_MEMBER_ID } from "../src/preview/mock-web-runtime";
@@ -129,7 +130,7 @@ if (root)
     () => (
       <StaticI18nProvider locale="en">
         <div class="web-app">
-          <Toaster />
+          <Toaster offset={WEB_TOAST_OFFSET} />
           <WebWorkspace
             accountId="preview-account"
             accountEmail="you@example.com"

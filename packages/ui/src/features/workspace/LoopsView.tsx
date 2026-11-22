@@ -69,6 +69,29 @@ export interface LoopsViewProps {
   class?: string;
 }
 
+/**
+ * A number as people type it in a money, number or percent field: "1200", "1,200.50", "1.200,50",
+ * "12,5" (the decimal comma of a phone's keypad in many languages), "$49" or "15 %". Null when the
+ * text is not one number.
+ */
+export function loopNumber(text: string): number | null {
+  const bare = text.replace(/\s|[$€£%]|usd|eur/giu, "");
+  if (!/^-?\d[\d.,]*$/u.test(bare)) return null;
+  const comma = bare.lastIndexOf(",");
+  const dot = bare.lastIndexOf(".");
+  let plain = bare;
+  if (comma !== -1 && dot !== -1) {
+    // Both marks: the last one is the decimal mark, the other groups thousands.
+    const [group, decimal] = comma > dot ? [".", ","] : [",", "."];
+    plain = bare.split(group).join("").replace(decimal, ".");
+  } else if (comma !== -1) {
+    // Only commas: groups of three digits are thousands (1,200), anything else is a decimal comma (12,5).
+    plain = /^-?\d{1,3}(,\d{3})+$/u.test(bare) ? bare.replaceAll(",", "") : bare.replace(",", ".");
+  } else if (/^-?\d{1,3}(\.\d{3}){2,}$/u.test(bare)) plain = bare.replaceAll(".", "");
+  const value = Number(plain);
+  return Number.isFinite(value) ? value : null;
+}
+
 function valueText(
   field: LoopField | undefined,
   value: LoopValue | undefined,
@@ -701,15 +724,22 @@ function ItemPanel(props: {
   const stageName = (id: string | undefined) =>
     props.loop.stages.find((candidate) => candidate.id === id)?.name ?? id ?? "";
   const changed = () => Object.keys(draft()).length > 0;
+  const [notNumbers, setNotNumbers] = createSignal<string[]>([]);
 
   function save() {
     const values: Record<string, LoopValue | null> = {};
+    const wrong: string[] = [];
     for (const [key, text] of Object.entries(draft())) {
       const field = props.loop.fields.find((candidate) => candidate.key === key);
       const trimmed = text.trim();
       const numeric = field && field.type !== "text" && field.type !== "url" && field.type !== "date";
-      values[key] = trimmed === "" ? null : numeric && Number.isFinite(Number(trimmed)) ? Number(trimmed) : trimmed;
+      const number = numeric && trimmed !== "" ? loopNumber(trimmed) : null;
+      // A money or number field keeps a number, never text: gates read amounts and exit metrics compare them.
+      if (numeric && trimmed !== "" && number === null) wrong.push(field.label);
+      values[key] = trimmed === "" ? null : (number ?? trimmed);
     }
+    setNotNumbers(wrong);
+    if (wrong.length > 0) return;
     void props.onAction({ kind: "save-item", loopId: props.loop.id, itemId: props.item.id, values }).then((result) => {
       if (result) props.onDraft({});
     });
@@ -786,12 +816,24 @@ function ItemPanel(props: {
               )}
             </For>
           </div>
+          <Show when={notNumbers().length > 0}>
+            <p class="ws-loops-error" role="alert">
+              {t("workspace.loops.notNumber", { fields: notNumbers().join(", ") })}
+            </p>
+          </Show>
           <Show when={props.canEdit && changed()}>
             <div class="ws-loops-row">
               <Button size="sm" disabled={props.busy} onClick={save}>
                 {t("workspace.loops.save")}
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => props.onDraft({})}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  props.onDraft({});
+                  setNotNumbers([]);
+                }}
+              >
                 {t("workspace.loops.cancel")}
               </Button>
             </div>

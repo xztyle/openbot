@@ -186,6 +186,33 @@ try {
     check("no value goes to another item", item("Beta")?.values.product_id === undefined, item("Beta")?.values);
     await page.context().close();
   }
+
+  // Money and number fields store numbers as people type them on a phone, and refuse text.
+  {
+    const page = await open("phone");
+    const panel = page.locator("aside.ws-loops-panel");
+    const field = (label: string) =>
+      panel.locator(".ws-loops-fields > *", { hasText: new RegExp(`^${label}`, "u") }).locator("input");
+    await page.locator(".ws-loops-card", { hasText: "Beta" }).click();
+    await field("Commission").fill("1,200");
+    await field("Spend").fill("12,5");
+    await field("Price").fill("$49");
+    await field("Sales").fill("three");
+    await panel.getByRole("button", { name: "Save" }).click();
+    await panel.getByText("Sales: type a number").waitFor({ timeout: UI_WAIT_MS });
+    check("text in a number field is refused", item("Beta")?.values.sales === undefined, item("Beta")?.values);
+    await field("Sales").fill("3");
+    await panel.getByRole("button", { name: "Save" }).click();
+    await panel.getByRole("button", { name: "Save" }).waitFor({ state: "hidden", timeout: UI_WAIT_MS });
+    const values = item("Beta")?.values;
+    check(
+      "typed amounts are stored as numbers",
+      values?.commission_usd === 1200 && values.spend_usd === 12.5 && values.price_usd === 49 && values.sales === 3,
+      values,
+    );
+    check("the refusal goes once the values are numbers", !(await panel.getByText("type a number").isVisible()));
+    await page.context().close();
+  }
 } finally {
   await browser?.close();
   await server.close();

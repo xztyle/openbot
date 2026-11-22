@@ -938,6 +938,7 @@ export const messages = {
   "workspace.loops.cancel": "Cancelar",
   "workspace.loops.exit": "Para salir de {stage}",
   "workspace.loops.blocked": "Todavía no:",
+  "workspace.loops.notNumber": "{fields}: escribe un número, como 1200 o 12,5.",
   "workspace.loops.moveNote": "Por qué (opcional)",
   "workspace.loops.force": "Mover a {stage} de todos modos",
   "workspace.loops.back": "Volver a {stage}",

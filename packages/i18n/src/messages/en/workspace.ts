@@ -951,6 +951,7 @@ export const messages = defineMessages("workspace", {
   "workspace.loops.cancel": "Cancel",
   "workspace.loops.exit": "To leave {stage}",
   "workspace.loops.blocked": "Not yet:",
+  "workspace.loops.notNumber": "{fields}: type a number, such as 1200 or 12.5.",
   "workspace.loops.moveNote": "Why (optional)",
   "workspace.loops.force": "Move to {stage} anyway",
   "workspace.loops.back": "Back to {stage}",

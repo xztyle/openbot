@@ -290,7 +290,9 @@ export class BrowserRecorder {
     }
     const activeRecordings = new Set([...this.#sessions.keys(), ...this.#starting]).size;
     if (activeRecordings >= this.#maxConcurrentRecordings) {
-      throw new Error(`At most ${this.#maxConcurrentRecordings} browser recordings can run at the same time.`);
+      throw new Error(
+        `At most ${this.#maxConcurrentRecordings} browser recordings can run at the same time. Stop one of yours with openbot_browser.recording_stop, or try again in a few minutes: a recording stops after ${Math.round(this.#maxRecordingMs / 60_000)} minutes.`,
+      );
     }
     const artifactBytes = [...this.#artifacts.values()].reduce((total, artifact) => total + artifact.bytes, 0);
     const reservedBytes = activeRecordings * MAX_RECORDING_BYTES;

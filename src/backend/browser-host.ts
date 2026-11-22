@@ -3406,7 +3406,11 @@ export class BrowserHost {
 
   #requireToolTab(params: DynamicToolCallParams, tabId: string): void {
     const tab = this.listTabs().find((candidate) => candidate.id === tabId);
-    if (!tab || !this.#canUseToolTab(params, tab)) throw new Error(`Unknown browser tab: ${tabId}`);
+    // The agent often reuses a tab id from an earlier session, or a name: the error says where ids come from.
+    if (!tab || !this.#canUseToolTab(params, tab))
+      throw new Error(
+        `Unknown browser tab: ${tabId}. Call openbot_browser.list_tabs for the ids of your open tabs, or openbot_browser.open to open one.`,
+      );
     // The user holds this tab. `AgentService` already refuses an agent's browser tools while its own
     // takeover is outstanding, but that check is agent-wide and only covers callers that go through
     // the agent service; this one is per tab and holds for every caller of a tabId-bearing tool.

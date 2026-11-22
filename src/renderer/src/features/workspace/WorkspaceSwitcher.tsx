@@ -49,7 +49,7 @@ import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSide
 import { slugChannelName } from "@openbot/ui/features/workspace/workspace-format";
 import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
-import type { JSX } from "@solidjs/web";
+import { Dynamic, type JSX } from "@solidjs/web";
 import { createMemo, createSignal, createUniqueId, For, Show } from "solid-js";
 import { isCommandText } from "./workspace-command-text";
 import { type CommandAction, useCommandActions } from "./workspace-commands";
@@ -437,7 +437,7 @@ export function QuickSwitcher(props: { onClose: () => void }) {
                                 </Show>
                               }
                             >
-                              {(view) => VIEW_ICON[view()]()}
+                              {(view) => <Dynamic component={VIEW_ICON[view()]} />}
                             </Show>
                           }
                         >
@@ -447,7 +447,7 @@ export function QuickSwitcher(props: { onClose: () => void }) {
                         </Show>
                       }
                     >
-                      {(action) => ACTION_ICON[action().kind]()}
+                      {(action) => <Dynamic component={ACTION_ICON[action().kind]} />}
                     </Show>
                   }
                 >

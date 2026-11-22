@@ -9,7 +9,7 @@
  */
 import { type DraftAttachment, isAttachmentSummary } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
-import { createSignal } from "solid-js";
+import { createSignal, untrack } from "solid-js";
 
 const OUTBOX_KEY = "openbot.workspace.outbox.v1";
 /** Older messages than this many go: a box that never reconnects must not fill the disk. */
@@ -97,7 +97,8 @@ function writeOutbox(storageKey: string, messages: readonly OutboxMessage[], kno
 
 export function createWorkspaceOutbox(options: OutboxOptions) {
   const now = options.now ?? Date.now;
-  let storageKey = options.storageKey();
+  // reload() reads the key again when the reader or the server changes.
+  let storageKey = untrack(options.storageKey);
   /*
    * The list itself. The signal shows it to the page; it is not read back here, because a signal
    * written in Solid 2 gives its new value only after the next flush.

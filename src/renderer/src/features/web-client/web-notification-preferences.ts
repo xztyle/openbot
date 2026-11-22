@@ -1,5 +1,5 @@
 import { SERVER_NOTIFICATION_LEVELS, type ServerNotificationLevel } from "@openbot/contracts/ipc";
-import { createSignal, onCleanup } from "solid-js";
+import { createSignal, onCleanup, untrack } from "solid-js";
 import { z } from "zod/mini";
 
 type NotificationStorage = Pick<Storage, "getItem" | "setItem">;
@@ -88,7 +88,7 @@ export function createWebServerNotifications(accountId: string, storage: Notific
     scheduleExpiry(next);
   }
   window.addEventListener("storage", listen);
-  scheduleExpiry(stored());
+  scheduleExpiry(untrack(stored));
   onCleanup(() => {
     clearTimeout(expiry);
     window.removeEventListener("storage", listen);

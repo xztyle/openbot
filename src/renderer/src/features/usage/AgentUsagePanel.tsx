@@ -31,7 +31,7 @@ import {
 } from "@openbot/ui/features/usage/usage-format";
 import { useText } from "@openbot/ui/text";
 import { errorReference } from "@openbot/user-errors";
-import { createEffect, createStore, onSettled, Show } from "solid-js";
+import { createEffect, createStore, onSettled, Show, untrack } from "solid-js";
 import { desktopAnalytics } from "../../analytics";
 import { type UsagePort, usagePort } from "./usage-port";
 
@@ -66,15 +66,19 @@ function usageRange(days: number, agentId: string | undefined): HostAnalyticsInp
 export function AgentUsagePanel(props: AgentUsagePanelProps) {
   const { t } = useText();
   const port = () => props.port ?? usagePort();
+  // The first values only: the effect below reads the props again when they change.
   const [state, setState] = createStore<UsageState>({
-    range: usageRange(usagePeriodDays["30d"], props.agentId),
+    range: usageRange(
+      usagePeriodDays["30d"],
+      untrack(() => props.agentId),
+    ),
     agents: [],
     result: null,
     phase: "loading",
     errorReference: null,
     metric: "cost",
     period: "30d",
-    serverId: props.serverId,
+    serverId: untrack(() => props.serverId),
   });
   let generation = 0;
   /**

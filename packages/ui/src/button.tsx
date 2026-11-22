@@ -119,7 +119,7 @@ export function Button<T extends ValidComponent = "button">(props: ButtonProps<T
 
   return (
     <Root<T>
-      ref={[guardLoading, props.ref]}
+      ref={[guardLoading, untrack(() => props.ref)]}
       class={cx(
         buttonVariants({ variant: props.variant ?? "default", size: props.size ?? "default" }),
         props.fullWidth && "ui-button-full",

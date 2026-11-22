@@ -98,13 +98,13 @@ export function useCommandActions() {
         agentId: worker.member.id,
         run: () => worker.onStop?.(),
       }));
-  const goal: CommandAction = {
+  const goal = (): CommandAction => ({
     id: "goal",
     label: t("workspace.command.goal"),
     hint: t("workspace.command.hint.open"),
     kind: "goal",
     run: () => openInsightTab(ws, "goals"),
-  };
+  });
 
   /** The actions for a query, before the names that match it. */
   function actions(query: string): CommandAction[] {
@@ -126,7 +126,7 @@ export function useCommandActions() {
     const lower = fold(text);
     if (APPROVE.test(lower)) return approvals(fold(text.replace(APPROVE, "").trim()));
     if (STOP.test(lower)) return stops(fold(text.replace(STOP, "").trim()));
-    if (GOAL.test(lower) && ws.viewAvailable("insights")) return [goal];
+    if (GOAL.test(lower) && ws.viewAvailable("insights")) return [goal()];
     const agents = askable();
     const target = askTarget(text, agents);
     if (target?.kind === "named" && target.message) return [ask(target.agent.id, target.agent.name, target.message)];

@@ -734,13 +734,18 @@ export function ConversationTimeline() {
   };
   /** The day above a row: the workspace's pill in the workspace layout, the chat's line elsewhere. */
   const DayMarker = (marker: { label: string; at: string | undefined }) => {
-    const at = marker.at ? Date.parse(marker.at) : Number.NaN;
-    return rowLayout && Number.isFinite(at) ? (
-      <DayDivider date={at} />
-    ) : (
-      <div class="time-marker">
-        <span>{marker.label}</span>
-      </div>
+    const at = () => (marker.at ? Date.parse(marker.at) : Number.NaN);
+    return (
+      <Show
+        when={rowLayout && Number.isFinite(at())}
+        fallback={
+          <div class="time-marker">
+            <span>{marker.label}</span>
+          </div>
+        }
+      >
+        <DayDivider date={at()} />
+      </Show>
     );
   };
   /** The line above the first unread message. */

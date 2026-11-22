@@ -2,7 +2,8 @@
 // answer on the first load shows the error with Retry instead of an empty Today with a first-run
 // guide; a host with no agent has a New agent step in the guide, which opens the form; a new space
 // offers a channel of its own rather than #general of General, and stays in that space; a template
-// import shows its validation score when the host has it, without leaving the tab. It serves the web
+// import shows its validation score when the host has it, without leaving the tab, and clears the
+// name of the new space. It serves the web
 // client on mock hosts (`src/renderer/stories/web-client-empty-harness.tsx` and `views-harness.tsx`,
 // picked by a cookie) at every address under `/app`, and drives it in Chromium.
 //
@@ -223,14 +224,18 @@ try {
   // 4. A template import shows its validation when the host has scored it, on the open tab.
   const views = await browser.newContext(phoneOptions);
   const viewsPage = await open(views, "views-harness");
-  await step(viewsPage, "an import shows its validation score without leaving the tab", async () => {
+  await step(viewsPage, "an import clears the name and shows its validation score on the tab", async () => {
     await viewsPage.goto(`${origin}/app/general/portfolio`, COMMIT);
     await viewsPage.getByRole("button", { name: english("portfolio.tab.templates"), exact: true }).tap();
+    const name = viewsPage.getByPlaceholder(english("portfolio.templates.namePlaceholder"));
+    await name.fill("Bakery");
     await viewsPage
       .getByRole("button", { name: english("portfolio.templates.create") })
       .first()
       .tap();
     await viewsPage.getByText(english("portfolio.templates.validating")).waitFor({ timeout: UI_WAIT_MS });
+    // The name was of that space: the next template does not take it too.
+    assert.equal(await name.inputValue(), "");
     await viewsPage.getByText(english("portfolio.templates.score", { score: 72 }), { exact: false }).waitFor({
       timeout: 40_000,
     });

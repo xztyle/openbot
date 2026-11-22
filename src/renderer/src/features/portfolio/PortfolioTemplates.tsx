@@ -81,13 +81,16 @@ export function PortfolioTemplates() {
     }
   }
 
+  // The name is of one new space: a made space clears it, so the next one does not take it too.
   const fromStarter = (starterId: string) =>
     act(
       () =>
         calls()?.importTemplate({ starterId, ...(name().trim() ? { name: name().trim() } : {}) }) ??
         Promise.reject(new Error("unsupported")),
       "portfolio.templates.importFailed",
-    );
+    ).then((done) => {
+      if (done) setName("");
+    });
 
   function fromFile(): void {
     let template: ReturnType<typeof parseSpaceTemplate>;
@@ -104,7 +107,9 @@ export function PortfolioTemplates() {
       "portfolio.templates.importFailed",
     ).then((done) => {
       // A failed import keeps the pasted text, so the owner can try again.
-      if (done) setFile("");
+      if (!done) return;
+      setFile("");
+      setName("");
     });
   }
 

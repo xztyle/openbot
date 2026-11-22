@@ -10,3 +10,5 @@
   of General and left the new space, and the step stayed undone.
 - Portfolio > Templates shows the validation score of a new space when the host has it. Before, the
   import said "Validating" until you left the tab and opened it again.
+- Portfolio > Templates clears the name of the new space after it makes the space. Before, the next
+  template that you started took the same name.

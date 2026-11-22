@@ -198,6 +198,44 @@ try {
     await context.close();
   }
 
+  // Later keeps its rows on the screen while the connection comes back.
+  {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await page.addInitScript(CAPTURE);
+    await page.goto(`${origin}/app/general/c/general`, { waitUntil: "commit" });
+    await mounted(page);
+    const messages = page.locator("main article");
+    await messages.last().hover();
+    await page
+      .getByRole("button", { name: english("workspace.message.more") })
+      .first()
+      .click();
+    await page.getByRole("menuitem", { name: english("workspace.message.save") }).click();
+    await page
+      .getByRole("button", { name: new RegExp(`^${english("workspace.view.later")}`, "u") })
+      .first()
+      .click();
+    const saved = page.getByRole("button", { name: english("workspace.later.open") });
+    await saved.first().waitFor({ timeout: 15_000 });
+    const connection = (state: string) =>
+      page.evaluate((detail) => window.dispatchEvent(new CustomEvent("today-connection", { detail })), state);
+    // The empty state, if it comes, comes within a flush of the status change.
+    const empty = () =>
+      page
+        .getByText(english("workspace.later.emptyTitle"))
+        .waitFor({ timeout: 2_000 })
+        .catch(() => undefined);
+    await connection("connecting");
+    await empty();
+    check("Later keeps its rows while the connection comes back", (await saved.count()) === 1);
+    await connection("online");
+    await empty();
+    check("Later shows its rows after a reconnect", (await saved.count()) === 1);
+    await drain(page, "later");
+    await context.close();
+  }
+
   // An iPhone: every tab of the tab bar.
   {
     const { defaultBrowserType: _browserType, ...iphone } = devices["iPhone 13"];

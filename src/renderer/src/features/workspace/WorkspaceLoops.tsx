@@ -1,7 +1,7 @@
 import type { WorkspaceLoopAction, WorkspaceLoops } from "@openbot/contracts/ipc";
 import { LoopsView } from "@openbot/ui/features/workspace/LoopsView";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createMemo, createSignal, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { useLoopDecisions } from "./loop-decisions-feed";
 import { useWorkspace } from "./workspace-context";
 import { loopFocus, setLoopFocus } from "./workspace-decisions";
@@ -45,9 +45,9 @@ export function WorkspaceLoopsView() {
   );
 
   const feed = useLoopDecisions(ws);
-  // The decision that Today or Needs you opened: the board shows its loop and scrolls to it once.
-  const focus = untrack(loopFocus);
-  setLoopFocus(null);
+  // The decision that Today, Needs you or Ctrl+K opened: the board shows its loop and scrolls to it,
+  // also when the board already shows. It is forgotten when the view goes, so it does not come back.
+  onCleanup(() => setLoopFocus(null));
   /** The space's lead (its first agent), who makes a loop from a description in words. */
   const lead = () => ws.spaceAgents()[0];
   const agents = createMemo(() => ws.spaceAgents().map((agent) => memberById(ws.directory(), agent.id, agent.name)));
@@ -55,7 +55,12 @@ export function WorkspaceLoopsView() {
   async function act(action: WorkspaceLoopAction) {
     const run = agentApi().workspaceLoopAction;
     if (!run) throw new Error(t("workspace.loops.failed"));
-    const result = await run(action);
+    const spaceId = ws.spaces.current();
+    const result = await run(action).catch((error: unknown) => {
+      // The board can be older than the host's (an agent moved or removed the item): read it again.
+      void load(spaceId);
+      throw error;
+    });
     if (result.spaceId === ws.spaces.current()) setBoard(result);
     if (action.kind === "decide") feed.refresh();
     return result;
@@ -72,8 +77,8 @@ export function WorkspaceLoopsView() {
       agents={agents()}
       // The owner and the admins change loops and decide gates.
       canEdit={ws.isAdmin()}
-      initialLoopId={focus?.loopId}
-      focusDecisionId={focus?.decisionId}
+      initialLoopId={loopFocus()?.loopId}
+      focusDecisionId={loopFocus()?.decisionId}
       onAskLead={
         lead()
           ? () => {

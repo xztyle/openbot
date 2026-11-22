@@ -11,3 +11,9 @@
   with the reason and blocks Save. Before, it was dropped without a word.
 - Loop editor: Escape, a click outside and Cancel ask before they discard your changes. A new blank
   loop names its stages in your language.
+- Loops: a decision opened from Today, Needs you or Ctrl+K while Loops already shows now switches
+  to its loop and scrolls to it. Before, nothing happened until you left Loops and came back.
+- Loops: the return key of the phone's keyboard sends the answer to an agent's question.
+- Loops on a phone: removing the stage that showed no longer leaves an empty board.
+- Loops: a dialog no longer opens with the error of an earlier action, and a refused action reads
+  the board again, so an item that an agent moved or removed shows where it is.

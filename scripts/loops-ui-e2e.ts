@@ -149,7 +149,10 @@ async function open(viewport: keyof typeof VIEWPORTS, query = ""): Promise<Page>
   const context = await browser.newContext(VIEWPORTS[viewport]);
   const page = await context.newPage();
   page.on("console", (message) => {
-    if (message.type() === "error" || message.type() === "warning") errors.push(`${viewport}: ${message.text()}`);
+    // Every error, and the warnings of this view's code: Solid's diagnostics name the file they come from.
+    const text = message.text();
+    const ours = /UNCOMMITTED_INPUT_OVERWRITTEN|at \S*\/(Loop\w*|WorkspaceLoops|loops-harness)\.tsx/u.test(text);
+    if (message.type() === "error" || (message.type() === "warning" && ours)) errors.push(`${viewport}: ${text}`);
   });
   page.on("pageerror", (error) => errors.push(`${viewport}: ${error.message}`));
   await page.goto(`${base}${query}`);
@@ -258,13 +261,104 @@ try {
     check("Escape closes an unchanged editor at once", (await page.getByRole("alertdialog").count()) === 0);
     await page.context().close();
   }
+
+  // A second loop, with an item that asks the owner a question.
+  const inbox = loops.apply(
+    {
+      kind: "create-loop",
+      spaceId: "uo",
+      definition: {
+        name: "Customer inbox",
+        fields: [],
+        stages: [
+          { id: "start", name: "New" },
+          { id: "review", name: "Review" },
+          { id: "closed", name: "Closed", outcome: "done" },
+        ],
+      },
+    },
+    owner,
+  );
+  const inboxId = inbox.createdId ?? "";
+  const ticket = loops.apply({ kind: "save-item", loopId: inboxId, title: "Invoice request" }, owner);
+  const question = loops.escalate(AGENT.agentId, ticket.createdId ?? "", "Can we give a VAT invoice?");
+
+  // A link that opens a decision while the board already shows another loop: its loop and card show,
+  // and the return key of the phone's keyboard sends the answer.
+  {
+    const page = await open("phone");
+    await page.locator(".ws-loops-card").first().waitFor({ timeout: UI_WAIT_MS });
+    const tab = page.locator(".ws-loops-tabs").getByRole("button", { name: /^Customer inbox/u });
+    check("the board starts on the first loop", (await tab.getAttribute("aria-pressed")) === "false");
+    // `window.harness` of `loops-harness.tsx`, as a link from Today opens the decision.
+    await page.evaluate(`window.harness.open(${JSON.stringify(inboxId)}, ${JSON.stringify(question.id)})`);
+    const card = page.locator(".ws-loops-decision[data-focused]");
+    await card.waitFor({ timeout: UI_WAIT_MS });
+    check("the link shows the decision's loop", (await tab.getAttribute("aria-pressed")) === "true");
+    await page.waitForTimeout(300);
+    check(
+      "the decision is in view",
+      await card.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        return box.top >= 0 && box.bottom <= window.innerHeight;
+      }),
+    );
+    await card.getByRole("textbox").fill("Yes, with VAT");
+    await card.getByRole("textbox").press("Enter");
+    await card.waitFor({ state: "detached", timeout: UI_WAIT_MS });
+    const answered = loops.board("uo").decisions.find((entry) => entry.id === question.id);
+    check("Enter sends the answer", answered?.status === "approved" && answered.note === "Yes, with VAT", answered);
+    await page.context().close();
+  }
+
+  // A phone shows a column after the stage it showed is removed, and a dialog opens without the
+  // error of an earlier action.
+  {
+    const page = await open("phone");
+    await page
+      .locator(".ws-loops-tabs")
+      .getByRole("button", { name: /^Customer inbox/u })
+      .click();
+    await page
+      .locator(".ws-loops-stage-picker")
+      .getByRole("button", { name: /^Review/u })
+      .click();
+    await page.getByRole("button", { name: "Edit loop" }).click();
+    const editor = page.getByRole("dialog", { name: "Edit loop" });
+    await editor
+      .locator(".ws-loops-flow")
+      .getByRole("button", { name: /^Review/u })
+      .click();
+    await editor.getByRole("button", { name: "Remove stage" }).click();
+    await editor.getByRole("button", { name: "Save" }).click();
+    await editor.waitFor({ state: "hidden", timeout: UI_WAIT_MS });
+    check("the stage is removed", loops.board("uo").loops.find((entry) => entry.id === inboxId)?.stages.length === 2);
+    check("a column shows", (await page.locator("section.ws-loops-column:visible").count()) === 1);
+    check(
+      "its stage tab is the shown one",
+      (await page.locator(".ws-loops-stage-picker [aria-pressed=true]").textContent())?.startsWith("New") === true,
+    );
+    // The item goes behind the view's back, as when an agent removes it: the next action fails.
+    await page.locator(".ws-loops-card", { hasText: "Invoice request" }).click();
+    loops.apply({ kind: "remove-item", itemId: ticket.createdId ?? "" }, owner);
+    await page.locator("aside.ws-loops-panel").getByRole("button", { name: "Remove item" }).click();
+    await page.locator("aside.ws-loops-panel [role=alert]").waitFor({ timeout: UI_WAIT_MS });
+    await page.locator("aside.ws-loops-panel").getByRole("button", { name: "Close" }).first().click();
+    await page.getByRole("button", { name: "Edit loop" }).click();
+    await page.getByRole("dialog", { name: "Edit loop" }).waitFor({ timeout: UI_WAIT_MS });
+    check(
+      "the editor opens without an earlier error",
+      (await page.getByRole("dialog", { name: "Edit loop" }).locator(".ui-form-dialog-error, [role=alert]").count()) ===
+        0,
+    );
+    await page.context().close();
+  }
 } finally {
   await browser?.close();
   await server.close();
   database.close?.();
   rmSync(data, { recursive: true, force: true });
 }
-// Kobalte's polymorphic trigger reads a prop outside a tracking scope in every tooltip: not this view's.
-const realErrors = errors.filter((entry) => !entry.includes("[vite]") && !entry.includes("@kobalte/core"));
+const realErrors = errors.filter((entry) => !entry.includes("[vite]"));
 check("no console errors", realErrors.length === 0, realErrors);
 process.exit(failures === 0 ? 0 : 1);

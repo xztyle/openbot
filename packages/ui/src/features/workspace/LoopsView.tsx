@@ -15,7 +15,7 @@ import {
   type WorkspaceLoops,
 } from "@openbot/contracts/ipc";
 import type { JSX } from "@solidjs/web";
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show, untrack } from "solid-js";
 import { Badge } from "../../badge";
 import { Button } from "../../button";
 import { Checkbox } from "../../checkbox";
@@ -113,7 +113,7 @@ function valueText(
  */
 export function LoopsView(props: LoopsViewProps): JSX.Element {
   const { t, errorMessage } = useText();
-  const [selectedLoopId, setSelectedLoopId] = createSignal<string | null>(props.initialLoopId ?? null);
+  const [selectedLoopId, setSelectedLoopId] = createSignal<string | null>(untrack(() => props.initialLoopId) ?? null);
   const [itemId, setItemId] = createSignal<string | null>(null);
   const [editing, setEditing] = createSignal<{ loop: Loop | null } | null>(null);
   const [creating, setCreating] = createSignal(false);
@@ -125,6 +125,17 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
   const [blocked, setBlocked] = createSignal<string[]>([]);
   // The unsaved field values of each item, by item id: another item's panel never shows or saves them.
   const [drafts, setDrafts] = createSignal<Record<string, Record<string, string>>>({});
+
+  // A link that opens a decision while the board shows: its loop shows.
+  createEffect(
+    () => props.initialLoopId,
+    (loopId) => {
+      if (!loopId) return;
+      setSelectedLoopId(loopId);
+      setPhoneStage(null);
+    },
+    { defer: true },
+  );
 
   const loops = () => props.board?.loops ?? [];
   const loop = createMemo(() => loops().find((candidate) => candidate.id === selectedLoopId()) ?? loops()[0] ?? null);
@@ -141,12 +152,24 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
     return current && entry ? { loop: current, item: entry } : null;
   });
   const agent = (id: string | undefined) => (id ? props.agents.find((member) => member.id === id) : undefined);
+  /** The stage that a phone shows: the one chosen while it still exists, else the first. */
+  const shownStage = () => {
+    const stages = loop()?.stages ?? [];
+    const chosen = phoneStage();
+    return stages.some((stage) => stage.id === chosen) ? chosen : stages[0]?.id;
+  };
 
   /** Shows one item, without the answer of the last action on another one. */
   function openItem(id: string | null) {
     setItemId(id);
     setBlocked([]);
     setFormError(null);
+  }
+
+  /** Opens a dialog without the error of an earlier action. */
+  function openDialog(show: () => void) {
+    setFormError(null);
+    show();
   }
 
   async function run(action: WorkspaceLoopAction): Promise<WorkspaceLoopActionResult | null> {
@@ -173,7 +196,7 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
         onBack={props.onBack}
         actions={
           <Show when={props.canEdit}>
-            <PaneHeaderAction label={t("workspace.loops.new")} onClick={() => setCreating(true)} />
+            <PaneHeaderAction label={t("workspace.loops.new")} onClick={() => openDialog(() => setCreating(true))} />
           </Show>
         }
       />
@@ -198,7 +221,10 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
                   description={t("workspace.loops.emptyHint")}
                   action={
                     <Show when={props.canEdit}>
-                      <PaneHeaderAction label={t("workspace.loops.new")} onClick={() => setCreating(true)} />
+                      <PaneHeaderAction
+                        label={t("workspace.loops.new")}
+                        onClick={() => openDialog(() => setCreating(true))}
+                      />
                     </Show>
                   }
                 />
@@ -235,7 +261,7 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
           </nav>
           <Show when={props.canEdit && loop()}>
             {(current) => (
-              <Button variant="ghost" size="sm" onClick={() => setEditing({ loop: current() })}>
+              <Button variant="ghost" size="sm" onClick={() => openDialog(() => setEditing({ loop: current() }))}>
                 <Pencil aria-hidden="true" />
                 {t("workspace.loops.edit")}
               </Button>
@@ -270,7 +296,7 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
                     <Button
                       variant="ghost"
                       class="ws-loops-tab"
-                      aria-pressed={(phoneStage() ?? current().stages[0]?.id) === stage().id ? "true" : "false"}
+                      aria-pressed={shownStage() === stage().id ? "true" : "false"}
                       onClick={() => setPhoneStage(stage().id)}
                     >
                       {stage().name}
@@ -289,10 +315,10 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
                       stage={stage()}
                       items={items().filter((entry) => entry.stageId === stage().id)}
                       agent={agent}
-                      hiddenOnPhone={(phoneStage() ?? current().stages[0]?.id) !== stage().id}
+                      hiddenOnPhone={shownStage() !== stage().id}
                       selectedItemId={itemId()}
                       onOpen={openItem}
-                      onAdd={index() === 0 && props.canEdit ? () => setAdding(true) : undefined}
+                      onAdd={index() === 0 && props.canEdit ? () => openDialog(() => setAdding(true)) : undefined}
                     />
                   )}
                 </For>
@@ -361,7 +387,9 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
       <FormDialog
         open={creating()}
         onOpenChange={(open) => {
-          if (!open) setCreating(false);
+          if (open) return;
+          setCreating(false);
+          setFormError(null);
         }}
         title={t("workspace.loops.new")}
         description={t("workspace.loops.newHint")}
@@ -371,7 +399,7 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
         submitLabel={t("workspace.loops.blank")}
         onSubmit={() => {
           setCreating(false);
-          setEditing({ loop: null });
+          openDialog(() => setEditing({ loop: null }));
         }}
       >
         <Show when={(props.board?.templates ?? []).length === 0}>
@@ -405,6 +433,7 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
                   void run({ kind: "create-loop", spaceId, templateId: template().id }).then((result) => {
                     if (!result) return;
                     setCreating(false);
+                    openItem(null);
                     if (result.createdId) setSelectedLoopId(result.createdId);
                   });
                 }}
@@ -608,13 +637,21 @@ export function DecisionCard(props: {
   const [note, setNote] = createSignal("");
   const requester = () => props.agent(props.decision.requestedBy);
   const question = () => props.decision.subject === "question";
+  let card: HTMLElement | undefined;
+  // A link from Today, Needs you or Ctrl+K opened this decision, now or while the card shows: show it.
+  createEffect(
+    () => props.focused,
+    (focused) => {
+      if (focused) requestAnimationFrame(() => card?.scrollIntoView({ block: "center" }));
+    },
+  );
+  const decide = (approve: boolean) => props.onDecide(props.decision.id, approve, note().trim());
   return (
     <article
       class={cx("ws-loops-decision", `ws-loops-decision-${props.decision.kind}`)}
       data-focused={props.focused ? "" : undefined}
       ref={(element) => {
-        // A link from Today or Needs you opened this decision: show it.
-        if (props.focused) requestAnimationFrame(() => element.scrollIntoView({ block: "center" }));
+        card = element;
       }}
     >
       <div class="ws-loops-decision-head">
@@ -655,32 +692,26 @@ export function DecisionCard(props: {
             value={note()}
             placeholder={t(question() ? "workspace.loops.answerPlaceholder" : "workspace.loops.notePlaceholder")}
             onInput={(event) => setNote(event.currentTarget.value)}
+            // The return key of a phone's keyboard answers a question; a gate needs a tap on its choice.
+            enterkeyhint={question() ? "send" : undefined}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.isComposing || !question()) return;
+              event.preventDefault();
+              if (!props.busy && note().trim() !== "") decide(true);
+            }}
           />
           <Show
             when={!question()}
             fallback={
-              <Button
-                size="sm"
-                disabled={props.busy || note().trim() === ""}
-                onClick={() => props.onDecide(props.decision.id, true, note().trim())}
-              >
+              <Button size="sm" disabled={props.busy || note().trim() === ""} onClick={() => decide(true)}>
                 {t("workspace.loops.answer")}
               </Button>
             }
           >
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={props.busy}
-              onClick={() => props.onDecide(props.decision.id, false, note().trim())}
-            >
+            <Button size="sm" variant="outline" disabled={props.busy} onClick={() => decide(false)}>
               {t("workspace.loops.reject")}
             </Button>
-            <Button
-              size="sm"
-              disabled={props.busy}
-              onClick={() => props.onDecide(props.decision.id, true, note().trim())}
-            >
+            <Button size="sm" disabled={props.busy} onClick={() => decide(true)}>
               {t("workspace.loops.approve")}
             </Button>
           </Show>

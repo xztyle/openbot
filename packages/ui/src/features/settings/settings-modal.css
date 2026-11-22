@@ -33,7 +33,7 @@
   font-weight: var(--openbot-weight-medium);
 }
 
-.settings-modal-nav-heading:first-child {
+[role="tablist"] > .settings-modal-nav-heading:first-child {
   padding-top: 0;
 }
 

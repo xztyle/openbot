@@ -74,6 +74,38 @@ function focusRestoreHandler(upstream: () => OpenChangeHandler | undefined): Ope
   };
 }
 
+/**
+ * The element that opened a modal dialog, so the focus goes back to it on close. Kobalte gives the
+ * focus back to its `Trigger` only, and most dialogs here open from state (⌘K, a menu item, a row's
+ * button), so without this the focus fell to the page and a screen reader started again at the top.
+ * The opener is read when the content mounts, before the dialog moves the focus in. A dialog that
+ * sends the focus somewhere itself (`onCloseAutoFocus` with `preventDefault`) keeps that, and so does
+ * a closing action that moved the focus out, such as a conversation the switcher opened.
+ */
+function createOpenerFocus() {
+  let opener: HTMLElement | null = null;
+  let content: HTMLElement | undefined;
+  return {
+    ref(element: HTMLElement) {
+      content = element;
+      const active = document.activeElement;
+      opener = active instanceof HTMLElement && active !== document.body && !element.contains(active) ? active : null;
+      // A menu item that opens a dialog goes away with its menu: the focus goes back to the menu's button.
+      const menu = opener?.closest<HTMLElement>('[role="menu"]');
+      if (menu?.id) opener = document.querySelector<HTMLElement>(`[aria-controls="${CSS.escape(menu.id)}"]`);
+    },
+    restore(event: Event) {
+      const target = opener;
+      opener = null;
+      if (event.defaultPrevented || !target?.isConnected) return;
+      const active = document.activeElement;
+      if (active !== null && active !== document.body && !content?.contains(active)) return;
+      event.preventDefault();
+      target.focus({ preventScroll: true });
+    },
+  };
+}
+
 /** A menu may restore focus only while its closing surface still owns it. */
 function createMenuFocusRestore(props: { open?: boolean; defaultOpen?: boolean; onOpenChange?: OpenChangeHandler }) {
   let target =
@@ -220,17 +252,25 @@ export const Dialog: DialogApi = {
   Portal: (props) => <DialogPrimitive.Portal {...props} />,
   Trigger: (props) => <DialogPrimitive.Trigger data-cuelume-open="" {...props} />,
   Overlay: (props) => <DialogPrimitive.Overlay {...props} class={withBaseClass("ui-dialog-overlay", props.class)} />,
-  Content: (props) => (
-    <DialogPrimitive.Content
-      {...props}
-      class={withBaseClass("ui-dialog-content", props.class)}
-      onInteractOutside={(event) => {
-        props.onInteractOutside?.(event);
-        const target = event.detail.originalEvent.target;
-        if (target instanceof Element && target.closest("[data-kb-top-layer]")) event.preventDefault();
-      }}
-    />
-  ),
+  Content: (props) => {
+    const opener = createOpenerFocus();
+    return (
+      <DialogPrimitive.Content
+        {...props}
+        ref={[props.ref, opener.ref]}
+        class={withBaseClass("ui-dialog-content", props.class)}
+        onInteractOutside={(event) => {
+          props.onInteractOutside?.(event);
+          const target = event.detail.originalEvent.target;
+          if (target instanceof Element && target.closest("[data-kb-top-layer]")) event.preventDefault();
+        }}
+        onCloseAutoFocus={(event: Event) => {
+          props.onCloseAutoFocus?.(event);
+          opener.restore(event);
+        }}
+      />
+    );
+  },
   Title: (props) => <DialogPrimitive.Title {...props} />,
   Description: (props) => <DialogPrimitive.Description {...props} />,
   CloseButton: (props) => <DialogPrimitive.CloseButton data-cuelume-close="" {...props} />,
@@ -256,9 +296,20 @@ export const AlertDialog: AlertDialogApi = {
   Overlay: (props) => (
     <AlertDialogPrimitive.Overlay {...props} class={withBaseClass("ui-dialog-overlay", props.class)} />
   ),
-  Content: (props) => (
-    <AlertDialogPrimitive.Content {...props} class={withBaseClass("ui-dialog-content", props.class)} />
-  ),
+  Content: (props) => {
+    const opener = createOpenerFocus();
+    return (
+      <AlertDialogPrimitive.Content
+        {...props}
+        ref={[props.ref, opener.ref]}
+        class={withBaseClass("ui-dialog-content", props.class)}
+        onCloseAutoFocus={(event: Event) => {
+          props.onCloseAutoFocus?.(event);
+          opener.restore(event);
+        }}
+      />
+    );
+  },
   Title: (props) => <AlertDialogPrimitive.Title {...props} />,
   Description: (props) => <AlertDialogPrimitive.Description {...props} />,
   CloseButton: (props) => <AlertDialogPrimitive.CloseButton data-cuelume-close="" {...props} />,

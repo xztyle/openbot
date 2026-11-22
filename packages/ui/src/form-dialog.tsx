@@ -107,7 +107,12 @@ export function FormDialog(props: FormDialogProps): JSX.Element {
             onOpenAutoFocus={(event: Event) => {
               // The first field takes the focus, not the close button in the corner.
               event.preventDefault();
-              const target = props.initialFocus?.() ?? body?.querySelector<HTMLElement>(FIELD_SELECTOR);
+              // A dialog with no field, as the shortcuts sheet, takes the focus itself: it reads its title,
+              // and the focus leaves the page behind, which the modal hides from a screen reader.
+              const target =
+                props.initialFocus?.() ??
+                body?.querySelector<HTMLElement>(FIELD_SELECTOR) ??
+                (event.currentTarget instanceof HTMLElement ? event.currentTarget : null);
               requestAnimationFrame(() => target?.focus({ preventScroll: true }));
             }}
           >

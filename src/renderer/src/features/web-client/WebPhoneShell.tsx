@@ -313,6 +313,13 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
       chips.push({ id: "money", label: t("workspace.view.money"), icon: <Coins />, onSelect: () => openView("money") });
     if (ws.viewAvailable("insights"))
       chips.push({ id: "insights", label: t("insight.title"), icon: <Target />, onSelect: () => openView("insights") });
+    if (ws.viewAvailable("portfolio"))
+      chips.push({
+        id: "portfolio",
+        label: t("portfolio.title"),
+        icon: <Briefcase />,
+        onSelect: () => openView("portfolio"),
+      });
     chips.push(
       { id: "org", label: t("workspace.view.org"), icon: <Network />, onSelect: () => openView("org") },
       {

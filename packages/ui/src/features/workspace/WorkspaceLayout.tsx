@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { createSignal, createUniqueId, Show } from "solid-js";
+import { createEffect, createSignal, createUniqueId, Show } from "solid-js";
 import { PanelResizer } from "../../components/PanelResizer";
 import { useText } from "../../text";
 import { cx } from "../../utils";
@@ -41,13 +41,38 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps): JSX.Element {
   const panelId = createUniqueId();
   const [sidebarWidth, setSidebarWidth] = createSignal(() => props.sidebarWidth ?? WORKSPACE_SIDEBAR_WIDTH.default);
   const [panelWidth, setPanelWidth] = createSignal(() => props.panelWidth ?? WORKSPACE_PANEL_WIDTH.default);
+  /*
+   * The right panel takes the focus when it opens (a thread's composer) and drops it when it closes.
+   * The last element focused outside it, such as the "View thread" button, takes the focus back, or
+   * the message box when that one is gone; without this the focus fell to the page.
+   */
+  let root: HTMLDivElement | undefined;
+  let panel: HTMLElement | undefined;
+  let lastOutside: HTMLElement | null = null;
+  createEffect(
+    () => Boolean(props.panel),
+    (open, wasOpen) => {
+      if (open || !wasOpen) return;
+      const target = lastOutside;
+      requestAnimationFrame(() => {
+        const active = document.activeElement;
+        if (active && active !== document.body) return;
+        const fallback = root?.querySelector<HTMLElement>('.ws-layout-main [contenteditable="true"]');
+        (target?.isConnected ? target : fallback)?.focus({ preventScroll: true });
+      });
+    },
+  );
   const phonePane = (): WorkspacePane => {
     const pane = props.phonePane ?? "main";
     return pane === "panel" && !props.panel ? "main" : pane;
   };
   return (
     <div
+      ref={root}
       class={cx("ws-layout", props.class)}
+      onFocusIn={(event) => {
+        if (event.target instanceof HTMLElement && !panel?.contains(event.target)) lastOutside = event.target;
+      }}
       data-phone-pane={phonePane()}
       data-panel={props.panel ? "" : undefined}
       data-sidebar-collapsed={props.sidebarCollapsed ? "" : undefined}
@@ -73,7 +98,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps): JSX.Element {
       </div>
       <main class="ws-layout-main">{props.main}</main>
       <Show when={props.panel}>
-        <aside id={panelId} class="ws-layout-panel">
+        <aside ref={panel} id={panelId} class="ws-layout-panel">
           <PanelResizer
             class="ws-layout-resizer ws-layout-resizer-start"
             label={t("workspace.layout.resizePanel")}

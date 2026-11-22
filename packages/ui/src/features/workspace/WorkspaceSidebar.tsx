@@ -1,6 +1,6 @@
 import type { AppTranslate } from "@openbot/i18n";
 import type { JSX } from "@solidjs/web";
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, onSettled, Show } from "solid-js";
 import { ActionSheet, type ActionSheetItem } from "../../action-sheet";
 import { Button, buttonVariants, IconButton } from "../../button";
 import { DropdownMenu } from "../../complex";
@@ -279,6 +279,8 @@ export function sidebarItemLabel(item: SidebarItem): string {
  */
 export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
   const { t } = useText();
+  let nav: HTMLElement | undefined;
+  onSettled(() => (nav ? keepRowFocus(nav) : undefined));
   const [localCollapsed, setLocalCollapsed] = createSignal<ReadonlySet<string>>(new Set());
   const collapsed = (section: string) =>
     props.collapsedGroups ? props.collapsedGroups.includes(section) : localCollapsed().has(section);
@@ -383,6 +385,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
       label={t("workspace.sidebar.workspaceMenu", { name: props.workspaceName })}
     >
       <nav
+        ref={nav}
         class={cx("ws-sidebar", props.class)}
         aria-label={t("workspace.sidebar.label")}
         onKeyDown={(event) => sidebarKeys(event, toggleSection)}
@@ -1275,6 +1278,46 @@ function SidebarRow(props: {
  * and the last; Left on an open section header collapses it, Right opens it, and Left on a row goes
  * to its section header; a letter moves to the next conversation whose name starts with it.
  */
+/**
+ * Keeps the focus in the sidebar when the row that holds it goes away, as one does after Leave or
+ * Close in its menu: the row in its place takes it, or the last row. Without it the focus fell to
+ * the page, and a keyboard or a screen reader started at the top. The menu and the confirm of the
+ * row keep the row held while they have the focus.
+ */
+function keepRowFocus(nav: HTMLElement): () => void {
+  let held: { row: HTMLElement; index: number } | null = null;
+  const rows = () => [...nav.querySelectorAll<HTMLElement>("[data-ws-row]")];
+  const rowOf = (target: Element) =>
+    target.closest<HTMLElement>("[data-ws-row]") ??
+    target.closest(".ws-sidebar-item")?.querySelector<HTMLElement>("[data-ws-row]");
+  const focusIn = (event: FocusEvent) => {
+    if (!(event.target instanceof Element)) return;
+    if (nav.contains(event.target)) {
+      const row = rowOf(event.target);
+      held = row ? { row, index: rows().indexOf(row) } : null;
+    } else if (!event.target.closest("[role=menu], [role=dialog], [role=alertdialog]")) held = null;
+  };
+  const observer = new MutationObserver(() => {
+    const lost = held;
+    if (!lost || lost.row.isConnected) return;
+    held = null;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const active = document.activeElement;
+        if (active && active !== document.body) return;
+        const rest = rows();
+        rest[Math.min(lost.index, rest.length - 1)]?.focus();
+      }),
+    );
+  });
+  observer.observe(nav, { childList: true, subtree: true });
+  document.addEventListener("focusin", focusIn);
+  return () => {
+    observer.disconnect();
+    document.removeEventListener("focusin", focusIn);
+  };
+}
+
 function sidebarKeys(
   event: KeyboardEvent & { currentTarget: HTMLElement },
   toggle: (section: string, collapsed: boolean) => void,

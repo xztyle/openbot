@@ -179,9 +179,32 @@ function InviteDialog(props: { channelId: string; candidates: readonly Workspace
   );
 }
 
+/**
+ * Where the focus goes after a message is deleted: the menu that opened the dialog goes with the
+ * message, so the next message takes it, or the one before, or the message box of the thread or the
+ * channel. Without it the focus fell to the page.
+ */
+function focusAfterDelete(messageId: string, inThread: boolean): HTMLElement | null {
+  const row = document.querySelector(`[data-row-key="${CSS.escape(messageId)}"]`);
+  const sibling = (forward: boolean) => {
+    let next = forward ? row?.nextElementSibling : row?.previousElementSibling;
+    while (next) {
+      const message = next.querySelector<HTMLElement>("article.ws-message");
+      if (message) return message;
+      next = forward ? next.nextElementSibling : next.previousElementSibling;
+    }
+    return null;
+  };
+  const composer = document.querySelector<HTMLElement>(
+    `${inThread ? ".ws-layout-panel" : ".ws-layout-main"} [contenteditable="true"]`,
+  );
+  return sibling(true) ?? sibling(false) ?? composer;
+}
+
 function DeleteMessageDialog() {
   const { t } = useText();
   const ws = useWorkspace();
+  const [restore, setRestore] = createSignal<HTMLElement | null>(null);
   const target = () => {
     const dialog = ws.state.dialog;
     return dialog?.kind === "delete-message" ? dialog : null;
@@ -193,11 +216,21 @@ function DeleteMessageDialog() {
       title={t("workspace.app.message.deleteTitle")}
       description={t("workspace.app.message.deleteDescription")}
       confirmLabel={t("workspace.app.message.delete")}
-      onCancel={() => ws.openDialog(null)}
+      restoreFocusTarget={restore()}
+      onCancel={() => {
+        setRestore(null);
+        ws.openDialog(null);
+      }}
       onConfirm={async () => {
         const current = target();
         if (!current) return;
-        await ws.deleteMessage(current.channelId, current.messageId);
+        setRestore(focusAfterDelete(current.messageId, current.threadRootId !== null));
+        try {
+          await ws.deleteMessage(current.channelId, current.messageId);
+        } catch (error) {
+          setRestore(null);
+          throw error;
+        }
         ws.openDialog(null);
       }}
     />

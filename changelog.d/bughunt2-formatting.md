@@ -14,3 +14,6 @@
   "Mon 3:05 PM" as in Money. An amount in the audit trail shows its currency's sign, and the audit
   export is named after your own day, not the UTC day.
 - The Money alert rule says "for 1 day" in the singular when it is set to one day.
+- Today's greeting and date follow the clock while the app stays open. Before, the phone's Today
+  tab could greet "Good evening" with yesterday's date the next morning.
+- The daily cost bars in Money name each day as "Sun, Nov 22", not "2026-11-22".

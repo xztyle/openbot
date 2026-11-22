@@ -1,6 +1,6 @@
 import { type InsightGoal, insightGoalPace, type WorkspaceInsight } from "@openbot/contracts/ipc";
 import { Dynamic, type JSX } from "@solidjs/web";
-import { createEffect, createSignal, createUniqueId, For, Show } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, onCleanup, Show } from "solid-js";
 import { Button } from "../../button";
 import { Input } from "../../form";
 import {
@@ -224,8 +224,12 @@ export function TodayView(props: TodayViewProps): JSX.Element {
   // A phone mounts Today twice (its tab, and the pane behind it): the heading ids must not clash.
   const uid = createUniqueId();
   const cost = useCost();
-  const now = new Date();
-  const title = () => t(greetingKey(now.getHours()), { name: props.name });
+  // Today stays mounted behind the phone's tabs for days: the greeting and the date follow the clock,
+  // so the morning after does not still say "Good evening" and yesterday's date.
+  const [now, setNow] = createSignal(new Date());
+  const clock = setInterval(() => setNow(new Date()), 60_000);
+  onCleanup(() => clearInterval(clock));
+  const title = () => t(greetingKey(now().getHours()), { name: props.name });
   const sentAt = () => {
     const at = Date.parse(props.report?.briefing.lastSentAt ?? "");
     return Number.isFinite(at) ? at : undefined;
@@ -236,7 +240,7 @@ export function TodayView(props: TodayViewProps): JSX.Element {
       <WorkspacePaneHeader
         icon={<Sunrise aria-hidden="true" />}
         title={title()}
-        subtitle={format.date(now.getTime(), { weekday: "long", month: "long", day: "numeric" })}
+        subtitle={format.date(now().getTime(), { weekday: "long", month: "long", day: "numeric" })}
         onBack={props.onBack}
         actions={props.actions}
       />

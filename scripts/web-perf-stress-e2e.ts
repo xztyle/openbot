@@ -332,17 +332,28 @@ async function desktop(browser: Browser, origin: string) {
     await page.waitForTimeout(1_000);
     const open = await calls(page);
     const openTasks = await takeLongTasks(page);
+    const openEffects = await takeEffectRuns(page);
     report.metrics.openStream = {
       calls: open,
       longTasks: openTasks.length,
       longTaskMs: Math.round(sum(openTasks)),
-      ...(EFFECTS ? { repeatedEffects: repeatedEffects(await takeEffectRuns(page)) } : {}),
+      ...(EFFECTS ? { repeatedEffects: repeatedEffects(openEffects) } : {}),
     };
     check(
       "a reply streaming in the open channel does not read its page again",
       (open["channels.readChannel"] ?? 0) <= 1,
       `readChannel ${open["channels.readChannel"] ?? 0}, listChannels ${open["channels.listChannels"] ?? 0}`,
     );
+    if (EFFECTS) {
+      // An effect that runs for each flush with an unchanged value repeats its work: the avatars
+      // loaded a failed picture again, and the steps poll started over. One run per flush is 50.
+      const repeated = Object.entries(openEffects).filter(([, entry]) => entry.equal > 60);
+      check(
+        "no effect runs more than 60 times with an unchanged value during a 5 s stream",
+        repeated.length === 0,
+        repeated.map(([site, entry]) => `${site}: ${entry.equal}`).join("; "),
+      );
+    }
     // The working agent's steps are read every 2 s, not on each flush.
     check(
       "a 5 s stream in the open channel reads the agent's steps at most 4 times",

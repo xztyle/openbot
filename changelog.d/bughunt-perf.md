@@ -5,3 +5,7 @@
   most once a second while a channel changes, and the open channel is read again only when its own
   live messages missed a change. On a phone's link this was about two reads of the open channel a
   second for as long as an agent wrote anywhere in the workspace.
+- While an agent writes in the open channel, its steps are read every 2 seconds as intended, not
+  on each streamed word. An agent's picture that fails to load is no longer loaded again at every
+  change of the agent, and the short success face after finished work is no longer cut off by an
+  unrelated change.

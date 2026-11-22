@@ -111,12 +111,12 @@ export function AgentAvatar(props: AgentAvatarProps) {
     props.agent?.sleepingSince !== undefined && props.mood !== "working" ? "asleep" : (props.mood ?? "idle");
   const presentation = () => avatarMoodPresentation(mood());
   const [imageFailed, setImageFailed] = createSignal(false);
-  createEffect(
-    () => url(),
-    () => {
-      setImageFailed(false);
-    },
-  );
+  // A memo: an effect runs again each time its source runs, also with the same address, and such a
+  // run showed a picture that failed to load again (and loaded it again) at each change of the agent.
+  const imageUrl = createMemo(url);
+  createEffect(imageUrl, () => {
+    setImageFailed(false);
+  });
   const className = () => `agent-avatar agent-avatar-motion-${motion()} ${props.class ?? ""}`;
   // The custom property rides with the attribute rather than being set on every avatar: the
   // keyframe is an infinite animation, and a selector that matched all of them would start one

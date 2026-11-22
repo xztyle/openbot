@@ -84,25 +84,26 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
   // The reader's saved messages here, and their state in each thread of the page, for the marks on
   // the messages and the unread dot of each thread summary.
   void ws.marks.loadSaved(props.channelId);
-  createEffect(
-    () =>
-      entries()
-        .filter((entry) => (entry.threadSummary?.replyCount ?? 0) > 0 && !entry.threadRootId)
-        .map((entry) => `${entry.id}@${entry.threadSummary?.lastReplyAt ?? ""}`)
-        .join(" "),
-    (key) => {
-      if (!key) return;
-      const timer = setTimeout(
-        () =>
-          void ws.marks.loadThreads(
-            props.channelId,
-            key.split(" ").map((item) => item.split("@")[0] ?? ""),
-          ),
-        300,
-      );
-      return () => clearTimeout(timer);
-    },
+  // A memo, so a page change that leaves the threads as they were (a streamed flush) does not read
+  // their state again: an effect runs again each time its source runs, also with the same value.
+  const threadsKey = createMemo(() =>
+    entries()
+      .filter((entry) => (entry.threadSummary?.replyCount ?? 0) > 0 && !entry.threadRootId)
+      .map((entry) => `${entry.id}@${entry.threadSummary?.lastReplyAt ?? ""}`)
+      .join(" "),
   );
+  createEffect(threadsKey, (key) => {
+    if (!key) return;
+    const timer = setTimeout(
+      () =>
+        void ws.marks.loadThreads(
+          props.channelId,
+          key.split(" ").map((item) => item.split("@")[0] ?? ""),
+        ),
+      300,
+    );
+    return () => clearTimeout(timer);
+  });
   /** Who works, thinks and types here, with Stop for a working agent. */
   const work = createAgentWork({
     channelId: props.channelId,

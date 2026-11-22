@@ -168,41 +168,43 @@ export function createAgentWork(input: {
     [...ids()].flatMap(([id, state]) => (state === "working" || state === "waiting" ? [id] : [])),
   );
 
-  /** The steps so far of each working agent, read every 2 s while it works. */
+  /**
+   * The steps so far of each working agent, read every 2 s while it works. A memo, because an effect
+   * runs again each time its source runs, also with the same value: each streamed flush restarted the
+   * poll, which read the steps of every working agent at once, about ten times a second.
+   */
   const [liveSteps, setLiveSteps] = createSignal<Record<string, WorkspaceSteps>>({});
-  createEffect(
-    () => [...ids()].flatMap(([id, state]) => (state === "working" ? [id] : [])).join(" "),
-    (key) => {
-      const read = ws.channels.port().agent.workspaceSteps;
-      if (!key || !read) {
-        setLiveSteps({});
-        return;
-      }
-      const agentIds = key.split(" ");
-      let stopped = false;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const poll = async () => {
-        const results = await Promise.all(
-          agentIds.map((agentId) =>
-            read({ channelId: input.channelId, agentId }).then(
-              (steps) => [agentId, steps] as const,
-              () => [agentId, null] as const,
-            ),
+  const workingKey = createMemo(() => [...ids()].flatMap(([id, state]) => (state === "working" ? [id] : [])).join(" "));
+  createEffect(workingKey, (key) => {
+    const read = ws.channels.port().agent.workspaceSteps;
+    if (!key || !read) {
+      setLiveSteps({});
+      return;
+    }
+    const agentIds = key.split(" ");
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      const results = await Promise.all(
+        agentIds.map((agentId) =>
+          read({ channelId: input.channelId, agentId }).then(
+            (steps) => [agentId, steps] as const,
+            () => [agentId, null] as const,
           ),
-        );
-        if (stopped) return;
-        const next: Record<string, WorkspaceSteps> = {};
-        for (const [agentId, steps] of results) if (steps && steps.total > 0) next[agentId] = steps;
-        setLiveSteps(next);
-        timer = setTimeout(() => void poll(), STEPS_POLL_MS);
-      };
-      void poll();
-      return () => {
-        stopped = true;
-        clearTimeout(timer);
-      };
-    },
-  );
+        ),
+      );
+      if (stopped) return;
+      const next: Record<string, WorkspaceSteps> = {};
+      for (const [agentId, steps] of results) if (steps && steps.total > 0) next[agentId] = steps;
+      setLiveSteps(next);
+      timer = setTimeout(() => void poll(), STEPS_POLL_MS);
+    };
+    void poll();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  });
 
   /** The agents whose stop was sent. Each one leaves the set when its work ends or the stop fails. */
   const [stopping, setStopping] = createSignal<ReadonlySet<string>>(new Set());

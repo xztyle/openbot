@@ -136,15 +136,15 @@ export function AgentFace(props: AgentFaceProps) {
   // Work that ends without a failure or a question shows success for a moment, then the face rests.
   const [celebrating, setCelebrating] = createSignal(false);
   let celebration: ReturnType<typeof setTimeout> | undefined;
-  createEffect(
-    () => props.state ?? "idle",
-    (next, previous) => {
-      clearTimeout(celebration);
-      const ended = props.celebrate !== false && (previous === "working" || previous === "talking") && next === "idle";
-      setCelebrating(ended);
-      if (ended) celebration = setTimeout(() => setCelebrating(false), SUCCESS_MS);
-    },
-  );
+  // A memo: an effect runs again each time its source runs, also with the same state, and such a run
+  // ended the success face of an agent at the next unrelated change.
+  const faceState = createMemo(() => props.state ?? "idle");
+  createEffect(faceState, (next, previous) => {
+    clearTimeout(celebration);
+    const ended = props.celebrate !== false && (previous === "working" || previous === "talking") && next === "idle";
+    setCelebrating(ended);
+    if (ended) celebration = setTimeout(() => setCelebrating(false), SUCCESS_MS);
+  });
   onCleanup(() => clearTimeout(celebration));
   const state = (): FaceState => (celebrating() ? "success" : (props.state ?? "idle"));
   const svg = createMemo(() => {

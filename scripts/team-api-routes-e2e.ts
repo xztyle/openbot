@@ -426,6 +426,7 @@ const browser: TeamApiBrowser = {
   stop: unused("stop"),
   takeUserControl: unused("takeUserControl"),
   releaseUserControl: unused("releaseUserControl"),
+  releaseUserControlRefused: () => {},
   releaseUserControlHeldBy: (holder) => {
     releasedHolders.push(holder);
   },

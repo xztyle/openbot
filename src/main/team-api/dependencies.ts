@@ -489,6 +489,7 @@ export type TeamApiBrowser = Pick<
   | "takeUserControl"
   | "releaseUserControl"
   | "releaseUserControlHeldBy"
+  | "releaseUserControlRefused"
   // Behind `browser-page-state`.
   | "stop"
   // Behind `browser-sign-in`.
@@ -501,7 +502,13 @@ export type TeamApiBrowser = Pick<
 >;
 export type TeamApiBrowserView = Pick<
   BrowserViewGateway,
-  "handlesUpgrade" | "handleUpgrade" | "stop" | "createSession" | "closeMemberSession" | "revokeTeamSession"
+  | "handlesUpgrade"
+  | "handleUpgrade"
+  | "stop"
+  | "createSession"
+  | "closeMemberSession"
+  | "revokeTeamSession"
+  | "closeRefusedSessions"
 >;
 export type TeamApiRemoteScreen = Pick<
   RemoteScreenGateway,

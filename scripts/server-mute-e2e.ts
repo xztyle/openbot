@@ -184,6 +184,7 @@ const teamBrowser: TeamApiBrowser = {
   stop: unused,
   takeUserControl: unused,
   releaseUserControl: () => {},
+  releaseUserControlRefused: () => {},
   releaseUserControlHeldBy: () => {},
   close: unused,
   capturePreview: unused,

@@ -111,6 +111,7 @@ async function runHost(root: string, configure: boolean): Promise<void> {
     stop: unused,
     takeUserControl: unused,
     releaseUserControl: () => {},
+    releaseUserControlRefused: () => {},
     releaseUserControlHeldBy: (holder) => {
       if (holder.kind === "session") send({ type: "released", sessionId: holder.sessionId });
     },

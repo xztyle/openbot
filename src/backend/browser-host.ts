@@ -1299,6 +1299,15 @@ export class BrowserHost {
     this.#endUserControl(tabId);
   }
 
+  /**
+   * Releases each tab whose holder `refused` names, such as a member who may no longer see the tab
+   * after a change of the roles. A recording in the tab ends with it.
+   */
+  releaseUserControlRefused(refused: (tabId: string, holder: BrowserUserControlHolder) => boolean): void {
+    for (const [tabId, holder] of [...this.#userControlTabIds])
+      if (refused(tabId, holder)) this.releaseUserControl(tabId);
+  }
+
   /** Releases the tabs of a closed window, session or member. */
   releaseUserControlHeldBy(owner: BrowserUserControlOwner): void {
     for (const [tabId, holder] of [...this.#userControlTabIds]) {

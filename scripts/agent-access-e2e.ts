@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 // Checks member access to agents through the agent-access-v1 Team API contract. A real
 // `TeamApiServer` runs on loopback with the real team, agent, mailbox, sidebar and roles stores on a
 // temporary profile. The owner sets roles; a member signs in as a current desktop client does. The
@@ -159,16 +160,27 @@ const agentBrowser: AgentBrowserHost = {
   close: () => Effect.void,
   clearAgentSession: () => Effect.void,
 };
+/** The tabs of the host's browser, as a step sets them. */
+const browserTabs: {
+  id: string;
+  title: string;
+  url: string;
+  loading: boolean;
+  ownerThreadId: null;
+  ownerAgentId: string | null;
+}[] = [];
 const teamBrowser: TeamApiBrowser = {
-  listTabs: () => [],
+  listTabs: () => browserTabs,
   getControlState: () => ({ sessions: [] }),
-  open: unused,
+  open: (url, ownerThreadId = null, ownerAgentId = null) =>
+    Effect.succeed({ id: randomUUID(), title: "", url, loading: false, ownerThreadId, ownerAgentId }),
   activate: unused,
   navigate: unused,
   reload: unused,
   stop: unused,
   takeUserControl: unused,
   releaseUserControl: () => {},
+  releaseUserControlRefused: () => {},
   releaseUserControlHeldBy: () => {},
   close: unused,
   capturePreview: unused,
@@ -575,6 +587,39 @@ try {
       closedScope: closedScope.status,
       files: { closedFile, openFile },
     };
+  });
+
+  await step("none: the member neither sees nor opens a browser tab of the closed agent", async () => {
+    browserTabs.splice(0, browserTabs.length);
+    for (const [id, owner] of [
+      ["tab-finance", finance],
+      ["tab-general", general],
+    ] as const)
+      browserTabs.push({
+        id,
+        title: id,
+        url: "https://example.com/",
+        loading: false,
+        ownerThreadId: null,
+        ownerAgentId: owner,
+      });
+    const tabs = await call("GET", TEAM_API_ROUTES.browser.tabs, { token: setup.memberToken });
+    const ids = (Array.isArray(tabs.body) ? tabs.body : []).map((tab) => text(record(tab, "tab").id, "tab id"));
+    assert.deepEqual(ids, ["tab-general"], `The member lists the tabs ${refusal(tabs.body)}.`);
+    const owner = await call("GET", TEAM_API_ROUTES.browser.tabs, { token: ownerToken });
+    assert.equal(Array.isArray(owner.body) ? owner.body.length : 0, 2, "The owner lists every tab.");
+    const open = (agentId: string) =>
+      call("POST", TEAM_API_ROUTES.browser.open, {
+        token: setup.memberToken,
+        // The wire key of a v7 client.
+        body: { url: "https://example.com/", ownerThreadId: null, ownerBotId: agentId, focus: false },
+      });
+    const closed = await open(finance);
+    assert.equal(closed.status, 404, `Opening a tab of the closed agent returned ${closed.status}.`);
+    const opened = await open(general);
+    assert.equal(opened.status, 201, `Opening a tab of a visible agent returned ${opened.status}.`);
+    browserTabs.splice(0, browserTabs.length);
+    return { member: ids, closed: closed.status, opened: opened.status };
   });
 
   await step("view: a write is refused with 403, and reading the conversation works", async () => {

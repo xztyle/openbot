@@ -608,6 +608,27 @@ export class ContextCompaction {
     this.#clearTimer(threadId);
   }
 
+  /**
+   * The thread was deleted, so no turn of it ends its compaction or a refusal hold. Its hold stayed
+   * until a restart, and the agent's queue waited behind it with the reason "compaction" (upstream
+   * 92e958ff0).
+   */
+  endThread(threadId: string): void {
+    const agents = new Set<string>();
+    for (const [agentId, compaction] of this.#compactingAgents)
+      if (compaction.threadId === threadId) {
+        this.#compactingAgents.delete(agentId);
+        agents.add(agentId);
+      }
+    this.forgetThread(threadId);
+    for (const [agentId, hold] of this.#refusals)
+      if (hold.threadId === threadId) {
+        this.#endRefusal(agentId, false);
+        agents.add(agentId);
+      }
+    for (const agentId of agents) this.#scheduleDrain(agentId);
+  }
+
   forgetAgent(agentId: string): void {
     this.#compactingAgents.delete(agentId);
   }

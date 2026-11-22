@@ -6811,7 +6811,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     for (const session of sessions) {
       this.#conversation.unbindThread(session.externalSessionId);
       this.#conversation.unloadThread(session.externalSessionId);
-      this.#compaction.forgetThread(session.externalSessionId);
+      this.#compaction.endThread(session.externalSessionId);
     }
     this.#conversation.forgetExecutionThread(threadId);
   }, Effect.uninterruptible);

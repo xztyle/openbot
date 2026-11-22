@@ -249,6 +249,33 @@ export interface ClaudeAgentQueryConfig {
 }
 
 /**
+ * Names Atelier to Claude. Without `CLAUDE_CODE_ENTRYPOINT` the SDK labels each request `sdk-ts`, and
+ * Claude's 5-hour window counts `sdk-*` requests about twice as heavily (anthropics/claude-code#97074).
+ * With a label other than `sdk-*`, the CLI turns on the claude.ai Artifact tools for accounts that
+ * have Artifacts. They publish pages to the user's claude.ai account, outside Atelier, and their
+ * schemas cost about 13k tokens in each request. `CLAUDE_CODE_ARTIFACT=0` keeps them off.
+ */
+const OPENBOT_CLAUDE_CLIENT = {
+  CLAUDE_AGENT_SDK_CLIENT_APP: "openbot/0.1.0",
+  CLAUDE_CODE_ARTIFACT: "0",
+  CLAUDE_CODE_ENTRYPOINT: "openbot",
+};
+
+/**
+ * The client labels for a CLI environment. Anthropic bills a request with a label other than `sdk-*`
+ * as Claude Code, and promotional API credit can leave Claude Code out: a key with such credit got
+ * "Credit balance is too low" with `openbot`, and an answer with `sdk-ts`. An API key has no 5-hour
+ * window, so a request with a key keeps the SDK label. A label that the server's provider variables
+ * set stays.
+ */
+export function withClaudeClientLabels(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const labelled: NodeJS.ProcessEnv = { ...OPENBOT_CLAUDE_CLIENT, ...environment };
+  return labelled.ANTHROPIC_API_KEY && labelled.CLAUDE_CODE_ENTRYPOINT === OPENBOT_CLAUDE_CLIENT.CLAUDE_CODE_ENTRYPOINT
+    ? { ...labelled, CLAUDE_CODE_ENTRYPOINT: "sdk-ts" }
+    : labelled;
+}
+
+/**
  * The options of an agent query that set what the model gets before the conversation: the system
  * prompt, the tools and skills that are off, the setting sources and the flag settings.
  * `scripts/claude-prompt-tokens-bench.ts` measures a request with these options.
@@ -285,7 +312,7 @@ export function claudeAgentQueryOptions(config: ClaudeAgentQueryConfig) {
     strictMcpConfig: true,
     settings: config.profileGeneration ? ({} satisfies Settings) : settings,
     env: {
-      CLAUDE_AGENT_SDK_CLIENT_APP: "openbot/0.1.0",
+      ...OPENBOT_CLAUDE_CLIENT,
       // Without a terminal, the CLI gives the newer models no TodoWrite or task tools, so the
       // agent has no plan for OpenBot to show as a task list.
       CLAUDE_CODE_ENABLE_TODO_TOOLS: "1",
@@ -760,11 +787,11 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       mcpServers: {},
       strictMcpConfig: true,
       persistSession: false,
-      env: {
+      env: withClaudeClientLabels({
         ...claudeEnvironment(this.#cli),
+        ...OPENBOT_CLAUDE_CLIENT,
         ...this.#environment(this.#onApiKey),
-        CLAUDE_AGENT_SDK_CLIENT_APP: "openbot/0.1.0",
-      },
+      }),
     };
   }
 
@@ -1202,7 +1229,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
             : { hooks: { PreToolUse: [trustHooks] } }),
           ...(plugins.length ? { plugins } : {}),
           mcpServers,
-          env: {
+          env: withClaudeClientLabels({
             ...claudeEnvironment(this.#cli),
             // The login shell's `PATH`, so the Bash tool and hooks find Homebrew and `~/.local/bin`
             // tools when Finder starts OpenBot. An `env.PATH` in the Claude settings still wins.
@@ -1214,7 +1241,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
             // Last: the agent environment ends with the provider variables of this server, which an
             // admin sets, so they win over OpenBot's own values of the same name.
             ...this.#environment(this.#onApiKey),
-          },
+          }),
         },
       }),
     );

@@ -84,12 +84,8 @@
   gap: var(--openbot-space-1);
 }
 
-/* One row: "Why is this slow?" sits beside the DM's model picker, not above it. */
 .ws-channel-header-search {
-  display: flex;
   min-width: 0;
-  align-items: center;
-  gap: var(--openbot-space-1);
   margin-right: var(--openbot-space-1);
 }
 

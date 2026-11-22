@@ -527,4 +527,27 @@ export const messages = {
   "mobile.agent.info.memory.inclusion.explanation":
     "Todos los recuerdos se guardan. Solo los recuerdos esenciales entran en cada prompt. El agente puede buscar los demás.",
   "mobile.agent.info.memory.inclusion.capacity": "Capacidad de recuerdos esenciales: {used} de {total}",
+  "mobile.agent.info.eventChecks.title": "Comprobaciones de eventos",
+  "mobile.agent.info.eventChecks.loading": "Cargando comprobaciones de eventos…",
+  "mobile.agent.info.eventChecks.reconnect": "Vuelve a conectarte para cargar las comprobaciones de eventos.",
+  "mobile.agent.info.eventChecks.failed": "No se pudieron cargar las comprobaciones de eventos.",
+  "mobile.agent.info.eventChecks.retry": "Reintentar las comprobaciones de eventos",
+  "mobile.agent.eventCheck.status.baseline": "guardó una línea base",
+  "mobile.agent.eventCheck.status.unchanged": "sin cambios",
+  "mobile.agent.eventCheck.status.triggered": "despertó al agente",
+  "mobile.agent.eventCheck.status.error": "falló",
+  "mobile.agent.eventCheck.status.cancelled": "cancelada",
+  "mobile.agent.eventCheck.failing": "Falla. {error}",
+  "mobile.agent.eventCheck.noReason": "Abre la comprobación en el computador para ver por qué.",
+  "mobile.agent.eventCheck.neverChecked": "Todavía no se revisa",
+  "mobile.agent.eventCheck.lastCheck": "Última revisión {time}: {status}",
+  "mobile.agent.eventCheck.checkNow": "Revisar ahora",
+  "mobile.agent.eventCheck.checkNowNamed": "Revisar {name} ahora",
+  "mobile.agent.eventCheck.checking": "Revisando…",
+  "mobile.agent.eventCheck.toggleFailed": "No se pudo cambiar {name}.",
+  "mobile.agent.eventCheck.checkFailed": "No se pudo revisar {name}.",
+  "mobile.agent.info.noEventChecks":
+    "Todavía no hay comprobaciones de eventos. Configúralas en el computador o pídeselo al agente.",
+  "mobile.agent.info.eventChecksNote":
+    "Los ajustes, programas y variables privadas de una comprobación de eventos se quedan en el computador.",
 } as const satisfies PartialTranslation<typeof source>;

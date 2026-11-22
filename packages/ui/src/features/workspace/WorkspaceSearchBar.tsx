@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { createEffect, createMemo, createSignal, createUniqueId, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, createUniqueId, Show, untrack } from "solid-js";
 import { IconButton } from "../../button";
 import { Listbox } from "../../complex";
 import { createFieldListPress } from "../../field-list-press";
@@ -59,7 +59,8 @@ export function WorkspaceSearchBar(props: WorkspaceSearchBarProps): JSX.Element 
   const listId = createUniqueId();
   const press = createFieldListPress();
   const [open, setOpen] = createSignal(false);
-  const [text, setText] = createSignal(props.query ?? "");
+  // The first value only: the effect below brings each later query.
+  const [text, setText] = createSignal(untrack(() => props.query) ?? "");
   const [active, setActive] = createSignal(0);
   let input: HTMLInputElement | undefined;
   // A search that runs from elsewhere (a recent search, a filter) shows its query here.

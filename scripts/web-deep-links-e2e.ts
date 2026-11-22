@@ -383,7 +383,9 @@ try {
     await settle(page);
     await page.goto(`${origin}/app/general/c/random?page=settings&section=preferences`, COMMIT);
     await started(page);
-    await page.getByRole("tab", { name: english("webClient.settings.appearance.title") }).waitFor({ timeout: UI_WAIT_MS });
+    await page
+      .getByRole("tab", { name: english("webClient.settings.appearance.title") })
+      .waitFor({ timeout: UI_WAIT_MS });
     await page.waitForFunction(
       () => document.querySelector('[data-tab="appearance"]')?.checkVisibility() === true,
       undefined,

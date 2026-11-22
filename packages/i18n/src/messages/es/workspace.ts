@@ -586,6 +586,8 @@ export const messages = {
   "workspace.spaces.deleteAgentsTitle": { one: "¿Eliminar {count} agente?", other: "¿Eliminar {count} agentes?" },
   "workspace.spaces.deleteAgentsDescription":
     "Atelier elimina estos agentes con sus chats, memorias, rutinas y archivos del espacio de trabajo. No se puede deshacer.",
+  "workspace.spaces.deleteAgentDescription":
+    "Atelier elimina este agente con sus chats, memorias, rutinas y archivos del espacio de trabajo. No se puede deshacer.",
   "workspace.spaces.deleteAgentsButton": { one: "Eliminar {count} agente", other: "Eliminar {count} agentes" },
   "workspace.spaces.deleteAgentsFailed": "Atelier no pudo eliminar todos los agentes.",
   // Agent work, the place in a thread, and the header bell.

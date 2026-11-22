@@ -243,7 +243,11 @@ export function SpaceAgentsView(props: SpaceAgentsViewProps): JSX.Element {
             ? t("workspace.spaces.deleteAgentTitle", { name: names(deleting() ?? [])[0] ?? "" })
             : t("workspace.spaces.deleteAgentsTitle", { count: deleting()?.length ?? 0 })
         }
-        description={t("workspace.spaces.deleteAgentsDescription")}
+        description={
+          deleting()?.length === 1
+            ? t("workspace.spaces.deleteAgentDescription")
+            : t("workspace.spaces.deleteAgentsDescription")
+        }
         confirmLabel={t("workspace.spaces.deleteAgentsButton", { count: deleting()?.length ?? 0 })}
         error={error() ?? undefined}
         onCancel={() => {

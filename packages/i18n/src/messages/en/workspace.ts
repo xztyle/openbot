@@ -604,6 +604,8 @@ export const messages = defineMessages("workspace", {
   "workspace.spaces.deleteAgentsTitle": { one: "Delete {count} agent?", other: "Delete {count} agents?" },
   "workspace.spaces.deleteAgentsDescription":
     "Atelier deletes these agents with their chats, memories, routines and workspace files. You cannot undo this.",
+  "workspace.spaces.deleteAgentDescription":
+    "Atelier deletes this agent with its chats, memories, routines and workspace files. You cannot undo this.",
   "workspace.spaces.deleteAgentsButton": { one: "Delete {count} agent", other: "Delete {count} agents" },
   "workspace.spaces.deleteAgentsFailed": "Atelier could not delete all of the agents.",
   // Agent work, the place in a thread, and the header bell.

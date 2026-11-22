@@ -1,6 +1,7 @@
 import type { AgentEvent, TeamRealtimeEvent } from "@openbot/contracts/ipc";
 import { isRoutineRunFields } from "@openbot/contracts/ipc";
 import type { TeamApiRequest } from "@openbot/team-client/team-api-requests";
+import { currentText } from "@openbot/ui/text";
 import type { EventRoutinesApi } from "./routine-webhooks-api";
 import { eventRoutinesPort } from "./routines-port";
 export function webRoutinesPort(
@@ -19,7 +20,7 @@ export function webRoutinesPort(
         `/v1/agents/${encodeURIComponent(agentId)}/routines/${encodeURIComponent(id)}/runs?limit=${limit}`,
         (value) => {
           if (!Array.isArray(value) || value.length > 100 || !value.every(isRoutineRunFields))
-            throw new Error("Invalid routine history.");
+            throw new Error(currentText().t("error.remote.invalidData"));
           return value;
         },
       ),

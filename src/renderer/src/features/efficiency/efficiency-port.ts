@@ -24,6 +24,7 @@ import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { AGENT_EFFICIENCY_ROUTES } from "@openbot/contracts/team-protocol/agent-efficiency-v1";
 import { AGENT_LEARNING_ROUTES } from "@openbot/contracts/team-protocol/agent-learning-v1";
 import type { TeamApiRequest } from "@openbot/team-client/team-api-requests";
+import { currentText } from "@openbot/ui/text";
 
 /** The sleep, savings, review and playbook calls of a host, for an owner or an admin (agent-efficiency-v1). */
 export interface EfficiencyCalls {
@@ -98,7 +99,7 @@ function isForgetResult(value: unknown): value is ForgetConversationResult {
 function field<T>(key: string, guard: (value: unknown) => value is T): (value: unknown) => T {
   return (value) => {
     const inner = isDynamicRecord(value) ? value[key] : undefined;
-    if (!guard(inner)) throw new Error("Invalid answer.");
+    if (!guard(inner)) throw new Error(currentText().t("error.remote.invalidData"));
     return inner;
   };
 }
@@ -112,20 +113,20 @@ const isCheckpoints = (value: unknown): value is SettingsCheckpoint[] =>
 
 function decoder<T>(guard: (value: unknown) => value is T): (value: unknown) => T {
   return (value) => {
-    if (!guard(value)) throw new Error("Invalid answer.");
+    if (!guard(value)) throw new Error(currentText().t("error.remote.invalidData"));
     return value;
   };
 }
 
 const decodeReviewAnswer = (value: unknown): PerformanceReview | null => {
-  if (!isDynamicRecord(value)) throw new Error("Invalid answer.");
+  if (!isDynamicRecord(value)) throw new Error(currentText().t("error.remote.invalidData"));
   if (value.review === null) return null;
-  if (!isReview(value.review)) throw new Error("Invalid answer.");
+  if (!isReview(value.review)) throw new Error(currentText().t("error.remote.invalidData"));
   return value.review;
 };
 const decodeDecidedReview = (value: unknown): PerformanceReview => {
   const review = decodeReviewAnswer(value);
-  if (!review) throw new Error("Invalid answer.");
+  if (!review) throw new Error(currentText().t("error.remote.invalidData"));
   return review;
 };
 

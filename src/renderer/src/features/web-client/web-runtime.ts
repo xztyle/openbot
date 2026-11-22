@@ -1100,7 +1100,7 @@ export function createWebWorkspaceRuntime(
     },
     async markUnread(id) {
       const value = await request("POST", TEAM_API_ROUTES.agent.conversationUnread(id), {});
-      if (!isConversationReadState(value)) throw new Error("The host returned an invalid read state.");
+      if (!isConversationReadState(value)) throw new Error(currentText().t("error.remote.invalidData"));
       return value;
     },
     async focusUse() {
@@ -1437,12 +1437,12 @@ function decodeWebFile(value: unknown): WebFile {
 }
 
 function decodeFileTicket(value: unknown): FileTicket {
-  if (!isDynamicRecord(value)) throw new Error("The host returned an invalid download link.");
+  if (!isDynamicRecord(value)) throw new Error(currentText().t("error.remote.invalidData"));
   const url = requiredString(value, "url");
-  if (!url.startsWith("https://")) throw new Error("The host returned an invalid download link.");
+  if (!url.startsWith("https://")) throw new Error(currentText().t("error.remote.invalidData"));
   const { size, expiresAt } = value;
   if (typeof size !== "number" || typeof expiresAt !== "number")
-    throw new Error("The host returned an invalid download link.");
+    throw new Error(currentText().t("error.remote.invalidData"));
   return { url, name: requiredString(value, "name"), size, expiresAt };
 }
 

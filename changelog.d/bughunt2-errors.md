@@ -12,3 +12,6 @@
   stacked every two minutes and each time the page showed again.
 - Mailboxes: when the host refuses to remove an address, the question stays open with the reason.
   Before, it stayed open with no word, and the address still got mail.
+- A malformed answer from the host in Learning, playbooks, reviews, memories, routine history,
+  mark unread and file downloads now reads "The host returned invalid data." in your language.
+  Before, it showed a fixed English sentence such as "Invalid answer.".

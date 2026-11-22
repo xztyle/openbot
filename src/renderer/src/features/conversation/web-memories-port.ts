@@ -3,6 +3,7 @@ import type { AgentEvent, AgentMemory, TeamRealtimeEvent } from "@openbot/contra
 import { isAgentMemory } from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import type { TeamApiRequest } from "@openbot/team-client/team-api-requests";
+import { currentText } from "@openbot/ui/text";
 import type { MemoriesPort } from "./memories-port";
 
 /** The same bound as the desktop's `parseCreateAgentMemory`. The host checks it again. */
@@ -22,7 +23,8 @@ export function webMemoriesPort(
   onEvent?: (listener: (event: AgentEvent | TeamRealtimeEvent) => void) => () => void,
 ): MemoriesPort {
   const decodeMemory = (value: unknown): AgentMemory => {
-    if (!isAgentMemory(value) || value.agentId !== agentId) throw new Error("The host returned an invalid memory.");
+    if (!isAgentMemory(value) || value.agentId !== agentId)
+      throw new Error(currentText().t("error.remote.invalidData"));
     return value;
   };
   return {
@@ -33,7 +35,7 @@ export function webMemoriesPort(
     list: () =>
       request("GET", TEAM_API_ROUTES.agent.memories(agentId), (value) => {
         if (!Array.isArray(value) || !value.every(isAgentMemory) || value.some((memory) => memory.agentId !== agentId))
-          throw new Error("The host returned invalid memories.");
+          throw new Error(currentText().t("error.remote.invalidData"));
         return value;
       }),
     create: async (text) => {

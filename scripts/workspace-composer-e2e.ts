@@ -2,7 +2,8 @@
 // (`src/renderer/stories/web-client-inbox-harness.tsx`), on an iPhone and on a computer: a message
 // that waits in the outbox keeps its files through Edit, two tabs that send while offline both
 // deliver, an edit in place hides a pasted password as the message box does, and an agent DM that
-// cannot send yet leaves its draft alone. Send waits for a file that is still uploading.
+// cannot send yet leaves its draft alone. Send waits for a file that is still uploading, and many
+// waiting messages leave the header and the box on a phone's screen.
 //
 // `bun scripts/workspace-composer-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>]`
 // Writes report.json to .openbot-build/workspace-composer-e2e, or to --out.
@@ -211,6 +212,37 @@ async function checkSendWaitsForUpload(page: Page, device: string, phone: boolea
   });
 }
 
+/**
+ * Many messages that wait for the connection scroll in their own list on a phone: the header, with
+ * its back button, and the box stay on screen, and the newest message shows.
+ */
+async function checkManyWaitingFit(page: Page, device: string) {
+  await load(page, `${CHANNEL_ORIGIN()}${CHANNEL_PATH}`);
+  await page.evaluate(() => window.harnessConnection?.drop(120_000));
+  await page.waitForTimeout(200);
+  await editor(page).tap();
+  for (let index = 0; index < 8; index += 1) {
+    await page.keyboard.type(
+      `Mensaje ${index} que es bastante largo para ocupar varias lineas en la pantalla del telefono`,
+    );
+    await press(page, true, "Send");
+    await page.waitForTimeout(100);
+  }
+  await settle(page);
+  await step(device, "eight waiting messages keep the header and the box on screen", async () => {
+    const height = await page.evaluate(() => window.innerHeight);
+    const header = await page.locator(".ws-channel-header").first().boundingBox();
+    const box = await composer(page).boundingBox();
+    assert.ok(header && header.y >= 0, `The header is at ${header?.y}px.`);
+    assert.ok(box && box.y + box.height <= height + 1, `The box ends at ${box ? box.y + box.height : "?"}px.`);
+    const newest = outbox(page).filter({ hasText: "Mensaje 7 " });
+    assert.ok(await newest.isVisible(), "The newest waiting message is not shown.");
+    const rect = await newest.boundingBox();
+    const list = await page.locator(".ws-outbox").first().boundingBox();
+    assert.ok(rect && list && rect.y + rect.height <= list.y + list.height + 1, "The newest message is scrolled away.");
+  });
+}
+
 /** Two tabs of the reader, both offline, each send one: both messages go, once each. */
 async function checkTwoTabsOffline(context: BrowserContext, device: string) {
   const first = await newPage(context);
@@ -338,6 +370,11 @@ try {
   {
     const context = await newDevice(browser, true);
     await checkSendWaitsForUpload(await newPage(context), "iphone", true);
+    await context.close();
+  }
+  {
+    const context = await newDevice(browser, true);
+    await checkManyWaitingFit(await newPage(context), "iphone");
     await context.close();
   }
   {

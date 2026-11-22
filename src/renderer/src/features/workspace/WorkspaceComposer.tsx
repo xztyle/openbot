@@ -477,8 +477,16 @@ function OutboxList(props: {
   onEdit: ((message: OutboxMessage) => void) | undefined;
 }) {
   const { t } = useText();
+  let list: HTMLUListElement | undefined;
+  // The newest message, the one just sent, shows at the end of a list that scrolls.
+  createEffect(
+    () => props.messages.length,
+    () => {
+      if (list) list.scrollTop = list.scrollHeight;
+    },
+  );
   return (
-    <ul class="ws-outbox" aria-label={t("workspace.app.outbox.label")}>
+    <ul ref={list} class="ws-outbox" aria-label={t("workspace.app.outbox.label")}>
       <For each={props.messages} keyed={(message) => message.id}>
         {(message) => (
           <li class="ws-outbox-message" data-state={message().state} data-online={props.online ? "" : undefined}>

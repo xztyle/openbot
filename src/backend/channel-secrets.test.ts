@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { ChannelMessage, ChannelTask } from "@openbot/contracts/ipc";
 import { registerSecretValue } from "@openbot/logging";
 import { afterEach, describe, expect, it } from "vitest";
-import { hideChannelSecrets } from "./channel-secrets";
+import { hideChannelSecrets, storedAgentText } from "./channel-secrets";
 import { ChannelStore } from "./channel-store";
 import { runCauseEffect } from "./effect-boundary";
 import { OpenBotDatabase } from "./openbot-database";
@@ -119,9 +119,12 @@ describe("channel secrets", () => {
       condensed: { original: `Long answer with ${GITHUB}` },
       agentNote: { to: ["agent-b"], summary: `use ${saved}` },
     });
-    store.update(store.get("channel-1"), { messages: [answer] });
+    store.update(store.get("channel-1"), {
+      messages: [{ ...answer, message: { ...answer.message, condensed: { original: `Long answer with ${GITHUB}` } } }],
+    });
 
     const stored = store.message("channel-1", "m-2");
+    expect(stored?.message.condensed?.original).toBe("Long answer with [hidden: GitHub token]");
     expect(stored?.message.text).toBe("The key is [hidden: saved secret].");
     expect(stored?.condensed?.original).toBe("Long answer with [hidden: GitHub token]");
     expect(stored?.agentNote?.summary).toBe("use [hidden: saved secret]");
@@ -141,6 +144,23 @@ describe("channel secrets", () => {
       'password = os.getenv("DB_PASSWORD")',
     );
     expect(hideChannelSecrets("The password is correct.", "person")).toBe("The password is correct.");
+  });
+
+  // Failure mode: the channel compared an agent's raw thread text with the row the store had hidden,
+  // so a reply that held a key was written again on each event and its result showed twice.
+  it("gives an agent's thread text as the store keeps it", async () => {
+    const { store } = await channelStore();
+    const thread = {
+      id: "m-4",
+      author: "assistant" as const,
+      text: `Key: ${GITHUB}`,
+      createdAt: "",
+      status: "completed" as const,
+    };
+    store.update(store.get("channel-1"), { messages: [message("m-4", thread.text, agent)] });
+    expect(storedAgentText(thread).text).toBe(store.message("channel-1", "m-4")?.message.text);
+    const plain = { ...thread, text: "No key here." };
+    expect(storedAgentText(plain)).toBe(plain);
   });
 
   it("leaves a message that the composer already hid as it is", () => {

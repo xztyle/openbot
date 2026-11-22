@@ -1,4 +1,4 @@
-import type { ChannelMessage, ChannelTask } from "@openbot/contracts/ipc";
+import type { ChannelMessage, ChannelTask, ConversationMessage } from "@openbot/contracts/ipc";
 import { scanForSecrets } from "@openbot/contracts/secret-hygiene";
 import { maskRegisteredSecrets } from "@openbot/logging";
 
@@ -29,21 +29,25 @@ export function writerOf(message: ChannelMessage): "person" | "agent" {
   return message.author.kind === "member" || message.externalAuthor ? "person" : "agent";
 }
 
+/** The text and the condensed original of one message without secrets. The same object when none. */
+function conversationWithoutSecrets(message: ConversationMessage, writer: "person" | "agent"): ConversationMessage {
+  const text = hideChannelSecrets(message.text, writer);
+  const original = message.condensed ? hideChannelSecrets(message.condensed.original, writer) : undefined;
+  if (text === message.text && original === message.condensed?.original) return message;
+  return { ...message, text, ...(message.condensed && original !== undefined ? { condensed: { original } } : {}) };
+}
+
 /** The message with its text, its condensed original and its line for the people without secrets. */
 export function channelMessageWithoutSecrets(message: ChannelMessage): ChannelMessage {
   const writer = writerOf(message);
-  const text = hideChannelSecrets(message.message.text, writer);
+  const inner = conversationWithoutSecrets(message.message, writer);
   const original = message.condensed ? hideChannelSecrets(message.condensed.original, writer) : undefined;
   const summary = message.agentNote ? hideChannelSecrets(message.agentNote.summary, writer) : undefined;
-  if (
-    text === message.message.text &&
-    original === message.condensed?.original &&
-    summary === message.agentNote?.summary
-  )
+  if (inner === message.message && original === message.condensed?.original && summary === message.agentNote?.summary)
     return message;
   return {
     ...message,
-    message: { ...message.message, text },
+    message: inner,
     ...(message.condensed && original !== undefined ? { condensed: { original } } : {}),
     ...(message.agentNote && summary !== undefined ? { agentNote: { ...message.agentNote, summary } } : {}),
   };
@@ -59,4 +63,12 @@ export function channelTaskWithoutSecrets(task: ChannelTask, writer: "person" | 
   return instruction === task.instruction && expectedResult === task.expectedResult
     ? task
     : { ...task, instruction, expectedResult };
+}
+
+/**
+ * An agent's thread message with its text as the channel stores it, for a caller that compares the
+ * two. The same object when nothing is hidden.
+ */
+export function storedAgentText(message: ConversationMessage): ConversationMessage {
+  return conversationWithoutSecrets(message, "agent");
 }

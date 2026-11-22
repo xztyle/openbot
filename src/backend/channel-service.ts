@@ -91,7 +91,7 @@ import { ChannelReadState } from "./channel-read-state";
 import { type ChannelGateOutcome, ChannelResponders, memberAnswerMode, usesAnswerModes } from "./channel-responders";
 import { ChannelSaved } from "./channel-saved";
 import { ChannelSearch } from "./channel-search";
-import { hideChannelSecrets } from "./channel-secrets";
+import { hideChannelSecrets, storedAgentText } from "./channel-secrets";
 import { type ChannelAssignment, type ChannelContext, type ChannelMessageChange, ChannelStore } from "./channel-store";
 import { type ChannelAgentWork, ChannelTyping } from "./channel-typing";
 import { type ChannelViewer, canSeeChannel } from "./channel-visibility";
@@ -3137,6 +3137,10 @@ export class ChannelService {
         !(message.attachments?.length && message.author !== "user")
       )
         continue;
+      // The store hides a key in what it writes, so the comparisons below read the text as stored.
+      // With the raw text, a reply that held a key never matched its row: it was written again on
+      // each event, and its result showed beside it as a second answer.
+      message = storedAgentText(message);
       const assignment =
         assignments.find((item) => item.turnId === message.turnId) ??
         assignments.find((item) => item.agentId === snapshot.agentId && activeAssignment(item));

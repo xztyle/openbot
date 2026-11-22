@@ -30,7 +30,7 @@ const SAVED = [
  * message to an agent fails as on a dead connection. `sent` lists every send the host took, so a test
  * sees a message that went twice.
  * A file the reader attaches uploads as a draft at once, so `scripts/workspace-composer-e2e.ts` can
- * send a message with files.
+ * send a message with files. `harnessUploadMs` makes each upload take that long, as a photo on a phone does.
  */
 declare global {
   interface Window {
@@ -40,6 +40,7 @@ declare global {
       phase(phase: AgentPhase): void;
       sent: { operationId: string; text: string }[];
     };
+    harnessUploadMs?: number;
   }
 }
 
@@ -95,15 +96,19 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
   return {
     ...web,
     send,
-    upload: async (file: File) => ({
-      id: crypto.randomUUID(),
-      name: file.name,
-      size: file.size,
-      kind: file.type.startsWith("image/") ? "image" : "file",
-      mimeType: file.type || "application/octet-stream",
-      previewKind: "none",
-      previewUrl: null,
-    }),
+    upload: async (file: File) => {
+      const wait = window.harnessUploadMs ?? 0;
+      if (wait) await new Promise((done) => setTimeout(done, wait));
+      return {
+        id: crypto.randomUUID(),
+        name: file.name,
+        size: file.size,
+        kind: file.type.startsWith("image/") ? "image" : "file",
+        mimeType: file.type || "application/octet-stream",
+        previewKind: "none",
+        previewUrl: null,
+      };
+    },
     discard: async () => {},
     connect: async (host) => {
       const wait = hold;

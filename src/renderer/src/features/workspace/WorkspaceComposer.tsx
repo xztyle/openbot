@@ -63,6 +63,28 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     target = key(),
   ) => ws.setDraftFiles(target, typeof next === "function" ? next(ws.draftFiles(target)) : next);
   const [sending, setSending] = createSignal(false);
+  /**
+   * The drafts with files on their way up, one entry per upload. Send waits for them, as in Slack:
+   * a message sent meanwhile would leave without the photo, which would then land in an empty box.
+   */
+  const [uploads, setUploads] = createSignal<readonly string[]>([]);
+  // The port reports progress only once files are chosen: a chooser left open, or one that Safari
+  // closes without a word, holds nothing up.
+  const uploading = () => uploads().includes(key()) && Boolean(ws.channels.port().importProgress?.());
+  async function upload(target: string, files: () => Promise<readonly DraftAttachment[]>) {
+    setUploads((current) => [...current, target]);
+    try {
+      addFiles(await files(), target);
+    } catch (cause) {
+      if (cause instanceof PartialAttachmentImportError) addFiles(cause.attachments, target);
+      setError(errorMessage(cause, t("workspace.app.composer.attachFailed")));
+    } finally {
+      setUploads((current) => {
+        const index = current.indexOf(target);
+        return index < 0 ? current : [...current.slice(0, index), ...current.slice(index + 1)];
+      });
+    }
+  }
   const [error, setError] = createSignal<string | null>(null);
   const [alsoSend, setAlsoSend] = createSignal(false);
   const [format, setFormat] = createSignal<{ id: number; format: ComposerTextFormat } | undefined>();
@@ -141,13 +163,9 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
   async function attach() {
     lastComposer = id;
     setError(null);
-    const target = key();
-    try {
-      addFiles(await ws.channels.port().agent.chooseAttachments({ filter: "all" }), target);
-    } catch (cause) {
-      if (cause instanceof PartialAttachmentImportError) addFiles(cause.attachments, target);
-      setError(errorMessage(cause, t("workspace.app.composer.attachFailed")));
-    }
+    // The chooser opens in this call, inside the tap: nothing is awaited before it.
+    const chosen = ws.channels.port().agent.chooseAttachments({ filter: "all" });
+    await upload(key(), () => chosen);
   }
 
   function removeFile(file: DraftAttachment) {
@@ -175,13 +193,7 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     const importer = ws.channels.port().importAttachments;
     if (!importer) return undefined;
     return (files: File[]) => {
-      const target = key();
-      void importer(files)
-        .then((imported) => addFiles(imported, target))
-        .catch((cause: unknown) => {
-          if (cause instanceof PartialAttachmentImportError) addFiles(cause.attachments, target);
-          setError(errorMessage(cause, t("workspace.app.composer.attachFailed")));
-        });
+      void upload(key(), () => importer(files));
       return undefined;
     };
   };
@@ -192,7 +204,9 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     return current ? Boolean(findMessage(current.messageId)?.message.attachments?.length) : false;
   };
   const canSend = () =>
-    !sending() && (value().trim().length > 0 || (editing() ? editedHasFiles() : attachments().length > 0));
+    !sending() &&
+    (editing() !== null || !uploading()) &&
+    (value().trim().length > 0 || (editing() ? editedHasFiles() : attachments().length > 0));
 
   /** The broadcast in the draft that needs a confirmation before it goes, or null. */
   function pendingBroadcast(): { kind: "channel" | "here"; count: number } | null {
@@ -343,6 +357,14 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
                   {message()}
                 </p>
               )}
+            </Show>
+            <Show when={!editing() && uploading()}>
+              <p class="ws-composer-upload" role="status">
+                {t("composer.upload.progress", {
+                  current: ws.channels.port().importProgress?.()?.current ?? 0,
+                  total: ws.channels.port().importProgress?.()?.total ?? 0,
+                })}
+              </p>
             </Show>
           </>
         }

@@ -2,7 +2,7 @@
 // (`src/renderer/stories/web-client-inbox-harness.tsx`), on an iPhone and on a computer: a message
 // that waits in the outbox keeps its files through Edit, two tabs that send while offline both
 // deliver, an edit in place hides a pasted password as the message box does, and an agent DM that
-// cannot send yet leaves its draft alone.
+// cannot send yet leaves its draft alone. Send waits for a file that is still uploading.
 //
 // `bun scripts/workspace-composer-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>]`
 // Writes report.json to .openbot-build/workspace-composer-e2e, or to --out.
@@ -63,6 +63,8 @@ declare global {
       phase(phase: "idle" | "starting" | "ready" | "restarting" | "blocked" | "stopped"): void;
       sent: { operationId: string; text: string }[];
     };
+    /** How long the harness takes for each upload. */
+    harnessUploadMs?: number;
   }
 }
 
@@ -169,6 +171,43 @@ async function checkOutboxEditKeepsFiles(page: Page, device: string, phone: bool
     const files = composer(page).locator(".ws-composer-file");
     assert.equal(await files.count(), 1, "The file of the message is gone.");
     assert.match(await files.first().innerText(), /plan\.txt/u);
+  });
+}
+
+/** A photo on its way up holds Send, so the message does not leave without it. */
+async function checkSendWaitsForUpload(page: Page, device: string, phone: boolean) {
+  await load(page, `${CHANNEL_ORIGIN()}${CHANNEL_PATH}`);
+  if (phone) await editor(page).tap();
+  else await editor(page).click();
+  await page.keyboard.type("mira la foto");
+  await page.evaluate(() => {
+    window.harnessUploadMs = 2_500;
+  });
+  const chooser = page.waitForEvent("filechooser", { timeout: 5_000 });
+  await press(page, phone, "Attach files");
+  await (await chooser).setFiles({ name: "foto.png", mimeType: "image/png", buffer: Buffer.from("png") });
+  await page.waitForTimeout(300);
+  await step(device, "while a file uploads, the box says so and Send waits", async () => {
+    await composer(page)
+      .getByRole("status")
+      .filter({ hasText: /Uploading 1 of 1/u })
+      .waitFor({ timeout: 2_000 });
+    assert.equal(await composer(page).getByRole("button", { name: "Send", exact: true }).isDisabled(), true);
+    // Typing goes on meanwhile.
+    if (phone) await editor(page).tap();
+    else await editor(page).click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" ya");
+    assert.equal((await editor(page).innerText()).trim(), "mira la foto ya");
+  });
+  await composer(page).locator(".ws-composer-file").first().waitFor({ timeout: 10_000 });
+  await step(device, "once the file is up, Send sends the text with the file", async () => {
+    await press(page, phone, "Send");
+    await page.locator(".ws-message").filter({ hasText: "mira la foto ya" }).first().waitFor({ timeout: 10_000 });
+    assert.equal(await composer(page).locator(".ws-composer-file").count(), 0, "The file stayed in the box.");
+  });
+  await page.evaluate(() => {
+    window.harnessUploadMs = 0;
   });
 }
 
@@ -294,6 +333,11 @@ try {
   {
     const context = await newDevice(browser, false);
     await checkOutboxEditKeepsFiles(await newPage(context), "desktop", false);
+    await context.close();
+  }
+  {
+    const context = await newDevice(browser, true);
+    await checkSendWaitsForUpload(await newPage(context), "iphone", true);
     await context.close();
   }
   {

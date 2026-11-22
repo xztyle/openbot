@@ -335,6 +335,12 @@
   font-size: var(--openbot-text-sm);
 }
 
+.ws-composer-upload {
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+}
+
 .ws-composer-editing .ws-composer-box {
   border-color: var(--openbot-warning);
 }

@@ -303,11 +303,15 @@ export function createWebServerSettings(options: {
     return result;
   }
 
-  /** The workspace settings of the connected host (`fork-host-v1`). The host answers only an owner or admin. */
+  /**
+   * The workspace settings of the connected host (`fork-host-v1`). The host answers only an owner or admin.
+   * Async, so a server that is not connected rejects the call: a sync throw in the section's load effect
+   * halted the whole client.
+   */
   const workspaceSettings: WorkspaceSettingsCalls = {
-    getWorkspaceSettings: () =>
+    getWorkspaceSettings: async () =>
       requireAdmin().admin.request("POST", WORKSPACE_ROUTES.settings, decodeWorkspaceSettings, {}),
-    setWorkspaceSettings: (settings) =>
+    setWorkspaceSettings: async (settings) =>
       requireAdmin().admin.request(
         "POST",
         WORKSPACE_ROUTES.settingsUpdate,
@@ -369,7 +373,7 @@ export function createWebServerSettings(options: {
         draft.mcpSignIns = mcpSignInRecord(states);
       });
     },
-    mcpSignInApp: (mcpServerId: string): Promise<McpSignInAppState> =>
+    mcpSignInApp: async (mcpServerId: string): Promise<McpSignInAppState> =>
       runTeamEffect(
         mcpSignInAppRequest(requireAdmin().admin.request, { mcpServerId }).pipe(
           Effect.mapError((error) => error.cause),
@@ -379,7 +383,7 @@ export function createWebServerSettings(options: {
       changeMcpSignInApp((admin) => saveMcpSignInAppRequest(admin.request, input)),
     removeMcpSignInApp: (mcpServerId: string) =>
       changeMcpSignInApp((admin) => removeMcpSignInAppRequest(admin.request, { mcpServerId })),
-    testMcpServer: (config: McpServerConfig): Promise<McpTestResult> =>
+    testMcpServer: async (config: McpServerConfig): Promise<McpTestResult> =>
       runTeamEffect(
         testMcpServerRequest(requireAdmin().admin.request, { config }).pipe(Effect.mapError((error) => error.cause)),
       ),

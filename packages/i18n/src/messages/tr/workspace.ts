@@ -355,6 +355,7 @@ export const messages = {
   "workspace.app.composer.attachFailed": "Dosyalar eklenemedi.",
   "workspace.app.outbox.label": "Henüz gönderilmedi",
   "workspace.app.outbox.waiting": "Bağlantı bekleniyor. Bağlantı gelince gönderilecek.",
+  "workspace.app.outbox.held": "Yukarıdaki mesaj gönderilene ya da silinene kadar bekliyor.",
   "workspace.app.outbox.sending": "Gönderiliyor…",
   "workspace.app.outbox.failed": "Gönderilmedi.",
   "workspace.app.outbox.retry": "Tekrar dene",

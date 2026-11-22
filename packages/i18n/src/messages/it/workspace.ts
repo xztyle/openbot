@@ -332,6 +332,7 @@ export const messages = {
   "workspace.app.composer.attachFailed": "Impossibile allegare i file.",
   "workspace.app.outbox.label": "Non ancora inviati",
   "workspace.app.outbox.waiting": "In attesa della connessione. Partirà quando torna.",
+  "workspace.app.outbox.held": "Aspetta che il messaggio sopra venga inviato o eliminato.",
   "workspace.app.outbox.sending": "Invio…",
   "workspace.app.outbox.failed": "Non inviato.",
   "workspace.app.outbox.retry": "Riprova",

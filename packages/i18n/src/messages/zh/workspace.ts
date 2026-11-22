@@ -347,6 +347,7 @@ export const messages = {
   "workspace.app.composer.attachFailed": "无法附加文件。",
   "workspace.app.outbox.label": "尚未发送",
   "workspace.app.outbox.waiting": "正在等待连接，连接恢复后发送。",
+  "workspace.app.outbox.held": "等待上面的消息发送或删除。",
   "workspace.app.outbox.sending": "正在发送…",
   "workspace.app.outbox.failed": "未发送。",
   "workspace.app.outbox.retry": "重试",

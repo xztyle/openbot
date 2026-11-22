@@ -351,6 +351,7 @@ export const messages = {
   "workspace.app.composer.attachFailed": "파일을 첨부하지 못했어요.",
   "workspace.app.outbox.label": "아직 보내지 않음",
   "workspace.app.outbox.waiting": "연결을 기다리고 있어요. 연결되면 보내요.",
+  "workspace.app.outbox.held": "위 메시지가 보내지거나 삭제될 때까지 기다려요.",
   "workspace.app.outbox.sending": "보내는 중…",
   "workspace.app.outbox.failed": "보내지 못했어요.",
   "workspace.app.outbox.retry": "다시 시도",

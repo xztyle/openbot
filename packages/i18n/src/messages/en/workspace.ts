@@ -417,6 +417,7 @@ export const messages = defineMessages("workspace", {
   "workspace.app.composer.attachFailed": "The files could not be attached.",
   "workspace.app.outbox.label": "Not sent yet",
   "workspace.app.outbox.waiting": "Waiting for the connection. It sends when it is back.",
+  "workspace.app.outbox.held": "Waits until the message above is sent or deleted.",
   "workspace.app.outbox.sending": "Sending…",
   "workspace.app.outbox.failed": "Not sent.",
   "workspace.app.outbox.retry": "Retry",

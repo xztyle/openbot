@@ -478,6 +478,11 @@ function OutboxList(props: {
 }) {
   const { t } = useText();
   let list: HTMLUListElement | undefined;
+  /** A refused message holds the ones after it in its conversation until Retry or Delete. */
+  const heldBehindFailure = (message: OutboxMessage) => {
+    const index = props.messages.indexOf(message);
+    return index > 0 && props.messages.slice(0, index).some((item) => item.state === "failed");
+  };
   // The newest message, the one just sent, shows at the end of a list that scrolls.
   createEffect(
     () => props.messages.length,
@@ -498,9 +503,11 @@ function OutboxList(props: {
               <span>
                 {message().state === "failed"
                   ? (message().error ?? t("workspace.app.outbox.failed"))
-                  : message().state === "sending" || props.online
-                    ? t("workspace.app.outbox.sending")
-                    : t("workspace.app.outbox.waiting")}
+                  : heldBehindFailure(message())
+                    ? t("workspace.app.outbox.held")
+                    : message().state === "sending" || props.online
+                      ? t("workspace.app.outbox.sending")
+                      : t("workspace.app.outbox.waiting")}
               </span>
               <Show when={message().state === "failed"}>
                 <Button variant="link" size="xs" onClick={() => props.onRetry(message())}>

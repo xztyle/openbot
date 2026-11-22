@@ -457,6 +457,7 @@ export const messages = {
   "workspace.app.composer.attachFailed": "Не удалось прикрепить файлы.",
   "workspace.app.outbox.label": "Ещё не отправлены",
   "workspace.app.outbox.waiting": "Ждёт подключения. Отправится, когда оно вернётся.",
+  "workspace.app.outbox.held": "Ждёт, пока сообщение выше не отправится или не будет удалено.",
   "workspace.app.outbox.sending": "Отправка…",
   "workspace.app.outbox.failed": "Не отправлено.",
   "workspace.app.outbox.retry": "Повторить",

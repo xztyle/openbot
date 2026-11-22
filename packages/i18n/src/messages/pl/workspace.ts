@@ -457,6 +457,7 @@ export const messages = {
   "workspace.app.composer.attachFailed": "Nie udało się załączyć plików.",
   "workspace.app.outbox.label": "Jeszcze niewysłane",
   "workspace.app.outbox.waiting": "Czeka na połączenie. Zostanie wysłana, gdy wróci.",
+  "workspace.app.outbox.held": "Czeka, aż wiadomość powyżej zostanie wysłana lub usunięta.",
   "workspace.app.outbox.sending": "Wysyłanie…",
   "workspace.app.outbox.failed": "Nie wysłano.",
   "workspace.app.outbox.retry": "Spróbuj ponownie",

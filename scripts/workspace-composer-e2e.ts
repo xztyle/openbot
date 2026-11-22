@@ -4,7 +4,8 @@
 // deliver, an edit in place hides a pasted password as the message box does, and an agent DM that
 // cannot send yet leaves its draft alone. Send waits for a file that is still uploading, and many
 // waiting messages leave the header and the box on a phone's screen. Deleting a message whose
-// edit is open on a phone ends the edit. A message the reader sends shows at the end of the list.
+// edit is open on a phone ends the edit. A message the reader sends shows at the end of the list. A
+// message behind a refused one says that it waits for it.
 //
 // `bun scripts/workspace-composer-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>]`
 // Writes report.json to .openbot-build/workspace-composer-e2e, or to --out.
@@ -67,6 +68,8 @@ declare global {
     };
     /** How long the harness takes for each upload. */
     harnessUploadMs?: number;
+    /** The texts the harness's host refuses to send. */
+    harnessRefusedTexts?: string[];
   }
 }
 
@@ -265,6 +268,39 @@ async function checkSendShowsMessage(page: Page, device: string, phone: boolean)
   });
 }
 
+/**
+ * A message the host refuses holds the next ones of its conversation: they say they wait for it,
+ * not "Sending…", until Retry sends them in order.
+ */
+async function checkHeldBehindRefused(page: Page, device: string) {
+  await load(page, `${CHANNEL_ORIGIN()}${CHANNEL_PATH}`);
+  await page.evaluate(() => {
+    window.harnessRefusedTexts = ["rechazado por el host"];
+  });
+  await editor(page).click();
+  await page.keyboard.type("rechazado por el host");
+  await page.keyboard.press("Enter");
+  await outbox(page).filter({ hasText: "The host refused this message." }).waitFor({ timeout: 5_000 });
+  await page.keyboard.type("el siguiente");
+  await page.keyboard.press("Enter");
+  await settle(page);
+  await step(device, "a message behind a refused one says it waits for it", async () => {
+    const next = outbox(page).filter({ hasText: "el siguiente" });
+    await next.waitFor({ timeout: 3_000 });
+    await page.waitForTimeout(1_000);
+    assert.match(await next.innerText(), /Waits until the message above is sent or deleted/u);
+  });
+  await page.evaluate(() => {
+    window.harnessRefusedTexts = [];
+  });
+  await outbox(page).first().getByRole("button", { name: "Retry" }).click();
+  await step(device, "Retry sends the refused message and the one behind it, in order", async () => {
+    await outbox(page).first().waitFor({ state: "detached", timeout: 10_000 });
+    const sent = await page.evaluate(() => window.harnessConnection?.sent.map((item) => item.text) ?? []);
+    assert.deepEqual(sent.slice(-2), ["rechazado por el host", "el siguiente"]);
+  });
+}
+
 /** Holds a finger on an element, as a long press on a phone. */
 async function longPress(page: Page, target: Locator) {
   await target.scrollIntoViewIfNeeded();
@@ -452,6 +488,11 @@ try {
   for (const phone of [true, false]) {
     const context = await newDevice(browser, phone);
     await checkSendShowsMessage(await newPage(context), phone ? "iphone" : "desktop", phone);
+    await context.close();
+  }
+  {
+    const context = await newDevice(browser, false);
+    await checkHeldBehindRefused(await newPage(context), "desktop");
     await context.close();
   }
   {

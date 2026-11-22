@@ -352,6 +352,7 @@ export const messages = {
   "workspace.app.composer.attachFailed": "ファイルを添付できませんでした。",
   "workspace.app.outbox.label": "未送信",
   "workspace.app.outbox.waiting": "接続を待っています。接続が戻ると送信されます。",
+  "workspace.app.outbox.held": "上のメッセージが送信または削除されるまで待っています。",
   "workspace.app.outbox.sending": "送信中…",
   "workspace.app.outbox.failed": "送信されませんでした。",
   "workspace.app.outbox.retry": "再試行",

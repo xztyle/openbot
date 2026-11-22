@@ -31,6 +31,7 @@ const SAVED = [
  * sees a message that went twice.
  * A file the reader attaches uploads as a draft at once, so `scripts/workspace-composer-e2e.ts` can
  * send a message with files. `harnessUploadMs` makes each upload take that long, as a photo on a phone does.
+ * The host refuses a send whose text is in `harnessRefusedTexts`, with the connection up.
  */
 declare global {
   interface Window {
@@ -41,6 +42,7 @@ declare global {
       sent: { operationId: string; text: string }[];
     };
     harnessUploadMs?: number;
+    harnessRefusedTexts?: string[];
   }
 }
 
@@ -81,6 +83,8 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     const channelCommand = agent.channelCommand.bind(agent);
     agent.channelCommand = async (command) => {
       if (down) throw new Error("The connection was lost.");
+      if (command.type === "send" && window.harnessRefusedTexts?.includes(command.text))
+        throw new Error("The host refused this message.");
       const result = await channelCommand(command);
       if (command.type === "send") sent.push({ operationId: command.operationId, text: command.text });
       return result;

@@ -357,6 +357,7 @@ export const messages = {
   "workspace.app.composer.attachFailed": "Não foi possível anexar os arquivos.",
   "workspace.app.outbox.label": "Ainda não enviadas",
   "workspace.app.outbox.waiting": "Aguardando a conexão. Será enviada quando ela voltar.",
+  "workspace.app.outbox.held": "Aguarda até a mensagem acima ser enviada ou apagada.",
   "workspace.app.outbox.sending": "Enviando…",
   "workspace.app.outbox.failed": "Não enviada.",
   "workspace.app.outbox.retry": "Tentar de novo",

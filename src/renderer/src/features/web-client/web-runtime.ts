@@ -66,6 +66,7 @@ import {
 import { guardedListDecoder, optionalHistoryExtent, requiredString } from "@openbot/contracts/ipc-decoding";
 import { isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import { AGENT_QUEUES_ROUTE } from "@openbot/contracts/team-protocol/agent-queues-v1";
 import {
   ATTACHMENT_PREVIEWS_CAPABILITY,
   attachmentPreviewRoute,
@@ -269,6 +270,8 @@ export interface WebWorkspaceRuntime {
   /** Sends which agent this member is writing to, or `null`. It does nothing while the host is offline. */
   setTyping(agentId: string | null, typing: boolean): void;
   queue(agentId: string): Promise<QueueSnapshot>;
+  /** Every queue the member can see, in one read (`agent-queues-v1`). A host without it answers 404. */
+  queues?(): Promise<QueueSnapshot[]>;
   editQueue(input: EditQueuedMessageInput): Promise<QueueSnapshot>;
   cancelQueued(input: CancelQueuedMessageInput): Promise<void>;
   steerQueued(input: SteerQueuedMessageInput): Promise<void>;
@@ -1147,6 +1150,7 @@ export function createWebWorkspaceRuntime(
     stop: (id, turnId) =>
       Effect.runPromise(interruptAgentTurn(teamApi, id, turnId).pipe(Effect.mapError((error) => error.cause))),
     queue: (id) => teamApi("GET", TEAM_API_ROUTES.agent.queue(id), (value) => queueSnapshot(id, value)),
+    queues: () => teamApi("GET", AGENT_QUEUES_ROUTE, queueSnapshots),
     async editQueue({ agentId, ...edit }) {
       const snapshot = await teamApi(
         "POST",
@@ -1491,6 +1495,12 @@ function toTeamInvite(invite: RemoteTeamInvite): TeamInviteSummary {
     permanent: invite.permanent,
     useCount: invite.useCount,
   };
+}
+
+function queueSnapshots(value: unknown): QueueSnapshot[] {
+  if (!isDynamicRecord(value) || !Array.isArray(value.queues) || !value.queues.every(isQueueSnapshot))
+    throw new Error(currentText().t("app.errorStatus.queueLoad"));
+  return value.queues;
 }
 
 function queueSnapshot(agentId: string, value: unknown): QueueSnapshot {

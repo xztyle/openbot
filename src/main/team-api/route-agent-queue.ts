@@ -54,11 +54,7 @@ export async function routeAgentQueue(
   { agents }: AgentQueueRouteDependencies,
 ): Promise<RouteOutcome> {
   const { method, request, member, json, empty } = context;
-  const snapshot = (value: QueueSnapshot) =>
-    json(
-      200,
-      context.protocol >= 7 && context.capabilities.has(TEAM_QUEUE_WINDOW_CAPABILITY) ? queueWindow(value) : value,
-    );
+  const snapshot = (value: QueueSnapshot) => json(200, queueForClient(context, value));
 
   if (method === "POST" && action === "queue/edit") {
     if (context.protocol < 3 || !context.capabilities.has(TEAM_QUEUE_EDIT_CAPABILITY))
@@ -162,6 +158,14 @@ const ACTIVE_STATUSES = new Set<QueueDelivery["status"]>(["queued", "starting", 
  * a turn of any agent, and a reconnect reads every agent's queue at once: with full texts a busy
  * agent's window was over 1 MB, and those bursts overflowed the connection and lost its events.
  */
+/** A queue as this client reads it: the window of `queue-window` when it was negotiated. */
+export function queueForClient(
+  context: Pick<TeamApiRequestContext, "protocol" | "capabilities">,
+  value: QueueSnapshot,
+): QueueSnapshot {
+  return context.protocol >= 7 && context.capabilities.has(TEAM_QUEUE_WINDOW_CAPABILITY) ? queueWindow(value) : value;
+}
+
 function queueWindow(snapshot: QueueSnapshot): QueueSnapshot {
   const newestFirst = snapshot.deliveries
     .map((delivery, index) => ({ delivery, index }))

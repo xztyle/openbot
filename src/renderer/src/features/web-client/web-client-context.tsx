@@ -28,6 +28,7 @@ import type {
 } from "@openbot/contracts/ipc";
 import { canAdministerServer } from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import { AGENT_QUEUES_CAPABILITY } from "@openbot/contracts/team-protocol/agent-queues-v1";
 import { AGENT_HIDDEN_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import { FOCUS_USE_CAPABILITY } from "@openbot/contracts/team-protocol/focus-use-v1";
 import { cleanAgentMessageText } from "@openbot/team-client/agent-message-text";
@@ -1238,7 +1239,7 @@ export function createWebWorkspace(
         agents.map((agent) => agent.id),
       );
       preferences.reconcileActiveServerPins(agents.map((agent) => agent.id));
-      loadQueues(agents.map((agent) => agent.id));
+      loadAllQueues(agents.map((agent) => agent.id));
       loadReads();
       void runtime
         .currentMemberId?.()
@@ -1560,6 +1561,38 @@ export function createWebWorkspace(
    * Reads the queues of many agents a few at a time. A host with 90 agents got 90 requests at once on
    * each connect, and the read of the open chat waited behind them.
    */
+  /**
+   * Reads every agent's queue in one request (`agent-queues-v1`), as a connect and a resync need them.
+   * A host without the route, or a failed read, reads each queue as before. A queue that changed while
+   * the answer travelled keeps the newer state.
+   */
+  function loadAllQueues(ids: readonly string[]): void {
+    const read = runtime.queues;
+    if (!read || !state.capabilities.includes(AGENT_QUEUES_CAPABILITY) || ids.length < 2) {
+      loadQueues(ids);
+      return;
+    }
+    const current = generation;
+    const revisions = new Map(ids.map((id) => [id, queueRevisions.get(id) ?? 0]));
+    read().then(
+      (queues) => {
+        if (disposed || current !== generation) return;
+        const fresh = queues.filter(
+          (queue) =>
+            revisions.has(queue.agentId) && (queueRevisions.get(queue.agentId) ?? 0) === revisions.get(queue.agentId),
+        );
+        setState((draft) => {
+          for (const queue of fresh) draft.queues[queue.agentId] = queue;
+        });
+        for (const queue of fresh) staleQueues.delete(queue.agentId);
+        const missing = ids.filter((id) => !queues.some((queue) => queue.agentId === id));
+        if (missing.length) loadQueues(missing);
+      },
+      () => {
+        if (!disposed && current === generation) loadQueues(ids);
+      },
+    );
+  }
   function loadQueues(ids: readonly string[]): void {
     const waiting = [...ids];
     const current = generation;
@@ -1708,7 +1741,7 @@ export function createWebWorkspace(
       const agentIds = agents.map((agent) => agent.id);
       void loadPanels(state.capabilities, agentIds);
       staleQueues.clear();
-      loadQueues(agentIds);
+      loadAllQueues(agentIds);
       loadReads();
       await refresh();
     } catch {

@@ -16,6 +16,7 @@ import { AGENT_MAILBOXES_CODECS } from "./agent-mailboxes-v1";
 import { AGENT_MEMORIES_CODECS } from "./agent-memories-v1";
 import { AGENT_MEMORY_LIMIT_CODECS } from "./agent-memory-limit-v1";
 import { AGENT_PUBLISH_CODECS } from "./agent-publish-v1";
+import { AGENT_QUEUES_CODECS } from "./agent-queues-v1";
 import { AGENT_SESSION_SETTINGS_CODECS } from "./agent-session-settings-v1";
 import { AGENT_TASK_LIMIT_CODECS } from "./agent-task-limit-v1";
 import { AGENT_TASKS_CODECS } from "./agent-tasks-v1";
@@ -192,6 +193,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...STORAGE_HYGIENE_CODECS,
   ...TRUST_CONTROL_CODECS,
   ...GUARDRAILS_CODECS,
+  ...AGENT_QUEUES_CODECS,
 ]);
 
 export function optionalRouteCodec(path: string): OptionalRouteCodec | undefined {

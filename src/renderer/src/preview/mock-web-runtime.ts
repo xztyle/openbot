@@ -96,6 +96,7 @@ export function mockWebRuntimeFor(mock: MockOpenBotControls, events: WebRuntimeE
     stop: (agentId, turnId) => agent.interrupt({ agentId, turnId }),
     setTyping: () => {},
     queue: (agentId) => agent.listQueue(agentId),
+    queues: async () => Promise.all((await agent.listAgents()).map((summary) => agent.listQueue(summary.id))),
     editQueue: (input) => agent.editQueuedMessage(input),
     cancelQueued: (input) => agent.cancelQueuedMessage(input),
     steerQueued: (input) => agent.steerQueuedMessage(input),

@@ -25,6 +25,7 @@ import { isAvatarMimeType } from "@openbot/contracts/avatar-images";
 import { AVATAR_IMAGE_LIMITS, INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { type CreateAgentInput, type DuplicateAgentResult, WORKFLOWS_USAGE_ID } from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import { AGENT_QUEUES_CAPABILITY, AGENT_QUEUES_ROUTE } from "@openbot/contracts/team-protocol/agent-queues-v1";
 import { V5_AGENT_MODEL } from "@openbot/contracts/team-protocol/v5-adapter";
 import { V6_AGENT_MODEL } from "@openbot/contracts/team-protocol/v6-adapter";
 import { WORKFLOWS_CAPABILITY } from "@openbot/contracts/team-protocol/workflows-v1";
@@ -55,7 +56,7 @@ import {
 } from "./request-helpers";
 import { routeAgentConversation } from "./route-agent-conversation";
 import { routeAgentMemories } from "./route-agent-memories";
-import { routeAgentQueue } from "./route-agent-queue";
+import { queueForClient, routeAgentQueue } from "./route-agent-queue";
 import { routeAgentRoutines } from "./route-agent-routines";
 
 export interface AgentRouteDependencies {
@@ -171,6 +172,16 @@ export async function routeAgents(
         ),
       ),
     );
+  }
+  // agent-queues-v1: every queue the member can see, in one answer, before the parametric regex below.
+  if (method === "GET" && url.pathname === AGENT_QUEUES_ROUTE) {
+    if (!capabilities.has(AGENT_QUEUES_CAPABILITY)) throw new HttpError(404, sourceText("error.team.agentNotFound"));
+    const queues = agents
+      .listAgents()
+      .filter((agent) => !hidden.has(agent.id) && context.agentLevel(agent.id) !== "none")
+      .slice(0, 1_000)
+      .map((agent) => queueForClient(context, agents.listQueue(agent.id)));
+    return json(200, { queues });
   }
   if (method === "GET" && url.pathname === TEAM_API_ROUTES.agents.status) {
     return json(200, agents.getStatus());

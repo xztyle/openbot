@@ -9,3 +9,5 @@
   two minutes.
 - When a deploy restarts the server, it tells phones and browsers first, and they ask again every
   few seconds: back about 2 to 3 seconds after the server.
+- A reconnect reads every agent's queue in one request instead of one request per agent (43 with
+  43 agents), so devices coming back after a restart no longer flood the server.

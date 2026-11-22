@@ -524,6 +524,9 @@ async function desktop(browser: Browser, origin: string) {
       nodesBefore,
       nodesAfter,
     };
+    // One read of all queues (agent-queues-v1), not one for each of the 43 agents.
+    const queueReads = ((reconnectCalls.queue ?? 0) + (reconnectCalls.queues ?? 0)) / cycles;
+    check("a reconnect reads the queues with at most 2 requests", queueReads <= 2, `${queueReads} per reconnect`);
     check(
       "reconnects add no window or document listeners",
       listenersAfter.window <= listenersBefore.window && listenersAfter.document <= listenersBefore.document,

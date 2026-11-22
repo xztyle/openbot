@@ -76,6 +76,7 @@
     "./team-protocol/trust-control-v1": "./src/team-protocol/trust-control-v1.ts",
     "./guardrails": "./src/guardrails.ts",
     "./team-protocol/guardrails-v1": "./src/team-protocol/guardrails-v1.ts",
+    "./team-protocol/agent-queues-v1": "./src/team-protocol/agent-queues-v1.ts",
     "./workspace-links": "./src/workspace-links.ts",
     "./team-protocol": "./src/team-protocol/index.ts",
     "./team-protocol/queue-edit-v1": "./src/team-protocol/queue-edit-v1.ts",

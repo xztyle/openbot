@@ -284,6 +284,7 @@ import { automationRunCommand } from "./automation-command";
 import { toChannelOperationError } from "./channel-effects";
 import type { ChannelGateGeneration } from "./channel-gate";
 import { ChannelRoutineScheduler } from "./channel-routine-scheduler";
+import { hideChannelSecrets } from "./channel-secrets";
 import { ChannelService } from "./channel-service";
 import type { BundledProviderExecutables } from "./cli";
 import type { ConversationMarkerExclusions } from "./conversation-read-store";
@@ -6274,7 +6275,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   readonly sendMessage = Effect.fn("AgentService.sendMessage")(function* (
     this: AgentService,
-    input: SendMessageInput,
+    sent: SendMessageInput,
     sender?: ConversationMessageSender,
     timezone?: string,
     /** Sends the text as a note from OpenBot itself, not the person: the chat shows a marker. */
@@ -6284,6 +6285,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   ): Effect.fn.Return<QueuedMessageReceipt, AgentLifecycleFailed> {
     // A notice has no person behind it.
     const person = notice ? undefined : sender;
+    // The message boxes hide a pasted key before they send; a task reply, a routine flow, the phone
+    // app and an older client do not. The thread stores what this passes on, and the agent reads it.
+    const input = notice ? sent : { ...sent, text: hideChannelSecrets(sent.text, "person") };
     if (!input.clientMessageId)
       return yield* this.#sendUserMessage(input, person, timezone, undefined, undefined, notice, fyi);
     const idempotencyKey = `user-send:${createHash("sha256")

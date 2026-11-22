@@ -1,5 +1,6 @@
 import { chatVisualReply } from "@openbot/contracts/chat-visual";
 import type { ConversationMessageSender, MessageReaction } from "@openbot/contracts/ipc";
+import { markdownPlainText } from "@openbot/contracts/markdown-preview-text";
 import type { ConversationUiBlock } from "@openbot/contracts/ui-blocks";
 import {
   ArrowUp,
@@ -48,7 +49,18 @@ import type {
   WorkspaceReaction,
 } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
-import { createMemo, createSignal, createStore, For, Loading, lazy, onCleanup, Show, untrack } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  createStore,
+  For,
+  Loading,
+  lazy,
+  onCleanup,
+  Show,
+  untrack,
+} from "solid-js";
 import { useShowAgentSteps } from "../../agent-steps-preference";
 import { planItems, planTitle } from "../../app-message-projection";
 import { currentDevicePlatform, deviceSendShortcut } from "../../send-shortcut-preference";
@@ -321,6 +333,48 @@ export function ConversationTimeline() {
   };
   const CompactionMarker = () => (
     <Show when={compaction()}>{(state) => <ContextCompactionMarker compaction={state()} />}</Show>
+  );
+
+  /*
+   * The agent's answers, for a screen reader: the transcript draws only the rows around the view and
+   * an answer streams in, so it is not a live region. Each answer is read once, when it is complete;
+   * the messages at open and those of another agent's chat are not.
+   */
+  const [arrival, setArrival] = createSignal("");
+  let heard: { agentId: string | undefined; ids: Set<string>; since: number } | null = null;
+  createEffect(
+    () => ({
+      agentId: props.agent?.id,
+      // Read each message's state here: a streamed answer changes in place when it completes.
+      answers: timelineMessages().filter(
+        (message) =>
+          message.author === "agent" &&
+          (message.kind ?? "text") === "text" &&
+          !message.streaming &&
+          message.body.trim(),
+      ),
+    }),
+    ({ agentId, answers }) => {
+      if (channel) return;
+      if (!heard || heard.agentId !== agentId) {
+        heard = { agentId, ids: new Set(answers.map((message) => message.id)), since: Date.now() - 5_000 };
+        setArrival("");
+        return;
+      }
+      const seen = heard.ids;
+      const fresh = answers.filter((message) => !seen.has(message.id));
+      for (const message of fresh) seen.add(message.id);
+      const since = heard.since;
+      const name = props.agent?.name ?? t("chat.activity.agentFallback");
+      const lines = fresh
+        .filter((message) => !message.createdAt || Date.parse(message.createdAt) >= since)
+        .map((message) => {
+          const plain = markdownPlainText(message.body).replace(/\s+/gu, " ").trim();
+          const text = plain.length > 300 ? `${plain.slice(0, 299)}…` : plain;
+          return t("workspace.app.channel.announce", { name, text });
+        });
+      if (lines.length) setArrival(lines.join("\n"));
+    },
   );
 
   const runtime = conversationRuntime(props);
@@ -694,6 +748,9 @@ export function ConversationTimeline() {
   };
   return (
     <>
+      <span class="sr-only" aria-live="polite">
+        {arrival()}
+      </span>
       <span class="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {keyedPrompt()
           ? t("prompt.inputRequiredAnnouncement", { question: keyedPrompt()?.prompt.questions[0]?.question ?? "" })

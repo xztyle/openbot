@@ -682,4 +682,5 @@ export const messages = {
   "workspace.mailboxes.save": "Speichern",
   "workspace.mailboxes.saved": "{address} gespeichert",
   "workspace.mailboxes.failed": "Die Änderung wurde nicht gespeichert.",
+  "workspace.app.channel.announce": "Neue Nachricht von {name}: {text}",
 } as const satisfies PartialTranslation<typeof source>;

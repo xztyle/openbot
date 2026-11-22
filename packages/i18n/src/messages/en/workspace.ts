@@ -1229,4 +1229,5 @@ export const messages = defineMessages("workspace", {
   "workspace.mailboxes.save": "Save",
   "workspace.mailboxes.saved": "{address} saved",
   "workspace.mailboxes.failed": "The change was not saved.",
+  "workspace.app.channel.announce": "New message from {name}: {text}",
 });

@@ -694,4 +694,5 @@ export const messages = {
   "workspace.mailboxes.save": "Kaydet",
   "workspace.mailboxes.saved": "{address} kaydedildi",
   "workspace.mailboxes.failed": "Değişiklik kaydedilmedi.",
+  "workspace.app.channel.announce": "{name} adlı kişiden yeni mesaj: {text}",
 } as const satisfies PartialTranslation<typeof source>;

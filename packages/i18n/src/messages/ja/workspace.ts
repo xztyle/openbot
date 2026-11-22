@@ -689,4 +689,5 @@ export const messages = {
   "workspace.mailboxes.save": "保存",
   "workspace.mailboxes.saved": "{address} を保存しました",
   "workspace.mailboxes.failed": "変更は保存されませんでした。",
+  "workspace.app.channel.announce": "{name} から新しいメッセージ: {text}",
 } as const satisfies PartialTranslation<typeof source>;

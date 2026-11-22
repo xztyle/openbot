@@ -671,4 +671,5 @@ export const messages = {
   "workspace.mailboxes.save": "保存",
   "workspace.mailboxes.saved": "已保存 {address}",
   "workspace.mailboxes.failed": "更改未保存。",
+  "workspace.app.channel.announce": "来自 {name} 的新消息：{text}",
 } as const satisfies PartialTranslation<typeof source>;

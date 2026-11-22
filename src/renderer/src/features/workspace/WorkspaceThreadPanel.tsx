@@ -11,6 +11,7 @@ import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
 import { WorkspaceComposer } from "./WorkspaceComposer";
 import { WorkspaceMessage } from "./WorkspaceMessage";
+import { createNewMessageAnnouncer } from "./WorkspaceMessageList";
 import { createAgentWork } from "./workspace-agent-work";
 import { useWorkspace } from "./workspace-context";
 import { debugMode } from "./workspace-debug";
@@ -90,6 +91,7 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
   });
   const root = () => rows().find((row) => row.entry.id === props.rootId && !row.pending);
   const replies = () => rows().filter((row) => row !== root());
+  const announcement = createNewMessageAnnouncer(replies);
   /** A row of folded progress lines counts each line. */
   const replyCount = () =>
     replies()
@@ -259,17 +261,22 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
           </Show>
         }
         replies={
-          <For each={replies()} keyed={(row) => row.key}>
-            {(row) => (
-              <WorkspaceMessage
-                row={row()}
-                channelId={props.channelId}
-                channelName={name()}
-                highlighted={focusId() === row().entry.id}
-                inThread
-              />
-            )}
-          </For>
+          <>
+            <p class="sr-only" aria-live="polite">
+              {announcement()}
+            </p>
+            <For each={replies()} keyed={(row) => row.key}>
+              {(row) => (
+                <WorkspaceMessage
+                  row={row()}
+                  channelId={props.channelId}
+                  channelName={name()}
+                  highlighted={focusId() === row().entry.id}
+                  inThread
+                />
+              )}
+            </For>
+          </>
         }
         typing={<TypingIndicator humans={work.humans()} agents={work.agents()} group={!debugMode()} />}
         composer={

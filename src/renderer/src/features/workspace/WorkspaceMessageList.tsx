@@ -11,9 +11,11 @@ import {
   agentNotes,
   foldProgressRows,
   keepUnchangedRows,
+  messageAuthor,
   messageRows,
   peopleNames,
   rowMessages,
+  previewText,
   type WorkspaceMessageRowModel,
 } from "./workspace-model";
 import { savedScrollPlace, saveScrollPlace } from "./workspace-scroll-places";
@@ -47,6 +49,43 @@ export interface WorkspaceMessageListProps {
   onAtEnd?: (atEnd: boolean) => void;
   /** Marks the conversation read: the unread banner's button. */
   onMarkRead?: () => void;
+}
+
+/**
+ * New messages of others, for a screen reader: a transcript draws only the rows around the view and
+ * an agent's answer streams in, so the list itself is not a live region. Each message is read once,
+ * when it is complete; the reader's own, the older pages and the rows at open are not. The text goes
+ * in a polite live region that stays in the page.
+ */
+export function createNewMessageAnnouncer(rows: () => readonly WorkspaceMessageRowModel[]): () => string {
+  const { t } = useText();
+  const ws = useWorkspace();
+  const [announcement, setAnnouncement] = createSignal("");
+  const openedAt = Date.now();
+  let announced: Set<string> | null = null;
+  createEffect(rows, (current) => {
+    const done = current.filter((row) => !row.pending && row.entry.message.status !== "streaming");
+    if (!announced) {
+      if (current.length) announced = new Set(done.map((row) => row.entry.id));
+      return;
+    }
+    const seen = announced;
+    const fresh = done.filter((row) => !seen.has(row.entry.id));
+    for (const row of fresh) seen.add(row.entry.id);
+    const lines = fresh
+      .filter(
+        (row) =>
+          !row.entry.deletedAt &&
+          Date.parse(row.entry.message.createdAt) >= openedAt - 5_000 &&
+          !(row.entry.author.kind === "member" && !row.entry.externalAuthor && ws.env.isReader(row.entry.author.id)),
+      )
+      .map((row) => {
+        const text = row.note?.summary ?? previewText(row.entry.message.text, 300);
+        return t("workspace.app.channel.announce", { name: messageAuthor(ws.directory(), row.entry).name, text });
+      });
+    if (lines.length) setAnnouncement(lines.join("\n"));
+  });
+  return announcement;
 }
 
 /**
@@ -142,6 +181,8 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
   });
   /** The "new" divider is above the screen: the banner offers to jump back to it. */
   const [unreadAbove, setUnreadAbove] = createSignal(false);
+
+  const announcement = createNewMessageAnnouncer(rows);
 
   async function loadOlder() {
     if (loadingOlder() || !props.hasOlder) return;
@@ -319,6 +360,9 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
 
   return (
     <div class="ws-message-list">
+      <p class="sr-only" aria-live="polite">
+        {announcement()}
+      </p>
       <div
         ref={(element) => {
           scroller = element;

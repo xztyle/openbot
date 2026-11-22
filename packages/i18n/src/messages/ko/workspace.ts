@@ -684,4 +684,5 @@ export const messages = {
   "workspace.mailboxes.save": "저장",
   "workspace.mailboxes.saved": "{address} 저장됨",
   "workspace.mailboxes.failed": "변경 사항이 저장되지 않았습니다.",
+  "workspace.app.channel.announce": "{name}님의 새 메시지: {text}",
 } as const satisfies PartialTranslation<typeof source>;

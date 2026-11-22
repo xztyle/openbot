@@ -51,6 +51,8 @@ const TURN_START_GRACE_MS = 5 * 60_000;
 export interface DrainHooks {
   emitError(code: string, error: unknown, agentId?: string): void;
   isStopping(): boolean;
+  /** A deploy waits for the running turns to end before it restarts the server: no new turn starts. */
+  isDeployDraining?(): boolean;
   /**
    * Whether the catalogue still serves this model. A removed endpoint's models stay in the running
    * OpenCode process until it restarts, and the restart waits for a busy agent, so this is what
@@ -309,6 +311,7 @@ export class DrainScheduler {
   /** The first clause of `mayDrain` that holds this lane, or null when none does. */
   #heldBy(lane: Lane): string | null {
     const { agentId, taskId } = lane;
+    if (this.#hooks.isDeployDraining?.()) return "deploy-drain";
     if (this.#settingsHolds.has(agentId)) return "session-settings";
     if (this.#laneTurnActive(lane)) return "active-turn";
     if (this.#providerTurnHolds.has(laneKey(lane))) return "provider-turn";

@@ -540,6 +540,24 @@ other earlier keys do not change.
 | `running_turns`, `longest_turn_s`, `longest_turn_idle_s`, `silent_turns` | The running turns, the age of the oldest, and the longest time that a turn got nothing from its provider. OpenBot writes one warning to the log for each turn that is silent for 30 minutes. It never stops a turn. Set `OPENBOT_SILENT_TURN_MINUTES` (1 to 1440) to change the time. |
 | `analytics` | `on` or `off`. See [Product analytics](#product-analytics). |
 
+**Restart between turns.** Before a deploy restarts the container, let the running turns end:
+
+```sh
+docker exec openbot curl -s --unix-socket /run/openbot/control.sock -X POST \
+  -d timeout=600 http://openbot/v1/drain
+```
+
+`POST /v1/drain` holds every queue, so no new turn starts, and answers when no turn runs, or after
+`timeout` seconds (default 600, at most 1800). It answers `drained=yes`, or `drained=no` with the
+turns that still run. Messages still queue during the hold, and the new container starts them. A
+deploy that does not restart ends the hold with `POST /v1/drain/cancel`; else it ends by itself five
+minutes after the wait.
+
+After a start, each agent whose turn a restart cut off continues by itself, with a short note from
+Atelier, once the agents are ready. It happens once for each cut-off delivery, and not for an agent
+that got newer work. `POST /v1/resume-interrupted` runs the same resume for the deliveries that a
+deploy recorded (`delivery=<id>`), or as a dry run (`dry_run=1`).
+
 **Logs.** OpenBot writes its log to the output of the container: `docker logs openbot`. Docker keeps
 it without a limit by default. Limit it in the Compose file (`docker/compose.yaml` does this):
 

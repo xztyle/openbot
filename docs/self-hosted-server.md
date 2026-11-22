@@ -267,7 +267,8 @@ The `openbot` command talks to main over HTTP on a Unix socket, with form bodies
 text answers, so it needs only `curl`. The routes are `GET /v1/status`, `GET /v1/health`,
 `POST /v1/login/start`, `POST /v1/login/verify`, `POST /v1/login/claim`, `POST /v1/name`,
 `POST /v1/mobile-connect`, `POST /v1/logout`, `POST /v1/backup`, `GET /v1/diagnostics`,
-`POST /v1/analytics` and `GET /v1/audit?limit=N`. The last one answers with the newest rows of the
+`POST /v1/analytics`, `POST /v1/drain`, `POST /v1/drain/cancel`, `POST /v1/resume-interrupted`
+and `GET /v1/audit?limit=N` (see [restart between turns](docker.md#health-logs-and-diagnostics)). The last one answers with the newest rows of the
 security audit file, as `row<N>=<JSON>` lines. `openbot audit [count]` shows them. A row has names
 and never a value. The Docker image and the status keys are in
 [Docker](docker.md#health-logs-and-diagnostics).

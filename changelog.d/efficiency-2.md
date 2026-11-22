@@ -1,3 +1,9 @@
+### Added
+
+- A server deploy can wait for the running agent turns to end before it restarts:
+  `POST /v1/drain` on the control socket holds new turns and answers when none runs, or after a
+  timeout. See [Docker](docs/docker.md#health-logs-and-diagnostics).
+
 ### Changed
 
 - Claude agents compact their chats at 250,000 tokens by default, instead of Claude Code's own size
@@ -18,3 +24,5 @@
   guessed most often, and its errors show a complete call. About one call in seven failed before.
 - A server with 10 to 40 GiB of memory runs at most 12 turns at the same time, not 16, and keeps
   at most 12 agent browser tabs loaded, not 24. A 24 GiB server ran out of memory with 13 turns.
+- After a restart, each agent whose turn the restart cut off continues by itself once the server is
+  ready. Before, an operator had to send the resume.

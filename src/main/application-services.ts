@@ -401,6 +401,8 @@ const AGENT_MEMORY_LIMIT_PREFERENCE_FILE = "openbot-agent-memory-limit-v1.json";
 const AGENT_CREATION_LIMIT_PREFERENCE_FILE = "openbot-agent-creation-limit-v1.json";
 const SERVER_TIMEZONE_PREFERENCE_FILE = "openbot-server-timezone-v1.json";
 const HOST_TURN_LIMITS_PREFERENCE_FILE = "openbot-host-turn-limits-v1.json";
+/** How often a server start checks whether its agents are ready to resume the turns a restart cut off. */
+const RESTART_RESUME_CHECK_MS = 10_000;
 const PROMPT_CACHE_TTL_PREFERENCE_FILE = "openbot-prompt-cache-ttl-v1.json";
 const CLAUDE_CONTEXT_PREFERENCE_FILE = "openbot-claude-context-v1.json";
 const WORKSPACE_SETTINGS_FILE = "openbot-workspace-v1.json";
@@ -3399,6 +3401,36 @@ export async function createApplicationServices({
     : undefined;
   if (serverDebugRoutes)
     teardown.push(TEARDOWN_ORDER.serverMode, "the stall recorder", () => serverDebugRoutes.close());
+  const agentOperations = serverModeEnvironment
+    ? createServerAgentOperations({
+        restartInterrupted: () => service.restartInterruptedDeliveryIds(),
+        database: () => store.database.connection,
+        agentIds: () => service.listAgents().map((agent) => agent.id),
+        // As the owner types it in the app on this computer: the same sender, queue and steer rules.
+        // A notice goes with no sender: it is OpenBot's own note, and the chat shows a marker.
+        send: (input, notice) =>
+          service
+            .sendMessage(input, notice ? undefined : host.conversationSender(), undefined, notice)
+            .pipe(Effect.mapError((error) => ({ cause: error }))),
+        markerFile: join(app.getPath("userData"), "openbot-restart-resumes-v1.json"),
+        log: (message) => logger.info(message),
+        drain: (timeoutMs) => Effect.runPromise(service.drainForDeploy(timeoutMs)),
+        endDrain: () => service.endDeployDrain(),
+      })
+    : undefined;
+  // The turns that this start's recovery cut off continue by themselves once the agents are ready,
+  // with no note from an operator. The check runs until the first initialization succeeds.
+  if (agentOperations) {
+    const resumeCheck = setInterval(() => {
+      if (!agentInitialization.succeeded) return;
+      clearInterval(resumeCheck);
+      void agentOperations
+        .resumeAfterRestart()
+        .catch((error) => logger.warn("The restart resume did not run.", toLogValue(error)));
+    }, RESTART_RESUME_CHECK_MS);
+    resumeCheck.unref();
+    teardown.push(TEARDOWN_ORDER.serverMode, "the restart resume check", () => clearInterval(resumeCheck));
+  }
   const serverMode = serverModeEnvironment
     ? new ServerMode({
         environment: serverModeEnvironment,
@@ -3414,19 +3446,7 @@ export async function createApplicationServices({
         },
         onError: (message, error) => logger.warn(message, toLogValue(error)),
         log: (message) => logger.info(message),
-        agentOperations: createServerAgentOperations({
-          restartInterrupted: () => service.restartInterruptedDeliveryIds(),
-          database: () => store.database.connection,
-          agentIds: () => service.listAgents().map((agent) => agent.id),
-          // As the owner types it in the app on this computer: the same sender, queue and steer rules.
-          // A notice goes with no sender: it is OpenBot's own note, and the chat shows a marker.
-          send: (input, notice) =>
-            service
-              .sendMessage(input, notice ? undefined : host.conversationSender(), undefined, notice)
-              .pipe(Effect.mapError((error) => ({ cause: error }))),
-          markerFile: join(app.getPath("userData"), "openbot-restart-resumes-v1.json"),
-          log: (message) => logger.info(message),
-        }),
+        agentOperations,
         debug: serverDebugRoutes,
         spaces: {
           spaces: service.spaces,

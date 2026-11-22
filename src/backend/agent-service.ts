@@ -493,6 +493,8 @@ export interface AgentServiceOptions {
 
 /** How long a user send's `clientMessageId` answers a retry. A retry follows a lost reply, not a day. */
 const USER_SEND_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** How long a deploy hold outlives its wait, for a deploy that stopped before it restarted the server. */
+const DEPLOY_DRAIN_HOLD_GRACE_MS = 5 * 60_000;
 /** The `send_message` recipient limit, so one message can reach every section-mate the prompt names. */
 const MAX_SECTION_TEAMMATES = 32;
 
@@ -610,6 +612,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #poolReading = new Set<AgentProvider>();
   #initialized = false;
   #stopping = false;
+  /** Until when a deploy holds new turns, in epoch milliseconds, or null. See `drainForDeploy`. */
+  #deployDrainUntil: number | null = null;
+  #deployDrainTimer: NodeJS.Timeout | null = null;
 
   constructor(options: AgentServiceOptions) {
     super();
@@ -1563,6 +1568,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
         redactMcp: (text) => this.#mcp.redact(text),
         isStopping: () => this.#stopping,
+        isDeployDraining: () => this.#deployDrainUntil !== null && Date.now() < this.#deployDrainUntil,
         servesModel: (model) => this.#endpoints.serves(model),
         requeueChannelDelivery: (deliveryId, continueWork) => this.#requeueChannelDelivery(deliveryId, continueWork),
         mayFailOver: (agentId) => this.#usageLimitBackup(agentId) !== undefined || this.#poolBackup(agentId),
@@ -2589,6 +2595,40 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
    */
   earliestRunningTurnStartedAt(): number | null {
     return this.#turn.earliestRunningTurnStartedAt();
+  }
+
+  /**
+   * Holds every queue for a deploy and waits, for `timeoutMs` at most, until no turn runs, so the
+   * restart that follows cuts off no work. Messages still queue, and the next process starts them.
+   * The hold ends by itself `DEPLOY_DRAIN_HOLD_GRACE_MS` after the wait, for a deploy that stopped
+   * before its restart, or with `endDeployDrain`. Returns the turns that still run.
+   */
+  readonly drainForDeploy = Effect.fn("AgentService.drainForDeploy")(function* (this: AgentService, timeoutMs: number) {
+    const deadline = Date.now() + timeoutMs;
+    this.#holdForDeploy(deadline + DEPLOY_DRAIN_HOLD_GRACE_MS);
+    logger.info("A deploy holds new turns until the running ones end.", {
+      running: this.#turn.runningTurnActivity().length,
+    });
+    while (this.#turn.runningTurnActivity().length > 0 && Date.now() < deadline)
+      yield* Effect.sleep(Math.min(1_000, Math.max(0, deadline - Date.now())));
+    return this.#turn.runningTurnActivity();
+  });
+
+  /** Ends the hold of `drainForDeploy`, and the queues start again. */
+  endDeployDrain(): void {
+    if (this.#deployDrainTimer) clearTimeout(this.#deployDrainTimer);
+    this.#deployDrainTimer = null;
+    if (this.#deployDrainUntil === null) return;
+    this.#deployDrainUntil = null;
+    logger.info("The deploy hold ended; queued turns start again.");
+    for (const agent of this.#store.list()) this.#drain.scheduleDrain(agent.id);
+  }
+
+  #holdForDeploy(until: number): void {
+    if (this.#deployDrainTimer) clearTimeout(this.#deployDrainTimer);
+    this.#deployDrainUntil = until;
+    this.#deployDrainTimer = setTimeout(() => this.endDeployDrain(), Math.max(0, until - Date.now()));
+    this.#deployDrainTimer.unref?.();
   }
 
   /**
@@ -5006,6 +5046,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   readonly stop = Effect.fn("AgentService.stop")(function* (this: AgentService) {
     this.#stopping = true;
+    if (this.#deployDrainTimer) clearTimeout(this.#deployDrainTimer);
+    this.#deployDrainTimer = null;
     const channelStop = yield* Effect.forkChild(
       this.channels
         .stop()

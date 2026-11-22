@@ -220,3 +220,64 @@ describe("resume after a restart", () => {
     ]);
   });
 });
+
+// Failure mode: after each deploy the coordinator sent a resume note by hand to every agent whose
+// turn the restart cut off, and the deploy cut off turns that were about to end.
+describe("restart without an operator", () => {
+  it("resumes the cut-off turns of this start once, by itself", async () => {
+    const data = database();
+    data.delivery({
+      id: "a-cut",
+      agentId: "agent-a",
+      createdAt: "2026-11-16T12:00:00.000Z",
+      turn: { id: "t-a", thread: "thread-a", status: "interrupted" },
+    });
+    const sent: SendMessageInput[] = [];
+    const operations = createServerAgentOperations({
+      restartInterrupted: () => new Set(["a-cut"]),
+      database: () => data.db,
+      agentIds: () => ["agent-a"],
+      send: (input) =>
+        Effect.sync((): QueuedMessageReceipt => {
+          sent.push(input);
+          return { messageId: "m", deliveries: [] };
+        }),
+      markerFile: join(mkdtempSync(join(tmpdir(), "openbot-resume-")), "resumes.json"),
+      log: () => {},
+    });
+
+    await operations.resumeAfterRestart();
+    await operations.resumeAfterRestart();
+
+    expect(sent.map((input) => input.clientMessageId)).toEqual(["restart-resume:a-cut"]);
+  });
+
+  it("drains for a deploy with a bounded wait, and cancels the hold", async () => {
+    const waits: number[] = [];
+    let cancelled = 0;
+    const { route } = createServerAgentOperations({
+      restartInterrupted: () => new Set(),
+      database: () => database().db,
+      agentIds: () => [],
+      send: () => Effect.die("unused"),
+      markerFile: join(mkdtempSync(join(tmpdir(), "openbot-resume-")), "resumes.json"),
+      log: () => {},
+      drain: async (timeoutMs) => {
+        waits.push(timeoutMs);
+        return timeoutMs > 0 ? [] : [{ turnId: "t-1", agentId: "agent-a" }];
+      },
+      endDrain: () => {
+        cancelled += 1;
+      },
+    });
+
+    expect((await route("POST", "/v1/drain", "timeout=5000"))?.lines).toMatchObject({ drained: "yes", running: 0 });
+    expect((await route("POST", "/v1/drain", '{"timeout":0}'))?.lines).toMatchObject({
+      drained: "no",
+      turn1: "agent-a t-1",
+    });
+    expect(waits).toEqual([1_800_000, 0]);
+    expect((await route("POST", "/v1/drain/cancel", ""))?.lines).toEqual({ drain: "cancelled" });
+    expect(cancelled).toBe(1);
+  });
+});

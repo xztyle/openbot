@@ -5,7 +5,12 @@
  *   through the same `sendMessage` as the app: the same queue, turn start and steer rules. With
  *   `system` set, the text goes as a note from OpenBot: the chat shows a marker, not the owner's message.
  * - `POST /v1/resume-interrupted` tells each agent whose last delivery a restart cut off to continue,
- *   as a note from OpenBot.
+ *   as a note from OpenBot. The server also does this by itself once after each start
+ *   (`resumeAfterRestart`), so the route is for a dry run or for the deliveries of an earlier restart.
+ * - `POST /v1/drain` holds every queue and waits until no turn runs, `timeout` seconds at most
+ *   (default 600, up to 1800), so a deploy restarts the server between turns. It answers `drained`
+ *   and the turns that still run. `POST /v1/drain/cancel` ends the hold; it also ends by itself five
+ *   minutes after the wait, for a deploy that did not restart.
  *
  * A body is JSON or form fields. Every action is logged without the text. The resume route keeps the
  * deliveries it handled in a small file, so a second call, or a call after another restart, does not
@@ -51,7 +56,15 @@ export interface ServerAgentOperationsDependencies {
   /** The JSON file of handled deliveries. */
   markerFile: string;
   log: (message: string) => void;
+  /** Holds new turns and waits for the running ones, as `AgentService.drainForDeploy`. */
+  drain?: (timeoutMs: number) => Promise<readonly { turnId: string; agentId: string }[]>;
+  /** Ends the hold of `drain`. */
+  endDrain?: () => void;
 }
+
+/** The default and the longest wait of `POST /v1/drain`. */
+const DRAIN_DEFAULT_SECONDS = 600;
+const DRAIN_MAX_SECONDS = 1_800;
 
 interface InterruptedDelivery {
   deliveryId: string;
@@ -78,6 +91,35 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
     if (message?.[1] !== undefined) {
       if (method !== "POST") return failure(405, "method_not_allowed");
       return sendOperatorMessage(decodeURIComponent(message[1]), readFields(rawBody));
+    }
+    if (path === "/v1/drain" || path === "/v1/drain/cancel") {
+      if (method !== "POST") return failure(405, "method_not_allowed");
+      const { drain, endDrain } = dependencies;
+      if (!drain || !endDrain) return failure(404, "not_found");
+      if (path === "/v1/drain/cancel") {
+        endDrain();
+        dependencies.log("Deploy drain cancelled.");
+        return { status: 200, lines: { drain: "cancelled" } };
+      }
+      const requested = Number(readFields(rawBody).timeout ?? DRAIN_DEFAULT_SECONDS);
+      const seconds = Number.isFinite(requested)
+        ? Math.min(DRAIN_MAX_SECONDS, Math.max(0, requested))
+        : DRAIN_DEFAULT_SECONDS;
+      const startedAt = Date.now();
+      const running = await drain(seconds * 1_000);
+      const waited = Math.round((Date.now() - startedAt) / 1_000);
+      dependencies.log(`Deploy drain: ${running.length} turns still run after ${waited} s.`);
+      return {
+        status: 200,
+        lines: {
+          drained: running.length === 0 ? "yes" : "no",
+          running: running.length,
+          waited_seconds: waited,
+          ...Object.fromEntries(
+            running.slice(0, 20).map((turn, index) => [`turn${index + 1}`, `${turn.agentId} ${turn.turnId}`]),
+          ),
+        },
+      };
     }
     if (path === "/v1/resume-interrupted") {
       if (method !== "POST") return failure(405, "method_not_allowed");
@@ -186,7 +228,25 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
     };
   }
 
-  return { route };
+  /**
+   * The resume of `POST /v1/resume-interrupted` for the deliveries that this start's boot recovery
+   * ended, run once by the server itself, so no operator has to send it. The marker file keeps a
+   * second run, or the route afterwards, from sending the note again.
+   */
+  async function resumeAfterRestart(): Promise<void> {
+    if (dependencies.restartInterrupted().size === 0) return;
+    if (resuming) return;
+    const run = resumeInterrupted(readFields(""));
+    resuming = run;
+    try {
+      const answer = await run;
+      dependencies.log(`Restart resume ran by itself: ${answer.lines.resumed ?? 0} of ${answer.lines.found ?? 0}.`);
+    } finally {
+      resuming = null;
+    }
+  }
+
+  return { route, resumeAfterRestart };
 }
 
 /** Why a cut-off delivery is not resumed, or null when it is. */
@@ -249,6 +309,8 @@ function readInterruptedDeliveries(database: DatabaseSync): InterruptedDelivery[
 
 interface Fields {
   text: string | undefined;
+  /** The wait of `POST /v1/drain`, in seconds. */
+  timeout: string | undefined;
   clientMessageId: string | undefined;
   deliveryIds: string[];
   dryRun: boolean;
@@ -270,6 +332,7 @@ function readFields(rawBody: string): Fields {
     const ids = Array.isArray(record.deliveryIds) ? record.deliveryIds.filter(isString) : [];
     return {
       text: isString(record.text) ? record.text : undefined,
+      timeout: typeof record.timeout === "number" || isString(record.timeout) ? String(record.timeout) : undefined,
       clientMessageId: isString(record.clientMessageId) ? record.clientMessageId : undefined,
       deliveryIds: ids,
       dryRun: record.dryRun === true,
@@ -279,6 +342,7 @@ function readFields(rawBody: string): Fields {
   const form = new URLSearchParams(trimmed);
   return {
     text: form.get("text") ?? undefined,
+    timeout: form.get("timeout") ?? undefined,
     clientMessageId: form.get("client_message_id") ?? undefined,
     deliveryIds: form.getAll("delivery").flatMap((value) =>
       value

@@ -16,6 +16,9 @@
 
 ### Changed
 
+- A run of short progress messages of one agent ("Checked the plan table of rival 1 … 30") folds
+  into one row with "28 more updates", in channels and threads. Activity shows one agent's replies
+  in a thread as one row ("Research: 31 replies"), and its badge counts that row once.
 - "Needs you" counts every space, not only the one that shows, and the top bar, the sidebar's Today
   row and the phone's Today tab show the same number. Before, a loop decision or a request in
   another space did not reach you.

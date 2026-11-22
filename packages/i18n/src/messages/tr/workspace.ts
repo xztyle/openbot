@@ -635,4 +635,7 @@ export const messages = {
   "workspace.command.hint.stop": "durdur",
   "workspace.command.hint.open": "aç",
   "workspace.command.hint.pick": "seç",
+  "workspace.progress.more": { one: "{count} güncelleme daha", other: "{count} güncelleme daha" },
+  "workspace.progress.hide": { one: "{count} güncellemeyi gizle", other: "{count} güncellemeyi gizle" },
+  "workspace.activity.replies": { one: "{name} bir ileti dizisinde yanıtladı", other: "{name}: {count} yanıt" },
 } as const satisfies PartialTranslation<typeof source>;

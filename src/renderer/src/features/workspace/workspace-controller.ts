@@ -65,6 +65,7 @@ import { createWorkspaceLater } from "./workspace-later";
 import { createWorkspaceMarks } from "./workspace-marks";
 import {
   AGENT_DM_PREFIX,
+  activityGroupKey,
   humanIds,
   readerJoined,
   readerReacted,
@@ -1270,11 +1271,17 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   );
   /** The Activity badge: unread mentions, replies and DMs. Reactions never count (Slack). */
   // A conversation set to "Just mentions" or "Nothing" adds only its mentions.
+  // A thread's replies of one agent are one group, as Activity shows them: thirty progress replies count once.
   const activityCount = createMemo(
     () =>
-      spaceActivity().filter(
-        (item) => item.unread && item.kind !== "reaction" && (item.kind === "mention" || !chosenLevel(item.channelId)),
-      ).length,
+      new Set(
+        spaceActivity()
+          .filter(
+            (item) =>
+              item.unread && item.kind !== "reaction" && (item.kind === "mention" || !chosenLevel(item.channelId)),
+          )
+          .map(activityGroupKey),
+      ).size,
   );
   const threadsUnread = createMemo(() => spaceThreads().some((thread) => thread.unreadCount > 0));
 

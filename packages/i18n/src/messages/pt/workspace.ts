@@ -635,4 +635,7 @@ export const messages = {
   "workspace.command.hint.stop": "parar",
   "workspace.command.hint.open": "abrir",
   "workspace.command.hint.pick": "escolher",
+  "workspace.progress.more": { one: "Mais {count} atualização", other: "Mais {count} atualizações" },
+  "workspace.progress.hide": { one: "Ocultar {count} atualização", other: "Ocultar {count} atualizações" },
+  "workspace.activity.replies": { one: "{name} respondeu em uma conversa", other: "{name}: {count} respostas" },
 } as const satisfies PartialTranslation<typeof source>;

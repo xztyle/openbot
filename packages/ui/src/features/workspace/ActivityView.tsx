@@ -27,6 +27,8 @@ export interface ActivityItem {
   emoji?: string | undefined;
   at: number;
   unread: boolean;
+  /** The replies that this row stands for: one agent's run of replies in a thread is one row. */
+  count?: number | undefined;
 }
 
 const KIND_TEXT = {
@@ -166,7 +168,11 @@ export function ActivityView(props: ActivityViewProps): JSX.Element {
                       </span>
                     </span>
                   }
-                  title={t(KIND_TEXT[item().kind], { name: item().actor.name, emoji: item().emoji ?? "" })}
+                  title={
+                    (item().count ?? 1) > 1
+                      ? t("workspace.activity.replies", { name: item().actor.name, count: item().count ?? 1 })
+                      : t(KIND_TEXT[item().kind], { name: item().actor.name, emoji: item().emoji ?? "" })
+                  }
                   titleEnd={recent(item().at)}
                   trailing={
                     <Show when={item().unread}>

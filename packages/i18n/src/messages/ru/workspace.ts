@@ -793,4 +793,22 @@ export const messages = {
   "workspace.command.hint.stop": "остановить",
   "workspace.command.hint.open": "открыть",
   "workspace.command.hint.pick": "выбрать",
+  "workspace.progress.more": {
+    one: "Ещё {count} обновление",
+    few: "Ещё {count} обновления",
+    many: "Ещё {count} обновлений",
+    other: "Ещё {count} обновлений",
+  },
+  "workspace.progress.hide": {
+    one: "Скрыть {count} обновление",
+    few: "Скрыть {count} обновления",
+    many: "Скрыть {count} обновлений",
+    other: "Скрыть {count} обновлений",
+  },
+  "workspace.activity.replies": {
+    one: "{name} ответил в ветке",
+    few: "{name}: {count} ответа",
+    many: "{name}: {count} ответов",
+    other: "{name}: {count} ответов",
+  },
 } as const satisfies PartialTranslation<typeof source>;

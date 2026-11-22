@@ -615,4 +615,7 @@ export const messages = {
   "workspace.command.hint.stop": "停止",
   "workspace.command.hint.open": "打开",
   "workspace.command.hint.pick": "选择",
+  "workspace.progress.more": { other: "还有 {count} 条进展" },
+  "workspace.progress.hide": { other: "隐藏 {count} 条进展" },
+  "workspace.activity.replies": { other: "{name}：{count} 条回复" },
 } as const satisfies PartialTranslation<typeof source>;

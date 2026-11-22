@@ -791,4 +791,22 @@ export const messages = {
   "workspace.command.hint.stop": "zatrzymaj",
   "workspace.command.hint.open": "otwórz",
   "workspace.command.hint.pick": "wybierz",
+  "workspace.progress.more": {
+    one: "{count} aktualizacja więcej",
+    few: "{count} aktualizacje więcej",
+    many: "{count} aktualizacji więcej",
+    other: "{count} aktualizacji więcej",
+  },
+  "workspace.progress.hide": {
+    one: "Ukryj {count} aktualizację",
+    few: "Ukryj {count} aktualizacje",
+    many: "Ukryj {count} aktualizacji",
+    other: "Ukryj {count} aktualizacji",
+  },
+  "workspace.activity.replies": {
+    one: "{name} odpowiada w wątku",
+    few: "{name}: {count} odpowiedzi",
+    many: "{name}: {count} odpowiedzi",
+    other: "{name}: {count} odpowiedzi",
+  },
 } as const satisfies PartialTranslation<typeof source>;

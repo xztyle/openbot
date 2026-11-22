@@ -5,6 +5,8 @@ import {
   BellOff,
   Bookmark,
   BookmarkMinus,
+  Button,
+  ChevronRight,
   CircleDot,
   Copy,
   Link,
@@ -451,6 +453,9 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
         <Show when={!props.row.pending && !plain()}>
           <WorkspaceMessageBody entry={shownEntry()} fold={fold()} />
         </Show>
+        <Show when={props.row.progress?.length ? props.row.progress : undefined}>
+          {(lines) => <ProgressFold lines={lines()} />}
+        </Show>
         <Show when={!props.row.pending && !note() && condensed.condensed()}>
           <CondensedNote showingOriginal={condensed.showingOriginal()} onToggle={condensed.toggle} />
         </Show>
@@ -476,5 +481,44 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
         </Show>
       </MessageRow>
     </>
+  );
+}
+
+/**
+ * The progress lines that an agent posted one after another, folded under the first: "28 more
+ * updates" opens them in place. The newest line shows as its own row below.
+ */
+function ProgressFold(props: { lines: readonly ChannelMessage[] }) {
+  const { t, format } = useText();
+  const [open, setOpen] = createSignal(false);
+  return (
+    <div class="ws-progress-fold" data-open={open() ? "" : undefined}>
+      <Button
+        variant="ghost"
+        size="xs"
+        class="ws-progress-fold-toggle"
+        aria-expanded={open() ? "true" : "false"}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <ChevronRight aria-hidden="true" />
+        {open()
+          ? t("workspace.progress.hide", { count: props.lines.length })
+          : t("workspace.progress.more", { count: props.lines.length })}
+      </Button>
+      <Show when={open()}>
+        <ol class="ws-progress-fold-lines">
+          <For each={props.lines} keyed={(line) => line.id}>
+            {(line) => (
+              <li>
+                <time class="ws-progress-fold-time">
+                  {format.date(Date.parse(line().message.createdAt), { timeStyle: "short" })}
+                </time>
+                <span>{line().message.text}</span>
+              </li>
+            )}
+          </For>
+        </ol>
+      </Show>
+    </div>
   );
 }

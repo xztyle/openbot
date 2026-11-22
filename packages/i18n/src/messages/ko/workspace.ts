@@ -625,4 +625,7 @@ export const messages = {
   "workspace.command.hint.stop": "중지",
   "workspace.command.hint.open": "열기",
   "workspace.command.hint.pick": "선택",
+  "workspace.progress.more": { other: "업데이트 {count}개 더" },
+  "workspace.progress.hide": { other: "업데이트 {count}개 숨기기" },
+  "workspace.activity.replies": { other: "{name}: 답글 {count}개" },
 } as const satisfies PartialTranslation<typeof source>;

@@ -1165,4 +1165,7 @@ export const messages = defineMessages("workspace", {
   "workspace.command.hint.stop": "stop",
   "workspace.command.hint.open": "open",
   "workspace.command.hint.pick": "choose",
+  "workspace.progress.more": { one: "{count} more update", other: "{count} more updates" },
+  "workspace.progress.hide": { one: "Hide {count} update", other: "Hide {count} updates" },
+  "workspace.activity.replies": { one: "{name} replied in a thread", other: "{name}: {count} replies" },
 });

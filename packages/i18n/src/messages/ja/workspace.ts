@@ -630,4 +630,7 @@ export const messages = {
   "workspace.command.hint.stop": "停止",
   "workspace.command.hint.open": "開く",
   "workspace.command.hint.pick": "選択",
+  "workspace.progress.more": { other: "ほか {count} 件の更新" },
+  "workspace.progress.hide": { other: "{count} 件の更新を隠す" },
+  "workspace.activity.replies": { other: "{name}：返信 {count} 件" },
 } as const satisfies PartialTranslation<typeof source>;

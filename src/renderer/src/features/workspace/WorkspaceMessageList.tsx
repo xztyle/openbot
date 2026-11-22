@@ -9,6 +9,7 @@ import { useWorkspace } from "./workspace-context";
 import { debugMode } from "./workspace-debug";
 import {
   agentNotes,
+  foldProgressRows,
   keepUnchangedRows,
   messageRows,
   peopleNames,
@@ -68,16 +69,18 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
 
   const rows = createMemo<readonly WorkspaceMessageRowModel[]>((previous) =>
     keepUnchangedRows(
-      messageRows(props.entries, {
-        firstUnreadId: props.firstUnreadId,
-        working: props.working,
-        membersAnswer: props.membersAnswer === true,
-        note: debugMode()
-          ? undefined
-          : agentNotes(ws.directory().agents, props.tasks ?? [], peopleNames(ws.directory())),
-        steps: debugMode(),
-        everything: debugMode(),
-      }),
+      (debugMode() ? (rows: WorkspaceMessageRowModel[]) => rows : foldProgressRows)(
+        messageRows(props.entries, {
+          firstUnreadId: props.firstUnreadId,
+          working: props.working,
+          membersAnswer: props.membersAnswer === true,
+          note: debugMode()
+            ? undefined
+            : agentNotes(ws.directory().agents, props.tasks ?? [], peopleNames(ws.directory())),
+          steps: debugMode(),
+          everything: debugMode(),
+        }),
+      ),
       previous,
     ),
   );

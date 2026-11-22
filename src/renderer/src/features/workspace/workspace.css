@@ -1116,3 +1116,52 @@
 .ws-outbox-message[data-state="failed"] .ws-outbox-status {
   color: var(--openbot-danger-text);
 }
+
+/* A run of an agent's progress lines, folded under the first one ("28 more updates"). */
+.ws-progress-fold {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--openbot-space-1);
+  margin-top: var(--openbot-space-1);
+}
+
+.ws-progress-fold-toggle.ui-button {
+  gap: var(--openbot-space-1);
+  margin-left: calc(-1 * var(--openbot-space-1-5));
+  color: var(--openbot-text-muted);
+}
+
+.ws-progress-fold-toggle.ui-button > svg {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+  transition: transform var(--openbot-duration-fast) var(--openbot-ease-out);
+}
+
+.ws-progress-fold[data-open] .ws-progress-fold-toggle.ui-button > svg {
+  transform: rotate(90deg);
+}
+
+.ws-progress-fold-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-0-5);
+  margin: 0;
+  border-left: 2px solid var(--openbot-border);
+  padding: 0 0 0 var(--openbot-space-3);
+  color: var(--openbot-text-secondary);
+  list-style: none;
+}
+
+.ws-progress-fold-time {
+  margin-right: var(--openbot-space-2);
+  color: var(--openbot-text-dim);
+  font-size: var(--openbot-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .ws-progress-fold-toggle.ui-button {
+    min-height: var(--openbot-touch-target);
+  }
+}

@@ -18,6 +18,7 @@ import {
   isChannelThreadReply,
   isRestatedChannelResult,
   parseChannelRoutingConversationEventItemType,
+  type WorkspaceActivityItem,
   type WorkspaceAgentExchangeMessage,
 } from "@openbot/contracts/ipc";
 import { markdownPlainText } from "@openbot/contracts/markdown-preview-text";
@@ -364,6 +365,11 @@ export interface WorkspaceMessageRowModel {
   broadcast?: { rootId: string; rootText: string | null } | null;
   /** A message between agents: the row is one line, the summary, and opens the full text. */
   note?: WorkspaceAgentNoteView | null;
+  /**
+   * A run of short progress lines of one agent ("Checked the plan table of rival 4."): the row shows
+   * the first, folds the ones after it into "N more updates", and the newest shows as its own row.
+   */
+  progress?: readonly ChannelMessage[] | null;
 }
 
 /** A message that an agent wrote for other agents, as the people see it: who it is for, and one line. */
@@ -513,6 +519,8 @@ function sameRow(left: WorkspaceMessageRowModel, right: WorkspaceMessageRowModel
     left.note?.summary === right.note?.summary &&
     left.note?.expandable === right.note?.expandable &&
     left.note?.to.join(" ") === right.note?.to.join(" ") &&
+    (left.progress?.length ?? 0) === (right.progress?.length ?? 0) &&
+    left.progress?.at(-1) === right.progress?.at(-1) &&
     sameSteps(left.steps, right.steps)
   );
 }
@@ -556,6 +564,61 @@ function withoutRestatedResults(entries: readonly ChannelMessage[]): readonly Ch
  * turn that has not answered yet is a row of its own. Messages of one author within five minutes
  * group, and a day divider and the "new" divider stand above the row they belong to.
  */
+/** The shortest run of progress lines that folds: fewer read fine as they are. */
+const PROGRESS_FOLD_MIN = 4;
+/** A progress line is short: one line of plain text. */
+const PROGRESS_LINE_MAX = 200;
+
+/** A short line of an agent, alone in its message: a step it reports, not an answer. */
+function progressLine(row: WorkspaceMessageRowModel): boolean {
+  const entry = row.entry;
+  const text = entry.message.text.trim();
+  return (
+    !row.pending &&
+    !row.note &&
+    !row.broadcast &&
+    !row.steps &&
+    entry.author.kind === "agent" &&
+    !entry.deletedAt &&
+    !entry.threadSummary &&
+    !(entry.message.attachments?.length ?? 0) &&
+    !(entry.reactions?.length ?? 0) &&
+    text.length > 0 &&
+    text.length <= PROGRESS_LINE_MAX &&
+    !text.includes("\n")
+  );
+}
+
+/**
+ * Folds each run of short progress lines of one agent: the first row stays with the lines after it
+ * folded in (`progress`), and the newest line shows as its own row, so a long run of "Checked rival
+ * 1 … 37" reads as one row that opens, not a wall. The "new" divider and a day start end a run.
+ */
+export function foldProgressRows(rows: readonly WorkspaceMessageRowModel[]): WorkspaceMessageRowModel[] {
+  const out: WorkspaceMessageRowModel[] = [];
+  let index = 0;
+  while (index < rows.length) {
+    const head = rows[index];
+    if (!head) break;
+    let end = index + 1;
+    if (progressLine(head))
+      while (end < rows.length) {
+        const next = rows[end];
+        if (!next?.grouped || next.entry.author.id !== head.entry.author.id || !progressLine(next)) break;
+        end += 1;
+      }
+    const run = end - index;
+    if (run >= PROGRESS_FOLD_MIN) {
+      const folded = rows.slice(index + 1, end - 1).map((row) => row.entry);
+      const last = rows[end - 1];
+      out.push({ ...head, key: `progress:${head.key}`, progress: folded });
+      if (last) out.push(last);
+    } else out.push(...rows.slice(index, end));
+    index = end;
+  }
+  return out;
+}
+
 export function messageRows(
   entries: readonly ChannelMessage[],
   options: {
@@ -907,4 +970,15 @@ export function mergeLatestExchange(
   const pageIds = new Set(page.map((message) => message.id));
   const older = loaded.filter((message) => !pageIds.has(message.id) && message.createdAt < first.createdAt);
   return [...older, ...page];
+}
+
+/**
+ * The group of an Activity item: the replies of one agent or person in one thread are one group
+ * ("Research: 30 updates in a thread"), every other item is its own. Activity shows a group as one
+ * row and its badge counts groups, so a run of progress replies is one thing to read, not thirty.
+ */
+export function activityGroupKey(
+  item: Pick<WorkspaceActivityItem, "id" | "kind" | "channelId" | "threadRootId" | "actor">,
+): string {
+  return item.kind === "reply" ? `reply\n${item.channelId}\n${item.threadRootId ?? ""}\n${item.actor.id}` : item.id;
 }

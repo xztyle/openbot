@@ -14,7 +14,14 @@ import { WorkspaceMessage } from "./WorkspaceMessage";
 import { createAgentWork } from "./workspace-agent-work";
 import { useWorkspace } from "./workspace-context";
 import { debugMode } from "./workspace-debug";
-import { agentNotes, conversationName, messageRows, peopleNames, readerJoined } from "./workspace-model";
+import {
+  agentNotes,
+  conversationName,
+  foldProgressRows,
+  messageRows,
+  peopleNames,
+  readerJoined,
+} from "./workspace-model";
 import { savedScrollPlace, saveScrollPlace } from "./workspace-scroll-places";
 
 /** How close to the end still counts as reading the newest replies, as in the channel. */
@@ -61,7 +68,7 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
   const followState = () => ws.marks.thread(props.channelId, props.rootId);
   const rows = createMemo(() => {
     const current = channel();
-    return messageRows(entries(), {
+    const built = messageRows(entries(), {
       thread: true,
       firstUnreadId: firstUnreadId(),
       membersAnswer: current ? channelMembersAnswer(current) : false,
@@ -71,6 +78,8 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
       steps: debugMode(),
       everything: debugMode(),
     });
+    // Debug mode shows every line; otherwise a run of progress lines folds to one row.
+    return debugMode() ? built : foldProgressRows(built);
   });
   const root = () => rows().find((row) => row.entry.id === props.rootId && !row.pending);
   /** A reply that a link named. */

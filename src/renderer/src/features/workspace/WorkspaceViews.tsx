@@ -1,4 +1,4 @@
-import { channelKind, channelVisibility } from "@openbot/contracts/ipc";
+import { channelKind, channelVisibility, type WorkspaceActivityItem } from "@openbot/contracts/ipc";
 import { Workflow } from "@openbot/ui";
 import { type ActivityItem, ActivityView } from "@openbot/ui/features/workspace/ActivityView";
 import { ArtifactsView } from "@openbot/ui/features/workspace/ArtifactsView";
@@ -33,7 +33,7 @@ import { WorkspaceStorageView } from "./WorkspaceStorageView";
 import { WorkspaceTodayView } from "./WorkspaceToday";
 import { openArtifact } from "./workspace-artifact-open";
 import { useWorkspace } from "./workspace-context";
-import { conversationName, memberById, previewText } from "./workspace-model";
+import { activityGroupKey, conversationName, memberById, previewText } from "./workspace-model";
 
 /** The views of the workspace: Unreads, Threads, Activity, Later, DMs, search, Fleet and the views under More. */
 export function WorkspaceViewPane(props: { view: WorkspaceView }) {
@@ -122,8 +122,23 @@ function isDirect(ws: ReturnType<typeof useWorkspace>, channelId: string): boole
 
 function WorkspaceActivityView() {
   const ws = useWorkspace();
+  // One agent's replies in one thread are one row, the newest, with how many there are.
+  const groups = createMemo(() => {
+    const byKey = new Map<string, { item: WorkspaceActivityItem; count: number; unread: boolean }>();
+    for (const item of ws.spaceActivity()) {
+      const key = activityGroupKey(item);
+      const known = byKey.get(key);
+      if (!known) byKey.set(key, { item, count: 1, unread: item.unread });
+      else {
+        known.count += 1;
+        known.unread ||= item.unread;
+        if (Date.parse(item.at) > Date.parse(known.item.at)) known.item = item;
+      }
+    }
+    return [...byKey.values()];
+  });
   const items = createMemo((): ActivityItem[] =>
-    ws.spaceActivity().map((item) => {
+    groups().map(({ item, count, unread }) => {
       const actor: WorkspaceMember =
         item.actor.kind === "external"
           ? { id: item.actor.id, kind: "human", name: item.actor.name, external: true }
@@ -137,7 +152,8 @@ function WorkspaceActivityView() {
         preview: item.preview,
         emoji: item.emoji,
         at: Date.parse(item.at),
-        unread: item.unread,
+        unread,
+        count,
       };
     }),
   );

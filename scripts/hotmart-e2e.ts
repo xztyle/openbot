@@ -3,7 +3,8 @@
 // Checks the client-credentials sign-in and the token cache, a new token after a 401, sales paging with
 // one status per query, the totals per status and currency, the approval guard and its audit lines,
 // rate-limit backoff, that no output holds a credential or an access token, the Meta Conversions API
-// recipe through the meta-ads helper (fake Graph API on the same port), and that the watcher items have
+// recipe through the meta-ads helper (fake Graph API on the same port), the affiliate stats per product
+// (commission_as AFFILIATE) and the clean answer without credentials, and that the watcher items have
 // stable IDs through the host's own program launcher and baseline comparison.
 // `bun scripts/hotmart-e2e.ts`. HOTMART_E2E_NODE selects the Node.js binary (default: node on PATH).
 // Writes .openbot-build/hotmart-e2e/report.json.
@@ -45,6 +46,7 @@ interface Sale {
   currency: string;
   daysAgo: number;
   buyer: { name: string; email: string; ucode: string };
+  role?: "AFFILIATE";
 }
 interface Subscription {
   code: string;
@@ -66,6 +68,10 @@ const BUYERS = {
   bob: { name: "Bob Stone", email: "bob@example.com", ucode: "buyer-bob-0002" },
 };
 
+const PRODUCT_NAMES: Record<number, string> = { 1111111: "Course A", 4444444: "Course C", 5555555: "Course D" };
+// The share of the affiliate (the credential's user) in the fake affiliate sales.
+const AFFILIATE_SHARE = 0.4;
+
 function initialSales(): Sale[] {
   const sale = (
     transaction: string,
@@ -79,7 +85,7 @@ function initialSales(): Sale[] {
     transaction,
     status,
     productId,
-    productName: productId === 1111111 ? "Course A" : "Ebook B",
+    productName: PRODUCT_NAMES[productId] ?? "Ebook B",
     value,
     currency,
     daysAgo,
@@ -94,6 +100,15 @@ function initialSales(): Sale[] {
     sale("HP0006", "CHARGEBACK", 2222222, 19.9, "USD", 6, BUYERS.ana),
     sale("HP0007", "WAITING_PAYMENT", 1111111, 97, "BRL", 1, BUYERS.bob),
     sale("HP0008", "APPROVED", 1111111, 97, "BRL", 40, BUYERS.ana),
+    // Sales of other producers' courses, where the credential's user is the affiliate.
+    ...[
+      sale("HP0104", "APPROVED", 5555555, 497, "USD", 1, BUYERS.bob),
+      sale("HP0101", "APPROVED", 4444444, 197, "BRL", 1, BUYERS.ana),
+      sale("HP0102", "COMPLETE", 4444444, 197, "BRL", 2, BUYERS.bob),
+      sale("HP0103", "REFUNDED", 4444444, 197, "BRL", 3, BUYERS.ana),
+      sale("HP0105", "CHARGEBACK", 5555555, 497, "USD", 4, BUYERS.ana),
+      sale("HP0106", "APPROVED", 4444444, 197, "BRL", 90, BUYERS.bob),
+    ].map((row): Sale => ({ ...row, role: "AFFILIATE" })),
   ];
 }
 
@@ -158,7 +173,9 @@ function saleJson(sale: Sale): DynamicRecord {
   return {
     product: { id: sale.productId, name: sale.productName },
     buyer: sale.buyer,
-    producer: { name: "Producer", ucode: "producer-0001" },
+    producer: sale.role
+      ? { name: "Other Producer", ucode: "other-producer-0009" }
+      : { name: "Producer", ucode: "producer-0001" },
     purchase: {
       transaction: sale.transaction,
       order_date: time,
@@ -166,7 +183,7 @@ function saleJson(sale: Sale): DynamicRecord {
       status: sale.status,
       recurrency_number: 1,
       is_subscription: false,
-      commission_as: "PRODUCER",
+      commission_as: sale.role ?? "PRODUCER",
       price: { value: sale.value, currency_code: sale.currency },
       payment: { method: "PIX", installments_number: 1, type: "PIX" },
       tracking: { source: "meta", source_sck: "HOTMART_PRODUCT_PAGE", external_code: "xcod-1" },
@@ -201,8 +218,11 @@ function selectedSales(query: URLSearchParams): Sale[] | null {
   const start = Number(query.get("start_date") ?? Number.NEGATIVE_INFINITY);
   const end = Number(query.get("end_date") ?? Number.POSITIVE_INFINITY);
   const product = query.get("product_id");
+  // Affiliate sales show only with commission_as=AFFILIATE, so the producer checks keep their numbers.
+  const role = query.get("commission_as") ?? "PRODUCER";
   return state.sales.filter((sale) => {
     const time = Date.now() - sale.daysAgo * DAY;
+    if ((sale.role ?? "PRODUCER") !== role) return false;
     if (transaction) return sale.transaction === transaction;
     const wanted = statuses[0] ? [statuses[0]] : ["APPROVED", "COMPLETE"];
     return (
@@ -351,13 +371,31 @@ async function handle(request: IncomingMessage, response: ServerResponse, base: 
         sales.map((sale) => ({
           transaction: sale.transaction,
           product: { id: sale.productId, name: sale.productName },
-          commissions: [
-            {
-              commission: { currency_value: sale.currency, value: sale.value - 9.9 },
-              user: { ucode: "producer-0001", name: "Producer" },
-              source: "PRODUCER",
-            },
-          ],
+          commissions: sale.role
+            ? [
+                {
+                  commission: { currency_value: sale.currency, value: sale.value * 0.5 },
+                  user: { ucode: "other-producer-0009", name: "Other Producer" },
+                  source: "PRODUCER",
+                },
+                {
+                  commission: { currency_value: sale.currency, value: 1 },
+                  user: { ucode: "other-affiliate-0007", name: "Other Affiliate" },
+                  source: "AFFILIATE",
+                },
+                {
+                  commission: { currency_value: sale.currency, value: sale.value * AFFILIATE_SHARE },
+                  user: { ucode: "producer-0001", name: "E2E Producer" },
+                  source: "AFFILIATE",
+                },
+              ]
+            : [
+                {
+                  commission: { currency_value: sale.currency, value: sale.value - 9.9 },
+                  user: { ucode: "producer-0001", name: "Producer" },
+                  source: "PRODUCER",
+                },
+              ],
         })),
       );
     if (path === "/payments/api/v1/sales/summary") {
@@ -636,6 +674,65 @@ try {
   result = await cli("summary", "--status", "APPROVED", "--days", "30");
   assert.deepEqual(at(result.json, "data", 0, "by_currency", "BRL"), { count: 2, value: 194 });
   check("sale and summary: one sale with price, commissions and participants");
+
+  // The affiliate side: per course, the sales made as an affiliate, sorted by commission.
+  before = state.requests.length;
+  result = await cli("affiliate-stats", "--days", "30");
+  assert.equal(result.code, 0, result.stderr);
+  const affiliateReads = state.requests
+    .slice(before)
+    .filter((request) => request.path.startsWith("/payments/api/v1/sales/"));
+  assert.ok(
+    affiliateReads.every((request) => request.query.get("commission_as") === "AFFILIATE"),
+    "Every read asks for commission_as AFFILIATE.",
+  );
+  const courses = entries(at(result.json, "products"));
+  assert.deepEqual(
+    courses.map((row) => at(row, "product_name")),
+    ["Course C", "Course D"],
+    "Sorted by the commission in the user's commission currency (BRL).",
+  );
+  assert.deepEqual(courses[0], {
+    product_id: 4444444,
+    product_name: "Course C",
+    producer: "Other Producer",
+    sales: 2,
+    refunds: 1,
+    chargebacks: 0,
+    protested: 0,
+    buyer_paid_by_currency: { BRL: 394 },
+    commission_by_currency: { BRL: 157.6 },
+    refunded_by_currency: { BRL: 197 },
+    lost_commission_by_currency: { BRL: 78.8 },
+  });
+  assert.equal(at(courses[1], "chargebacks"), 1);
+  assert.deepEqual(at(courses[1], "commission_by_currency"), { USD: 198.8 });
+  assert.deepEqual(at(result.json, "totals", "commission_by_currency"), { BRL: 157.6, USD: 198.8 });
+  assert.equal(at(result.json, "totals", "sales"), 3);
+  assert.equal(at(result.json, "sales_without_commission"), undefined, "Each sale has the user's commission.");
+  result = await cli("affiliate-stats", "--days", "30", "--product", "5555555");
+  assert.deepEqual(
+    entries(at(result.json, "products")).map((row) => at(row, "product_id")),
+    [5555555],
+  );
+  result = await cli("affiliate-products");
+  assert.equal(result.code, 0, result.stderr);
+  assert.deepEqual(
+    entries(at(result.json, "data")).map((row) => `${at(row, "product_name")}:${at(row, "sales")}`),
+    ["Course D:1", "Course C:3"],
+    "Paid affiliate sales of the last 365 days, the latest sale first.",
+  );
+  assert.equal(at(result.json, "data", 0, "producer_name"), "Other Producer");
+  assert.ok(String(at(result.json, "note")).includes("no endpoint for affiliations"));
+  const bare = await run(CLI, { HOTMART_HOME: join(scratch, "empty-home") }, ["affiliate-stats"]);
+  assert.equal(bare.code, 1);
+  assert.deepEqual(at(bare.json, "error", "details", "needs"), [
+    "credential HOTMART_CLIENT_ID (save with openbot.request_api_key, shared)",
+    "credential HOTMART_CLIENT_SECRET (save with openbot.request_api_key, shared)",
+    "credential HOTMART_BASIC (save with openbot.request_api_key, shared)",
+  ]);
+  assert.ok(!bare.stderr.includes("    at "), "No stack trace.");
+  check("affiliate: per-course sales, buyer value, own commission, refunds; products sold; missing credentials");
 
   // Rate limits.
   state.rateLimitNext = 1;

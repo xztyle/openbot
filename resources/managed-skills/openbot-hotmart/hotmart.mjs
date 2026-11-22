@@ -22,6 +22,10 @@ import { pathToFileURL } from "node:url";
 
 // Sources: developers.hotmart.com/docs/en/start/app-auth/ (token), /start/sandbox/ (sandbox base),
 // /start/rate-limit/ (500 calls a minute, RateLimit-* headers), /start/pagination/ (page_token).
+// Affiliate reads: /v1/sales/sales-history/, /v1/sales/sales-commissions/ and /v1/sales/sales-users/ take
+// commission_as (PRODUCER, COPRODUCER or AFFILIATE: how the credential's user earned on the sale);
+// /v1/sales/sales-summary/ does not. The v1 reference has no endpoint for affiliations or affiliation
+// requests, and /v1/product/product-list/ lists only the creator's own products.
 const OFFICIAL_API_BASE_URL = "https://developers.hotmart.com";
 const SANDBOX_API_BASE_URL = "https://sandbox.hotmart.com";
 const OFFICIAL_AUTH_BASE_URL = "https://api-sec-vlc.hotmart.com";
@@ -127,6 +131,9 @@ Setup and reading
         [--transaction HP...] [--offer CODE] [--payment-type PIX] [--src CODE] [--limit N] [--raw]
                                          Rows and totals per status and currency (value paid by the buyer).
   sale <transaction> [--full]            One sale with its price details, commissions and participants.
+  affiliate-stats [--status ...] [period] [--product ID]   Per product, the sales you made as an affiliate:
+                                         count, value paid by the buyer, your commission, refunds and chargebacks.
+  affiliate-products [--status ...] [period, default --days 365]   The products you sold as an affiliate.
   summary [--status ...] [period] [--product ID]   Your commission totals per currency (Hotmart's numbers).
   commissions [--status ...] [period] [--product ID] [--transaction HP...] [--as PRODUCER]
   price-details [--status ...] [period] [--product ID] [--transaction HP...]
@@ -486,6 +493,19 @@ function readSecret(options, flag, name) {
 
 /** The three credentials of Hotmart → Tools → Developer Credentials. The Basic value may keep its "Basic " prefix. */
 export function readCredentials(options) {
+  const names = [
+    ["client-id-file", "HOTMART_CLIENT_ID"],
+    ["client-secret-file", "HOTMART_CLIENT_SECRET"],
+    ["basic-file", "HOTMART_BASIC"],
+  ];
+  const missing = names
+    .filter(([flag, name]) => !options[flag] && !process.env[`${name}_FILE`] && !(process.env[name] ?? "").trim())
+    .map(([, name]) => name);
+  if (missing.length > 0)
+    throw new CliError(
+      `No ${missing.join(", ")}. Set ${missing.map((name) => `${name}_FILE`).join(", ")} to the paths of the shared keys (openbot.list_api_keys).`,
+      { details: { needs: missing.map((name) => `credential ${name} (save with openbot.request_api_key, shared)`) } },
+    );
   const clientId = readSecret(options, "client-id-file", "HOTMART_CLIENT_ID");
   const clientSecret = readSecret(options, "client-secret-file", "HOTMART_CLIENT_SECRET");
   const basic = readSecret(options, "basic-file", "HOTMART_BASIC").replace(/^Basic\s+/i, "");
@@ -1474,6 +1494,144 @@ const commands = {
       next: file
         ? `meta-ads capi-send --pixel <pixel id> --data @${file} --reason "Hotmart purchase ${transaction}", then delete ${file}`
         : "Add --out FILE, then: meta-ads capi-send --pixel <pixel id> --data @FILE",
+    };
+  },
+
+  async "affiliate-stats"(context) {
+    const { options } = context;
+    const statuses = saleStatuses(options.status, [...STATUS_GROUPS.paid, ...STATUS_GROUPS.refunds]);
+    const { period, query } = periodQuery(context);
+    const filters = { ...query, ...salesFilters(context), commission_as: "AFFILIATE" };
+    const limit = Number(options.limit ?? 5000);
+    const me = await context.api.get("/user/api/v1/me");
+    const sales = await perStatus(context, "/payments/api/v1/sales/history", statuses, filters, limit);
+    const paid = await perStatus(context, "/payments/api/v1/sales/commissions", statuses, filters, limit);
+    // The commission of the credential's user: the entry with its ucode, or the only AFFILIATE entry.
+    const commissionOf = new Map();
+    for (const { row } of paid.rows) {
+      const entries = Array.isArray(row?.commissions) ? row.commissions : [];
+      const affiliates = entries.filter((entry) => entry?.source === "AFFILIATE");
+      const own =
+        entries.find((entry) => me?.ucode && entry?.user?.ucode === me.ucode) ??
+        (affiliates.length === 1 ? affiliates[0] : null);
+      if (own && row?.transaction)
+        commissionOf.set(row.transaction, {
+          value: money(own.commission?.value) ?? 0,
+          currency: own.commission?.currency_value ?? "UNKNOWN",
+        });
+    }
+    const add = (target, currency, value) => {
+      target[currency] = round((target[currency] ?? 0) + value);
+    };
+    const counts = () => ({
+      sales: 0,
+      refunds: 0,
+      chargebacks: 0,
+      protested: 0,
+      buyer_paid_by_currency: {},
+      commission_by_currency: {},
+      refunded_by_currency: {},
+      lost_commission_by_currency: {},
+    });
+    const products = new Map();
+    const totals = counts();
+    const seen = new Set();
+    let unmatched = 0;
+    for (const { row } of sales.rows) {
+      const sale = saleRow(row);
+      const key = `${sale.transaction}:${sale.status}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const id = sale.product_id ?? "UNKNOWN";
+      if (!products.has(id))
+        products.set(id, {
+          product_id: sale.product_id,
+          product_name: sale.product_name,
+          producer: row?.producer?.name ?? null,
+          ...counts(),
+        });
+      const product = products.get(id);
+      const commission = commissionOf.get(sale.transaction) ?? null;
+      if (!commission) unmatched += 1;
+      const currency = sale.currency ?? "UNKNOWN";
+      for (const target of [product, totals]) {
+        if (PAID.has(sale.status)) {
+          target.sales += 1;
+          add(target.buyer_paid_by_currency, currency, sale.value ?? 0);
+          if (commission) add(target.commission_by_currency, commission.currency, commission.value);
+        } else if (LOST.has(sale.status)) {
+          if (sale.status === "CHARGEBACK") target.chargebacks += 1;
+          else target.refunds += 1;
+          add(target.refunded_by_currency, currency, sale.value ?? 0);
+          if (commission) add(target.lost_commission_by_currency, commission.currency, commission.value);
+        } else if (sale.status === "PROTESTED") target.protested += 1;
+      }
+    }
+    // Sorted by the commission in the user's commission currency, then by the sum of all currencies.
+    const main = me?.currency_code_commission ?? null;
+    const earned = (product) => [
+      main ? (product.commission_by_currency[main] ?? 0) : 0,
+      Object.values(product.commission_by_currency).reduce((sum, value) => sum + value, 0),
+    ];
+    const data = [...products.values()].sort((a, b) => {
+      const [mainA, allA] = earned(a);
+      const [mainB, allB] = earned(b);
+      return mainB - mainA || allB - allA;
+    });
+    return {
+      environment: context.sandbox ? "sandbox" : "production",
+      role: "AFFILIATE",
+      user: { name: me?.name ?? null, ucode: me?.ucode ?? null, currency_code_commission: main },
+      period,
+      statuses,
+      truncated: sales.truncated || paid.truncated,
+      totals,
+      products: data,
+      ...(unmatched > 0 ? { sales_without_commission: unmatched } : {}),
+      note: "Sales where the credential's user earned as AFFILIATE (Hotmart commission_as). buyer_paid is what the buyer paid; commission is your share. A refund or chargeback takes the commission back.",
+    };
+  },
+
+  async "affiliate-products"(context) {
+    const { options } = context;
+    const statuses = saleStatuses(options.status);
+    const { period, query } = periodQuery(context, 365);
+    const { rows, truncated } = await perStatus(
+      context,
+      "/payments/api/v1/sales/history",
+      statuses,
+      { ...query, ...salesFilters(context), commission_as: "AFFILIATE" },
+      Number(options.limit ?? 5000),
+    );
+    const products = new Map();
+    for (const { row } of rows) {
+      const sale = saleRow(row);
+      const id = sale.product_id ?? "UNKNOWN";
+      const product = products.get(id) ?? {
+        product_id: sale.product_id,
+        product_name: sale.product_name,
+        producer_name: row?.producer?.name ?? null,
+        producer_ucode: row?.producer?.ucode ?? null,
+        sales: 0,
+        first_sale: sale.order_date,
+        last_sale: sale.order_date,
+      };
+      product.sales += 1;
+      if (String(sale.order_date ?? "") < String(product.first_sale ?? "")) product.first_sale = sale.order_date;
+      if (String(sale.order_date ?? "") > String(product.last_sale ?? "")) product.last_sale = sale.order_date;
+      products.set(id, product);
+    }
+    const data = [...products.values()].sort((a, b) =>
+      String(b.last_sale ?? "").localeCompare(String(a.last_sale ?? "")),
+    );
+    return {
+      environment: context.sandbox ? "sandbox" : "production",
+      period,
+      statuses,
+      count: data.length,
+      truncated,
+      data,
+      note: "Hotmart's public API has no endpoint for affiliations or affiliation requests. This list comes from your affiliate sales in the period: a product you promote with no sale yet is not in it. Affiliation requests and approvals stay in the Hotmart app.",
     };
   },
 

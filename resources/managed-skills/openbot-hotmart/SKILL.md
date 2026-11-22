@@ -1,6 +1,6 @@
 ---
 name: openbot-hotmart
-description: Read the user's Hotmart sales, refunds, chargebacks, commissions, subscriptions, products and coupons through the Hotmart Developers API with the hotmart helper, send approved Hotmart purchases to Meta as Conversions API events, refund sales and cancel subscriptions with the person's approval, and set up Hotmart event checks. Use when the user asks about Hotmart sales, revenue, refunds, chargebacks, subscribers or churn.
+description: Read the user's Hotmart sales, refunds, chargebacks, commissions, affiliate stats per course, subscriptions, products and coupons through the Hotmart Developers API with the hotmart helper, send approved Hotmart purchases to Meta as Conversions API events, refund sales and cancel subscriptions with the person's approval, and set up Hotmart event checks. Use when the user asks about Hotmart sales, revenue, affiliate commissions, refunds, chargebacks, subscribers or churn.
 ---
 
 # Hotmart
@@ -44,13 +44,14 @@ Do these steps with the user once. The user does the steps in Hotmart; you do th
 
 1. **Credential.** In Hotmart, open **Tools → Developer Credentials** (`https://app-vlc.hotmart.com/tools/credentials`)
    and choose **Create Credential**. Give it a name. Leave **Sandbox** off for the real account. Hotmart shows
-   three values: **Client ID**, **Client Secret** and **Basic**. The credential must be created by the account
-   that owns the products (the producer).
+   three values: **Client ID**, **Client Secret** and **Basic**. The credential reads the data of the account that
+   creates it: for the producer's sales, the producer's account; for affiliate stats, the affiliate's own account.
 2. **Save the three values.** Call `openbot.request_api_key` three times, with `shared: true` so every agent can
    use them: `name: "HOTMART_CLIENT_ID"`, `name: "HOTMART_CLIENT_SECRET"` and `name: "HOTMART_BASIC"`. The Basic
    value can keep or drop the word `Basic`. Never ask for the values in chat. If the user pastes one in chat,
    do not repeat it, and ask again with `request_api_key`. Only the server owner or an admin can answer the form,
-   and not in a Slack, Discord or Telegram chat.
+   and not in a Slack, Discord or Telegram chat. Without a value, the helper stops with `needs`, for example
+   `credential HOTMART_CLIENT_ID (save with openbot.request_api_key, shared)`.
 3. **Check.** `hotmart whoami` shows the Hotmart user and the commission currency. Then `hotmart products`.
 4. **Time zone.** `hotmart config set timezone America/Sao_Paulo` (use the user's time zone, or the `time_zone`
    from `whoami`). Calendar periods such as `--preset today` use it.
@@ -90,6 +91,23 @@ helper asks for each status separately. Sales of the last hours can still change
 Buyer data (email, phone, address, documents) is personal data. Use it for the task; do not paste it into
 public channels.
 
+## Affiliate
+
+When the user promotes other producers' courses (an affiliate), the same helper reads his side. The credential
+must be created in the affiliate's own Hotmart account.
+
+- `hotmart affiliate-stats --preset yesterday` (or any period): for each product (course) where the user earned as
+  `AFFILIATE`, the paid `sales`, `buyer_paid_by_currency` (what buyers paid), `commission_by_currency` (his share),
+  `refunds`, `chargebacks`, `refunded_by_currency` and `lost_commission_by_currency`, sorted by commission, and
+  `totals`. `--product <id>` for one course; `--status` as for `sales` (the default is paid and refunds).
+- `hotmart affiliate-products` (default `--days 365`): the products he sold as an affiliate, with the producer and
+  the first and last sale.
+- `sales`, `commissions` and `participants` also take `--as AFFILIATE`.
+
+Hotmart's public API has no endpoint for affiliations or affiliation requests, and `products` lists only his own
+products. A course he promotes with no sale yet does not show. Affiliation requests and approvals stay in the
+Hotmart app. `summary` cannot filter by role: it sums all his commissions.
+
 ## Changing
 
 Every change needs `--approved` (exit code 3 without it), and goes to `audit.jsonl` with the actor and `--reason`.
@@ -121,6 +139,18 @@ Make it a routine when the user asks, for example every day at 09:00 in their ti
    (`--since`/`--until`). Use a few lines, not a table of every sale.
 3. If Meta ads run, add the Meta spend of the same day (`meta-ads insights --level account --preset yesterday`)
    and the revenue per spend from Hotmart's paid value.
+
+### Daily stats per course (affiliate)
+
+This replaces the stats per course that someone sends by hand. Make it a routine when the user asks, for example
+every day at 09:00 in his time zone:
+
+1. `hotmart affiliate-stats --preset yesterday`, and `--preset this_month` for the month so far.
+2. Post one line per course, the highest commission first: "Course C: 2 sales, 394.00 BRL paid, 157.60 BRL
+   commission; 1 refund (-78.80 BRL)." Then the totals per currency. Use a few lines, not raw JSON.
+3. If Meta ads run for these courses, add the spend of the same day (`meta-ads insights --level campaign --preset
+   yesterday`) and the commission per spend. For an affiliate, compare the spend with the commission, not with
+   what the buyer paid.
 
 ### Refund or chargeback follow-up
 
@@ -189,7 +219,8 @@ secrets in agent settings → Event checks → the check → Private variables (
 - 401 (`invalid_token`, `token_expired`): the helper gets a new token and tries once more. If it still fails, the
   credentials are wrong, deleted, or for the other environment (sandbox or production). Ask for new ones with
   `request_api_key`.
-- 403 `unauthorized_client`: the credential may not read this; it must belong to the producer account.
+- 403 `unauthorized_client`: the credential may not read this; it must belong to the account whose data you read
+  (the producer for product changes, the affiliate for affiliate stats).
 - 400 `invalid_parameter` or `invalid_value_parameter`: fix the filter (status names, IDs, dates) and run again.
 - 429: Hotmart allows 500 calls a minute. The helper waits and tries again; exit code 4 means wait a minute.
 - 502: the query ran longer than 30 seconds at Hotmart. Use a shorter period or `--product`.

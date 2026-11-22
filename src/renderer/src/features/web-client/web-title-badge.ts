@@ -91,10 +91,25 @@ async function drawIcon(badge: WebTitleBadge): Promise<string | null> {
 }
 
 /**
+ * The count on the icon of the installed app (the Home Screen app of an iPhone, a desktop PWA), as
+ * Slack's: the same count as the tab title. A dot alone is not shown there, since a count of nothing
+ * new for the user would stay on the Home Screen. A browser without the Badging API, or one that
+ * refuses it (iOS before notifications are allowed), shows none.
+ */
+function setAppIconBadge(count: number): void {
+  if (typeof navigator === "undefined" || !("setAppBadge" in navigator) || !("clearAppBadge" in navigator)) return;
+  try {
+    void (count > 0 ? navigator.setAppBadge(count) : navigator.clearAppBadge()).catch(() => undefined);
+  } catch {
+    // As above: no badge.
+  }
+}
+
+/**
  * The browser tab tells what waits for the user, as Slack's does: the title starts with the count of
  * mentions, DM messages and waiting agents, and the icon gets a badge with that count. Unread messages
  * that the count leaves out give the icon a dot only. The same numbers show on the space rail and the
- * sidebar rows, so the tab, the rail and the rows agree.
+ * sidebar rows, so the tab, the rail and the rows agree. The installed app's icon shows the count too.
  */
 export function createWebTitleBadge(options: {
   badge: () => WebTitleBadge;
@@ -152,6 +167,7 @@ export function createWebTitleBadge(options: {
   createEffect(badgeKey, (key) => {
     const [count, unread] = key.split(":");
     const badge = { count: Number(count), unread: unread === "1" };
+    setAppIconBadge(badge.count);
     const current = ++drawing;
     if (badge.count === 0 && !badge.unread) {
       restoreIcon();
@@ -166,5 +182,6 @@ export function createWebTitleBadge(options: {
     drawing++;
     document.title = baseTitle;
     restoreIcon();
+    setAppIconBadge(0);
   });
 }

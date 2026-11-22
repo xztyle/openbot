@@ -1,3 +1,8 @@
+### Added
+
+- The icon of the installed app (an iPhone Home Screen app, a desktop PWA) shows the same count as
+  the browser tab: mentions, DM messages and agents that wait for you. It clears when they are read.
+
 ### Fixed
 
 - A push that waited (the hourly digest of an agent's updates, or the notice that counts a burst of

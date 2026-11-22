@@ -407,6 +407,27 @@ try {
     await waitForPath(page, "/app/general/c/random");
   });
 
+  // 9e. The account's shortcut to Connections & secrets opens the server settings, and the client still
+  // answers: the dialog read the section's options in an effect callback, which halted every update.
+  await step(page, "the Connections & secrets shortcut opens and the client still answers", async () => {
+    await settle(page);
+    const halted = report.consoleErrors.length;
+    await page.goto(`${origin}/app/general/c/random?page=settings&section=appearance`, COMMIT);
+    await started(page);
+    await page
+      .getByRole("button", { name: english("server.settings.group.connections"), exact: true })
+      .click({ timeout: UI_WAIT_MS });
+    await waitForPath(page, "/app/general/c/random?page=server-settings&section=connections");
+    await page.getByRole("heading", { name: "Preview computer" }).first().waitFor({ timeout: UI_WAIT_MS });
+    await page.keyboard.press("Escape");
+    await waitForPath(page, "/app/general/c/random");
+    assert.equal(
+      report.consoleErrors.slice(halted).some((error) => error.includes("REACTIVITY_HALTED")),
+      false,
+      "The client stopped updating.",
+    );
+  });
+
   // 10. Copy link of a channel header; a link that names the wrong space opens the channel's own.
   await step(page, "Copy link of a channel", async () => {
     await settle(page);

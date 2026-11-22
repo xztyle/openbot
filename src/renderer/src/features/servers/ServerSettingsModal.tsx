@@ -580,12 +580,15 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
       name: props.server.kind === "local" && !props.hostStatus?.configured ? "" : props.server.name,
       logoUrl: props.server.logoUrl,
       editing: general.editing(),
+      // Read here, not in the callback: a caller's prop can be a getter that makes a memo, and a memo
+      // made in an effect callback halts every update (a link to the Connections group did).
+      initial: props.open ? availableInitialSection() : null,
     }),
-    ({ open, id, name, logoUrl, editing }) => {
+    ({ open, id, name, logoUrl, editing, initial }) => {
       if (!open) return;
       if (syncedServerId !== id) {
         syncedServerId = id;
-        setSection(untrack(availableInitialSection) ?? "general");
+        setSection(initial ?? "general");
         general.resetForServer();
         members.resetForServer();
         roles.resetForServer();

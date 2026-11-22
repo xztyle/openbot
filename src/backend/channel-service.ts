@@ -279,6 +279,17 @@ const decodeRoutingDecision = Schema.decodeUnknownResult(RoutingDecision, { onEx
  * Owns channel commands and assignment scheduling. It never starts provider turns itself.
  */
 /** What every member of a hands-off channel reads with each assignment, and what a refused question says. */
+/**
+ * A person's send or edit with the keys in its text hidden, before anything reads it: the gate and the
+ * responders ask a model about the text, and the tasks and the attachments keep it. The store hides
+ * them again on write, for the text that other paths bring.
+ */
+function commandWithoutSecrets(command: ChannelCommand): ChannelCommand {
+  if (command.type !== "send" && command.type !== "edit") return command;
+  const text = hideChannelSecrets(command.text, "person");
+  return text === command.text ? command : { ...command, text };
+}
+
 export const HANDS_OFF_INSTRUCTION =
   "Hands-off mode: the people of this channel want the goal reached without waiting for them. Never ask a person to decide, approve or provide something, and never wait for an answer: take the path the team recommends, within the rules and limits that the people already set (no real money unless they allowed it). For each decision that a person would normally have made, call openbot.log_decision (through openbot.tool_call when it is not in your tool list) once with the decision, why, and the alternatives you rejected, then continue. Ask a teammate when you need its expertise.";
 const channelLogger = createOpenBotLogger("channel-service");
@@ -461,7 +472,9 @@ export class ChannelService {
     ) => {
       const operation = Effect.suspend(() => {
         const next = beforeApply(command);
-        return next ? this.apply(next, actor, [], viewer) : channelSync(() => this.store.get(command.channelId));
+        return next
+          ? this.apply(commandWithoutSecrets(next), actor, [], viewer)
+          : channelSync(() => this.store.get(command.channelId));
       });
       if (command.type === "stop" || command.type === "archive") return operation;
       // Two clients that open the same DM, or onboard at once, send different new channel ids: the

@@ -24,6 +24,9 @@ const VERDICT_TEXT = {
   stop: "portfolio.templates.verdict.stop",
 } as const satisfies Record<NonNullable<TemplateImport["validation"]>["verdict"], AppTextKey>;
 
+/** How often the tab asks the host again while a validation runs: the research agent takes minutes. */
+const VALIDATION_POLL_MS = 15_000;
+
 /**
  * The Templates tab: a new space from a starter template or a template file, the export of the space
  * that shows, and each import with its validation stage, Start building and Stop.
@@ -51,7 +54,15 @@ export function PortfolioTemplates() {
       setError(errorMessage(failure, t("portfolio.loadFailed")));
     }
   }
-  onSettled(() => void load());
+  onSettled(() => {
+    void load();
+    // The host scores an import after the answer that made it, so the tab asks until none waits.
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible" && imports().some((entry) => entry.state === "validating"))
+        void load();
+    }, VALIDATION_POLL_MS);
+    return () => clearInterval(timer);
+  });
 
   /** Whether the host made the change. A failure shows as a toast. */
   async function act(run: () => Promise<TemplateImport>, failed: AppTextKey): Promise<boolean> {

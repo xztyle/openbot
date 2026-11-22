@@ -307,7 +307,29 @@ const answers: Record<string, (body: unknown) => object> = {
     },
   }),
   [PORTFOLIO_ROUTES.draftSuite]: () => ({ scenarios: [] }),
-  [PORTFOLIO_ROUTES.templates]: () => ({ starters, imports }),
+  [PORTFOLIO_ROUTES.templates]: () => {
+    // The research agent reports a few seconds after the import, as the host scores it later.
+    imports = imports.map(
+      (entry): TemplateImport =>
+        entry.state === "validating" && Date.now() - Date.parse(entry.createdAt) > 3_000
+          ? {
+              ...entry,
+              state: "ready",
+              validation: {
+                score: 72,
+                verdict: "go",
+                demand: "People search for it every month.",
+                competition: "",
+                risks: "",
+                summary: "A real demand with room to stand out.",
+                at: iso(0),
+                agentId: null,
+              },
+            }
+          : entry,
+    );
+    return { starters, imports };
+  },
   [PORTFOLIO_ROUTES.importTemplate]: (body) => {
     record(`import:${JSON.stringify(body)}`);
     // A pasted template file fails, as a host that cannot make one of its parts does.
@@ -321,7 +343,7 @@ const answers: Record<string, (body: unknown) => object> = {
       agents: {},
       researcherId: null,
       notes: [],
-      createdAt: iso(0),
+      createdAt: new Date().toISOString(),
     };
     imports = [made, ...imports];
     return { import: made };

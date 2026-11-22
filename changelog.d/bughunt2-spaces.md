@@ -11,3 +11,6 @@
   picked there counts as the whole space after a switch.
 - Removing an entry from Knowledge and switching space before the answer no longer shows the old
   space's knowledge in the new one.
+- In the web client on a computer, Back after opening something of another space (Open on a Today card,
+  Jump to, a loop decision) returns to the space you came from. Before, the step of the space you left
+  was overwritten, so Back stayed in the new space.

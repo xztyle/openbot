@@ -160,6 +160,19 @@ export function createWebLocationHistory(options: {
     const previous = shown;
     const userMove = pushMatch?.(location) === true;
     if (userMove) pushMatch = null;
+    // A conversation of another space that the user opens shows its space a step before it shows
+    // itself. The entry keeps the place before, so Back returns to the space the user came from;
+    // the conversation gets its own entry when it shows.
+    if (
+      !userMove &&
+      pushMatch !== null &&
+      !quiet &&
+      previous !== null &&
+      previous.hostId === location.hostId &&
+      previous.space !== location.space &&
+      untrack(options.ownEntries)
+    )
+      return;
     if (previous && sameWebPlace(previous, location) && previous.messageId === location.messageId) {
       if (options.href(location) !== currentAddress()) write(location, false);
       return;

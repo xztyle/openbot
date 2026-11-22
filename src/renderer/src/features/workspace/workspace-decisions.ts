@@ -135,8 +135,9 @@ export function useDecisionQueue() {
     return [space, place].filter(Boolean).join(" · ") || undefined;
   };
   const openSpaceView = (spaceId: string, view: "loops" | "insights") => {
-    if (ws.spaces.available() && ws.spaces.current() !== spaceId) ws.spaces.select(spaceId);
+    // The view first: it marks the step for Back before the space changes the place on screen.
     ws.openView(view);
+    if (ws.spaces.available() && ws.spaces.current() !== spaceId) ws.spaces.select(spaceId);
   };
 
   const requests = createMemo((): TodayDecision[] =>

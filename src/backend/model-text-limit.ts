@@ -68,3 +68,11 @@ export function jsonStringFit(text: string, limit: number): number {
   }
   return fits;
 }
+
+/** Says what an evaluate script can return; a DOM node, a function or `undefined` cannot cross. */
+export const BROWSER_VALUE_NOT_JSON =
+  "Browser evaluation result is not JSON-serializable. Return plain data, such as strings, numbers, arrays and objects: [...document.querySelectorAll('a')].map((a) => a.href), not the elements. A DOM node, a function, undefined or a value with cycles cannot be returned.";
+
+/** Each evaluate runs in the page's global scope, so a top-level `const` from an earlier call is still declared. */
+export const BROWSER_SCOPE_HINT =
+  "Top-level const and let names stay declared between calls in the page's global scope: wrap the script, such as (() => { const t = 1; return t; })().";

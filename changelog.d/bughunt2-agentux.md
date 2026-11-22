@@ -14,6 +14,9 @@
   takes.
 - A browser tool given a `timeoutMs` above its limit waits the longest time it allows instead of
   failing, and a wrong click or drag target gets an error that shows the target forms.
+- Browser errors say what to do next: an unknown tab points to `list_tabs`, the recording limit to
+  `recording_stop`, and `evaluate` explains a value it cannot return, a timeout, and a name already
+  declared by an earlier script.
 
 ### Changed
 

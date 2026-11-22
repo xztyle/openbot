@@ -77,7 +77,7 @@ import {
 } from "./browser-fill-fields";
 import { describeBrowserTarget, stopLoadingAndWait, waitForLoading } from "./browser-navigation";
 import { createFramePacer } from "./browser-screencast-pacing";
-import { BROWSER_VALUE_TOO_LARGE } from "./model-text-limit";
+import { BROWSER_SCOPE_HINT, BROWSER_VALUE_NOT_JSON, BROWSER_VALUE_TOO_LARGE } from "./model-text-limit";
 import type { VaultCardSecret } from "./vault-items";
 
 const ACTION_TIMEOUT_MS = 10_000;
@@ -2184,21 +2184,26 @@ export class BrowserCdpEngine {
           disableBreaks: true,
         });
         const exception = recordValue(result.exceptionDetails);
-        if (exception)
-          return yield* browserFailure(new Error(`Browser evaluation failed: ${exceptionDescription(exception)}`));
+        if (exception) {
+          const description = exceptionDescription(exception);
+          return yield* browserFailure(
+            new Error(
+              `Browser evaluation failed: ${description}${/has already been declared/u.test(description) ? ` ${BROWSER_SCOPE_HINT}` : ""}`,
+            ),
+          );
+        }
         const remoteObject = recordValue(result.result);
         if (!remoteObject || !("value" in remoteObject) || "unserializableValue" in remoteObject) {
-          return yield* browserFailure(new Error("Browser evaluation result is not JSON-serializable."));
+          return yield* browserFailure(new Error(BROWSER_VALUE_NOT_JSON));
         }
         const value = remoteObject.value;
         let serialized: string | undefined;
         try {
           serialized = JSON.stringify(value);
         } catch {
-          return yield* browserFailure(new Error("Browser evaluation result is not JSON-serializable."));
+          return yield* browserFailure(new Error(BROWSER_VALUE_NOT_JSON));
         }
-        if (serialized === undefined)
-          return yield* browserFailure(new Error("Browser evaluation result is not JSON-serializable."));
+        if (serialized === undefined) return yield* browserFailure(new Error(BROWSER_VALUE_NOT_JSON));
         const bytes = Buffer.byteLength(serialized, "utf8");
         if (bytes > MAX_RESULT_BYTES) {
           return yield* browserFailure(

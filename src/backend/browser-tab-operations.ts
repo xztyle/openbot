@@ -350,7 +350,8 @@ export const runTabEvaluation = Effect.fn("BrowserTab.evaluate")(
           );
         yield* browserSync(requireEvaluable);
         const deadline = Date.now() + timeoutMs;
-        const timeoutMessage = "Browser evaluate timed out.";
+        const timeoutMessage =
+          "Browser evaluate timed out. Return sooner, or raise timeoutMs up to 30000: a script that awaits a promise that never settles always times out.";
         const value = yield* boundEngineOperation(
           tab,
           tab.engine.evaluate(

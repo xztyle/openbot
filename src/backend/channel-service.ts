@@ -91,6 +91,7 @@ import { ChannelReadState } from "./channel-read-state";
 import { type ChannelGateOutcome, ChannelResponders, memberAnswerMode, usesAnswerModes } from "./channel-responders";
 import { ChannelSaved } from "./channel-saved";
 import { ChannelSearch } from "./channel-search";
+import { hideChannelSecrets } from "./channel-secrets";
 import { type ChannelAssignment, type ChannelContext, type ChannelMessageChange, ChannelStore } from "./channel-store";
 import { type ChannelAgentWork, ChannelTyping } from "./channel-typing";
 import { type ChannelViewer, canSeeChannel } from "./channel-visibility";
@@ -3972,7 +3973,14 @@ export class ChannelService {
         return yield* channelFailure(new Error("Provide the memory text."));
       const text = args.text;
       if (tool === "channel_remember")
-        yield* channelSync(() => this.memories.saveFromTool(channelId, text, turnId, `channel-memory:${operationId}`));
+        yield* channelSync(() =>
+          this.memories.saveFromTool(
+            channelId,
+            hideChannelSecrets(text, "agent"),
+            turnId,
+            `channel-memory:${operationId}`,
+          ),
+        );
       else if (!(yield* channelSync(() => this.memories.deleteByText(channelId, text))))
         return { accepted: false, reason: "No memory matches that text." };
       this.hooks.memoriesChanged?.(channelId);
@@ -4410,14 +4418,15 @@ export class ChannelService {
 
   createMemory(input: CreateChannelMemoryInput): ChannelMemory {
     this.store.get(input.channelId);
-    const memory = this.memories.createManual(input.channelId, input.text);
+    // A memory goes into every prompt of the channel: a key in it stays hidden, as in an agent's memory.
+    const memory = this.memories.createManual(input.channelId, hideChannelSecrets(input.text, "agent"));
     this.hooks.memoriesChanged?.(input.channelId);
     return memory;
   }
 
   updateMemory(input: UpdateChannelMemoryInput): ChannelMemory {
     this.store.get(input.channelId);
-    const memory = this.memories.updateManual(input.channelId, input.memoryId, input.text);
+    const memory = this.memories.updateManual(input.channelId, input.memoryId, hideChannelSecrets(input.text, "agent"));
     this.hooks.memoriesChanged?.(input.channelId);
     return memory;
   }

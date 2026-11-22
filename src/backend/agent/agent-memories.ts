@@ -150,14 +150,14 @@ export class AgentMemories {
 
   create(input: CreateAgentMemoryInput): AgentMemory {
     this.#conversation.requireKnownAgent(input.agentId);
-    const memory = this.#memories.createManual(input.agentId, hideChannelSecrets(input.text, "person"));
+    const memory = this.#memories.createManual(input.agentId, hideChannelSecrets(input.text, "agent"));
     this.stateChanged(input.agentId);
     return memory;
   }
 
   update(input: UpdateAgentMemoryInput): AgentMemory {
     this.#conversation.requireKnownAgent(input.agentId);
-    const memory = this.#memories.updateManual(input.agentId, input.memoryId, hideChannelSecrets(input.text, "person"));
+    const memory = this.#memories.updateManual(input.agentId, input.memoryId, hideChannelSecrets(input.text, "agent"));
     this.stateChanged(input.agentId);
     return memory;
   }

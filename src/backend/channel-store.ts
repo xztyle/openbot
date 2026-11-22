@@ -29,7 +29,7 @@ import {
   replaySavedEvent,
 } from "./channel-thread-projection";
 import { type ChannelViewer, canSeeChannel } from "./channel-visibility";
-import { deleteAggregateHistory, deleteThreadAttachments } from "./database/database-core";
+import { deleteAggregateHistory, deleteReceiptsOf, deleteThreadAttachments } from "./database/database-core";
 import {
   databaseRow,
   databaseRows,
@@ -745,6 +745,121 @@ export class ChannelStore {
       db.prepare(
         "INSERT INTO projection_channel_assignments VALUES (?, ?, ?, ?, ?) ON CONFLICT(assignment_id) DO UPDATE SET delivery_id = excluded.delivery_id, assignment_json = excluded.assignment_json",
       ).run(assignment.id, change.channel.id, assignment.taskId, assignment.deliveryId, JSON.stringify(assignment));
+  }
+
+  /**
+   * The fast path of a streaming reply: a new part of the text of messages that already stream.
+   * Only their rows change, as `project` changes them: no event, no revision and no command receipt,
+   * because each part replaces the one before and the commit that ends the stream carries the whole
+   * message. False, with nothing written, when one of them is not such a part; the caller commits.
+   */
+  updateStreaming(channelId: string, messages: readonly ChannelMessage[]): boolean {
+    const db = this.database.connection;
+    const rows: { message: ChannelMessage; sequence: number }[] = [];
+    for (const message of messages) {
+      if (message.message.status !== "streaming") return false;
+      const existing = databaseRow(
+        db
+          .prepare(
+            "SELECT sequence, json_extract(message_json, '$.message.status') AS status FROM projection_channel_messages WHERE channel_id = ? AND message_id = ?",
+          )
+          .get(channelId, message.id),
+      );
+      if (!existing || existing.status !== "streaming") return false;
+      rows.push({ message, sequence: requiredNumberColumn(existing, "sequence") });
+    }
+    const pending = this.#messageChanges.get(channelId) ?? [];
+    for (const { message, sequence } of rows) {
+      const stored = { ...message, sequence };
+      db.prepare("UPDATE projection_channel_messages SET message_json = ? WHERE channel_id = ? AND message_id = ?").run(
+        JSON.stringify(stored),
+        channelId,
+        message.id,
+      );
+      projectThreadState(db, channelId, stored, false);
+      db.prepare(
+        "UPDATE projection_channel_summaries SET version = version + 1, through_sequence = 0, text = '' WHERE channel_id = ? AND through_sequence >= ?",
+      ).run(channelId, sequence);
+      db.prepare(
+        "UPDATE projection_channel_contexts SET through_sequence = 0, summary_version = 0 WHERE channel_id = ? AND through_sequence >= ?",
+      ).run(channelId, sequence);
+      pending.push({ message: stored, removed: false });
+    }
+    this.#messageChanges.set(channelId, pending);
+    return true;
+  }
+
+  /**
+   * Deletes, from the channel events after `cursor`, up to `limit` of them, the streamed frames that
+   * a later state of their message replaced: a `channel.changed` event that only carried one more
+   * part of a streaming message, of a message that a newer commit has since ended. The first event
+   * that wrote a message stays, so a rebuild gives each message the same sequence. `seen` holds the
+   * messages that earlier events wrote; the caller keeps it between chunks, and an empty one after
+   * a restart only keeps more frames. Returns the last sequence read, or null at the end of the log.
+   */
+  compactStreamedEvents(cursor: number, limit: number, seen: Set<string>): { cursor: number | null; deleted: number } {
+    const db = this.database.connection;
+    const rows = databaseRows(
+      db
+        .prepare(
+          `SELECT e.sequence, e.aggregate_id, e.command_id,
+             (SELECT json_group_array(json_extract(m.value, '$.id')) FROM json_each(e.payload_json, '$.messages') m) AS ids,
+             json_extract(e.payload_json, '$.messages[0].message.status') AS status,
+             json_array_length(e.payload_json, '$.tasks') AS tasks,
+             json_array_length(e.payload_json, '$.assignments') AS assignments,
+             COALESCE(json_array_length(e.payload_json, '$.quietMessages'), 0) AS quiet
+           FROM orchestration_events e
+           WHERE e.sequence > ? AND e.aggregate_type = 'channel' AND e.event_type = 'channel.changed'
+           ORDER BY e.sequence LIMIT ?`,
+        )
+        .all(cursor, limit),
+    );
+    if (rows.length === 0) return { cursor: null, deleted: 0 };
+    const superseded: { sequence: number; commandId: string }[] = [];
+    for (const row of rows) {
+      const channelId = requiredStringColumn(row, "aggregate_id");
+      const parsed = JSON.parse(requiredStringColumn(row, "ids"));
+      const ids = Array.isArray(parsed) ? parsed.filter(isString) : [];
+      const frame =
+        ids.length === 1 &&
+        row.status === "streaming" &&
+        row.tasks === 0 &&
+        row.assignments === 0 &&
+        row.quiet === 0 &&
+        seen.has(`${channelId}:${ids[0]}`);
+      for (const id of ids) seen.add(`${channelId}:${id}`);
+      if (!frame) continue;
+      // Only a message that a later commit ended: its row no longer streams.
+      const current = databaseRow(
+        db
+          .prepare(
+            "SELECT json_extract(message_json, '$.message.status') AS status FROM projection_channel_messages WHERE channel_id = ? AND message_id = ?",
+          )
+          .get(channelId, ids[0] ?? ""),
+      );
+      if (current && current.status !== "streaming")
+        superseded.push({
+          sequence: requiredNumberColumn(row, "sequence"),
+          commandId: requiredStringColumn(row, "command_id"),
+        });
+    }
+    if (superseded.length) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const remove = db.prepare("DELETE FROM orchestration_events WHERE sequence = ?");
+        for (const { sequence } of superseded) remove.run(sequence);
+        deleteReceiptsOf(
+          db,
+          superseded.map((event) => event.commandId),
+        );
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    }
+    const last = rows.at(-1);
+    return { cursor: last ? requiredNumberColumn(last, "sequence") : cursor, deleted: superseded.length };
   }
 
   update(

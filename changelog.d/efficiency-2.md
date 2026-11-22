@@ -22,6 +22,10 @@
 - A message from a teammate waits up to two minutes before it wakes an agent, and the teammate
   messages that arrive meanwhile start the same turn. A message from you never waits, and `fyi`
   notes still wake nobody. A message that wakes its recipients goes to at most 10 teammates.
+- A streaming reply in a channel sends only its message to the open clients. Before, each part of
+  the text, ten times a second, also stored a copy in the channel's history and made every client
+  read the whole channel list again. The copies that earlier versions stored are removed in the
+  background.
 
 ### Fixed
 

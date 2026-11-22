@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { addressesPerson, channelAgentNoteLine, givenAgentNoteLine } from "@openbot/contracts/channel-agent-note";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
@@ -64,7 +64,7 @@ import {
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { isFixedSourceText, matchingSourceKeys, sourceText } from "@openbot/i18n/source";
-import { createOpenBotLogger } from "@openbot/logging";
+import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { Deferred, Effect, Exit, Fiber, Result, Schema, Scope } from "effect";
 import { ChannelActivity } from "./channel-activity";
 import { type ChannelOperationError, channelFailure, channelResult, channelSync } from "./channel-effects";
@@ -236,6 +236,24 @@ class ChannelRoutingError extends Schema.TaggedError<ChannelRoutingError>()("Cha
  * it costs nothing extra because member turns maintain it.
  */
 const ROUTING_RECENT_MESSAGES = 5;
+/** How often a streaming reply tells the channel list and the routine checks that its channel changed. */
+const STREAMING_CHANGE_INTERVAL_MS = 1_000;
+/**
+ * The cleanup of the streamed frames in the channel event log (`ChannelStore.compactStreamedEvents`):
+ * small chunks on the main thread, a few seconds apart, then a look at the new events now and then.
+ */
+const EVENT_COMPACTION_CHUNK = 200;
+const EVENT_COMPACTION_INTERVAL_MS = 3_000;
+const EVENT_COMPACTION_IDLE_MS = 6 * 60 * 60_000;
+const EVENT_COMPACTION_FILE = "channel-event-compaction-v1.json";
+
+/** Where the cleanup of the event log stands: its timer, the last sequence read, and the messages seen. */
+interface EventCompaction {
+  timer: NodeJS.Timeout | null;
+  cursor: number;
+  seen: Set<string>;
+  deleted: number;
+}
 const ROUTING_TEXT_CHARACTERS = 600;
 const ROUTING_PROMPT_CHARACTERS = 120_000;
 /** The thread replies that the routing prompt sends, and that the thread partner is looked for in. */
@@ -297,6 +315,9 @@ export class ChannelService {
   readonly #summaryAgain = new Set<string>();
   readonly #commandFibers = new Set<Fiber.Fiber<Channel | void, ChannelOperationError>>();
   readonly #interrupts = new Set<Fiber.Fiber<void>>();
+  /** The channels whose streaming reply has a `changed` notice waiting. See `#publishStreaming`. */
+  readonly #streamingChanges = new Map<string, NodeJS.Timeout>();
+  #eventCompaction: { timer: NodeJS.Timeout | null; cursor: number; seen: Set<string>; deleted: number } | null = null;
   readonly #events = new Set<Fiber.Fiber<void>>();
   /** The messages whose answer gate runs in this process. */
   readonly #gating = new Set<string>();
@@ -2754,6 +2775,7 @@ export class ChannelService {
   ): Effect.fn.Return<void, ChannelOperationError> {
     if (this.#scope.state._tag === "Closed") this.#scope = Scope.makeUnsafe();
     this.#stopped = false;
+    this.#startEventCompaction();
     // A gate that the last stop interrupted decides nothing: its members answer as `mention` members.
     // A second round that waits for an answer starts when that answer has ended meanwhile.
     for (const message of yield* channelSync(() => this.store.gateOpenMessages())) {
@@ -3173,10 +3195,71 @@ export class ChannelService {
         messages.push(value);
     }
     if (messages.length) {
-      this.store.update(this.store.get(channelId), { messages });
-      this.publish(channelId);
+      // A new part of a reply that streams writes its rows and sends the messages, with no commit.
+      // The channel list and the routine checks hear of it at most once a second; the commit that
+      // ends the stream publishes as before.
+      if (this.store.updateStreaming(channelId, messages)) this.#publishStreaming(channelId);
+      else {
+        this.store.update(this.store.get(channelId), { messages });
+        this.publish(channelId);
+      }
     }
     return true;
+  }
+
+  /**
+   * Removes the streamed frames that older versions kept in the channel event log, a chunk at a
+   * time. The position is kept in a file, so a restart goes on where it stopped.
+   */
+  #startEventCompaction(): void {
+    if (this.#eventCompaction) return;
+    const file = join(this.store.database.userDataPath, EVENT_COMPACTION_FILE);
+    let cursor = 0;
+    try {
+      const saved = JSON.parse(readFileSync(file, "utf8"));
+      if (isDynamicRecord(saved) && typeof saved.cursor === "number" && Number.isSafeInteger(saved.cursor))
+        cursor = saved.cursor;
+    } catch {
+      // No file yet: the cleanup starts at the beginning of the log.
+    }
+    const state: EventCompaction = { timer: null, cursor, seen: new Set(), deleted: 0 };
+    this.#eventCompaction = state;
+    const tick = (): void => {
+      if (this.#stopped || this.#eventCompaction !== state) return;
+      let next = EVENT_COMPACTION_INTERVAL_MS;
+      try {
+        const result = this.store.compactStreamedEvents(state.cursor, EVENT_COMPACTION_CHUNK, state.seen);
+        state.deleted += result.deleted;
+        if (result.cursor === null) {
+          if (state.deleted)
+            channelLogger.info("Removed streamed frames from the channel event log.", { events: state.deleted });
+          state.deleted = 0;
+          next = EVENT_COMPACTION_IDLE_MS;
+        } else {
+          state.cursor = result.cursor;
+          writeFileSync(file, JSON.stringify({ version: 1, cursor: state.cursor }), { mode: 0o600 });
+        }
+      } catch (error) {
+        channelLogger.warn("The channel event log cleanup stopped for now.", { error: toLogValue(error) });
+        next = EVENT_COMPACTION_IDLE_MS;
+      }
+      state.timer = setTimeout(tick, next);
+      state.timer.unref?.();
+    };
+    state.timer = setTimeout(tick, EVENT_COMPACTION_INTERVAL_MS);
+    state.timer.unref?.();
+  }
+
+  #publishStreaming(channelId: string): void {
+    const changes = this.store.takeMessageChanges(channelId);
+    if (changes.length) this.hooks.messagesChanged?.(channelId, changes, this.store.get(channelId).revision);
+    if (this.#streamingChanges.has(channelId)) return;
+    const timer = setTimeout(() => {
+      this.#streamingChanges.delete(channelId);
+      this.hooks.changed(channelId, this.store.get(channelId).revision);
+    }, STREAMING_CHANGE_INTERVAL_MS);
+    timer.unref?.();
+    this.#streamingChanges.set(channelId, timer);
   }
 
   /** Each thread that these messages answered in counts them in the summary of its root. */
@@ -4408,6 +4491,10 @@ export class ChannelService {
   }
 
   private publish(channelId: string): void {
+    // This publish carries what a waiting streaming notice would have said.
+    const streaming = this.#streamingChanges.get(channelId);
+    if (streaming) clearTimeout(streaming);
+    this.#streamingChanges.delete(channelId);
     let changes = this.store.takeMessageChanges(channelId);
     // Every message written into a thread, by a person, an agent or a deletion, counts in its root.
     if (changes.some((change) => change.message.threadRootId)) {
@@ -4458,6 +4545,10 @@ export class ChannelService {
     this.#stopped = true;
     for (const timer of this.#summaryTimers.values()) clearTimeout(timer);
     this.#summaryTimers.clear();
+    for (const timer of this.#streamingChanges.values()) clearTimeout(timer);
+    this.#streamingChanges.clear();
+    if (this.#eventCompaction?.timer) clearTimeout(this.#eventCompaction.timer);
+    this.#eventCompaction = null;
     yield* Fiber.awaitAll([
       ...this.#events,
       ...this.#pumps.values(),

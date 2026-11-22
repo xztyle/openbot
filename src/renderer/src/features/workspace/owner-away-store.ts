@@ -54,6 +54,16 @@ export function ownerAwayWelcomeParts(welcome: NonNullable<OwnerAwayState["welco
     .join(", ");
 }
 
+/**
+ * Whether the owner's quiet hours or focus are on now, from the last read of the state. The page then
+ * keeps its own notifications and cues, as the host keeps its pushes. Null state (no read yet, or no
+ * such host) is not quiet.
+ */
+export function ownerAwayQuietNow(state: OwnerAwayState | null, now = Date.now()): boolean {
+  const quiet = state?.quiet;
+  return quiet != null && quiet.until > now;
+}
+
 function inFront(): boolean {
   return typeof document !== "undefined" && document.visibilityState === "visible" && document.hasFocus();
 }

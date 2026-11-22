@@ -14,3 +14,6 @@
   3 notifications" instead of "1 held requests, 3 notifications" or "0 held requests".
 - With two tabs of the app open on the same server, and push notifications off, the computer shows
   one notification for an agent's event or a channel reply instead of one from each tab.
+- In focus or quiet hours, the owner's open browser tab no longer pops its own notifications or
+  plays cues for agent events and channel replies (with push notifications off); it waits, as push
+  does. An admin's tab still tells.

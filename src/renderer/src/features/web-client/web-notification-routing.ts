@@ -49,14 +49,20 @@ export function createWebNotificationRouting(options: {
    * question or an approval still tells.
    */
   conversationQuiet?: (hostId: string, conversationId: string) => boolean;
+  /**
+   * Whether the owner's quiet hours or focus are on for the host (`owner-away-v1`). As the host holds
+   * its push messages then, the page shows no notification and plays no cue of its own.
+   */
+  ownerQuiet?: (hostId: string) => boolean;
 }) {
+  const ownerQuiet = (hostId: string) => untrack(() => options.ownerQuiet?.(hostId) ?? false);
   const quietConversation = (hostId: string, conversationId: string) =>
     options.conversationQuiet?.(hostId, conversationId) ?? false;
   const { workspace, notifications } = options;
   function notify(hostId: string, event: AgentEvent, agents: ClientAgentSummary[]): void {
     withdrawWebAgentNotification(hostId, event);
     const { muted, level } = untrack(() => notifications.state(hostId));
-    if (muted || level === "nothing") return;
+    if (muted || level === "nothing" || ownerQuiet(hostId)) return;
     // A reply in a conversation set to Just mentions, Nothing or mute is quiet, as in Slack. The channel of
     // the agent's thread is unknown for a reply, so the DM's level decides.
     if (event.type === "turn-completed" && quietConversation(hostId, `agent:${event.agentId}`)) return;
@@ -91,7 +97,7 @@ export function createWebNotificationRouting(options: {
   ): void {
     const { muted, level } = untrack(() => notifications.state(hostId));
     // The host's push message tells a channel reply with the same levels, as it tells an agent event.
-    if (muted || options.pushes?.(hostId)) return;
+    if (muted || options.pushes?.(hostId) || ownerQuiet(hostId)) return;
     const replies = channelReplyNotifications(previous, next, {
       agents: untrack(() => workspace.state.agents),
       translate: options.t,
@@ -126,6 +132,7 @@ export function createWebNotificationRouting(options: {
     return (
       !muted &&
       level !== "nothing" &&
+      !ownerQuiet(hostId) &&
       untrack(() => workspace.state.agents).some((agent) => agent.id === agentId && agent.notifications)
     );
   });

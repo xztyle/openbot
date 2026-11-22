@@ -269,7 +269,7 @@ import { ServerSettingsPageTitle, SettingsPageFrame } from "../window/SettingsPa
 import type { SettingsKind, WindowPage } from "../window/window-page-context";
 import { createAgentMailboxesStore } from "../workspace/agent-mailboxes-store";
 import { createConnectorAccessStore } from "../workspace/connector-access-store";
-import { createOwnerAwayStore, ownerAwayWelcomeParts } from "../workspace/owner-away-store";
+import { createOwnerAwayStore, ownerAwayQuietNow, ownerAwayWelcomeParts } from "../workspace/owner-away-store";
 import { QuietHoursSettingsDialog } from "../workspace/WorkspaceOwnerAway";
 import { WorkspaceSidebarPane } from "../workspace/WorkspaceSidebarPane";
 import { WorkspaceAgentFrame, WorkspaceChrome, WorkspaceMain } from "../workspace/WorkspaceView";
@@ -881,6 +881,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       workspaceOn() &&
       hostId === workspace.state.host?.hostId &&
       workspaceController.notifyLevel(conversationId) !== null,
+    // The owner's quiet hours and focus, known for the open host only. The host applies them to the
+    // owner alone, so an admin's page still tells.
+    ownerQuiet: (hostId) => {
+      if (hostId !== workspace.state.host?.hostId || workspace.state.host?.role !== "owner") return false;
+      return ownerAwayQuietNow(ownerAway.state());
+    },
     // Only the open host has a channel list. A prompt of another host names the agent only.
     channelForThread: (hostId, threadId) =>
       hostId === workspace.state.host?.hostId

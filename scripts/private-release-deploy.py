@@ -225,9 +225,14 @@ def main():
     drained = drain_host() if interrupt else None
     if interrupt:
         (RELEASE / "interrupted-agents.json").write_text(json.dumps(working_agents(), indent=2))
+    # Devices retry every few seconds through a planned restart instead of backing off (older hosts
+    # answer 404 and nothing changes).
+    noticed = control("POST", "/v1/restart-notice", "restart-notice", body="state=restarting")
     try:
         deploy_host(IMAGE)
     except Exception:
+        if noticed is not None:
+            control("POST", "/v1/restart-notice", "restart-notice-clear", body="state=none")
         if drained is not None:
             control("POST", "/v1/drain/cancel", "drain-cancel")
         raise
@@ -240,11 +245,12 @@ def main():
                           deploy_seconds=report["deploy_seconds"], saved_data_verified=True, resumed=resumed)))
 
 
-def control(method, path, name, max_time=10):
+def control(method, path, name, max_time=10, body=None):
     """One call to the running host's control socket; None when the call fails."""
+    data = ["-d", body] if body is not None else []
     result = subprocess.run(["sudo", "docker", "exec", "openbot", "curl", "-s", "--fail", "-X", method,
                              "--max-time", str(max_time), "--unix-socket", "/run/openbot/control.sock",
-                             f"http://openbot{path}"], env=ENV, capture_output=True)
+                             *data, f"http://openbot{path}"], env=ENV, capture_output=True)
     (RELEASE / f"{name}.log").write_bytes(result.stdout + result.stderr)
     return result.stdout.decode() if result.returncode == 0 else None
 

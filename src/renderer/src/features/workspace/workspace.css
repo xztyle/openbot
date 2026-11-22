@@ -668,6 +668,14 @@
   height: 50px;
 }
 
+/* "Why is this slow?" and the chat's controls stand in one row: a block slot put them on two. */
+.ws-agent-dm-header .ws-channel-header-search {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--openbot-space-1);
+}
+
 .ws-agent-dm-controls {
   display: flex;
   min-width: 0;

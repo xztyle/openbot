@@ -470,6 +470,32 @@ async function handedBack(page: Page): Promise<void> {
 }
 
 /** The Browser menu of the DM header opens the agent's tab in the full view, live. */
+/**
+ * While the agent works, the DM header holds "Why is this slow?" beside the chat's controls, in its
+ * one row: the button and the model picker overlap in height, and both are inside the header.
+ */
+async function headerInOneRow(page: Page): Promise<void> {
+  const header = page.locator(".ws-agent-dm-header");
+  const slow = header.getByRole("button", { name: `${english("insight.slow.button")} · Chief`, exact: true });
+  await slow.waitFor({ timeout: UI_WAIT_MS });
+  const boxes = await Promise.all([
+    header.boundingBox(),
+    slow.boundingBox(),
+    header.locator(".provider-model-trigger").first().boundingBox(),
+  ]);
+  const [frame, button, picker] = boxes;
+  assert.ok(frame && button && picker, `The header has no box: ${JSON.stringify(boxes)}`);
+  assert.ok(
+    Math.max(button.y, picker.y) < Math.min(button.y + button.height, picker.y + picker.height),
+    `"Why is this slow?" and the model are not in one row: ${JSON.stringify(boxes)}`,
+  );
+  for (const inner of [button, picker])
+    assert.ok(
+      inner.y >= frame.y - 1 && inner.y + inner.height <= frame.y + frame.height + 1,
+      `A control stands outside the header: ${JSON.stringify(boxes)}`,
+    );
+}
+
 async function browserFromHeader(page: Page, host: TabHost, touch: boolean): Promise<void> {
   const starts = host.starts;
   const trigger = page.getByRole("button", { name: english("conversation.header.browser", { name: "Chief" }) });
@@ -553,13 +579,25 @@ async function phone(browser: Browser, origin: string): Promise<void> {
     await handedBack(page);
   });
 
-  await step(page, viewport, "the DM header's Browser menu opens the agent's tab live", async () => {
+  await step(page, viewport, "the DM header's More sheet opens the agent's tab live", async () => {
     // The full view is open from the takeover; Back returns to the chat first.
     await page.goto(`${origin}${DM_PATH}`, { waitUntil: "commit" });
+    const more = page.locator(".ws-agent-dm-header").getByRole("button", { name: english("workspace.message.more") });
+    await more.waitFor({ timeout: UI_WAIT_MS });
+    await headerInOneRow(page);
+    const starts = host.starts;
+    await more.tap();
     await page
-      .getByRole("button", { name: english("conversation.header.browser", { name: "Chief" }) })
+      .getByRole("dialog")
+      .getByRole("button", {
+        name: new RegExp(`^${english("conversation.header.browser", { name: "Chief" })}: Create your account`, "u"),
+      })
+      .tap();
+    await page
+      .getByRole("tabpanel")
+      .getByRole("img", { name: english("browser.liveView.label") })
       .waitFor({ timeout: UI_WAIT_MS });
-    await browserFromHeader(page, host, true);
+    assert.ok(host.starts > starts, "The full view starts a stream of the tab.");
     await shot(page, "phone-header-browser");
   });
   await context.close();
@@ -573,6 +611,7 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
 
   await step(page, viewport, "the card says the agent waits for the reader", async () => {
     await load(page, origin, DM_PATH, card());
+    await headerInOneRow(page);
     await card()
       .getByRole("status")
       .filter({ hasText: english("prompt.browser.waitingForYou") })

@@ -337,6 +337,8 @@ export class DelegationFollowUp {
     if (!this.#store.list().some((agent) => agent.id === requesterId)) return;
     yield* this.#mailbox.enqueue({
       sender: { kind: "agent", agentId },
+      // The members whose request this answers: the requester keeps to their levels too.
+      requesterIds: this.#mailbox.requesterIds(messageId),
       recipientAgentIds: [requesterId],
       text,
       replyToMessageId: messageId,

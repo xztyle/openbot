@@ -51,6 +51,7 @@ export interface AgentTaskCaller {
   agentId: string;
   /** A channel, messaging or task turn: only the agent's own chat starts a task. */
   inExecutionThread: boolean;
+  requesterIds: readonly string[];
 }
 
 export interface AgentTasksOptions {
@@ -255,6 +256,7 @@ export class AgentTasks implements TaskLanes {
     const queued = yield* this.#mailbox
       .enqueue({
         sender: { kind: "agent", agentId: caller.agentId },
+        requesterIds: caller.requesterIds,
         taskId: task.taskId,
         recipientAgentIds: [caller.agentId],
         text: parsed.data.brief,

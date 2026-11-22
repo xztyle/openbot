@@ -16,6 +16,7 @@ import type {
   UpdateAgentInput,
 } from "@openbot/contracts/ipc";
 import {
+  agentAccessRank,
   agentComputerUseEnabled,
   agentNewChatAllowed,
   agentQuickAcknowledgementEnabled,
@@ -868,6 +869,34 @@ export class OpenBotToolRouter {
     );
   }
 
+  /**
+   * The team members whose request this turn serves: the member who wrote a message of the turn, and
+   * the members that an agent's message of the turn carries (upstream c57e4cb20). The owner and
+   * admins have every agent at `manage`, so they limit nothing.
+   */
+  #memberRequesters(agentId: string, turnId: string): string[] {
+    const ids = new Set<string>();
+    for (const { delivery } of this.#mailbox.findDeliveriesByTurn(agentId, turnId)) {
+      if (delivery.sender.kind === "agent") {
+        for (const id of this.#mailbox.requesterIds(delivery.messageId)) ids.add(id);
+        continue;
+      }
+      const member = this.#mailbox.senderMember(delivery.messageId);
+      if (member && (this.#channels.hooks.remotePerson?.(member.id) ?? false)) ids.add(member.id);
+    }
+    return [...ids];
+  }
+
+  /** Whether an agent is one that every requesting member may chat with. The caller always is. */
+  #reachableAgentIds(senderAgentId: string, requesterIds: readonly string[]): (agentId: string) => boolean {
+    return (agentId) =>
+      agentId === senderAgentId ||
+      requesterIds.every(
+        (personId) =>
+          agentAccessRank(this.#channels.hooks.personAgentLevel?.(personId, agentId) ?? "manage") >=
+          agentAccessRank("chat"),
+      );
+  }
   /** The agents in the space of `agentId`, itself included. */
   #spaceAgents(agentId: string): AgentSummary[] {
     return this.#hooks.listAgents().filter((agent) => this.#store.spaces.sameSpace(agentId, agent.id));
@@ -1117,7 +1146,9 @@ export class OpenBotToolRouter {
       const openWaits = this.#waits.countByAgent();
       // A hidden agent takes no new messages, so the list leaves it out. A background teammate stays:
       // it keeps working for other agents.
-      const spaceAgents = this.#spaceAgents(senderAgentId);
+      // In a member's turn, only the agents that the member may chat with (upstream c57e4cb20).
+      const reachable = this.#reachableAgentIds(senderAgentId, this.#memberRequesters(senderAgentId, params.turnId));
+      const spaceAgents = this.#spaceAgents(senderAgentId).filter((agent) => reachable(agent.id));
       const managers = agentManagers(spaceAgents);
       const agents = spaceAgents
         .filter((agent) => agent.hiddenAt === undefined)
@@ -1179,7 +1210,12 @@ export class OpenBotToolRouter {
       return { success: true, contentItems: [{ type: "inputText", text: redactText(JSON.stringify(payload)) }] };
     }
 
-    if (params.tool === "interrupt_agent") return yield* this.#interruptTool.handle(params, senderAgentId);
+    if (params.tool === "interrupt_agent")
+      return yield* this.#interruptTool.handle(
+        params,
+        senderAgentId,
+        this.#memberRequesters(senderAgentId, params.turnId),
+      );
 
     if (params.tool === "read_agent") {
       const args = readAgentToolSchema.parse(params.arguments ?? {});
@@ -1332,6 +1368,7 @@ export class OpenBotToolRouter {
       inExecutionThread: this.#conversation.isExecutionThread(
         this.#conversation.publicThreadId(senderAgentId, params.threadId),
       ),
+      requesterIds: this.#memberRequesters(senderAgentId, params.turnId),
     };
     const waitResult = this.#waits.handleTool(params, caller);
     if (waitResult) return waitResult;
@@ -2075,7 +2112,16 @@ export class OpenBotToolRouter {
         throw new Error("Duplicate recipients are not allowed.");
       }
       if (recipientValues.includes(senderAgentId)) throw new Error("An agent cannot message itself.");
-      const known = new Map(this.#hooks.listAgents().map((agent) => [agent.id, agent]));
+      // An agent that the requesting member may not chat with reads as unknown, so the refusal does
+      // not name it (upstream c57e4cb20).
+      const requesterIds = this.#memberRequesters(senderAgentId, params.turnId);
+      const reachable = this.#reachableAgentIds(senderAgentId, requesterIds);
+      const known = new Map(
+        this.#hooks
+          .listAgents()
+          .filter((agent) => reachable(agent.id))
+          .map((agent) => [agent.id, agent]),
+      );
       for (const recipient of recipientValues) {
         const agent = known.get(recipient);
         if (!agent) throw new Error(`Unknown Atelier agent: ${recipient}`);
@@ -2160,6 +2206,7 @@ export class OpenBotToolRouter {
       const receipt = yield* this.#mailbox
         .enqueue({
           sender: { kind: "agent", agentId: senderAgentId },
+          ...(requesterIds.length > 0 ? { requesterIds } : {}),
           recipientAgentIds: recipientValues,
           text,
           ...(summary ? { summary } : {}),

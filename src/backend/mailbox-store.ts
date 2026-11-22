@@ -106,6 +106,11 @@ interface StoredMessage {
    * because `sender` is also the queue's and the transfer manifest's. Absent on older messages.
    */
   senderMember?: ConversationMessageSender;
+  /**
+   * On an agent's message: the team members whose request started this work (upstream c57e4cb20).
+   * The next agent in a chain keeps to the levels of these members.
+   */
+  requesterIds?: string[];
   text: string;
   attachments: StoredAttachment[];
   /**
@@ -198,6 +203,7 @@ interface EnqueueInput {
   taskId?: string;
   sender: StoredMessage["sender"];
   senderMember?: ConversationMessageSender;
+  requesterIds?: readonly string[];
   recipientAgentIds: string[];
   text: string;
   replyToMessageId?: string | null;
@@ -810,6 +816,9 @@ export class MailboxStore {
         ...(input.sender.kind === "user" && input.notice ? { notice: input.notice } : {}),
         ...(input.sender.kind === "user" && input.senderMember && !input.notice
           ? { senderMember: input.senderMember }
+          : {}),
+        ...(input.sender.kind === "agent" && input.requesterIds?.length
+          ? { requesterIds: [...input.requesterIds] }
           : {}),
         text: rewriteAttachmentReferences(text, (reference) => {
           const attachment = committedByDraftId.get(reference.attachmentId);
@@ -2262,6 +2271,15 @@ export class MailboxStore {
     return this.#state.messages.find((message) => message.id === messageId)?.expectsReply !== false;
   }
 
+  /** The person who wrote a user message, as the host stamped it. */
+  senderMember(messageId: string): ConversationMessageSender | undefined {
+    return this.#state.messages.find((message) => message.id === messageId)?.senderMember;
+  }
+
+  requesterIds(messageId: string): readonly string[] {
+    return this.#state.messages.find((message) => message.id === messageId)?.requesterIds ?? [];
+  }
+
   hasReplyFrom(agentId: string, messageId: string): boolean {
     return this.#state.messages.some(
       (message) =>
@@ -3602,6 +3620,7 @@ function isStoredMessage(value: unknown): value is StoredMessage {
         isString(value.sender.routineName) &&
         isString(value.sender.scheduledFor))) &&
     (value.senderMember === undefined || isConversationMessageSender(value.senderMember)) &&
+    (value.requesterIds === undefined || (Array.isArray(value.requesterIds) && value.requesterIds.every(isString))) &&
     isString(value.text) &&
     Array.isArray(value.attachments) &&
     value.attachments.every(isStoredAttachment) &&

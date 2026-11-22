@@ -1156,4 +1156,13 @@ export const messages = {
   "workspace.progress.hide": { one: "Ocultar {count} actualización", other: "Ocultar {count} actualizaciones" },
   "workspace.activity.replies": { one: "{name} respondió en un hilo", other: "{name}: {count} respuestas" },
   "workspace.today.openGuide": "Abrir Hoy",
+  "workspace.today.learning": "Aprendizaje",
+  "workspace.today.apply": "Aplicar",
+  "workspace.today.proposal.learning": "Revisa lo que aprendió",
+  "workspace.today.proposal.playbook": "Revisa un cambio del playbook",
+  "workspace.today.proposal.review": "Revisa una instrucción nueva",
+  "workspace.today.pausedAgent": "En pausa por un límite",
+  "workspace.today.pausedSpace": "Espacio en pausa por un límite",
+  "workspace.today.injection": "Bloqueó una inyección de prompt",
+  "workspace.money.topToday": "Quién más gasta hoy",
 } as const satisfies PartialTranslation<typeof source>;

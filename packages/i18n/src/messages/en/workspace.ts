@@ -1169,4 +1169,13 @@ export const messages = defineMessages("workspace", {
   "workspace.progress.hide": { one: "Hide {count} update", other: "Hide {count} updates" },
   "workspace.activity.replies": { one: "{name} replied in a thread", other: "{name}: {count} replies" },
   "workspace.today.openGuide": "Open Today",
+  "workspace.today.learning": "Learning",
+  "workspace.today.apply": "Apply",
+  "workspace.today.proposal.learning": "Review what it learned",
+  "workspace.today.proposal.playbook": "Review a playbook change",
+  "workspace.today.proposal.review": "Review a new instruction",
+  "workspace.today.pausedAgent": "Paused by a guardrail",
+  "workspace.today.pausedSpace": "Space paused by a guardrail",
+  "workspace.today.injection": "Blocked a prompt injection",
+  "workspace.money.topToday": "Top spenders today",
 });

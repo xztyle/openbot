@@ -7,6 +7,12 @@
   workspace gets a short guide to goals, #general, the morning briefing, loops and costs.
 - Money: one page for what the agents cost today, this week and this month, revenue and ad spend,
   the spending that waits for your OK, each agent's cost, the plan's limits and the spend alert.
+  With guardrails on the server it also shows what is paused (with Resume), each subscription's use
+  and when it runs out, today's top spenders and the agents moved to another model.
+- Today also lists what the agents learned and wait to apply (memories, playbook changes, review
+  instructions) with Apply and Dismiss, an agent or a space that a guardrail paused with Resume, and
+  a blocked prompt injection. A money approval shows its effect line: the target, the amount and the
+  budget after.
 - Ctrl+K (⌘K) runs actions: "ask Research compare the prices" sends the line to Research,
   "approve" lists what waits with Approve and Decline, "stop" stops an agent at work, "goal" opens a
   new goal. A sentence that names no one goes to the lead agent as a task. The phone's Jump to has

@@ -619,4 +619,13 @@ export const messages = {
   "workspace.progress.hide": { other: "隐藏 {count} 条进展" },
   "workspace.activity.replies": { other: "{name}：{count} 条回复" },
   "workspace.today.openGuide": "打开今天",
+  "workspace.today.learning": "学习",
+  "workspace.today.apply": "应用",
+  "workspace.today.proposal.learning": "查看它学到的内容",
+  "workspace.today.proposal.playbook": "查看剧本变更",
+  "workspace.today.proposal.review": "查看新指令",
+  "workspace.today.pausedAgent": "被护栏暂停",
+  "workspace.today.pausedSpace": "空间被护栏暂停",
+  "workspace.today.injection": "已拦截提示注入",
+  "workspace.money.topToday": "今日支出最多",
 } as const satisfies PartialTranslation<typeof source>;

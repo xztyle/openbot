@@ -41,6 +41,8 @@ export interface EfficiencyCalls {
   decideLearning(itemId: string, decision: LearningDecision): Promise<LearningReviewItem>;
   dream(agentId: string): Promise<LearningReviewItem[]>;
   decisionQueue(): Promise<DecisionQueueEntry[]>;
+  /** Approves or dismisses one entry of the decision queue, whatever its source. */
+  decideQueue(id: string, decision: "approve" | "dismiss"): Promise<void>;
   settingsHistory(agentId: string): Promise<SettingsCheckpoint[]>;
   rollback(checkpointId: string): Promise<SettingsCheckpoint>;
   forgetConversation(agentId: string, confirm: boolean): Promise<ForgetConversationResult>;
@@ -136,6 +138,9 @@ export function hostEfficiencyCalls(request: () => TeamApiRequest): EfficiencyCa
       request()("POST", AGENT_LEARNING_ROUTES.decide, field("item", isItem), { itemId, decision }),
     dream: (agentId) => request()("POST", AGENT_LEARNING_ROUTES.dream, field("items", isItems), { agentId }),
     decisionQueue: () => request()("POST", AGENT_LEARNING_ROUTES.queue, field("entries", isEntries), {}),
+    decideQueue: async (id, decision) => {
+      await request()("POST", AGENT_LEARNING_ROUTES.decideQueue, () => undefined, { id, decision });
+    },
     settingsHistory: (agentId) =>
       request()("POST", AGENT_LEARNING_ROUTES.history, field("checkpoints", isCheckpoints), { agentId }),
     rollback: (checkpointId) =>

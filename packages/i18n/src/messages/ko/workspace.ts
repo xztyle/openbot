@@ -629,4 +629,13 @@ export const messages = {
   "workspace.progress.hide": { other: "업데이트 {count}개 숨기기" },
   "workspace.activity.replies": { other: "{name}: 답글 {count}개" },
   "workspace.today.openGuide": "오늘 열기",
+  "workspace.today.learning": "학습",
+  "workspace.today.apply": "적용",
+  "workspace.today.proposal.learning": "배운 내용 검토",
+  "workspace.today.proposal.playbook": "플레이북 변경 검토",
+  "workspace.today.proposal.review": "새 지시 검토",
+  "workspace.today.pausedAgent": "가드레일로 일시 중지됨",
+  "workspace.today.pausedSpace": "가드레일로 공간이 일시 중지됨",
+  "workspace.today.injection": "프롬프트 인젝션 차단",
+  "workspace.money.topToday": "오늘 지출 상위",
 } as const satisfies PartialTranslation<typeof source>;

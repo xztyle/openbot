@@ -2,7 +2,18 @@ import { Dynamic, type JSX } from "@solidjs/web";
 import { createSignal, For, Show } from "solid-js";
 import { Button, buttonVariants } from "../../button";
 import { Popover } from "../../complex";
-import { CircleQuestionMark, Globe2, Hand, KeyRound, LogIn, ShieldCheck, Ticket, TriangleAlert } from "../../icons";
+import {
+  CirclePause,
+  CircleQuestionMark,
+  Globe2,
+  Hand,
+  KeyRound,
+  LogIn,
+  ShieldCheck,
+  Sparkles,
+  Ticket,
+  TriangleAlert,
+} from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { MemberAvatar } from "./WorkspaceAvatar";
@@ -24,7 +35,13 @@ export type NeedsYouKind =
   /** A Motion ticket that waits on the reader. */
   | "ticket"
   /** An insight alert of the host, such as ad spend with no sale. */
-  | "alert";
+  | "alert"
+  /** A proposal to learn: a memory, a playbook or an instruction that waits for the owner's OK. */
+  | "proposal"
+  /** An agent or a space that a guardrail paused, such as a daily budget that ran out. */
+  | "pause"
+  /** A prompt injection that the guardrails blocked. */
+  | "injection";
 
 /** One request that waits for the reader, as a row shows it. */
 export interface NeedsYouRow {
@@ -52,6 +69,9 @@ const KIND_ICON = {
   decision: ShieldCheck,
   ticket: Ticket,
   alert: TriangleAlert,
+  proposal: Sparkles,
+  pause: CirclePause,
+  injection: ShieldCheck,
 } as const satisfies Record<NeedsYouKind, typeof Hand>;
 
 export interface NeedsYouListProps {

@@ -639,4 +639,13 @@ export const messages = {
   "workspace.progress.hide": { one: "Ocultar {count} atualização", other: "Ocultar {count} atualizações" },
   "workspace.activity.replies": { one: "{name} respondeu em uma conversa", other: "{name}: {count} respostas" },
   "workspace.today.openGuide": "Abrir Hoje",
+  "workspace.today.learning": "Aprendizado",
+  "workspace.today.apply": "Aplicar",
+  "workspace.today.proposal.learning": "Revise o que aprendeu",
+  "workspace.today.proposal.playbook": "Revise uma mudança no playbook",
+  "workspace.today.proposal.review": "Revise uma nova instrução",
+  "workspace.today.pausedAgent": "Pausado por um limite",
+  "workspace.today.pausedSpace": "Espaço pausado por um limite",
+  "workspace.today.injection": "Bloqueou uma injeção de prompt",
+  "workspace.money.topToday": "Quem mais gasta hoje",
 } as const satisfies PartialTranslation<typeof source>;

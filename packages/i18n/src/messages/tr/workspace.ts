@@ -639,4 +639,13 @@ export const messages = {
   "workspace.progress.hide": { one: "{count} güncellemeyi gizle", other: "{count} güncellemeyi gizle" },
   "workspace.activity.replies": { one: "{name} bir ileti dizisinde yanıtladı", other: "{name}: {count} yanıt" },
   "workspace.today.openGuide": "Bugün’ü aç",
+  "workspace.today.learning": "Öğrenme",
+  "workspace.today.apply": "Uygula",
+  "workspace.today.proposal.learning": "Öğrendiklerini incele",
+  "workspace.today.proposal.playbook": "Bir playbook değişikliğini incele",
+  "workspace.today.proposal.review": "Yeni bir talimatı incele",
+  "workspace.today.pausedAgent": "Bir sınır tarafından duraklatıldı",
+  "workspace.today.pausedSpace": "Alan bir sınır tarafından duraklatıldı",
+  "workspace.today.injection": "Bir istem enjeksiyonu engellendi",
+  "workspace.money.topToday": "Bugün en çok harcayanlar",
 } as const satisfies PartialTranslation<typeof source>;

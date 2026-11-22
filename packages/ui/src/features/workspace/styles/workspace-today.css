@@ -151,6 +151,16 @@
   -webkit-box-orient: vertical;
 }
 
+.ws-today-decision-detail {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  white-space: pre-line;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+
 .ws-today-decision-where {
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
@@ -650,4 +660,54 @@
   padding: 0;
   color: inherit;
   font: inherit;
+}
+
+/* Money's guardrails: a paused agent with Resume, and each subscription window's use. */
+.ws-money-row {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-3);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--atelier-radius-card, var(--openbot-radius-lg));
+  background: var(--openbot-bg-surface);
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+}
+
+.ws-money-row-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.ws-money-row-copy > .ws-today-card-meta,
+.ws-money-window > .ws-today-card-meta {
+  margin-left: 0;
+  white-space: normal;
+}
+
+.ws-money-meter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+}
+
+.ws-money-meter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-2);
+  margin: 0;
+}
+
+.ws-money-window {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-0-5);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .ws-money-row > .ui-button {
+    min-height: var(--openbot-touch-target);
+  }
 }

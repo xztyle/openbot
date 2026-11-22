@@ -5,6 +5,7 @@
  * "Needs you" and the phone's Today badge count the same list, so the numbers always agree and a
  * request of another space is never missed.
  */
+import type { DecisionQueueSource } from "@openbot/contracts/agent-learning";
 import { agentAttentionKey, isTicketAttention, type LoopDecision } from "@openbot/contracts/ipc";
 import type { NeedsYouRow } from "@openbot/ui/features/workspace/NeedsYou";
 import type { TodayDecision } from "@openbot/ui/features/workspace/TodayView";
@@ -13,6 +14,7 @@ import { createMemo, createSignal } from "solid-js";
 import { needsYouAction } from "../agents/needs-you";
 import { useLoopDecisions } from "./loop-decisions-feed";
 import { useWorkspace } from "./workspace-context";
+import { useGuardrails, useLearningQueue } from "./workspace-host-feeds";
 import { insightAlerts, pollInsightAlerts, setInsightAlerts } from "./workspace-insight-alerts";
 import { memberById } from "./workspace-model";
 
@@ -39,6 +41,23 @@ export function compareDecisions(left: Sortable, right: Sortable): number {
 
 const LOOP_KEY = "loop-decision\n";
 const ALERT_KEY = "insight:";
+const LEARNING_KEY = "learning:";
+const PAUSE_KEY = "pause:";
+const INJECTION_KEY = "injection:";
+
+/** What a learning proposal asks, by where it comes from. */
+const PROPOSAL_KEY = {
+  learning: "workspace.today.proposal.learning",
+  playbook: "workspace.today.proposal.playbook",
+  review: "workspace.today.proposal.review",
+} as const satisfies Record<DecisionQueueSource, string>;
+
+/** The dollar amount of an effect line ("Pay $19.00 to …"), for the money order of the queue. */
+function amountIn(text: string): number | undefined {
+  const match = /\$\s?([\d,]+(?:\.\d+)?)/u.exec(text);
+  const value = match?.[1] ? Number(match[1].replaceAll(",", "")) : Number.NaN;
+  return Number.isFinite(value) ? value : undefined;
+}
 
 /** Every decision that waits for the reader, in queue order, with what each one opens and answers. */
 export function useDecisionQueue() {
@@ -75,12 +94,22 @@ export function useDecisionQueue() {
               ws.channels.port().agent.respondToApproval({ requestId: item.requestId, decision })
           : undefined;
       const browser = item.kind === "browser-takeover" || item.kind === "sign-in" || item.kind === "secret";
+      // A money approval of the trust gate says its effect: the target, the amount, the budget after.
+      const held =
+        item.kind === "approval"
+          ? (ws.env.approvals?.() ?? []).find(
+              (entry) => entry.agentId === item.agentId && String(entry.requestId) === String(item.requestId),
+            )
+          : undefined;
+      const effect = held?.command?.trim() || undefined;
       return {
         key: agentAttentionKey(item),
         member: memberById(ws.directory(), item.agentId, agentName(item.agentId)),
         kind: ticket ? "ticket" : item.kind,
         action: needsYouAction(item, t),
-        summary: item.summary,
+        summary: effect ?? item.summary,
+        detail: effect ? (held?.reason ?? undefined) : undefined,
+        amountUsd: effect ? amountIn(effect) : undefined,
         where: where(
           spaceId,
           channel ? t("workspace.activity.in", { channel: channel.name }) : t("workspace.activity.directMessage"),
@@ -152,7 +181,97 @@ export function useDecisionQueue() {
     })),
   );
 
-  const queue = createMemo(() => [...requests(), ...decisions(), ...alerts()].sort(compareDecisions));
+  // The learning queue: memory, playbook and instruction proposals that wait for the owner's OK.
+  const learning = useLearningQueue(ws);
+  const proposals = createMemo((): TodayDecision[] =>
+    learning.value().map((entry) => {
+      const decideEntry = (decision: "approve" | "dismiss") => async () => {
+        const calls = ws.env.efficiency?.();
+        if (!calls) throw new Error(t("workspace.today.answerFailed"));
+        await calls.decideQueue(entry.id, decision);
+        learning.set(learning.value().filter((candidate) => candidate.id !== entry.id));
+      };
+      return {
+        key: `${LEARNING_KEY}${entry.id}`,
+        member: entry.agentId
+          ? memberById(ws.directory(), entry.agentId, agentName(entry.agentId))
+          : { id: "learning", kind: "agent", name: t("workspace.today.learning"), avatarSeed: "learning" },
+        kind: "proposal",
+        action: t(PROPOSAL_KEY[entry.source]),
+        summary: entry.title,
+        detail: entry.detail,
+        where: where(entry.spaceId ?? undefined, undefined),
+        blocking: false,
+        at: Date.parse(entry.createdAt) || 0,
+        approve: decideEntry("approve"),
+        approveLabel: t("workspace.today.apply"),
+        reject: decideEntry("dismiss"),
+        rejectLabel: t("workspace.today.dismiss"),
+        openLabel: t("workspace.needsYou.open"),
+        open: () => ws.openView("reviews"),
+      };
+    }),
+  );
+
+  // The guardrails: an agent or a space that a budget paused, and a blocked prompt injection.
+  const guardrails = useGuardrails(ws);
+  const [seen, setSeen] = createSignal<ReadonlySet<string>>(new Set());
+  const guarded = createMemo((): TodayDecision[] => {
+    const view = guardrails.value();
+    if (!view) return [];
+    const pauses = view.pauses.map((pause): TodayDecision => {
+      const agent = pause.scope === "agent";
+      return {
+        key: `${PAUSE_KEY}${pause.scope}:${pause.id}`,
+        member: agent
+          ? memberById(ws.directory(), pause.id, agentName(pause.id))
+          : { id: pause.id, kind: "agent", name: ws.spaces.space(pause.id)?.name ?? pause.id, avatarSeed: pause.id },
+        kind: "pause",
+        action: t(agent ? "workspace.today.pausedAgent" : "workspace.today.pausedSpace"),
+        summary: pause.detail,
+        where: where(agent ? ws.spaces.agentSpace(pause.id) : pause.id, undefined),
+        blocking: true,
+        at: Date.parse(pause.since) || 0,
+        approve: async () => {
+          const calls = ws.env.trust?.();
+          if (!calls) throw new Error(t("workspace.today.answerFailed"));
+          guardrails.set(await calls.guardrails.resume(pause.scope, pause.id));
+        },
+        approveLabel: t("trust.guardrails.resume"),
+        openLabel: t("workspace.needsYou.open"),
+        open: () => ws.openView("trust"),
+      };
+    });
+    const day = Date.now() - 24 * 3_600_000;
+    const injections = view.events
+      .filter((event) => event.kind === "injection-blocked" && Date.parse(event.at) >= day && !seen().has(event.id))
+      .map(
+        (event): TodayDecision => ({
+          key: `${INJECTION_KEY}${event.id}`,
+          member: event.agentId
+            ? memberById(ws.directory(), event.agentId, agentName(event.agentId))
+            : { id: "guardrails", kind: "agent", name: t("trust.title"), avatarSeed: "guardrails" },
+          kind: "injection",
+          action: t("workspace.today.injection"),
+          summary: event.summary,
+          where: where(event.spaceId ?? (event.agentId ? ws.spaces.agentSpace(event.agentId) : undefined), undefined),
+          blocking: false,
+          at: Date.parse(event.at) || 0,
+          // The host keeps the event; the owner who read it does not need it here again.
+          reject: async () => {
+            setSeen((current) => new Set([...current, event.id]));
+          },
+          rejectLabel: t("workspace.today.dismiss"),
+          openLabel: t("workspace.needsYou.open"),
+          open: () => ws.openView("trust"),
+        }),
+      );
+    return [...pauses, ...injections];
+  });
+
+  const queue = createMemo(() =>
+    [...requests(), ...decisions(), ...alerts(), ...proposals(), ...guarded()].sort(compareDecisions),
+  );
   /** The same queue as the rows of the top bar's list. */
   const rows = createMemo((): NeedsYouRow[] =>
     queue().map((decision) => ({

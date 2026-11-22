@@ -810,4 +810,13 @@ export const messages = {
     other: "{name}: {count} odpowiedzi",
   },
   "workspace.today.openGuide": "Otwórz Dziś",
+  "workspace.today.learning": "Nauka",
+  "workspace.today.apply": "Zastosuj",
+  "workspace.today.proposal.learning": "Sprawdź, czego się nauczył",
+  "workspace.today.proposal.playbook": "Sprawdź zmianę playbooka",
+  "workspace.today.proposal.review": "Sprawdź nową instrukcję",
+  "workspace.today.pausedAgent": "Wstrzymany przez limit",
+  "workspace.today.pausedSpace": "Przestrzeń wstrzymana przez limit",
+  "workspace.today.injection": "Zablokowano wstrzyknięcie promptu",
+  "workspace.money.topToday": "Najwięcej wydają dziś",
 } as const satisfies PartialTranslation<typeof source>;

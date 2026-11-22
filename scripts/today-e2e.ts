@@ -49,8 +49,10 @@ function webClientPages(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (request, response, next) => {
         const url = request.url ?? "";
-        if (!/^\/app(?:[/?]|$)/u.test(url)) return next();
-        const html = await server.transformIndexHtml(url, HARNESS);
+        const guardrails = /^\/guardrails(?:[/?]|$)/u.test(url);
+        if (!guardrails && !/^\/app(?:[/?]|$)/u.test(url)) return next();
+        const page = guardrails ? HARNESS.replace("web-client-today-harness", "today-guardrails-harness") : HARNESS;
+        const html = await server.transformIndexHtml(url, page);
         response.setHeader("Content-Type", "text/html; charset=utf-8");
         response.end(html);
       });
@@ -119,7 +121,7 @@ const server = await createServer({
   plugins: [webClientPages(), tailwindcss({ optimize: false }), solidPlugin()],
   resolve: { dedupe: ["solid-js", "@solidjs/web", "@solidjs/signals"] },
   optimizeDeps: {
-    entries: ["src/renderer/stories/web-client-today-harness.tsx"],
+    entries: ["src/renderer/stories/web-client-today-harness.tsx", "src/renderer/stories/today-guardrails-harness.tsx"],
     include: ["@norbert_bodziony/bloub"],
   },
   server: { host: "127.0.0.1", port: 0, strictPort: false, fs: { strict: false }, hmr: false },
@@ -229,6 +231,44 @@ try {
       .waitFor({ timeout: UI_WAIT_MS });
   });
   await desk.close();
+
+  // 7. The guardrails and the learning queue: a pause resumes from Today and from Money; a proposal
+  // applies; Money shows when the subscription runs out, today's spenders and the failover.
+  const guard = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
+  const guardPage = await guard.newPage();
+  track(guardPage);
+  /** What the harness recorded, in order: the raw JSON list of the calls. */
+  const pressed = (): Promise<string> => guardPage.evaluate(() => document.body.dataset.todayCalls ?? "[]");
+  await step(guardPage, "Money shows the meter, today's spenders and the failover", async () => {
+    await guardPage.goto(`${origin}/guardrails`, COMMIT);
+    await guardPage.getByText(english("trust.guardrails.meter")).first().waitFor({ timeout: UI_WAIT_MS });
+    await guardPage
+      .getByText(/runs out about/u)
+      .first()
+      .waitFor({ timeout: UI_WAIT_MS });
+    await guardPage.getByText(english("workspace.money.topToday")).waitFor({ timeout: UI_WAIT_MS });
+    await guardPage.getByText(/claude\/claude-sonnet-5-5 → codex\/gpt-6-luna/u).waitFor({ timeout: UI_WAIT_MS });
+  });
+  await shot(guardPage, "05-guardrails");
+  await step(guardPage, "a learning proposal applies from its card", async () => {
+    await guardPage
+      .getByRole("article", { name: /Review a playbook change/u })
+      .getByRole("button", { name: english("workspace.today.apply"), exact: true })
+      .click();
+    await guardPage.waitForFunction(() => (document.body.dataset.todayCalls ?? "").includes("learning:approve"));
+  });
+  await step(guardPage, "Resume on Money ends the pause everywhere", async () => {
+    await guardPage
+      .getByRole("region", { name: english("workspace.view.money") })
+      .getByRole("listitem")
+      .filter({ hasText: "200 of 200 turns today" })
+      .getByRole("button", { name: english("trust.guardrails.resume") })
+      .click();
+    await guardPage.waitForFunction(() => (document.body.dataset.todayCalls ?? "").includes("resume:agent:ana-1"));
+    assert.equal(await guardPage.getByRole("article", { name: /Paused by a guardrail/u }).count(), 0);
+    assert.equal(await pressed(), JSON.stringify(["learning:approve", "resume:agent:ana-1"]));
+  });
+  await guard.close();
 
   report.passed =
     report.steps.every((item) => item.passed) && report.pageErrors.length === 0 && report.consoleErrors.length === 0;

@@ -7,6 +7,7 @@ import { MoneyView } from "@openbot/ui/features/workspace/MoneyView";
 import { createMemo } from "solid-js";
 import { useWorkspace } from "./workspace-context";
 import { useDecisionQueue } from "./workspace-decisions";
+import { useGuardrails } from "./workspace-host-feeds";
 import { openInsightTab, useInsightReport } from "./workspace-insight-report";
 import { memberById } from "./workspace-model";
 
@@ -42,6 +43,22 @@ export function WorkspaceMoneyView() {
   });
   const todayUsd = createMemo(() => [...today().values()].reduce((sum: number, usd) => sum + (usd ?? 0), 0));
   const insights = () => ws.viewAvailable("insights");
+  const guardrails = useGuardrails(ws);
+  const guard = createMemo(() => {
+    const view = guardrails.value();
+    if (!view) return null;
+    return {
+      view,
+      name: (scope: "agent" | "space", id: string) =>
+        scope === "agent" ? memberById(ws.directory(), id).name : (ws.spaces.space(id)?.name ?? id),
+      member: (agentId: string) => memberById(ws.directory(), agentId),
+      onResume: async (scope: "agent" | "space", id: string) => {
+        const calls = ws.env.trust?.();
+        if (calls) guardrails.set(await calls.guardrails.resume(scope, id));
+      },
+      onOpenAgent: (agentId: string) => ws.openAgent(agentId),
+    };
+  });
   return (
     <MoneyView
       report={insight.report()}
@@ -52,6 +69,7 @@ export function WorkspaceMoneyView() {
       onOpenUsage={ws.env.openUsage}
       onOpenDetails={insights() ? () => openInsightTab(ws, "costs") : undefined}
       onOpenRules={insights() ? () => openInsightTab(ws, "briefing") : undefined}
+      guardrails={guard()}
       onBack={() => ws.back()}
     />
   );

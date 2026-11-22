@@ -1,8 +1,9 @@
+import type { GuardrailsView, SubscriptionWindowMeter } from "@openbot/contracts/guardrails";
 import type { WorkspaceInsight } from "@openbot/contracts/ipc";
 import type { JSX } from "@solidjs/web";
-import { createMemo, createUniqueId, For, Show } from "solid-js";
+import { createMemo, createSignal, createUniqueId, For, Show } from "solid-js";
 import { Button } from "../../button";
-import { ArrowRight, Coins, Gauge, Hand, TriangleAlert } from "../../icons";
+import { ArrowRight, CirclePause, Coins, Gauge, Hand, TriangleAlert } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState, LoadingState } from "../../view-state";
@@ -11,6 +12,16 @@ import { MemberAvatar } from "./WorkspaceAvatar";
 import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { useCost } from "./workspace-format";
 import type { WorkspaceMember } from "./workspace-types";
+
+/** The guardrails part of Money, from the host's guardrails view. */
+export interface MoneyGuardrails {
+  view: GuardrailsView;
+  /** The name of an agent or a space. */
+  name: (scope: "agent" | "space", id: string) => string;
+  member: (agentId: string) => WorkspaceMember;
+  onResume: (scope: "agent" | "space", id: string) => Promise<void>;
+  onOpenAgent: (agentId: string) => void;
+}
 
 /** One agent's line of Money: what it cost in the period and today. */
 export interface MoneyAgentRow {
@@ -36,6 +47,8 @@ export interface MoneyViewProps {
   onOpenDetails?: (() => void) | undefined;
   /** The alert rules, with the briefing. */
   onOpenRules?: (() => void) | undefined;
+  /** The guardrails of the host: pauses, the subscription meter, today's use and failovers. */
+  guardrails?: MoneyGuardrails | null | undefined;
   onBack?: (() => void) | undefined;
   class?: string;
 }
@@ -232,6 +245,7 @@ export function MoneyView(props: MoneyViewProps): JSX.Element {
             </ul>
           </Show>
         </section>
+        <Show when={props.guardrails}>{(guard) => <MoneyGuardrailsSection guard={guard()} />}</Show>
         <div class="ws-today-cards">
           <article class="ws-today-card">
             <h4 class="ws-today-card-title">
@@ -275,5 +289,202 @@ export function MoneyView(props: MoneyViewProps): JSX.Element {
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * What the guardrails hold: the agents and spaces paused now with Resume, each subscription's use with
+ * when it runs out, today's biggest spenders, and the agents moved to another model.
+ */
+function MoneyGuardrailsSection(props: { guard: MoneyGuardrails }): JSX.Element {
+  const { t, format, errorMessage } = useText();
+  const cost = useCost();
+  const uid = createUniqueId();
+  const [busy, setBusy] = createSignal<string | null>(null);
+  const [error, setError] = createSignal<string | null>(null);
+  const view = () => props.guard.view;
+  /** A meter's time is in epoch seconds; a pause's and a failover's is an ISO time. */
+  const time = (at: string | number) =>
+    format.date(typeof at === "number" ? at * 1000 : Date.parse(at), {
+      weekday: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  const windowLabel = (window: SubscriptionWindowMeter) =>
+    window.windowDurationMins === null
+      ? ""
+      : window.windowDurationMins < 24 * 60
+        ? t("trust.guardrails.window.hours", { count: Math.round(window.windowDurationMins / 60) })
+        : t("trust.guardrails.window.days", { count: Math.round(window.windowDurationMins / (24 * 60)) });
+  const spenders = createMemo(() =>
+    view()
+      .usage.filter((row) => row.scope === "agent" && row.costUsd > 0)
+      .sort((left, right) => right.costUsd - left.costUsd)
+      .slice(0, 5),
+  );
+  async function resume(scope: "agent" | "space", id: string) {
+    setBusy(`${scope}:${id}`);
+    setError(null);
+    try {
+      await props.guard.onResume(scope, id);
+    } catch (failure) {
+      setError(errorMessage(failure, t("workspace.today.answerFailed")));
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <>
+      <Show when={view().pauses.length > 0}>
+        <section class="ws-today-section" aria-labelledby={`ws-money-paused-${uid}`}>
+          <h3 id={`ws-money-paused-${uid}`} class="ws-today-heading" data-tone="warn">
+            <CirclePause aria-hidden="true" />
+            <span>{t("trust.guardrails.paused")}</span>
+          </h3>
+          <ul class="ws-money-agents">
+            <For each={view().pauses} keyed={(pause) => `${pause.scope}:${pause.id}`}>
+              {(pause) => (
+                <li class="ws-money-row">
+                  <span class="ws-money-row-copy">
+                    <strong>{props.guard.name(pause().scope, pause().id)}</strong>
+                    <span class="ws-today-card-meta">
+                      {pause().detail} ·{" "}
+                      {pause().until
+                        ? t("trust.guardrails.until", { time: time(pause().until ?? "") })
+                        : t("trust.guardrails.untilOwner")}
+                    </span>
+                  </span>
+                  <Button
+                    variant="secondary"
+                    disabled={busy() === `${pause().scope}:${pause().id}`}
+                    onClick={() => void resume(pause().scope, pause().id)}
+                  >
+                    {t("trust.guardrails.resume")}
+                  </Button>
+                </li>
+              )}
+            </For>
+          </ul>
+          <Show when={error()}>
+            {(message) => (
+              <p class="ws-today-error" role="alert">
+                {message()}
+              </p>
+            )}
+          </Show>
+        </section>
+      </Show>
+      <div class="ws-today-cards">
+        <article class="ws-today-card">
+          <h4 class="ws-today-card-title">
+            <Gauge aria-hidden="true" />
+            {t("trust.guardrails.meter")}
+          </h4>
+          <For each={view().meter} fallback={<p class="ws-today-briefing-text">{t("trust.guardrails.meterEmpty")}</p>}>
+            {(account) => (
+              <div class="ws-money-meter">
+                <p class="ws-money-meter-head">
+                  <strong>
+                    {account.provider}
+                    {account.label ? ` · ${account.label}` : ""}
+                  </strong>
+                  <Show when={account.nearlyExhausted}>
+                    <span class="ws-today-amount">{t("trust.guardrails.nearlyOut")}</span>
+                  </Show>
+                </p>
+                <For each={account.windows}>
+                  {(window) => (
+                    <div class="ws-money-window">
+                      <span class="ws-today-goal-bar" aria-hidden="true">
+                        <span style={{ width: `${Math.min(100, Math.round(window.usedPercent))}%` }} />
+                      </span>
+                      <span class="ws-today-card-meta">
+                        {[
+                          windowLabel(window),
+                          t("trust.guardrails.window.used", { percent: Math.round(window.usedPercent) }),
+                          window.exhaustsAt
+                            ? t("trust.guardrails.window.runsOut", { time: time(window.exhaustsAt) })
+                            : window.resetsAt
+                              ? t("trust.guardrails.window.resets", { time: time(window.resetsAt) })
+                              : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </div>
+                  )}
+                </For>
+              </div>
+            )}
+          </For>
+        </article>
+        <article class="ws-today-card">
+          <h4 class="ws-today-card-title">
+            <Coins aria-hidden="true" />
+            {t("workspace.money.topToday")}
+          </h4>
+          <Show
+            when={spenders().length > 0}
+            fallback={<p class="ws-today-briefing-text">{t("trust.guardrails.todayEmpty")}</p>}
+          >
+            <ul class="ws-today-shipped">
+              <For each={spenders()} keyed={(row) => row.id}>
+                {(row) => (
+                  <li>
+                    <Button
+                      variant="ghost"
+                      class="ws-today-shipped-item"
+                      onClick={() => props.guard.onOpenAgent(row().id)}
+                    >
+                      <MemberAvatar member={props.guard.member(row().id)} size="xs" />
+                      <span class="ws-truncate">{props.guard.name("agent", row().id)}</span>
+                      <span class="ws-today-card-meta">
+                        {row().state === "paused"
+                          ? t("trust.guardrails.state.paused")
+                          : row().state === "warn"
+                            ? t("trust.guardrails.state.warn")
+                            : ""}
+                      </span>
+                      <span class="ws-money-agent-cost">{cost(row().costUsd)}</span>
+                    </Button>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Show>
+        </article>
+        <Show when={view().failovers.length > 0}>
+          <article class="ws-today-card">
+            <h4 class="ws-today-card-title">
+              <ArrowRight aria-hidden="true" />
+              {t("trust.guardrails.failovers")}
+            </h4>
+            <ul class="ws-today-shipped">
+              <For each={view().failovers} keyed={(row) => row.agentId}>
+                {(row) => (
+                  <li>
+                    <Button
+                      variant="ghost"
+                      class="ws-today-shipped-item"
+                      onClick={() => props.guard.onOpenAgent(row().agentId)}
+                    >
+                      <MemberAvatar member={props.guard.member(row().agentId)} size="xs" />
+                      <span class="ws-truncate">
+                        {props.guard.name("agent", row().agentId)}:{" "}
+                        {t("trust.guardrails.failoverRow", {
+                          from: `${row().from.provider}/${row().from.model}`,
+                          to: `${row().to.provider}/${row().to.model}`,
+                        })}
+                      </span>
+                      <span class="ws-today-card-meta">{time(row().since)}</span>
+                    </Button>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </article>
+        </Show>
+      </div>
+    </>
   );
 }

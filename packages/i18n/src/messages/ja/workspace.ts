@@ -634,4 +634,13 @@ export const messages = {
   "workspace.progress.hide": { other: "{count} 件の更新を隠す" },
   "workspace.activity.replies": { other: "{name}：返信 {count} 件" },
   "workspace.today.openGuide": "今日を開く",
+  "workspace.today.learning": "学習",
+  "workspace.today.apply": "適用",
+  "workspace.today.proposal.learning": "学んだ内容を確認",
+  "workspace.today.proposal.playbook": "プレイブックの変更を確認",
+  "workspace.today.proposal.review": "新しい指示を確認",
+  "workspace.today.pausedAgent": "ガードレールで一時停止",
+  "workspace.today.pausedSpace": "スペースがガードレールで一時停止",
+  "workspace.today.injection": "プロンプトインジェクションをブロック",
+  "workspace.money.topToday": "今日の支出上位",
 } as const satisfies PartialTranslation<typeof source>;

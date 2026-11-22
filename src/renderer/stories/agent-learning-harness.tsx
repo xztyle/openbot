@@ -82,6 +82,7 @@ const calls: EfficiencyCalls = {
   decidePlaybook: unused,
   learning: unused,
   decisionQueue: unused,
+  decideQueue: unused,
   decideLearning: async (itemId, decision) => {
     record(`decide:${itemId}:${decision}`);
     const item = items.find((candidate) => candidate.id === itemId) ?? items[0];

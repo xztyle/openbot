@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Check,
   CircleCheck,
+  CirclePause,
   CirclePlus,
   CircleQuestionMark,
   Coins,
@@ -16,6 +17,7 @@ import {
   LayoutDashboard,
   LogIn,
   ShieldCheck,
+  Sparkles,
   Square,
   Sunrise,
   Target,
@@ -45,6 +47,8 @@ export interface TodayDecision {
   action: string;
   /** What the agent asks, when it is safe to show. */
   summary?: string | undefined;
+  /** A second line under the summary, such as why a payment is asked or what a proposal changes. */
+  detail?: string | undefined;
   /** Where it waits: "Trading · #launch". */
   where?: string | undefined;
   /** Money that the answer lets an agent spend. */
@@ -53,6 +57,8 @@ export interface TodayDecision {
   blocking: boolean;
   at: number;
   approve?: (() => Promise<void>) | undefined;
+  /** The label of `approve` when it is not "Approve", such as "Apply" or "Resume". */
+  approveLabel?: string | undefined;
   reject?: (() => Promise<void>) | undefined;
   /** The label of `reject` when it is not "Decline", such as "Dismiss" for an alert. */
   rejectLabel?: string | undefined;
@@ -133,6 +139,9 @@ const KIND_ICON = {
   decision: ShieldCheck,
   ticket: Ticket,
   alert: TriangleAlert,
+  proposal: Sparkles,
+  pause: CirclePause,
+  injection: ShieldCheck,
 } as const satisfies Record<NeedsYouKind, typeof Hand>;
 
 /** The key of the greeting for an hour of the day. */
@@ -322,6 +331,7 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
           </p>
           <p class="ws-today-decision-action">{decision().action}</p>
           <Show when={decision().summary}>{(summary) => <p class="ws-today-decision-summary">{summary()}</p>}</Show>
+          <Show when={decision().detail}>{(detail) => <p class="ws-today-decision-detail">{detail()}</p>}</Show>
           <Show when={decision().where}>{(where) => <p class="ws-today-decision-where">{where()}</p>}</Show>
         </div>
         <Show when={decision().amountUsd !== undefined}>
@@ -363,7 +373,7 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
           <Show when={decision().approve}>
             {(approve) => (
               <Button disabled={busy()} onClick={() => void run(approve())}>
-                {t("workspace.today.approve")}
+                {decision().approveLabel ?? t("workspace.today.approve")}
               </Button>
             )}
           </Show>

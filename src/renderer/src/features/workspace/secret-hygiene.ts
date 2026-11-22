@@ -82,11 +82,16 @@ function labeledShape(word: string): { label: string; name: string } {
   return { label: "token", name: "ACCESS_TOKEN" };
 }
 
-/** True when the value looks typed by hand, not a word: it mixes letters with digits or symbols. */
+/**
+ * True when the value looks typed by hand, not a word: it mixes letters with digits or symbols. The
+ * stop or comma that ends a sentence does not count, so "the password is correct." is talk, and
+ * accented letters are letters, so "la contraseña es válida" is too.
+ */
 function looksLikeSecret(value: string): boolean {
   if (NOT_A_VALUE.test(value)) return false;
   if (/^https?:\/\//iu.test(value)) return false;
-  return /[A-Za-z]/u.test(value) && /[^A-Za-z]/u.test(value);
+  const word = value.replace(/[.,;:!?)]+$/u, "");
+  return /\p{L}/u.test(word) && /[^\p{L}]/u.test(word);
 }
 
 /** Replaces the secrets in `text`. `marker` writes the text that stands where each one was. */

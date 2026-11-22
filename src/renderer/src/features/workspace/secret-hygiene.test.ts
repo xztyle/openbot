@@ -15,6 +15,9 @@ describe("scanForSecrets", () => {
     const scan = scanForSecrets("usuario: ana\ncontraseña: Pan-de-oro77\npassword = hunter22!", marker);
     expect(scan.text).toBe("usuario: ana\ncontraseña: [hidden password]\npassword = [hidden password]");
     expect(scan.found.map((secret) => secret.value)).toEqual(["Pan-de-oro77", "hunter22!"]);
+    expect(scanForSecrets("mi clave es Ñandú2024.", marker).found.map((secret) => secret.value)).toEqual([
+      "Ñandú2024.",
+    ]);
   });
 
   it("leaves plain talk about passwords alone", () => {
@@ -24,6 +27,11 @@ describe("scanForSecrets", () => {
       "token: https://example.com/a1",
       "my api key is ready",
       "he said the token expired",
+      "The password is correct.",
+      "my api key is ready.",
+      "the token is invalid, try again",
+      "La contraseña es válida",
+      "la clave es económica.",
     ])
       expect(scanForSecrets(text, marker)).toEqual({ text, found: [] });
   });

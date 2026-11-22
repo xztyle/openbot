@@ -756,22 +756,27 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       }
       case "turn/interrupt": {
         const threadId = yield* providerSync(() => requiredString(params, "threadId"));
+        // A turn that this adapter does not run has ended here: it makes the turn ids. The answer says
+        // so, and a user Stop then ends a chat turn that only the snapshot still holds.
+        const turnId = getString(params, "turnId");
+        const notRunning = turnId === null ? {} : { turnActive: false };
         // A released thread has no turn to stop.
-        if (this.#threads.isReleased(threadId)) return yield* providerSync(() => decoder({}));
+        if (this.#threads.isReleased(threadId)) return yield* providerSync(() => decoder(notRunning));
         const runtime = yield* providerSync(() => this.#requireThread(threadId));
         const turn = runtime.activeTurn;
         if (turn) turn.stopRequested = true;
-        const stopped = turn && turn.id === getString(params, "turnId") ? turn : null;
+        const stopped = turn && turn.id === turnId ? turn : null;
         if (stopped) yield* Effect.forkIn(this.#closeIfStopIgnored(runtime, stopped), this.#scope);
         yield* providerCall(() => runtime.query.interrupt()).pipe(
           // The close of a CLI that did not answer the stop rejects the stop request, but the close ends the turn.
           Effect.catch((failure) =>
-            stopped && (this.#threads.get(runtime.id) !== runtime || runtime.activeTurn !== stopped)
+            (stopped && (this.#threads.get(runtime.id) !== runtime || runtime.activeTurn !== stopped)) ||
+            (!stopped && turnId !== null)
               ? Effect.void
               : Effect.fail(failure),
           ),
         );
-        return yield* providerSync(() => decoder({}));
+        return yield* providerSync(() => decoder(stopped ? {} : notRunning));
       }
       case "thread/compact/start":
         // Claude Code manages its own context compaction.

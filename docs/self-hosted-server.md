@@ -274,41 +274,69 @@ printf '%s' '{"system":true,"text":"Continue."}' | sudo docker exec -i openbot \
   --data-binary @- http://openbot/v1/agents/<agentId>/message
 ```
 
-The check is not a jail: an agent still runs as the service user and can read its files.
+The check is not a jail: an agent still runs as the service user. The [agent jail](#agent-jail) keeps
+a jailed agent out of that user's other files.
 
-### Agent jail notes
+### Agent jail
 
-Agents run as the same user as OpenBot, in the same container. What OpenBot does today:
+Agents run as the same user as OpenBot, in the same container. On a Linux server, each Claude agent's
+provider process runs in a jail of its own (`src/backend/agent-jail.ts`). Main starts the CLI through
+`resources/agent-runtime/agent-jail.py`, which restricts itself with Landlock and then starts the
+CLI, so the CLI and everything it starts keep the jail: the Bash tool, the stdio MCP servers, the
+Computer Use driver's proxy, git, Node, Python and the build tools. Nothing inside can take it away.
+Landlock needs no privilege and no namespace: Docker's own AppArmor profile refuses the mounts that
+bubblewrap needs, and with AppArmor off, Ubuntu refuses user namespaces to an unconfined process.
 
-- The control socket checks who connected (above).
-- A Claude agent's MCP servers go in a 0600 file that is removed once Claude has read it, not on the
-  command line, so their tokens stay only in Claude's memory. Yama (`ptrace_scope=1`, the default on
-  Ubuntu) keeps another agent out of that memory.
-- On a server, agent processes get an allowlisted environment (`src/backend/agent-inherited-environment.ts`),
-  and main takes the host's own secrets, such as `OPENBOT_MOTION_EVENTS_SECRET`, out of its
-  environment before any agent starts (`src/main/host-secret-environment.ts`).
-- The trust policy's money check reads expanded commands and scripts, and covers the command
-  approvals of Codex, Muse and the ACP providers.
+The jail reaches:
 
-What still reaches an agent, and needs a separate user for each agent or space (a jail):
+- the system folders (`/usr`, `/etc`, `/opt` and the others), `/proc` and `/sys`, to read and run,
+  and `/dev`, `/tmp`, `/var/tmp` and `/dev/shm`;
+- the agent's workspace, the shared folder of its space, the browser downloads (`~/OpenBot/Downloads`),
+  the old default of `appctl deploy --src` (`~/OpenBot/Shared/apps`), and the CLI's config folder
+  with its sign-in and sessions (`CLAUDE_CONFIG_DIR`, `~/.claude` for the first account);
+- the agent's own key folder and the shared keys, the provider runtimes, the GitHub connection's
+  folder, and the files that main writes for one start: the MCP config, the settings file and the
+  skill plugins, with the folders their links point at, and the folder of each MCP server program;
+- a home folder of the agent's own, `<profile>/agent-jail/<agent>/home`, which `HOME` names. Each
+  entry of the real home links there, except the ones that hold sign-ins, keys, histories and
+  backups (`.ssh`, `.claude.json`, `.codex`, `~/.config/openbot-container` with the keyring password,
+  `~/.local/share/keyrings` and the others in `agent-jail.ts`) and the folders with OpenBot's data. So
+  `~/.cargo`, `~/.bun`, `~/.cache` and `~/.config/godot` stay shared, and a new file in `~` stays the
+  agent's. `TMPDIR` and `XDG_RUNTIME_DIR` are folders of the agent too, emptied at each start of OpenBot.
 
-- Every file of the service user: the other agents' key files under `agent-api-keys/`, the database,
-  the provider sign-ins, and the keyring file with its password file next to it.
-- `/proc/<pid>/environ` and `/proc/<pid>/cmdline` of every process, main's and PID 1's included:
-  Yama limits only attaching, not reading these. A secret in the container environment can be read
-  there, even after main took it out of its own copy.
-- The session D-Bus: `secret-tool` gives the key of the encrypted stores. Agents keep the bus because
-  some CLIs keep their sign-in in the keyring.
-- The X display of the OpenBot window (`:0`) has no access control.
+Everything else is out of reach: the other agents' keys and workspaces, the other spaces, the
+database and the rest of the profile, the provider sign-ins of other providers, the keyring and its
+password, the automation token and `/run/openbot`. Landlock also refuses a jailed process the memory,
+`environ`, open files and links of any process outside its jail in `/proc`, main's and PID 1's
+included, and a signal to such a process. The jail takes `DBUS_SESSION_BUS_ADDRESS`,
+`GNOME_KEYRING_CONTROL` and `SSH_AUTH_SOCK` out of the environment. The Claude CLI keeps its global
+config in its config folder: the first account gets `CLAUDE_CONFIG_DIR`, and its first jailed start
+copies `~/.claude.json` there.
+
+`OPENBOT_AGENT_JAIL` chooses the providers: unset or `claude` jails Claude, `off` jails nothing. Only
+Claude starts a process for each session; Codex, Grok and the ACP providers share one process between
+agents, so they are not jailed yet. Without Landlock 3 (Linux 6.2) or `python3`, agents start
+without the jail and the log says so once; `OPENBOT_AGENT_JAIL_STRICT=1` stops them instead. A start
+that is not an agent's session, such as a title or a profile generation, has no tools and runs
+without the jail. To see which processes are jailed, run
+`docker exec openbot sh -c 'grep -l OPENBOT_AGENT_JAILED=1 /proc/[0-9]*/environ'`.
+`bun scripts/agent-jail-e2e.ts` checks the jail on a Linux computer.
+
+What still reaches a jailed agent:
+
+- A UNIX socket file, which Landlock does not control: the control socket (which refuses agents by
+  itself, above), the appctl and benchctl sockets (on purpose), the D-Bus socket in `/tmp`, which
+  still gives the keyring's secrets to a process that finds it, and the X display of the OpenBot
+  window (`:0`), which has no access control.
+- `/tmp`, `/dev/shm` and the browser downloads, which all agents share, the names and command lines
+  of all processes in `ps`, and the network, with OpenBot's loopback services.
+- The sessions and transcripts of the other agents on the same Claude account, in its config folder.
+- Another session of the same agent: each process is a jail of its own, so one cannot read the
+  `environ` of, or signal, a program that the other started.
 - A shell command of Codex with Full access runs without asking, so the money check does not see it.
 
-A jail would run each provider CLI as its own user (or in bubblewrap with a user namespace), with its
-own `/proc` mounted `hidepid=2`, a tmpfs over `/run/openbot`, the config folders and the keyring,
-bind mounts of only the workspace, the space's shared folder and that agent's key folder, no D-Bus,
-and an `-auth` cookie on the X displays. The money credentials would move into a broker that main
-runs, which asks the owner and then calls the payment API, so an agent never holds them. Provider
-CLIs, the browser's CDP endpoint and the MCP bridges all need plumbing for it, so it would roll out
-per provider behind a flag.
+The money credentials would move into a broker that main runs, which asks the owner and then calls
+the payment API, so an agent never holds them.
 
 The server has two Xvfb displays, one in each of two nested `xvfb-run` commands that share one
 authority file. The outer one starts the agent display, at the [display size](#display-size), and
@@ -340,8 +368,9 @@ Threat model:
 - systemd makes `/run/openbot` for the service user with mode 0700, and main makes the socket 0600.
   Main refuses to listen when the directory belongs to another user or other users can enter it. It
   never removes a file at the socket path that is not a socket.
-- Only the service user and root can connect. Agents run as the service user and already have full
-  access to its files, its keyring and the OpenBot database, so the socket gives them nothing new.
+- Only the service user and root can connect. Agents run as the service user, and the
+  [agent jail](#agent-jail) does not control a connection to a socket file, so main also refuses
+  every process that descends from it, as above.
 - The socket answers a closed list of requests. It never sends the session token, the sign-in
   code or the claim back, and a value cannot add a line to an answer. A body is at most 4 KiB.
 - `POST /v1/backup` writes a database copy only when the operator asks. It refuses to replace a file.

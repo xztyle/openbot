@@ -1,0 +1,243 @@
+// Checks Today, the owner's one decision queue: on an iPhone the Today tab counts every request of
+// every space in amber and lists them blocking first, then by money; Approve and an inline answer on
+// a card send the answer and the count goes down. On a computer the sidebar's Today row and the top
+// bar's "Needs you" count the same queue, and Ctrl+K approves a decision by name. It serves the web
+// client on a mock host (`src/renderer/stories/web-client-today-harness.tsx`) at every address under
+// `/app`, and drives it in Chromium. No account service, host or provider is needed.
+//
+// `bun scripts/today-e2e.ts [--browser-executable=<path>] [--headed]`
+// Writes .openbot-build/today-e2e/report.json and a screenshot for each screen.
+import assert from "node:assert/strict";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { translateFor } from "@openbot/i18n";
+import { createOpenBotLogger } from "@openbot/logging";
+import solidPlugin from "@solidjs/vite-plugin";
+import tailwindcss from "@tailwindcss/vite";
+import { type Browser, chromium, devices, type Page } from "playwright-core";
+import { createServer, type Plugin } from "vite";
+
+const logger = createOpenBotLogger("today-e2e");
+const ROOT = resolve(import.meta.dirname, "..");
+const OUT = resolve(ROOT, ".openbot-build/today-e2e");
+const UI_WAIT_MS = 60_000;
+const english = translateFor("en");
+const COMMIT = { waitUntil: "commit" } as const;
+
+function option(name: string): string | undefined {
+  return process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
+}
+
+// `viewport-fit=cover` as the site's /app page, so the bars keep clear of the safe areas themselves.
+const HARNESS = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>OpenBot web</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/renderer/stories/web-client-today-harness.tsx"></script>
+  </body>
+</html>`;
+
+/** Serves the harness page at `/app` and every address under it, as the site's `/app/$` route does. */
+function webClientPages(): Plugin {
+  return {
+    name: "openbot-today-harness",
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        const url = request.url ?? "";
+        if (!/^\/app(?:[/?]|$)/u.test(url)) return next();
+        const html = await server.transformIndexHtml(url, HARNESS);
+        response.setHeader("Content-Type", "text/html; charset=utf-8");
+        response.end(html);
+      });
+    },
+  };
+}
+
+interface Step {
+  name: string;
+  url: string;
+  passed: boolean;
+  detail?: string;
+}
+
+const report: {
+  steps: Step[];
+  pageErrors: string[];
+  consoleErrors: string[];
+  screenshots: string[];
+  passed: boolean;
+} = { steps: [], pageErrors: [], consoleErrors: [], screenshots: [], passed: false };
+
+const path = (page: Page) => {
+  const url = new URL(page.url());
+  return `${url.pathname}${url.search}`;
+};
+
+const waiting = (page: Page, count: number) =>
+  page.getByRole("heading", { name: english("workspace.today.waiting", { count }) }).first();
+const tabBar = (page: Page) => page.getByRole("navigation", { name: english("workspace.phone.tabs") });
+
+async function step(page: Page, name: string, check: () => Promise<void>): Promise<void> {
+  try {
+    await check();
+    report.steps.push({ name, url: path(page), passed: true });
+  } catch (error) {
+    const shown = await page
+      .evaluate(() => (document.querySelector(".web-app")?.textContent ?? "").replace(/\s+/gu, " ").slice(0, 400))
+      .catch((reason: unknown) => String(reason));
+    report.steps.push({
+      name,
+      url: path(page),
+      passed: false,
+      detail: `${String(error).slice(0, 500)}\nPage: ${shown}`,
+    });
+    const shot = resolve(OUT, `${report.steps.length}-failed.png`);
+    await page.screenshot({ path: shot }).catch(() => undefined);
+    report.screenshots.push(shot);
+    throw error;
+  }
+}
+
+async function shot(page: Page, label: string): Promise<void> {
+  const file = resolve(OUT, `${label}.png`);
+  await page.screenshot({ path: file });
+  report.screenshots.push(file);
+}
+
+rmSync(OUT, { recursive: true, force: true });
+mkdirSync(OUT, { recursive: true });
+const server = await createServer({
+  root: ROOT,
+  configFile: false,
+  appType: "custom",
+  logLevel: "error",
+  plugins: [webClientPages(), tailwindcss({ optimize: false }), solidPlugin()],
+  resolve: { dedupe: ["solid-js", "@solidjs/web", "@solidjs/signals"] },
+  optimizeDeps: {
+    entries: ["src/renderer/stories/web-client-today-harness.tsx"],
+    include: ["@norbert_bodziony/bloub"],
+  },
+  server: { host: "127.0.0.1", port: 0, strictPort: false, fs: { strict: false }, hmr: false },
+});
+await server.listen();
+const address = server.httpServer?.address();
+assert.ok(address && typeof address === "object", "The harness server has no port.");
+const origin = `http://127.0.0.1:${address.port}`;
+let browser: Browser | null = null;
+
+function track(page: Page): void {
+  page.on("pageerror", (error) => report.pageErrors.push(error.stack ?? error.message));
+  page.on("console", (message) => {
+    // The harness has no favicon or fonts route; the dev server's own socket is no part of the client.
+    if (
+      message.type() === "error" &&
+      !message.text().startsWith("Failed to load resource") &&
+      !message.text().startsWith("[vite]")
+    )
+      report.consoleErrors.push(message.text().slice(0, 1_000));
+  });
+}
+
+try {
+  const executablePath = option("browser-executable");
+  browser = await chromium.launch({
+    headless: !process.argv.includes("--headed"),
+    ...(executablePath ? { executablePath } : {}),
+  });
+  const { defaultBrowserType: _browserType, ...iphone } = devices["iPhone 13"];
+  const phone = await browser.newContext({ ...iphone, hasTouch: true, isMobile: true });
+  const page = await phone.newPage();
+  track(page);
+
+  // 1. The Today tab counts every space: two loop decisions of Trading and two requests of General.
+  await step(page, "Today counts the requests of every space in amber", async () => {
+    await page.goto(`${origin}/app/general`, COMMIT);
+    await waiting(page, 4).waitFor({ timeout: UI_WAIT_MS });
+    await tabBar(page)
+      .getByRole("button", {
+        name: `${english("workspace.view.today")}, ${english("workspace.phone.waiting", { count: 4 })}`,
+      })
+      .waitFor({ timeout: UI_WAIT_MS });
+  });
+  await shot(page, "01-phone-today");
+
+  // 2. Blocking first, then money, then age: the $40 budget leads.
+  await step(page, "the queue puts the money that blocks work first", async () => {
+    const first = page.getByRole("article").first();
+    assert.match((await first.getAttribute("aria-label")) ?? "", /Research needs you: Approve \$40/u);
+    assert.match((await first.textContent()) ?? "", /Trading/u);
+  });
+
+  // 3. Approve on the card answers the decision; the count goes down everywhere.
+  await step(page, "Approve on a card answers it and the count goes down", async () => {
+    await page
+      .getByRole("article")
+      .first()
+      .getByRole("button", { name: english("workspace.today.approve"), exact: true })
+      .tap();
+    await waiting(page, 3).waitFor({ timeout: UI_WAIT_MS });
+    await tabBar(page)
+      .getByRole("button", {
+        name: `${english("workspace.view.today")}, ${english("workspace.phone.waiting", { count: 3 })}`,
+      })
+      .waitFor({ timeout: UI_WAIT_MS });
+  });
+
+  // 4. A loop question is answered in place.
+  await step(page, "a loop question is answered on its card", async () => {
+    const card = page.getByRole("article", { name: /Answer a question/u }).first();
+    await card.getByRole("textbox").fill("Open with the price drop");
+    await card.getByRole("button", { name: english("workspace.today.send"), exact: true }).tap();
+    await waiting(page, 2).waitFor({ timeout: UI_WAIT_MS });
+  });
+  await shot(page, "02-phone-answered");
+  await phone.close();
+
+  // 5. A computer: the sidebar's Today row and the top bar count the same queue.
+  const desk = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const deskPage = await desk.newPage();
+  track(deskPage);
+  await step(deskPage, "the sidebar's Today row and the top bar agree", async () => {
+    await deskPage.goto(`${origin}/app/general`, COMMIT);
+    await waiting(deskPage, 4).waitFor({ timeout: UI_WAIT_MS });
+    await deskPage
+      .getByRole("button", { name: english("workspace.needsYou.buttonLabel", { count: 4 }) })
+      .waitFor({ timeout: UI_WAIT_MS });
+    const row = deskPage.getByRole("button", { name: new RegExp(`^${english("workspace.view.today")}`, "u") }).first();
+    assert.match((await row.textContent()) ?? "", /4/u);
+  });
+  await shot(deskPage, "03-desk-today");
+
+  // 6. Ctrl+K: "approve" lists what waits; Enter approves the one named.
+  await step(deskPage, "Ctrl+K approves a decision by name", async () => {
+    await deskPage.keyboard.press("Control+k");
+    await deskPage.keyboard.type("approve spring");
+    await deskPage
+      .getByRole("button", { name: /Approve: Run the spring ad test/u })
+      .first()
+      .waitFor({ timeout: UI_WAIT_MS });
+    await shot(deskPage, "04-desk-command-bar");
+    await deskPage.keyboard.press("Enter");
+    await waiting(deskPage, 3).waitFor({ timeout: UI_WAIT_MS });
+    await deskPage
+      .getByRole("button", { name: english("workspace.needsYou.buttonLabel", { count: 3 }) })
+      .waitFor({ timeout: UI_WAIT_MS });
+  });
+  await desk.close();
+
+  report.passed =
+    report.steps.every((item) => item.passed) && report.pageErrors.length === 0 && report.consoleErrors.length === 0;
+} finally {
+  writeFileSync(resolve(OUT, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
+  await browser?.close();
+  await server.close();
+}
+logger.info(
+  `${report.passed ? "Passed" : "Failed"}: ${report.steps.filter((item) => item.passed).length} of ${report.steps.length} steps. Report: ${resolve(OUT, "report.json")}`,
+);
+process.exit(report.passed ? 0 : 1);

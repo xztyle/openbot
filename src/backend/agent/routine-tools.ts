@@ -16,7 +16,12 @@ export function routineToolArguments(value: unknown, allowedKeys: readonly strin
   if (!isRecord(value)) throw new RoutineInputError("Routine tool arguments are required.");
   const allowed = new Set(allowedKeys);
   const unexpected = Object.keys(value).find((key) => !allowed.has(key));
-  if (unexpected) throw new RoutineInputError(`Unexpected routine argument: ${unexpected}.`);
+  if (unexpected)
+    throw new RoutineInputError(
+      `Unexpected routine argument: ${unexpected}. This tool takes ${allowedKeys.join(", ")}${
+        unexpected === "id" && allowed.has("routineId") ? "; the routine's id goes in routineId" : ""
+      }.`,
+    );
   return value;
 }
 

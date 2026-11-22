@@ -3991,11 +3991,35 @@ export class ChannelService {
       !Array.isArray(args.sourceMessageIds) ||
       !args.sourceMessageIds.length ||
       !args.sourceMessageIds.every(isString)
-    )
+    ) {
+      // The error names each field to fix, so the agent corrects the call in one step.
+      const fix = [
+        ...(isString(args.recipientAgentId) ? [] : ["recipientAgentId (a member's agent id)"]),
+        ...(isString(args.task) && args.task.trim() && args.task.length <= 100_000 ? [] : ["task"]),
+        ...(isString(args.expectedResult) && args.expectedResult.trim() && args.expectedResult.length <= 100_000
+          ? []
+          : ["expectedResult"]),
+        ...(Array.isArray(args.sourceMessageIds) &&
+        args.sourceMessageIds.length &&
+        args.sourceMessageIds.every(isString)
+          ? []
+          : ["sourceMessageIds (an array of the ids of the channel messages the task comes from)"]),
+      ];
       return yield* channelFailure(
-        new Error("A handoff needs a recipient, task, expected result, and source messages."),
+        new Error(`A handoff needs a recipient, task, expected result, and source messages. Fix: ${fix.join(", ")}.`),
       );
+    }
     const recipientAgentId = args.recipientAgentId;
+    // An agent often passes a name, or an agent outside the channel: the error lists the members it can choose.
+    if (!channel.members.some((member) => member.agentId === recipientAgentId))
+      return yield* channelFailure(
+        new Error(
+          `recipientAgentId must be the agent id of another member of this channel: ${channel.members
+            .filter((member) => member.agentId !== agentId)
+            .map((member) => `${this.memberName(member.agentId)} (${member.agentId})`)
+            .join(", ")}.`,
+        ),
+      );
     yield* channelSync(() => this.requireAvailableMember(channel, recipientAgentId));
     if (args.recipientAgentId === agentId) return yield* channelFailure(new Error("Choose another channel member."));
     const sourceMessageIds = args.sourceMessageIds;

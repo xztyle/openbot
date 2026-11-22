@@ -9,6 +9,9 @@
 - When an agent calls a tool with arguments that do not fit its schema, it gets the fields to fix and
   the tool to describe, instead of raw validation output, and the owner no longer sees a server error
   for it.
+- `channel_assign` and `channel_transfer` errors name the fields to fix, and a recipient that is not
+  a member lists the members' ids. A routine tool given a field it does not take lists the fields it
+  takes.
 
 ### Changed
 

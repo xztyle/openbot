@@ -378,7 +378,7 @@ try {
     await page.getByRole("heading", { name: english("app.settingsPage.title") }).waitFor({ timeout: UI_WAIT_MS });
     await shot(page, "07-settings");
     // Two screens, as iOS Settings: a section opens over the list, and Back goes to the list first.
-    const preferences = page.getByRole("tab", { name: english("webClient.settings.preferences.title") });
+    const preferences = page.getByRole("tab", { name: english("webClient.settings.appearance.title") });
     await preferences.tap();
     assert.equal(await preferences.isVisible(), false);
     await shot(page, "07b-settings-section");

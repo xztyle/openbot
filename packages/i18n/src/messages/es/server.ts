@@ -669,4 +669,14 @@ export const messages = {
   "server.restartNotice.restartingDescription":
     "Atelier vuelve a conectarse automáticamente cuando {name} esté disponible de nuevo.",
   "server.restartNotice.backTitle": "{name} vuelve a estar en línea",
+  "server.settings.group.agents": "Agentes y modelos",
+  "server.settings.group.connections": "Conexiones y secretos",
+  "server.settings.group.server": "Servidor y copias de seguridad",
+  "server.settings.group.money": "Dinero y límites",
+  "server.settings.group.notifications": "Notificaciones y horas de silencio",
+  "server.settings.group.appearance": "Apariencia",
+  "server.settings.shortcut.money": "Presupuestos y reglas de gasto",
+  "server.settings.shortcut.notifications": "Notificaciones",
+  "server.settings.shortcut.appearance": "Claro, oscuro e idioma",
+  "server.settings.elsewhere": "Otros ajustes",
 } as const satisfies PartialTranslation<typeof source>;

@@ -15,7 +15,7 @@ import {
 } from "@openbot/ui/features/workspace/WhenBack";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, Show } from "solid-js";
-import { nextClockTime } from "./owner-away-store";
+import { nextClockTime, type OwnerAwayStore } from "./owner-away-store";
 import { useWorkspace } from "./workspace-context";
 import { memberById } from "./workspace-model";
 
@@ -54,6 +54,7 @@ function useAwayControls() {
       <Show when={settingsOpen() && store()?.state()}>
         {(state) => (
           <OwnerAwaySettingsDialog
+            away={store()}
             settings={state().settings}
             systemTimezone={state().systemTimezone}
             onClose={() => setSettingsOpen(false)}
@@ -152,8 +153,28 @@ function zones(): string[] {
   }
 }
 
-function OwnerAwaySettingsDialog(props: { settings: OwnerAwaySettings; systemTimezone: string; onClose: () => void }) {
-  const ws = useWorkspace();
+/** The quiet hours settings of `away`, outside the workspace, such as from the account's Notifications. */
+export function QuietHoursSettingsDialog(props: { away: OwnerAwayStore; onClose: () => void }) {
+  return (
+    <Show when={props.away.state()}>
+      {(state) => (
+        <OwnerAwaySettingsDialog
+          away={props.away}
+          settings={state().settings}
+          systemTimezone={state().systemTimezone}
+          onClose={props.onClose}
+        />
+      )}
+    </Show>
+  );
+}
+
+function OwnerAwaySettingsDialog(props: {
+  away: OwnerAwayStore | undefined;
+  settings: OwnerAwaySettings;
+  systemTimezone: string;
+  onClose: () => void;
+}) {
   const { t } = useText();
   const [enabled, setEnabled] = createSignal(props.settings.quietHours.enabled);
   const [start, setStart] = createSignal(props.settings.quietHours.start);
@@ -169,7 +190,7 @@ function OwnerAwaySettingsDialog(props: { settings: OwnerAwaySettings; systemTim
     (deliverAt() === "" || /^\d{2}:\d{2}$/u.test(deliverAt())) &&
     /^\d{1,7}$/u.test(money().trim());
   const submit = () => {
-    const away = ws.env.ownerAway;
+    const away = props.away;
     if (!away || !valid() || busy()) return;
     setBusy(true);
     setError(null);

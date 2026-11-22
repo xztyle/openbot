@@ -377,6 +377,34 @@ try {
     );
   });
 
+  // 9d. The section stays in the address: an old `preferences` link opens Appearance, and a tab the
+  // user picks is what a reload opens.
+  await step(page, "a settings section survives the load and a reload", async () => {
+    await settle(page);
+    await page.goto(`${origin}/app/general/c/random?page=settings&section=preferences`, COMMIT);
+    await started(page);
+    await page.getByRole("tab", { name: english("webClient.settings.appearance.title") }).waitFor({ timeout: UI_WAIT_MS });
+    await page.waitForFunction(
+      () => document.querySelector('[data-tab="appearance"]')?.checkVisibility() === true,
+      undefined,
+      { timeout: UI_WAIT_MS },
+    );
+    await waitForPath(page, "/app/general/c/random?page=settings&section=appearance");
+    await page.getByRole("tab", { name: english("webClient.settings.notifications.title") }).click();
+    await waitForPath(page, "/app/general/c/random?page=settings&section=notifications");
+    await settle(page);
+    await page.reload(COMMIT);
+    await started(page);
+    await page.waitForFunction(
+      () => document.querySelector('[data-tab="notifications"]')?.checkVisibility() === true,
+      undefined,
+      { timeout: UI_WAIT_MS },
+    );
+    await waitForPath(page, "/app/general/c/random?page=settings&section=notifications");
+    await page.keyboard.press("Escape");
+    await waitForPath(page, "/app/general/c/random");
+  });
+
   // 10. Copy link of a channel header; a link that names the wrong space opens the channel's own.
   await step(page, "Copy link of a channel", async () => {
     await settle(page);

@@ -111,6 +111,7 @@ import {
   Store,
   toast,
 } from "@openbot/ui";
+import { modelNameOf } from "@openbot/ui/components/model-name";
 import { accountUsageProviderRows } from "@openbot/ui/features/account/account-usage-view";
 import { computeAgentAvatarMoods } from "@openbot/ui/features/agents/agent-avatar-mood";
 import { createFirstAgentDraft, type FirstAgentDraft } from "@openbot/ui/features/agents/FirstAgentSetup";
@@ -235,7 +236,11 @@ import {
 import type { HostBackupsCalls } from "../servers/ServerBackupsPanel";
 import type { HostMemoryLimitCalls } from "../servers/ServerMemoryLimitSetting";
 import type { HostAgentAccessCalls } from "../servers/ServerRolesSection";
-import type { ServerHostedSitesOptions, ServerSettingsSection } from "../servers/ServerSettingsModal";
+import {
+  type ServerHostedSitesOptions,
+  type ServerSettingsTarget,
+  serverSettingsTargetOf,
+} from "../servers/ServerSettingsModal";
 import type { HostTimezoneCalls } from "../servers/ServerTimezoneSetting";
 import type { HostTurnLimitsCalls } from "../servers/ServerTurnLimitsSetting";
 import type { HostUpdateCalls } from "../servers/ServerUpdatePanel";
@@ -265,6 +270,7 @@ import type { SettingsKind, WindowPage } from "../window/window-page-context";
 import { createAgentMailboxesStore } from "../workspace/agent-mailboxes-store";
 import { createConnectorAccessStore } from "../workspace/connector-access-store";
 import { createOwnerAwayStore } from "../workspace/owner-away-store";
+import { QuietHoursSettingsDialog } from "../workspace/WorkspaceOwnerAway";
 import { WorkspaceSidebarPane } from "../workspace/WorkspaceSidebarPane";
 import { WorkspaceAgentFrame, WorkspaceChrome, WorkspaceMain } from "../workspace/WorkspaceView";
 import { workspaceAttention } from "../workspace/workspace-attention";
@@ -286,6 +292,11 @@ import {
   type WebPhoneTab,
 } from "./WebPhoneShell";
 import { createWebAccountCalls } from "./web-account";
+import {
+  type WebAccountSettingsShortcut,
+  type WebAccountSettingsTab,
+  webAccountSettingsTabOf,
+} from "./web-account-settings-tabs";
 import { createWebAccountUsage } from "./web-account-usage";
 import { createWebAgentImportCalls } from "./web-agent-import";
 import { createWebArtifactThumbnails } from "./web-artifact-thumbnails";
@@ -391,30 +402,6 @@ type WebWorkspaceProps = {
 };
 
 const WebAccountSettings = lazy(() => import("./WebAccountSettings"));
-
-/** The sections of Server settings that an address may name. */
-const SERVER_SETTINGS_SECTIONS = [
-  "general",
-  "vault",
-  "members",
-  "roles",
-  "workspace",
-  "desktop",
-  "mcp",
-  "storage",
-  "sites",
-  "providers",
-  "updates",
-  "import",
-  "transfer",
-  "routines",
-  "browser-profiles",
-  "connectors",
-] as const satisfies readonly ServerSettingsSection[];
-
-function serverSettingsSectionOf(section: string | null): ServerSettingsSection | null {
-  return SERVER_SETTINGS_SECTIONS.find((item) => item === section) ?? null;
-}
 
 /** The page is the web client's own, `/app`: not a story or the site's preview. */
 function ownsAddress(): boolean {
@@ -1121,7 +1108,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     serverSettings.setOpen(false);
     setHostPage(null);
   }
-  function openAccountSettings() {
+  /** The tab of the account settings that shows, as the address named it or the user picked it. */
+  const [accountSettingsSection, setAccountSettingsSection] = createSignal<WebAccountSettingsTab | null>(null);
+  function openAccountSettings(section: WebAccountSettingsTab | null = null) {
+    setAccountSettingsSection(section);
     // On a phone the page shows in the conversation pane.
     setMobilePane("conversation");
     setHostPage(null);
@@ -1399,11 +1389,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     setAgentAccess: async (change, serverId) =>
       runTeamEffect(setHostAgentAccess(hostRequest(serverId), change).pipe(Effect.mapError((error) => error.cause))),
   };
-  const [serverSettingsSection, setServerSettingsSection] = createSignal<ServerSettingsSection | null>(null);
+  /** The section of Server settings that shows, as the opener asked for it or the user picked it. */
+  const [serverSettingsSection, setServerSettingsSection] = createSignal<ServerSettingsTarget | null>(null);
   async function openServerSettings(
     serverId: string,
     trigger: HTMLElement | null,
-    section: ServerSettingsSection | null = null,
+    section: ServerSettingsTarget | null = null,
   ): Promise<void> {
     if (server()?.id !== serverId || workspace.state.status !== "online") {
       const host = workspace.state.hosts.find((item) => item.hostId === serverId);
@@ -2039,6 +2030,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       canAdministerServer(workspace.state.host?.role),
   });
   const workspaceController = createWorkspaceController({
+    modelName: (provider, model) => modelNameOf(models(), provider, model),
     channels,
     artifactThumbnailUrl: artifactThumbnails.url,
     agents: workspace.profiles,
@@ -2240,6 +2232,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     onPhonePaneChange: (pane) => setMobilePane(pane === "sidebar" ? "workspace" : "conversation"),
   });
   conversationLevel = workspaceController.notifyLevel;
+  /** Whether the open server has the Trust view, where the budgets and spending rules are. */
+  const trustSupported = () =>
+    workspace.state.capabilities.includes(TRUST_CONTROL_CAPABILITY) && canAdministerServer(workspace.state.host?.role);
+  const [quietHoursOpen, setQuietHoursOpen] = createSignal(false);
   /**
    * The workspace actions that the reader takes. Each gives the place it opens its own history
    * entry, so Back goes to the place before it. An action that waits for the host waits for its place.
@@ -2309,6 +2305,18 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       return workspaceController.createChannel(input);
     },
   };
+  /** Closes the settings pages and shows a view of the workspace, such as Trust from Settings. */
+  function openWorkspaceView(view: "trust") {
+    showAgents();
+    ws.openView(view);
+  }
+  /** A task that the account settings list under "This workspace". */
+  function openSettingsShortcut(shortcut: WebAccountSettingsShortcut) {
+    const id = server()?.id;
+    if (!id) return;
+    if (shortcut === "money" && trustSupported()) openWorkspaceView("trust");
+    else void openServerSettings(id, null, shortcut === "money" ? "agents" : shortcut);
+  }
   /**
    * The tab title and icon count what the sidebar badges count: mentions, DM messages and waiting
    * agents of every space. A host without the workspace counts its agents that wait or have a reply.
@@ -2599,7 +2607,16 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       current === "usage" ||
       current === "schedule" ||
       current === "tasks"
-      ? { kind: current, section: null }
+      ? {
+          kind: current,
+          // The section stays in the address, so a reload or a shared link opens the same section.
+          section:
+            current === "settings"
+              ? accountSettingsSection()
+              : current === "server-settings"
+                ? serverSettingsSection()
+                : null,
+        }
       : null;
   };
   /** The place on screen, for the address bar. Null until the server and its lists are in. */
@@ -2651,9 +2668,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       return;
     }
     if (!id) return;
-    if (target.kind === "settings") openAccountSettings();
+    if (target.kind === "settings") openAccountSettings(webAccountSettingsTabOf(target.section));
     else if (target.kind === "server-settings")
-      void openServerSettings(id, null, serverSettingsSectionOf(target.section));
+      void openServerSettings(id, null, serverSettingsTargetOf(target.section));
     else if (target.kind !== "tasks" || tasksSupported()) void openHostPage(id, target.kind, null);
   }
   /**
@@ -3079,7 +3096,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
               if (id) void openHostPage(id, "usage", button);
             }}
             onMarketplace={workspace.state.status === "online" ? () => setMarketplaceOpen(true) : undefined}
-            onSettings={openAccountSettings}
+            onSettings={() => openAccountSettings()}
             help={
               <RailHelpMenu
                 version={null}
@@ -3137,7 +3154,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                         }
                         onMounts={setSettingsMounts}
                         onEscape={showAgents}
-                        section={kind === "personal" ? null : serverSettingsSection()}
+                        section={kind === "personal" ? accountSettingsSection() : serverSettingsSection()}
                       />
                     )}
                   </Show>
@@ -3358,7 +3375,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                             email: props.accountEmail ?? "",
                             avatarUrl: props.accountAvatarUrl ?? null,
                           }}
-                          onOpenAccount={() => openFromPhoneList(openAccountSettings)}
+                          onOpenAccount={() => openFromPhoneList(() => openAccountSettings())}
                           servers={servers().map((item) => ({
                             id: item.id,
                             name: item.name,
@@ -3482,6 +3499,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       onChangeAppearance={props.onChangeAppearance}
                       onOpenBilling={() => setBillingOpen(true)}
                       onSignOut={signOut}
+                      section={accountSettingsSection()}
+                      onSectionChange={setAccountSettingsSection}
+                      onOpenShortcut={server() ? openSettingsShortcut : undefined}
+                      onOpenQuietHours={ownerAway.supported() ? () => setQuietHoursOpen(true) : undefined}
                       push={{
                         availability: push.availability(),
                         hostName: workspace.state.host?.name ?? "",
@@ -3492,6 +3513,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       }}
                     />
                   </Loading>
+                </Show>
+                <Show when={quietHoursOpen()}>
+                  <QuietHoursSettingsDialog away={ownerAway} onClose={() => setQuietHoursOpen(false)} />
                 </Show>
                 <SharedAgentInstallOverlay
                   templateId={props.agentTemplateId}
@@ -3508,6 +3532,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       page={settingsPlacement("server")}
                       restoreFocusTarget={serverSettings.restoreTarget()}
                       initialSection={serverSettingsSection()}
+                      onSectionChange={setServerSettingsSection}
+                      shortcuts={{
+                        ...(trustSupported() ? { money: () => openWorkspaceView("trust") } : {}),
+                        notifications: () => openAccountSettings("notifications"),
+                        appearance: () => openAccountSettings("appearance"),
+                      }}
                       platform="darwin"
                       remoteDesktopSupported={false}
                       server={target()}

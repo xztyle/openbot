@@ -25,6 +25,18 @@
   gap: var(--openbot-space-1);
 }
 
+/* A task group's name above its sections, such as "Agents & models" */
+.settings-modal-nav-heading {
+  padding: var(--openbot-space-3) var(--openbot-space-2) var(--openbot-space-1);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.settings-modal-nav-heading:first-child {
+  padding-top: 0;
+}
+
 .settings-modal-nav-item {
   position: relative;
   width: 100%;

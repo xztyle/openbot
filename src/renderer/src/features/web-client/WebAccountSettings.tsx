@@ -3,7 +3,10 @@ import type { AppLanguage } from "@openbot/contracts/app-language";
 import type { CentralAuthUser } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
 import {
+  Archive,
+  Bell,
   Button,
+  CircleDollarSign,
   CreditCard,
   Item,
   ItemActions,
@@ -11,8 +14,10 @@ import {
   ItemDescription,
   ItemGroup,
   ItemTitle,
+  KeyRound,
+  Palette,
   SettingsSection,
-  SlidersHorizontal,
+  Sparkles,
   SwitchField,
   Tabs,
   UserRound,
@@ -26,7 +31,7 @@ import { SoundThemePicker } from "@openbot/ui/features/settings/SoundThemePicker
 import { createSettingsProfileStore } from "@openbot/ui/features/settings/stores/profile-store";
 import { useText } from "@openbot/ui/text";
 import { usesTouchLayout } from "@openbot/ui/utils";
-import { createSignal, onCleanup, Show } from "solid-js";
+import { createEffect, createSignal, onCleanup, Show, untrack } from "solid-js";
 import { readActionSoundChoice, replayActionSoundChoice, setActionSoundChoice } from "../../action-sounds";
 import { setShowAgentSteps, useShowAgentSteps } from "../../agent-steps-preference";
 import {
@@ -39,12 +44,21 @@ import { isCompletionSoundEnabled, setCompletionSoundEnabled } from "../../compl
 import { webReportsEnabled } from "../../error-reports";
 import { currentDevicePlatform, setSendShortcutMode, useSendShortcutMode } from "../../send-shortcut-preference";
 import type { WebAccountCalls } from "./web-account";
+import {
+  WEB_ACCOUNT_SETTINGS_TABS as TABS,
+  type WebAccountSettingsShortcut,
+  type WebAccountSettingsTab,
+} from "./web-account-settings-tabs";
 import { setWebAnalyticsEnabled } from "./web-analytics";
 import { isNotificationTextEnabled, setNotificationTextEnabled } from "./web-notification-text";
 import type { WebPushAvailability, WebPushFailure } from "./web-push";
 
-const TABS = ["profile", "preferences"] as const;
-type WebAccountSettingsTab = (typeof TABS)[number];
+const SHORTCUTS = [
+  { id: "agents", titleKey: "server.settings.group.agents", icon: Sparkles },
+  { id: "money", titleKey: "server.settings.group.money", icon: CircleDollarSign },
+  { id: "connections", titleKey: "server.settings.group.connections", icon: KeyRound },
+  { id: "server", titleKey: "server.settings.group.server", icon: Archive },
+] as const satisfies readonly { id: WebAccountSettingsShortcut; titleKey: AppTextKey; icon: typeof UserRound }[];
 
 const TAB_ITEMS = {
   profile: {
@@ -52,10 +66,15 @@ const TAB_ITEMS = {
     descriptionKey: "settings.tab.profile.description",
     icon: UserRound,
   },
-  preferences: {
-    titleKey: "webClient.settings.preferences.title",
-    descriptionKey: "webClient.settings.preferences.description",
-    icon: SlidersHorizontal,
+  appearance: {
+    titleKey: "webClient.settings.appearance.title",
+    descriptionKey: "webClient.settings.appearance.description",
+    icon: Palette,
+  },
+  notifications: {
+    titleKey: "webClient.settings.notifications.title",
+    descriptionKey: "webClient.settings.notifications.description",
+    icon: Bell,
   },
 } as const satisfies Record<
   WebAccountSettingsTab,
@@ -76,6 +95,14 @@ export interface WebAccountSettingsProps {
   /** Closes these settings and opens the plans and servers of the account. */
   onOpenBilling: () => void;
   onSignOut: () => Promise<void>;
+  /** The tab to show, from the address. Profile shows when there is none. */
+  section?: WebAccountSettingsTab | null;
+  /** Called when the user picks another tab, so the address can name it. */
+  onSectionChange?: (tab: WebAccountSettingsTab) => void;
+  /** Opens a task that lives in the settings of the open server. Absent without one. */
+  onOpenShortcut?: ((shortcut: WebAccountSettingsShortcut) => void) | undefined;
+  /** Opens the quiet hours and focus of the open server, for its owner or an admin. */
+  onOpenQuietHours?: (() => void) | undefined;
   /** Push notifications from the opened host. Absent in a build that has none. */
   push?: {
     availability: WebPushAvailability;
@@ -95,7 +122,14 @@ export interface WebAccountSettingsProps {
 export default function WebAccountSettings(props: WebAccountSettingsProps) {
   const [reportsEnabled, setReportsEnabled] = createSignal(webReportsEnabled());
   const { t } = useText();
-  const [activeTab, setActiveTab] = createSignal<WebAccountSettingsTab>("profile");
+  const [activeTab, setActiveTab] = createSignal<WebAccountSettingsTab>(untrack(() => props.section) ?? "profile");
+  // An address that names another tab while the page shows moves to it.
+  createEffect(
+    () => props.section,
+    (section) => {
+      if (section) setActiveTab(section);
+    },
+  );
   const [completionSound, setCompletionSound] = createSignal(isCompletionSoundEnabled());
   const [notificationText, setNotificationText] = createSignal(isNotificationTextEnabled());
   const sendShortcutMode = useSendShortcutMode();
@@ -135,7 +169,9 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
       value={activeTab()}
       onChange={(value: string) => {
         const tab = TABS.find((candidate) => candidate === value);
-        if (tab) setActiveTab(tab);
+        if (!tab) return;
+        setActiveTab(tab);
+        props.onSectionChange?.(tab);
       }}
       orientation="vertical"
       activationMode="automatic"
@@ -167,6 +203,29 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
                 );
               })}
             </Tabs.List>
+            <Show when={props.onOpenShortcut}>
+              {(open) => (
+                <nav class="settings-modal-nav" aria-label={t("server.settings.elsewhere")}>
+                  <span class="settings-modal-nav-heading" aria-hidden="true">
+                    {t("webClient.settings.workspaceHeading")}
+                  </span>
+                  {SHORTCUTS.map((item) => {
+                    const NavIcon = item.icon;
+                    return (
+                      <Button
+                        variant="ghost"
+                        type="button"
+                        class="settings-modal-nav-item"
+                        onClick={() => open()(item.id)}
+                      >
+                        <NavIcon aria-hidden="true" />
+                        <span>{t(item.titleKey)}</span>
+                      </Button>
+                    );
+                  })}
+                </nav>
+              )}
+            </Show>
             <div class="settings-modal-nav">
               <Button
                 variant="ghost"
@@ -194,7 +253,7 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
           />
         </Tabs.Content>
 
-        <Tabs.Content value="preferences" class="settings-modal-tab-panel" data-tab="preferences">
+        <Tabs.Content value="appearance" class="settings-modal-tab-panel" data-tab="appearance">
           <SettingsSection title={t("settings.appBehavior.title")}>
             <ItemGroup class="settings-modal-card">
               {/* A phone has no Enter key to choose: Return adds a line and Send sends. */}
@@ -272,6 +331,9 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
               />
             </ItemGroup>
           </SettingsSection>
+        </Tabs.Content>
+
+        <Tabs.Content value="notifications" class="settings-modal-tab-panel" data-tab="notifications">
           <SettingsSection title={t("settings.notifications.title")}>
             <ItemGroup class="settings-modal-card">
               <SwitchField
@@ -329,6 +391,21 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
                   onReplay={replayActionSoundChoice}
                 />
               </Item>
+              <Show when={props.onOpenQuietHours}>
+                {(open) => (
+                  <Item class="settings-modal-row">
+                    <ItemContent>
+                      <ItemTitle>{t("workspace.away.settingsTitle")}</ItemTitle>
+                      <ItemDescription>{t("workspace.away.quietNote")}</ItemDescription>
+                    </ItemContent>
+                    <ItemActions>
+                      <Button type="button" variant="outline" size="sm" onClick={() => open()()}>
+                        {t("webClient.settings.quietHours.open")}
+                      </Button>
+                    </ItemActions>
+                  </Item>
+                )}
+              </Show>
             </ItemGroup>
           </SettingsSection>
         </Tabs.Content>

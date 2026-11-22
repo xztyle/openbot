@@ -593,4 +593,14 @@ export const messages = {
   "server.restartNotice.restartingDescription":
     "Atelier verbindet sich automatisch erneut, sobald {name} wieder verfügbar ist.",
   "server.restartNotice.backTitle": "{name} ist wieder online",
+  "server.settings.group.agents": "Agenten & Modelle",
+  "server.settings.group.connections": "Verbindungen & Geheimnisse",
+  "server.settings.group.server": "Server & Backups",
+  "server.settings.group.money": "Geld & Limits",
+  "server.settings.group.notifications": "Benachrichtigungen & Ruhezeiten",
+  "server.settings.group.appearance": "Darstellung",
+  "server.settings.shortcut.money": "Budgets und Ausgaberegeln",
+  "server.settings.shortcut.notifications": "Benachrichtigungen",
+  "server.settings.shortcut.appearance": "Hell, dunkel und Sprache",
+  "server.settings.elsewhere": "Weitere Einstellungen",
 } as const satisfies PartialTranslation<typeof source>;

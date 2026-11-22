@@ -21,16 +21,19 @@ import {
   AppWindow,
   Archive,
   ArrowLeftRight,
+  Bell,
   Blocks,
   Button,
   CalendarClock,
   ChevronRight,
+  CircleDollarSign,
   Download,
   Globe2,
   HardDrive,
   Hash,
   KeyRound,
   Monitor,
+  Palette,
   Plug,
   RefreshCw,
   Settings,
@@ -54,7 +57,7 @@ import {
 } from "@openbot/ui/features/settings/stores/hosted-sites-store";
 import { createUnsavedGuard, DiscardChangesDialog } from "@openbot/ui/features/settings/unsaved-changes";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createSignal, onCleanup, Show, untrack } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { type ServerBrowserProfilesOptions, ServerBrowserProfilesPanel } from "../browser/ServerBrowserProfilesPanel";
 import { ConnectorsPanel, type ConnectorsPanelDetail } from "../connectors/ConnectorsPanel";
@@ -249,8 +252,18 @@ export interface ServerSettingsModalProps {
    * a remote host with `fork-host-v1` that this member administers.
    */
   workspaceSettings?: ServerWorkspaceSettingsOptions | undefined;
-  /** The section to show when the dialog opens. General shows when the server does not have that section. */
-  initialSection?: ServerSettingsSection | null;
+  /**
+   * The section to show when the dialog opens, or a group, which opens its first section. General
+   * shows when the server does not have it.
+   */
+  initialSection?: ServerSettingsTarget | null;
+  /** Called when the user picks another section, so an address can name it. */
+  onSectionChange?: (section: ServerSettingsSection) => void;
+  /**
+   * Settings that live elsewhere, listed under the server's own sections so the owner finds every
+   * task in one place: the money limits, the notifications and quiet hours, and the look.
+   */
+  shortcuts?: Partial<Record<ServerSettingsShortcut, () => void>> | undefined;
   /** Where the settings page shows, or nothing while the page is not on screen. */
   page: SettingsPagePlacement | undefined;
 }
@@ -282,6 +295,91 @@ export type ServerSettingsSection =
   | "browser-profiles"
   | "connectors";
 type Section = ServerSettingsSection;
+
+/** The task groups of the navigation, in order. A group id also names its first section in an address. */
+export type ServerSettingsGroup = "agents" | "connections" | "server";
+/** What an opener may ask for: a section, or a group's first section. */
+export type ServerSettingsTarget = ServerSettingsSection | ServerSettingsGroup;
+export type ServerSettingsShortcut = "money" | "notifications" | "appearance";
+
+/**
+ * The sections by what the owner wants to do, not by how the server is built. Every section is in
+ * exactly one group.
+ */
+export const SERVER_SETTINGS_GROUPS = [
+  {
+    id: "agents",
+    title: "server.settings.group.agents",
+    sections: ["providers", "workspace", "roles", "routines", "import"],
+  },
+  {
+    id: "connections",
+    title: "server.settings.group.connections",
+    sections: ["vault", "connectors", "mcp", "browser-profiles", "sites", "desktop"],
+  },
+  {
+    id: "server",
+    title: "server.settings.group.server",
+    sections: ["general", "members", "storage", "updates", "backups", "transfer"],
+  },
+] as const satisfies readonly { id: ServerSettingsGroup; title: AppTextKey; sections: readonly Section[] }[];
+
+export function isServerSettingsSection(value: string): value is ServerSettingsSection {
+  return SERVER_SETTINGS_GROUPS.some((group) => group.sections.some((section) => section === value));
+}
+
+/** Whether an address's `section` names a section or a group of the server settings. */
+export function serverSettingsTargetOf(value: string | null): ServerSettingsTarget | null {
+  if (!value) return null;
+  if (isServerSettingsSection(value)) return value;
+  return SERVER_SETTINGS_GROUPS.find((group) => group.id === value)?.id ?? null;
+}
+
+const SETTINGS_SHORTCUTS = [
+  {
+    id: "money",
+    group: "server.settings.group.money",
+    title: "server.settings.shortcut.money",
+    icon: CircleDollarSign,
+  },
+  {
+    id: "notifications",
+    group: "server.settings.group.notifications",
+    title: "server.settings.shortcut.notifications",
+    icon: Bell,
+  },
+  {
+    id: "appearance",
+    group: "server.settings.group.appearance",
+    title: "server.settings.shortcut.appearance",
+    icon: Palette,
+  },
+] as const satisfies readonly {
+  id: ServerSettingsShortcut;
+  group: AppTextKey;
+  title: AppTextKey;
+  icon: typeof Settings;
+}[];
+
+const SECTION_ICONS = {
+  general: Settings,
+  vault: KeyRound,
+  members: UsersRound,
+  roles: ShieldCheck,
+  workspace: Hash,
+  desktop: Monitor,
+  mcp: Blocks,
+  storage: HardDrive,
+  sites: Globe2,
+  providers: Sparkles,
+  updates: RefreshCw,
+  backups: Archive,
+  import: Download,
+  transfer: ArrowLeftRight,
+  routines: CalendarClock,
+  "browser-profiles": AppWindow,
+  connectors: Plug,
+} as const satisfies Record<Section, typeof Settings>;
 
 const sections = {
   general: { title: "server.settings.generalTitle", description: "server.settings.generalDescription" },
@@ -392,7 +490,10 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
   /** The section that an opener asked for, or none when this server does not have it. General shows then. */
   const availableInitialSection = (): Section | null => {
     const requested = props.initialSection;
-    return requested && sectionAvailable(requested) ? requested : null;
+    if (!requested) return null;
+    const group = SERVER_SETTINGS_GROUPS.find((item) => item.id === requested);
+    if (group) return group.sections.find(sectionAvailable) ?? null;
+    return isServerSettingsSection(requested) && sectionAvailable(requested) ? requested : null;
   };
   function providerEnvironmentSource(): ProviderEnvironmentSource | undefined {
     const options = props.providerEnvironment;
@@ -609,7 +710,10 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
         value === "connectors"
       ) {
         // Changes that are not saved ask first (docs/ux/standard.md § 5).
-        requestLeave(() => setSection(value));
+        requestLeave(() => {
+          setSection(value);
+          props.onSectionChange?.(value);
+        });
       }
     },
   };
@@ -720,106 +824,58 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
           </>
         }
         sidebar={
-          <Tabs.List class="settings-modal-nav" aria-label={t("server.settings.sections")}>
-            <Tabs.Trigger class="settings-modal-nav-item" value="general">
-              <Settings aria-hidden="true" />
-              <span>{t(sections.general.title)}</span>
-            </Tabs.Trigger>
-            <Show when={props.vault}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="vault">
-                <KeyRound aria-hidden="true" />
-                <span>{t(sections.vault.title)}</span>
-              </Tabs.Trigger>
+          <>
+            <Tabs.List class="settings-modal-nav" aria-label={t("server.settings.sections")}>
+              <For each={SERVER_SETTINGS_GROUPS}>
+                {(group) => (
+                  <Show when={group.sections.some(sectionAvailable)}>
+                    {/* The heading is for the eye: a tab list holds only tabs, and each tab names itself. */}
+                    <span class="settings-modal-nav-heading" aria-hidden="true">
+                      {t(group.title)}
+                    </span>
+                    <For each={group.sections.filter(sectionAvailable)}>
+                      {(value) => {
+                        const NavIcon = SECTION_ICONS[value];
+                        return (
+                          <Tabs.Trigger class="settings-modal-nav-item" value={value}>
+                            <NavIcon aria-hidden="true" />
+                            <span>{t(sections[value].title)}</span>
+                          </Tabs.Trigger>
+                        );
+                      }}
+                    </For>
+                  </Show>
+                )}
+              </For>
+            </Tabs.List>
+            <Show when={props.shortcuts}>
+              {(shortcuts) => (
+                <nav class="settings-modal-nav" aria-label={t("server.settings.elsewhere")}>
+                  <For each={SETTINGS_SHORTCUTS.filter((item) => shortcuts()[item.id])}>
+                    {(item) => {
+                      const NavIcon = item.icon;
+                      return (
+                        <>
+                          <span class="settings-modal-nav-heading" aria-hidden="true">
+                            {t(item.group)}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            type="button"
+                            class="settings-modal-nav-item"
+                            onClick={() => requestLeave(() => shortcuts()[item.id]?.())}
+                          >
+                            <NavIcon aria-hidden="true" />
+                            <span>{t(item.title)}</span>
+                          </Button>
+                        </>
+                      );
+                    }}
+                  </For>
+                </nav>
+              )}
             </Show>
-            <Tabs.Trigger class="settings-modal-nav-item" value="members">
-              <UsersRound aria-hidden="true" />
-              <span>{t(sections.members.title)}</span>
-            </Tabs.Trigger>
-            <Show when={roles.available()}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="roles">
-                <ShieldCheck aria-hidden="true" />
-                <span>{t(sections.roles.title)}</span>
-              </Tabs.Trigger>
-            </Show>
-            <Show when={workspaceSection.available()}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="workspace">
-                <Hash aria-hidden="true" />
-                <span>{t(sections.workspace.title)}</span>
-              </Tabs.Trigger>
-            </Show>
-            <Show when={remoteDesktopSection()}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="desktop">
-                <Monitor aria-hidden="true" />
-                <span>{t(sections.desktop.title)}</span>
-              </Tabs.Trigger>
-            </Show>
-            <Show when={props.mcpServers}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="mcp">
-                <Blocks aria-hidden="true" />
-                <span>{t(sections.mcp.title)}</span>
-              </Tabs.Trigger>
-            </Show>
-            <Show when={props.storage}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="storage">
-                <HardDrive aria-hidden="true" />
-                <span>{t(sections.storage.title)}</span>
-              </Tabs.Trigger>
-            </Show>
-            <Show when={props.hostedSites}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="sites">
-                <Globe2 aria-hidden="true" />
-                <span>{t(sections.sites.title)}</span>
-              </Tabs.Trigger>
-            </Show>
-            <Show when={props.providers || props.onSwitchToManageProviders}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="providers">
-                <Sparkles aria-hidden="true" />
-                <span>{t(sections.providers.title)}</span>
-              </Tabs.Trigger>
-            </Show>
-            <Show when={props.hostUpdate}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="updates">
-                <RefreshCw aria-hidden="true" />
-                <span>{t(sections.updates.title)}</span>
-              </Tabs.Trigger>
-            </Show>
-            <Show when={props.hostBackups}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="backups">
-                <Archive aria-hidden="true" />
-                <span>{t(sections.backups.title)}</span>
-              </Tabs.Trigger>
-            </Show>
-            <Show when={props.agentImport}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="import">
-                <Download aria-hidden="true" />
-                <span>{t(sections.import.title)}</span>
-              </Tabs.Trigger>
-            </Show>
-            <Show when={props.instanceTransfer}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="transfer">
-                <ArrowLeftRight aria-hidden="true" />
-                <span>{t(sections.transfer.title)}</span>
-              </Tabs.Trigger>
-            </Show>
-            <Show when={props.routineFeed}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="routines">
-                <CalendarClock aria-hidden="true" />
-                <span>{t(sections.routines.title)}</span>
-              </Tabs.Trigger>
-            </Show>
-            <Show when={props.browserProfiles}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="browser-profiles">
-                <AppWindow aria-hidden="true" />
-                <span>{t(sections["browser-profiles"].title)}</span>
-              </Tabs.Trigger>
-            </Show>
-            <Show when={(props.connectors?.available().length ?? 0) > 0}>
-              <Tabs.Trigger class="settings-modal-nav-item" value="connectors">
-                <Plug aria-hidden="true" />
-                <span>{t(sections.connectors.title)}</span>
-              </Tabs.Trigger>
-            </Show>
-          </Tabs.List>
+          </>
         }
       >
         <Tabs.Content value="general" class="settings-modal-tab-panel server-settings-panel" data-tab="general">

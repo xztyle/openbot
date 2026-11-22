@@ -200,10 +200,16 @@ sign-in and browser secret of every agent. Each surface reads that one list:
 - The agent that gave the work shows the request too: its row in the sidebar is marked, its
   "Waiting for replies" row says what to do and where ("Sign in on accounts.google.com") with the
   action (Take over, Answer, Review), and the teammate's card stands in its chat.
-- "Needs you": a button with the count in the top bar of a computer (it shows only while something
-  waits) opens the list; Activity starts with the same list; a phone's Home has the chip. A row says
-  who asks, what to do, the safe summary, where and when, and opens the chat that answers it.
-- The Activity badges, the space rail, the tab title and the Dock count it. A takeover and a browser
+- One decision queue (`useDecisionQueue`): the host's list of every space, every pending loop
+  decision of every space and every insight alert. Not only the space that shows: a request of
+  another space must reach the owner too. Order: what stops an agent's work first, then the most
+  money, then the oldest.
+- Today is its home. Each card says who asks, what to do, the safe summary, the money, where (space
+  and place) and when, with the answers the host takes from there (Approve, Decline, Answer,
+  Dismiss) and Open, which goes to the exact place: the chat with the card, or Loops on the decision.
+- The same queue gives every count: the top bar's "Needs you" button on a computer, the sidebar's
+  Today row and the phone's Today tab, all amber. Activity holds messages only.
+- The space rail, the tab title and the Dock count it. A takeover and a browser
   secret send a web push, as a question and an approval do.
 - A new card in the open chat brings the chat to its end. A takeover card that this client cannot
   open (a web client without the browser view) says where to finish the step.
@@ -215,6 +221,41 @@ and confirm dialogs, select pickers, Secrets, Usage, Schedule and Tasks read the
 touch steps (`--openbot-touch-*` in the brand tokens; the scope is at the end of `patterns.css`):
 body text 16 px, hints 14 px, controls and rows 44 px, a larger switch. No field is under 16 px, so
 iOS does not zoom into it. A new management screen joins the scope list; do not hand-size its controls.
+
+## 7d.1 Phone tabs and the command bar
+
+- The phone's bottom bar is Today, Chat, Agents and Inbox, with a round "+" in the middle (ask an
+  agent, new message, channel, loop or goal). Today has the only count, amber; Chat and Inbox show a
+  dot. More (the account, the views and the server's pages) opens from the avatar in Today's header.
+  Chat is the space's channels and DMs under the shortcut chips; Agents is the fleet with chips for
+  Loops, Money, Insights, the org chart and the artifacts; Inbox is Activity.
+- A bare address (`/app/<space>`) opens Today on a phone and a computer.
+- The command bar (⌘K, and the phone's Jump to) jumps to a name, searches messages and runs actions:
+  `ask <agent> …`, `approve`, `stop`, `goal`. A sentence that names no one is offered to the space's
+  lead agent as a task. A computer has one search field, in the top bar.
+
+## 7e. Touch and contrast (every theme)
+
+These are rules of the design system, for Craft Studio, Modern Atelier and Riso Press in light and
+dark. A change that breaks one is a bug.
+
+- **Tap targets.** On a touch screen (`(hover: none), (pointer: coarse)`) every control a finger
+  hits is at least `--openbot-touch-target` (44 px) in both directions: Stop, "Why is this slow?",
+  "Jump to latest", reactions, thread links, tabs and filter chips. Do not reach 44 px with an
+  invisible `::after` only; the control that stops or answers is visibly that size.
+- **Text contrast.** Text is at least 4.5:1 on the canvas and the surface it sits on, small and dim
+  text too (times, metadata): `--openbot-text-dim` is set for that. Text on a fill uses the fill's
+  own token: `--openbot-text-on-danger` on danger (red counts), `--openbot-text-on-success` on
+  success, `--openbot-text-on-status` on the amber warning fill, `--openbot-text-on-accent` on the
+  accent. A light theme's deep fills take white text; a dark theme's light fills take dark text.
+- **Badges.** Red counts are unread messages and mentions. Amber counts are what waits on the reader
+  (`data-tone="attention"`). No badge text is under 9 px (`--openbot-glyph-md`).
+- **Focus.** Every focusable control shows `--openbot-focus-ring` on `:focus-visible`: 2 px in the
+  accent in the Atelier themes. Do not remove an outline without that ring.
+- **ARIA.** `aria-controls`, `aria-labelledby` and `aria-describedby` name an id that exists in the
+  same shell. A switch's on and off states differ in colour and position, not position alone.
+- **Floating controls.** A pill over a transcript ("Jump to latest", "3 new replies") sits at the
+  edge by the composer, not over the middle of the text.
 
 ## 8. Copy
 

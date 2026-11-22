@@ -28,6 +28,7 @@ import {
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createSignal, createStore, createUniqueId, For, Show } from "solid-js";
+import { copyTextWithToast } from "../copy-text";
 import { useText } from "../text";
 import { MoreProvidersDialog } from "./MoreProvidersDialog";
 import { ProviderAccountList } from "./ProviderAccountList";
@@ -781,9 +782,7 @@ export function ProviderPicker(props: ProviderPickerProps) {
                                 )}
                               </Show>
                               <Show when={diagnosticsOffered()}>
-                                <DropdownMenu.Item
-                                  onSelect={() => void navigator.clipboard.writeText(option().diagnostics ?? "")}
-                                >
+                                <DropdownMenu.Item onSelect={() => copyTextWithToast(option().diagnostics ?? "")}>
                                   <Copy aria-hidden="true" />
                                   {t("provider.action.copyDiagnostics")}
                                 </DropdownMenu.Item>

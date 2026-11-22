@@ -85,6 +85,7 @@ import {
   servesCustomProvider,
   showProviderInUse,
 } from "../../components/provider-row";
+import { copyTextWithToast } from "../../copy-text";
 import { useText } from "../../text";
 import { AccountUsageWindowList } from "../account/AccountUsageDetails";
 import type { AccountUsageProviderRow, AccountUsageWindowRow } from "../account/account-usage-view";
@@ -1397,7 +1398,7 @@ function RuntimeSection(props: SectionProps) {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => void navigator.clipboard.writeText(props.option.diagnostics ?? "")}
+                    onClick={() => copyTextWithToast(props.option.diagnostics ?? "")}
                   >
                     <Copy aria-hidden="true" />
                     {t("provider.action.copyDiagnostics")}

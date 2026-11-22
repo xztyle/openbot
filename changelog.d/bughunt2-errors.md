@@ -31,3 +31,4 @@
 - Connections: after you revoke an access link, the toast says "Link revoked" instead of "Revoke".
 - Browse channels: when joining a channel fails, the list stays open with the toast, so you can try
   again. Before, it closed as if you had joined.
+- Providers: Copy diagnostics now says "Copied", or that the copy failed. Before, it gave no sign.

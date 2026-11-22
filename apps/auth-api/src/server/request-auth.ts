@@ -72,6 +72,7 @@ export function requestAuthService(): AuthService {
     profileChanged: (userId) => notifyAccountProfileChanged(bindings, userId, schedule),
     analytics,
     attribution: new AccountAttribution({ database: bindings.DB, analytics }),
+    scheduleDelivery: (work) => schedule(work),
   });
 }
 

@@ -55,6 +55,11 @@ interface AuthServiceOptions {
   analytics?: AccountAnalytics;
   /** Saves the first website visit that a sign-in on the web sends. */
   attribution?: AccountAttribution;
+  /**
+   * Sends the sign-in code after the answer (a Worker's `waitUntil`). Without it the answer waits
+   * for the mail server, which can take longer than a browser waits.
+   */
+  scheduleDelivery?: (work: Effect.Effect<void>) => void;
 }
 
 export interface EmailSignInStart {
@@ -85,6 +90,7 @@ class AuthDependencies extends Context.Service<
     profileChanged: (userId: string) => Effect.Effect<void, RemoteFailure>;
     analytics: AccountAnalytics;
     attribution: AccountAttribution | null;
+    scheduleDelivery: ((work: Effect.Effect<void>) => void) | null;
   }
 >()("@openbot/auth-api/AuthDependencies") {}
 
@@ -106,6 +112,7 @@ export class AuthService {
       profileChanged: options.profileChanged ?? (() => Effect.void),
       analytics: options.analytics ?? NO_ACCOUNT_ANALYTICS,
       attribution: options.attribution ?? null,
+      scheduleDelivery: options.scheduleDelivery ?? null,
     });
   }
 
@@ -185,6 +192,32 @@ export class AuthService {
         return yield* this.#replayEmailSignIn(existing, email, challengeId, now);
       }
       const delivery = dependencies.delivery;
+      if (delivery && dependencies.scheduleDelivery) {
+        // The challenge already accepts its code while delivery is pending, so the reader can type
+        // the code as soon as it arrives; the mail server's answer only settles the delivery state.
+        const { repository, now: clock } = dependencies;
+        dependencies.scheduleDelivery(
+          delivery.send({ email, code, expiresAt }).pipe(
+            Effect.mapError(safeDeliveryError),
+            Effect.result,
+            Effect.flatMap((result) => {
+              if (Result.isSuccess(result))
+                return repository.completeEmailChallengeDelivery(challengeHash, "sent", clock());
+              console.error("Email code delivery failed:", result.failure);
+              // An ambiguous failure may still deliver: the challenge stays pending, as before.
+              return AMBIGUOUS_DELIVERY_ERRORS.has(result.failure)
+                ? Effect.void
+                : repository.completeEmailChallengeDelivery(challengeHash, "failed", clock());
+            }),
+            Effect.catch((error) => Effect.sync(() => console.error("Email code delivery state failed:", error))),
+          ),
+        );
+        return {
+          challengeId,
+          expiresAt,
+          resendAt: now + RESEND_COOLDOWN_MS,
+        };
+      }
       const deliveryResult = yield* Effect.result(
         delivery ? delivery.send({ email, code, expiresAt }).pipe(Effect.mapError(safeDeliveryError)) : Effect.void,
       );

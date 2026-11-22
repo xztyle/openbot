@@ -9,6 +9,7 @@ import { activeSessionKey } from "../database/provider-sessions";
 import { causeHelpers } from "../effect-boundary";
 import { decodeRecordResponse, getRecord } from "../protocol";
 import { finiteNumberOrNull } from "./account-usage";
+import { type IdlePrecompactEntry, IdlePrecompactState } from "./idle-precompact-state";
 import type { ProviderPort } from "./provider-runtime";
 import type { ThreadOperationFailed } from "./thread-lifecycle";
 
@@ -93,6 +94,23 @@ const USAGE_CHANGE_DELAY_MS = 250;
  */
 export const IDLE_HANDOFF_AFTER_MS = 60 * 60_000;
 export const IDLE_HANDOFF_MIN_TOKENS = 120_000;
+/**
+ * A Claude session that stays idle this long after its turn compacts once, still inside the prompt
+ * cache, so its wake reads a small context instead of writing the whole session to the cache again.
+ */
+export const IDLE_PRECOMPACT_AFTER_MS = 55 * 60_000;
+export const IDLE_PRECOMPACT_MIN_TOKENS = 100_000;
+export const IDLE_PRECOMPACT_STATE_FILE = "idle-precompact.json";
+/** Keeps the latest exchanges word for word; only the older part of the chat is summarised. */
+export const IDLE_PRECOMPACT_INSTRUCTIONS =
+  "Keep the most recent exchanges verbatim: the last few user and assistant turns, the current task, " +
+  "open questions, promised next steps, and every ID, link and path still in use. Summarise only the " +
+  "older part of the conversation.";
+
+/** `OPENBOT_IDLE_PRECOMPACT=off` turns the idle pre-compaction off. */
+export function idlePrecompactEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.OPENBOT_IDLE_PRECOMPACT?.trim().toLowerCase() !== "off";
+}
 
 export interface ContextCompactionOptions {
   /**
@@ -115,6 +133,12 @@ export interface ContextCompactionOptions {
   changed?(): void;
   /** A provider session finished a compaction: its summary replaces what it read before. */
   compacted?(threadId: string): void;
+  /** Whether a turn runs or a delivery waits for this agent. The idle pre-compaction waits for neither. */
+  agentBusy?(agentId: string): boolean;
+  /** The JSON file that keeps the idle pre-compaction across a restart, or none. */
+  idlePrecompactPath?: string | null;
+  /** Tests turn it on or off; otherwise `OPENBOT_IDLE_PRECOMPACT`. */
+  idlePrecompact?: boolean;
 }
 
 /** Whether OpenBot can ask for a compaction of this client, automatically or for the user. */
@@ -185,6 +209,14 @@ export class ContextCompaction {
   readonly #activity = new Map<string, number>();
   /** The threads that `reserveIdleHandoff` reserved, which `request` hands off. */
   readonly #idleHandoffs = new Set<string>();
+  readonly #agentBusy: (agentId: string) => boolean;
+  readonly #idlePrecompact: boolean;
+  readonly #precompactState: IdlePrecompactState;
+  /** The last turn end of each Claude thread, and whether it compacted since. Kept on disk. */
+  readonly #precompactEntries: Map<string, IdlePrecompactEntry>;
+  readonly #precompactTimers = new Map<string, NodeJS.Timeout>();
+  /** Threads whose running compaction is the idle pre-compaction: the context before it. */
+  readonly #precompacting = new Map<string, number>();
   #usageTimer: NodeJS.Timeout | null = null;
 
   constructor(options: ContextCompactionOptions) {
@@ -199,6 +231,97 @@ export class ContextCompaction {
     this.#scheduleDrain = options.scheduleDrain;
     this.#rotateSession = options.rotateSession;
     this.#rotatesSession = options.rotatesSession;
+    this.#agentBusy = options.agentBusy ?? (() => false);
+    this.#idlePrecompact = options.idlePrecompact ?? idlePrecompactEnabled();
+    this.#precompactState = new IdlePrecompactState(options.idlePrecompactPath ?? null);
+    this.#precompactEntries = this.#precompactState.load();
+    this.#rescheduleIdlePrecompacts();
+  }
+
+  /**
+   * After a restart: a thread whose check time is still ahead waits for it again. One past it is left
+   * to the wake handoff, and one past the prompt cache is forgotten.
+   */
+  #rescheduleIdlePrecompacts(now = Date.now()): void {
+    let dropped = false;
+    for (const [threadId, entry] of this.#precompactEntries) {
+      if (now - entry.lastTurnEndAt >= IDLE_HANDOFF_AFTER_MS) {
+        this.#precompactEntries.delete(threadId);
+        dropped = true;
+        continue;
+      }
+      const due = entry.lastTurnEndAt + IDLE_PRECOMPACT_AFTER_MS - now;
+      if (this.#idlePrecompact && !entry.precompacted && due > 0) this.#armPrecompact(threadId, due);
+    }
+    if (dropped) this.#precompactState.save(this.#precompactEntries);
+  }
+
+  #armPrecompact(threadId: string, ms: number): void {
+    this.#clearPrecompactTimer(threadId);
+    const timer = setTimeout(() => {
+      this.#precompactTimers.delete(threadId);
+      this.#precompactIfIdle(threadId);
+    }, ms);
+    timer.unref?.();
+    this.#precompactTimers.set(threadId, timer);
+  }
+
+  #clearPrecompactTimer(threadId: string): void {
+    const timer = this.#precompactTimers.get(threadId);
+    if (timer) clearTimeout(timer);
+    this.#precompactTimers.delete(threadId);
+  }
+
+  /**
+   * A turn of an agent on this thread ended. A Claude session checks again at
+   * `IDLE_PRECOMPACT_AFTER_MS` whether it is still idle and large enough to compact once.
+   */
+  agentTurnEnded(agentId: string, threadId: string, now = Date.now()): void {
+    if (!this.#idlePrecompact) return;
+    const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+    if (!agent || this.#providers.clientForAgent(agent)?.contextCompaction !== "native") return;
+    this.#precompactEntries.set(threadId, {
+      agentId,
+      lastTurnEndAt: now,
+      usedTokens: this.#display.get(threadId)?.usage?.usedTokens ?? 0,
+      precompacted: false,
+    });
+    this.#precompactState.save(this.#precompactEntries);
+    this.#armPrecompact(threadId, IDLE_PRECOMPACT_AFTER_MS);
+  }
+
+  /** Whether the thread compacted while idle since its last turn. Its wake needs no handoff. */
+  precompactedSinceLastTurn(threadId: string): boolean {
+    return this.#precompactEntries.get(threadId)?.precompacted === true;
+  }
+
+  #precompactIfIdle(threadId: string): void {
+    const entry = this.#precompactEntries.get(threadId);
+    if (!entry || entry.precompacted || !this.#idlePrecompact) return;
+    const { agentId } = entry;
+    const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+    const client = agent ? this.#providers.clientForAgent(agent) : null;
+    if (!client || client.contextCompaction !== "native" || !this.#providers.isReady()) return;
+    const usedTokens = this.#display.get(threadId)?.usage?.usedTokens ?? entry.usedTokens;
+    if (usedTokens < IDLE_PRECOMPACT_MIN_TOKENS) return;
+    if (this.#agentBusy(agentId) || this.#compactingAgents.has(agentId) || this.#refusals.has(agentId)) return;
+    if (this.#display.get(threadId)?.compaction?.status === "running") return;
+    const budget =
+      this.#budgets.get(threadId) ?? newBudget(usedTokens, this.#display.get(threadId)?.usage?.windowTokens ?? 1);
+    if (budget.phase !== "idle") return;
+    this.#budgets.set(threadId, budget);
+    // Marked before the request: whatever it ends with, the thread compacts once until its next turn.
+    entry.precompacted = true;
+    this.#precompactState.save(this.#precompactEntries);
+    budget.phase = "requested";
+    this.#precompacting.set(threadId, usedTokens);
+    this.#compactingAgents.set(agentId, { threadId, client: null, turnId: null });
+    this.observeCompaction(threadId, "running");
+    logger.info("Compacting an idle Claude session before its prompt cache expires.", {
+      agentId,
+      contextBefore: usedTokens,
+    });
+    Effect.runFork(this.request(agentId, threadId));
   }
 
   /** Only personal sessions appear in the desktop snapshot; execution threads remain separate. */
@@ -237,6 +360,15 @@ export class ContextCompaction {
     };
     const after = display.compaction?.status === "completed" && this.#awaitingPostCompaction.delete(threadId);
     if (after && display.compaction) display.compaction.afterTokens = usedTokens;
+    const before = after ? this.#precompacting.get(threadId) : undefined;
+    if (before !== undefined) {
+      this.#precompacting.delete(threadId);
+      logger.info("An idle Claude session compacted.", {
+        agentId: this.#precompactEntries.get(threadId)?.agentId,
+        contextBefore: before,
+        contextAfter: usedTokens,
+      });
+    }
     this.#display.set(threadId, display);
     if (after || JSON.stringify(previous) !== JSON.stringify(display.usage)) this.#scheduleUsageChange();
   }
@@ -303,6 +435,13 @@ export class ContextCompaction {
 
   beginTurn(threadId: string): void {
     this.#awaitingPostCompaction.delete(threadId);
+    // A new turn makes the session grow again: the idle check starts over at its end.
+    this.#clearPrecompactTimer(threadId);
+    const entry = this.#precompactEntries.get(threadId);
+    if (entry) {
+      this.#precompactEntries.delete(threadId);
+      this.#precompactState.save(this.#precompactEntries);
+    }
   }
 
   /** The context of a provider thread and when its last model step was, or null before its first one here. */
@@ -322,6 +461,8 @@ export class ContextCompaction {
   reserveIdleHandoff(agentId: string, threadId: string, now = Date.now()): boolean {
     const agent = this.#store.list().find((candidate) => candidate.id === agentId);
     if (!agent || this.#providers.clientForAgent(agent)?.contextCompaction !== "native") return false;
+    // A session that compacted while idle holds a small context already.
+    if (this.precompactedSinceLastTurn(threadId)) return false;
     const usage = this.#display.get(threadId)?.usage;
     const at = this.#activity.get(threadId);
     if (!usage || at === undefined || usage.usedTokens < IDLE_HANDOFF_MIN_TOKENS || now - at < IDLE_HANDOFF_AFTER_MS)
@@ -493,12 +634,14 @@ export class ContextCompaction {
       this.#scheduleDrain(agentId);
       return;
     }
+    const precompact = this.#precompacting.has(threadId);
     if (
       budget?.phase !== "requested" ||
       !client ||
-      !compactsOnRequest(client.contextCompaction) ||
+      !(compactsOnRequest(client.contextCompaction) || (precompact && client.contextCompaction === "native")) ||
       !this.#providers.isReady()
     ) {
+      this.#precompacting.delete(threadId);
       if (budget?.phase === "requested") this.observeCompaction(threadId, "failed");
       this.#release(agentId, threadId);
       return;
@@ -510,13 +653,14 @@ export class ContextCompaction {
 
     this.#compactingAgents.set(agentId, { threadId, client, turnId: null });
     // A `request` compaction runs inside the request, so it starts now and the request waits as long.
+    // A native compaction is a Claude turn of its own: `claimTurn` takes it and its end finishes it.
     const runsInRequest = client.contextCompaction === "request";
     this.#armDeadline(agentId, threadId, client, runsInRequest ? this.#runTimeoutMs : this.#timeoutMs);
 
     yield* client
       .request(
         "thread/compact/start",
-        { threadId },
+        precompact ? { threadId, instructions: IDLE_PRECOMPACT_INSTRUCTIONS } : { threadId },
         decodeRecordResponse,
         runsInRequest ? this.#runTimeoutMs : undefined,
       )
@@ -535,6 +679,7 @@ export class ContextCompaction {
             // Codex reported the compaction turn, so it runs whatever the answer was. Its end, or
             // the deadline, releases the queue.
             if (budget.phase === "running" || budget.phase === "stopping") return;
+            this.#precompacting.delete(threadId);
             budget.lastCompactedTokens = budget.usedTokens;
             this.#emitError("context_compaction_failed", failure.cause, agentId);
             this.#countFailure(threadId, agentId);
@@ -590,6 +735,7 @@ export class ContextCompaction {
         this.#countFailure(threadId, agentId);
       }
     }
+    if (status !== "completed") this.#precompacting.delete(threadId);
     this.observeCompaction(threadId, status === "completed" ? "completed" : "failed");
     this.#release(agentId, threadId);
     this.#scheduleDrain(agentId);
@@ -600,6 +746,9 @@ export class ContextCompaction {
     this.#budgets.delete(threadId);
     this.#activity.delete(threadId);
     this.#idleHandoffs.delete(threadId);
+    this.#precompacting.delete(threadId);
+    this.#clearPrecompactTimer(threadId);
+    if (this.#precompactEntries.delete(threadId)) this.#precompactState.save(this.#precompactEntries);
     const displayed = this.#display.delete(threadId);
     this.#durations.delete(threadId);
     this.#awaitingPostCompaction.delete(threadId);
@@ -672,6 +821,9 @@ export class ContextCompaction {
     this.#budgets.clear();
     this.#activity.clear();
     this.#idleHandoffs.clear();
+    for (const timer of this.#precompactTimers.values()) clearTimeout(timer);
+    this.#precompactTimers.clear();
+    this.#precompacting.clear();
     this.#display.clear();
     this.#durations.clear();
     this.#awaitingPostCompaction.clear();

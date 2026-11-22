@@ -175,7 +175,7 @@ import { fanoutCandidates, reviewJudgeCandidates } from "./agent/background-mode
 import { BootRecovery } from "./agent/boot-recovery";
 import { BrowserUploads } from "./agent/browser-uploads";
 import type { ChatVisualPreviewHost } from "./agent/chat-visual-preview";
-import { ContextCompaction } from "./agent/context-compaction";
+import { ContextCompaction, IDLE_PRECOMPACT_STATE_FILE } from "./agent/context-compaction";
 import { ConversationReader } from "./agent/conversation-reader";
 import { ConversationRuntime } from "./agent/conversation-runtime";
 import { CustomEndpoints, toEndpointChangeFailed } from "./agent/custom-endpoints";
@@ -1134,6 +1134,16 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       scheduleDrain: (agentId) => this.#drain.scheduleDrain(agentId),
       rotateSession: (agentId, client, threadId) => this.#threads.rotateProviderSession(agentId, client, threadId),
       rotatesSession: (agentId, threadId) => this.#threads.rotatesSession(agentId, threadId),
+      agentBusy: (agentId) => {
+        const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+        return (
+          !agent ||
+          this.#conversation.anyWorkingSnapshot(agentId) != null ||
+          this.#mailbox.hasUnfinishedDelivery(agentId) ||
+          this.#threads.providerContextBusy(agent)
+        );
+      },
+      idlePrecompactPath: join(store.database.userDataPath, IDLE_PRECOMPACT_STATE_FILE),
       compacted: (threadId) => {
         this.channels.contextCompacted(threadId);
         // A compaction of an agent's own chat drops detail: its memory review runs now.

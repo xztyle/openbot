@@ -825,9 +825,18 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
         );
         return yield* providerSync(() => decoder(stopped ? {} : notRunning));
       }
-      case "thread/compact/start":
-        // Claude Code manages its own context compaction.
-        return yield* providerSync(() => decoder({}));
+      case "thread/compact/start": {
+        // Claude Code manages its own context compaction. With instructions, OpenBot asks for one
+        // now: the CLI runs `/compact` as a turn of its own, which `claimTurn` takes.
+        const instructions = getString(params, "instructions");
+        if (!instructions) return yield* providerSync(() => decoder({}));
+        const threadId = yield* providerSync(() => requiredString(params, "threadId"));
+        const response = yield* this.#startTurnEffect({
+          threadId,
+          input: [{ type: "text", text: `/compact ${instructions}` }],
+        });
+        return yield* providerSync(() => decoder(response));
+      }
       default:
         return yield* providerFailure(new Error(`Claude adapter does not implement ${method}.`));
     }

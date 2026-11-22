@@ -733,6 +733,8 @@ export class TurnLifecycle {
           this.#compaction.finish(agentId, threadId, status);
           return;
         }
+        // An idle Claude session compacts once before its prompt cache expires.
+        this.#compaction.agentTurnEnded(agentId, threadId);
         // A defect too: this fiber has no other handler, and the turn is settled by then.
         yield* this.#completeTurn(agentId, threadId, turnId, status).pipe(
           Effect.catchCause((cause) =>

@@ -74,7 +74,7 @@ import { startProviderTerminalLogin } from "../provider-terminal-login";
 import { recordRestartActivity } from "../restart-activity";
 import { shortenDiagnostic } from "./../stderr-diagnostics";
 import { stopProcessTree } from "../windows-process-tree";
-import { normalizeAccountUsage, usageWindowHasReset } from "./account-usage";
+import { normalizeAccountUsage, usageWindowHasReset, usageWindowResetSince } from "./account-usage";
 import { captureBrowser } from "./browser-capture";
 import { startCliCodeLogin } from "./cli-code-login";
 import { CliLoginFailed, CliLoginFlow, toCliLoginFailed } from "./cli-login-flow";
@@ -109,6 +109,7 @@ import {
   waitForSuccessfulProcess,
 } from "./provider-status";
 import { providerForAgent, providerLabel } from "./thread-items";
+import { UsageReadGate } from "./usage-read-gate";
 import { workspaceWritableRoots } from "./workspace-sandbox";
 
 const logger = createOpenBotLogger("provider-runtime");
@@ -457,6 +458,8 @@ export class ProviderRuntime implements ProviderPort {
    * every five minutes, so starting a released one to ask again would keep its process running.
    */
   readonly #usageUnreported = new Set<AgentProvider>();
+  /** Paces the usage reads of each provider's own sign-in. A new login or credential resets it. */
+  readonly #usageGates = new Map<AgentProvider, UsageReadGate>();
   /**
    * The last answer of each custom agent's usage prompt, with the prompt and the time of the read. A
    * null text is a read that gave no answer, kept so that a released `acp` does not start for it again.
@@ -737,6 +740,7 @@ export class ProviderRuntime implements ProviderPort {
       yield* this.#stopProviderClient(provider);
       this.#cli.delete(provider);
       this.#accounts.delete(provider);
+      this.#forgetUsage(provider);
       this.#setStatus({
         providers: updateProviderStatus(this.#status.providers, provider, {
           state: "not-started",
@@ -948,7 +952,13 @@ export class ProviderRuntime implements ProviderPort {
       // By provider, then by provider and account: the provider's own sign-in comes first.
       const collected = new Map<string, AccountUsage["limits"][number]>();
       const logFailure = (provider: AgentProvider) => this.#logUsageFailure(provider);
-      const readDefault = (provider: AgentProvider) =>
+      /**
+       * The provider's last reading, also with a window that has reset, as an account after the first keeps
+       * it: a window that resets after the read starts a read, and the row must not leave the rail between.
+       */
+      const keptReading = (provider: AgentProvider) =>
+        this.#usageUnreported.has(provider) ? null : (this.#lastUsage.get(provider) ?? null);
+      const readOwn = (provider: AgentProvider) =>
         Effect.gen({ self: this }, function* () {
           let usage: AccountUsage;
           if (provider === "opencode") {
@@ -965,27 +975,43 @@ export class ProviderRuntime implements ProviderPort {
           } else {
             // Starting a provider that has no usage reading only to get nothing back cost a cold
             // start on every dock poll.
-            if (!agentProviderDescriptor(provider).reportsUsage) return;
+            if (!agentProviderDescriptor(provider).reportsUsage) return null;
             const kept = this.#released.has(provider) ? this.#lastUsage.get(provider) : undefined;
-            if (kept && !usageWindowHasReset(kept)) {
-              collected.set(provider, kept);
-              if (only === undefined) this.#emit({ type: "usage-changed", usage: { limits: [...collected.values()] } });
-              return;
-            }
-            if (this.#released.has(provider) && this.#usageUnreported.has(provider)) return;
+            if (kept && !usageWindowHasReset(kept)) return kept;
+            if (this.#released.has(provider) && this.#usageUnreported.has(provider)) return null;
             if (!this.#clients.has(provider)) yield* this.ensureProvider(provider);
             const client = this.#clients.get(provider);
-            if (!client) return;
+            if (!client) return null;
             usage = yield* this.#refreshUsage(client, defaultUsageModel(provider), false).pipe(deadline);
           }
           const limit = usage.limits[0];
           if (!limit || (!limit.primary && !limit.secondary)) {
             this.#usageUnreported.add(provider);
-            return;
+            return null;
           }
-          this.#usageUnreported.delete(provider);
-          collected.set(provider, { ...limit, id: provider });
-          this.#lastUsage.set(provider, { ...limit, id: provider });
+          this.#keepUsage(provider, usage);
+          return { ...limit, id: provider };
+        });
+      const readDefault = (provider: AgentProvider) =>
+        Effect.gen({ self: this }, function* () {
+          // Each desktop window, web tab and phone polls, so the gate decides when the provider is asked
+          // again. A failed read is logged and keeps the last reading on the rail.
+          const limit = yield* this.#usageGate(provider)
+            .run({
+              read: readOwn(provider),
+              kept: () => keptReading(provider),
+              stale: (readAt) => {
+                const kept = this.#lastUsage.get(provider);
+                return kept !== undefined && usageWindowResetSince(kept, readAt);
+              },
+            })
+            .pipe(
+              Effect.catch((error) =>
+                Effect.fail(error).pipe(this.#logUsageFailure(provider), Effect.as(keptReading(provider))),
+              ),
+            );
+          if (!limit) return;
+          collected.set(provider, limit);
           if (only === undefined)
             this.#emit({
               type: "usage-changed",
@@ -1209,6 +1235,36 @@ export class ProviderRuntime implements ProviderPort {
     );
     return kept();
   });
+
+  /**
+   * Keeps a reading of the provider's own sign-in that another read took, such as when Codex starts, so
+   * the reading that the gate answers with is not older than the one the views were sent.
+   */
+  #keepUsage(provider: AgentProvider, usage: AccountUsage): void {
+    const limit = usage.limits[0];
+    if (!limit || (!limit.primary && !limit.secondary)) return;
+    this.#usageUnreported.delete(provider);
+    this.#lastUsage.set(provider, { ...limit, id: provider });
+  }
+
+  /**
+   * Another login or credential: the next poll reads at once, and no view shows the old login's reading or
+   * credits, also when that read fails.
+   */
+  #forgetUsage(provider: AgentProvider): void {
+    this.#usageGate(provider).reset();
+    this.#lastUsage.delete(provider);
+    this.#ownResetCredits.delete(provider);
+  }
+
+  #usageGate(provider: AgentProvider): UsageReadGate {
+    let gate = this.#usageGates.get(provider);
+    if (!gate) {
+      gate = new UsageReadGate();
+      this.#usageGates.set(provider, gate);
+    }
+    return gate;
+  }
 
   #logUsageFailure(provider: AgentProvider) {
     return Effect.catch((error: ProviderOperationFailed | ProviderAccountFailed) =>
@@ -2002,6 +2058,8 @@ export class ProviderRuntime implements ProviderPort {
     // A shared process that was released when idle starts again without a new activation, and an
     // agent's own process would then keep the old credential until it idles out (#2544).
     this.#countActivation(provider);
+    // The new credential's usage is read at the next poll, not after the old one's wait.
+    this.#forgetUsage(provider);
     return yield* this.#reprobeProvider(provider);
   }, Effect.uninterruptible);
 
@@ -2541,7 +2599,11 @@ export class ProviderRuntime implements ProviderPort {
     yield* this.#refreshUsage(client, undefined, false).pipe(
       Effect.tap((usage) =>
         Effect.sync(() => {
-          if (usage.limits.length > 0) this.#emit({ type: "usage-changed", usage });
+          if (usage.limits.length === 0) return;
+          // With no model, this is not the dock's reading of a provider whose limits depend on the model, so
+          // the next poll reads that again instead of answering with one older than this event.
+          if (defaultUsageModel(source.provider) !== undefined) this.#usageGate(source.provider).reset();
+          this.#emit({ type: "usage-changed", usage });
         }),
       ),
       Effect.ignore,
@@ -2695,6 +2757,8 @@ export class ProviderRuntime implements ProviderPort {
         this.#clients.delete(provider);
         this.#cli.delete(provider);
         this.#accounts.delete(provider);
+        // The next sign-in can be another login.
+        this.#forgetUsage(provider);
         yield* client.stop().pipe(toProviderOperationFailed).pipe(Effect.ignore);
         yield* this.#hooks.onClientStopped(client);
         yield* Effect.forEach(
@@ -2853,6 +2917,14 @@ export class ProviderRuntime implements ProviderPort {
         if (previousClient !== client) this.#activatedAt.set(provider, Date.now());
         this.#cli.set(provider, cli);
         this.#accounts.set(provider, account);
+        // Another login has its own usage budget, so its first reading does not wait for the old one's gate.
+        if (
+          previousAccount &&
+          (previousAccount.type !== account.type ||
+            previousAccount.email !== account.email ||
+            previousAccount.planType !== account.planType)
+        )
+          this.#forgetUsage(provider);
         const restorePrevious = Effect.gen({ self: this }, function* () {
           if (previousClient) this.#clients.set(provider, previousClient);
           else this.#clients.delete(provider);
@@ -3848,6 +3920,11 @@ export class ProviderRuntime implements ProviderPort {
       if (this.#clients.get(client.provider) === client) this.#ownResetCredits.set(client.provider, available);
     }
     const usage = normalizeAccountUsage(rateLimits, client.provider === "codex" ? model : undefined);
+    // The dock's reading, such as when Codex starts: the gate counts it, so the next poll does not read again.
+    if (this.#clients.get(client.provider) === client && model === defaultUsageModel(client.provider)) {
+      this.#keepUsage(client.provider, usage);
+      this.#usageGate(client.provider).succeeded();
+    }
     if (emit) this.#emit({ type: "usage-changed", usage: structuredClone(usage) });
     return structuredClone(usage);
   });

@@ -12,3 +12,5 @@
 
 - The desktop app sets the Dock or taskbar badge only when its count changes. Before, it set it
   about 100 times a second while agents worked, and the trace log filled up every few minutes.
+- `send_message` accepts `message` for `text` and `to` for `recipientAgentIds`, the names agents
+  guessed most often, and its errors show a complete call. About one call in seven failed before.

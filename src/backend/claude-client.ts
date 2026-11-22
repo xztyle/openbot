@@ -106,6 +106,7 @@ import {
   type McpToolRuntimeSource,
   usableMcpServers,
 } from "./mcp-provider-shapes";
+import { normalizeSendMessageArguments } from "./openbot-tools";
 import { PendingServerRequests } from "./pending-server-requests";
 import { readTaskLimit, type TaskLimitState, taskLimitReachedSince } from "./process-limit";
 import {
@@ -1849,10 +1850,8 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     // A bridged call names the OpenBot tool and holds its own arguments in `arguments`.
     const bridged = name === "mcp__openbot__tool_call" && isRecord(input) && input.name === "openbot.send_message";
     const message = name === "mcp__openbot__send_message" ? input : bridged ? input.arguments : undefined;
-    const recipients =
-      isRecord(message) && Array.isArray(message.recipientAgentIds)
-        ? { recipientAgentIds: message.recipientAgentIds }
-        : null;
+    const recipientAgentIds = isRecord(message) ? normalizeSendMessageArguments(message).recipientAgentIds : undefined;
+    const recipients = Array.isArray(recipientAgentIds) ? { recipientAgentIds } : null;
     this.emit("notification", {
       method: completed ? "item/completed" : "item/started",
       params: {

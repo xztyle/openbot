@@ -6,11 +6,12 @@ import {
   type ConversationTraceToolCategory,
   DEFAULT_PROVIDER_ACCOUNT_ID,
 } from "@openbot/contracts/ipc";
-import { type DynamicRecord, isString } from "@openbot/contracts/runtime-values";
+import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import { redactSecrets, redactText } from "@openbot/logging";
 import { type AgentProvider, MissingClaudeSessionError, RequestTimeoutError } from "../agent-client";
 import { AppServerError } from "../app-server-client";
+import { normalizeSendMessageArguments } from "../openbot-tools";
 import {
   bridgedToolName,
   type DynamicToolCallParams,
@@ -305,7 +306,7 @@ function messageRecipients(item: ThreadItem): string[] {
       return [];
     }
   }
-  return getArray(value, "recipientAgentIds")
+  return getArray(isDynamicRecord(value) ? normalizeSendMessageArguments(value) : value, "recipientAgentIds")
     .filter(isString)
     .filter((id) => id.length > 0 && id.length <= INPUT_LIMITS.identifier)
     .slice(0, INPUT_LIMITS.messageRecipients);

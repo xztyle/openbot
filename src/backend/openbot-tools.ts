@@ -6,6 +6,7 @@ import {
   CHAT_VISUAL_TITLE_LIMIT,
 } from "@openbot/contracts/chat-visual";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
+import type { DynamicRecord } from "@openbot/contracts/runtime-values";
 import { isUiBlockId, UI_BLOCK_LIMITS } from "@openbot/contracts/ui-blocks";
 import { z } from "zod";
 import { advertisedJsonSchema } from "./agent/advertised-json-schema";
@@ -943,8 +944,15 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     description:
       "Queue an asynchronous message and optional local files for one or more Atelier agents. Send it only to agents that must act or decide. When replying, pass the original message id as replyToMessageId. Never send acknowledgements or thanks.",
     shape: {
-      recipientAgentIds: z.array(z.string()).min(1).max(32),
-      text: z.string().min(1).max(100_000),
+      // Optional in the schema so that a call with a guessed name, such as `message` or `to`, reaches
+      // the tool, which reads the aliases and names what is missing. See `normalizeSendMessageArguments`.
+      recipientAgentIds: z.array(z.string()).min(1).max(32).describe("Required: the agent ids.").optional(),
+      text: z.string().min(1).max(100_000).describe("Required: the message.").optional(),
+      to: z
+        .union([z.string(), z.array(z.string()).max(32)])
+        .describe("Same as recipientAgentIds.")
+        .optional(),
+      message: z.string().max(100_000).describe("Same as text.").optional(),
       summary: z
         .string()
         .max(240)
@@ -969,6 +977,26 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     },
   },
 ];
+
+/** What a `send_message` call must hold, as its error says. */
+export const SEND_MESSAGE_USAGE =
+  'send_message needs recipientAgentIds (an array of agent ids) and text (the message), such as {"recipientAgentIds":["agent-…"],"text":"Can you check the build?"}.';
+
+/**
+ * The arguments of a `send_message` call with the names that models guess most often: `message`,
+ * `content` or `body` for `text`, and `to`, `recipients` or `recipientAgentId` (one id or several)
+ * for `recipientAgentIds`. The canonical name wins when both are given.
+ */
+export function normalizeSendMessageArguments(args: DynamicRecord): DynamicRecord {
+  const { to, recipients, recipientAgentId, message, content, body, ...rest } = args;
+  const text = rest.text ?? message ?? content ?? body;
+  const recipient = rest.recipientAgentIds ?? to ?? recipients ?? recipientAgentId;
+  return {
+    ...rest,
+    ...(text === undefined ? {} : { text }),
+    ...(recipient === undefined ? {} : { recipientAgentIds: typeof recipient === "string" ? [recipient] : recipient }),
+  };
+}
 
 export const OPENBOT_DYNAMIC_TOOLS = {
   type: "namespace",

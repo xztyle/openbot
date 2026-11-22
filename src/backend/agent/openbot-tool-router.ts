@@ -61,9 +61,11 @@ import {
   htmlPreviewToolSchema,
   htmlRenderToolSchema,
   logDecisionToolSchema,
+  normalizeSendMessageArguments,
   removeApiKeyToolSchema,
   requestApiKeyToolSchema,
   routineReportFailureToolSchema,
+  SEND_MESSAGE_USAGE,
   saveApiKeyToolSchema,
 } from "../openbot-tools";
 import type { OwnerAwayService } from "../owner-away";
@@ -72,9 +74,9 @@ import { handleRoutineFlowTool, type RoutineFlowTools } from "../routine-flows/r
 import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "../security-audit-log";
 import { agentSeesChannel, crossSpaceRefusal } from "../spaces/space-scope";
 import type { StoredStateFailure } from "../stored-state-effects";
-import type { SharePreviewDrawer } from "../workspace-thumbnails";
 import type { TrustService } from "../trust/trust-service";
 import { TRUST_CHECK_METHOD, TrustToolGate } from "../trust/trust-tool-gate";
+import type { SharePreviewDrawer } from "../workspace-thumbnails";
 import { AgentInterruptTool } from "./agent-interrupt-tool";
 import type { AgentMemories } from "./agent-memories";
 import { type ApprovalAutomationPolicy, NO_APPROVAL_AUTOMATION } from "./approval-automation";
@@ -2027,10 +2029,13 @@ export class OpenBotToolRouter {
       if (params.tool !== "send_message" || !isRecord(params.arguments)) {
         throw new Error(`Unsupported Atelier tool: ${params.tool}`);
       }
-      const recipientValues = params.arguments.recipientAgentIds;
+      const args = normalizeSendMessageArguments(params.arguments);
+      const recipientValues = args.recipientAgentIds;
+      if (recipientValues === undefined) throw new Error(`recipientAgentIds is missing. ${SEND_MESSAGE_USAGE}`);
       if (!Array.isArray(recipientValues) || !recipientValues.every((item) => isString(item))) {
-        throw new Error("recipientAgentIds must be an array of agent ids.");
+        throw new Error(`recipientAgentIds must be an array of agent ids. ${SEND_MESSAGE_USAGE}`);
       }
+      if (recipientValues.length === 0) throw new Error(`recipientAgentIds is empty. ${SEND_MESSAGE_USAGE}`);
       if (recipientValues.length !== new Set(recipientValues).size) {
         throw new Error("Duplicate recipients are not allowed.");
       }
@@ -2043,11 +2048,11 @@ export class OpenBotToolRouter {
         if (agent.hiddenAt !== undefined)
           throw new Error(`${recipient}: ${sourceText("error.backend.recipientHidden")}`);
       }
-      const paths = params.arguments.paths ?? [];
+      const paths = args.paths ?? [];
       if (!Array.isArray(paths) || !paths.every((item) => isString(item))) {
         throw new Error("paths must be an array of local file paths.");
       }
-      const replyToMessageId = params.arguments.replyToMessageId;
+      const replyToMessageId = args.replyToMessageId;
       if (
         replyToMessageId !== undefined &&
         replyToMessageId !== null &&
@@ -2055,12 +2060,12 @@ export class OpenBotToolRouter {
       ) {
         throw new Error("replyToMessageId must be a message id.");
       }
-      if (!isString(params.arguments.text)) throw new Error("text is required.");
-      const expectsReply = params.arguments.expectsReply;
+      if (!isString(args.text) || args.text.trim() === "") throw new Error(`text is missing. ${SEND_MESSAGE_USAGE}`);
+      const expectsReply = args.expectsReply;
       if (expectsReply !== undefined && typeof expectsReply !== "boolean") {
         throw new Error("expectsReply must be a boolean.");
       }
-      const fyiValue = params.arguments.fyi;
+      const fyiValue = args.fyi;
       if (fyiValue !== undefined && typeof fyiValue !== "boolean") throw new Error("fyi must be a boolean.");
       // A reply is never held, so fyi marks only a new message.
       const fyi = fyiValue === true && !replyToMessageId?.trim();
@@ -2075,7 +2080,7 @@ export class OpenBotToolRouter {
             ? this.#mailbox.activeDuplicate({
                 senderAgentId,
                 recipientAgentIds: recipientValues,
-                text: params.arguments.text,
+                text: args.text,
                 replyToMessageId: replyToMessageId ?? null,
                 expectsReply: expectsReply !== false,
                 fyi,
@@ -2111,8 +2116,8 @@ export class OpenBotToolRouter {
         .findDeliveriesByTurn(senderAgentId, params.turnId)
         .map(({ delivery }) => this.#mailbox.messagingOrigin(delivery.id))
         .find((origin) => origin !== null);
-      const text = params.arguments.text;
-      const summary = isString(params.arguments.summary) ? params.arguments.summary.slice(0, 240) : undefined;
+      const text = args.text;
+      const summary = isString(args.summary) ? args.summary.slice(0, 240) : undefined;
       const receipt = yield* this.#mailbox
         .enqueue({
           sender: { kind: "agent", agentId: senderAgentId },

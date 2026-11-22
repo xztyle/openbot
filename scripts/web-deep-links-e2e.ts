@@ -235,7 +235,8 @@ try {
     const trading = page.getByRole("button", { name: /^Trading/u }).first();
     await trading.waitFor({ timeout: UI_WAIT_MS });
     await trading.click();
-    await waitForPath(page, "/app/market-trading/activity");
+    // A space opens on its home, Today.
+    await waitForPath(page, "/app/market-trading/today");
     await page.goBack(COMMIT);
     await waitForPath(page, "/app/general/c/general");
     await channelHeading(page, "general").waitFor({ timeout: UI_WAIT_MS });
@@ -274,11 +275,11 @@ try {
   });
   await shot(page, "7-agent");
 
-  // 8. A link to something gone shows the space's activity with a notice.
+  // 8. A link to something gone shows the space's home, Today, with a notice.
   await step(page, "a gone channel falls back with a notice", async () => {
     await page.goto(`${origin}/app/general/c/no-such-channel`, COMMIT);
     await page.getByText(english("webClient.location.unavailable")).waitFor({ timeout: UI_WAIT_MS });
-    await waitForPath(page, "/app/general/activity");
+    await waitForPath(page, "/app/general/today");
   });
   await shot(page, "8-gone");
 
@@ -293,6 +294,26 @@ try {
     await page.getByRole("heading", { name: english("app.settingsPage.title") }).waitFor({ timeout: UI_WAIT_MS });
   });
 
+  // 9b. A page with no place opens over the space's home, not over the last chat.
+  await step(page, "a page address with no place opens over Today", async () => {
+    await page.goto(`${origin}/app/general?page=settings`, COMMIT);
+    await page.getByRole("heading", { name: english("app.settingsPage.title") }).waitFor({ timeout: UI_WAIT_MS });
+    await waitForPath(page, "/app/general/today?page=settings");
+  });
+
+  // 9c. A link to a section of the server settings opens it, and the client still answers: a sync
+  // throw of the section's first read halted every update.
+  await step(page, "a server settings section link opens and the client still answers", async () => {
+    await page.goto(`${origin}/app/general/c/random?page=server-settings&section=workspace`, COMMIT);
+    await page.getByRole("heading", { name: "Preview computer" }).first().waitFor({ timeout: UI_WAIT_MS });
+    await page.keyboard.press("Escape");
+    await waitForPath(page, "/app/general/c/random");
+    assert.equal(
+      report.pageErrors.some((error) => error.includes(english("webClient.error.connectServerFirst"))),
+      false,
+    );
+  });
+
   // 10. Copy link of a channel header; a link that names the wrong space opens the channel's own.
   await step(page, "Copy link of a channel", async () => {
     await page.goto(`${origin}/app/general/c/cakemaker`, COMMIT);
@@ -302,6 +323,38 @@ try {
     await page.getByRole("menuitem", { name: english("workspace.app.channel.copyLink") }).click();
     const link = await page.evaluate(() => navigator.clipboard.readText());
     assert.equal(new URL(link).pathname, "/app/s/preview-host/market-trading/c/cakemaker");
+  });
+
+  // 10b. The command bar: a sentence that starts with "tell" goes to the lead; a verb with nothing to
+  // act on offers no channel of that name.
+  await step(page, "the command bar sends a 'tell me' sentence to the lead", async () => {
+    await page.goto(`${origin}/app/general/c/general`, COMMIT);
+    await channelHeading(page, "general").waitFor({ timeout: UI_WAIT_MS });
+    await page.keyboard.press("Control+k");
+    const field = page.getByRole("textbox", { name: english("workspace.app.switcher.placeholder") });
+    await field.waitFor({ timeout: UI_WAIT_MS });
+    const sentence = "Tell me what the costs are this week";
+    await field.fill(sentence);
+    const items = page.locator(".ws-switcher-item");
+    await page.waitForFunction(
+      (text) => (document.querySelector(".ws-switcher-item")?.textContent ?? "").includes(text),
+      sentence,
+      { timeout: UI_WAIT_MS },
+    );
+    assert.ok(!(await items.first().textContent())?.startsWith(english("workspace.jump.create", { name: "" })));
+    await field.fill("approve");
+    await page.waitForFunction(
+      () => (document.querySelector(".ws-switcher-item")?.textContent ?? "").length > 0,
+      undefined,
+      { timeout: UI_WAIT_MS },
+    );
+    const labels = await items.allTextContents();
+    assert.equal(
+      labels.some((label) => label.includes("#approve")),
+      false,
+      `The bar offers a channel: ${labels.join(" | ")}`,
+    );
+    await page.keyboard.press("Escape");
   });
 
   // 11. A phone opens the conversation of the address, and Back goes to the list, not to another place.
@@ -315,10 +368,7 @@ try {
   await step(page, "phone Back shows the list and keeps the address", async () => {
     // The step stays in the page and on its address, so the browser may report no navigation for it.
     await page.evaluate(() => history.back());
-    await page
-      .getByRole("button", { name: english("workspace.view.activity") })
-      .first()
-      .waitFor({ timeout: UI_WAIT_MS });
+    await page.getByRole("navigation", { name: english("workspace.phone.tabs") }).waitFor({ timeout: UI_WAIT_MS });
     assert.equal(await channelHeading(page, "cakemaker").isVisible(), false);
     await waitForPath(page, "/app/market-trading/c/cakemaker");
   });

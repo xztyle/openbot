@@ -1,4 +1,5 @@
 import { GENERAL_SPACE_ID } from "@openbot/contracts/ipc";
+import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import {
   ActionSheet,
   type ActionSheetItem,
@@ -60,6 +61,24 @@ import { openInsightTab } from "../workspace/workspace-insight-report";
  * around a centre "+". More (the account, the views and the server's pages) opens from Today's header.
  */
 export type WebPhoneTab = "today" | "chat" | "agents" | "inbox" | "more";
+
+const PHONE_TABS: readonly WebPhoneTab[] = ["today", "chat", "agents", "inbox", "more"];
+/** The key of the history state that holds the tab of the entry. */
+export const PHONE_TAB_KEY = "openbotPhoneTab";
+
+/** The tab that a history entry holds, or null for an entry without one. */
+export function phoneTabOfState(state: unknown): WebPhoneTab | null {
+  const value = isDynamicRecord(state) ? state[PHONE_TAB_KEY] : undefined;
+  return PHONE_TABS.find((tab) => tab === value) ?? null;
+}
+
+/** The view that a tab shows, so the address names it: Chat and More have none. */
+export function viewOfPhoneTab(tab: WebPhoneTab): "today" | "activity" | "fleet" | undefined {
+  if (tab === "today") return "today";
+  if (tab === "inbox") return "activity";
+  if (tab === "agents") return "fleet";
+  return undefined;
+}
 
 /** The tab that shows a view on a phone, for a view that is a tab. */
 export function phoneTabOfView(view: WorkspaceView): "today" | "inbox" | "agents" | undefined {
@@ -127,7 +146,11 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
   });
   const switcherAvailable = () => spaceItems().length > 1 || props.servers.length > 1;
 
+  /** Slack's DMs badge counts conversations, not messages. */
+  const unreadDms = () =>
+    ws.sidebarDirectMessages().filter((row) => !row.muted && (row.unread || (row.mentionCount ?? 0) > 0)).length;
   const openView = (view: WorkspaceView) => ws.openView(view);
+  // After `unreadDms`: a memo computes when it is made, and a Chat tab that a reload restored reads it.
   const chips = createMemo((): PhoneChip[] => {
     return [
       {
@@ -194,10 +217,6 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
         : []),
     ];
   });
-
-  /** Slack's DMs badge counts conversations, not messages. */
-  const unreadDms = () =>
-    ws.sidebarDirectMessages().filter((row) => !row.muted && (row.unread || (row.mentionCount ?? 0) > 0)).length;
 
   /** The views that the desktop sidebar keeps under More, in the same order. */
   const viewRows = createMemo((): PhoneMoreRow[] => {
@@ -476,6 +495,7 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
           </Match>
           <Match when={props.tab === "more"}>
             <PhoneMoreScreen
+              onBack={() => props.onTab("today")}
               account={props.account}
               onOpenAccount={props.onOpenAccount}
               sections={[{ id: "views", title: t("workspace.phone.views"), rows: viewRows() }, ...props.moreSections]}
@@ -485,7 +505,8 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
       </div>
       <PhoneTabBar
         tabs={tabs()}
-        active={props.tab}
+        // More is a screen of Today, so Today stays lit, and a tap on it goes back.
+        active={props.tab === "more" ? "today" : props.tab}
         onSelect={selectTab}
         label={t("workspace.phone.tabs")}
         center={{ label: t("workspace.phone.create"), icon: <Plus />, onSelect: () => setCreateOpen(true) }}

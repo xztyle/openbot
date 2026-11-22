@@ -22,6 +22,7 @@ import {
   type ServerSummary,
   type WorkspaceNotifyLevel,
 } from "@openbot/contracts/ipc";
+import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { AGENT_BACKUP_MODELS_ROUTES } from "@openbot/contracts/team-protocol/agent-backup-models-v1";
 import { AGENT_HOST_SETTINGS_ROUTES } from "@openbot/contracts/team-protocol/agent-host-settings-v1";
 import { AGENT_IMPORT_CAPABILITY } from "@openbot/contracts/team-protocol/agent-import-v1";
@@ -97,11 +98,13 @@ import {
   CalendarClock,
   ChartArea,
   CheckCheck,
+  closeTopModal,
   hasVisibleToasts,
   IconButton,
   ListChecks,
   MessageCircle,
   MessageCircleQuestionMark,
+  openModalCount,
   Search,
   Settings,
   Sparkles,
@@ -274,7 +277,14 @@ import { workspaceViewLabel } from "../workspace/workspace-view-labels";
 import { WebAgentSettings } from "./WebAgentSettings";
 import { WebConnectComputer } from "./WebConnectComputer";
 import { WebMobileNavigation, type WebMobilePane } from "./WebMobileNavigation";
-import { phoneTabOfView, WebPhoneShell, type WebPhoneTab } from "./WebPhoneShell";
+import {
+  PHONE_TAB_KEY,
+  phoneTabOfState,
+  phoneTabOfView,
+  viewOfPhoneTab,
+  WebPhoneShell,
+  type WebPhoneTab,
+} from "./WebPhoneShell";
 import { createWebAccountCalls } from "./web-account";
 import { createWebAccountUsage } from "./web-account-usage";
 import { createWebAgentImportCalls } from "./web-agent-import";
@@ -307,7 +317,7 @@ import { createWebServerNotifications } from "./web-notification-preferences";
 import { createWebNotificationRouting } from "./web-notification-routing";
 import { requestWebNotificationPermission } from "./web-notifications";
 import { webOnePasswordConnectorPort } from "./web-onepassword-connector";
-import { createWebPaneHistory, type WebPhoneLevel } from "./web-pane-history";
+import { createWebPaneHistory, paneOf, type WebPhoneLevel } from "./web-pane-history";
 import { createWebProviderSettings, openWebDestination } from "./web-provider-admin";
 import { createWebPush, webPushPreferences } from "./web-push";
 import { webRoutineFlowsHost } from "./web-routine-flows";
@@ -639,6 +649,14 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   /** The new agent form's avatar. The first-agent row in an empty sidebar shows it. */
   const [agentAvatar, setAgentAvatar] = createSignal(newAgentAvatar());
   const [mobilePane, setMobilePane] = createSignal<WebMobilePane>("conversation");
+  /**
+   * The tab of the phone's bottom bar. The history entry holds it, so a reload shows the tab that the
+   * user had, also Chat and More, which no address names. The first place of the address takes it.
+   */
+  let restoredPhoneTab = ownsAddress() ? phoneTabOfState(window.history.state) : null;
+  /** The list (a tab or More) that a reload showed: the place of the address stays under it. */
+  let restoredOnList = ownsAddress() && ["workspace", "more"].includes(paneOf(window.history.state) ?? "");
+  const [phoneTab, setPhoneTab] = createSignal<WebPhoneTab>(restoredPhoneTab ?? "today");
   const [settingsRequest, setSettingsRequest] = createSignal<AgentSettingsRequest | null>(null);
   const account = createMemo(() => ({
     id: props.accountId,
@@ -741,6 +759,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     pane: () => phoneLevel(),
     setPane: (level) => setPhoneLevel(level),
     closeOverlay: closeOverlays,
+    covered: () => untrack(overlayOpen),
   });
   onCleanup(paneHistory.stop);
   /** The Usage, Schedule or Tasks page of the connected host. As on desktop, it follows a host switch. */
@@ -2324,13 +2343,16 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   });
   /** The screen that a phone shows: the list (a tab), the conversation, or the thread or details over it. */
   function phoneLevel(): WebPhoneLevel {
-    if (mobilePane() === "workspace") return "workspace";
+    // More opens from Today's header, as a screen over it: Back goes to Today, not out of the app.
+    if (mobilePane() === "workspace") return workspaceOn() && phoneTab() === "more" ? "more" : "workspace";
     return workspaceOn() && ws.state.phonePane === "panel" ? "panel" : "conversation";
   }
   /** Shows the screen of a history entry. A thread that the history leaves closes; one it returns to stays closed. */
   function setPhoneLevel(level: WebPhoneLevel): void {
-    if (level === "workspace") {
+    if (level === "workspace" || level === "more") {
       setMobilePane("workspace");
+      if (level === "more") setPhoneTab("more");
+      else if (untrack(phoneTab) === "more") setPhoneTab("today");
       return;
     }
     setMobilePane("conversation");
@@ -2342,6 +2364,20 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     else paneHistory.stop();
   });
   createEffect(phoneLevel, (level) => paneHistory.sync(level));
+  /** The history entry holds the phone's tab, for a reload. */
+  function stampPhoneTab(): void {
+    if (!ownsAddress() || !untrack(phone)) return;
+    const tab = untrack(phoneTab);
+    const state = isDynamicRecord(window.history.state) ? window.history.state : {};
+    if (state[PHONE_TAB_KEY] !== tab) window.history.replaceState({ ...state, [PHONE_TAB_KEY]: tab }, "");
+  }
+  createEffect(phoneTab, () => stampPhoneTab());
+  onSettled(() => {
+    // An entry that Back or Forward shows can hold the tab of an older moment.
+    const stamp = () => setTimeout(stampPhoneTab, 0);
+    window.addEventListener("popstate", stamp);
+    return () => window.removeEventListener("popstate", stamp);
+  });
   // A swipe from the left edge goes back one screen on a phone, in Safari and on the Home Screen.
   createWebSwipeBack({
     enabled: () => phone() && mobilePane() === "conversation",
@@ -2409,7 +2445,16 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       </Show>
     </>
   );
-  const [phoneTab, setPhoneTab] = createSignal<WebPhoneTab>("today");
+  /**
+   * A tab of the bottom bar. Today, Inbox and Agents show a view, so the address names it, and a
+   * reload or a shared link opens the same tab.
+   */
+  function selectPhoneTab(tab: WebPhoneTab): void {
+    setPhoneTab(tab);
+    const view = viewOfPhoneTab(tab);
+    const route = untrack(ws.route);
+    if (view && (route.kind !== "view" || route.view !== view)) workspaceController.openView(view, "sidebar");
+  }
   /**
    * A page that the More tab opened (settings, usage, schedule) shows over the conversation pane. When
    * it closes with nothing else opened, the phone goes back to the More tab, as Slack's back button does.
@@ -2617,6 +2662,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
    */
   function showLocation(location: WebLocation): boolean {
     const controller = workspaceController;
+    // A reload shows the tab of its entry; a later place shows the tab of its view.
+    const restoredTab = restoredPhoneTab;
+    const onList = restoredOnList && restoredTab !== null;
+    restoredPhoneTab = null;
+    restoredOnList = false;
     const target = location.target;
     let shown = true;
     const channelListed = (channelId: string) => channels.state.channels.some((channel) => channel.id === channelId);
@@ -2659,7 +2709,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           // screen over another tab. The address keeps naming the view.
           const tab = phoneShell() ? phoneTabOfView(target.view) : undefined;
           if (tab) {
-            setPhoneTab(tab);
+            setPhoneTab(restoredTab ?? tab);
             setMobilePane("workspace");
           } else if (phone()) {
             // The view pushes over the list. A space that the address chose showed its list first, and
@@ -2667,11 +2717,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
             setMobilePane("conversation");
           }
         }
-      } else if (!target && !location.page) {
-        // An address with no place is the space's home: Today, not the last agent's chat.
+      } else if (!target) {
+        // An address with no place is the space's home: Today, not the last agent's chat. A page of
+        // the address, such as the settings, opens over it.
         controller.openView("today");
-        if (phoneShell()) {
-          setPhoneTab("today");
+        if (phoneShell() && !location.page) {
+          setPhoneTab(restoredTab ?? "today");
           setMobilePane("workspace");
         }
       }
@@ -2684,6 +2735,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       if (location.messageId) void openMessage(target.agentId, location.messageId);
       else void openAgentChat(target.agentId);
     } else if (target) shown = false;
+    // A reload on the list keeps the list: the conversation of the address is the one under it.
+    if (onList && phoneShell() && !location.page) setMobilePane("workspace");
     setMessageAnchor(shown && target && location.messageId ? { target, messageId: location.messageId } : null);
     if (!shown) {
       showLocationNotice();
@@ -2718,6 +2771,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     ownEntries: () => !phone(),
     initial: startLocation,
     enabled: ownsAddress(),
+  });
+  // A thread that a reload restored shows once the place of the address opened, or never.
+  createEffect(locationReady, (ready) => {
+    if (!ready) return;
+    const timer = setTimeout(() => paneHistory.settle(), 0);
+    return () => clearTimeout(timer);
   });
   const chatHistory = {
     /** Gives the chat that the user opens now its own history entry. */
@@ -2772,6 +2831,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   /** As on desktop: the empty canvas opens the agent's chat with a new routine in its settings. */
   /** Whether something covers the pane, so the history holds an entry for it. */
   const overlayOpen = () =>
+    openModalCount() > 0 ||
     hostPage() !== null ||
     accountSettingsOpen() ||
     joinOpen() ||
@@ -2783,7 +2843,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     serverSettings.state.open ||
     chatApps.state.open ||
     Boolean(props.agentTemplateId);
+  /**
+   * Closes the top of what covers the pane: a dialog or a sheet first, as Escape does, and the next
+   * step back closes the page under it.
+   */
   function closeOverlays(): void {
+    if (closeTopModal()) return;
     if (hostPage() !== null) closeHostPage();
     setAccountSettingsOpen(false);
     if (joinOpen()) {
@@ -3283,7 +3348,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       <div id="agent-sidebar" class="sidebar ws-frame-sidebar ws-phone-shell">
                         <WebPhoneShell
                           tab={phoneTab()}
-                          onTab={setPhoneTab}
+                          onTab={selectPhoneTab}
                           searchShortcut={globalSearchShortcutLabel(currentDevicePlatform())}
                           account={{
                             name: workspacePersonName({

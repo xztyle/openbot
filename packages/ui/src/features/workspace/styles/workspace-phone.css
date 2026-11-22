@@ -289,6 +289,11 @@
   padding: 0 var(--openbot-space-2) 0 var(--openbot-space-4);
 }
 
+/* A screen with a back button keeps the button at the edge, as a conversation header does. */
+.ws-phone-screen-header-back {
+  padding-left: var(--openbot-space-1);
+}
+
 .ws-phone-screen-title {
   min-width: 0;
   flex: 1 1 auto;

@@ -2,7 +2,7 @@ import type { JSX } from "@solidjs/web";
 import { createSignal, For, Show } from "solid-js";
 import { ActionSheet, type ActionSheetItem } from "../../action-sheet";
 import { Button, IconButton } from "../../button";
-import { ChevronDown, ChevronRight, Search, Server, SquarePen } from "../../icons";
+import { ChevronDown, ChevronLeft, ChevronRight, Search, Server, SquarePen } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { SpaceMark, type SpaceRailItem } from "../spaces/SpaceRail";
@@ -351,6 +351,8 @@ export interface PhoneMoreScreenProps {
   account: { name: string; email: string; avatarUrl: string | null };
   onOpenAccount: () => void;
   sections: readonly PhoneMoreSection[];
+  /** More opens from Today's header: its back button goes back there. */
+  onBack?: (() => void) | undefined;
 }
 
 /**
@@ -367,7 +369,19 @@ export function PhoneMoreScreen(props: PhoneMoreScreenProps): JSX.Element {
   });
   return (
     <section class="ws-phone-screen" aria-label={t("workspace.phone.more")}>
-      <header class="ws-phone-screen-header">
+      <header class={cx("ws-phone-screen-header", props.onBack && "ws-phone-screen-header-back")}>
+        <Show when={props.onBack}>
+          {(back) => (
+            <IconButton
+              variant="ghost"
+              class="ws-phone-compose"
+              label={t("workspace.layout.back")}
+              onClick={() => back()()}
+            >
+              <ChevronLeft />
+            </IconButton>
+          )}
+        </Show>
         <h1 class="ws-phone-screen-title">{t("workspace.phone.more")}</h1>
       </header>
       <div class="ws-phone-screen-scroll">

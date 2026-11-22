@@ -3,9 +3,10 @@ import type { WebMobilePane } from "./WebMobileNavigation";
 
 /**
  * The screens of a phone, from the bottom of the stack: the list (a tab of the workspace, or the
- * agents), the conversation, and the thread or details panel over the conversation.
+ * agents), More (which opens from Today's header), the conversation, and the thread or details panel
+ * over the conversation.
  */
-export type WebPhoneLevel = WebMobilePane | "panel";
+export type WebPhoneLevel = WebMobilePane | "more" | "panel";
 
 /** The key of the history state that holds the screen an entry shows. */
 const PANE_KEY = "openbotPane";
@@ -14,11 +15,12 @@ const DEPTH_KEY = "openbotPaneDepth";
 /** Marks the entry that an open dialog, settings page or report added on top of its pane. */
 const OVERLAY_KEY = "openbotOverlay";
 
-const LEVEL_DEPTH: Record<WebPhoneLevel, number> = { workspace: 0, conversation: 1, panel: 2 };
+const LEVEL_DEPTH: Record<WebPhoneLevel, number> = { workspace: 0, more: 1, conversation: 2, panel: 3 };
 
-function paneOf(state: unknown): WebPhoneLevel | null {
+/** The screen that a history entry shows, or null for an entry of no phone screen. */
+export function paneOf(state: unknown): WebPhoneLevel | null {
   const value = isDynamicRecord(state) ? state[PANE_KEY] : undefined;
-  return value === "workspace" || value === "conversation" || value === "panel" ? value : null;
+  return value === "workspace" || value === "more" || value === "conversation" || value === "panel" ? value : null;
 }
 
 /** The place of an entry in the stack. An entry of an older client has none: the list is the bottom. */
@@ -57,11 +59,18 @@ function withPane(pane: WebPhoneLevel, depth: number) {
 export function createWebPaneHistory(options: {
   pane: () => WebPhoneLevel;
   setPane: (pane: WebPhoneLevel) => void;
-  /** The user stepped back from an overlay. Closes everything that covers the pane. */
+  /** The user stepped back from an overlay. Closes the top one of what covers the pane. */
   closeOverlay?: () => void;
+  /** Whether something still covers the pane: after a step back, one of two overlays stays open. */
+  covered?: () => boolean;
 }): {
   start(): void;
   sync(pane: WebPhoneLevel): void;
+  /**
+   * The screen that a reload restored can show now, or never will. A thread shows only once its
+   * conversation loaded, so until then the screen under it does not step the history back.
+   */
+  settle(): void;
   /** Tells that something covers the pane, or that nothing does. */
   syncOverlay(open: boolean): void;
   stop(): void;
@@ -73,6 +82,11 @@ export function createWebPaneHistory(options: {
   let overlayShown = false;
   /** The overlay's entry waits for the screen that it opened with. */
   let overlayPending = false;
+  /**
+   * The screen of the entry that a reload restored, and the screen under it that shows until it
+   * can, such as the conversation of a thread that loads. Kept until it shows or `settle` gives it up.
+   */
+  let restoring: { level: WebPhoneLevel; shows: WebPhoneLevel } | null = null;
 
   const shown = (): WebPhoneLevel | null => stack.at(-1) ?? null;
 
@@ -81,6 +95,10 @@ export function createWebPaneHistory(options: {
     if (overlayShown && !overlay) {
       overlayShown = false;
       options.closeOverlay?.();
+      // A dialog over the settings closes alone; the settings keep an entry for the next step back.
+      setTimeout(() => {
+        if (listening && !overlayShown && options.covered?.()) syncOverlay(true);
+      }, 0);
     } else if (!overlayShown && overlay) {
       // The overlay is closed already, so this entry shows nothing of its own.
       window.history.back();
@@ -93,7 +111,59 @@ export function createWebPaneHistory(options: {
     while (stack.length < depth) stack.push(stack.length === 0 ? "workspace" : "conversation");
     stack.length = depth;
     stack.push(pane);
+    restoring = null;
     if (options.pane() !== pane) options.setPane(pane);
+  }
+
+  function syncOverlay(open: boolean): void {
+    if (!listening || open === overlayShown) return;
+    overlayShown = open;
+    if (open) {
+      // A page opens with the screen it shows on, such as the settings over the conversation. The
+      // screen's entry goes first, so the overlay's entry waits until the changes of this task are in.
+      overlayPending = true;
+      queueMicrotask(() => {
+        if (!overlayPending) return;
+        overlayPending = false;
+        if (!listening || !overlayShown) return;
+        const pane = shown() ?? options.pane();
+        window.history.pushState({ ...withPane(pane, Math.max(0, stack.length - 1)), [OVERLAY_KEY]: true }, "");
+      });
+      return;
+    }
+    if (overlayPending) {
+      overlayPending = false;
+      return;
+    }
+    // The entry is gone when a pane change pushed another one over it. That entry is stepped over later.
+    if (isOverlayEntry(window.history.state)) window.history.back();
+  }
+
+  function sync(pane: WebPhoneLevel): void {
+    const top = shown();
+    if (!listening || !top || top === pane) {
+      if (top === pane) restoring = null;
+      return;
+    }
+    // The restored screen comes later: the screen under it is a step on the way, not a step back.
+    if (restoring?.shows === pane) return;
+    restoring = null;
+    if (LEVEL_DEPTH[pane] > LEVEL_DEPTH[top]) {
+      window.history.pushState(withPane(pane, stack.length), "");
+      stack.push(pane);
+      return;
+    }
+    // A screen below: the history's own steps go back to it, when it has an entry.
+    const below = stack.findLastIndex((level) => LEVEL_DEPTH[level] <= LEVEL_DEPTH[pane]);
+    if (below >= 0 && stack[below] === pane && paneOf(window.history.state) === top) {
+      const steps = stack.length - 1 - below;
+      stack.length = below + 1;
+      window.history.go(-steps);
+      return;
+    }
+    // No entry has it, such as the conversation under a thread that opened from the list.
+    stack[stack.length - 1] = pane;
+    window.history.replaceState(withPane(pane, stack.length - 1), "");
   }
 
   return {
@@ -110,6 +180,9 @@ export function createWebPaneHistory(options: {
           current,
         ];
         if (options.pane() !== current) options.setPane(current);
+        // A thread shows once its conversation loaded: until then the screen under it is no step back.
+        const shows = options.pane();
+        if (shows !== current) restoring = { level: current, shows };
       } else {
         // The first entry of the page becomes the list, with the screen of the page on top of it.
         window.history.replaceState(withPane("workspace", 0), "");
@@ -124,48 +197,12 @@ export function createWebPaneHistory(options: {
       // A reload on the entry of an overlay shows no overlay, so the entry is stepped over.
       if (isOverlayEntry(window.history.state)) window.history.back();
     },
-    syncOverlay(open) {
-      if (!listening || open === overlayShown) return;
-      overlayShown = open;
-      if (open) {
-        // A page opens with the screen it shows on, such as the settings over the conversation. The
-        // screen's entry goes first, so the overlay's entry waits until the changes of this task are in.
-        overlayPending = true;
-        queueMicrotask(() => {
-          if (!overlayPending) return;
-          overlayPending = false;
-          if (!listening || !overlayShown) return;
-          const pane = shown() ?? options.pane();
-          window.history.pushState({ ...withPane(pane, Math.max(0, stack.length - 1)), [OVERLAY_KEY]: true }, "");
-        });
-        return;
-      }
-      if (overlayPending) {
-        overlayPending = false;
-        return;
-      }
-      // The entry is gone when a pane change pushed another one over it. That entry is stepped over later.
-      if (isOverlayEntry(window.history.state)) window.history.back();
-    },
-    sync(pane) {
-      const top = shown();
-      if (!listening || !top || top === pane) return;
-      if (LEVEL_DEPTH[pane] > LEVEL_DEPTH[top]) {
-        window.history.pushState(withPane(pane, stack.length), "");
-        stack.push(pane);
-        return;
-      }
-      // A screen below: the history's own steps go back to it, when it has an entry.
-      const below = stack.findLastIndex((level) => LEVEL_DEPTH[level] <= LEVEL_DEPTH[pane]);
-      if (below >= 0 && stack[below] === pane && paneOf(window.history.state) === top) {
-        const steps = stack.length - 1 - below;
-        stack.length = below + 1;
-        window.history.go(-steps);
-        return;
-      }
-      // No entry has it, such as the conversation under a thread that opened from the list.
-      stack[stack.length - 1] = pane;
-      window.history.replaceState(withPane(pane, stack.length - 1), "");
+    syncOverlay,
+    sync,
+    settle() {
+      if (!restoring) return;
+      restoring = null;
+      sync(options.pane());
     },
     stop() {
       if (!listening) return;
@@ -173,6 +210,7 @@ export function createWebPaneHistory(options: {
       stack = [];
       overlayShown = false;
       overlayPending = false;
+      restoring = null;
       window.removeEventListener("popstate", onPopState);
     },
   };

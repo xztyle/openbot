@@ -309,6 +309,25 @@ try {
     await page.getByRole("button", { name: english("workspace.view.org") }).waitFor({ timeout: UI_WAIT_MS });
     await shot(page, "05b-agents");
   });
+  await step(page, "a reload keeps the tab: Agents and Chat", async () => {
+    // Agents names its view in the address; Chat has none, so the history entry holds the tab.
+    await waitForPath(page, "/app/general/fleet");
+    await page.reload(COMMIT);
+    await page.getByRole("region", { name: english("workspace.view.fleet") }).waitFor({ timeout: UI_WAIT_MS });
+    assert.equal(await tab(page, "workspace.phone.agents").getAttribute("aria-current"), "page");
+    await tab(page, "workspace.phone.chat").tap();
+    await page.reload(COMMIT);
+    await tab(page, "workspace.phone.chat").waitFor({ timeout: UI_WAIT_MS });
+    await page.waitForFunction(
+      (name) =>
+        [...document.querySelectorAll("nav button[aria-current='page']")].some((button) =>
+          button.textContent?.startsWith(name),
+        ),
+      english("workspace.phone.chat"),
+      { timeout: UI_WAIT_MS },
+    );
+    await tab(page, "workspace.phone.agents").tap();
+  });
   await step(page, "the + opens ask, message, channel and more", async () => {
     await tabBar(page)
       .getByRole("button", { name: english("workspace.phone.create") })
@@ -331,6 +350,27 @@ try {
     await waitForPath(page, "/app/general/between-agents");
     assert.equal(await tabBar(page).isVisible(), false);
     await back(page);
+    await more().waitFor({ timeout: UI_WAIT_MS });
+  });
+  await step(page, "Back from More returns to Today, not out of the app", async () => {
+    await page.evaluate(() => history.back());
+    await page
+      .getByRole("heading", { name: english("workspace.today.waiting", { count: 0 }) })
+      .first()
+      .waitFor({ timeout: UI_WAIT_MS });
+    assert.ok(path(page).startsWith("/app/"));
+    // More's own back button, for the Home Screen app, which has no edge swipe of Safari.
+    await page.getByRole("button", { name: english("workspace.phone.more") }).tap();
+    await more().waitFor({ timeout: UI_WAIT_MS });
+    await page
+      .getByRole("button", { name: english("workspace.layout.back") })
+      .first()
+      .tap();
+    await page
+      .getByRole("heading", { name: english("workspace.today.waiting", { count: 0 }) })
+      .first()
+      .waitFor({ timeout: UI_WAIT_MS });
+    await page.getByRole("button", { name: english("workspace.phone.more") }).tap();
     await more().waitFor({ timeout: UI_WAIT_MS });
   });
   await step(page, "the profile opens the settings, and its back button returns to More", async () => {
@@ -373,6 +413,42 @@ try {
       .waitFor({ timeout: UI_WAIT_MS });
   });
   await shot(page, "09-trading-home");
+
+  // 8b. Back closes a sheet or a dialog first, as on iOS, and stays in the app.
+  await step(page, "Back closes the switcher sheet and stays on Chat", async () => {
+    await page.getByRole("button", { name: new RegExp(`^${english("workspace.phone.switch")}`, "u") }).tap();
+    const sheet = page.getByRole("dialog");
+    await sheet.waitFor({ timeout: UI_WAIT_MS });
+    await back(page);
+    await sheet.waitFor({ state: "detached", timeout: UI_WAIT_MS });
+    await tab(page, "workspace.phone.chat").waitFor({ timeout: UI_WAIT_MS });
+  });
+  await step(page, "Back closes Jump to over a channel and keeps the channel", async () => {
+    await page.goto(`${origin}/app/general/c/general`, COMMIT);
+    await channelPane(page, "general").waitFor({ timeout: UI_WAIT_MS });
+    await page.keyboard.press("Control+k");
+    const dialog = page.getByRole("dialog", { name: english("workspace.app.switcher.title") });
+    await dialog.waitFor({ timeout: UI_WAIT_MS });
+    await back(page);
+    await dialog.waitFor({ state: "detached", timeout: UI_WAIT_MS });
+    await channelPane(page, "general").waitFor({ timeout: UI_WAIT_MS });
+    await back(page);
+    await tabBar(page).waitFor({ timeout: UI_WAIT_MS });
+  });
+
+  // 8c. A reload on a thread keeps the thread, and Back still goes to its channel.
+  await step(page, "a reload keeps the thread", async () => {
+    await page.goto(`${origin}/app/general/c/general/t/general-root`, COMMIT);
+    await page.getByText("Started: I compare the plans of both rivals.").first().waitFor({ timeout: UI_WAIT_MS });
+    await page.reload(COMMIT);
+    await page.getByText("Started: I compare the plans of both rivals.").first().waitFor({ timeout: UI_WAIT_MS });
+    // The client settles; the thread must not step back to its channel by itself.
+    await page.waitForTimeout(1_000);
+    await waitForPath(page, "/app/general/c/general/t/general-root");
+    await back(page);
+    await channelPane(page, "general").waitFor({ timeout: UI_WAIT_MS });
+    await page.waitForFunction(() => !location.pathname.includes("/t/"), undefined, { timeout: UI_WAIT_MS });
+  });
 
   // 9. The app on the Home Screen: a swipe from the left edge goes back one screen.
   const app = await context.newPage();

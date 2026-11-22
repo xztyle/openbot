@@ -18,17 +18,24 @@ export function WorkspaceLoopsView() {
   const [board, setBoard] = createSignal<WorkspaceLoops | null>(null);
   const [loadError, setLoadError] = createSignal<string | null>(null);
 
+  /*
+   * Each read and each action counts one. A timed read that began before an action answers the board
+   * from before it, so the moved or decided item went back until the next read.
+   */
+  let asked = 0;
   async function load(spaceId: string) {
     const read = agentApi().workspaceLoops;
     if (!read) return;
+    const mine = ++asked;
     try {
       const next = await read({ spaceId });
+      if (mine !== asked) return;
       if (spaceId === ws.spaces.current()) {
         setBoard(next);
         setLoadError(null);
       }
     } catch (error) {
-      if (board() === null) setLoadError(errorMessage(error, t("workspace.loops.loadFailed")));
+      if (mine === asked && board() === null) setLoadError(errorMessage(error, t("workspace.loops.loadFailed")));
     }
   }
 
@@ -56,12 +63,13 @@ export function WorkspaceLoopsView() {
     const run = agentApi().workspaceLoopAction;
     if (!run) throw new Error(t("workspace.loops.failed"));
     const spaceId = ws.spaces.current();
+    const mine = ++asked;
     const result = await run(action).catch((error: unknown) => {
       // The board can be older than the host's (an agent moved or removed the item): read it again.
       void load(spaceId);
       throw error;
     });
-    if (result.spaceId === ws.spaces.current()) setBoard(result);
+    if (mine === asked && result.spaceId === ws.spaces.current()) setBoard(result);
     if (action.kind === "decide") feed.refresh();
     return result;
   }

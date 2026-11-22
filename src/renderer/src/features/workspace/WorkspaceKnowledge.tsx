@@ -80,11 +80,15 @@ export function WorkspaceKnowledgeView() {
     const api = calls();
     if (!api || busy()) return;
     setBusy(input.id);
+    const space = spaceId();
+    // A read on its way began before the removal: its answer would show the removed item again.
+    const mine = ++request;
     try {
-      const next = await api.removeKnowledge({ ...input, spaceId: spaceId() });
-      // The host answers the whole space; a search keeps its filter by reading again.
+      const next = await api.removeKnowledge({ ...input, spaceId: space });
+      // The host answers the whole space; a search keeps its filter by reading again. The reader
+      // who went to another space or typed meanwhile has a read of their own.
       if (query().trim()) void load(spaceId(), query());
-      else setKnowledge(next);
+      else if (mine === request && space === spaceId()) setKnowledge(next);
       toast.success(t("workspace.knowledge.removed"));
     } catch (failure) {
       toast.error(errorMessage(failure, t("workspace.knowledge.removeFailed")));

@@ -1,4 +1,4 @@
-import { type AttachmentSummary, type ChannelMessage, canPreviewAttachment, channelKind } from "@openbot/contracts/ipc";
+import { type AttachmentSummary, type ChannelMessage, channelKind } from "@openbot/contracts/ipc";
 import { CHAT_CARD_MARKER } from "@openbot/contracts/portfolio";
 import {
   Bell,
@@ -19,7 +19,6 @@ import {
 } from "@openbot/ui";
 import type { AgentMessage } from "@openbot/ui/data";
 import { CondensedNote, createCondensedView } from "@openbot/ui/features/conversation/CondensedNote";
-import { FilePreviewDialog, type FilePreviewDialogState } from "@openbot/ui/features/conversation/FilePreviewDialog";
 import { MessageBody } from "@openbot/ui/features/conversation/MessageRendering";
 import { ArtifactCard } from "@openbot/ui/features/workspace/ArtifactCard";
 import { LongMessageFold } from "@openbot/ui/features/workspace/LongMessageFold";
@@ -30,12 +29,12 @@ import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { toAgentMessage } from "../../app-message-projection";
-import { attachmentFilePreview } from "../conversation/attachment-preview";
 import { WorkspaceChatCard } from "../portfolio/WorkspaceChatCard";
 import { WorkspaceMessageEditor } from "./WorkspaceMessageEditor";
 import { MemberProfile } from "./WorkspaceProfile";
 import { useWorkspace } from "./workspace-context";
 import { debugMode } from "./workspace-debug";
+import { createWorkspaceFileViewer } from "./workspace-file-viewer";
 import {
   memberById,
   mentionsReader,
@@ -68,40 +67,7 @@ export function WorkspaceMessageBody(props: {
   const cardId = () => CHAT_CARD_MARKER.exec(props.entry.message.text)?.[1];
   const port = () => ws.channels.port();
   const { t, errorMessage } = useText();
-  const [viewer, setViewer] = createSignal<{ attachment: AttachmentSummary; state: FilePreviewDialogState } | null>(
-    null,
-  );
-  let viewing = 0;
-  /** A download says that it started: a file that comes through the host connection takes a while. */
-  const download = (attachment: AttachmentSummary) => {
-    const progress = toast.loading(t("attachment.downloading", { name: attachment.name }));
-    void port()
-      .agent.openAttachment({ attachmentId: attachment.id, action: "download" })
-      .then(
-        () => toast.dismiss(progress),
-        (error: unknown) => toast.error(errorMessage(error, t("attachment.error.open")), { id: progress }),
-      );
-  };
-  /** A file that the app can show opens in the viewer at once, and fills it when it is read. */
-  const view = (attachment: AttachmentSummary) => {
-    if (!canPreviewAttachment(attachment)) return download(attachment);
-    const run = ++viewing;
-    const name = attachment.name;
-    setViewer({ attachment, state: { status: "loading", name } });
-    void (port().previewAttachment ?? attachmentFilePreview)(attachment).then(
-      (preview) => {
-        if (run === viewing)
-          setViewer({ attachment, state: { status: "ready", name, preview, sourceUrl: attachment.previewUrl } });
-      },
-      (error: unknown) => {
-        if (run === viewing)
-          setViewer({
-            attachment,
-            state: { status: "failed", name, message: errorMessage(error, t("attachment.error.preview", { name })) },
-          });
-      },
-    );
-  };
+  const { view, download, Viewer } = createWorkspaceFileViewer();
   const attachmentAction = (attachment: AttachmentSummary, action: "open" | "reveal" | "download") => {
     if (action === "open") return view(attachment);
     if (action === "download") return download(attachment);
@@ -137,30 +103,7 @@ export function WorkspaceMessageBody(props: {
         }
       />
       <Show when={cardId()}>{(id) => <WorkspaceChatCard cardId={id()} />}</Show>
-      <Show when={viewer()}>
-        {(open) => (
-          <FilePreviewDialog
-            state={open().state}
-            agents={ws.env.agents()}
-            onOpenLink={(url) => {
-              if (!ws.openLink(url)) void port().openUrl(url);
-            }}
-            onDownload={() => download(open().attachment)}
-            onOpenExternally={
-              port().fileActions === "native"
-                ? () =>
-                    void port()
-                      .agent.openAttachment({ attachmentId: open().attachment.id, action: "open" })
-                      .catch((error: unknown) => toast.error(errorMessage(error, t("attachment.error.open"))))
-                : undefined
-            }
-            onClose={() => {
-              viewing += 1;
-              setViewer(null);
-            }}
-          />
-        )}
-      </Show>
+      <Viewer />
     </div>
   );
 }

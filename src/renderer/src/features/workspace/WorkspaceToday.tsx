@@ -11,6 +11,7 @@ import { createMemo, createSignal, onSettled } from "solid-js";
 import { openArtifact } from "./workspace-artifact-open";
 import { useWorkspace } from "./workspace-context";
 import { useDecisionQueue } from "./workspace-decisions";
+import { createWorkspaceFileViewer } from "./workspace-file-viewer";
 import { openInsightTab, useInsightReport } from "./workspace-insight-report";
 
 type Workspace = ReturnType<typeof useWorkspace>;
@@ -95,6 +96,7 @@ export function WorkspaceTodayView(props: { actions?: JSX.Element; onBack?: (() 
   const queue = useDecisionQueue();
   const working = useWorkingAgents(ws);
   const insight = useInsightReport(ws, () => 7);
+  const files = createWorkspaceFileViewer();
   onSettled(() => ws.artifacts.refresh?.());
   const shipped = createMemo(() =>
     ws.artifacts
@@ -108,7 +110,7 @@ export function WorkspaceTodayView(props: { actions?: JSX.Element; onBack?: (() 
         title: artifact.title,
         agent: artifact.agent,
         at: artifact.createdAt ?? 0,
-        onOpen: () => openArtifact(ws, artifact.id),
+        onOpen: () => openArtifact(ws, artifact.id, undefined, files.view),
       })),
   );
   const todayCost = createMemo(() => ws.fleet.agents().reduce((sum, agent) => sum + (agent.todayCostUsd ?? 0), 0));
@@ -186,25 +188,28 @@ export function WorkspaceTodayView(props: { actions?: JSX.Element; onBack?: (() 
   };
 
   return (
-    <TodayView
-      name={firstName()}
-      decisions={queue.queue()}
-      working={working()}
-      report={insight.report()}
-      shipped={shipped()}
-      todayCostUsd={todayCost()}
-      steps={steps()}
-      onHideSteps={() => {
-        writeFlag(guideKey(ws, "hidden"));
-        setHidden(true);
-      }}
-      onOpenMoney={ws.viewAvailable("money") ? () => ws.openView("money") : undefined}
-      onOpenGoals={insights() ? () => openInsightTab(ws, "goals") : undefined}
-      onOpenBriefing={insights() ? () => openInsightTab(ws, "briefing") : undefined}
-      onOpenShipped={() => ws.openView("artifacts")}
-      onAsk={() => ws.openDialog({ kind: "switcher" })}
-      actions={props.actions}
-      onBack={props.onBack}
-    />
+    <>
+      <TodayView
+        name={firstName()}
+        decisions={queue.queue()}
+        working={working()}
+        report={insight.report()}
+        shipped={shipped()}
+        todayCostUsd={todayCost()}
+        steps={steps()}
+        onHideSteps={() => {
+          writeFlag(guideKey(ws, "hidden"));
+          setHidden(true);
+        }}
+        onOpenMoney={ws.viewAvailable("money") ? () => ws.openView("money") : undefined}
+        onOpenGoals={insights() ? () => openInsightTab(ws, "goals") : undefined}
+        onOpenBriefing={insights() ? () => openInsightTab(ws, "briefing") : undefined}
+        onOpenShipped={() => ws.openView("artifacts")}
+        onAsk={() => ws.openDialog({ kind: "switcher" })}
+        actions={props.actions}
+        onBack={props.onBack}
+      />
+      <files.Viewer />
+    </>
   );
 }

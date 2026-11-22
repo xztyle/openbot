@@ -24,6 +24,7 @@ import { WorkspaceSpaceAgentsView } from "./WorkspaceSpaceAgents";
 import { WorkspaceTodayView } from "./WorkspaceToday";
 import { openArtifact } from "./workspace-artifact-open";
 import { useWorkspace } from "./workspace-context";
+import { createWorkspaceFileViewer } from "./workspace-file-viewer";
 import { activityGroupKey, conversationName, memberById, previewText } from "./workspace-model";
 
 /**
@@ -295,40 +296,48 @@ function WorkspaceFleetView() {
 
 function WorkspaceArtifactsView() {
   const ws = useWorkspace();
+  const files = createWorkspaceFileViewer();
   createEffect(
     () => true,
     () => ws.artifacts.refresh?.(),
   );
   return (
-    <ArtifactsView
-      artifacts={ws.artifacts
-        .artifacts()
-        .filter((artifact) =>
-          artifact.channelId
-            ? ws.spaces.channelInCurrent(artifact.channelId)
-            : !artifact.agent || ws.spaces.agentInCurrent(artifact.agent.id),
-        )}
-      onOpen={(id) => openArtifact(ws, id)}
-      onBack={() => ws.back()}
-    />
+    <>
+      <ArtifactsView
+        artifacts={ws.artifacts
+          .artifacts()
+          .filter((artifact) =>
+            artifact.channelId
+              ? ws.spaces.channelInCurrent(artifact.channelId)
+              : !artifact.agent || ws.spaces.agentInCurrent(artifact.agent.id),
+          )}
+        onOpen={(id) => openArtifact(ws, id, undefined, files.view)}
+        onBack={() => ws.back()}
+      />
+      <files.Viewer />
+    </>
   );
 }
 
 /** The artifacts of one channel, in the right panel. */
 export function WorkspaceChannelArtifacts(props: { channelId: string }) {
   const ws = useWorkspace();
+  const files = createWorkspaceFileViewer();
   createEffect(
     () => props.channelId,
     (channelId) => ws.artifacts.refresh?.({ channelId }),
   );
   return (
-    <ArtifactsView
-      artifacts={ws.artifacts.artifacts({ channelId: props.channelId })}
-      channelName={channelName(ws, props.channelId)}
-      onOpen={(id) => openArtifact(ws, id, props.channelId)}
-      onBack={() => ws.back()}
-      onClose={() => ws.closePanel()}
-    />
+    <>
+      <ArtifactsView
+        artifacts={ws.artifacts.artifacts({ channelId: props.channelId })}
+        channelName={channelName(ws, props.channelId)}
+        onOpen={(id) => openArtifact(ws, id, props.channelId, files.view)}
+        onBack={() => ws.back()}
+        onClose={() => ws.closePanel()}
+      />
+      <files.Viewer />
+    </>
   );
 }
 

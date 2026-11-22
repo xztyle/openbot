@@ -7,7 +7,8 @@
 // - an iPhone photo in HEIC that the browser can draw goes up as a JPEG with the same name, and one
 //   it cannot draw is named as a type the host refuses. Chromium draws no HEIC, so the drawable photo
 //   holds PNG bytes: an image element reads the bytes, not the type;
-// - on a phone, the image viewer steps with a swipe and closes with a drag down.
+// - on a phone, the image viewer steps with a swipe and closes with a drag down;
+// - on a phone, Open on a document in Artifacts shows it in the file viewer, as a file of a message.
 //
 // `bun scripts/web-media-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>]`
 // Writes report.json to .openbot-build/web-media-e2e, or to --out.
@@ -87,7 +88,7 @@ async function step(device: string, name: string, check: () => Promise<void>): P
   }
 }
 
-async function newPage(browser: Browser, phone: boolean): Promise<Page> {
+async function newPage(browser: Browser, phone: boolean, path = CHANNEL_PATH): Promise<Page> {
   const context = await browser.newContext(
     phone
       ? { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 }
@@ -95,8 +96,8 @@ async function newPage(browser: Browser, phone: boolean): Promise<Page> {
   );
   const page = await context.newPage();
   page.on("pageerror", (error) => report.pageErrors.push(error.stack ?? error.message));
-  await page.goto(`${origin}${CHANNEL_PATH}`, { waitUntil: "commit", timeout: UI_WAIT_MS });
-  await page.locator("[data-attachment-id]").first().waitFor({ timeout: UI_WAIT_MS });
+  await page.goto(`${origin}${path}`, { waitUntil: "commit", timeout: UI_WAIT_MS });
+  if (path === CHANNEL_PATH) await page.locator("[data-attachment-id]").first().waitFor({ timeout: UI_WAIT_MS });
   return page;
 }
 
@@ -223,6 +224,20 @@ async function checkPhoneViewer(browser: Browser) {
   await page.context().close();
 }
 
+async function checkArtifactDocument(browser: Browser) {
+  const page = await newPage(browser, true, "/app/general/artifacts");
+  const card = page.locator("article, li, section").filter({ hasText: "market-research.pdf" }).last();
+  const open = card.getByRole("button", { name: /Open/u }).last();
+  await open.waitFor({ timeout: UI_WAIT_MS });
+  await open.scrollIntoViewIfNeeded();
+  await open.tap();
+  await step("phone", "Open on a document in Artifacts shows it in the file viewer", async () => {
+    const viewer = page.getByRole("dialog", { name: "market-research.pdf" });
+    await viewer.waitFor({ timeout: 5_000 });
+  });
+  await page.context().close();
+}
+
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 const server = await createServer({
@@ -254,6 +269,7 @@ try {
   await checkDrop(browser);
   await checkIphonePhoto(browser);
   await checkPhoneViewer(browser);
+  await checkArtifactDocument(browser);
 } finally {
   await browser?.close();
   await server.close();

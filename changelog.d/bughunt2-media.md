@@ -10,3 +10,6 @@
   as a JPEG with the same name in Safari. Before, the host refused it as a file type it does not take.
 - Browser client: an artifact's picture shows again after many other artifacts were shown. Before,
   once more than 120 pictures had loaded, the oldest stayed blank until the page was loaded again.
+- Browser client: Open on a document in Artifacts, or under Shipped on Today, shows it in the file
+  viewer, as a file in a message does. Before, it only started a download, which on an iPhone asks
+  where to save it, and a failed download said nothing.

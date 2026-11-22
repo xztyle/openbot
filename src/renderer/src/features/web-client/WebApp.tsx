@@ -27,6 +27,8 @@ import { WEB_TOAST_OFFSET } from "./web-visual-viewport";
 
 /** An account request that has no answer by now is over, so the screen shows Retry and not a wait without end. */
 const ACCOUNT_REQUEST_TIMEOUT_MS = 15_000;
+/** Sending the sign-in code waits for the mail server, which can take longer than other account calls. */
+const SIGN_IN_CODE_TIMEOUT_MS = 60_000;
 
 // The site loads this before it mounts `WebApp` (`apps/auth-api/src/routes/app.lazy.tsx`).
 export { loadSavedLanguage } from "./web-language-preference";
@@ -229,7 +231,7 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
         cache: "no-store",
         headers: body ? { "Content-Type": "application/json", "X-OpenBot-Browser": "1" } : {},
         ...(body ? { body: JSON.stringify(body) } : {}),
-        signal: AbortSignal.timeout(ACCOUNT_REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(path === "email/start" ? SIGN_IN_CODE_TIMEOUT_MS : ACCOUNT_REQUEST_TIMEOUT_MS),
       });
     } catch (error) {
       // The browser's own words ("Load failed") say nothing to a reader.

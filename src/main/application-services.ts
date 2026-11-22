@@ -1957,6 +1957,14 @@ export async function createApplicationServices({
           ),
         ),
     skillLearner: () => localSkillLearner(skills),
+    copySkill: (skillId, toAgentId) =>
+      skills
+        .requireLocalLibrary()
+        .get(skillId)
+        .pipe(
+          Effect.flatMap((detail) => skills.installLocal({ agentId: toAgentId, skillId, revision: detail.version })),
+        )
+        .pipe(Effect.asVoid),
     // The delete also clears the agent from workflow nodes, so the editors of those workflows load
     // the new graph. `workflowStore` is built later, after the agent service.
     deleteWithRevokedApproval: (agentId, remove) =>
@@ -2502,6 +2510,11 @@ export async function createApplicationServices({
         agentId,
       ),
     ticketsChanged: () => service.currentTicketsChanged(),
+    taskDone: ({ agentIds, key, title }) =>
+      service.learning.taskFinished(
+        agentIds.filter((agentId) => service.listAgents().some((agent) => agent.id === agentId)),
+        { source: "task", ref: key, title },
+      ),
   });
   const motion = motionEvents;
   service.setCurrentTickets((agentId) => motion.tickets.current(agentId));

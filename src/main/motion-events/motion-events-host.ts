@@ -42,6 +42,8 @@ export interface MotionEventsHostOptions {
   /** The web client path of an agent's chat, such as `/app/s/<host>/<space>/dm/<agent>`. */
   chatPath: (agentId: string) => string | null;
   ticketsChanged: () => void;
+  /** A ticket of these local agents is done: each may learn a lesson from the work. */
+  taskDone?: (input: { agentIds: string[]; key: string; title: string }) => void;
 }
 
 /** The `motion` MCP row: the board the agents use. */
@@ -128,6 +130,16 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
         const outcome = await events.receive(event);
         // A done ticket, or one the agent was taken off, is nobody's current ticket any more.
         if (event.issue.statusCategory === "done") tickets.settle(event.issue.key);
+        if (
+          event.type === "issue.status_changed" &&
+          event.issue.statusCategory === "done" &&
+          outcome.outcome !== "duplicate"
+        ) {
+          const agentIds = [event.actor, ...event.issue.assignees].flatMap((person) =>
+            person?.kind === "agent" && person.agentKey ? [person.agentKey] : [],
+          );
+          if (agentIds.length > 0) options.taskDone?.({ agentIds, key: event.issue.key, title: event.issue.title });
+        }
         if (event.type === "issue.unassigned")
           for (const person of event.recipients) if (person.agentKey) tickets.settle(event.issue.key, person.agentKey);
         return outcome;

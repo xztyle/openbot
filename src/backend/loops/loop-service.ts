@@ -51,6 +51,8 @@ export interface LoopServiceHooks {
   runRoutine(agentId: string, routineId: string): Promise<void>;
   /** Creates a Motion ticket; answers its key or link, or null when Motion is not connected. */
   createTicket(request: LoopTicketRequest): Promise<{ key?: string; url?: string } | null>;
+  /** An item reached an end stage: the agents that worked on it may learn from it. */
+  itemFinished?(input: { agentIds: string[]; loop: string; item: string; outcome: string }): void;
 }
 
 function fill(text: string, item: LoopItem, stage: LoopStage, loop: Loop): string {
@@ -487,6 +489,16 @@ export class LoopService {
       });
     });
     this.#enter(loop, moved, to, actor, requesterAgentId);
+    if (to.outcome) {
+      const agentIds = [
+        item.ownerAgentId,
+        from.ownerAgentId,
+        actor.kind === "agent" ? actor.agentId : undefined,
+        requesterAgentId,
+      ].filter((id): id is string => typeof id === "string");
+      if (agentIds.length > 0)
+        this.#hooks.itemFinished?.({ agentIds, loop: loop.name, item: item.title, outcome: to.name });
+    }
   }
 
   #decide(decisionId: string, approve: boolean, actor: LoopActor, note: string | undefined): { spaceId: string } {

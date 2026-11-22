@@ -281,6 +281,16 @@ export class OpenBotDatabase {
     return this.#conversations.readConversationPage(agentId, threadId, anchor, requestedLimit, options);
   }
 
+  /** The ids of every turn that has a message in the thread, for the forget of what a chat taught. */
+  threadTurnIds(threadId: string): string[] {
+    return this.connection
+      .prepare(
+        "SELECT DISTINCT turn_id FROM projection_thread_messages WHERE thread_id = ? AND turn_id IS NOT NULL LIMIT 20000",
+      )
+      .all(threadId)
+      .flatMap((row) => (typeof row.turn_id === "string" ? [row.turn_id] : []));
+  }
+
   supportedConversationCursor(
     threadId: string,
     throughMessageId: string | null,

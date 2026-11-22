@@ -72,6 +72,7 @@ import {
   routineReportFailureToolSchema,
   SEND_MESSAGE_USAGE,
   saveApiKeyToolSchema,
+  spaceMemoryToolSchema,
 } from "../openbot-tools";
 import type { OwnerAwayService } from "../owner-away";
 import { type AppServerRequest, type DynamicToolCallParams, type DynamicToolResult, isRecord } from "../protocol";
@@ -231,6 +232,17 @@ export interface OpenBotToolRouterHooks {
   channelHost(): { id: string; name: string };
   /** Puts a channel that does not exist yet in a space, and tells the readers of the spaces. */
   placeChannel(channelId: string, spaceId: string): void;
+  /** `space_memory`: the shared memory of the agent's space. */
+  spaceMemory?(
+    agentId: string,
+    turnId: string,
+    input: z.infer<typeof spaceMemoryToolSchema>,
+  ): Effect.Effect<OpenBotToolResponse>;
+  /** Adds a decision to the decision log of the agent's space. */
+  logSpaceDecision?(
+    agentId: string,
+    input: { decision: string; why: string; alternatives?: string | undefined; channelId?: string | undefined },
+  ): Effect.Effect<void>;
   /** The goals tool of the insight service; absent before the service is attached. */
   goals?(
     agentId: string,
@@ -1355,6 +1367,15 @@ export class OpenBotToolRouter {
 
     if (params.tool === "react_to_user_message") return yield* this.#react(params, senderAgentId);
 
+    if (params.tool === "space_memory") {
+      const parsed = spaceMemoryToolSchema.safeParse(params.arguments);
+      if (!parsed.success)
+        return openBotToolFailure(`${z.prettifyError(parsed.error)}\nCorrect the arguments and retry.`);
+      const spaceMemory = this.#hooks.spaceMemory;
+      if (!spaceMemory) return openBotToolFailure("The space memory is not available on this host yet.");
+      return yield* spaceMemory(senderAgentId, params.turnId, parsed.data);
+    }
+
     if (params.tool === "goals") {
       const parsed = goalsToolSchema.safeParse(params.arguments);
       if (!parsed.success)
@@ -1375,11 +1396,20 @@ export class OpenBotToolRouter {
       if (!parsed.success)
         return openBotToolFailure(`${z.prettifyError(parsed.error)}\nCorrect the arguments and retry.`);
       const context = this.#channels.teamContext(senderAgentId, params.turnId);
-      if (!context)
-        return openBotToolFailure(
-          "log_decision records decisions of a team channel's work, and this turn works for no team channel. Tell the person about the decision in your answer instead.",
-        );
       const { decision, why, alternatives } = parsed.data;
+      if (this.#hooks.logSpaceDecision)
+        yield* this.#hooks.logSpaceDecision(senderAgentId, {
+          decision,
+          why,
+          alternatives,
+          ...(context ? { channelId: context.channelId } : {}),
+        });
+      if (!context)
+        return this.#hooks.logSpaceDecision
+          ? openBotToolResult({ status: "logged", log: "space" })
+          : openBotToolFailure(
+              "log_decision records decisions of a team channel's work, and this turn works for no team channel. Tell the person about the decision in your answer instead.",
+            );
       const posted = this.#channels.postDecision(
         senderAgentId,
         context.channelId,

@@ -2,11 +2,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { join } from "node:path";
 import {
+  agentHasPlaybookRole,
   type ModelSavingsSnapshot,
   type SetAgentsSleepingInput,
   type SleepTarget,
   teamAgentIds,
 } from "@openbot/contracts/agent-efficiency";
+import type { ForgetConversationInput, SettingsAuthor } from "@openbot/contracts/agent-learning";
 import { agentManagers } from "@openbot/contracts/agent-org";
 import { AGENT_PROVIDERS, agentProviderDescriptor, customAgentIdOfModel } from "@openbot/contracts/agent-providers";
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
@@ -132,6 +134,8 @@ import {
   DEFAULT_WORKSPACE_LEARNING,
   DEFAULT_WORKSPACE_SETTINGS,
   defaultProviderModel,
+  isAgentAccess,
+  isAgentBackupModels,
   isAgentProvider,
   isContextResetMarker,
   isReasoningEffort,
@@ -252,6 +256,18 @@ import type { SpaceAgentTables } from "./agent-data/space-agent-tables";
 import { modelSavings } from "./agent-efficiency/model-savings";
 import { PERFORMANCE_REVIEWS_FILE, PerformanceReviews } from "./agent-efficiency/performance-reviews";
 import { ROLE_PLAYBOOKS_FILE, RolePlaybooks } from "./agent-efficiency/role-playbooks";
+import { AGENT_LEARNING_FILE, AgentLearning } from "./agent-learning/agent-learning";
+import { withLesson } from "./agent-learning/learning-prompts";
+import {
+  isCutText,
+  recordedSkillLearner,
+  SETTINGS_HISTORY_FILE,
+  SettingsHistory,
+  settingsSnapshot,
+  snapshotChanges,
+} from "./agent-learning/settings-history";
+import { SPACE_KNOWLEDGE_FILE } from "./agent-learning/space-knowledge";
+import { spaceMemoryTool } from "./agent-learning/space-memory-tool";
 import type { AgentStore } from "./agent-store";
 import { AgentTaskStore } from "./agent-tasks/agent-task-store";
 import { AgentTasks } from "./agent-tasks/agent-tasks";
@@ -435,6 +451,8 @@ export interface AgentServiceOptions {
   /** The skills that a memory review may revise, and the library it saves learned skills in. Omitted, no skill learning. */
   reviewSkills?: (agentId: string) => Effect.Effect<readonly ReviewSkill[], unknown>;
   skillLearner?: () => SkillLearner;
+  /** Installs a local skill of the library on another agent, for a suggestion across spaces. */
+  copySkill?: (skillId: string, toAgentId: string) => Effect.Effect<void, unknown>;
   /** Every active person of the team, the host user first, for the onboarding `#general`. */
   channelPeople?: () => { id: string; name: string }[];
   deleteWithRevokedApproval?: (
@@ -552,6 +570,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly playbooks: RolePlaybooks;
   /** The weekly performance reviews of the agents. */
   readonly reviews: PerformanceReviews;
+  /** The checkpoints of each agent's settings, with their authors, for a rollback. */
+  readonly settingsHistory: SettingsHistory;
+  /** The nightly memory cleanup, the lessons of finished tasks and the knowledge of each space. */
+  readonly learning: AgentLearning;
+  /** The skill library of the reviews, with each save in the settings history. Null without skill learning. */
+  readonly #learnedSkills: (() => SkillLearner) | null;
+  readonly #skillLibrary: (() => SkillLearner) | null;
   readonly #waits: AgentWaits;
   readonly #tasks: AgentTasks;
   readonly #tables: SpaceAgentTables | null;
@@ -726,9 +751,19 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
       ...(options.agentMemoryLimit ? { limit: options.agentMemoryLimit } : {}),
     });
+    this.settingsHistory = new SettingsHistory(join(store.database.userDataPath, SETTINGS_HISTORY_FILE));
     this.playbooks = new RolePlaybooks({
       path: join(store.database.userDataPath, ROLE_PLAYBOOKS_FILE),
       agents: () => this.#store.list(),
+      contentChanged: (playbook, before, after, author) => {
+        for (const agent of this.#store.list())
+          if (agentHasPlaybookRole(agent, playbook.roles))
+            Effect.runFork(
+              this.settingsHistory.record(agent.id, author, [
+                { field: "playbook", ref: playbook.id, label: playbook.slug, before, after },
+              ]),
+            );
+      },
     });
     this.reviews = new PerformanceReviews({
       path: join(store.database.userDataPath, PERFORMANCE_REVIEWS_FILE),
@@ -738,7 +773,37 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       generate: (agent, prompt) => this.#generateReview(agent, prompt),
       applyInstruction: (agentId, text) => this.#applyReviewInstruction(agentId, text),
     });
-    const skillLearner = options.skillLearner;
+    const rawSkillLearner = options.skillLearner;
+    this.#skillLibrary = rawSkillLearner ?? null;
+    this.#learnedSkills = rawSkillLearner ? () => recordedSkillLearner(rawSkillLearner(), this.settingsHistory) : null;
+    const skillLearner = this.#learnedSkills;
+    this.learning = new AgentLearning({
+      path: join(store.database.userDataPath, AGENT_LEARNING_FILE),
+      knowledgePath: join(store.database.userDataPath, SPACE_KNOWLEDGE_FILE),
+      agents: () => this.#store.list(),
+      agentSpace: (agentId) => store.spaces.agentSpaceId(agentId),
+      spaces: () => store.spaces.list(),
+      running: () => this.#initialized && !this.#stopping,
+      timeZone: () => options.timezone?.() ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+      generate: (agent, prompt) => this.#generateReview(agent, prompt, "agent_learning_failed"),
+      memoryBase: (agentId) => this.#memories.reviewBase(agentId),
+      applyMemory: (agentId, base, operations, turnId) => {
+        this.#memories.applyReview(agentId, base, operations, turnId);
+      },
+      memories: (agentId) => this.#memories.listFor(agentId),
+      forgetMemories: (agentId, memoryIds) => this.#memories.forgetMany(agentId, memoryIds),
+      chat: (agentId) => this.#ownChat(agentId),
+      addInstruction: (agentId, text) => this.#applyReviewInstruction(agentId, text),
+      playbooks: () => this.playbooks.snapshot(),
+      addPlaybookLesson: (playbookId, text) => this.playbooks.appendLesson(playbookId, text).pipe(Effect.asVoid),
+      skills: (agentId) => options.reviewSkills?.(agentId) ?? Effect.succeed([]),
+      addSkillLesson: (agentId, skillId, text) => this.#addSkillLesson(agentId, skillId, text),
+      copySkill: (skillId, toAgentId) =>
+        options.copySkill
+          ? options.copySkill(skillId, toAgentId)
+          : Effect.fail(new Error("This host cannot install a skill on another agent.")),
+      redact: (text) => this.#mcp.redact(text),
+    });
     this.#memoryReview = new MemoryReview({
       memories: this.#memories,
       profileClients: this.#profileClients,
@@ -750,18 +815,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       createClient: (agent) => this.#providers.createProfileClient(agent.provider),
       usageObserver: (agent, model) =>
         memoryReviewUsageObserver(this.#store.database.usage, agent.provider, model.id, agent.id),
-      chat: (agentId) => {
-        const loaded = this.#conversation.loadedSnapshot(agentId);
-        if (loaded)
-          return loaded.activeTurnId
-            ? loaded.messages.filter((message) => message.turnId !== loaded.activeTurnId)
-            : loaded.messages;
-        const threadId = this.#store.list().find((agent) => agent.id === agentId)?.threadId;
-        return threadId
-          ? this.#store.database.readConversationPage(agentId, threadId, { type: "latest" }, MEMORY_REVIEW_MESSAGES)
-              .messages
-          : [];
-      },
+      chat: (agentId) => this.#ownChat(agentId),
       turnActive: (agentId) => Boolean(this.#conversation.loadedSnapshot(agentId)?.activeTurnId),
       appendSystemMessage: (agentId, message) => this.#appendReviewMessage(agentId, message),
       ...(options.reviewSkills ? { skills: options.reviewSkills } : {}),
@@ -774,6 +828,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           }
         : {}),
       redact: (text) => this.#mcp.redact(text),
+      reviewed: (agentId, reviewTurnId, turnIds) => this.learning.reviewed(agentId, reviewTurnId, turnIds),
       stopping: () => this.#stopping,
     });
     // One timer for every routine owner. The sources are read lazily because `channels` and its
@@ -1031,7 +1086,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       scheduleDrain: (agentId) => this.#drain.scheduleDrain(agentId),
       rotateSession: (agentId, client, threadId) => this.#threads.rotateProviderSession(agentId, client, threadId),
       rotatesSession: (agentId, threadId) => this.#threads.rotatesSession(agentId, threadId),
-      compacted: (threadId) => this.channels.contextCompacted(threadId),
+      compacted: (threadId) => {
+        this.channels.contextCompacted(threadId);
+        // A compaction of an agent's own chat drops detail: its memory review runs now.
+        const agent = this.#store.list().find((candidate) => candidate.threadId === threadId);
+        if (agent) Effect.runFork(this.#memoryReview.compacted(agent.id));
+      },
     });
     this.#attention = new AttentionRegistry({
       // The channel service starts later; a question only arrives once both run.
@@ -1727,6 +1787,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         agentName: (agentId) => this.listAgents().find((agent) => agent.id === agentId)?.name ?? null,
         secret: (scope, agentId, name) => options.agentApiKeys?.readNow(scope, agentId, name) ?? null,
       }),
+      itemFinished: ({ agentIds, loop, item, outcome }) =>
+        this.learning.taskFinished(agentIds, { source: "loop", ref: loop, title: `${item} (${outcome})` }),
     });
     this.secrets = new WorkspaceSecretsService(options.agentApiKeys ?? null, (agentId) =>
       this.listAgents().some((agent) => agent.id === agentId),
@@ -1781,6 +1843,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         stopAgentProcess: (agentId) =>
           this.#memoryReview
             .cancel(agentId)
+            .pipe(Effect.andThen(this.learning.forgetAgent(agentId)))
+            .pipe(Effect.andThen(this.settingsHistory.forgetAgent(agentId)))
             .pipe(Effect.andThen(this.#providers.stopAgentProcess(agentId)))
             .pipe(Effect.mapError((failure) => new AgentRemovalFailed({ cause: failure.cause }))),
       },
@@ -1866,6 +1930,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         sleepTargetAgentIds: (target) => this.sleepTargetAgentIds(target),
         setAgentsSleeping: (input) => this.setAgentsSleeping(input).pipe(toToolOperationFailed),
         proposePlaybook: (agentId, slug, content, note) => this.playbooks.propose(agentId, slug, content, note),
+        spaceMemory: (agentId, turnId, input) =>
+          spaceMemoryTool(this.learning.knowledge, this.#store.spaces.agentSpaceId(agentId), agentId, turnId, input),
+        logSpaceDecision: (agentId, input) =>
+          this.learning.knowledge
+            .logDecision(this.#store.spaces.agentSpaceId(agentId), agentId, input)
+            .pipe(Effect.asVoid),
         // The first person is the host user of this computer; signed out, the signed-out reader.
         channelHost: () => options.channelPeople?.()[0] ?? { id: SIGNED_OUT_CHANNEL_MEMBER_ID, name: "You" },
         placeChannel: (channelId, spaceId) => this.spaces.place("channel", channelId, spaceId),
@@ -2743,7 +2813,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
    * Runs a performance review prompt on the agent's small model (its background model when the
    * provider lists none). Null when no model can run it. Its usage is saved like a memory review's.
    */
-  #generateReview(agent: AgentSummary, prompt: string) {
+  #generateReview(agent: AgentSummary, prompt: string, errorCode = "performance_review_failed") {
     return Effect.gen({ self: this }, function* () {
       yield* this.#providers.ensureProvider(agent.provider);
       const listed = this.#endpoints.available();
@@ -2766,7 +2836,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.sync(() => {
-          this.#emitError("performance_review_failed", cause, agent.id);
+          this.#emitError(errorCode, cause, agent.id);
           return null;
         }),
       ),
@@ -2782,10 +2852,155 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       const agent = this.#store.list().find((candidate) => candidate.id === agentId);
       if (!agent) return;
       const description = `${agent.description.trimEnd()}\n\n${text}`;
-      if (description.length <= INPUT_LIMITS.agentDescription) yield* this.updateAgent({ agentId, description });
+      if (description.length <= INPUT_LIMITS.agentDescription)
+        yield* this.updateAgent({ agentId, description }, undefined, true, { author: { kind: "improver" } });
       else this.#memories.create({ agentId, text });
     });
   }
+
+  /** The agent's own chat, without the turn that runs now, from memory or the newest page of the database. */
+  #ownChat(agentId: string): readonly ConversationMessage[] {
+    const loaded = this.#conversation.loadedSnapshot(agentId);
+    if (loaded)
+      return loaded.activeTurnId
+        ? loaded.messages.filter((message) => message.turnId !== loaded.activeTurnId)
+        : loaded.messages;
+    const threadId = this.#store.list().find((agent) => agent.id === agentId)?.threadId;
+    return threadId
+      ? this.#store.database.readConversationPage(agentId, threadId, { type: "latest" }, MEMORY_REVIEW_MESSAGES)
+          .messages
+      : [];
+  }
+
+  /** Adds an accepted lesson to the "Lessons" part of one of the agent's local skills. */
+  #addSkillLesson(agentId: string, skillId: string, text: string) {
+    return Effect.gen({ self: this }, function* () {
+      const learner = this.#learnedSkills?.();
+      if (!learner) return yield* Effect.fail(new Error("This host has no skill library."));
+      const current = yield* learner.read(skillId);
+      yield* learner.save(agentId, {
+        action: "update",
+        skillId,
+        expectedRevision: current.revision,
+        description: current.description,
+        instructions: withLesson(current.instructions, text),
+      });
+    });
+  }
+
+  /**
+   * Puts each field of a settings checkpoint back to its value before it: the agent's settings in one
+   * update, then each skill and playbook text. Answers the agent's newest checkpoint after it.
+   */
+  readonly rollbackSettings = Effect.fn("AgentService.rollbackSettings")(function* (
+    this: AgentService,
+    checkpointId: string,
+  ) {
+    const checkpoint = yield* this.settingsHistory.get(checkpointId);
+    if (!checkpoint) return yield* Effect.fail(new Error("The checkpoint does not exist any more."));
+    const agent = this.#store.list().find((candidate) => candidate.id === checkpoint.agentId);
+    if (!agent) return yield* Effect.fail(new Error("The agent does not exist any more."));
+    if (checkpoint.changes.some((change) => isCutText(change.before)))
+      return yield* Effect.fail(
+        new Error("A text of this checkpoint was too long to keep whole, so it cannot roll back."),
+      );
+    const update: AgentUpdate = { agentId: agent.id };
+    for (const change of checkpoint.changes) {
+      const before = change.before;
+      switch (change.field) {
+        case "name":
+          if (before) update.name = before;
+          break;
+        case "title":
+          update.title = before ?? "";
+          break;
+        case "instructions":
+          update.description = before ?? "";
+          break;
+        case "provider":
+          if (isAgentProvider(before)) update.provider = before;
+          break;
+        case "model":
+          if (before) update.model = before;
+          break;
+        case "reasoningEffort":
+          if (isReasoningEffort(before)) update.reasoningEffort = before;
+          break;
+        case "modelPolicy":
+          update.modelPolicy = before === "auto" ? "auto" : "fixed";
+          break;
+        case "playbookRole":
+          update.playbookRole = before;
+          break;
+        case "access":
+          if (isAgentAccess(before)) update.access = before;
+          break;
+        case "computerUse":
+          update.computerUse = before !== "off";
+          break;
+        case "backupModels":
+          {
+            const models = before ? JSON.parse(before) : null;
+            update.backupModels = isAgentBackupModels(models) ? models : null;
+          }
+          break;
+        default:
+          break;
+      }
+    }
+    if (Object.keys(update).length > 1)
+      yield* this.updateAgent(update, undefined, true, { author: { kind: "owner" }, rollbackOf: checkpoint.id });
+    for (const change of checkpoint.changes) {
+      if (change.field === "skill" && change.ref) {
+        const library = this.#skillLibrary;
+        const learner = library
+          ? recordedSkillLearner(library(), this.settingsHistory, { kind: "owner" }, checkpoint.id)
+          : null;
+        if (!learner || change.before === null)
+          return yield* Effect.fail(new Error("A skill that a review made is removed in Skills, not rolled back."));
+        const current = yield* learner.read(change.ref);
+        yield* learner.save(agent.id, {
+          action: "update",
+          skillId: change.ref,
+          expectedRevision: current.revision,
+          description: current.description,
+          instructions: change.before,
+        });
+      }
+      if (change.field === "playbook" && change.ref && change.before !== null) {
+        const playbook = (yield* this.playbooks.snapshot()).playbooks.find((candidate) => candidate.id === change.ref);
+        if (!playbook) return yield* Effect.fail(new Error("The playbook does not exist any more."));
+        yield* this.playbooks.save(
+          { id: playbook.id, slug: playbook.slug, roles: playbook.roles, content: change.before },
+          { kind: "owner" },
+        );
+      }
+    }
+    return (yield* this.settingsHistory.list(agent.id))[0] ?? null;
+  }).bind(this);
+
+  /**
+   * The memories and space facts that an agent learned from one of its chats (its own chat, a task or
+   * a channel thread of its), which go with `confirm`.
+   */
+  readonly forgetConversation = Effect.fn("AgentService.forgetConversation")(function* (
+    this: AgentService,
+    input: ForgetConversationInput,
+  ) {
+    const agent = this.#store.list().find((candidate) => candidate.id === input.agentId);
+    if (!agent) return yield* Effect.fail(new Error("The agent does not exist any more."));
+    const threadId = input.threadId ?? agent.threadId;
+    const own = [
+      ...(agent.threadId ? [agent.threadId] : []),
+      ...this.#tasks.threadIdsForAgent(agent.id),
+      ...this.channels.store.contextThreadsForAgent(agent.id),
+    ];
+    if (!threadId || !own.includes(threadId)) return { memories: [], facts: [], forgotten: 0 };
+    const turnIds = new Set(this.#store.database.threadTurnIds(threadId));
+    for (const message of this.#conversation.loadedSnapshot(agent.id)?.messages ?? [])
+      if (threadId === agent.threadId && message.turnId) turnIds.add(message.turnId);
+    return yield* this.learning.forgetConversation(agent.id, turnIds, input.confirm === true);
+  }).bind(this);
 
   /** Adds a line of a background memory review to the agent's own chat. It wakes nobody. */
   #appendReviewMessage(agentId: string, message: ConversationMessage): void {
@@ -3523,9 +3738,28 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     input: AgentUpdate,
     initiatingAgentId?: string,
     queueWhileBusy = true,
+    history: { author?: SettingsAuthor; rollbackOf?: string } = {},
   ): Effect.Effect<AgentSummary, AgentLifecycleFailed> {
     return this.#endpoints
-      .runExclusive(() => this.#applyAgentUpdate(input, initiatingAgentId, null, queueWhileBusy))
+      .runExclusive(() =>
+        Effect.suspend(() => {
+          const before = this.#store.list().find((agent) => agent.id === input.agentId);
+          return this.#applyAgentUpdate(input, initiatingAgentId, null, queueWhileBusy).pipe(
+            Effect.tap((after) => {
+              if (!before) return Effect.void;
+              const author: SettingsAuthor =
+                history.author ??
+                (initiatingAgentId ? { kind: "agent", agentId: initiatingAgentId } : { kind: "owner" });
+              return this.settingsHistory.record(
+                after.id,
+                author,
+                snapshotChanges(settingsSnapshot(before), settingsSnapshot(after)),
+                history.rollbackOf,
+              );
+            }),
+          );
+        }),
+      )
       .pipe(Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "updateAgent", cause: failure.cause })));
   }
 
@@ -4531,6 +4765,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       this.#initialized = true;
       this.#memoryHold.start();
       this.reviews.start();
+      this.learning.start();
       Effect.runFork(this.playbooks.sync());
     });
     yield* this.#providers
@@ -5071,6 +5306,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#threads.dispose();
     yield* this.#memoryReview.dispose();
     this.reviews.dispose();
+    this.learning.dispose();
     this.playbooks.dispose();
     this.#memories.clearPending();
     this.#tables?.dispose();

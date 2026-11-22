@@ -14,10 +14,12 @@ import {
   type RolePlaybooksSnapshot,
   type SaveRolePlaybookInput,
 } from "@openbot/contracts/agent-efficiency";
+import type { SettingsAuthor } from "@openbot/contracts/agent-learning";
 import type { AgentSummary } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { createOpenBotLogger } from "@openbot/logging";
 import { Effect } from "effect";
+import { withLesson } from "../agent-learning/learning-prompts";
 import { isMissingFileError } from "../file-errors";
 import { isPathInside } from "../path-containment";
 import { JsonStore } from "./json-store";
@@ -111,6 +113,13 @@ export interface RolePlaybooksOptions {
   agents(): readonly AgentSummary[];
   /** Tells the owner's clients that a proposal waits. */
   changed?(): void;
+  /** A playbook's text changed, for the settings history of the agents of its roles. */
+  contentChanged?(
+    playbook: { id: string; slug: string; roles: string[] },
+    before: string,
+    after: string,
+    author: SettingsAuthor,
+  ): void;
 }
 
 /**
@@ -155,9 +164,16 @@ export class RolePlaybooks {
     };
   }
 
-  readonly save = Effect.fn("RolePlaybooks.save")(function* (this: RolePlaybooks, input: SaveRolePlaybookInput) {
+  readonly save = Effect.fn("RolePlaybooks.save")(function* (
+    this: RolePlaybooks,
+    input: SaveRolePlaybookInput,
+    author: SettingsAuthor = { kind: "owner" },
+  ) {
     requireSkill(input.slug, input.content);
     const now = new Date().toISOString();
+    const before = input.id
+      ? (yield* this.#store.load()).playbooks.find((playbook) => playbook.id === input.id)
+      : undefined;
     yield* this.#store.update((stored) => {
       const existing = input.id ? stored.playbooks.find((playbook) => playbook.id === input.id) : undefined;
       if (input.id && !existing) throw new Error("The playbook does not exist.");
@@ -189,8 +205,32 @@ export class RolePlaybooks {
           : [...stored.playbooks, next],
       };
     });
+    if (before && before.content !== input.content)
+      this.#options.contentChanged?.(
+        { id: before.id, slug: input.slug, roles: input.roles },
+        before.content,
+        input.content,
+        author,
+      );
     yield* this.sync();
     return yield* this.snapshot();
+  });
+
+  /** Adds a lesson to the "Lessons" part of a playbook, as an accepted learning item does. */
+  readonly appendLesson = Effect.fn("RolePlaybooks.appendLesson")(function* (
+    this: RolePlaybooks,
+    playbookId: string,
+    lesson: string,
+  ) {
+    const stored = yield* this.#store.load();
+    const playbook = stored.playbooks.find((candidate) => candidate.id === playbookId);
+    if (!playbook) throw new Error("The playbook does not exist any more.");
+    const content = withLesson(playbook.content, lesson);
+    if (content.length > PLAYBOOK_CONTENT_LIMIT) throw new Error("The playbook has no room for the lesson.");
+    return yield* this.save(
+      { id: playbook.id, slug: playbook.slug, roles: playbook.roles, content },
+      { kind: "improver" },
+    );
   });
 
   /** Makes a playbook from the skill of that name in an agent's workspace. */
@@ -298,6 +338,11 @@ export class RolePlaybooks {
             : current.playbooks,
       };
     });
+    if (input.decision === "approve" && playbook && playbook.content !== proposal.content)
+      this.#options.contentChanged?.(playbook, playbook.content, proposal.content, {
+        kind: "agent",
+        agentId: proposal.agentId,
+      });
     if (input.decision === "approve") yield* this.sync();
     return yield* this.snapshot();
   });

@@ -206,6 +206,46 @@ export const logDecisionToolSchema = z.strictObject({
   alternatives: z.string().trim().max(400).optional().describe("The options you rejected, in a few words each."),
 });
 
+export const spaceMemoryToolSchema = z.strictObject({
+  action: z
+    .enum(["remember", "recall", "forget", "decisions", "outcome"])
+    .describe(
+      "remember: save a fact about a customer, product or supplier of your space. recall: find what the space knows about a name or topic, with past decisions. forget: remove a wrong fact or a whole entity. decisions: the latest decisions of the space. outcome: record what came of a past decision.",
+    ),
+  type: z.enum(["customer", "product", "supplier", "other"]).optional().describe("For remember: what the entity is."),
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .optional()
+    .describe("For remember: the name of the customer, product or supplier."),
+  fact: z
+    .string()
+    .trim()
+    .min(1)
+    .max(400)
+    .optional()
+    .describe("For remember: one short fact, such as a preference, a price or a problem."),
+  query: z.string().trim().min(1).max(200).optional().describe("For recall and decisions: names or words to look for."),
+  entityId: z.string().trim().min(1).max(128).optional().describe("For forget: the entity id that recall gives."),
+  factId: z
+    .string()
+    .trim()
+    .min(1)
+    .max(128)
+    .optional()
+    .describe("For forget: one fact of the entity; without it the whole entity goes."),
+  decisionId: z
+    .string()
+    .trim()
+    .min(1)
+    .max(128)
+    .optional()
+    .describe("For outcome: the decision id that decisions or recall gives."),
+  outcome: z.string().trim().min(1).max(400).optional().describe("For outcome: what happened, in one sentence."),
+});
+
 export const goalsToolSchema = z.strictObject({
   action: z
     .enum(["list", "progress"])
@@ -854,8 +894,14 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "log_decision",
     description:
-      "Record a decision that a person would normally have made, in a hands-off team channel, where nobody answers questions: the channel shows it, and the people review the list of decisions made without them. Call it once per decision, then continue the work.",
+      "Record a decision in your space's decision log: what you decided, why, and what else was on the table. Use it for a decision that a person would normally have made, or one your teammates should know later. In a hands-off team channel, where nobody answers questions, the channel shows it too, and the people review the list of decisions made without them. Call it once per decision, then continue the work.",
     shape: logDecisionToolSchema.shape,
+  },
+  {
+    name: "space_memory",
+    description:
+      "The shared memory of your space, which every agent of the space reads: its customers, products and suppliers with their facts, and its decision log. Remember a lasting fact about one of them here instead of in your own memory, so your teammates know it too. Recall before you work for a customer or on a product. Record what came of a decision with outcome.",
+    shape: spaceMemoryToolSchema.shape,
   },
   {
     name: "goals",

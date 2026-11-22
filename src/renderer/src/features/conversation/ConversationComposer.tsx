@@ -59,11 +59,23 @@ import {
   ComposerFormatToolbar,
 } from "@openbot/ui/features/workspace/MessageComposer";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createMemo, createSignal, createStore, For, Loading, lazy, onCleanup, Show } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  createStore,
+  For,
+  flush,
+  Loading,
+  lazy,
+  onCleanup,
+  Show,
+} from "solid-js";
 import { reportErrorBanner, reportNotification } from "../../error-reports";
 import { deviceSendShortcut, sendShortcutAriaKey, sendShortcutHintKey } from "../../send-shortcut-preference";
 import { speechReading } from "../speech/speech-playback";
 import { stopSpokenReply } from "../speech/speech-replies";
+import { useSecretHygiene } from "../workspace/workspace-secret-offer";
 import { copyComposerSelection, readComposerCopy } from "./composer-clipboard";
 import { useConversationViewScope } from "./conversation-scope";
 import { useConversationWorkspaceLayout } from "./conversation-workspace-layout";
@@ -156,6 +168,7 @@ export function ConversationComposer() {
     const name = channel ? undefined : props.agent?.name;
     return name ? t("composer.reply.toName", { name }) : t("composer.reply.toAgent");
   };
+  const secrets = useSecretHygiene();
   const [pickerOpen, setPickerOpen] = createSignal(false);
   const [skillPickerRequest, setSkillPickerRequest] = createSignal(0);
   /*
@@ -187,7 +200,12 @@ export function ConversationComposer() {
       setDeleteQueuedOpen(true);
       return;
     }
+    // A pasted key or password never reaches the agent: a marker takes its place before the send,
+    // and a notice offers to save it in Secrets.
+    const scanned = secrets.scan(draft.text);
+    if (scanned.found.length > 0) flush(() => updateCurrentDraft({ text: scanned.text }));
     submitComposer();
+    secrets.offer(scanned.found);
   };
   // A provider start, restart or server reconnect is short. Keys typed in it must not drop, so only a
   // lasting stop locks the text. Sending still waits for the agent. Without an agent, no draft keeps the text.

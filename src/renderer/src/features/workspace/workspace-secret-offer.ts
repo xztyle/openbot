@@ -21,13 +21,15 @@ export function useSecretHygiene(): {
   offer: (found: readonly FoundSecret[]) => void;
 } {
   const { t } = useText();
-  const ws = useWorkspace();
-  const agent = () => ws.channels.port().agent;
+  // Absent outside the workspace (an agent chat of the desktop app): the secret is still hidden,
+  // and the notice then sends the reader to Secrets instead of saving it.
+  const ws: ReturnType<typeof useWorkspace> | undefined = useWorkspace();
+  const agent = () => ws?.channels.port().agent;
 
   async function save(secret: FoundSecret): Promise<void> {
     const port = agent();
     try {
-      if (!port.workspaceSecretSave || !port.workspaceSecrets) throw new Error("unsupported");
+      if (!port?.workspaceSecretSave || !port.workspaceSecrets) throw new Error("unsupported");
       // Never over a key that exists: that key may be the one an agent uses now.
       const taken = new Set(
         (await port.workspaceSecrets()).secrets
@@ -49,7 +51,7 @@ export function useSecretHygiene(): {
         toast.warning(t("workspace.secretHygiene.title", { label: secret.label }), {
           description: t("workspace.secretHygiene.body"),
           duration: OFFER_DURATION_MS,
-          ...(agent().workspaceSecretSave
+          ...(agent()?.workspaceSecretSave
             ? { action: { label: t("workspace.secretHygiene.save"), onClick: () => void save(secret) } }
             : {}),
         });

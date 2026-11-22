@@ -4,7 +4,9 @@
  * Spanish paragraphs with mention chips, lists, code blocks, tables), over several days, each read up
  * to 30 messages before the end. The scripts drive it through `globalThis.openbotFlow`: it grows the
  * reader's last message in #historia, as an edit does, streams a reply into the DM, posts new
- * messages to #historia and adds new messages to the DM, as host events do.
+ * messages to #historia and adds new messages to the DM, as host events do. `?progress=1` puts a run
+ * of an agent's short progress lines in #historia (`historia-step-1` to `-7`, after message 40), and
+ * `openbotFlow.postProgress` posts more of them live, for `scripts/workspace-progress-fold-e2e.ts`.
  */
 import type { ChannelMessage, ConversationMessage } from "@openbot/contracts/ipc";
 import { Toaster } from "@openbot/ui";
@@ -33,6 +35,9 @@ function historyLength(): number {
   }
 }
 const COUNT = historyLength();
+/** A run of an agent's progress lines after message 40, one a minute: `?progress=1`. */
+const PROGRESS_RUN = new URLSearchParams(location.search).get("progress") === "1" ? 7 : 0;
+const PROGRESS_AT = 40;
 const READ_THROUGH = COUNT - 30;
 const START = Date.parse("2026-11-10T07:00:00Z");
 
@@ -73,7 +78,7 @@ const you = { kind: "member" as const, id: WEB_PREVIEW_MEMBER_ID, name: "You" };
 const chief = { kind: "agent" as const, id: "chief", name: "CSO - Director de Ventas" };
 
 function channelMessages(): ChannelMessage[] {
-  return Array.from({ length: COUNT }, (_, index): ChannelMessage => {
+  const messages = Array.from({ length: COUNT }, (_, index): ChannelMessage => {
     // The last message is the reader's, so the script can grow it with edits.
     const author = index === COUNT - 1 ? you : index % 3 === 0 ? chief : index % 3 === 1 ? ana : you;
     const id = index === COUNT - 1 ? "historia-grow" : `historia-${index}`;
@@ -93,6 +98,26 @@ function channelMessages(): ChannelMessage[] {
       },
     };
   });
+  const steps = Array.from({ length: PROGRESS_RUN }, (_, step): ChannelMessage => {
+    const id = `historia-step-${step + 1}`;
+    return {
+      id,
+      channelId: "historia",
+      sequence: 0,
+      author: chief,
+      taskId: null,
+      superseded: false,
+      message: {
+        id: `${id}-c`,
+        author: "assistant",
+        text: `Paso ${step + 1}: revisé la tabla de precios ${step + 1}.`,
+        createdAt: new Date(Date.parse(createdAt(PROGRESS_AT)) + (step + 1) * 60_000).toISOString(),
+        status: "completed",
+      },
+    };
+  });
+  messages.splice(PROGRESS_AT + 1, 0, ...steps);
+  return messages.map((message, index) => ({ ...message, sequence: index + 1 }));
 }
 
 function dmMessages(): ConversationMessage[] {
@@ -135,7 +160,8 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
           humanMemberIds: [WEB_PREVIEW_MEMBER_ID, "ana"],
         },
         messages: channelMessages(),
-        readThrough: READ_THROUGH,
+        // A sequence: the progress run comes before the unread messages.
+        readThrough: READ_THROUGH + PROGRESS_RUN,
       },
     ],
     channelMemberId: WEB_PREVIEW_MEMBER_ID,
@@ -235,7 +261,38 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     }
   }
 
-  Object.assign(globalThis, { openbotFlow: { growChannel, streamDm, postChannel, postDm } });
+  /** An agent's short progress lines in #historia, each from a host event, `gap` ms apart. */
+  let posted = 0;
+  async function postProgress(count: number, gap: number): Promise<void> {
+    for (let index = 0; index < count; index++) {
+      posted += 1;
+      const id = `historia-live-${posted}`;
+      const sequence = COUNT + PROGRESS_RUN + 1_000 + posted;
+      mock.emitAgentEvent({
+        type: "channel-message",
+        channelId: "historia",
+        revision: 1_000_000 + posted,
+        message: {
+          id,
+          channelId: "historia",
+          sequence,
+          author: chief,
+          taskId: null,
+          superseded: false,
+          message: {
+            id: `${id}-c`,
+            author: "assistant",
+            text: `En vivo ${posted}: revisé otra tabla.`,
+            createdAt: new Date().toISOString(),
+            status: "completed",
+          },
+        },
+      });
+      await wait(gap);
+    }
+  }
+
+  Object.assign(globalThis, { openbotFlow: { growChannel, streamDm, postChannel, postDm, postProgress } });
   return mockWebRuntimeFor(mock, events);
 };
 

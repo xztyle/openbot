@@ -101,12 +101,17 @@ export function createOwnerAwayStore(input: OwnerAwayStoreInput): OwnerAwayStore
   }
   const quiet = (path: string, body?: TeamProtocolV2Json) => void call(path, body).catch(() => undefined);
 
-  function noteActive() {
-    if (!inFront()) return;
+  /** Tells the host that the owner is here, unless it was told within `ACTIVE_MS`. Answers whether it asked. */
+  function noteActive(): boolean {
+    if (!inFront() || !input.request() || !input.enabled()) return false;
     const now = Date.now();
-    if (now - lastActive < ACTIVE_MS) return;
+    if (now - lastActive < ACTIVE_MS) return false;
     lastActive = now;
-    quiet(OWNER_AWAY_ROUTES.active);
+    // A call that did not reach the host tells nothing, so the next front or connection tells again.
+    void call(OWNER_AWAY_ROUTES.active).catch(() => {
+      if (lastActive === now) lastActive = 0;
+    });
+    return true;
   }
 
   createEffect(
@@ -119,8 +124,8 @@ export function createOwnerAwayStore(input: OwnerAwayStoreInput): OwnerAwayStore
         setUnsupported(false);
       }
       if (!enabled) return;
-      if (inFront()) noteActive();
-      else quiet(OWNER_AWAY_ROUTES.state);
+      // A connection that comes back within `ACTIVE_MS` of the last tell still reads the state.
+      if (!noteActive()) quiet(OWNER_AWAY_ROUTES.state);
     },
   );
   const onFront = () => {
@@ -133,8 +138,7 @@ export function createOwnerAwayStore(input: OwnerAwayStoreInput): OwnerAwayStore
   };
   const timer = setInterval(() => {
     if (!input.enabled() || document.visibilityState !== "visible") return;
-    if (inFront() && Date.now() - lastActive >= ACTIVE_MS) noteActive();
-    else quiet(OWNER_AWAY_ROUTES.state);
+    if (!noteActive()) quiet(OWNER_AWAY_ROUTES.state);
   }, READ_MS);
   document.addEventListener("visibilitychange", onFront);
   window.addEventListener("focus", onFront);

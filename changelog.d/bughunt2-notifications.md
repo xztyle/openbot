@@ -17,3 +17,5 @@
 - In focus or quiet hours, the owner's open browser tab no longer pops its own notifications or
   plays cues for agent events and channel replies (with push notifications off); it waits, as push
   does. An admin's tab still tells.
+- Coming back to the app while the connection is still coming back no longer delays the "When
+  you're back" note by up to four minutes: a call that did not reach the server is made again.

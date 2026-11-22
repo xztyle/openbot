@@ -1,6 +1,10 @@
 import type { AppAppearance } from "@openbot/contracts/app-appearance";
 import type { AppLanguage } from "@openbot/contracts/app-language";
-import type { CentralAuthUser } from "@openbot/contracts/ipc";
+import {
+  type CentralAuthUser,
+  WORKSPACE_AGENT_NOISE_LEVELS,
+  type WorkspaceAgentNoise,
+} from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
 import {
   Archive,
@@ -15,6 +19,7 @@ import {
   ItemGroup,
   ItemTitle,
   KeyRound,
+  NativeSelect,
   Palette,
   SettingsSection,
   Sparkles,
@@ -31,7 +36,7 @@ import { SoundThemePicker } from "@openbot/ui/features/settings/SoundThemePicker
 import { createSettingsProfileStore } from "@openbot/ui/features/settings/stores/profile-store";
 import { useText } from "@openbot/ui/text";
 import { usesTouchLayout } from "@openbot/ui/utils";
-import { createEffect, createSignal, onCleanup, Show, untrack } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show, untrack } from "solid-js";
 import { readActionSoundChoice, replayActionSoundChoice, setActionSoundChoice } from "../../action-sounds";
 import { setShowAgentSteps, useShowAgentSteps } from "../../agent-steps-preference";
 import {
@@ -81,6 +86,12 @@ const TAB_ITEMS = {
   { titleKey: AppTextKey; descriptionKey: AppTextKey; icon: typeof UserRound }
 >;
 
+export interface AgentNoiseOptions {
+  agents: readonly { id: string; name: string }[];
+  level: (agentId: string) => WorkspaceAgentNoise;
+  onChange: (agentId: string, level: WorkspaceAgentNoise) => void;
+}
+
 export interface WebAccountSettingsProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -103,6 +114,8 @@ export interface WebAccountSettingsProps {
   onOpenShortcut?: ((shortcut: WebAccountSettingsShortcut) => void) | undefined;
   /** Opens the quiet hours and focus of the open server, for its owner or an admin. */
   onOpenQuietHours?: (() => void) | undefined;
+  /** How much each agent's updates push, on a host that keeps it (`agentNoise`). */
+  agentNoise?: AgentNoiseOptions | undefined;
   /** Push notifications from the opened host. Absent in a build that has none. */
   push?: {
     availability: WebPushAvailability;
@@ -391,6 +404,39 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
                   onReplay={replayActionSoundChoice}
                 />
               </Item>
+              <Show when={props.agentNoise?.agents.length ? props.agentNoise : undefined}>
+                {(noise) => (
+                  <Item class="settings-modal-row settings-agent-noise">
+                    <ItemContent>
+                      <ItemTitle>{t("webClient.settings.agentNoise.title")}</ItemTitle>
+                      <ItemDescription>{t("webClient.settings.agentNoise.description")}</ItemDescription>
+                      <ul class="settings-agent-noise-list">
+                        <For each={noise().agents}>
+                          {(agent) => (
+                            <li class="settings-agent-noise-row">
+                              <span>{agent.name}</span>
+                              <NativeSelect
+                                aria-label={t("webClient.settings.agentNoise.label", { name: agent.name })}
+                                value={noise().level(agent.id)}
+                                onChange={(event) => {
+                                  const level = WORKSPACE_AGENT_NOISE_LEVELS.find(
+                                    (value) => value === event.currentTarget.value,
+                                  );
+                                  if (level) noise().onChange(agent.id, level);
+                                }}
+                              >
+                                <option value="all">{t("webClient.settings.agentNoise.all")}</option>
+                                <option value="important">{t("webClient.settings.agentNoise.important")}</option>
+                                <option value="digest">{t("webClient.settings.agentNoise.digest")}</option>
+                              </NativeSelect>
+                            </li>
+                          )}
+                        </For>
+                      </ul>
+                    </ItemContent>
+                  </Item>
+                )}
+              </Show>
               <Show when={props.onOpenQuietHours}>
                 {(open) => (
                   <Item class="settings-modal-row">

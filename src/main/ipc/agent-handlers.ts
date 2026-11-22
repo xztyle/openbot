@@ -579,7 +579,7 @@ export function agentIpcHandlers({
           const memberId = host.channelActor().id;
           return {
             sidebar: workspaceSidebar.get(memberId),
-            notifyLevels: true,
+            notifyLevels: true, agentNoise: true,
             revision: workspaceSidebar.revision(memberId),
           };
         },
@@ -588,7 +588,7 @@ export function agentIpcHandlers({
       setWorkspaceSidebar: scopedHandler(decodeWorkspaceSidebarPrefs, {
         local: async (prefs) => ({
           ...(await runCauseEffect(workspaceSidebar.set(host.channelActor().id, prefs))),
-          notifyLevels: true,
+          notifyLevels: true, agentNoise: true,
         }),
         remote: (prefs, serverId) => remoteSidebar(serverId, WORKSPACE_SIDEBAR_ROUTES.save, prefs),
       }),

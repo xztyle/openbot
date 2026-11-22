@@ -690,7 +690,8 @@ export const messages = {
   "workspace.mailboxes.failed": "La modification n'a pas été enregistrée.",
   "workspace.app.channel.announce": "Nouveau message de {name} : {text}",
   "workspace.knowledge.title": "Connaissances",
-  "workspace.knowledge.subtitle": "Ce que les agents de cet espace ont décidé et savent des clients, produits et fournisseurs",
+  "workspace.knowledge.subtitle":
+    "Ce que les agents de cet espace ont décidé et savent des clients, produits et fournisseurs",
   "workspace.knowledge.tab.decisions": "Décisions ({count})",
   "workspace.knowledge.tab.memory": "Clients et produits ({count})",
   "workspace.knowledge.search": "Rechercher dans les connaissances",
@@ -700,8 +701,10 @@ export const messages = {
   "workspace.knowledge.type.product": "Produit",
   "workspace.knowledge.type.supplier": "Fournisseur",
   "workspace.knowledge.type.other": "Autre",
-  "workspace.knowledge.noDecisions": "Aucune décision pour l’instant. Les agents en notent une quand ils choisissent une direction, avec la raison.",
-  "workspace.knowledge.noMemory": "Rien de mémorisé pour l’instant. Les agents enregistrent ici ce qu’ils apprennent sur les clients, produits et fournisseurs.",
+  "workspace.knowledge.noDecisions":
+    "Aucune décision pour l’instant. Les agents en notent une quand ils choisissent une direction, avec la raison.",
+  "workspace.knowledge.noMemory":
+    "Rien de mémorisé pour l’instant. Les agents enregistrent ici ce qu’ils apprennent sur les clients, produits et fournisseurs.",
   "workspace.knowledge.noMatch": "Rien ne correspond à cette recherche.",
   "workspace.knowledge.loadFailed": "Impossible de charger les connaissances de cet espace.",
   "workspace.knowledge.removed": "Supprimé",

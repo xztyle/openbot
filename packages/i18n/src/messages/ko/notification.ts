@@ -23,4 +23,7 @@ export const messages = {
   "notification.welcome": "에이전트가 도움을 필요로 하면 Atelier가 여기서 알려드려요.",
   "notification.toast.region": "알림",
   "notification.toast.close": "알림 닫기",
+  "notification.digest.title": { other: "에이전트 업데이트 {count}개" },
+  "notification.digest.fromOne": "{agent}에서 보냄.",
+  "notification.digest.fromMany": { other: "{agent} 외 {count}개에서 보냄." },
 } as const satisfies PartialTranslation<typeof source>;

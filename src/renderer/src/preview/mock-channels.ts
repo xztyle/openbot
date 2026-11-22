@@ -640,7 +640,7 @@ export function createMockChannels(
     workspaceSidebar: async (serverId?: string): Promise<WorkspaceSidebar> => {
       const saved = sidebars.get(serverId ?? "local");
       const revision = sidebarRevisions.get(serverId ?? "local") ?? 0;
-      return { sidebar: saved ? structuredClone(saved) : null, notifyLevels: true, revision };
+      return { sidebar: saved ? structuredClone(saved) : null, notifyLevels: true, agentNoise: true, revision };
     },
     setWorkspaceSidebar: async (prefs: WorkspaceSidebarPrefs, serverId?: string): Promise<WorkspaceSidebar> => {
       // The preview has one session, so a save never has another session's changes to keep.
@@ -651,7 +651,7 @@ export function createMockChannels(
       // As a host does: every session of the member hears of the change, the one that saved too,
       // after the answer.
       setTimeout(() => emit({ type: "workspace-sidebar-changed" }), 0);
-      return { sidebar: structuredClone(saved), notifyLevels: true, revision };
+      return { sidebar: structuredClone(saved), notifyLevels: true, agentNoise: true, revision };
     },
     workspaceActivity: async (input: WorkspaceActivityInput): Promise<WorkspaceActivity> => {
       const items: WorkspaceActivityItem[] = [];

@@ -730,3 +730,34 @@ body {
   width: var(--openbot-icon-sm);
   height: var(--openbot-icon-sm);
 }
+
+/* Updates from agents: one row per agent, its name and how much it pushes. */
+.settings-agent-noise-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  margin: var(--openbot-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-agent-noise-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-3);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+}
+
+.settings-agent-noise-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-agent-noise-row > :last-child {
+  flex: none;
+  width: auto;
+}

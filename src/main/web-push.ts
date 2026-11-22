@@ -7,6 +7,7 @@ import {
   type Channel,
   type ChannelMessage,
   channelKind,
+  type WorkspaceAgentNoise,
   type WorkspaceNotifyLevel,
 } from "@openbot/contracts/ipc";
 import type { WebPushRegistration } from "@openbot/contracts/team-protocol/web-push-v1";
@@ -55,6 +56,11 @@ const REPEAT_MS = 3_000;
  * end, which replaces the first on the browser and counts them.
  */
 const BURST_MS = 20_000;
+/**
+ * The updates of agents set to Digest wait this long after the first one, then go as one notice that
+ * counts them and opens Activity.
+ */
+const DIGEST_MS = 60 * 60 * 1000;
 /** The channel messages whose notice is decided, so a later change of one (a reaction, an edit) is not news. */
 const DECIDED_LIMIT = 5_000;
 
@@ -108,6 +114,8 @@ export interface WebPushOptions {
   away?: WebPushAway;
   /** The time in which the notices of one conversation become one. Scripts make it short. */
   burstMs?: number;
+  /** For tests: the wait of a digest. */
+  digestMs?: number;
   fetch?: typeof fetch;
   now?: () => number;
   logger?: { warn(message: string, ...values: unknown[]): void };
@@ -145,6 +153,8 @@ export interface WebPushWorkspace {
   follows(channel: Channel, viewer: ChannelViewer, rootId: string): boolean;
   /** The bell of the member for a conversation (`workspaceNotifyLevel`), or null for the server's level. */
   notifyLevel(memberId: string, conversationId: string): WorkspaceNotifyLevel | null;
+  /** How much an agent's updates push for the member (`workspaceAgentNoise`). Absent: every one. */
+  agentNoise?(memberId: string, agentId: string): WorkspaceAgentNoise;
   /** The slug of the space of a channel, and of an agent, for the address in a message. */
   channelSpace(channel: Channel): string;
   agentSpace(agentId: string): string;
@@ -191,6 +201,16 @@ interface Notice {
   repeat?: boolean;
 }
 
+/** The agent updates that wait for one browser's digest. */
+interface Digest {
+  subscription: WebPushSubscription;
+  count: number;
+  /** The agents' names, in the order of their first update. */
+  agents: string[];
+  space: string;
+  timer: ReturnType<typeof setTimeout>;
+}
+
 /** The notices of one conversation for one browser in the last `BURST_MS`. */
 interface Burst {
   subscription: WebPushSubscription;
@@ -224,6 +244,7 @@ export class WebPushService {
   readonly #translators = new Map<string, AppTranslate>();
   readonly #pending = new Set<Promise<void>>();
   readonly #bursts = new Map<string, Burst>();
+  readonly #digests = new Map<string, Digest>();
   /** The channel messages that had their notices, oldest first. */
   readonly #decided = new Set<string>();
   /** The last escalation list. It comes before the request event, so a request finds its delegator. */
@@ -269,6 +290,8 @@ export class WebPushService {
     this.#options.agents.off("event", this.#listener);
     for (const burst of this.#bursts.values()) if (burst.timer) clearTimeout(burst.timer);
     this.#bursts.clear();
+    for (const digest of this.#digests.values()) clearTimeout(digest.timer);
+    this.#digests.clear();
     await Promise.allSettled([...this.#pending]);
   }
 
@@ -425,6 +448,13 @@ export class WebPushService {
       )
         continue;
       if (!webPushAllowed(kind, subscription.level, workspace.notifyLevel(subscription.memberId, channel.id))) continue;
+      // An agent's update that does not name the reader follows the agent's noise: Important only drops
+      // it, Digest counts it for one later notice. A mention always goes.
+      if (message.author.kind !== "member" && kind !== "mention") {
+        const noise = workspace.agentNoise?.(subscription.memberId, message.author.id) ?? "all";
+        if (noise === "digest") this.#addToDigest(subscription, author, space);
+        if (noise !== "all") continue;
+      }
       const translate = this.#translator(subscription);
       const notice: Notice = {
         kind,
@@ -487,6 +517,47 @@ export class WebPushService {
       burstTag(conversation),
       { ...notice, title: notice.burstTitle, body: translate("notification.newMessages", { count: burst.count }) },
       true,
+    );
+  }
+
+  /** Counts an agent's update for the browser's digest, which goes `DIGEST_MS` after the first one. */
+  #addToDigest(subscription: WebPushSubscription, agent: string, space: string): void {
+    const key = subscriptionId(subscription);
+    const digest = this.#digests.get(key);
+    if (digest) {
+      digest.count += 1;
+      if (!digest.agents.includes(agent)) digest.agents.push(agent);
+      return;
+    }
+    const timer = setTimeout(() => this.#sendDigest(key), this.#options.digestMs ?? DIGEST_MS);
+    timer.unref?.();
+    this.#digests.set(key, { subscription, count: 1, agents: [agent], space, timer });
+  }
+
+  #sendDigest(key: string): void {
+    const digest = this.#digests.get(key);
+    this.#digests.delete(key);
+    if (!digest || this.#disposed) return;
+    const translate = this.#translator(digest.subscription);
+    const [first, ...others] = digest.agents;
+    const title = translate("notification.digest.title", { count: digest.count });
+    const body =
+      others.length === 0
+        ? translate("notification.digest.fromOne", { agent: first ?? "" })
+        : translate("notification.digest.fromMany", { agent: first ?? "", count: others.length });
+    this.#send(
+      digest.subscription,
+      "digest",
+      {
+        kind: "summary",
+        title,
+        body,
+        burstTitle: title,
+        agentId: "",
+        threadId: null,
+        path: webPushViewPath(this.#options.hostId(), digest.space, "activity"),
+      },
+      false,
     );
   }
 

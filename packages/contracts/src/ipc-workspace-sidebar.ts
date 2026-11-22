@@ -35,6 +35,14 @@ export interface WorkspaceSidebarPrefs {
   notifyMentions?: string[];
   notifyNothing?: string[];
   /**
+   * The agents whose updates push only when they matter ("Important only"), and those whose other
+   * updates wait for one digest push ("Digest"), by agent id. An agent in neither list pushes as the
+   * conversation's bell says ("Everything"). A question, an approval, a failure, a finished task and a
+   * mention always push. Absent from an older client or host.
+   */
+  agentNoiseImportant?: string[];
+  agentNoiseDigest?: string[];
+  /**
    * The conversations in the Starred section, in the reader's order. A starred conversation shows
    * there and in no other group. Absent from an older client or host.
    */
@@ -65,6 +73,8 @@ export interface WorkspaceSidebar {
   sidebar: WorkspaceSidebarPrefs | null;
   /** The host keeps `notifyMentions` and `notifyNothing`. An older host drops them and sends no flag. */
   notifyLevels?: boolean;
+  /** The host keeps `agentNoiseImportant` and `agentNoiseDigest` and applies them to pushes. */
+  agentNoise?: boolean;
   /**
    * The count of the member's saves on the host; each save makes it larger. A client keeps the
    * revision of the value it shows, sends it as `baseRevision`, and leaves out an answer with a smaller
@@ -133,6 +143,35 @@ export function withWorkspaceNotifyLevel(
       level === "mentions" ? [...without(prefs.notifyMentions), conversationId] : without(prefs.notifyMentions),
     notifyNothing:
       level === "nothing" ? [...without(prefs.notifyNothing), conversationId] : without(prefs.notifyNothing),
+  };
+}
+
+/** How much an agent's updates push: every one, only those that matter, or a digest of the rest. */
+export const WORKSPACE_AGENT_NOISE_LEVELS = ["all", "important", "digest"] as const;
+export type WorkspaceAgentNoise = (typeof WORKSPACE_AGENT_NOISE_LEVELS)[number];
+
+export function workspaceAgentNoise(
+  prefs: Pick<WorkspaceSidebarPrefs, "agentNoiseImportant" | "agentNoiseDigest">,
+  agentId: string,
+): WorkspaceAgentNoise {
+  if (prefs.agentNoiseDigest?.includes(agentId)) return "digest";
+  if (prefs.agentNoiseImportant?.includes(agentId)) return "important";
+  return "all";
+}
+
+/** The prefs with `level` for the agent's updates. */
+export function withWorkspaceAgentNoise(
+  prefs: WorkspaceSidebarPrefs,
+  agentId: string,
+  level: WorkspaceAgentNoise,
+): WorkspaceSidebarPrefs {
+  const without = (ids: readonly string[] | undefined) => (ids ?? []).filter((id) => id !== agentId);
+  return {
+    ...prefs,
+    agentNoiseImportant:
+      level === "important" ? [...without(prefs.agentNoiseImportant), agentId] : without(prefs.agentNoiseImportant),
+    agentNoiseDigest:
+      level === "digest" ? [...without(prefs.agentNoiseDigest), agentId] : without(prefs.agentNoiseDigest),
   };
 }
 
@@ -216,6 +255,10 @@ export function decodeWorkspaceSidebarPrefs(value: unknown): WorkspaceSidebarPre
       ? {}
       : { notifyMentions: idList(value.notifyMentions, "notification levels") }),
     ...(value.notifyNothing === undefined ? {} : { notifyNothing: idList(value.notifyNothing, "notification levels") }),
+    ...(value.agentNoiseImportant === undefined
+      ? {}
+      : { agentNoiseImportant: idList(value.agentNoiseImportant, "agent noise") }),
+    ...(value.agentNoiseDigest === undefined ? {} : { agentNoiseDigest: idList(value.agentNoiseDigest, "agent noise") }),
     ...(value.starred === undefined ? {} : { starred: idList(value.starred, "starred conversations") }),
     ...(value.sections === undefined ? {} : { sections: sections(value.sections) }),
     ...(value.groupOptions === undefined ? {} : { groupOptions: groupOptions(value.groupOptions) }),
@@ -228,6 +271,7 @@ export function decodeWorkspaceSidebar(value: unknown): WorkspaceSidebar {
   return {
     sidebar: value.sidebar === null ? null : decodeWorkspaceSidebarPrefs(value.sidebar),
     ...(value.notifyLevels === true ? { notifyLevels: true } : {}),
+    ...(value.agentNoise === true ? { agentNoise: true } : {}),
     ...(value.revision === undefined ? {} : { revision: revision(value.revision, "revision") }),
   };
 }
@@ -242,6 +286,8 @@ const WORKSPACE_SIDEBAR_ID_SETS = new Set([
   "collapsed",
   "notifyMentions",
   "notifyNothing",
+  "agentNoiseImportant",
+  "agentNoiseDigest",
   "starred",
 ]);
 
@@ -299,6 +345,8 @@ export function boundedWorkspaceSidebar(prefs: WorkspaceSidebarPrefs): Workspace
     ...(prefs.collapsed === undefined ? {} : { collapsed: bounded(prefs.collapsed) }),
     ...(prefs.notifyMentions === undefined ? {} : { notifyMentions: bounded(prefs.notifyMentions) }),
     ...(prefs.notifyNothing === undefined ? {} : { notifyNothing: bounded(prefs.notifyNothing) }),
+    ...(prefs.agentNoiseImportant === undefined ? {} : { agentNoiseImportant: bounded(prefs.agentNoiseImportant) }),
+    ...(prefs.agentNoiseDigest === undefined ? {} : { agentNoiseDigest: bounded(prefs.agentNoiseDigest) }),
     ...(prefs.starred === undefined ? {} : { starred: bounded(prefs.starred) }),
     ...(prefs.sections === undefined
       ? {}

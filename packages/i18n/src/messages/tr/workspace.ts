@@ -697,7 +697,8 @@ export const messages = {
   "workspace.mailboxes.failed": "Değişiklik kaydedilmedi.",
   "workspace.app.channel.announce": "{name} adlı kişiden yeni mesaj: {text}",
   "workspace.knowledge.title": "Bilgi",
-  "workspace.knowledge.subtitle": "Bu alanın ajanlarının verdiği kararlar ve müşteriler, ürünler ve tedarikçiler hakkında bildikleri",
+  "workspace.knowledge.subtitle":
+    "Bu alanın ajanlarının verdiği kararlar ve müşteriler, ürünler ve tedarikçiler hakkında bildikleri",
   "workspace.knowledge.tab.decisions": "Kararlar ({count})",
   "workspace.knowledge.tab.memory": "Müşteriler ve ürünler ({count})",
   "workspace.knowledge.search": "Bilgide ara",
@@ -708,7 +709,8 @@ export const messages = {
   "workspace.knowledge.type.supplier": "Tedarikçi",
   "workspace.knowledge.type.other": "Diğer",
   "workspace.knowledge.noDecisions": "Henüz karar yok. Ajanlar bir yön seçtiklerinde nedeniyle birlikte kaydeder.",
-  "workspace.knowledge.noMemory": "Henüz hatırlanan bir şey yok. Ajanlar müşteriler, ürünler ve tedarikçiler hakkında öğrendiklerini buraya kaydeder.",
+  "workspace.knowledge.noMemory":
+    "Henüz hatırlanan bir şey yok. Ajanlar müşteriler, ürünler ve tedarikçiler hakkında öğrendiklerini buraya kaydeder.",
   "workspace.knowledge.noMatch": "Bu aramayla eşleşen bir şey yok.",
   "workspace.knowledge.loadFailed": "Bu alanın bilgisi yüklenemedi.",
   "workspace.knowledge.removed": "Kaldırıldı",

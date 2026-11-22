@@ -89,4 +89,10 @@ export const messages = {
   "webClient.settings.notifications.description": "Scegli cosa ti arriva, quando e con quale suono.",
   "webClient.settings.workspaceHeading": "Questo workspace",
   "webClient.settings.quietHours.open": "Imposta ore di silenzio",
+  "webClient.settings.agentNoise.title": "Aggiornamenti dagli agenti",
+  "webClient.settings.agentNoise.description": "Quanto notificano le risposte di avanzamento di ogni agente. Domande, approvazioni, errori, attività finite e menzioni notificano sempre. Riepilogo invia un avviso un’ora dopo il primo aggiornamento.",
+  "webClient.settings.agentNoise.label": "Aggiornamenti da {name}",
+  "webClient.settings.agentNoise.all": "Tutto",
+  "webClient.settings.agentNoise.important": "Solo importanti",
+  "webClient.settings.agentNoise.digest": "Riepilogo",
 } as const satisfies PartialTranslation<typeof source>;

@@ -21,6 +21,10 @@
   and admins of a server with agent learning.
 - The morning briefing also reads the space's decision log, so a decision an agent logged outside a
   hands-off channel reaches the briefing. A decision that a channel already showed is said once.
+- Settings > Notifications sets how much each agent's progress replies push: Everything, Important
+  only, or Digest, one notice an hour after the first update that counts them and opens Activity.
+  Questions, approvals, failures, finished tasks and mentions always push. The server keeps the
+  choice with the member's sidebar and applies it to web push.
 
 ### Fixed
 

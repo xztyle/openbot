@@ -1241,7 +1241,8 @@ export const messages = defineMessages("workspace", {
   "workspace.knowledge.type.supplier": "Supplier",
   "workspace.knowledge.type.other": "Other",
   "workspace.knowledge.noDecisions": "No decisions yet. Agents log one when they choose a direction, with the reason.",
-  "workspace.knowledge.noMemory": "Nothing remembered yet. Agents save what they learn about customers, products and suppliers here.",
+  "workspace.knowledge.noMemory":
+    "Nothing remembered yet. Agents save what they learn about customers, products and suppliers here.",
   "workspace.knowledge.noMatch": "Nothing matches this search.",
   "workspace.knowledge.loadFailed": "Could not load the knowledge of this space.",
   "workspace.knowledge.removed": "Removed",

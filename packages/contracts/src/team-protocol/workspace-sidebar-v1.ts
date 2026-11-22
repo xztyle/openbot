@@ -22,7 +22,10 @@
 //   `ids` at most 500); and `groupOptions?`, at most 60 entries `{ id, sort?, show? }`, the sort
 //   (`custom`, `alpha`, `recent`, `priority`) and the filter (`all`, `unreads`, `mentions`) of a group
 //   (`channels`, `direct`, `starred` or a section id). A rebase merges `starred` by id and takes
-//   `sections` and `groupOptions` whole.
+//   `sections` and `groupOptions` whole. Later still: `agentNoiseImportant?` and `agentNoiseDigest?`,
+//   at most 500 agent ids each, the agents whose updates push only when they matter, or wait for one
+//   digest push; a host that keeps them and applies them to pushes answers `agentNoise: true`. A
+//   rebase merges both by id.
 // - `POST /v1/workspace/sidebar/save` with a sidebar replaces the value of the member of the session
 //   and answers `{ sidebar }`, the value the host keeps (a repeated id keeps its first place).
 //
@@ -79,6 +82,8 @@ const sidebarFields = {
   collapsed: ids,
   notifyMentions: ids,
   notifyNothing: ids,
+  agentNoiseImportant: ids,
+  agentNoiseDigest: ids,
   starred: ids,
   sections: list(section, 50),
   groupOptions: list(groupOptions, 60),
@@ -88,7 +93,10 @@ const save = fields(
   { order: fields({ channels: ids, direct: ids }), muted: ids },
   { ...sidebarFields, baseRevision: count },
 );
-const answer = fields({ sidebar: nullable(sidebar) }, { notifyLevels: boolean, revision: count });
+const answer = fields(
+  { sidebar: nullable(sidebar) },
+  { notifyLevels: boolean, agentNoise: boolean, revision: count },
+);
 
 export const WORKSPACE_SIDEBAR_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [WORKSPACE_SIDEBAR_ROUTES.read, adminRoute(empty, answer)],

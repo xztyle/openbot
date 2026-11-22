@@ -703,7 +703,8 @@ export const messages = {
   "workspace.knowledge.type.supplier": "仕入先",
   "workspace.knowledge.type.other": "その他",
   "workspace.knowledge.noDecisions": "まだ決定はありません。エージェントは方針を選ぶと、理由とともに記録します。",
-  "workspace.knowledge.noMemory": "まだ何も記憶されていません。エージェントは顧客・商品・仕入先について学んだことをここに保存します。",
+  "workspace.knowledge.noMemory":
+    "まだ何も記憶されていません。エージェントは顧客・商品・仕入先について学んだことをここに保存します。",
   "workspace.knowledge.noMatch": "この検索に一致するものはありません。",
   "workspace.knowledge.loadFailed": "このスペースのナレッジを読み込めませんでした。",
   "workspace.knowledge.removed": "削除しました",

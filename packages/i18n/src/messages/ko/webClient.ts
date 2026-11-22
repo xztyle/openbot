@@ -86,4 +86,10 @@ export const messages = {
   "webClient.settings.notifications.description": "무엇을, 언제, 어떤 소리로 받을지 선택하세요.",
   "webClient.settings.workspaceHeading": "이 워크스페이스",
   "webClient.settings.quietHours.open": "방해 금지 시간 설정",
+  "webClient.settings.agentNoise.title": "에이전트 업데이트",
+  "webClient.settings.agentNoise.description": "각 에이전트의 진행 상황 답글을 얼마나 알릴지 정합니다. 질문, 승인, 실패, 완료된 작업, 멘션은 항상 알립니다. 요약은 첫 업데이트 1시간 뒤에 알림 하나를 보냅니다.",
+  "webClient.settings.agentNoise.label": "{name} 업데이트",
+  "webClient.settings.agentNoise.all": "전체",
+  "webClient.settings.agentNoise.important": "중요한 것만",
+  "webClient.settings.agentNoise.digest": "요약",
 } as const satisfies PartialTranslation<typeof source>;

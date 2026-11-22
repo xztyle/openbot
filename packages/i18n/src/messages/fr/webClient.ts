@@ -89,4 +89,10 @@ export const messages = {
   "webClient.settings.notifications.description": "Choisissez ce qui vous parvient, quand, et avec quel son.",
   "webClient.settings.workspaceHeading": "Cet espace de travail",
   "webClient.settings.quietHours.open": "Régler les heures calmes",
+  "webClient.settings.agentNoise.title": "Nouvelles des agents",
+  "webClient.settings.agentNoise.description": "Ce que les réponses d’avancement de chaque agent notifient. Les questions, approbations, échecs, tâches terminées et mentions notifient toujours. Résumé envoie une notification une heure après la première nouvelle.",
+  "webClient.settings.agentNoise.label": "Nouvelles de {name}",
+  "webClient.settings.agentNoise.all": "Tout",
+  "webClient.settings.agentNoise.important": "Important seulement",
+  "webClient.settings.agentNoise.digest": "Résumé",
 } as const satisfies PartialTranslation<typeof source>;

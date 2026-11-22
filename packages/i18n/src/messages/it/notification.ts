@@ -33,4 +33,7 @@ export const messages = {
   "notification.welcome": "Atelier ti avviserà qui quando un agente ha bisogno di te.",
   "notification.toast.region": "Notifiche",
   "notification.toast.close": "Chiudi notifica",
+  "notification.digest.title": { one: "{count} aggiornamento dai tuoi agenti", other: "{count} aggiornamenti dai tuoi agenti" },
+  "notification.digest.fromOne": "Da {agent}.",
+  "notification.digest.fromMany": { one: "Da {agent} e {count} altro.", other: "Da {agent} e altri {count}." },
 } as const satisfies PartialTranslation<typeof source>;

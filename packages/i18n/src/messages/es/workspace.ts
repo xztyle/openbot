@@ -1217,7 +1217,8 @@ export const messages = {
   "workspace.mailboxes.failed": "El cambio no se guardó.",
   "workspace.app.channel.announce": "Nuevo mensaje de {name}: {text}",
   "workspace.knowledge.title": "Conocimiento",
-  "workspace.knowledge.subtitle": "Lo que los agentes de este espacio decidieron y saben de clientes, productos y proveedores",
+  "workspace.knowledge.subtitle":
+    "Lo que los agentes de este espacio decidieron y saben de clientes, productos y proveedores",
   "workspace.knowledge.tab.decisions": "Decisiones ({count})",
   "workspace.knowledge.tab.memory": "Clientes y productos ({count})",
   "workspace.knowledge.search": "Buscar en el conocimiento",
@@ -1227,8 +1228,10 @@ export const messages = {
   "workspace.knowledge.type.product": "Producto",
   "workspace.knowledge.type.supplier": "Proveedor",
   "workspace.knowledge.type.other": "Otro",
-  "workspace.knowledge.noDecisions": "Aún no hay decisiones. Los agentes registran una cuando eligen un rumbo, con el motivo.",
-  "workspace.knowledge.noMemory": "Aún no hay nada guardado. Los agentes guardan aquí lo que aprenden de clientes, productos y proveedores.",
+  "workspace.knowledge.noDecisions":
+    "Aún no hay decisiones. Los agentes registran una cuando eligen un rumbo, con el motivo.",
+  "workspace.knowledge.noMemory":
+    "Aún no hay nada guardado. Los agentes guardan aquí lo que aprenden de clientes, productos y proveedores.",
   "workspace.knowledge.noMatch": "Nada coincide con esta búsqueda.",
   "workspace.knowledge.loadFailed": "No se pudo cargar el conocimiento de este espacio.",
   "workspace.knowledge.removed": "Eliminado",

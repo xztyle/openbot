@@ -89,4 +89,10 @@ export const messages = {
   "webClient.settings.notifications.description": "Wybierz, co do ciebie dociera, kiedy i z jakim dźwiękiem.",
   "webClient.settings.workspaceHeading": "Ten obszar roboczy",
   "webClient.settings.quietHours.open": "Ustaw godziny ciszy",
+  "webClient.settings.agentNoise.title": "Aktualizacje od agentów",
+  "webClient.settings.agentNoise.description": "Ile powiadomień dają odpowiedzi agentów o postępach. Pytania, zatwierdzenia, błędy, ukończone zadania i wzmianki zawsze powiadamiają. Podsumowanie wysyła jedno powiadomienie godzinę po pierwszej aktualizacji.",
+  "webClient.settings.agentNoise.label": "Aktualizacje od {name}",
+  "webClient.settings.agentNoise.all": "Wszystko",
+  "webClient.settings.agentNoise.important": "Tylko ważne",
+  "webClient.settings.agentNoise.digest": "Podsumowanie",
 } as const satisfies PartialTranslation<typeof source>;

@@ -685,7 +685,8 @@ export const messages = {
   "workspace.mailboxes.failed": "Die Änderung wurde nicht gespeichert.",
   "workspace.app.channel.announce": "Neue Nachricht von {name}: {text}",
   "workspace.knowledge.title": "Wissen",
-  "workspace.knowledge.subtitle": "Was die Agenten dieses Space entschieden haben und über Kunden, Produkte und Lieferanten wissen",
+  "workspace.knowledge.subtitle":
+    "Was die Agenten dieses Space entschieden haben und über Kunden, Produkte und Lieferanten wissen",
   "workspace.knowledge.tab.decisions": "Entscheidungen ({count})",
   "workspace.knowledge.tab.memory": "Kunden & Produkte ({count})",
   "workspace.knowledge.search": "Wissen durchsuchen",
@@ -695,8 +696,10 @@ export const messages = {
   "workspace.knowledge.type.product": "Produkt",
   "workspace.knowledge.type.supplier": "Lieferant",
   "workspace.knowledge.type.other": "Sonstiges",
-  "workspace.knowledge.noDecisions": "Noch keine Entscheidungen. Agenten halten eine fest, wenn sie eine Richtung wählen, mit Grund.",
-  "workspace.knowledge.noMemory": "Noch nichts gemerkt. Agenten speichern hier, was sie über Kunden, Produkte und Lieferanten lernen.",
+  "workspace.knowledge.noDecisions":
+    "Noch keine Entscheidungen. Agenten halten eine fest, wenn sie eine Richtung wählen, mit Grund.",
+  "workspace.knowledge.noMemory":
+    "Noch nichts gemerkt. Agenten speichern hier, was sie über Kunden, Produkte und Lieferanten lernen.",
   "workspace.knowledge.noMatch": "Nichts passt zu dieser Suche.",
   "workspace.knowledge.loadFailed": "Das Wissen dieses Space konnte nicht geladen werden.",
   "workspace.knowledge.removed": "Entfernt",

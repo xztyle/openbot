@@ -64,4 +64,7 @@ export const messages = defineMessages("notification", {
   // The toast region in each window.
   "notification.toast.region": "Notifications",
   "notification.toast.close": "Close notification",
+  "notification.digest.title": { one: "{count} update from your agents", other: "{count} updates from your agents" },
+  "notification.digest.fromOne": "From {agent}.",
+  "notification.digest.fromMany": { one: "From {agent} and {count} more.", other: "From {agent} and {count} more." },
 });

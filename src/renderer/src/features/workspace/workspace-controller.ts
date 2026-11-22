@@ -37,7 +37,10 @@ import {
   type WorkspaceSidebar,
   type WorkspaceSidebarPrefs,
   type WorkspaceSteps,
+  type WorkspaceAgentNoise,
+  withWorkspaceAgentNoise,
   withWorkspaceNotifyLevel,
+  workspaceAgentNoise,
   workspaceNotifyLevel,
 } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
@@ -435,6 +438,8 @@ function readSidebar(key: string): SidebarPrefs {
       // Always present, so a view that reads a level before the first choice hears the change.
       notifyMentions: idList(value.notifyMentions),
       notifyNothing: idList(value.notifyNothing),
+      ...(Array.isArray(value.agentNoiseImportant) ? { agentNoiseImportant: idList(value.agentNoiseImportant) } : {}),
+      ...(Array.isArray(value.agentNoiseDigest) ? { agentNoiseDigest: idList(value.agentNoiseDigest) } : {}),
       ...localSectionPrefs(value),
     };
   } catch {
@@ -887,6 +892,17 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     });
     saveSidebar();
   }
+  /** The host keeps how much each agent's updates push (`agentNoise`) and applies it. */
+  const [agentNoiseSupported, setAgentNoiseSupported] = createSignal(false);
+  const agentNoise = (agentId: string): WorkspaceAgentNoise => workspaceAgentNoise(state.sidebar, agentId);
+  function setAgentNoise(agentId: string, level: WorkspaceAgentNoise) {
+    setState((draft) => {
+      const next = withWorkspaceAgentNoise(draft.sidebar, agentId, level);
+      draft.sidebar.agentNoiseImportant = next.agentNoiseImportant ?? [];
+      draft.sidebar.agentNoiseDigest = next.agentNoiseDigest ?? [];
+    });
+    saveSidebar();
+  }
   /** Unread mentions only, for a conversation whose level lets nothing else count. */
   const onlyMentions = createMemo(() => {
     const counts: Record<string, number> = {};
@@ -1077,6 +1093,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       hosted = answer.sidebar;
       revision = answer.revision;
       setNotifyLevels(answer.notifyLevels === true);
+      setAgentNoiseSupported(answer.agentNoise === true);
     } catch {
       // A host without the route, or one that cannot answer now: this computer keeps the sidebar.
       if (keyRun === sidebarKeyRun && readRun === sidebarReadRun) sidebarHome = "local";
@@ -2671,6 +2688,10 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     /** The bell's choice, without mute. */
     chosenNotifyLevel: chosenLevel,
     setNotifyLevel,
+    agentNoiseSupported,
+    /** How much the agent's updates push: every one, only those that matter, or a digest. */
+    agentNoise,
+    setAgentNoise,
     marks,
     setSidebarFilter,
     noteEmoji,

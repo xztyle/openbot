@@ -1,5 +1,5 @@
-import type { SpaceDecision } from "@openbot/contracts/agent-learning";
 import { randomUUID } from "node:crypto";
+import type { SpaceDecision } from "@openbot/contracts/agent-learning";
 import {
   type AgentAttentionItem,
   type AgentSummary,
@@ -933,7 +933,7 @@ export class InsightService {
         if (said.some((line) => line.includes(entry.decision.toLowerCase()))) continue;
         said.push(entry.decision.toLowerCase());
         decisions.push({
-          agent: entry.agentId ? name(entry.agentId) : this.#options.owner()?.name ?? "",
+          agent: entry.agentId ? name(entry.agentId) : (this.#options.owner()?.name ?? ""),
           text,
           link:
             entry.channelId && this.#options.channels.exists(entry.channelId)

@@ -17,8 +17,8 @@ import type {
   LearningReviewItem,
   LearningReviewsInput,
   LearningReviewsPage,
-  SpaceKnowledge,
   SettingsCheckpoint,
+  SpaceKnowledge,
 } from "@openbot/contracts/agent-learning";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { AGENT_EFFICIENCY_ROUTES } from "@openbot/contracts/team-protocol/agent-efficiency-v1";
@@ -167,7 +167,8 @@ export function hostEfficiencyCalls(request: () => TeamApiRequest): EfficiencyCa
         spaceId,
         ...(query?.trim() ? { query: query.trim() } : {}),
       }),
-    removeKnowledge: (input) => request()("POST", AGENT_LEARNING_ROUTES.removeKnowledge, decoder(isKnowledge), { ...input }),
+    removeKnowledge: (input) =>
+      request()("POST", AGENT_LEARNING_ROUTES.removeKnowledge, decoder(isKnowledge), { ...input }),
     forgetConversation: (agentId, confirm) =>
       request()("POST", AGENT_LEARNING_ROUTES.forgetConversation, decoder(isForgetResult), {
         agentId,

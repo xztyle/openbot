@@ -880,8 +880,10 @@ export const messages = {
   "workspace.knowledge.type.product": "Товар",
   "workspace.knowledge.type.supplier": "Поставщик",
   "workspace.knowledge.type.other": "Другое",
-  "workspace.knowledge.noDecisions": "Решений пока нет. Агенты записывают решение, когда выбирают направление, вместе с причиной.",
-  "workspace.knowledge.noMemory": "Пока ничего не запомнено. Агенты сохраняют здесь то, что узнают о клиентах, товарах и поставщиках.",
+  "workspace.knowledge.noDecisions":
+    "Решений пока нет. Агенты записывают решение, когда выбирают направление, вместе с причиной.",
+  "workspace.knowledge.noMemory":
+    "Пока ничего не запомнено. Агенты сохраняют здесь то, что узнают о клиентах, товарах и поставщиках.",
   "workspace.knowledge.noMatch": "По этому запросу ничего нет.",
   "workspace.knowledge.loadFailed": "Не удалось загрузить знания этого пространства.",
   "workspace.knowledge.removed": "Удалено",

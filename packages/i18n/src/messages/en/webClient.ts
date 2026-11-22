@@ -114,4 +114,10 @@ export const messages = defineMessages("webClient", {
   "webClient.settings.notifications.description": "Choose what reaches you, when, and how it sounds.",
   "webClient.settings.workspaceHeading": "This workspace",
   "webClient.settings.quietHours.open": "Set quiet hours",
+  "webClient.settings.agentNoise.title": "Updates from agents",
+  "webClient.settings.agentNoise.description": "How much each agent's progress replies push. Questions, approvals, failures, finished tasks and mentions always push. Digest sends one notice an hour after the first update.",
+  "webClient.settings.agentNoise.label": "Updates from {name}",
+  "webClient.settings.agentNoise.all": "Everything",
+  "webClient.settings.agentNoise.important": "Important only",
+  "webClient.settings.agentNoise.digest": "Digest",
 });

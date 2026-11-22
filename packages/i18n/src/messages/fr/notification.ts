@@ -36,4 +36,7 @@ export const messages = {
   // The toast region in each window.
   "notification.toast.region": "Notifications",
   "notification.toast.close": "Fermer la notification",
+  "notification.digest.title": { one: "{count} nouvelle de vos agents", other: "{count} nouvelles de vos agents" },
+  "notification.digest.fromOne": "De {agent}.",
+  "notification.digest.fromMany": { one: "De {agent} et {count} autre.", other: "De {agent} et {count} autres." },
 } as const satisfies PartialTranslation<typeof source>;

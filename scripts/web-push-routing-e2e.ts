@@ -41,6 +41,8 @@ import { WorkspaceSidebarStore } from "../src/main/workspace-sidebar-store";
 import { type JsonObject, type Person, record, startWorkspaceE2e } from "./workspace-e2e-host";
 
 const BURST_MS = 400;
+/** The wait of a digest here: long enough for a marker to come first. */
+const DIGEST_MS = 2_000;
 
 /** One browser of the script: its keys, as `PushManager.subscribe` makes them. */
 interface Browser {
@@ -162,6 +164,7 @@ const e2e = await startWorkspaceE2e(
           hostViewer: () => null,
         }),
         burstMs: BURST_MS,
+        digestMs: DIGEST_MS,
         fetch: pushService,
       });
       return { webPush: made.sender, workspaceSidebar: sidebar };
@@ -191,12 +194,23 @@ async function register(person: Person, target: Browser, level: WebPushLevel): P
 }
 
 /** Sets the member's sidebar through the route, as the web client's bell does. */
-async function bell(person: Person, value: { muted?: string[]; notifyMentions?: string[]; notifyNothing?: string[] }) {
+async function bell(
+  person: Person,
+  value: {
+    muted?: string[];
+    notifyMentions?: string[];
+    notifyNothing?: string[];
+    agentNoiseImportant?: string[];
+    agentNoiseDigest?: string[];
+  },
+) {
   const response = await e2e.optional(WORKSPACE_SIDEBAR_CODECS, WORKSPACE_SIDEBAR_ROUTES.save, person.token, {
     order: { channels: [], direct: [] },
     muted: value.muted ?? [],
     notifyMentions: value.notifyMentions ?? [],
     notifyNothing: value.notifyNothing ?? [],
+    agentNoiseImportant: value.agentNoiseImportant ?? [],
+    agentNoiseDigest: value.agentNoiseDigest ?? [],
   });
   assert.equal(response.status, 200, `The sidebar save returned ${response.status}.`);
 }
@@ -427,6 +441,61 @@ try {
     assert.equal(push.message.path, agentPath);
     assert.equal(push.message.tag, `agent:${fixtureAgentId}`);
     assert.equal(push.message.agentId, fixtureAgentId);
+    return summary(push);
+  });
+
+  // An agent's update in a thread the member follows, as the agent's turn posts it.
+  const agentReply = async (rootId: string, text: string) => {
+    const base = agents.channels.store.messages(threadChannel).find((entry) => entry.id === rootId);
+    assert.ok(base, "The thread root is not in the store.");
+    const message: ChannelMessage = {
+      ...base,
+      id: randomUUID(),
+      author: { kind: "agent", id: fixtureAgentId, name: "Web Push Agent" },
+      threadRootId: rootId,
+      mentions: [],
+      message: { ...base.message, text, createdAt: new Date().toISOString() },
+    };
+    emit({ type: "channel-message", channelId: threadChannel, message, revision: 0 });
+  };
+
+  await step("Important only drops an agent's update in a followed thread", async () => {
+    // The coordinator may still answer the DM of an earlier step; its burst ends before this starts.
+    await new Promise((done) => setTimeout(done, BURST_MS * 4));
+    received.splice(0, received.length);
+    const rootMessage = await e2e.send(member, threadChannel, "member's root for agent updates");
+    const rootId = messageId(rootMessage);
+    // A stored reply makes the thread one the member follows.
+    await e2e.send(owner, threadChannel, "a reply that starts the thread", rootId);
+    assert.equal((await nextPush(memberBrowser)).message.kind, "reply");
+    await new Promise((done) => setTimeout(done, BURST_MS * 2));
+    await agentReply(rootId, "progress 1 (everything)");
+    const push = await nextPush(memberBrowser);
+    assert.equal(push.message.kind, "reply", "With Everything, an agent's update pushes.");
+    await bell(member, { agentNoiseImportant: [fixtureAgentId] });
+    await agentReply(rootId, "progress 2");
+    await nextMarker("after an agent update with Important only");
+    return { rootId };
+  });
+
+  await step("Digest holds an agent's updates and sends one notice that counts them", async () => {
+    await bell(member, { agentNoiseDigest: [fixtureAgentId] });
+    const rootMessage = await e2e.send(member, threadChannel, "member's root for a digest");
+    const rootId = messageId(rootMessage);
+    await e2e.send(owner, threadChannel, "a reply that starts the thread", rootId);
+    assert.equal((await nextPush(memberBrowser)).message.kind, "reply");
+    await new Promise((done) => setTimeout(done, BURST_MS * 2));
+    await agentReply(rootId, "progress 3");
+    await agentReply(rootId, "progress 4");
+    await nextMarker("after two agent updates with Digest");
+    const push = await nextPush(memberBrowser);
+    assert.equal(push.message.kind, "summary");
+    assert.equal(push.message.tag, "digest");
+    assert.equal(push.message.title, "2 updates from your agents");
+    assert.equal(push.message.body, "From Web Push Agent.");
+    assert.equal(push.message.path, `${hostId ? `/app/s/${hostId}` : "/app"}/general/activity`);
+    assert.ok(!push.text.includes("progress"), "The digest holds no chat text.");
+    await bell(member, {});
     return summary(push);
   });
 

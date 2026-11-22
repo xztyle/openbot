@@ -1,4 +1,4 @@
-import { type Channel, type TeamRole, workspaceNotifyLevel } from "@openbot/contracts/ipc";
+import { type Channel, type TeamRole, workspaceAgentNoise, workspaceNotifyLevel } from "@openbot/contracts/ipc";
 import type { ChannelService } from "../backend/channel-service";
 import { type ChannelViewer, channelViewer } from "../backend/channel-visibility";
 import type { SpaceService } from "../backend/spaces/space-service";
@@ -40,6 +40,10 @@ export function webPushWorkspace(sources: WebPushWorkspaceSources): WebPushWorks
     notifyLevel: (memberId, conversationId) => {
       const prefs = sidebar.get(memberId);
       return prefs ? workspaceNotifyLevel(prefs, conversationId) : null;
+    },
+    agentNoise: (memberId, agentId) => {
+      const prefs = sidebar.get(memberId);
+      return prefs ? workspaceAgentNoise(prefs, agentId) : "all";
     },
     channelSpace: (target) => slug(spaces.store.channelSpaceId(target)),
     agentSpace: (agentId) => spaces.store.agentSpace(agentId).slug,

@@ -38,4 +38,7 @@ export const messages = {
   // The toast region in each window.
   "notification.toast.region": "通知",
   "notification.toast.close": "关闭通知",
+  "notification.digest.title": { other: "来自智能体的 {count} 条更新" },
+  "notification.digest.fromOne": "来自 {agent}。",
+  "notification.digest.fromMany": { other: "来自 {agent} 和另外 {count} 个。" },
 } as const satisfies PartialTranslation<typeof source>;

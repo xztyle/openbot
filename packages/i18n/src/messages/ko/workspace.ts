@@ -698,7 +698,8 @@ export const messages = {
   "workspace.knowledge.type.supplier": "공급업체",
   "workspace.knowledge.type.other": "기타",
   "workspace.knowledge.noDecisions": "아직 결정이 없습니다. 에이전트는 방향을 정하면 이유와 함께 기록합니다.",
-  "workspace.knowledge.noMemory": "아직 기억된 것이 없습니다. 에이전트는 고객, 제품, 공급업체에 대해 알게 된 것을 여기에 저장합니다.",
+  "workspace.knowledge.noMemory":
+    "아직 기억된 것이 없습니다. 에이전트는 고객, 제품, 공급업체에 대해 알게 된 것을 여기에 저장합니다.",
   "workspace.knowledge.noMatch": "이 검색과 일치하는 항목이 없습니다.",
   "workspace.knowledge.loadFailed": "이 스페이스의 지식을 불러오지 못했습니다.",
   "workspace.knowledge.removed": "삭제됨",

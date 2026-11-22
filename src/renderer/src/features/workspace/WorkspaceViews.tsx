@@ -11,6 +11,7 @@ import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-t
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, Match, Show, Switch } from "solid-js";
 import { WorkspaceReviewsView } from "../efficiency/WorkspaceReviews";
+import { WorkspacePortfolioView } from "../portfolio/WorkspacePortfolio";
 import { WorkspaceTrustView } from "../trust/WorkspaceTrustView";
 import { WorkspaceAgentTalkView } from "./WorkspaceAgentTalk";
 import { WorkspaceDraftsView } from "./WorkspaceDrafts";
@@ -68,6 +69,9 @@ export function WorkspaceViewPane(props: { view: WorkspaceView }) {
       </Match>
       <Match when={props.view === "reviews"}>
         <WorkspaceReviewsView />
+      </Match>
+      <Match when={props.view === "portfolio"}>
+        <WorkspacePortfolioView />
       </Match>
       <Match when={props.view === "insights"}>
         <WorkspaceInsightView />

@@ -31,6 +31,7 @@ import { messages as messaging } from "./messaging";
 import { messages as notification } from "./notification";
 import { messages as onboarding } from "./onboarding";
 import { messages as plugin } from "./plugin";
+import { messages as portfolio } from "./portfolio";
 import { messages as preview } from "./preview";
 import { messages as prompt } from "./prompt";
 import { messages as provider } from "./provider";
@@ -114,6 +115,7 @@ export const es = {
   ...sitePage,
   ...workspace,
   ...efficiency,
+  ...portfolio,
   ...storageHygiene,
   ...trust,
 } as const satisfies PartialTranslation<AppMessages>;

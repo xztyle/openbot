@@ -7,6 +7,7 @@ import {
   Blocks,
   Bookmark,
   Bot,
+  Briefcase,
   Ellipsis,
   Gauge,
   Hand,
@@ -277,6 +278,13 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
         label: t("efficiency.view.title"),
         icon: <Gauge />,
         onSelect: () => openView("reviews"),
+      });
+    if (ws.viewAvailable("portfolio"))
+      rows.push({
+        id: "portfolio",
+        label: t("portfolio.title"),
+        icon: <Briefcase />,
+        onSelect: () => openView("portfolio"),
       });
     if (ws.viewAvailable("insights"))
       rows.push({

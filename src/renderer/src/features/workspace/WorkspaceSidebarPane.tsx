@@ -376,6 +376,7 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
         showStorage={Boolean(ws.env.storageHygiene?.())}
         showSecrets={ws.env.secrets?.() === true && Boolean(ws.channels.port().agent.workspaceSecrets)}
         showReviews={ws.viewAvailable("reviews")}
+        showPortfolio={ws.viewAvailable("portfolio")}
         showInsights={ws.viewAvailable("insights")}
         showTrust={ws.viewAvailable("trust")}
         onOpenApps={ws.env.openApps}

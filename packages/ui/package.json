@@ -170,6 +170,7 @@
     "./features/conversation/SkillLibraryToolbar": "./src/features/conversation/SkillLibraryToolbar.tsx",
     "./features/conversation/SpreadsheetFilePreview": "./src/features/conversation/SpreadsheetFilePreview.tsx",
     "./features/conversation/UnreadMessages": "./src/features/conversation/UnreadMessages.tsx",
+    "./features/conversation/ui-blocks/ChatCardBlock": "./src/features/conversation/ui-blocks/ChatCardBlock.tsx",
     "./features/conversation/ui-blocks/UiBlockCard": "./src/features/conversation/ui-blocks/UiBlockCard.tsx",
     "./features/conversation/ui-blocks/UiConfirmBlock": "./src/features/conversation/ui-blocks/UiConfirmBlock.tsx",
     "./features/conversation/ui-blocks/UiChoiceBlock": "./src/features/conversation/ui-blocks/UiChoiceBlock.tsx",

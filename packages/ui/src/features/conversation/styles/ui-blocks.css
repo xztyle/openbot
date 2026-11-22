@@ -443,3 +443,95 @@
     transition: none;
   }
 }
+
+/* Chat cards (`post_card`): a line of context above a block, and the rows of a table card. */
+.chat-card-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  min-width: 0;
+}
+
+.chat-card-detail {
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.chat-card-rows {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+  border: 1px solid var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-card);
+}
+
+.chat-card-row {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-3);
+  padding: var(--openbot-space-3);
+  transition: background var(--openbot-duration-fast) var(--openbot-ease-out);
+}
+
+.chat-card-row + .chat-card-row {
+  border-top: 1px solid var(--openbot-border-strong);
+}
+
+.chat-card-row[data-decision="approve"],
+.chat-card-row[data-picked] {
+  background: var(--openbot-question-option-soft);
+}
+
+.chat-card-row[data-decision="reject"] {
+  opacity: 0.6;
+}
+
+.chat-card-cells {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-1) var(--openbot-space-3);
+  min-width: 0;
+  margin: 0;
+}
+
+.chat-card-cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-card-cell[data-first] {
+  flex-basis: 100%;
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.chat-card-cell dt {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-xs);
+}
+
+.chat-card-cell[data-first] dt {
+  display: none;
+}
+
+.chat-card-cell dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.chat-card-row-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--openbot-space-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-card-row {
+    transition: none;
+  }
+}

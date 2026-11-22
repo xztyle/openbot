@@ -11,6 +11,7 @@ import {
   Blocks,
   Bookmark,
   Bot,
+  Briefcase,
   Check,
   ChevronDown,
   ChevronRight,
@@ -59,6 +60,8 @@ export type WorkspaceView =
   | "secrets"
   /** The weekly reviews of the agents, the model policy savings and the role playbooks. */
   | "reviews"
+  /** Test suites, the value per dollar, space templates and the weekly reality check of the agents. */
+  | "portfolio"
   /** The loops (pipelines) of the space: items by stage, and the decisions that wait for the reader. */
   | "loops"
   /** Goals, money, agent costs and the briefing, for the owner and the admins. */
@@ -169,6 +172,8 @@ export interface WorkspaceSidebarProps {
   showSecrets?: boolean | undefined;
   /** The Reviews view: an owner or admin of a host with agent-efficiency-v1. */
   showReviews?: boolean | undefined;
+  /** The Portfolio view shows under More: a fork host's owner or admin. */
+  showPortfolio?: boolean | undefined;
   /** Goals, money, agent costs and the briefing, for the owner and the admins of a host that has them. */
   showInsights?: boolean | undefined;
   /** The Trust view (rules, budgets, audit trail), for the owner and the admins. */
@@ -224,6 +229,7 @@ const MORE_VIEWS = [
   "storage",
   "secrets",
   "reviews",
+  "portfolio",
   "insights",
   "trust",
 ] as const satisfies readonly WorkspaceView[];
@@ -291,11 +297,13 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
           ? Boolean(props.showSecrets)
           : view === "reviews"
             ? Boolean(props.showReviews)
-            : view === "insights"
-              ? Boolean(props.showInsights)
-              : view === "trust"
-                ? Boolean(props.showTrust)
-                : true;
+            : view === "portfolio"
+              ? Boolean(props.showPortfolio)
+              : view === "insights"
+                ? Boolean(props.showInsights)
+                : view === "trust"
+                  ? Boolean(props.showTrust)
+                  : true;
   const MORE_ICON: Record<MoreView, () => JSX.Element> = {
     dms: () => <MessagesSquare aria-hidden="true" />,
     loops: () => <Kanban aria-hidden="true" />,
@@ -305,6 +313,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
     storage: () => <HardDrive aria-hidden="true" />,
     secrets: () => <KeyRound aria-hidden="true" />,
     reviews: () => <Gauge aria-hidden="true" />,
+    portfolio: () => <Briefcase aria-hidden="true" />,
     insights: () => <Target aria-hidden="true" />,
     trust: () => <ShieldCheck aria-hidden="true" />,
   };
@@ -323,11 +332,13 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                 ? t("storageHygiene.title")
                 : view === "reviews"
                   ? t("efficiency.view.title")
-                  : view === "insights"
-                    ? t("insight.title")
-                    : view === "trust"
-                      ? t("trust.title")
-                      : t("workspace.view.secrets");
+                  : view === "portfolio"
+                    ? t("portfolio.title")
+                    : view === "insights"
+                      ? t("insight.title")
+                      : view === "trust"
+                        ? t("trust.title")
+                        : t("workspace.view.secrets");
   /** The view under More that shows now: it gets a row of its own above More while it shows. */
   const activeMore = () => MORE_VIEWS.find((view) => view === props.activeView && moreAvailable(view));
   const moreItems = (): WorkspaceMenuItem[] => [

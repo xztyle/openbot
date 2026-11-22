@@ -32,6 +32,8 @@ export function workspaceViewLabel(view: WorkspaceView, t: TextValue["t"]): stri
       return t("workspace.view.secrets");
     case "reviews":
       return t("efficiency.view.title");
+    case "portfolio":
+      return t("portfolio.title");
     case "loops":
       return t("workspace.view.loops");
     case "insights":

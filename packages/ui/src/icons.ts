@@ -21,6 +21,7 @@ export { default as BookmarkCheck } from "lucide-solid/icons/bookmark-check";
 export { default as BookmarkMinus } from "lucide-solid/icons/bookmark-minus";
 export { default as Bot } from "lucide-solid/icons/bot";
 export { default as Brain } from "lucide-solid/icons/brain";
+export { default as Briefcase } from "lucide-solid/icons/briefcase";
 export { default as BringToFront } from "lucide-solid/icons/bring-to-front";
 export { default as Bug } from "lucide-solid/icons/bug";
 export { default as CalendarClock } from "lucide-solid/icons/calendar-clock";

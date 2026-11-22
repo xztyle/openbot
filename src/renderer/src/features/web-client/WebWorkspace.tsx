@@ -157,6 +157,7 @@ import {
   untrack,
 } from "solid-js";
 import { hostEfficiencyCalls } from "../efficiency/efficiency-port";
+import { hostPortfolioCalls } from "../portfolio/portfolio-port";
 import { serverSupportsCapability } from "../servers/server-capabilities";
 // Copying a selection with a formula in it gives its LaTeX source, as on desktop.
 import "katex/contrib/copy-tex";
@@ -1255,6 +1256,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   const saveFile = createWebFileSaver();
   const storageHygieneCalls = hostStorageHygieneCalls(() => hostRequest());
   const efficiencyCalls = hostEfficiencyCalls(() => hostRequest());
+  const portfolioCalls = hostPortfolioCalls(() => hostRequest());
   const trustCalls = hostTrustCalls(() => hostRequest());
   const storageCalls: FilesPort = {
     agent: { listAgents: () => workspace.runtime.listAgents() },
@@ -2153,6 +2155,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     efficiency: () =>
       canAdministerServer(workspace.state.host?.role) && serverSupportsCapability(server(), FORK_HOST_CAPABILITY)
         ? efficiencyCalls
+        : undefined,
+    portfolio: () =>
+      canAdministerServer(workspace.state.host?.role) && serverSupportsCapability(server(), FORK_HOST_CAPABILITY)
+        ? portfolioCalls
         : undefined,
     trust: () =>
       workspace.state.capabilities.includes(TRUST_CONTROL_CAPABILITY) && canAdministerServer(workspace.state.host?.role)

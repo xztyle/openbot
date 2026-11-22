@@ -1,4 +1,5 @@
 import type { EfficiencyCalls } from "../efficiency/efficiency-port";
+import type { PortfolioCalls } from "../portfolio/portfolio-port";
 /*
  * The workspace controller: which conversation or view is open, which right panel shows, the open
  * thread, the drafts, the activity feed, and every workspace command. The desktop and the browser
@@ -255,6 +256,8 @@ export interface WorkspaceEnvironment {
   secrets?: (() => boolean) | undefined;
   /** The sleep, review and playbook calls of the host, for an owner or admin of a fork host. */
   efficiency?: (() => EfficiencyCalls | undefined) | undefined;
+  /** Test suites, templates, value, the reality check and chat cards of a fork host, for an owner or admin. */
+  portfolio?: (() => PortfolioCalls | undefined) | undefined;
   /** The trust and control calls of the host, for an owner or admin. Absent, there is no Trust view. */
   trust?: (() => TrustCalls | undefined) | undefined;
   /** Opens Server settings > Storage, where the cleanup rules are. */
@@ -340,6 +343,7 @@ const SAVED_VIEWS: readonly WorkspaceView[] = [
   "routines",
   "secrets",
   "reviews",
+  "portfolio",
   "loops",
   "insights",
   "trust",
@@ -1761,6 +1765,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (view === "insights") return env.secrets?.() === true && Boolean(channels.port().agent.workspaceInsight);
     if (view === "storage") return Boolean(env.storageHygiene?.());
     if (view === "reviews") return Boolean(env.efficiency?.());
+    if (view === "portfolio") return Boolean(env.portfolio?.());
     if (view === "loops") return Boolean(channels.port().agent.workspaceLoops);
     if (view === "trust") return Boolean(env.trust?.());
     if (view === "routines") return env.routines?.available() === true;

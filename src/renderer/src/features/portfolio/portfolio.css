@@ -1,0 +1,150 @@
+.portfolio-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-4);
+  padding: var(--openbot-space-4);
+  overflow-y: auto;
+  min-height: 0;
+  max-width: 880px;
+}
+
+.portfolio-tabs,
+.portfolio-actions {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  gap: var(--openbot-space-2);
+  flex-wrap: wrap;
+}
+
+.portfolio-section,
+.portfolio-suite,
+.portfolio-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-3);
+  min-width: 0;
+}
+
+.portfolio-section h3 {
+  margin: 0;
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.portfolio-section label,
+.portfolio-scenario label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+}
+
+.portfolio-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+}
+
+.portfolio-card,
+.portfolio-run,
+.portfolio-scenario {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  min-width: 0;
+  margin: 0;
+  padding: var(--openbot-space-3);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-bg-surface);
+}
+
+.portfolio-scenario legend {
+  padding: 0 var(--openbot-space-1);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.portfolio-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--openbot-space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.portfolio-ratio {
+  font-weight: var(--openbot-weight-semibold);
+  color: var(--openbot-accent-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.portfolio-ratio[data-flagged] {
+  color: var(--openbot-text-primary);
+  text-decoration: underline;
+}
+
+.portfolio-summary {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.portfolio-claims,
+.portfolio-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+  margin: 0;
+  padding-inline-start: var(--openbot-space-4);
+  overflow-wrap: anywhere;
+}
+
+.portfolio-claims li {
+  display: flex;
+  flex-direction: column;
+}
+
+.portfolio-evidence {
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.portfolio-claims li[data-evidence="missing"] .portfolio-evidence {
+  text-decoration: underline;
+}
+
+.portfolio-claims li[data-evidence="found"] .portfolio-evidence {
+  color: var(--openbot-accent-text);
+}
+
+.portfolio-result,
+.portfolio-validation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+  padding: var(--openbot-space-2);
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-accent-soft);
+}
+
+.portfolio-result:not([data-pass]) {
+  background: var(--openbot-hover);
+}
+
+.portfolio-trend {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: var(--openbot-control-sm);
+}
+
+.portfolio-trend-bar {
+  flex: 1 1 0;
+  min-width: 2px;
+  height: calc(var(--portfolio-bar) * 100%);
+  border-radius: var(--openbot-radius-xs);
+  background: var(--openbot-accent-text);
+  opacity: 0.7;
+}

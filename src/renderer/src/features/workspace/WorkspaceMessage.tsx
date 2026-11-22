@@ -1,4 +1,5 @@
 import { type AttachmentSummary, type ChannelMessage, canPreviewAttachment, channelKind } from "@openbot/contracts/ipc";
+import { CHAT_CARD_MARKER } from "@openbot/contracts/portfolio";
 import {
   Bell,
   BellOff,
@@ -28,6 +29,7 @@ import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { toAgentMessage } from "../../app-message-projection";
 import { attachmentFilePreview } from "../conversation/attachment-preview";
+import { WorkspaceChatCard } from "../portfolio/WorkspaceChatCard";
 import { WorkspaceMessageEditor } from "./WorkspaceMessageEditor";
 import { MemberProfile } from "./WorkspaceProfile";
 import { useWorkspace } from "./workspace-context";
@@ -56,9 +58,11 @@ export function WorkspaceMessageBody(props: {
       props.entry.message,
       props.entry.author.kind === "agent" ? props.entry.author.id : undefined,
     );
-    // Everyone writes Markdown here, people with the formatting toolbar too.
-    return { ...row, id: props.entry.id, author: "agent" };
+    // Everyone writes Markdown here, people with the formatting toolbar too. A card's marker draws as
+    // its card below the text.
+    return { ...row, id: props.entry.id, author: "agent", body: row.body.replace(CHAT_CARD_MARKER, "").trimEnd() };
   });
+  const cardId = () => CHAT_CARD_MARKER.exec(props.entry.message.text)?.[1];
   const port = () => ws.channels.port();
   const { t, errorMessage } = useText();
   const [viewer, setViewer] = createSignal<{ attachment: AttachmentSummary; state: FilePreviewDialogState } | null>(
@@ -129,6 +133,7 @@ export function WorkspaceMessageBody(props: {
             : undefined
         }
       />
+      <Show when={cardId()}>{(id) => <WorkspaceChatCard cardId={id()} />}</Show>
       <Show when={viewer()}>
         {(open) => (
           <FilePreviewDialog

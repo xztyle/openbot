@@ -146,3 +146,26 @@
   --openbot-bg-control-active: color-mix(in srgb, var(--atelier-surface2) 90%, var(--atelier-text));
   --openbot-warning-text: var(--atelier-warn);
 }
+
+/* On a computer, as `window.css` lays out these pages; a phone shows them on their own screen. */
+@media (min-width: 721px) and (not ((max-height: 520px) and (pointer: coarse))) {
+  /*
+   * The usage, schedule, settings and Marketplace pages cover the sidebar, which hides its rows but not
+   * its fill: without this, the sidebar's color stood over the left part of the page's card.
+   */
+  :root[data-atelier-theme] .app-frame-edge:not([data-window-page-kind="agents"]) > .ws-frame-sidebar {
+    background-color: transparent;
+  }
+
+  /* Those pages put their title and controls in the top row, on the frame, which has the sidebar's ink. */
+  :root[data-atelier-theme]
+    .app-frame-edge
+    > .window-page
+    :is(.agent-usage-header, .routine-planner-title, .skills-marketplace-topbar) {
+    --openbot-text-primary: var(--atelier-sidebar-text);
+    --openbot-text-secondary: color-mix(in srgb, var(--atelier-sidebar-text) 84%, var(--atelier-sidebar));
+    --openbot-text-muted: color-mix(in srgb, var(--atelier-sidebar-text) 80%, var(--atelier-sidebar));
+    --openbot-text-dim: color-mix(in srgb, var(--atelier-sidebar-text) 72%, var(--atelier-sidebar));
+    --openbot-bg-control-hover: color-mix(in srgb, var(--atelier-sidebar-text) 10%, var(--atelier-sidebar));
+  }
+}

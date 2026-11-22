@@ -7,3 +7,6 @@
 - Money shows the revenue and the ad spend in each currency, such as pesos, next to the dollar
   totals. Before, an entry in another currency was left out with only a note. Insights writes an
   amount with its currency's sign in your format, such as "$ 50.000" for pesos in Colombia.
+- "Focus until tomorrow" ends when quiet hours end in their own time zone. Before, it used the
+  browser's zone, five hours off in Colombia for a server in UTC. The quiet hours settings start on
+  your own time zone when none is set, and the focus time shows in your language's format.

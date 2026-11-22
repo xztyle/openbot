@@ -19,19 +19,15 @@ import { nextClockTime, type OwnerAwayStore } from "./owner-away-store";
 import { useWorkspace } from "./workspace-context";
 import { memberById } from "./workspace-model";
 
-function clock(at: number): string {
-  return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(at));
-}
-
 /** The focus actions and the settings dialog, for one place that shows the focus menu. */
 function useAwayControls() {
   const ws = useWorkspace();
-  const { t } = useText();
+  const { t, format } = useText();
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const store = () => ws.env.ownerAway;
   const quiet = createMemo((): AwayQuiet | null => {
     const value = store()?.state()?.quiet;
-    return value ? { kind: value.kind, until: clock(value.until) } : null;
+    return value ? { kind: value.kind, until: format.date(value.until, { hour: "numeric", minute: "2-digit" }) } : null;
   });
   const onFocus = (choice: number | "tomorrow" | null) => {
     const away = store();
@@ -41,7 +37,11 @@ function useAwayControls() {
       choice === null
         ? null
         : choice === "tomorrow"
-          ? nextClockTime(state.settings.quietHours.end)
+          ? nextClockTime(
+              state.settings.quietHours.end,
+              Date.now(),
+              state.settings.quietHours.timeZone ?? state.systemTimezone,
+            )
           : Date.now() + choice * 60_000;
     void away.setFocus(until).catch(() => toast.error(t("workspace.away.focusFailed")));
   };
@@ -145,6 +145,16 @@ export function WorkspaceWhenBackSection() {
   );
 }
 
+/** The browser's zone where it is not the server's and the list has it, else "" (the server's). */
+function readerZone(serverZone: string): string {
+  try {
+    const own = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return own && own !== serverZone && zones().includes(own) ? own : "";
+  } catch {
+    return "";
+  }
+}
+
 function zones(): string[] {
   try {
     return Intl.supportedValuesOf("timeZone");
@@ -179,7 +189,9 @@ function OwnerAwaySettingsDialog(props: {
   const [enabled, setEnabled] = createSignal(props.settings.quietHours.enabled);
   const [start, setStart] = createSignal(props.settings.quietHours.start);
   const [end, setEnd] = createSignal(props.settings.quietHours.end);
-  const [zone, setZone] = createSignal(props.settings.quietHours.timeZone ?? "");
+  // Quiet hours without a zone follow the server's, often UTC: 23:00 there is 18:00 in Bogotá. The
+  // dialog offers the reader's own zone, so a save keeps the hours they read.
+  const [zone, setZone] = createSignal(props.settings.quietHours.timeZone ?? readerZone(props.systemTimezone));
   const [money, setMoney] = createSignal(String(props.settings.urgentMoneyUsd));
   const [deliverAt, setDeliverAt] = createSignal(props.settings.heldDeliverAt ?? "");
   const [busy, setBusy] = createSignal(false);

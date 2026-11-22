@@ -68,11 +68,46 @@ function inFront(): boolean {
   return typeof document !== "undefined" && document.visibilityState === "visible" && document.hasFocus();
 }
 
-/** The local time of the next `clock` ("HH:MM") after now, in the browser's zone. */
-export function nextClockTime(clock: string, now = Date.now()): number {
-  const [hours, minutes] = clock.split(":").map(Number);
+/** The wall clock of `at` in `timeZone`, read as if it were UTC: the zone's offset is the difference. */
+function wallClock(at: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+  }).formatToParts(at);
+  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((entry) => entry.type === type)?.value);
+  return Date.UTC(part("year"), part("month") - 1, part("day"), part("hour"), part("minute"), part("second"));
+}
+
+/**
+ * The time of the next `clock` ("HH:MM") after now in `timeZone`, the zone of the quiet hours (the
+ * server's zone for quiet hours without one), or in the browser's zone without a zone. The host ends
+ * quiet hours at that clock in that zone: 08:00 of a server in UTC is 03:00 in Bogotá.
+ */
+export function nextClockTime(clock: string, now = Date.now(), timeZone?: string): number {
+  const [hours = 8, minutes = 0] = clock.split(":").map(Number);
+  if (timeZone) {
+    try {
+      const today = wallClock(now, timeZone);
+      for (const days of [0, 1, 2]) {
+        const day = new Date(today + days * 86_400_000);
+        const wanted = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), hours, minutes);
+        // Twice: the offset at the guess can differ from the offset at the answer across a DST change.
+        let at = wanted - (wallClock(wanted, timeZone) - wanted);
+        at = wanted - (wallClock(at, timeZone) - at);
+        if (at > now) return at;
+      }
+    } catch {
+      // A zone that Intl does not know: the browser's zone below.
+    }
+  }
   const next = new Date(now);
-  next.setHours(hours ?? 8, minutes ?? 0, 0, 0);
+  next.setHours(hours, minutes, 0, 0);
   if (next.getTime() <= now) next.setDate(next.getDate() + 1);
   return next.getTime();
 }

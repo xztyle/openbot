@@ -923,7 +923,11 @@ export class TurnLifecycle {
       const mayRunAgain =
         failover !== undefined && !limited && status === "failed" && running !== undefined && !running.acted;
       const shouldCompact =
-        !refused && !limited && !mayRunAgain && !routineSession && this.#compaction.reserve(agentId, threadId);
+        !refused &&
+        !limited &&
+        !mayRunAgain &&
+        !routineSession &&
+        this.#compaction.reserve(agentId, threadId, false, turnId);
       // Read before a refused session is dropped below: the drop unbinds the provider thread, and a
       // channel turn would then end on the agent's own chat, so its task kept running.
       const publicThreadId = this.#conversation.publicThreadId(agentId, threadId);
@@ -1227,9 +1231,13 @@ export class TurnLifecycle {
       // deliveries running: nothing else would end them, and the agent's queue would wait (#2214).
       completion.pipe(
         Effect.onError((cause) =>
-          Cause.hasInterruptsOnly(cause)
-            ? Effect.void
-            : this.settleOrphanedTurn(agentId, threadId, turnId, status === "failed" ? "failed" : "interrupted"),
+          // Nor a compaction that it reserved and did not ask for: its hold has no deadline.
+          Effect.andThen(
+            Effect.sync(() => this.#compaction.dropReservation(agentId, threadId, turnId)),
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.void
+              : this.settleOrphanedTurn(agentId, threadId, turnId, status === "failed" ? "failed" : "interrupted"),
+          ),
         ),
         Effect.ensuring(
           Effect.andThen(

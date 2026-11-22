@@ -125,8 +125,14 @@ export class ContextCompaction {
   readonly #rotateSession: ContextCompactionOptions["rotateSession"];
   readonly #rotatesSession: ContextCompactionOptions["rotatesSession"];
   readonly #budgets = new Map<string, ThreadContextBudget>();
-  /** The thread that compacts, and the client that runs it once `request` sends it. */
-  readonly #compactingAgents = new Map<string, { threadId: string; client: AgentClient | null }>();
+  /**
+   * The thread that compacts, and the client that runs it once `request` sends it. `turnId`: the turn
+   * whose end made the `reserve` hold, until `request` takes the hold.
+   */
+  readonly #compactingAgents = new Map<
+    string,
+    { threadId: string; client: AgentClient | null; turnId: string | null }
+  >();
   readonly #refusals = new Map<string, RefusalHold>();
   readonly #timeoutMs: number;
   /** How long a stopped compaction, or a refused queue, waits for the turn to end. */
@@ -284,7 +290,7 @@ export class ContextCompaction {
     const phase = this.#budgets.get(threadId)?.phase;
     if ((phase !== undefined && phase !== "idle") || !this.#rotatesSession(agentId, threadId)) return false;
     this.#idleHandoffs.add(threadId);
-    this.#compactingAgents.set(agentId, { threadId, client: null });
+    this.#compactingAgents.set(agentId, { threadId, client: null, turnId: null });
     this.observeCompaction(threadId, "running");
     logger.info("Handing off an idle session before its wake.", {
       agentId,
@@ -374,8 +380,11 @@ export class ContextCompaction {
     return budget && budget.contextWindow > 1 ? Math.min(120_000, Math.floor(budget.contextWindow * 2)) : 120_000;
   }
 
-  /** `manual`: the user asked, so the thread compacts below the threshold too. */
-  reserve(agentId: string, threadId: string, manual = false): boolean {
+  /**
+   * `manual`: the user asked, so the thread compacts below the threshold too. `turnId`: the turn whose
+   * end reserves, so that only that turn can drop the hold.
+   */
+  reserve(agentId: string, threadId: string, manual = false, turnId: string | null = null): boolean {
     const agent = this.#store.list().find((candidate) => candidate.id === agentId);
     const mode = agent ? this.#providers.clientForAgent(agent)?.contextCompaction : undefined;
     if (!agent || !compactsOnRequest(mode)) return false;
@@ -385,9 +394,19 @@ export class ContextCompaction {
       return false;
     }
     budget.phase = "requested";
-    this.#compactingAgents.set(agentId, { threadId, client: null });
+    this.#compactingAgents.set(agentId, { threadId, client: null, turnId });
     this.observeCompaction(threadId, "running");
     return true;
+  }
+
+  /**
+   * Ends a hold that `reserve` made at the end of this turn and that `request` did not take: the work
+   * between them failed. Only `request` arms a deadline, so the hold stayed until a restart, and each
+   * next message waited with the reason "compaction".
+   */
+  dropReservation(agentId: string, threadId: string, turnId: string): void {
+    const compaction = this.#compactingAgents.get(agentId);
+    if (compaction?.turnId === turnId && compaction.threadId === threadId) this.#abandon(agentId, threadId);
   }
 
   readonly request = Effect.fn("ContextCompaction.request")(function* (
@@ -395,6 +414,8 @@ export class ContextCompaction {
     agentId: string,
     threadId: string,
   ) {
+    const reservation = this.#compactingAgents.get(agentId);
+    if (reservation) reservation.turnId = null;
     const budget = this.#budgets.get(threadId);
     const agent = this.#store.list().find((candidate) => candidate.id === agentId);
     const client = agent ? this.#providers.clientForAgent(agent) : null;
@@ -421,7 +442,7 @@ export class ContextCompaction {
       return;
     }
 
-    this.#compactingAgents.set(agentId, { threadId, client });
+    this.#compactingAgents.set(agentId, { threadId, client, turnId: null });
     this.#clearTimer(threadId);
     const timer = setTimeout(() => {
       this.#emitError(

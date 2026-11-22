@@ -276,6 +276,40 @@ printf '%s' '{"system":true,"text":"Continue."}' | sudo docker exec -i openbot \
 
 The check is not a jail: an agent still runs as the service user and can read its files.
 
+### Agent jail notes
+
+Agents run as the same user as OpenBot, in the same container. What OpenBot does today:
+
+- The control socket checks who connected (above).
+- A Claude agent's MCP servers go in a 0600 file that is removed once Claude has read it, not on the
+  command line, so their tokens stay only in Claude's memory. Yama (`ptrace_scope=1`, the default on
+  Ubuntu) keeps another agent out of that memory.
+- On a server, agent processes get an allowlisted environment (`src/backend/agent-inherited-environment.ts`),
+  and main takes the host's own secrets, such as `OPENBOT_MOTION_EVENTS_SECRET`, out of its
+  environment before any agent starts (`src/main/host-secret-environment.ts`).
+- The trust policy's money check reads expanded commands and scripts, and covers the command
+  approvals of Codex, Muse and the ACP providers.
+
+What still reaches an agent, and needs a separate user for each agent or space (a jail):
+
+- Every file of the service user: the other agents' key files under `agent-api-keys/`, the database,
+  the provider sign-ins, and the keyring file with its password file next to it.
+- `/proc/<pid>/environ` and `/proc/<pid>/cmdline` of every process, main's and PID 1's included:
+  Yama limits only attaching, not reading these. A secret in the container environment can be read
+  there, even after main took it out of its own copy.
+- The session D-Bus: `secret-tool` gives the key of the encrypted stores. Agents keep the bus because
+  some CLIs keep their sign-in in the keyring.
+- The X display of the OpenBot window (`:0`) has no access control.
+- A shell command of Codex with Full access runs without asking, so the money check does not see it.
+
+A jail would run each provider CLI as its own user (or in bubblewrap with a user namespace), with its
+own `/proc` mounted `hidepid=2`, a tmpfs over `/run/openbot`, the config folders and the keyring,
+bind mounts of only the workspace, the space's shared folder and that agent's key folder, no D-Bus,
+and an `-auth` cookie on the X displays. The money credentials would move into a broker that main
+runs, which asks the owner and then calls the payment API, so an agent never holds them. Provider
+CLIs, the browser's CDP endpoint and the MCP bridges all need plumbing for it, so it would roll out
+per provider behind a flag.
+
 The server has two Xvfb displays, one in each of two nested `xvfb-run` commands that share one
 authority file. The outer one starts the agent display, at the [display size](#display-size), and
 the script names it in `OPENBOT_AGENT_DISPLAY`. The inner one starts the display that OpenBot shows

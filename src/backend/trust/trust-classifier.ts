@@ -18,7 +18,7 @@ import { redactText } from "@openbot/logging";
  * `pay` and `launch_ads` (`expandCommand`): split strings are joined, base64 and hex payloads are
  * decoded, and a script that the command runs is read, so `echo … | base64 -d | sh`, `python3 -c`
  * with a built URL, or a script file written first do not walk around the rules. The real boundary is
- * a broker that holds the money credentials (docs: agent jail notes); this is not that.
+ * a broker that holds the money credentials (docs/self-hosted-server.md, agent jail notes); this is not that.
  */
 export interface TrustClassification {
   action: TrustAction;

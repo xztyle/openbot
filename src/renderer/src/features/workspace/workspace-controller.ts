@@ -1230,6 +1230,9 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     saveSidebar();
   }
   function saveEmoji() {
+    // A store write shows only after the flush: without it this computer kept the emoji and the skin
+    // tone from before the change.
+    flush();
     try {
       window.localStorage.setItem(EMOJI_KEY, JSON.stringify(state.emoji));
     } catch {

@@ -1,0 +1,20 @@
+# The Atelier mail Worker. Email Routing sends each agent address to it (the `email` handler), and the
+# host calls its `/send` to answer (the `fetch` handler). See README.md for the deploy steps.
+name = "atelier-mail"
+main = "src/index.ts"
+compatibility_date = "2026-08-18"
+compatibility_flags = ["nodejs_compat"]
+# The host calls https://atelier-mail.<account subdomain>.workers.dev/send. Replace it with a custom
+# domain route if you prefer one.
+workers_dev = true
+preview_urls = false
+
+[vars]
+# The host's webhook inbox for mail. Settings → Secrets → Agent mailboxes shows it.
+HOST_INBOX_URL = "https://connect.example.com/hooks/REPLACE_WITH_MAIL_ROUTE_ID"
+# The domains agents may send from, comma-separated. Each needs Cloudflare Email Sending.
+SENDER_DOMAINS = "example.com"
+
+# Cloudflare Email Sending. Set the secret with `wrangler secret put MAIL_SECRET`.
+[[send_email]]
+name = "EMAIL"

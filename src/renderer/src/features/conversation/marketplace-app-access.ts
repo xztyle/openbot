@@ -2,7 +2,7 @@ import type { McpChatSnapshot } from "@openbot/contracts/team-protocol/mcp-chat-
 import { isPluginAppConfig } from "@openbot/ui/features/settings/marketplace-plugins";
 import { createEffect, createSignal, createStore } from "solid-js";
 import type { MarketplaceCalls } from "../settings/marketplace-calls";
-import { MARKETPLACE_PLUGINS } from "../settings/marketplace-plugin-catalog";
+import { MARKETPLACE_PLUGIN_SLUGS } from "../settings/marketplace-plugin-slugs";
 
 /**
  * Where a Marketplace app stands for the open chat, as far as the host can say.
@@ -58,11 +58,13 @@ export function createMarketplaceAppAccess(options: {
       const request = ++requests;
       const calls = options.calls();
       const chat = calls.chatApps?.(serverId);
+      // The catalog is its own chunk: it loads with the first card that asks, not with the app.
       void Promise.all([
         calls.mcp.listMcpServers(serverId),
         chat ? chat.get({ kind: "agent", id: agentId }) : Promise.resolve(null),
+        import("../settings/marketplace-plugin-catalog"),
       ]).then(
-        ([servers, snapshot]) => {
+        ([servers, snapshot, { MARKETPLACE_PLUGINS }]) => {
           if (request !== requests) return;
           const accounts = servers.flatMap((row) => {
             const plugin = MARKETPLACE_PLUGINS.find((candidate) =>
@@ -91,7 +93,7 @@ export function createMarketplaceAppAccess(options: {
       const answer = read.value;
       const serverId = options.serverId();
       const agentId = options.agentId();
-      if (!MARKETPLACE_PLUGINS.some((plugin) => plugin.slug === appId)) return "unknown";
+      if (!MARKETPLACE_PLUGIN_SLUGS.includes(appId)) return "unknown";
       if (!answer || !serverId || !agentId || answer.key !== keyOf(serverId, agentId)) return "unknown";
       const rows = answer.accounts.filter((row) => row.slug === appId);
       if (rows.length === 0) return "available";

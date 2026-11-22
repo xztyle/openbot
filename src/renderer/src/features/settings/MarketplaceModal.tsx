@@ -8,6 +8,7 @@ import { McpSignInRelayDialog } from "@openbot/ui/features/settings/McpSignInPag
 import { PluginUninstallDialog } from "@openbot/ui/features/settings/PluginUninstallDialog";
 import { createEffect, createSignal, Match, Show, Switch, untrack } from "solid-js";
 import { createMarketplaceController, type MarketplaceControllerProps } from "./marketplace-controller";
+import { MARKETPLACE_PLUGINS } from "./marketplace-plugin-catalog";
 
 export interface MarketplaceModalProps extends MarketplaceControllerProps {
   /**
@@ -28,6 +29,14 @@ export interface MarketplaceModalProps extends MarketplaceControllerProps {
   onInitialPluginSlugConsumed?: (() => void) | undefined;
   /** A dialog, or a page of the desktop window. */
   variant?: "dialog" | "page" | undefined;
+}
+
+/**
+ * The Marketplace with the plugin catalog, which comes in this chunk: the workspace that opens it
+ * does not load the catalog when it starts.
+ */
+export function CatalogMarketplaceModal(props: Omit<MarketplaceModalProps, "plugins">) {
+  return <MarketplaceModal {...props} plugins={MARKETPLACE_PLUGINS} />;
 }
 
 /** The Marketplace on this computer's or a joined server's data, with the dialogs it opens. */

@@ -27,11 +27,6 @@ export interface MarketplaceSuggestionChatCardProps {
   onOpenMarketplaceApp?: ((request: { appId: string; connect: boolean }) => void) | undefined;
 }
 
-/** True when this client can draw a card for the app: a catalog plugin, or a connector. */
-export function marketplaceSuggestionKnown(appId: string): boolean {
-  return isConnectorId(appId) || MARKETPLACE_PLUGINS.some((plugin) => plugin.slug === appId);
-}
-
 /**
  * The Marketplace app an agent suggested in this chat. Connect and the name open the app in
  * Marketplace, where the connect step and its dialogs run.

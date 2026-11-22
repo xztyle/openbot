@@ -88,8 +88,8 @@ import { useConversationViewScope } from "./conversation-scope";
 import type { ConversationProps } from "./conversation-types";
 import { useConversationWorkspaceLayout } from "./conversation-workspace-layout";
 import { agentSkillsMode } from "./installed-skills-source";
-import { MarketplaceSuggestionChatCard, marketplaceSuggestionKnown } from "./MarketplaceSuggestionChatCard";
 import { McpSignInChatCard } from "./McpSignInChatCard";
+import { marketplaceSuggestionKnown } from "./marketplace-suggestion-known";
 import { RoutineChatCard } from "./RoutineChatCard";
 import { createChatWebhookRoutines, RoutineWebhookChatCard } from "./RoutineWebhookChatCard";
 import { desktopChatEventRoutinesApi } from "./routine-webhooks-api";
@@ -1118,14 +1118,16 @@ export function ConversationTimeline() {
                                     }
                                   >
                                     {(suggestion) => (
-                                      <MarketplaceSuggestionChatCard
-                                        messageId={message()?.id ?? initialMessage.id}
-                                        appId={suggestion().appId}
-                                        connectors={props.connectors}
-                                        mcpServers={mcpServers()}
-                                        access={props.marketplaceAppAccess}
-                                        onOpenMarketplaceApp={props.onOpenMarketplaceApp}
-                                      />
+                                      <Loading>
+                                        <MarketplaceSuggestionChatCard
+                                          messageId={message()?.id ?? initialMessage.id}
+                                          appId={suggestion().appId}
+                                          connectors={props.connectors}
+                                          mcpServers={mcpServers()}
+                                          access={props.marketplaceAppAccess}
+                                          onOpenMarketplaceApp={props.onOpenMarketplaceApp}
+                                        />
+                                      </Loading>
                                     )}
                                   </Show>
                                 }
@@ -1899,6 +1901,10 @@ const QuestionPromptBubble = lazy(() =>
   import("@openbot/ui/components/QuestionPromptBubble").then((module) => ({ default: module.QuestionPromptBubble })),
 );
 const UiBlockPrompt = lazy(() => import("./UiBlockPrompt").then((module) => ({ default: module.UiBlockPrompt })));
+// With the plugin catalog and the connector pages it shows, the card is a chunk the app does not start with.
+const MarketplaceSuggestionChatCard = lazy(() =>
+  import("./MarketplaceSuggestionChatCard").then((module) => ({ default: module.MarketplaceSuggestionChatCard })),
+);
 
 /** A message whose text carries a card's marker shows the card under the text, not the marker. */
 function withoutCardMarker<T extends { body: string }>(message: T): T {

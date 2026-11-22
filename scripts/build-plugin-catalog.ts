@@ -163,15 +163,17 @@ export async function buildPluginCatalog(options?: {
   const paths = options?.paths ?? defaultPluginCatalogPaths();
   const { spec, plugins } = await loadPluginCatalog(paths.sourceRoot);
   const renderer = renderRendererModule(plugins);
+  const slugs = renderSlugsModule(plugins);
   const worker = renderWorkerModule(spec, plugins);
   const successors = renderSuccessorsModule(plugins);
   const mobile = renderMobileModule(plugins);
   const snapshot = renderSnapshot(spec, plugins);
   if (options?.check) {
-    await checkGenerated(paths, renderer, worker, successors, mobile, snapshot);
+    await checkGenerated(paths, renderer, slugs, worker, successors, mobile, snapshot);
     return { plugins: plugins.length, catalogVersion: spec.catalogVersion };
   }
   await writeFile(paths.rendererPath, renderer);
+  await writeFile(slugsPath(paths), slugs);
   await writeFile(paths.workerPath, worker);
   await writeFile(paths.successorsPath, successors);
   await mkdir(dirname(paths.mobilePath), { recursive: true });
@@ -759,6 +761,29 @@ export const MARKETPLACE_PLUGINS: MarketplacePluginDetail[] = [
 `;
 }
 
+/** The slug list sits next to the renderer catalog. */
+function slugsPath(paths: PluginCatalogPaths): string {
+  return join(dirname(paths.rendererPath), "marketplace-plugin-slugs.ts");
+}
+
+/**
+ * The slugs alone, for code that runs when the app starts: the full catalog is its own chunk,
+ * which loads when the Marketplace or a card needs it.
+ */
+function renderSlugsModule(plugins: PluginDetail[]): string {
+  return `/**
+ * The slugs of the plugins the marketplace offers, in catalog order. Code that runs when the app
+ * starts reads this list; the full catalog in marketplace-plugin-catalog.ts loads when it is needed.
+ *
+ * Generated from marketplace/plugin-catalog/ by scripts/build-plugin-catalog.ts.
+ * Do not edit by hand: run bun run marketplace:build:plugins, or
+ * bun run marketplace:build:plugins -- --check to verify.
+ */
+
+export const MARKETPLACE_PLUGIN_SLUGS: readonly string[] = ${tsLiteral(plugins.map((plugin) => plugin.slug))};
+`;
+}
+
 /**
  * The phone's copy. Mobile cannot import the renderer's types from `@openbot/ui`, so the module states
  * its own. The vendor icon addresses are left out: the phone loads each icon from the account
@@ -1013,6 +1038,7 @@ async function writeSnapshot(dir: string, files: Array<{ path: string; content: 
 async function checkGenerated(
   paths: PluginCatalogPaths,
   renderer: string,
+  slugs: string,
   worker: string,
   successors: string,
   mobile: string,
@@ -1020,12 +1046,14 @@ async function checkGenerated(
 ): Promise<void> {
   const expected = new Map<string, string>();
   expected.set(resolve(paths.rendererPath), renderer);
+  expected.set(resolve(slugsPath(paths)), slugs);
   expected.set(resolve(paths.workerPath), worker);
   expected.set(resolve(paths.successorsPath), successors);
   expected.set(resolve(paths.mobilePath), mobile);
   for (const file of snapshot) expected.set(resolve(join(paths.snapshotDir, file.path)), file.content);
   const actual = new Map<string, string>();
   actual.set(resolve(paths.rendererPath), await readFile(paths.rendererPath, "utf8"));
+  actual.set(resolve(slugsPath(paths)), await readFile(slugsPath(paths), "utf8").catch(() => ""));
   actual.set(resolve(paths.workerPath), await readFile(paths.workerPath, "utf8"));
   actual.set(resolve(paths.successorsPath), await readFile(paths.successorsPath, "utf8"));
   actual.set(resolve(paths.mobilePath), await readFile(paths.mobilePath, "utf8").catch(() => ""));

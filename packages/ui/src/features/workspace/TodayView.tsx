@@ -160,19 +160,41 @@ function greetingKey(hour: number) {
 export function createDecisionFocus(items: () => readonly unknown[]) {
   let section: HTMLElement | undefined;
   let held: { card: HTMLElement; index: number } | null = null;
+  /**
+   * The heading took the focus because no card was drawn. A list that the host sends again can be
+   * empty for a moment; when its cards come back soon, the one in the lost card's place takes it.
+   */
+  let parked: { heading: HTMLElement; index: number; until: number } | null = null;
   const cards = () => Array.from(section?.querySelectorAll<HTMLElement>(".ws-today-decision") ?? []);
+  const place = (index: number) => {
+    const rest = cards();
+    const card = rest[Math.max(0, Math.min(index, rest.length - 1))];
+    if (card) {
+      parked = null;
+      card.focus();
+      return;
+    }
+    const heading = section?.querySelector<HTMLElement>("h3");
+    if (!heading) return;
+    parked = { heading, index, until: Date.now() + 3_000 };
+    heading.focus();
+  };
   createEffect(
     () => items().length,
     () => {
-      const lost = held;
-      if (!lost || lost.card.isConnected) return;
-      held = null;
+      // The list changed in the frame before its cards are drawn: read them on the next frame.
       requestAnimationFrame(() => {
+        const waiting = parked;
+        if (waiting && document.activeElement === waiting.heading && Date.now() < waiting.until && cards().length) {
+          place(waiting.index);
+          return;
+        }
+        const lost = held;
+        if (!lost || lost.card.isConnected) return;
+        held = null;
         const active = document.activeElement;
         if (active && active !== document.body) return;
-        const rest = cards();
-        const target = rest[Math.min(lost.index, rest.length - 1)] ?? section?.querySelector<HTMLElement>("h3");
-        target?.focus();
+        place(lost.index);
       });
     },
   );

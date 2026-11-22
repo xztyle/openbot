@@ -26,6 +26,21 @@ export const FORK_OWNER_ROUTES: ReadonlySet<string> = new Set<string>([
   ...Object.values(AGENT_MAILBOXES_ROUTES),
 ]);
 
+/**
+ * The routes that run a model before they answer (a review, a dream, a test suite, a draft, a reality
+ * check): they get the browser client's long request limit, where the others get the usual one.
+ */
+export const FORK_LONG_ROUTES: ReadonlySet<string> = new Set<string>([
+  AGENT_EFFICIENCY_ROUTES.runReview,
+  AGENT_LEARNING_ROUTES.dream,
+  PORTFOLIO_ROUTES.runSuite,
+  PORTFOLIO_ROUTES.draftSuite,
+  PORTFOLIO_ROUTES.runReality,
+]);
+
+/** The limit of a long route, as the browser client's peer has it for every request. */
+export const FORK_LONG_ROUTE_TIMEOUT_MS = 10 * 60_000 + 30_000;
+
 export interface ForkRouteRequest {
   path: string;
   body: TeamProtocolV2Json;

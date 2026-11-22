@@ -51,6 +51,7 @@ describe("fork route handler", () => {
     await expect(call("remote-1", { path: AGENT_LEARNING_ROUTES.queue, body: {} })).resolves.toEqual({ entries: [] });
     await call("remote-1", { path: GUARDRAILS_ROUTES.resume, body: { scope: "agent", id: "a1" } });
     await call("remote-1", { path: OWNER_AWAY_ROUTES.active });
+    await call("remote-1", { path: AGENT_LEARNING_ROUTES.dream, body: { agentId: "a1" } });
     expect(sent).toEqual([
       { serverId: "remote-1", path: AGENT_LEARNING_ROUTES.queue, init: { method: "POST", body: {} } },
       {
@@ -60,6 +61,12 @@ describe("fork route handler", () => {
       },
       // A request without a body sends an empty one.
       { serverId: "remote-1", path: OWNER_AWAY_ROUTES.active, init: { method: "POST", body: {} } },
+      // A route that runs a model waits as long as the browser client does.
+      {
+        serverId: "remote-1",
+        path: AGENT_LEARNING_ROUTES.dream,
+        init: { method: "POST", body: { agentId: "a1" }, timeoutMs: 630_000 },
+      },
     ]);
   });
 

@@ -5,7 +5,11 @@
 
 import type { TeamCurrentCapability } from "@openbot/contracts/team-protocol/current";
 import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
-import { parseForkRouteRequest } from "@openbot/contracts/team-protocol/fork-routes";
+import {
+  FORK_LONG_ROUTE_TIMEOUT_MS,
+  FORK_LONG_ROUTES,
+  parseForkRouteRequest,
+} from "@openbot/contracts/team-protocol/fork-routes";
 import type { Effect } from "effect";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import type { ResponseDecoder } from "../remote-host-decoding";
@@ -41,7 +45,11 @@ export function forkRouteIpcHandlers({
           if (!remoteServers.supportsCapability(serverId, FORK_HOST_CAPABILITY))
             throw new Error("This server does not support this.");
           return runCauseEffect(
-            remoteServers.request(serverId, input.path, answer, { method: "POST", body: input.body }),
+            remoteServers.request(serverId, input.path, answer, {
+              method: "POST",
+              body: input.body,
+              ...(FORK_LONG_ROUTES.has(input.path) ? { timeoutMs: FORK_LONG_ROUTE_TIMEOUT_MS } : {}),
+            }),
           );
         },
       }),

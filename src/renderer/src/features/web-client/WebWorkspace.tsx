@@ -1696,16 +1696,18 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           },
         }),
   );
-  /** Every request that waits for the user on the host: its list, and the requests this tab holds. */
+  /**
+   * Every request that waits for the user on the host: its list, and the requests this tab holds. While
+   * the connection comes back (a phone that wakes, a host that restarts) the last list of the same host
+   * stays: a request still waits, and "nothing waits" would be wrong. Another host clears the lists.
+   */
   const needsYouList = createMemo(() =>
-    workspace.state.status !== "online"
-      ? []
-      : needsYouItems({
-          items: workspace.state.attentionItems,
-          prompts: workspace.state.prompts,
-          approvals: workspace.state.approvals,
-          takeovers: workspace.state.takeovers,
-        }),
+    needsYouItems({
+      items: workspace.state.attentionItems,
+      prompts: workspace.state.prompts,
+      approvals: workspace.state.approvals,
+      takeovers: workspace.state.takeovers,
+    }),
   );
   const sidebarActivity = createMemo(() => {
     // The agent conversation shows only the waits of the agent's own thread. A wait in a channel

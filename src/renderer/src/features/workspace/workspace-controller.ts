@@ -2423,6 +2423,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     setState((draft) => {
       draft.hintsSeen[id] = true;
     });
+    // The store shows the write after its flush: without it the hint came back after a reload.
+    flush();
     try {
       window.localStorage.setItem(HINTS_KEY, JSON.stringify(state.hintsSeen));
     } catch {

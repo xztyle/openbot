@@ -9,3 +9,5 @@
   leaves the image lower and the backdrop faded.
 - Phone and tablet: a text field in a message, such as a form an agent sends, selects text and offers
   Paste again. The message's touch rule, which turns off selection for the long press, reached it.
+- Phone: an edge swipe while a sheet or dialog is open no longer slides the conversation away under
+  it and back. The swipe goes back once nothing covers the conversation.

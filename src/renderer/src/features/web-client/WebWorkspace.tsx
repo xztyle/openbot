@@ -2401,8 +2401,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     return () => window.removeEventListener("popstate", stamp);
   });
   // A swipe from the left edge goes back one screen on a phone, in Safari and on the Home Screen.
+  // A sheet, a dialog or a page over the conversation takes no swipe: the screen under it would slide.
   createWebSwipeBack({
-    enabled: () => phone() && mobilePane() === "conversation",
+    enabled: () => phone() && mobilePane() === "conversation" && !overlayOpen(),
     surface: () => document.querySelector<HTMLElement>(".web-app-frame > .app-frame-panes"),
     onBack: () => window.history.back(),
   });

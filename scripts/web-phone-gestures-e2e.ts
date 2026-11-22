@@ -4,6 +4,7 @@
 //    space around the messages, opens nothing (the workspace's menu is a right-click on a computer);
 //    a text field inside a message, as an agent's form, still selects text;
 // 2. a sheet follows a finger that drags it down: a short drag springs back, a long one closes it;
+//    an edge swipe over an open sheet does not slide the conversation under it;
 // 3. in the image viewer, a pinch that starts while the first finger drifts down leaves the image in
 //    place and the backdrop at full strength.
 // It serves the web client on a mock host (`src/renderer/stories/web-client-inbox-harness.tsx`) at
@@ -243,6 +244,23 @@ try {
     const lift = await touch.dragDown(app, { x: box.x + box.width / 2, y: box.y + 8 }, 260);
     await lift();
     await sheet(app).waitFor({ state: "detached", timeout: 5000 });
+  });
+  await closeDialogs(app);
+  await step(app, "an edge swipe over an open sheet leaves the conversation in place", async () => {
+    await touch.hold(app, await centre(app, ".ws-message .ws-message-body"));
+    await sheet(app).waitFor({ timeout: 5000 });
+    await touch.send("touchStart", [{ x: 4, y: 600, id: 1 }]);
+    for (const x of [30, 80, 140, 200, 260]) {
+      await touch.send("touchMove", [{ x, y: 600, id: 1 }]);
+      await app.waitForTimeout(16);
+    }
+    const moved = await app.evaluate(
+      () => document.querySelector<HTMLElement>(".web-app-frame > .app-frame-panes")?.style.transform ?? "",
+    );
+    await touch.send("touchEnd", []);
+    await app.waitForTimeout(700);
+    assert.equal(moved, "", "The conversation slid under the sheet.");
+    assert.ok(await app.locator(".ws-message").first().isVisible(), "The conversation left.");
   });
   await closeDialogs(app);
 

@@ -5,10 +5,10 @@
 // a real host send (the request, its escalation to Chief, and `agent-attention-changed`).
 //
 // Computer: the Sales Outbound row shows with the Needs you mark; the top bar has "Needs you" with the
-// count; Chief's "Waiting for replies" row says what to do and where, with Take over; Activity starts
-// with the request; a row of the top bar list opens Sales Outbound's chat with the takeover card in
-// view; "I'm done" answers it once, and every mark goes. iPhone: the Home has the Needs you chip; it
-// opens Activity; the row opens the chat with the card in view; "I'm done" clears the chip.
+// count; Chief's "Waiting for replies" row says what to do and where, with Take over; Today lists the
+// request; a row of the top bar list opens Sales Outbound's chat with the takeover card in view; "I'm
+// done" answers it once, and every mark goes. iPhone: the Today tab counts it; the card's Take over
+// opens the chat with the card in view; "I'm done" clears Today.
 //
 // `bun scripts/needs-you-ui-e2e.ts [--browser-executable=<path>] [--headed]`
 // Writes .openbot-build/needs-you-ui-e2e/report.json and a screenshot of each checked screen.
@@ -125,6 +125,18 @@ const agentRow = (page: Page, name: string) =>
 const markedRow = (page: Page, name: string) =>
   page.locator(`[data-ws-conversation][data-needs-you]`).filter({ hasText: new RegExp(`^${name}`, "u") });
 const card = (page: Page) => page.getByText(english("prompt.browser.title.pending", { host: SITE }));
+/** The request's card in Today. */
+const todayCard = (page: Page, what: string) =>
+  page.getByRole("article", { name: english("workspace.needsYou.rowLabel", { name: "Sales Outbound", action: what }) });
+/** The Today tab of the phone, with the count of what waits. */
+const todayTab = (page: Page, count: number) =>
+  page.getByRole("navigation", { name: english("workspace.phone.tabs") }).getByRole("button", {
+    name:
+      count > 0
+        ? `${english("workspace.view.today")}, ${english("workspace.phone.waiting", { count })}`
+        : english("workspace.view.today"),
+    exact: true,
+  });
 const action = english("workspace.needsYou.action.takeoverAt", { site: SITE });
 
 async function request(page: Page): Promise<void> {
@@ -188,16 +200,14 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
     },
   );
 
-  await step(page, viewport, "Activity starts with the request", async () => {
+  await step(page, viewport, "Today lists the request", async () => {
     await page
       .locator("[data-ws-row]")
-      .filter({ hasText: english("workspace.view.activity") })
+      .filter({ hasText: english("workspace.view.today") })
       .first()
       .click();
-    await page
-      .getByRole("button", { name: english("workspace.needsYou.rowLabel", { name: "Sales Outbound", action }) })
-      .waitFor({ timeout: UI_WAIT_MS });
-    await shot(page, "desktop-activity");
+    await todayCard(page, action).waitFor({ timeout: UI_WAIT_MS });
+    await shot(page, "desktop-today");
   });
 
   await step(page, viewport, "a row of the top bar list opens the chat with the card in view", async () => {
@@ -236,47 +246,33 @@ async function phone(browser: Browser, origin: string): Promise<void> {
   const context = await browser.newContext(VIEWPORTS.phone);
   const page = await context.newPage();
   watch(page, viewport);
-  const chip = () => page.getByRole("button", { name: english("workspace.needsYou.buttonLabel", { count: 1 }) });
-  const chipList = () => page.getByRole("list", { name: english("workspace.phone.shortcuts") });
-
-  await step(page, viewport, "the Home has the Needs you chip once Sales Outbound asks", async () => {
-    await load(page, origin, "/app/general", chipList());
-    assert.equal(await agentRow(page, "Sales Outbound").count(), 0, "Sales Outbound has a row before it asks.");
+  await step(page, viewport, "Today counts the request once Sales Outbound asks", async () => {
+    await load(page, origin, "/app/general", todayTab(page, 0));
     await request(page);
-    await page.locator(".ws-phone-chip[data-urgent]").waitFor({ timeout: UI_WAIT_MS });
-    await markedRow(page, "Sales Outbound").waitFor({ timeout: UI_WAIT_MS });
-    await shot(page, "phone-home");
+    await todayTab(page, 1).waitFor({ timeout: UI_WAIT_MS });
+    await todayCard(page, action).waitFor({ timeout: UI_WAIT_MS });
+    await shot(page, "phone-today");
   });
 
-  await step(page, viewport, "the chip opens Activity, and its row opens the chat with the card in view", async () => {
-    await page.locator(".ws-phone-chip[data-urgent]").tap();
-    const row = page.getByRole("button", {
-      name: english("workspace.needsYou.rowLabel", { name: "Sales Outbound", action }),
-    });
-    await row.waitFor({ timeout: UI_WAIT_MS });
-    await shot(page, "phone-activity");
-    await row.tap();
+  await step(page, viewport, "the card's Take over opens the chat with the card in view", async () => {
+    await todayCard(page, action)
+      .getByRole("button", { name: new RegExp(`^${english("workspace.today.takeOver")}`, "u") })
+      .tap();
     await inView(page, card(page));
     await inView(page, button(page, english("prompt.browser.done")));
     await shot(page, "phone-card");
   });
 
-  await step(page, viewport, "I'm done clears the chip", async () => {
+  await step(page, viewport, "I'm done clears Today", async () => {
     await button(page, english("prompt.browser.done")).tap();
     await page.waitForFunction(() => Number(document.documentElement.dataset.needsYouAnswered ?? 0) > 0, null, {
       timeout: UI_WAIT_MS,
     });
     await card(page).waitFor({ state: "detached", timeout: UI_WAIT_MS });
-    // Back goes to Activity, where the request is gone too; Home has no chip.
+    // Back goes to Today, where the request is gone too, and the tab has no count.
     await button(page, english("workspace.layout.back")).first().tap();
-    await page.getByRole("region", { name: english("workspace.view.activity") }).waitFor({ timeout: UI_WAIT_MS });
-    assert.equal(await page.locator(".ws-needs-you-row").count(), 0, "Activity keeps the answered request.");
-    await page
-      .getByRole("button", { name: english("workspace.phone.home") })
-      .first()
-      .tap();
-    await chipList().waitFor({ timeout: UI_WAIT_MS });
-    assert.equal(await chip().count(), 0, "The chip stays after the answer.");
+    await todayTab(page, 0).waitFor({ timeout: UI_WAIT_MS });
+    assert.equal(await todayCard(page, action).count(), 0, "Today keeps the answered request.");
     await shot(page, "phone-cleared");
   });
   await context.close();
@@ -300,15 +296,22 @@ async function secretCard(browser: Browser, origin: string, viewport: ViewportNa
       page,
       origin,
       viewport === "phone" ? "/app/general" : "/app/general/dm/chief",
-      page.locator("[data-ws-conversation]").first(),
+      viewport === "phone" ? todayTab(page, 0) : page.locator("[data-ws-conversation]").first(),
     );
     await page.waitForFunction(() => document.documentElement.dataset.needsYouReady !== undefined, null, {
       timeout: UI_WAIT_MS,
     });
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("needs-you-harness", { detail: "secret" })));
+    if (viewport === "phone") {
+      // A phone opens on Today: the request's card is there, with Take over.
+      const today = todayCard(page, secretAction);
+      await today.waitFor({ timeout: UI_WAIT_MS });
+      await shot(page, `${viewport}-secret-list`);
+      await tap(today.getByRole("button", { name: new RegExp(`^${english("workspace.today.takeOver")}`, "u") }));
+      return;
+    }
     await markedRow(page, "Sales Outbound").waitFor({ timeout: UI_WAIT_MS });
-    if (viewport === "phone") await tap(page.locator(".ws-phone-chip[data-urgent]"));
-    else await page.getByRole("button", { name: english("workspace.needsYou.buttonLabel", { count: 1 }) }).click();
+    await page.getByRole("button", { name: english("workspace.needsYou.buttonLabel", { count: 1 }) }).click();
     const row = page.getByRole("button", {
       name: english("workspace.needsYou.rowLabel", { name: "Sales Outbound", action: secretAction }),
     });

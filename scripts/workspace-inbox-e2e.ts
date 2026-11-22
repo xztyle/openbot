@@ -2,9 +2,10 @@
 // conversation read, Undo, Escape on a group, mark all), Threads (unread first, Mark all as read),
 // Later (complete, the Completed tab, remove with Undo), the message search (the top bar field or
 // the phone's field, a modifier, a result that opens the exact message), Jump to (unread first, a
-// fuzzy name), Browse channels (preview before joining) and the shortcuts sheet. It serves the web
-// client on a mock host with unread messages (`src/renderer/stories/web-client-inbox-harness.tsx`)
-// and drives it in Chromium. No account service, host or provider is needed.
+// fuzzy name; with no name that matches, Enter searches), a result on an agent's step, accents in the
+// Channels tab, a recent search run from its words, Ctrl+F in a DM, Browse channels (preview before
+// joining) and the shortcuts sheet. It serves the web client on a mock host with unread messages
+// (`src/renderer/stories/web-client-inbox-harness.tsx`) and drives it in Chromium. No account service, host or provider is needed.
 //
 // `bun scripts/workspace-inbox-e2e.ts [--browser-executable=<path>] [--headed]`
 // Writes .openbot-build/workspace-inbox-e2e/report.json and a screenshot of each view.
@@ -144,6 +145,37 @@ async function load(page: Page, origin: string, path: string, title: string): Pr
   await heading.waitFor({ timeout: UI_WAIT_MS });
 }
 
+/** Runs a message search: the top bar's field on a computer, the search view's field on a phone. */
+async function searchFor(page: Page, desktop: boolean, query: string) {
+  if (desktop) {
+    await page.keyboard.press("Control+g");
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type(query);
+    await page.keyboard.press("Enter");
+  } else {
+    const back = page.getByRole("button", { name: english("workspace.layout.back"), exact: true }).first();
+    if (!(await page.locator(".ws-search").isVisible())) {
+      while (await back.isVisible()) await back.click();
+      await page
+        .getByRole("navigation", { name: english("workspace.phone.tabs") })
+        .getByRole("button", { name: new RegExp(`^${english("workspace.phone.chat")}`, "u") })
+        .click();
+      await page.getByRole("button", { name: english("workspace.app.menu.search"), exact: true }).click();
+      await page.keyboard.type(query);
+      await page.getByRole("option", { name: english("workspace.jump.searchMessages", { query }) }).click();
+    } else {
+      const field = page.getByRole("searchbox", { name: english("workspace.search.placeholder") });
+      await field.fill(query);
+      await field.press("Enter");
+    }
+  }
+  const results = page.locator(".ws-search");
+  await page
+    .getByRole("heading", { name: english("workspace.view.search"), exact: true })
+    .waitFor({ timeout: UI_WAIT_MS });
+  return results;
+}
+
 const button = (page: Page, name: string | RegExp) =>
   page.getByRole("button", { name, exact: typeof name === "string" });
 
@@ -268,7 +300,14 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
       const jump = page.getByRole("dialog", { name: english("workspace.app.switcher.title") });
       await jump.waitFor({ timeout: UI_WAIT_MS });
       await page.keyboard.type("rivals");
-      await jump.getByRole("option", { name: english("workspace.jump.searchMessages", { query: "rivals" }) }).click();
+      // No conversation is named "rivals": the first row searches, so the keyboard's Search key does
+      // (it once offered "Create #rivals" first).
+      await jump.getByRole("option", { name: english("workspace.jump.searchMessages", { query: "rivals" }) }).waitFor();
+      assert.equal(
+        await jump.getByRole("option").first().textContent(),
+        english("workspace.jump.searchMessages", { query: "rivals" }),
+      );
+      await page.keyboard.press("Enter");
       await page
         .getByRole("heading", { name: english("workspace.view.search"), exact: true })
         .waitFor({ timeout: UI_WAIT_MS });
@@ -307,6 +346,48 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
       await page.keyboard.press("Backspace");
       await page.getByRole("option", { name: "from:@Research rivals" }).waitFor({ timeout: UI_WAIT_MS });
       await page.keyboard.press("Escape");
+    });
+
+  // A result on an agent's step (shown only in debug mode) lights the answer of its turn; the
+  // Channels tab matches without accents.
+  await step(page, viewport, "A result on an agent's step lights its answer; accents fold", async () => {
+    const results = await searchFor(page, desktop, "release branch blockers");
+    await results.getByRole("button", { name: /Checking the release branch/u }).click();
+    await page
+      .locator(".ws-channel-pane [data-highlighted]", { hasText: "launch checklist" })
+      .waitFor({ timeout: UI_WAIT_MS });
+    await searchFor(page, desktop, "géneral");
+    await page.getByRole("tab", { name: english("workspace.search.channels", { count: 1 }) }).waitFor();
+  });
+  // Recent searches: a tap on the words runs one; on a phone an emptied field shows them again.
+  if (!desktop)
+    await step(page, viewport, "A recent search runs from its words", async () => {
+      const field = page.getByRole("searchbox", { name: english("workspace.search.placeholder") });
+      await field.fill("");
+      await field.press("Enter");
+      await page.locator(".ws-search-recent-run", { hasText: /^rivals$/u }).click();
+      await page
+        .getByRole("tab", { name: english("workspace.search.messages", { count: 2 }) })
+        .waitFor({ timeout: UI_WAIT_MS });
+    });
+  // Ctrl+F in a DM searches that DM: `in:@Ana`, not `in:#dm-ana`, which named no conversation.
+  if (desktop)
+    await step(page, viewport, "Ctrl+F in a DM searches it", async () => {
+      await page.keyboard.press("Control+k");
+      await page.keyboard.type("Ana");
+      await page.getByRole("option", { name: /^Ana/u }).first().waitFor({ timeout: UI_WAIT_MS });
+      await page.keyboard.press("Enter");
+      await page.waitForURL((url) => url.pathname.includes("/c/dm-ana"), { timeout: UI_WAIT_MS, waitUntil: "commit" });
+      await page.keyboard.press("Control+f");
+      const field = page.getByRole("combobox", {
+        name: english("workspace.search.placeholderIn", { name: "General" }),
+      });
+      assert.equal(await field.inputValue(), "in:@Ana ");
+      await page.keyboard.type("lunch");
+      await page.keyboard.press("Enter");
+      await page
+        .getByRole("tab", { name: english("workspace.search.messages", { count: 1 }) })
+        .waitFor({ timeout: UI_WAIT_MS });
     });
 
   // Jump to: unread conversations first with no text; a fuzzy name finds the channel.

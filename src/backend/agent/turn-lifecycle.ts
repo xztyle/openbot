@@ -28,6 +28,7 @@ import type { AgentClient } from "../agent-client";
 import type { AgentStore } from "../agent-store";
 import type { BrowserOperationError } from "../browser-effects";
 import type { BrowserDynamicToolHooks } from "../browser-tool-actions";
+import { hideChannelSecrets } from "../channel-secrets";
 import { isAgentTalkTurn } from "../conversation-read-store";
 import { newAssistantMessage, normalizeCompletionStatus } from "../conversation-snapshots";
 import { causeHelpers, reportOriginalFailure } from "../effect-boundary";
@@ -1588,7 +1589,11 @@ export class TurnLifecycle {
       snapshot.messages.push(message);
     }
     // Thinking is commentary: it is redacted and bounded here, the one place a finished item is stored.
-    if (isString(item.text)) message.text = item.phase === "commentary" ? boundedReasoningText(item.text) : item.text;
+    // An answer loses a key that the agent quoted, such as one it read from Secrets: the chat, the
+    // phone, the push text and the chat apps read this text.
+    if (isString(item.text))
+      message.text =
+        item.phase === "commentary" ? boundedReasoningText(item.text) : hideChannelSecrets(item.text, "agent");
     if (isString(item.phase)) message.itemType = item.phase;
     message.status = completed ? "completed" : "streaming";
     this.#itemTurns.set(item.id, turnId);

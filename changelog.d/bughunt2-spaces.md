@@ -5,3 +5,5 @@
 - Mark all as read in a space's menu marks only that space, its channels and its agents' chats. Before,
   it cleared every space, so the unread marks of the other spaces on the rail went too. Shift+Escape
   now also marks the agent chats of the space read, as its confirm says.
+- On a phone, the space switcher has Delete space for owners and admins. Before, a space could only be
+  deleted from the space rail on a computer.

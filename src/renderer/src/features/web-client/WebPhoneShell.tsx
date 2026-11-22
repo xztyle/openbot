@@ -30,6 +30,7 @@ import {
   SquarePen,
   Sunrise,
   Target,
+  Trash2,
   UserAvatar,
   Workflow,
 } from "@openbot/ui";
@@ -213,6 +214,14 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
               label: t("workspace.spaces.edit"),
               icon: <Pencil aria-hidden="true" />,
               onSelect: () => ws.openDialog({ kind: "space-edit", spaceId: current }),
+            },
+            // The rail's row menu has it on a computer; a phone has no rail.
+            {
+              id: "delete-space",
+              label: t("workspace.spaces.delete"),
+              icon: <Trash2 aria-hidden="true" />,
+              danger: true,
+              onSelect: () => ws.openDialog({ kind: "space-delete", spaceId: current }),
             },
           ]
         : []),

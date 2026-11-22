@@ -217,6 +217,59 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     };
   };
 
+  /**
+   * A file dropped on the conversation or the thread of this box goes up as a draft of it, as in
+   * Slack. Only the browser has an importer: the desktop preload imports a drop itself. A file
+   * dropped elsewhere in the app is refused, so the browser does not leave the app to show it.
+   */
+  let frame: HTMLDivElement | undefined;
+  onSettled(() => {
+    const importer = ws.channels.port().importAttachments;
+    if (!importer) return;
+    const carriesFiles = (event: DragEvent) => event.dataTransfer?.types.includes("Files") === true;
+    const accepts = (event: DragEvent) => {
+      const area = frame?.closest(".ws-layout-main, .ws-layout-panel");
+      return (
+        !props.disabled &&
+        !editing() &&
+        event.target instanceof Node &&
+        Boolean(area?.contains(event.target)) &&
+        // The thread panel sits in the main area on a phone: its own box takes the file.
+        !(
+          area?.classList.contains("ws-layout-main") &&
+          event.target instanceof Element &&
+          event.target.closest(".ws-layout-panel")
+        )
+      );
+    };
+    const over = (event: DragEvent) => {
+      if (!carriesFiles(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer && accepts(event)) event.dataTransfer.dropEffect = "copy";
+    };
+    const drop = (event: DragEvent) => {
+      if (!carriesFiles(event)) return;
+      event.preventDefault();
+      if (!accepts(event)) return;
+      const files = [...(event.dataTransfer?.files ?? [])];
+      if (!files.length) return;
+      lastComposer = id;
+      setError(null);
+      const target = key();
+      if (room(target) === 0) {
+        setError(t("composer.error.attachmentLimit", { limit: INPUT_LIMITS.attachments }));
+        return;
+      }
+      void upload(target, () => importer(files, room(target)));
+    };
+    window.addEventListener("dragover", over);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("drop", drop);
+    };
+  });
+
   /** A message with files may lose its text in an edit; the files stay. */
   const editedHasFiles = () => {
     const current = editing();
@@ -322,6 +375,7 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
       class="ws-composer-frame"
       data-picker-mount=""
       ref={(element) => {
+        frame = element;
         // The editor owns the keys; the frame only hears the ones it lets through.
         element.addEventListener("focusin", () => {
           lastComposer = id;

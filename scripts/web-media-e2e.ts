@@ -2,6 +2,8 @@
 // (`src/renderer/stories/web-client-media-harness.tsx`), on a computer and on an iPhone:
 // - a second pick of files that would take the message over the attachment limit keeps the limit,
 //   says why, and gives the rest back, since the host refuses such a message at Send;
+// - a file dropped on the conversation goes up as a draft of its box, and a file dropped elsewhere
+//   in the app does not make the browser leave the app to show it;
 // - on a phone, the image viewer steps with a swipe and closes with a drag down.
 //
 // `bun scripts/web-media-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>]`
@@ -97,6 +99,7 @@ async function newPage(browser: Browser, phone: boolean): Promise<Page> {
 
 const composer = (page: Page): Locator => page.locator(".ws-layout-main .ws-composer-frame").last();
 const chips = (page: Page) => composer(page).locator(".ws-composer-file");
+const uploads = (page: Page) => page.evaluate(() => window.harnessUploads?.slice() ?? []);
 
 function files(count: number, prefix: string) {
   return Array.from({ length: count }, (_, index) => ({
@@ -112,6 +115,24 @@ async function pick(page: Page, chosen: ReturnType<typeof files>) {
   await (await chooser).setFiles(chosen);
 }
 
+/** Drops a file on the element at `selector`, as a drag from the desktop does. Says whether the page took the drop. */
+function dropFile(page: Page, selector: string, name: string) {
+  return page.evaluate(
+    ([selector, name]) => {
+      const target = document.querySelector(selector);
+      if (!target) throw new Error(`Nothing at ${selector}.`);
+      const data = new DataTransfer();
+      data.items.add(new File(["dropped"], name, { type: "text/plain" }));
+      const over = new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: data });
+      target.dispatchEvent(over);
+      const drop = new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: data });
+      target.dispatchEvent(drop);
+      return { over: over.defaultPrevented, drop: drop.defaultPrevented };
+    },
+    [selector, name] as const,
+  );
+}
+
 async function checkLimit(browser: Browser) {
   const page = await newPage(browser, false);
   await pick(page, files(8, "first"));
@@ -123,6 +144,24 @@ async function checkLimit(browser: Browser) {
     assert.equal(await chips(page).count(), ATTACHMENT_LIMIT, "The box holds more files than a message may carry.");
     const error = await composer(page).locator(".ws-composer-error").textContent();
     assert.match(error ?? "", /at most 10 files/u);
+  });
+  await page.context().close();
+}
+
+async function checkDrop(browser: Browser) {
+  const page = await newPage(browser, false);
+  const dropped = await dropFile(page, ".ws-layout-main .ws-message-list, .ws-layout-main", "notas del café.txt");
+  await step("desktop", "a file dropped on the conversation goes up as a draft of its box", async () => {
+    assert.deepEqual(dropped, { over: true, drop: true }, "The browser would leave the app to show the file.");
+    await chips(page).first().waitFor({ timeout: 5_000 });
+    assert.match(await chips(page).first().innerText(), /notas del café\.txt/u);
+  });
+  const before = (await uploads(page)).length;
+  const elsewhere = await dropFile(page, ".ws-layout-sidebar", "otro.txt");
+  await page.waitForTimeout(500);
+  await step("desktop", "a file dropped on the sidebar stays in the app and attaches nowhere", async () => {
+    assert.equal(elsewhere.drop, true, "The browser would leave the app to show the file.");
+    assert.equal((await uploads(page)).length, before);
   });
   await page.context().close();
 }
@@ -184,6 +223,7 @@ try {
     ...(executablePath ? { executablePath } : {}),
   });
   await checkLimit(browser);
+  await checkDrop(browser);
   await checkPhoneViewer(browser);
 } finally {
   await browser?.close();

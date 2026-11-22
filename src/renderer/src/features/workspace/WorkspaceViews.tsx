@@ -10,6 +10,7 @@ import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSide
 import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, Loading, lazy, Match, Show, Switch } from "solid-js";
+import { actionToast } from "../../action-toast";
 import { WorkspaceAgentTalkView } from "./WorkspaceAgentTalk";
 import { WorkspaceDraftsView } from "./WorkspaceDrafts";
 import {
@@ -172,6 +173,7 @@ function isDirect(ws: ReturnType<typeof useWorkspace>, channelId: string): boole
 
 function WorkspaceActivityView() {
   const ws = useWorkspace();
+  const { t } = useText();
   // One agent's replies in one thread are one row, the newest, with how many there are.
   const groups = createMemo(() => {
     const byKey = new Map<string, { item: WorkspaceActivityItem; count: number; unread: boolean }>();
@@ -224,7 +226,11 @@ function WorkspaceActivityView() {
       onMarkAllRead={() => {
         // Only the conversations of the unread items that the list shows, not every channel.
         const channelIds = [...new Set(ws.spaceActivity().flatMap((item) => (item.unread ? [item.channelId] : [])))];
-        void ws.channels.markAllRead(channelIds).then(() => ws.refreshActivity());
+        void ws.channels.markAllRead(channelIds).then((done) => {
+          // Some may be read: the list reads again either way.
+          void ws.refreshActivity();
+          if (!done) actionToast.error(t("workspace.unreads.markFailed"));
+        });
       }}
       onBack={() => ws.back()}
       // What waits for the reader has its own place, Today; Activity keeps the messages.

@@ -19,3 +19,6 @@
   now replaces its toast instead of stacking a new one each time.
 - Money: when the costs do not load, the view says so with Retry. Before, it said "No cost in this
   period", as if the agents had cost nothing.
+- Mark all read in Unreads, Activity, a sidebar row's menu and the Mark all read shortcut now says
+  when the host refuses. Before, nothing was said, Unreads emptied as if everything was read, and
+  the shortcut's dialog closed as if it worked.

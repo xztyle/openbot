@@ -2644,6 +2644,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       env.markAgentsRead?.(agentIds) ?? Promise.resolve(),
     ]);
     if (channelsRead.status === "rejected") throw channelsRead.reason;
+    // The channels controller reports a failure as `false`, not as a throw.
+    if (!channelsRead.value) throw new Error(currentText().t("workspace.shortcuts.markAllFailed"));
   }
 
   /**

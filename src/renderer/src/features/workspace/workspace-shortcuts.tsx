@@ -249,7 +249,7 @@ export function WorkspaceKeyboard() {
         onConfirm={async () => {
           setMarking(true);
           try {
-            // The channels and the agent chats of the space, as the confirm says.
+            // The channels and the agent chats of the space, as the confirm says. A refusal throws.
             await ws.markSpaceRead();
             void ws.refreshActivity();
             ws.openDialog(null);

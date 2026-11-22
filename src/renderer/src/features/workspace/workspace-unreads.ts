@@ -170,11 +170,16 @@ export function createWorkspaceUnreads(deps: WorkspaceUnreadsDeps) {
     }
   }
 
-  /** Reads every group that shows. */
+  /** Reads every group that shows. A failure throws, in the reader's language, and keeps the groups. */
   async function markAllRead(): Promise<void> {
     const ids = state.groups.filter((group) => !group.read).map((group) => group.channelId);
     if (!ids.length) return;
-    await deps.channels.markAllRead(ids);
+    // The channels controller reports a failure as `false`, not as a throw.
+    if (!(await deps.channels.markAllRead(ids))) {
+      // Some conversations may be read now: the list reads again and keeps the others.
+      void load();
+      throw new Error(currentText().t("workspace.unreads.markFailed"));
+    }
     setState((draft) => {
       draft.groups = [];
       draft.snapshot = {};

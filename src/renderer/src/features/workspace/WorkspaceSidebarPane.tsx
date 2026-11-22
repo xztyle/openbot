@@ -154,10 +154,11 @@ export function useConversationMenu(): (id: string, extra?: readonly WorkspaceMe
               label: t("workspace.app.channel.markRead"),
               icon: <CheckCheck aria-hidden="true" />,
               onSelect: () =>
-                void ws.channels
-                  .markAllRead([id])
-                  .then(() => ws.refreshActivity())
-                  .catch(() => actionToast.error(t("workspace.unreads.markFailed"))),
+                // The channels controller reports a failure as `false`, not as a throw.
+                void ws.channels.markAllRead([id]).then((done) => {
+                  if (done) void ws.refreshActivity();
+                  else actionToast.error(t("workspace.unreads.markFailed"));
+                }),
             },
           ]
         : []),

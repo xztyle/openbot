@@ -245,13 +245,20 @@ export function TrustGuardrailsPanel(props: {
             <h4 class="trust-muted">{t("trust.guardrails.failovers")}</h4>
             <For each={view()?.failovers ?? []}>
               {(row) => (
-                <Button type="button" size="sm" variant="ghost" onClick={() => props.onOpenAgent(row.agentId)}>
-                  {props.name("agent", row.agentId)}:{" "}
-                  {t("trust.guardrails.failoverRow", {
-                    from: `${row.from.provider}/${row.from.model}`,
-                    to: `${row.to.provider}/${row.to.model}`,
-                  })}
-                </Button>
+                <div class="guardrails-row">
+                  <span class="guardrails-row-main">
+                    <strong>{props.name("agent", row.agentId)}</strong>
+                    <span class="trust-muted">
+                      {t("trust.guardrails.failoverRow", {
+                        from: `${row.from.provider}/${row.from.model}`,
+                        to: `${row.to.provider}/${row.to.model}`,
+                      })}
+                    </span>
+                  </span>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => props.onOpenAgent(row.agentId)}>
+                    {t("common.open")}
+                  </Button>
+                </div>
               )}
             </For>
           </Show>

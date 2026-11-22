@@ -194,20 +194,26 @@
     margin-bottom: 0;
   }
 
+  /* A phone on its side has the notch at one edge: the sheet runs under it, and its content keeps clear. */
   .ui-form-dialog-header {
-    padding: var(--openbot-space-3) var(--openbot-space-3) var(--openbot-space-2) var(--openbot-space-4);
+    padding: var(--openbot-space-3) max(var(--openbot-space-3), env(safe-area-inset-right, 0px)) var(--openbot-space-2)
+      max(var(--openbot-space-4), env(safe-area-inset-left, 0px));
   }
 
   .ui-form-dialog-body {
-    padding: var(--openbot-space-2) var(--openbot-space-4) var(--openbot-space-4);
+    padding: var(--openbot-space-2) max(var(--openbot-space-4), env(safe-area-inset-right, 0px)) var(--openbot-space-4)
+      max(var(--openbot-space-4), env(safe-area-inset-left, 0px));
   }
 
   .ui-form-dialog-error.ui-alert {
-    margin: 0 var(--openbot-space-4) var(--openbot-space-3);
+    margin: 0 max(var(--openbot-space-4), env(safe-area-inset-right, 0px)) var(--openbot-space-3)
+      max(var(--openbot-space-4), env(safe-area-inset-left, 0px));
   }
 
   .ui-form-dialog-footer {
-    padding: var(--openbot-space-3) var(--openbot-space-4) max(var(--openbot-space-3), env(safe-area-inset-bottom, 0px));
+    padding: var(--openbot-space-3) max(var(--openbot-space-4), env(safe-area-inset-right, 0px))
+      max(var(--openbot-space-3), env(safe-area-inset-bottom, 0px))
+      max(var(--openbot-space-4), env(safe-area-inset-left, 0px));
   }
 
   /* Thumb-sized actions. */

@@ -151,6 +151,11 @@ body {
     max-height: calc(var(--web-viewport-height, 100dvh) - var(--openbot-space-6));
     padding-bottom: var(--openbot-space-2);
   }
+
+  /* The keyboard covers the home indicator, so the actions of a form need no room for it. */
+  html[data-web-keyboard] .ui-form-dialog-footer {
+    padding-bottom: var(--openbot-space-3);
+  }
 }
 
 /*
@@ -165,6 +170,38 @@ body {
 
   html[data-web-keyboard] .web-app .conversation-scroll {
     padding-bottom: 0;
+  }
+
+  /*
+   * A form keeps its title, its fields and its actions. The handle, the description and the gap
+   * over the sheet step aside: with them, the header and the actions took the whole visible part,
+   * and the field being typed in was under the actions.
+   */
+  html[data-web-keyboard] .ui-sheet-overlay:has(> .ui-form-dialog) {
+    padding-top: 0;
+  }
+
+  html[data-web-keyboard] .ui-form-dialog {
+    border-radius: 0;
+  }
+
+  html[data-web-keyboard] .ui-form-dialog > .ui-sheet-handle,
+  html[data-web-keyboard] .ui-form-dialog-description {
+    display: none;
+  }
+
+  html[data-web-keyboard] .ui-form-dialog-header {
+    align-items: center;
+    padding-block: var(--openbot-space-1) 0;
+  }
+
+  html[data-web-keyboard] .ui-form-dialog-body {
+    gap: var(--openbot-space-2);
+    padding-block: var(--openbot-space-1) var(--openbot-space-2);
+  }
+
+  html[data-web-keyboard] .ui-form-dialog-footer {
+    padding-block: var(--openbot-space-1);
   }
 }
 

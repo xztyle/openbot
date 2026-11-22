@@ -524,6 +524,43 @@ assert.ok(address && typeof address === "object", "The harness server has no por
 const origin = `http://127.0.0.1:${address.port}`;
 let browser: Browser | null = null;
 
+/**
+ * A form (New channel) on a phone on its side: the sheet runs under the notch and its content keeps
+ * clear of it, and with the keyboard open the field being typed in and the actions show in the
+ * visible part, about 180px high. Before, the header and the actions took all of it, and the field
+ * was under the actions.
+ */
+async function checkLandscapeForm(browser: Browser, page: Page, phone: Phone, url: string): Promise<void> {
+  await page.goto(url, { waitUntil: "commit" });
+  const start = page.getByRole("button", { name: "Ask or start" });
+  await start.waitFor({ timeout: UI_WAIT_MS });
+  await settle(page);
+  await start.tap();
+  await page.getByRole("button", { name: "New channel" }).tap();
+  const field = page.locator(".ui-form-dialog-body input").first();
+  await field.waitFor({ timeout: UI_WAIT_MS });
+  await field.tap();
+  await page.keyboard.type("launch");
+  await settle(page);
+  await phoneShot(browser, page, phone, "05-form-keyboard");
+  await step(phone, "landscape form: clear of the notch, the field and the actions over the keyboard", async () => {
+    assert.equal((await visible(page)).open, true, "The keyboard model did not open.");
+    const typed = await box(page, field);
+    assert.ok(typed.top >= 0 && typed.bottom <= typed.view.height, "The field is out of the visible part.");
+    const covered = await field.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return hit !== null && hit !== element && !element.contains(hit);
+    });
+    assert.equal(covered, false, "Something covers the field.");
+    const next = await box(page, page.locator(".ui-form-dialog-footer .ui-button").last());
+    assert.ok(next.bottom <= next.view.height, "The actions are under the keyboard.");
+    const title = await page.locator(".ui-form-dialog-title").boundingBox();
+    assert.ok(title && title.x >= phone.insets.left, `The title starts at ${title?.x}px, under the notch.`);
+  });
+  await page.keyboard.press("Escape");
+}
+
 const LONG_DRAFT = Array.from(
   { length: 9 },
   (_, line) => `Line ${line + 1} of a long draft that wraps on a phone screen`,
@@ -668,6 +705,7 @@ try {
     await step(phone, "rotated back with the keyboard open: the box stays on the keyboard", () =>
       checkKeyboardLayout(page, phone),
     );
+    await checkLandscapeForm(browser, page, phone, `${origin}/app`);
     await context.close();
   }
 

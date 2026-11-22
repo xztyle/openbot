@@ -670,6 +670,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   constructor(options: AgentServiceOptions) {
     super();
+    // The main process subscribes one listener to `event` per feature (renderers, trace, routines,
+    // Motion, learning, guardrails, resources...): a dozen is the design, not a leak. The warning at
+    // Node's default of 10 showed in the live log after each start.
+    this.setMaxListeners(40);
     const {
       store,
       mailbox,

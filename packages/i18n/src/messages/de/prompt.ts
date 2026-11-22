@@ -56,7 +56,6 @@ export const messages = {
   "prompt.browser.title.cancelled": "Schritt auf {host} abgebrochen",
   "prompt.browser.title.pending": "Schließe den Schritt auf {host} ab",
   "prompt.browser.cancelled": "Abgebrochen",
-  "prompt.browser.actionRequired": "Aktion erforderlich",
   "prompt.browser.reload":
     "Schließe die Anmeldung ab und lade die Browserseite neu, bevor du „Fertig“ wählst. Die Seitenprüfung bleibt gesperrt, bis die Seite neu geladen wurde.",
   "prompt.browser.continuing": "{name} fährt fort.",

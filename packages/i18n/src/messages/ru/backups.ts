@@ -1,0 +1,51 @@
+import type { PartialTranslation } from "../../message";
+import type { messages as source } from "../en/backups";
+
+export const messages = {
+  "backups.sectionTitle": "Резервные копии",
+  "backups.sectionDescription": "Ночные резервные копии этого сервера и восстановление.",
+  "backups.title": "Резервные копии {name}",
+  "backups.description":
+    "Каждая копия содержит базу данных, настройки, ключи, хранилище, аккаунты провайдеров, рабочие области агентов, пространства и доску Motion. Неизменённые файлы общие для всех копий, поэтому ночная копия добавляет только то, что изменилось.",
+  "backups.backUpNow": "Создать копию сейчас",
+  "backups.loadFailed": "Не удалось прочитать резервные копии {name}.",
+  "backups.createFailed": "Резервное копирование не началось",
+  "backups.checkFailed": "Проверка восстановления не прошла.",
+  "backups.restoreFailed": "Восстановление не началось.",
+  "backups.notSetUpTitle": "Резервное копирование на этом сервере не настроено",
+  "backups.notSetUpDescription":
+    "Администратор сервера устанавливает службу резервного копирования (scripts/backup-broker) и подключает её сокет. После этого здесь появится список копий.",
+  "backups.schedule": "Каждую ночь в {time} (время сервера)",
+  "backups.retention": "Хранит ежедневных копий: {daily}, еженедельных: {weekly}.",
+  "backups.disk": "Свободно {free} из {total}.",
+  "backups.offsiteOn": "Зашифрованная копия отправляется во внешнее хранилище.",
+  "backups.offsiteOff": "Внешней копии нет.",
+  "backups.running": "Создание копии…",
+  "backups.restoring": "Восстановление {id}… Сервер перезапускается; Atelier подключится снова сам.",
+  "backups.lastRestoreOk": "{id} восстановлена",
+  "backups.lastRestoreFailed": "Не удалось восстановить {id}",
+  "backups.safetyBackup": "Состояние до восстановления сохранено в копии {id}.",
+  "backups.empty": "Резервных копий пока нет.",
+  "backups.row": "{reason} · {size} · добавлено {added}",
+  "backups.skipped": "Не включено: {parts}.",
+  "backups.reason.nightly": "Ночная",
+  "backups.reason.manual": "Ручная",
+  "backups.reason.preRestore": "Перед восстановлением",
+  "backups.reason.other": "Резервная копия",
+  "backups.status.ok": "Полная",
+  "backups.status.partial": "Частичная",
+  "backups.status.failed": "Ошибка",
+  "backups.status.running": "Выполняется",
+  "backups.restore": "Восстановить…",
+  "backups.restoreTitle": "Восстановить {name}?",
+  "backups.restoreDescription":
+    "Сервер вернётся к состоянию на {when}. Сервер и все агенты остановятся, пройдёт восстановление, затем всё запустится снова. Сообщения, настройки и работа с того момента будут заменены; сначала создаётся страховочная копия текущего состояния.",
+  "backups.restoreConfirm": "Восстановить",
+  "backups.restoreStarting": "Запуск…",
+  "backups.restoreStarted": "{name} восстанавливается и перезапустится",
+  "backups.checking": "Проверка копии…",
+  "backups.includeSpaces":
+    "Также восстановить папки пространств (изменённые файлы вернутся; более новые файлы останутся)",
+  "backups.typeToConfirm": "Введите {id} для подтверждения.",
+  "backups.countRow": "{table}: сейчас {now}, в копии {backup}",
+} as const satisfies PartialTranslation<typeof source>;

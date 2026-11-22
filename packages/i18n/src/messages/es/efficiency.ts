@@ -20,7 +20,6 @@ export const messages = {
   "efficiency.sleep.spaceWake": "Despertar el espacio",
   "efficiency.sleep.done": { one: "{count} agente dormido", other: "{count} agentes dormidos" },
   "efficiency.sleep.woke": { one: "{count} agente despierto", other: "{count} agentes despiertos" },
-  "efficiency.sleep.badge": "Dormido",
   "efficiency.sleep.failed": "No se pudo cambiar el sueño",
   "efficiency.review.title": "Revisión semanal",
   "efficiency.review.none": "Aún no hay revisión. Se hace tras una semana con trabajo.",

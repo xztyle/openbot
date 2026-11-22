@@ -1,0 +1,51 @@
+import type { PartialTranslation } from "../../message";
+import type { messages as source } from "../en/backups";
+
+export const messages = {
+  "backups.sectionTitle": "Sauvegardes",
+  "backups.sectionDescription": "Sauvegardes nocturnes de ce serveur, et restauration.",
+  "backups.title": "Sauvegardes de {name}",
+  "backups.description":
+    "Chaque sauvegarde contient la base de données, les réglages, les clés, le coffre, les comptes des fournisseurs, les espaces de travail des agents, les espaces et le tableau Motion. Les fichiers inchangés sont partagés entre les sauvegardes : une sauvegarde nocturne n'ajoute que ce qui a changé.",
+  "backups.backUpNow": "Sauvegarder maintenant",
+  "backups.loadFailed": "Impossible de lire les sauvegardes de {name}.",
+  "backups.createFailed": "La sauvegarde n'a pas démarré",
+  "backups.checkFailed": "La vérification de la restauration a échoué.",
+  "backups.restoreFailed": "La restauration n'a pas démarré.",
+  "backups.notSetUpTitle": "Les sauvegardes ne sont pas configurées sur ce serveur",
+  "backups.notSetUpDescription":
+    "L'opérateur du serveur installe le service de sauvegarde (scripts/backup-broker) et monte son socket. Cette section liste ensuite les sauvegardes.",
+  "backups.schedule": "Chaque nuit à {time} (heure du serveur)",
+  "backups.retention": "Conserve {daily} sauvegardes quotidiennes et {weekly} hebdomadaires.",
+  "backups.disk": "{free} libres sur {total}.",
+  "backups.offsiteOn": "Une copie chiffrée est envoyée hors site.",
+  "backups.offsiteOff": "Aucune copie hors site.",
+  "backups.running": "Sauvegarde en cours…",
+  "backups.restoring": "Restauration de {id}… Le serveur redémarre ; Atelier se reconnecte tout seul.",
+  "backups.lastRestoreOk": "{id} restaurée",
+  "backups.lastRestoreFailed": "La restauration de {id} a échoué",
+  "backups.safetyBackup": "L'état précédent est la sauvegarde {id}.",
+  "backups.empty": "Aucune sauvegarde pour l'instant.",
+  "backups.row": "{reason} · {size} · {added} ajoutés",
+  "backups.skipped": "Non inclus : {parts}.",
+  "backups.reason.nightly": "Nocturne",
+  "backups.reason.manual": "Manuelle",
+  "backups.reason.preRestore": "Avant une restauration",
+  "backups.reason.other": "Sauvegarde",
+  "backups.status.ok": "Complète",
+  "backups.status.partial": "Partielle",
+  "backups.status.failed": "Échouée",
+  "backups.status.running": "En cours",
+  "backups.restore": "Restaurer…",
+  "backups.restoreTitle": "Restaurer {name} ?",
+  "backups.restoreDescription":
+    "Le serveur revient à l'état du {when}. Le serveur et tous les agents s'arrêtent, la restauration a lieu, puis tout redémarre. Les messages, réglages et travaux depuis cette date sont remplacés ; une sauvegarde de sécurité de l'état actuel est faite d'abord.",
+  "backups.restoreConfirm": "Restaurer",
+  "backups.restoreStarting": "Démarrage…",
+  "backups.restoreStarted": "{name} est en cours de restauration et va redémarrer",
+  "backups.checking": "Vérification de la sauvegarde…",
+  "backups.includeSpaces":
+    "Restaurer aussi les dossiers des espaces (les fichiers modifiés reviennent ; les fichiers plus récents restent)",
+  "backups.typeToConfirm": "Saisissez {id} pour confirmer.",
+  "backups.countRow": "{table} : {now} maintenant, {backup} dans la sauvegarde",
+} as const satisfies PartialTranslation<typeof source>;

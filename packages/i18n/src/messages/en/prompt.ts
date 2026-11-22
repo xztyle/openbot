@@ -57,7 +57,6 @@ export const messages = defineMessages("prompt", {
   "prompt.browser.title.cancelled": "Step cancelled on {host}",
   "prompt.browser.title.pending": "Complete the step on {host}",
   "prompt.browser.cancelled": "Cancelled",
-  "prompt.browser.actionRequired": "Action required",
   "prompt.browser.reload":
     "Finish sign-in, then reload the browser page before choosing “I’m done”. Page inspection stays blocked until the page reloads.",
   "prompt.browser.continuing": "{name} is continuing.",

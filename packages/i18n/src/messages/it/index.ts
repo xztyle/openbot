@@ -6,6 +6,7 @@ import { messages as agentSettings } from "./agentSettings";
 import { messages as agentTemplate } from "./agentTemplate";
 import { messages as app } from "./app";
 import { messages as attachment } from "./attachment";
+import { messages as backups } from "./backups";
 import { messages as billing } from "./billing";
 import { messages as browser } from "./browser";
 import { messages as channel } from "./channel";
@@ -17,6 +18,7 @@ import { messages as conversation } from "./conversation";
 import { messages as customProvider } from "./customProvider";
 import { messages as diagram } from "./diagram";
 import { messages as dialog } from "./dialog";
+import { messages as efficiency } from "./efficiency";
 import { messages as files } from "./files";
 import { messages as importAgent } from "./import";
 import { messages as insight } from "./insight";
@@ -47,6 +49,7 @@ import { source } from "./source";
 import { messages as startup } from "./startup";
 import { messages as storageHygiene } from "./storageHygiene";
 import { messages as team } from "./team";
+import { messages as trust } from "./trust";
 import { messages as uiBlock } from "./uiBlock";
 import { messages as update } from "./update";
 import { messages as usage } from "./usage";
@@ -77,6 +80,7 @@ export const it = {
   ...startup,
   ...window,
   ...settings,
+  ...backups,
   ...billing,
   ...provider,
   ...app,
@@ -122,6 +126,8 @@ export const it = {
   ...uiBlock,
   ...sitePage,
   ...workspace,
+  ...efficiency,
   ...portfolio,
   ...storageHygiene,
+  ...trust,
 } as const satisfies PartialTranslation<AppMessages>;

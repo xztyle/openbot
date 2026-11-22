@@ -25,6 +25,7 @@ import { useText } from "../../text";
 import { cx } from "../../utils";
 import { createUnsavedGuard, DiscardChangesDialog } from "../settings/unsaved-changes";
 import { GateIcon } from "./LoopGateIcon";
+import { LOOP_GATE_LABEL, LOOP_OUTCOME_LABEL } from "./loop-labels";
 import { WorkspaceSelect } from "./WorkspaceSelect";
 import type { WorkspaceMember } from "./workspace-types";
 
@@ -232,11 +233,11 @@ export function LoopEditor(props: LoopEditorProps): JSX.Element {
   ];
   const gateOptions = () => [
     { value: NONE, label: t("workspace.loops.editor.noGate") },
-    ...LOOP_GATE_KINDS.map((kind) => ({ value: kind, label: t(`workspace.loops.gate.${kind}`) })),
+    ...LOOP_GATE_KINDS.map((kind) => ({ value: kind, label: t(LOOP_GATE_LABEL[kind]) })),
   ];
   const outcomeOptions = () => [
     { value: NONE, label: t("workspace.loops.editor.notEnd") },
-    ...LOOP_OUTCOMES.map((outcome) => ({ value: outcome, label: t(`workspace.loops.outcome.${outcome}`) })),
+    ...LOOP_OUTCOMES.map((outcome) => ({ value: outcome, label: t(LOOP_OUTCOME_LABEL[outcome]) })),
   ];
 
   return (

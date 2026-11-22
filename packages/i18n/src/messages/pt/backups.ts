@@ -1,0 +1,51 @@
+import type { PartialTranslation } from "../../message";
+import type { messages as source } from "../en/backups";
+
+export const messages = {
+  "backups.sectionTitle": "Backups",
+  "backups.sectionDescription": "Backups noturnos deste servidor e restauração.",
+  "backups.title": "Backups de {name}",
+  "backups.description":
+    "Cada backup guarda o banco de dados, as configurações, as chaves, o cofre, as contas de provedores, os espaços de trabalho dos agentes, os espaços e o quadro do Motion. Arquivos sem alterações são compartilhados entre backups, então um backup noturno só adiciona o que mudou.",
+  "backups.backUpNow": "Fazer backup agora",
+  "backups.loadFailed": "Não foi possível ler os backups de {name}.",
+  "backups.createFailed": "O backup não começou",
+  "backups.checkFailed": "A verificação da restauração falhou.",
+  "backups.restoreFailed": "A restauração não começou.",
+  "backups.notSetUpTitle": "Os backups não estão configurados neste servidor",
+  "backups.notSetUpDescription":
+    "O operador do servidor instala o serviço de backup (scripts/backup-broker) e monta o socket dele. Depois, esta seção lista os backups.",
+  "backups.schedule": "Toda noite às {time} (horário do servidor)",
+  "backups.retention": "Mantém {daily} backups diários e {weekly} semanais.",
+  "backups.disk": "{free} livres de {total}.",
+  "backups.offsiteOn": "Uma cópia criptografada vai para fora do local.",
+  "backups.offsiteOff": "Sem cópia externa.",
+  "backups.running": "Fazendo backup…",
+  "backups.restoring": "Restaurando {id}… O servidor reinicia; o Atelier se reconecta sozinho.",
+  "backups.lastRestoreOk": "{id} restaurado",
+  "backups.lastRestoreFailed": "A restauração de {id} falhou",
+  "backups.safetyBackup": "O estado anterior é o backup {id}.",
+  "backups.empty": "Nenhum backup ainda.",
+  "backups.row": "{reason} · {size} · {added} adicionados",
+  "backups.skipped": "Não incluído: {parts}.",
+  "backups.reason.nightly": "Noturno",
+  "backups.reason.manual": "Manual",
+  "backups.reason.preRestore": "Antes de uma restauração",
+  "backups.reason.other": "Backup",
+  "backups.status.ok": "Completo",
+  "backups.status.partial": "Parcial",
+  "backups.status.failed": "Falhou",
+  "backups.status.running": "Em andamento",
+  "backups.restore": "Restaurar…",
+  "backups.restoreTitle": "Restaurar {name}?",
+  "backups.restoreDescription":
+    "Isso volta o servidor para {when}. O servidor e todos os agentes param, a restauração acontece e tudo inicia de novo. Mensagens, configurações e trabalho desde então são substituídos; antes, é feito um backup de segurança do estado atual.",
+  "backups.restoreConfirm": "Restaurar",
+  "backups.restoreStarting": "Iniciando…",
+  "backups.restoreStarted": "{name} está sendo restaurado e vai reiniciar",
+  "backups.checking": "Verificando o backup…",
+  "backups.includeSpaces":
+    "Restaurar também as pastas dos espaços (arquivos alterados voltam; arquivos mais novos ficam)",
+  "backups.typeToConfirm": "Digite {id} para confirmar.",
+  "backups.countRow": "{table}: {now} agora, {backup} no backup",
+} as const satisfies PartialTranslation<typeof source>;

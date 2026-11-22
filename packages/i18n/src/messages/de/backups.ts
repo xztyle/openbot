@@ -1,0 +1,51 @@
+import type { PartialTranslation } from "../../message";
+import type { messages as source } from "../en/backups";
+
+export const messages = {
+  "backups.sectionTitle": "Backups",
+  "backups.sectionDescription": "Nächtliche Backups dieses Servers und Wiederherstellung.",
+  "backups.title": "Backups von {name}",
+  "backups.description":
+    "Jedes Backup enthält die Datenbank, die Einstellungen, die Schlüssel, den Tresor, die Anbieterkonten, die Arbeitsbereiche der Agenten, die Spaces und das Motion-Board. Unveränderte Dateien teilen sich die Backups, daher fügt ein nächtliches Backup nur hinzu, was sich geändert hat.",
+  "backups.backUpNow": "Jetzt sichern",
+  "backups.loadFailed": "Die Backups von {name} konnten nicht gelesen werden.",
+  "backups.createFailed": "Das Backup wurde nicht gestartet",
+  "backups.checkFailed": "Die Prüfung der Wiederherstellung ist fehlgeschlagen.",
+  "backups.restoreFailed": "Die Wiederherstellung wurde nicht gestartet.",
+  "backups.notSetUpTitle": "Auf diesem Server sind keine Backups eingerichtet",
+  "backups.notSetUpDescription":
+    "Der Betreiber des Servers installiert den Backup-Dienst (scripts/backup-broker) und bindet seinen Socket ein. Danach listet dieser Abschnitt die Backups auf.",
+  "backups.schedule": "Jede Nacht um {time} (Serverzeit)",
+  "backups.retention": "Behält {daily} tägliche und {weekly} wöchentliche Backups.",
+  "backups.disk": "{free} von {total} frei.",
+  "backups.offsiteOn": "Eine verschlüsselte Kopie wird extern gespeichert.",
+  "backups.offsiteOff": "Keine externe Kopie.",
+  "backups.running": "Sicherung läuft…",
+  "backups.restoring": "{id} wird wiederhergestellt… Der Server startet neu; Atelier verbindet sich von selbst wieder.",
+  "backups.lastRestoreOk": "{id} wiederhergestellt",
+  "backups.lastRestoreFailed": "Die Wiederherstellung von {id} ist fehlgeschlagen",
+  "backups.safetyBackup": "Der Zustand davor ist Backup {id}.",
+  "backups.empty": "Noch keine Backups.",
+  "backups.row": "{reason} · {size} · {added} hinzugefügt",
+  "backups.skipped": "Nicht enthalten: {parts}.",
+  "backups.reason.nightly": "Nächtlich",
+  "backups.reason.manual": "Manuell",
+  "backups.reason.preRestore": "Vor einer Wiederherstellung",
+  "backups.reason.other": "Backup",
+  "backups.status.ok": "Vollständig",
+  "backups.status.partial": "Teilweise",
+  "backups.status.failed": "Fehlgeschlagen",
+  "backups.status.running": "Läuft",
+  "backups.restore": "Wiederherstellen…",
+  "backups.restoreTitle": "{name} wiederherstellen?",
+  "backups.restoreDescription":
+    "Damit wird der Server auf den Stand von {when} zurückgesetzt. Der Server und alle Agenten werden gestoppt, wiederhergestellt und neu gestartet. Nachrichten, Einstellungen und Arbeit seitdem werden ersetzt; vorher wird ein Sicherheits-Backup des aktuellen Zustands erstellt.",
+  "backups.restoreConfirm": "Wiederherstellen",
+  "backups.restoreStarting": "Wird gestartet…",
+  "backups.restoreStarted": "{name} wird wiederhergestellt und startet neu",
+  "backups.checking": "Backup wird geprüft…",
+  "backups.includeSpaces":
+    "Auch Space-Ordner wiederherstellen (geänderte Dateien werden zurückgesetzt, neuere Dateien bleiben)",
+  "backups.typeToConfirm": "Gib {id} zur Bestätigung ein.",
+  "backups.countRow": "{table}: jetzt {now}, im Backup {backup}",
+} as const satisfies PartialTranslation<typeof source>;

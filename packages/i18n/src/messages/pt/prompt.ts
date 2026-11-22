@@ -55,7 +55,6 @@ export const messages = {
   "prompt.browser.title.cancelled": "Etapa cancelada ({host})",
   "prompt.browser.title.pending": "Conclua a etapa ({host})",
   "prompt.browser.cancelled": "Cancelado",
-  "prompt.browser.actionRequired": "Ação necessária",
   "prompt.browser.reload":
     "Conclua o login e recarregue a página do navegador antes de escolher “Terminei”. A inspeção da página continua bloqueada até que a página seja recarregada.",
   "prompt.browser.continuing": "{name} está continuando.",

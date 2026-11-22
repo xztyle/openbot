@@ -54,7 +54,6 @@ export const messages = {
   "prompt.browser.title.cancelled": "{host} üzerinde adım iptal edildi",
   "prompt.browser.title.pending": "{host} üzerinde adımı tamamlayın",
   "prompt.browser.cancelled": "İptal edildi",
-  "prompt.browser.actionRequired": "Eylem gerekiyor",
   "prompt.browser.reload":
     "Oturum açma işlemini tamamlayın, ardından “Tamamladım” seçeneğini seçmeden önce tarayıcı sayfasını yenileyin. Sayfa incelemesi, sayfa yeniden yüklenene kadar engellenir.",
   "prompt.browser.continuing": "{name} devam ediyor.",

@@ -56,7 +56,6 @@ export const messages = {
   "prompt.browser.title.cancelled": "Étape annulée sur {host}",
   "prompt.browser.title.pending": "Terminez l’étape sur {host}",
   "prompt.browser.cancelled": "Annulée",
-  "prompt.browser.actionRequired": "Action requise",
   "prompt.browser.reload":
     "Terminez la connexion, puis rechargez la page du navigateur avant de choisir « J’ai terminé ». L’inspection de la page reste bloquée jusqu’au rechargement.",
   "prompt.browser.continuing": "{name} continue.",

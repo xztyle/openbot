@@ -39,6 +39,7 @@ import { cx } from "../../utils";
 import { EmptyState, ErrorState, LoadingState } from "../../view-state";
 import { LoopEditor } from "./LoopEditor";
 import { GateIcon } from "./LoopGateIcon";
+import { LOOP_EXPERIMENT_LABEL, LOOP_GATE_LABEL } from "./loop-labels";
 import { MemberAvatar } from "./WorkspaceAvatar";
 import { PaneHeaderAction, WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { WorkspaceSelect } from "./WorkspaceSelect";
@@ -520,7 +521,7 @@ function StageColumn(props: {
         <div class="ws-loops-column-title">
           <Show when={props.stage.gate}>
             {(gate) => (
-              <span class="ws-loops-gate" title={t(`workspace.loops.gate.${gate().kind}`)}>
+              <span class="ws-loops-gate" title={t(LOOP_GATE_LABEL[gate().kind])}>
                 <GateIcon kind={gate().kind} />
               </span>
             )}
@@ -670,7 +671,7 @@ export function DecisionCard(props: {
           <span class="ws-loops-muted">
             {[
               props.loopName,
-              t(question() ? "workspace.loops.question" : `workspace.loops.gate.${props.decision.kind}`),
+              t(question() ? "workspace.loops.question" : LOOP_GATE_LABEL[props.decision.kind]),
               requester()?.name,
               format.date(props.decision.createdAt, { dateStyle: "medium", timeStyle: "short" }),
             ]
@@ -984,7 +985,7 @@ function ItemPanel(props: {
                             : "secondary"
                       }
                     >
-                      {t(`workspace.loops.experiment.${experiment().status}`)}
+                      {t(LOOP_EXPERIMENT_LABEL[experiment().status])}
                     </Badge>
                   </div>
                   <p class="ws-loops-muted">{experiment().hypothesis}</p>

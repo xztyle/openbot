@@ -1,0 +1,51 @@
+import type { PartialTranslation } from "../../message";
+import type { messages as source } from "../en/backups";
+
+export const messages = {
+  "backups.sectionTitle": "Backup",
+  "backups.sectionDescription": "Backup notturni di questo server e ripristino.",
+  "backups.title": "Backup di {name}",
+  "backups.description":
+    "Ogni backup contiene il database, le impostazioni, le chiavi, la cassaforte, gli account dei provider, gli spazi di lavoro degli agenti, gli spazi e la bacheca Motion. I file invariati sono condivisi tra i backup, quindi un backup notturno aggiunge solo ciò che è cambiato.",
+  "backups.backUpNow": "Esegui backup ora",
+  "backups.loadFailed": "Impossibile leggere i backup di {name}.",
+  "backups.createFailed": "Il backup non è partito",
+  "backups.checkFailed": "Il controllo del ripristino non è riuscito.",
+  "backups.restoreFailed": "Il ripristino non è partito.",
+  "backups.notSetUpTitle": "I backup non sono configurati su questo server",
+  "backups.notSetUpDescription":
+    "Chi gestisce il server installa il servizio di backup (scripts/backup-broker) e ne monta il socket. Poi questa sezione elenca i backup.",
+  "backups.schedule": "Ogni notte alle {time} (ora del server)",
+  "backups.retention": "Conserva {daily} backup giornalieri e {weekly} settimanali.",
+  "backups.disk": "{free} liberi su {total}.",
+  "backups.offsiteOn": "Una copia cifrata viene inviata fuori sede.",
+  "backups.offsiteOff": "Nessuna copia fuori sede.",
+  "backups.running": "Backup in corso…",
+  "backups.restoring": "Ripristino di {id}… Il server si riavvia; Atelier si ricollega da solo.",
+  "backups.lastRestoreOk": "{id} ripristinato",
+  "backups.lastRestoreFailed": "Il ripristino di {id} non è riuscito",
+  "backups.safetyBackup": "Lo stato precedente è il backup {id}.",
+  "backups.empty": "Ancora nessun backup.",
+  "backups.row": "{reason} · {size} · {added} aggiunti",
+  "backups.skipped": "Non inclusi: {parts}.",
+  "backups.reason.nightly": "Notturno",
+  "backups.reason.manual": "Manuale",
+  "backups.reason.preRestore": "Prima di un ripristino",
+  "backups.reason.other": "Backup",
+  "backups.status.ok": "Completo",
+  "backups.status.partial": "Parziale",
+  "backups.status.failed": "Non riuscito",
+  "backups.status.running": "In corso",
+  "backups.restore": "Ripristina…",
+  "backups.restoreTitle": "Ripristinare {name}?",
+  "backups.restoreDescription":
+    "Il server torna allo stato del {when}. Il server e tutti gli agenti si fermano, il ripristino viene eseguito e poi tutto riparte. Messaggi, impostazioni e lavoro da allora vengono sostituiti; prima viene creato un backup di sicurezza dello stato attuale.",
+  "backups.restoreConfirm": "Ripristina",
+  "backups.restoreStarting": "Avvio…",
+  "backups.restoreStarted": "{name} è in ripristino e verrà riavviato",
+  "backups.checking": "Controllo del backup…",
+  "backups.includeSpaces":
+    "Ripristina anche le cartelle degli spazi (i file modificati tornano indietro; i file più recenti restano)",
+  "backups.typeToConfirm": "Digita {id} per confermare.",
+  "backups.countRow": "{table}: {now} ora, {backup} nel backup",
+} as const satisfies PartialTranslation<typeof source>;

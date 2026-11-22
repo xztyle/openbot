@@ -20,7 +20,6 @@ export const messages = defineMessages("efficiency", {
   "efficiency.sleep.spaceWake": "Wake space",
   "efficiency.sleep.done": { one: "{count} agent asleep", other: "{count} agents asleep" },
   "efficiency.sleep.woke": { one: "{count} agent awake", other: "{count} agents awake" },
-  "efficiency.sleep.badge": "Asleep",
   "efficiency.sleep.failed": "Could not change the sleep",
   "efficiency.review.title": "Weekly review",
   "efficiency.review.none": "No review yet. A review runs after a week with work.",

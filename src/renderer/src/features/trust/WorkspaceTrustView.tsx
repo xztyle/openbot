@@ -281,10 +281,15 @@ export function WorkspaceTrustView() {
                     {t("trust.budgets")}
                   </h3>
                   <p class="trust-muted">{t("trust.budgetsDescription")}</p>
-                  <For each={policy().budgets} fallback={<p class="trust-muted">{t("trust.budgets.empty")}</p>}>
+                  {/* Keyed by id: an edit replaces the budget, and its fields must keep focus while typing. */}
+                  <For
+                    each={policy().budgets}
+                    keyed={(budget) => budget.id}
+                    fallback={<p class="trust-muted">{t("trust.budgets.empty")}</p>}
+                  >
                     {(budget, index) => (
                       <BudgetRow
-                        budget={budget}
+                        budget={budget()}
                         spend={view()?.spend ?? []}
                         spaces={spaces()}
                         agents={agents()}
@@ -432,6 +437,22 @@ function TrustAgentCard(props: {
   );
 }
 
+/**
+ * A field whose text is normalized into the draft: it shows what the person typed while that still
+ * means the draft's value ("0." for 0, an empty platform for `*`), and the draft's value otherwise,
+ * such as after Reset.
+ */
+function typedField(saved: () => string, normalize: (text: string) => string) {
+  const [typed, setTyped] = createSignal<string | null>(null);
+  return {
+    value: () => {
+      const text = typed();
+      return text !== null && normalize(text) === saved() ? text : saved();
+    },
+    type: setTyped,
+  };
+}
+
 function BudgetRow(props: {
   budget: TrustBudget;
   spend: TrustPolicyView["spend"];
@@ -460,6 +481,23 @@ function BudgetRow(props: {
     const number = Number(value.replace(",", "."));
     return value.trim() === "" || !Number.isFinite(number) || number < 0 ? undefined : number;
   };
+  const amountText = (value: number | undefined) => (value === undefined ? "" : String(value));
+  const platform = typedField(
+    () => props.budget.platform,
+    (value) => value.trim().toLowerCase() || "*",
+  );
+  const perDay = typedField(
+    () => amountText(props.budget.perDay),
+    (value) => amountText(amount(value)),
+  );
+  const total = typedField(
+    () => amountText(props.budget.total),
+    (value) => amountText(amount(value)),
+  );
+  const currency = typedField(
+    () => props.budget.currency,
+    (value) => value.trim().toUpperCase() || "USD",
+  );
   const set = (patch: Partial<TrustBudget>) => {
     const next: TrustBudget = { ...props.budget, ...patch };
     if (next.perDay === undefined) delete next.perDay;
@@ -481,9 +519,12 @@ function BudgetRow(props: {
         <span>{t("trust.budget.platform")}</span>
         <Input
           size="sm"
-          value={props.budget.platform}
+          value={platform.value()}
           placeholder={t("trust.budget.platformHint")}
-          onValueChange={(value) => set({ platform: value.trim().toLowerCase() || "*" })}
+          onValueChange={(value) => {
+            platform.type(value);
+            set({ platform: value.trim().toLowerCase() || "*" });
+          }}
         />
       </label>
       <label class="trust-field">
@@ -517,8 +558,11 @@ function BudgetRow(props: {
         <Input
           size="sm"
           inputmode="decimal"
-          value={props.budget.perDay === undefined ? "" : String(props.budget.perDay)}
-          onValueChange={(value) => set({ perDay: amount(value) })}
+          value={perDay.value()}
+          onValueChange={(value) => {
+            perDay.type(value);
+            set({ perDay: amount(value) });
+          }}
         />
       </label>
       <label class="trust-field">
@@ -526,8 +570,11 @@ function BudgetRow(props: {
         <Input
           size="sm"
           inputmode="decimal"
-          value={props.budget.total === undefined ? "" : String(props.budget.total)}
-          onValueChange={(value) => set({ total: amount(value) })}
+          value={total.value()}
+          onValueChange={(value) => {
+            total.type(value);
+            set({ total: amount(value) });
+          }}
         />
       </label>
       <label class="trust-field trust-field-short">
@@ -535,8 +582,11 @@ function BudgetRow(props: {
         <Input
           size="sm"
           maxlength={3}
-          value={props.budget.currency}
-          onValueChange={(value) => set({ currency: value.trim().toUpperCase() || "USD" })}
+          value={currency.value()}
+          onValueChange={(value) => {
+            currency.type(value);
+            set({ currency: value.trim().toUpperCase() || "USD" });
+          }}
         />
       </label>
       <span class="trust-spent">
@@ -589,40 +639,47 @@ function OverridesSection(props: {
         {t("trust.overrides")}
       </h3>
       <p class="trust-muted">{t("trust.overridesDescription")}</p>
-      <For each={rows()} fallback={<p class="trust-muted">{t("trust.overrides.empty")}</p>}>
-        {(row) => (
-          <div class="trust-override">
-            <div class="trust-agent-header">
-              <strong>{label(row.kind, row.id)}</strong>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                aria-label={t("trust.override.remove")}
-                onClick={() => props.onChange((policy) => withoutOverride(policy, row.kind, row.id))}
-              >
-                <Trash2 aria-hidden="true" />
-              </Button>
+      <For
+        each={rows()}
+        keyed={(row) => `${row.kind}:${row.id}`}
+        fallback={<p class="trust-muted">{t("trust.overrides.empty")}</p>}
+      >
+        {(item) => {
+          const row = item();
+          return (
+            <div class="trust-override">
+              <div class="trust-agent-header">
+                <strong>{label(row.kind, row.id)}</strong>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  aria-label={t("trust.override.remove")}
+                  onClick={() => props.onChange((policy) => withoutOverride(policy, row.kind, row.id))}
+                >
+                  <Trash2 aria-hidden="true" />
+                </Button>
+              </div>
+              <div class="trust-override-rules">
+                <For each={TRUST_ACTIONS}>
+                  {(action) => (
+                    <div class="trust-field">
+                      <span>{t(TRUST_ACTION_LABEL[action])}</span>
+                      <RuleSelect
+                        label={t(TRUST_ACTION_LABEL[action])}
+                        value={props.policy[row.kind][row.id]?.[action] ?? null}
+                        inherit={t("trust.inheritShort")}
+                        onChange={(rule) =>
+                          props.onChange((policy) => withOverride(policy, row.kind, row.id, action, rule))
+                        }
+                      />
+                    </div>
+                  )}
+                </For>
+              </div>
             </div>
-            <div class="trust-override-rules">
-              <For each={TRUST_ACTIONS}>
-                {(action) => (
-                  <div class="trust-field">
-                    <span>{t(TRUST_ACTION_LABEL[action])}</span>
-                    <RuleSelect
-                      label={t(TRUST_ACTION_LABEL[action])}
-                      value={props.policy[row.kind][row.id]?.[action] ?? null}
-                      inherit={t("trust.inheritShort")}
-                      onChange={(rule) =>
-                        props.onChange((policy) => withOverride(policy, row.kind, row.id, action, rule))
-                      }
-                    />
-                  </div>
-                )}
-              </For>
-            </div>
-          </div>
-        )}
+          );
+        }}
       </For>
       <div class="trust-add">
         <NativeSelect

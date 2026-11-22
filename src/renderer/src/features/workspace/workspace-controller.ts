@@ -862,11 +862,13 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   /** The agents that the reader opened in this session: their DM rows stay while they talk. */
   const [openedAgentIds, setOpenedAgentIds] = createSignal<ReadonlySet<string>>(new Set());
   /**
-   * Whether an agent's DM row shows: the reader wrote to it lately, it waits for the reader, or the
-   * reader opened it now. Every other agent stays one step away, in New message, Jump to and Fleet.
+   * Whether an agent's DM row shows: the reader wrote to it lately, it waits for the reader, it wrote
+   * something the reader has not read (as a closed DM with a person comes back), or the reader opened
+   * it now. Every other agent stays one step away, in New message, Jump to and Fleet.
    */
   const showAgentRow = (agentId: string) => {
-    if (directory().agentStates[agentId]?.kind === "waiting") return true;
+    const kind = directory().agentStates[agentId]?.kind;
+    if (kind === "waiting" || kind === "unread") return true;
     if (closedSet().has(`${AGENT_DM_PREFIX}${agentId}`)) return false;
     const recent = recentAgentSet();
     return !recent || recent.has(agentId) || openedAgentIds().has(agentId) || env.activeAgentId() === agentId;

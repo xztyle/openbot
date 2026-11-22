@@ -7,3 +7,6 @@
   of its mention, here or on another device, instead of staying until Activity was opened.
 - Workspace: a reply that comes into the open thread while the window is in the background is read
   when you come back to it, so Threads and the thread's badge no longer keep it as new.
+- Workspace: an agent you have not written to lately that writes to you shows its DM row with the
+  unread count again. Its messages had no row, so the sidebar, the Space rail, the phone's Chat tab
+  and the tab title all left them out.

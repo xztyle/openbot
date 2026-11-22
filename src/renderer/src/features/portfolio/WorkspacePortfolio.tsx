@@ -78,12 +78,25 @@ export function WorkspacePortfolioView() {
   );
 }
 
-function usd(value: number): string {
-  return value.toFixed(value >= 100 ? 0 : 2);
+/** A dollar amount of a line that already says USD: cents under 100, whole dollars above, grouped. */
+function useUsd(): (value: number) => string {
+  const { format } = useText();
+  return (value) => {
+    const digits = Math.abs(value) >= 100 ? 0 : 2;
+    return format.number(value, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  };
+}
+
+/** One decimal, as a ratio or a score reads: 6.7, 4.3. */
+function useTenths(): (value: number) => string {
+  const { format } = useText();
+  return (value) => format.number(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 function PortfolioValue() {
   const { t, errorMessage } = useText();
+  const usd = useUsd();
+  const tenths = useTenths();
   const ws = useWorkspace();
   const calls = () => ws.env.portfolio?.();
   const [days, setDays] = createSignal<number>(30);
@@ -163,7 +176,9 @@ function PortfolioValue() {
       <Show when={report()}>
         {(value) => (
           <>
-            <h3>{t("portfolio.value.spaces")}</h3>
+            <Show when={value().spaces.length > 0}>
+              <h3>{t("portfolio.value.spaces")}</h3>
+            </Show>
             <div class="portfolio-cards">
               <For each={value().spaces}>
                 {(space) => (
@@ -173,7 +188,7 @@ function PortfolioValue() {
                       <span class="portfolio-ratio">
                         {space.valuePerDollar === null
                           ? t("portfolio.value.noCost")
-                          : t("portfolio.value.perDollar", { ratio: space.valuePerDollar.toFixed(1) })}
+                          : t("portfolio.value.perDollar", { ratio: tenths(space.valuePerDollar) })}
                       </span>
                     </div>
                     <Text tone="muted">
@@ -200,7 +215,7 @@ function PortfolioValue() {
                         <span class="portfolio-ratio">
                           {row.valuePerDollar === null
                             ? t("portfolio.value.noCost")
-                            : t("portfolio.value.perDollar", { ratio: row.valuePerDollar.toFixed(1) })}
+                            : t("portfolio.value.perDollar", { ratio: tenths(row.valuePerDollar) })}
                         </span>
                       </div>
                       <Text tone="muted">
@@ -211,7 +226,7 @@ function PortfolioValue() {
                         })}
                         <Show when={row.rating !== null}>
                           {" · "}
-                          {t("portfolio.value.rating", { rating: row.rating?.toFixed(1) ?? "" })}
+                          {t("portfolio.value.rating", { rating: row.rating === null ? "" : tenths(row.rating) })}
                         </Show>
                       </Text>
                     </article>
@@ -283,7 +298,7 @@ function PortfolioValue() {
 }
 
 function PortfolioReality() {
-  const { t, errorMessage } = useText();
+  const { t, format, errorMessage } = useText();
   const ws = useWorkspace();
   const calls = () => ws.env.portfolio?.();
   const [page, setPage] = createSignal<RealityPage | null>(null);
@@ -368,7 +383,7 @@ function PortfolioReality() {
           {(report) => (
             <article class="portfolio-card">
               <div class="portfolio-row">
-                <strong>{new Date(report.at).toLocaleDateString()}</strong>
+                <strong>{format.date(Date.parse(report.at), { dateStyle: "medium" })}</strong>
                 <span class="portfolio-ratio" data-flagged={report.flagged > 0 ? "" : undefined}>
                   {t("portfolio.reality.flagged", { count: report.flagged })}
                 </span>

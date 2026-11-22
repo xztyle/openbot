@@ -41,10 +41,12 @@ export function AgentLearningSettings(props: {
   calls: EfficiencyCalls;
   agentName(agentId: string): string;
 }) {
-  const { t, errorMessage } = useText();
+  const { t, format, errorMessage } = useText();
   const [checkpoints, setCheckpoints] = createSignal<SettingsCheckpoint[] | null>(null);
   const [open, setOpen] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
+  // Only the cleanup says it is running; a rollback or a forget keeps its label.
+  const [dreaming, setDreaming] = createSignal(false);
   const [note, setNote] = createSignal<string | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [forget, setForget] = createSignal<ForgetConversationResult | null>(null);
@@ -125,7 +127,9 @@ export function AgentLearningSettings(props: {
                     <div class="efficiency-review-head">
                       <strong>{checkpoint().changes.map(fieldName).join(", ")}</strong>
                       <Text tone="muted">{author(checkpoint())}</Text>
-                      <Text tone="muted">{new Date(checkpoint().at).toLocaleString()}</Text>
+                      <Text tone="muted">
+                        {format.date(Date.parse(checkpoint().at), { dateStyle: "medium", timeStyle: "short" })}
+                      </Text>
                     </div>
                     <Show when={open() === checkpoint().id}>
                       <For each={checkpoint().changes}>
@@ -171,12 +175,17 @@ export function AgentLearningSettings(props: {
           disabled={busy()}
           onClick={() =>
             void run(async () => {
-              const items = await props.calls.dream(props.agentId);
-              return t("efficiency.learning.dreamDone", { count: items.length });
+              setDreaming(true);
+              try {
+                const items = await props.calls.dream(props.agentId);
+                return t("efficiency.learning.dreamDone", { count: items.length });
+              } finally {
+                setDreaming(false);
+              }
             }, t("efficiency.learning.dreamFailed"))
           }
         >
-          {busy() ? t("efficiency.learning.dreamRunning") : t("efficiency.learning.dream")}
+          {dreaming() ? t("efficiency.learning.dreamRunning") : t("efficiency.learning.dream")}
         </Button>
         <Show
           when={forget()}

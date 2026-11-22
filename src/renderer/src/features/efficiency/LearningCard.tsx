@@ -41,7 +41,7 @@ export function LearningCard(props: {
   agentName?: string | undefined;
   onDecided: (item: LearningReviewItem) => void;
 }) {
-  const { t, errorMessage } = useText();
+  const { t, format, errorMessage } = useText();
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
 
@@ -83,7 +83,7 @@ export function LearningCard(props: {
         <Show when={props.agentName}>{(name) => <strong>{name()}</strong>}</Show>
         <Text tone="muted">{t(SOURCE_TEXT[props.item.source])}</Text>
         <Show when={props.item.ref}>{(ref) => <Text tone="muted">{ref()}</Text>}</Show>
-        <Text tone="muted">{new Date(props.item.createdAt).toLocaleDateString()}</Text>
+        <Text tone="muted">{format.date(Date.parse(props.item.createdAt), { dateStyle: "medium" })}</Text>
       </div>
       <Text>{props.item.title}</Text>
       <Show when={props.item.note}>{(note) => <Text tone="muted">{note()}</Text>}</Show>

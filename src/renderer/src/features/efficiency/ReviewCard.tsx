@@ -24,7 +24,7 @@ export function ReviewCard(props: {
   agentName?: string | undefined;
   onDecided: (review: PerformanceReview) => void;
 }) {
-  const { t, errorMessage } = useText();
+  const { t, format, errorMessage } = useText();
   const [text, setText] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -54,16 +54,16 @@ export function ReviewCard(props: {
       <div class="efficiency-review-head">
         <Show when={props.agentName}>{(name) => <strong>{name()}</strong>}</Show>
         <span class="efficiency-grade">{t(GRADE_TEXT[props.review.grade])}</span>
-        <Text tone="muted">{new Date(props.review.createdAt).toLocaleDateString()}</Text>
+        <Text tone="muted">{format.date(Date.parse(props.review.createdAt), { dateStyle: "medium" })}</Text>
       </div>
       <Text>{props.review.summary}</Text>
       <Text tone="muted">
         {t("efficiency.review.counts", {
-          turns: String(card().turns),
-          failed: String(card().failedTurns),
-          praise: String(card().praise),
-          complaints: String(card().complaints),
-          cost: card().costUsd.toFixed(2),
+          turns: format.number(card().turns),
+          failed: format.number(card().failedTurns),
+          praise: format.number(card().praise),
+          complaints: format.number(card().complaints),
+          cost: format.number(card().costUsd, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
         })}
       </Text>
       <Show when={card().ticketsDone > 0 || card().ticketsReopened > 0}>

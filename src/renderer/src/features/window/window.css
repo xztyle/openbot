@@ -345,6 +345,12 @@
     gap: 0;
   }
 
+  /* A failed load is one line in the card, not a danger fill over the whole week. */
+  .app-window > .app-frame-edge > .window-page .routine-planner-error {
+    align-self: start;
+    margin: var(--openbot-space-4);
+  }
+
   .app-window > .app-frame-edge > .window-page .routine-planner-toolbar {
     padding: var(--openbot-space-4) var(--openbot-space-6) 0;
   }

@@ -10,3 +10,4 @@
 - Usage, Schedule and Settings on a computer: the page's card is whole again. The sidebar's color
   stood over its left part, and in Riso Press light the title and the agent, cost and date controls in
   the top row were navy on navy.
+- When the schedule cannot load, its error is one line at the top, not a red fill of the whole week.

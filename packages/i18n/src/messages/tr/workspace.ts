@@ -638,4 +638,5 @@ export const messages = {
   "workspace.progress.more": { one: "{count} güncelleme daha", other: "{count} güncelleme daha" },
   "workspace.progress.hide": { one: "{count} güncellemeyi gizle", other: "{count} güncellemeyi gizle" },
   "workspace.activity.replies": { one: "{name} bir ileti dizisinde yanıtladı", other: "{name}: {count} yanıt" },
+  "workspace.today.openGuide": "Bugün’ü aç",
 } as const satisfies PartialTranslation<typeof source>;

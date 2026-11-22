@@ -112,8 +112,8 @@ export const messages = {
   "insight.briefing.timeZone": "Zona horaria",
   "insight.briefing.allSpaces": "Un resumen de todos los espacios",
   "insight.briefing.perSpace": "También un resumen propio para",
-  "insight.briefing.alertDays": "Alerta tras días con gasto y sin venta",
-  "insight.briefing.alertMinSpend": "Solo desde este gasto",
+  "insight.briefing.alertDays": "Durante estos días",
+  "insight.briefing.alertMinSpend": "Más de (US$)",
   "insight.briefing.replace": "Reemplazar reportes de rutinas",
   "insight.briefing.replaceHint":
     "Las rutinas marcadas se pausan mientras el resumen está activo y se reanudan al desmarcarlas. No se borra nada.",
@@ -143,4 +143,5 @@ export const messages = {
   "insight.slow.kind.failed": "Intento fallido",
   "insight.slow.open": "sigue",
   "insight.needsYou.alert": "Revisa esto",
+  "insight.briefing.alertRule": "Avísame cuando un agente gaste dinero y no haya ventas",
 } as const satisfies PartialTranslation<typeof source>;

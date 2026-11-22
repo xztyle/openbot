@@ -23,6 +23,7 @@ import { SwitchField } from "../../switch";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState, ErrorState, LoadingState } from "../../view-state";
+import { goalGap } from "./TodayView";
 import { MemberAvatar } from "./WorkspaceAvatar";
 import { WorkspaceList, WorkspaceListRow } from "./WorkspaceList";
 import { PaneHeaderAction, WorkspacePaneHeader } from "./WorkspacePaneHeader";
@@ -203,11 +204,14 @@ function InsightAlerts(props: {
   );
 }
 
-/** A tiny line of the last values, oldest first. Nothing for fewer than two values. */
+/**
+ * A tiny line of the last values, oldest first. Nothing for fewer than three values: two points
+ * draw a lone slant that reads as a glitch, not as a trend.
+ */
 function Sparkline(props: { values: readonly number[]; label: string }): JSX.Element {
   const points = createMemo(() => {
     const values = props.values;
-    if (values.length < 2) return "";
+    if (values.length < 3) return "";
     const max = Math.max(...values);
     const min = Math.min(...values, 0);
     const span = max - min || 1;
@@ -316,6 +320,20 @@ function InsightGoals(props: SectionProps): JSX.Element {
                         titleEnd={
                           <span class="ws-insight-pace" data-pace={pace()}>
                             {t(PACE_KEY[pace()])}
+                            {/* "Behind" says why: what the goal still needs, and by when. */}
+                            <Show when={pace() === "behind" ? goalGap(goal(), props.report.at) : null}>
+                              {(missing) => (
+                                <>
+                                  {" · "}
+                                  {missing().days === null
+                                    ? t("workspace.today.goalNeeds", { count: missing().needed })
+                                    : t("workspace.today.goalNeedsBy", {
+                                        count: missing().needed,
+                                        days: missing().days ?? 0,
+                                      })}
+                                </>
+                              )}
+                            </Show>
                           </span>
                         }
                         actions={
@@ -959,7 +977,25 @@ function InsightCosts(props: SectionProps): JSX.Element {
 
 function InsightBriefing(props: SectionProps): JSX.Element {
   const { t, format, errorMessage } = useText();
-  const [draft, setDraft] = createSignal<InsightBriefingSettings>(props.report.briefing.settings);
+  // A briefing that never went out starts from the reader: their time zone, and English unless the
+  // app speaks Spanish (the host's default is Spanish, which an English reader did not choose).
+  const fresh = () => props.report.briefing.lastSentAt === null;
+  const [draft, setDraft] = createSignal<InsightBriefingSettings>({
+    ...props.report.briefing.settings,
+    timeZone: props.report.briefing.settings.timeZone || props.report.timeZone,
+    ...(fresh() && !format.locale.toLowerCase().startsWith("es") ? { language: "en" as const } : {}),
+  });
+  /** Every zone the browser knows, with the one saved first when it is not among them. */
+  const zones = (() => {
+    let all: string[] = [];
+    try {
+      all = Intl.supportedValuesOf("timeZone");
+    } catch {
+      all = [];
+    }
+    const chosen = draft().timeZone;
+    return chosen && !all.includes(chosen) ? [chosen, ...all] : all;
+  })();
   const [busy, setBusy] = createSignal(false);
   const [sending, setSending] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -1008,11 +1044,23 @@ function InsightBriefing(props: SectionProps): JSX.Element {
           </Field>
         </div>
         <Field label={t("insight.briefing.timeZone")}>
-          <Input
-            value={draft().timeZone}
-            placeholder={props.report.timeZone}
-            onInput={(event) => set({ timeZone: event.currentTarget.value.trim() })}
-          />
+          <Show
+            when={zones.length > 0}
+            fallback={
+              <Input
+                value={draft().timeZone}
+                placeholder={props.report.timeZone}
+                onInput={(event) => set({ timeZone: event.currentTarget.value.trim() })}
+              />
+            }
+          >
+            <WorkspaceSelect
+              value={draft().timeZone}
+              label={t("insight.briefing.timeZone")}
+              options={zones.map((zone) => ({ value: zone, label: zone.replaceAll("_", " ") }))}
+              onChange={(timeZone) => set({ timeZone })}
+            />
+          </Show>
         </Field>
         <SwitchField
           checked={draft().allSpaces}
@@ -1036,7 +1084,16 @@ function InsightBriefing(props: SectionProps): JSX.Element {
             )}
           </For>
         </fieldset>
+        <p class="ws-insight-heading">{t("insight.briefing.alertRule")}</p>
         <div class="ws-insight-pair">
+          <Field label={t("insight.briefing.alertMinSpend")}>
+            <Input
+              type="number"
+              inputmode="decimal"
+              value={String(draft().alertMinSpend)}
+              onInput={(event) => set({ alertMinSpend: Math.max(0, Number(event.currentTarget.value) || 0) })}
+            />
+          </Field>
           <Field label={t("insight.briefing.alertDays")}>
             <Input
               type="number"
@@ -1047,14 +1104,6 @@ function InsightBriefing(props: SectionProps): JSX.Element {
               onInput={(event) =>
                 set({ alertDays: Math.min(14, Math.max(1, Math.round(Number(event.currentTarget.value) || 1))) })
               }
-            />
-          </Field>
-          <Field label={t("insight.briefing.alertMinSpend")}>
-            <Input
-              type="number"
-              inputmode="decimal"
-              value={String(draft().alertMinSpend)}
-              onInput={(event) => set({ alertMinSpend: Math.max(0, Number(event.currentTarget.value) || 0) })}
             />
           </Field>
         </div>

@@ -618,4 +618,5 @@ export const messages = {
   "workspace.progress.more": { other: "还有 {count} 条进展" },
   "workspace.progress.hide": { other: "隐藏 {count} 条进展" },
   "workspace.activity.replies": { other: "{name}：{count} 条回复" },
+  "workspace.today.openGuide": "打开今天",
 } as const satisfies PartialTranslation<typeof source>;

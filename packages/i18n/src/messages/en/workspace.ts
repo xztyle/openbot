@@ -1168,4 +1168,5 @@ export const messages = defineMessages("workspace", {
   "workspace.progress.more": { one: "{count} more update", other: "{count} more updates" },
   "workspace.progress.hide": { one: "Hide {count} update", other: "Hide {count} updates" },
   "workspace.activity.replies": { one: "{name} replied in a thread", other: "{name}: {count} replies" },
+  "workspace.today.openGuide": "Open Today",
 });

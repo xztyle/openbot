@@ -318,30 +318,34 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
         }
         workspaceMenu={menu()}
         onNewMessage={() => ws.openDialog({ kind: "new-message" })}
+        // A computer with the top bar's search has one search there (and ⌘K for the command bar): the
+        // sidebar does not add a second and a third field.
         search={
-          <>
-            <Button variant="ghost" class="ws-jump" onClick={() => ws.openDialog({ kind: "switcher" })}>
-              <Search aria-hidden="true" />
-              <span class="ws-jump-label">{t("workspace.app.switcher.jump")}</span>
-              <kbd class="ws-jump-key">{props.searchShortcut}</kbd>
-            </Button>
-            <Input
-              type="search"
-              size="sm"
-              class="ws-sidebar-filter"
-              value={ws.state.sidebarFilter}
-              placeholder={t("workspace.sidebar.filter")}
-              aria-label={t("workspace.sidebar.filter")}
-              onValueChange={(text: string) => ws.setSidebarFilter(text)}
-              onKeyDown={(event: KeyboardEvent) => {
-                if (event.key === "Escape" && ws.state.sidebarFilter) {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  ws.setSidebarFilter("");
-                }
-              }}
-            />
-          </>
+          ws.env.phone() || !ws.search.supported() ? (
+            <>
+              <Button variant="ghost" class="ws-jump" onClick={() => ws.openDialog({ kind: "switcher" })}>
+                <Search aria-hidden="true" />
+                <span class="ws-jump-label">{t("workspace.app.switcher.jump")}</span>
+                <kbd class="ws-jump-key">{props.searchShortcut}</kbd>
+              </Button>
+              <Input
+                type="search"
+                size="sm"
+                class="ws-sidebar-filter"
+                value={ws.state.sidebarFilter}
+                placeholder={t("workspace.sidebar.filter")}
+                aria-label={t("workspace.sidebar.filter")}
+                onValueChange={(text: string) => ws.setSidebarFilter(text)}
+                onKeyDown={(event: KeyboardEvent) => {
+                  if (event.key === "Escape" && ws.state.sidebarFilter) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    ws.setSidebarFilter("");
+                  }
+                }}
+              />
+            </>
+          ) : undefined
         }
         filtering={ws.state.sidebarFilter.trim().length > 0}
         collapsedGroups={ws.state.sidebar.collapsed ?? []}

@@ -626,4 +626,5 @@ export const messages = {
   "workspace.progress.more": { one: "{count} weiteres Update", other: "{count} weitere Updates" },
   "workspace.progress.hide": { one: "{count} Update ausblenden", other: "{count} Updates ausblenden" },
   "workspace.activity.replies": { one: "{name} hat im Thread geantwortet", other: "{name}: {count} Antworten" },
+  "workspace.today.openGuide": "Heute öffnen",
 } as const satisfies PartialTranslation<typeof source>;

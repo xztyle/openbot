@@ -141,7 +141,8 @@ export function WorkspaceTodayView(props: { actions?: JSX.Element; onBack?: (() 
         title: t("workspace.today.guide.channel"),
         hint: t("workspace.today.guide.channelHint"),
         done: ws.sidebarChannels().length > 0,
-        onSelect: () => ws.openDialog({ kind: "create-channel", name: "general" }),
+        // #general with the whole team and its agents, as the welcome's button makes it.
+        onSelect: () => void ws.ensureGeneral(),
       },
       ...(insights()
         ? [

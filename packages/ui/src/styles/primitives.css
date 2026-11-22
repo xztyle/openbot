@@ -879,8 +879,9 @@
   height: var(--openbot-switch-sm-height);
 }
 
+/* On is the accent fill; off is the plain track with a muted thumb, so the two never read alike. */
 .ui-switch[data-checked] {
-  background: var(--openbot-surface-light);
+  background: var(--openbot-accent);
 }
 
 .ui-switch[data-invalid] {
@@ -955,7 +956,7 @@
   height: var(--ui-switch-thumb-size);
   display: block;
   border-radius: var(--openbot-radius-pill);
-  background: var(--openbot-text-primary);
+  background: var(--openbot-text-muted);
   box-shadow: 0 1px 2px var(--openbot-shadow-ring);
   transform: translate3d(
       calc(var(--ui-switch-inset) + (var(--ui-switch-position, 0) * var(--ui-switch-travel))),
@@ -969,7 +970,7 @@
 }
 
 .ui-switch-thumb[data-checked] {
-  background: var(--openbot-text-on-light);
+  background: var(--openbot-text-on-accent);
 }
 
 .ui-slider-field {

@@ -1,4 +1,4 @@
-import { AtSign, Button, Hash, IconButton, MessageCircle, Plus, SquarePen, Waypoints, X } from "@openbot/ui";
+import { AtSign, Button, Hash, IconButton, MessageCircle, Plus, SquarePen, Sunrise, Waypoints, X } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
@@ -79,6 +79,15 @@ export function WorkspaceWelcome() {
         </div>
         <h2 class="ws-welcome-subtitle">{t("workspace.app.welcome.modesTitle")}</h2>
         <AnswerModes />
+        {/* What makes the workspace more than a chat: Today has the guide to each of them. */}
+        <h2 class="ws-welcome-subtitle">{t("workspace.today.guide.title")}</h2>
+        <p class="ws-welcome-text">{t("workspace.today.guide.intro")}</p>
+        <div class="ws-welcome-actions">
+          <Button variant="outline" onClick={() => ws.openView("today")}>
+            <Sunrise aria-hidden="true" />
+            {t("workspace.today.openGuide")}
+          </Button>
+        </div>
       </div>
     </section>
   );

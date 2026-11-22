@@ -26,6 +26,17 @@
 - The owner and the admins can change loops and decide gates; "New loop" says when no template
   loaded and offers to describe the loop to the lead agent.
 
+- A computer has one search field, the top bar's, and Ctrl+K: the sidebar's "Jump to" button and
+  "Filter conversations" field are gone there.
+- The briefing form starts from your time zone (a list, not a text box) and, for a briefing that
+  never went out, from English unless the app is in Spanish. The spend alert reads "Tell me when an
+  agent spends money and nothing sells: more than (US$) … for this many days".
+- "Behind" on a goal says what it still needs ("needs 21 more, 12 d left"), and a goal with fewer
+  than three points has no sparkline.
+- The fleet's cost line opens Money. A switch that is on is the accent colour; off has a muted
+  thumb.
+- The welcome of a new workspace points to Today's guide to goals, loops, the briefing and costs.
+
 ### Fixed
 
 - Unread counts, times and the AI badge are readable in the light themes (4.5:1 contrast or more),

@@ -628,4 +628,5 @@ export const messages = {
   "workspace.progress.more": { other: "업데이트 {count}개 더" },
   "workspace.progress.hide": { other: "업데이트 {count}개 숨기기" },
   "workspace.activity.replies": { other: "{name}: 답글 {count}개" },
+  "workspace.today.openGuide": "오늘 열기",
 } as const satisfies PartialTranslation<typeof source>;

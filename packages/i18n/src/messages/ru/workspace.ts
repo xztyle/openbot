@@ -811,4 +811,5 @@ export const messages = {
     many: "{name}: {count} ответов",
     other: "{name}: {count} ответов",
   },
+  "workspace.today.openGuide": "Открыть «Сегодня»",
 } as const satisfies PartialTranslation<typeof source>;

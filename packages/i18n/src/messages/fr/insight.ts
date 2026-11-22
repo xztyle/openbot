@@ -9,4 +9,7 @@ export const messages = {
   "insight.costs.note":
     "Prix publics de l'API pour le travail des agents, pas les frais de votre forfait. Les appels annexes sont les petites vérifications autour du travail : qui doit répondre, résumés courts et revues de mémoire. Travail sans réponse : tours qui ont coûté quelque chose sans laisser de message (ils ont pu modifier des fichiers ou des tickets).",
   "insight.costs.line": "{turns} tours · {tokens} jetons · annexes {side}",
+  "insight.briefing.alertRule": "Prévenez-moi quand un agent dépense sans aucune vente",
+  "insight.briefing.alertMinSpend": "Plus de (US$)",
+  "insight.briefing.alertDays": "Pendant ce nombre de jours",
 } as const satisfies PartialTranslation<typeof source>;

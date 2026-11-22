@@ -238,6 +238,7 @@ function WorkspaceFleetView() {
       onMessage={(agentId) => ws.openAgent(agentId)}
       onSettings={(agentId) => ws.env.openAgentSettings(agentId)}
       onAddAgent={ws.env.createAgent}
+      onOpenMoney={ws.viewAvailable("money") ? () => ws.openView("money") : undefined}
       onBack={() => ws.back()}
     />
   );

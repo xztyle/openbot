@@ -641,3 +641,11 @@
   align-self: flex-start;
   margin-bottom: var(--openbot-space-3);
 }
+
+/* The fleet's cost line opens Money. */
+.ui-button.ws-fleet-money-link {
+  height: auto;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+}

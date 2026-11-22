@@ -9,4 +9,7 @@ export const messages = {
   "insight.costs.note":
     "Цены API по прайсу за работу агентов, а не списания по вашему тарифу. Вспомогательные вызовы — небольшие проверки вокруг работы: кто должен ответить, короткие сводки и проверки памяти. Работа без ответа — ходы, которые стоили денег и не оставили сообщения (они могли изменить файлы или задачи).",
   "insight.costs.line": "Ходов: {turns} · токенов: {tokens} · вспомогательные {side}",
+  "insight.briefing.alertRule": "Сообщать, когда агент тратит деньги без продаж",
+  "insight.briefing.alertMinSpend": "Больше чем (US$)",
+  "insight.briefing.alertDays": "Столько дней подряд",
 } as const satisfies PartialTranslation<typeof source>;

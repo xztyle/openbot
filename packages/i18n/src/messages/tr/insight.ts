@@ -9,4 +9,7 @@ export const messages = {
   "insight.costs.note":
     "Ajanların işinin API liste fiyatları, planınızın ücretleri değil. Yardımcı çağrılar işin çevresindeki küçük kontrollerdir: kimin yanıtlayacağı, kısa özetler ve hafıza incelemeleri. Yanıtsız iş: bir şeye mal olup mesaj bırakmayan turlar (yine de dosya veya bilet değiştirmiş olabilirler).",
   "insight.costs.line": "{turns} tur · {tokens} token · yardımcı {side}",
+  "insight.briefing.alertRule": "Bir ajan para harcayıp satış olmazsa bana haber ver",
+  "insight.briefing.alertMinSpend": "Şundan fazla (US$)",
+  "insight.briefing.alertDays": "Bu kadar gün boyunca",
 } as const satisfies PartialTranslation<typeof source>;

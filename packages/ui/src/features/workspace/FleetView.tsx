@@ -39,6 +39,8 @@ export interface FleetViewProps {
   onSettings?: ((agentId: string) => void) | undefined;
   /** Adds an agent to the workspace. */
   onAddAgent?: (() => void) | undefined;
+  /** Opens Money, where the costs are: the cost line of the header links there. */
+  onOpenMoney?: (() => void) | undefined;
   onBack?: (() => void) | undefined;
   class?: string;
 }
@@ -72,7 +74,18 @@ export function FleetView(props: FleetViewProps): JSX.Element {
       <WorkspacePaneHeader
         icon={<Activity aria-hidden="true" />}
         title={t("workspace.view.fleet")}
-        subtitle={t("workspace.fleet.today", { cost: cost(totals().cost), time: duration(totals().time) })}
+        subtitle={
+          <Show
+            when={props.onOpenMoney}
+            fallback={t("workspace.fleet.today", { cost: cost(totals().cost), time: duration(totals().time) })}
+          >
+            {(open) => (
+              <Button variant="link" size="xs" class="ws-fleet-money-link" onClick={() => open()()}>
+                {t("workspace.fleet.today", { cost: cost(totals().cost), time: duration(totals().time) })}
+              </Button>
+            )}
+          </Show>
+        }
         onBack={props.onBack}
         actions={
           <Show when={props.onAddAgent}>

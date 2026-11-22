@@ -112,8 +112,8 @@ export const messages = defineMessages("insight", {
   "insight.briefing.timeZone": "Time zone",
   "insight.briefing.allSpaces": "One briefing of all spaces",
   "insight.briefing.perSpace": "Also a briefing of its own for",
-  "insight.briefing.alertDays": "Alert after days with spend and no sale",
-  "insight.briefing.alertMinSpend": "Only from this spend",
+  "insight.briefing.alertDays": "For this many days",
+  "insight.briefing.alertMinSpend": "More than (US$)",
   "insight.briefing.replace": "Replace routine reports",
   "insight.briefing.replaceHint":
     "The checked routines are paused while the briefing is on, and resumed when you uncheck them. Nothing is deleted.",
@@ -143,4 +143,5 @@ export const messages = defineMessages("insight", {
   "insight.slow.kind.failed": "Attempt failed",
   "insight.slow.open": "still going",
   "insight.needsYou.alert": "Look at this",
+  "insight.briefing.alertRule": "Tell me when an agent spends money and nothing sells",
 });

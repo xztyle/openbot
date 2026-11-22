@@ -633,4 +633,5 @@ export const messages = {
   "workspace.progress.more": { other: "ほか {count} 件の更新" },
   "workspace.progress.hide": { other: "{count} 件の更新を隠す" },
   "workspace.activity.replies": { other: "{name}：返信 {count} 件" },
+  "workspace.today.openGuide": "今日を開く",
 } as const satisfies PartialTranslation<typeof source>;

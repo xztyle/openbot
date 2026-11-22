@@ -20,6 +20,7 @@ import {
   TEAM_SUBAGENTS_CAPABILITY,
   TEAM_UI_BLOCKS_CAPABILITY,
 } from "@openbot/contracts/team-protocol/current";
+import { toWireAgentKeysObjectForPath } from "@openbot/contracts/team-protocol/current-agent-keys";
 import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
 import { optionalTeamEvent } from "@openbot/contracts/team-protocol/optional-events";
 import { teamSideRouteCodec } from "@openbot/contracts/team-protocol/side-routes";
@@ -682,26 +683,34 @@ export class TeamWebRtcHostPeer {
           ? yield* remoteCall(() => openAsBlob(uploaded.path))
           : input.body === null
             ? undefined
-            : yield* remoteDecode(() =>
-                JSON.stringify(
-                  sideRoute
-                    ? sideRoute.request(input.path, input.body)
-                    : (peerCapabilities.has(TEAM_OPEN_PROVIDERS_CAPABILITY)
-                        ? decodeTeamProtocolV8WebRtcHttpRequest
-                        : peerCapabilities.has(TEAM_PI_MUSE_CAPABILITY)
-                          ? decodeTeamProtocolV7WebRtcHttpRequest
-                          : peerCapabilities.has(TEAM_CURSOR_CLINE_CAPABILITY)
-                            ? decodeTeamProtocolV6WebRtcHttpRequest
-                            : peerCapabilities.has(TEAM_LOCAL_PROVIDERS_CAPABILITY)
-                              ? decodeTeamProtocolV5WebRtcHttpRequest
-                              : peerCapabilities.has("opencode")
-                                ? decodeTeamProtocolV4WebRtcHttpRequest
-                                : decodeTeamProtocolV3WebRtcHttpRequest)(input.method, input.path, input.body, {
-                        preserveSemanticTags,
-                        agentCreateModel: peerCapabilities.has(TEAM_AGENT_CREATE_MODEL_CAPABILITY),
-                      }),
-                ),
-              );
+            : yield* remoteDecode(() => {
+                if (sideRoute) return JSON.stringify(sideRoute.request(input.path, input.body));
+                const decoded = (
+                  peerCapabilities.has(TEAM_OPEN_PROVIDERS_CAPABILITY)
+                    ? decodeTeamProtocolV8WebRtcHttpRequest
+                    : peerCapabilities.has(TEAM_PI_MUSE_CAPABILITY)
+                      ? decodeTeamProtocolV7WebRtcHttpRequest
+                      : peerCapabilities.has(TEAM_CURSOR_CLINE_CAPABILITY)
+                        ? decodeTeamProtocolV6WebRtcHttpRequest
+                        : peerCapabilities.has(TEAM_LOCAL_PROVIDERS_CAPABILITY)
+                          ? decodeTeamProtocolV5WebRtcHttpRequest
+                          : peerCapabilities.has("opencode")
+                            ? decodeTeamProtocolV4WebRtcHttpRequest
+                            : decodeTeamProtocolV3WebRtcHttpRequest
+                )(input.method, input.path, input.body, {
+                  preserveSemanticTags,
+                  agentCreateModel: peerCapabilities.has(TEAM_AGENT_CREATE_MODEL_CAPABILITY),
+                });
+                // The local Team API decodes the body again, and with semantic tags its frozen projection
+                // reads only the wire keys: `ownerAgentId` is dropped where `ownerBotId` is kept, and a
+                // member's tab in an agent's browser panel opened in the shared profile (upstream
+                // 2357441bb). So the decoded frame goes back to the wire key names first.
+                return JSON.stringify(
+                  decoded !== null && typeof decoded === "object" && !Array.isArray(decoded)
+                    ? toWireAgentKeysObjectForPath(input.path, decoded)
+                    : decoded,
+                );
+              });
     return yield* Effect.acquireUseRelease(
       HostPeerTransport.use((transport) =>
         transport.fetch(url, {

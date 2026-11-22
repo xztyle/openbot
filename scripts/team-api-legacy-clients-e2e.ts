@@ -7,6 +7,7 @@
 // - v3: agent duplication, its idempotent retry, and the refused request shapes.
 // - v7 and v8: a v7 client on this host gets no v8 field; the v8 decoder reads the released v4-v7
 //   fixtures; the v7 decoder still refuses a provider that it does not know.
+// - v8 over WebRTC: a browser tab opened from an agent's panel keeps its owner agent.
 // Run: `bun scripts/team-api-legacy-clients-e2e.ts`.
 // Writes .openbot-build/team-api-legacy-clients-e2e/report.json.
 import assert from "node:assert/strict";
@@ -28,6 +29,7 @@ import {
   decodeTeamProtocolV7HttpResponse,
   decodeTeamProtocolV8HttpResponse,
   encodeTeamProtocolV2Frame,
+  encodeTeamProtocolV8WebRtcHttpRequest,
   highestCommonTeamProtocol,
   TEAM_APP_VERSION_HEADER,
   TEAM_CAPABILITIES_HEADER,
@@ -38,6 +40,7 @@ import {
   TEAM_PROTOCOL_V3_CAPABILITIES,
   TEAM_PROTOCOL_V7,
   TEAM_PROTOCOL_VERSION_HEADER,
+  teamCapabilitiesForProtocol,
   teamProtocolV2AuthenticationTranscript,
 } from "@openbot/contracts/team-protocol";
 import { plugin } from "bun";
@@ -171,10 +174,15 @@ const agentBrowser: AgentBrowserHost = {
   close: () => Effect.void,
   clearAgentSession: () => Effect.void,
 };
+/** The owners of each tab that the Team API asked the browser to open. */
+const openedTabOwners: { ownerThreadId: string | null; ownerAgentId: string | null }[] = [];
 const teamBrowser: TeamApiBrowser = {
   listTabs: () => [],
   getControlState: () => ({ sessions: [] }),
-  open: unused,
+  open: (url, ownerThreadId = null, ownerAgentId = null) => {
+    openedTabOwners.push({ ownerThreadId, ownerAgentId });
+    return Effect.succeed({ id: randomUUID(), title: "", url, loading: false, ownerThreadId, ownerAgentId });
+  },
   activate: unused,
   navigate: unused,
   reload: unused,
@@ -815,6 +823,64 @@ try {
     );
     assert.notEqual(record(decoded.bot, "bot").id, duplicate.copyId);
     return { agents: agentsOverV2.length, queueKeys: Object.keys(record(queue.body, "queue")).sort() };
+  });
+
+  await step("v8 RPC: a browser tab opened over WebRTC keeps its owner agent", async () => {
+    // What a current desktop client sends when the user opens a tab in an agent's browser panel.
+    const path = "/v1/browser/open";
+    const owners = { ownerThreadId: `openbot-thread-${source.id}`, ownerAgentId: source.id };
+    const requestId = randomUUID();
+    const from = v2.bridge.sent.length;
+    openedTabOwners.length = 0;
+    v2.bridge.emit(
+      "data",
+      "peer-v2",
+      "rpc",
+      encodeTeamProtocolV2Frame(
+        createTeamProtocolV2Request(requestId, "http.request", {
+          method: "POST",
+          path,
+          body: encodeTeamProtocolV8WebRtcHttpRequest("POST", path, {
+            url: "https://example.com/",
+            ...owners,
+            focus: true,
+          }),
+          capabilities: [...teamCapabilitiesForProtocol(8)],
+        }),
+      ),
+    );
+    const frame = await v2.bridge.rpcFrom(from, rpcResponse(requestId));
+    assert.ok("result" in frame, `The browser open frame failed: ${JSON.stringify(frame)}.`);
+    assert.deepEqual(openedTabOwners, [owners], "The host opened the tab without its owner agent.");
+    return owners;
+  });
+
+  await step("v8 RPC: a DELETE over WebRTC reaches the Team API", async () => {
+    // A current client sends `{}` with a DELETE. No frozen codec has a body for it, so the host must
+    // forward it and let the route answer, not fail it as a host error.
+    const path = `/v1/agents/${source.id}/avatar`;
+    const requestId = randomUUID();
+    const from = v2.bridge.sent.length;
+    v2.bridge.emit(
+      "data",
+      "peer-v2",
+      "rpc",
+      encodeTeamProtocolV2Frame(
+        createTeamProtocolV2Request(requestId, "http.request", {
+          method: "DELETE",
+          path,
+          body: encodeTeamProtocolV8WebRtcHttpRequest("DELETE", path, {}),
+          capabilities: [...teamCapabilitiesForProtocol(8)],
+        }),
+      ),
+    );
+    const frame = await v2.bridge.rpcFrom(from, rpcResponse(requestId));
+    const status = "result" in frame ? record(frame.result, "RPC result").status : frame.error?.status;
+    assert.ok(
+      "result" in frame || frame.error?.code !== "host_error",
+      `The host failed the DELETE: ${JSON.stringify(frame)}.`,
+    );
+    return { status };
   });
 
   await step("v2 handshake: a forged proof or an RPC before the proof gets no session", async () => {

@@ -760,17 +760,18 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     },
   });
   // New agents from any form of the app start in the space that shows, and agent settings move agents.
+  // The role is read here, not in the callback: it can change after the spaces are in.
   createEffect(
-    () => spaces.available(),
-    (available) => {
+    () => (spaces.available() ? (env.reader().role === "member" ? "member" : "admin") : null),
+    (access) => {
       setActiveSpaces(
-        available
+        access
           ? {
               current: spaces.current,
               options: () => spaces.list().map((space) => ({ value: space.id, label: space.name })),
               agentSpace: spaces.agentSpace,
               moveAgent:
-                env.reader().role === "member"
+                access === "member"
                   ? undefined
                   : (agentId, spaceId) =>
                       void spaces
@@ -1224,15 +1225,20 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   /** Collapses or opens a sidebar section. It follows the reader's account, as the order does. */
   function setGroupCollapsed(group: string, collapsed: boolean) {
     setState((draft) => {
-      const others = (draft.sidebar.collapsed ?? []).filter((item) => item !== group);
-      draft.sidebar.collapsed = collapsed ? [...others, group] : others;
+      // In place: a new list would run every reader of the list again for one group.
+      draft.sidebar.collapsed ??= [];
+      const list = draft.sidebar.collapsed;
+      const index = list.indexOf(group);
+      if (collapsed && index < 0) list.push(group);
+      if (!collapsed && index >= 0) list.splice(index, 1);
     });
     saveSidebar();
   }
   function setMuted(id: string, muted: boolean) {
     setState((draft) => {
-      const others = draft.sidebar.muted.filter((item) => item !== id);
-      draft.sidebar.muted = muted ? [...others, id] : others;
+      const index = draft.sidebar.muted.indexOf(id);
+      if (muted && index < 0) draft.sidebar.muted.push(id);
+      if (!muted && index >= 0) draft.sidebar.muted.splice(index, 1);
     });
     saveSidebar();
   }
@@ -1515,7 +1521,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       draft.drafts = readDrafts(key);
       draft.sidebar = readSidebar(key);
       draft.settings = null;
-      draft.activity = { data: null, loading: false, failed: false };
+      Object.assign(draft.activity, { data: null, loading: false, failed: false });
     });
     void refreshActivity();
   });
@@ -1555,7 +1561,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       const data = await port.workspaceActivity({ limit: 100 });
       if (run !== activityRun) return;
       setState((draft) => {
-        draft.activity = { data, loading: false, failed: false };
+        Object.assign(draft.activity, { data, loading: false, failed: false });
       });
     } catch {
       if (run !== activityRun) return;

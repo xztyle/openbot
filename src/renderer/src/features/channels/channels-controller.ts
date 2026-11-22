@@ -458,20 +458,20 @@ export function createChannelsController(env: ChannelsEnvironment) {
         unreadKeptFor = null;
         failedCommand = null;
         pendingCommands = 0;
-        flush(() =>
-          setState((state) => {
-            Object.assign(state, {
-              channels: [],
-              listed: false,
-              selectedId: selected,
-              page: null,
-              unread: null,
-              pending: false,
-              error: null,
-              editing: null,
-            });
-          }),
-        );
+        // No flush() here: an effect runs inside a flush, so the reads below take the selection as an
+        // argument instead of from the store.
+        setState((state) => {
+          Object.assign(state, {
+            channels: [],
+            listed: false,
+            selectedId: selected,
+            page: null,
+            unread: null,
+            pending: false,
+            error: null,
+            editing: null,
+          });
+        });
         if (next.supported) void untrack(() => refresh(selected));
         return;
       }
@@ -487,11 +487,9 @@ export function createChannelsController(env: ChannelsEnvironment) {
       // after the flush, so a read that takes the selection from the store reads the old one.
       env.beforeOpen();
       unreadKeptFor = null;
-      flush(() =>
-        setState((state) => {
-          Object.assign(state, { selectedId: saved, page: null, unread: null, editing: null, loading: true });
-        }),
-      );
+      setState((state) => {
+        Object.assign(state, { selectedId: saved, page: null, unread: null, editing: null, loading: true });
+      });
       void refresh(saved);
     },
   );

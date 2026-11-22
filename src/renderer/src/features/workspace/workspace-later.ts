@@ -94,16 +94,23 @@ export function createWorkspaceLater(deps: WorkspaceLaterDeps) {
     if (state.done.loaded) void load("done");
   }
 
-  // The lists follow the reader and the server.
+  // The lists follow the reader and the server. A reconnect to the same server keeps the rows on
+  // screen and reads them again; another reader or server starts empty, and drops reads still on the way.
+  let shownKey: string | undefined;
   createEffect(
-    () => (deps.ready() ? deps.storageKey() : null),
-    (key) => {
-      setState((draft) => {
-        draft.supported = true;
-        draft.saved = emptyList();
-        draft.done = emptyList();
-      });
-      if (key) void load("saved");
+    () => ({ ready: deps.ready(), key: deps.storageKey() }),
+    ({ ready, key }) => {
+      if (key !== shownKey) {
+        shownKey = key;
+        runs.saved += 1;
+        runs.done += 1;
+        setState((draft) => {
+          draft.supported = true;
+          Object.assign(draft.saved, emptyList());
+          Object.assign(draft.done, emptyList());
+        });
+      }
+      if (ready) refresh();
     },
   );
   const unsubscribe = deps.onHostEvent((event) => {

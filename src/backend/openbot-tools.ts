@@ -6,7 +6,7 @@ import {
   CHAT_VISUAL_TITLE_LIMIT,
 } from "@openbot/contracts/chat-visual";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
-import type { DynamicRecord } from "@openbot/contracts/runtime-values";
+import { type DynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { isUiBlockId, UI_BLOCK_LIMITS } from "@openbot/contracts/ui-blocks";
 import { z } from "zod";
 import { advertisedJsonSchema } from "./agent/advertised-json-schema";
@@ -1109,7 +1109,11 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     shape: {
       // Optional in the schema so that a call with a guessed name, such as `message` or `to`, reaches
       // the tool, which reads the aliases and names what is missing. See `normalizeSendMessageArguments`.
-      recipientAgentIds: z.array(z.string()).min(1).max(32).describe("Required: the agent ids.").optional(),
+      // One id as a string, and "true" or "false" for a boolean, also reach the tool, which reads them.
+      recipientAgentIds: z
+        .union([z.array(z.string()).min(1).max(32), z.string()])
+        .describe('Required: the agent ids, such as ["agent-…"].')
+        .optional(),
       text: z.string().min(1).max(100_000).describe("Required: the message.").optional(),
       to: z
         .union([z.string(), z.array(z.string()).max(32)])
@@ -1126,13 +1130,13 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
       paths: z.array(z.string()).max(10).optional(),
       replyToMessageId: z.string().nullable().optional(),
       expectsReply: z
-        .boolean()
+        .union([z.boolean(), z.enum(["true", "false"])])
         .describe(
           "True, the default, for a request, question, or task: Atelier sends the result back. False for your reply, or when you need no answer; it still wakes the recipient. False ends the exchange.",
         )
         .optional(),
       fyi: z
-        .boolean()
+        .union([z.boolean(), z.enum(["true", "false"])])
         .describe(
           "True only for information nobody acts on now, such as a status update: it does not wake the recipient and joins its next turn. Never for an order or review request.",
         )
@@ -1164,8 +1168,32 @@ export function normalizeSendMessageArguments(args: DynamicRecord): DynamicRecor
   return {
     ...rest,
     ...(text === undefined ? {} : { text }),
-    ...(recipient === undefined ? {} : { recipientAgentIds: typeof recipient === "string" ? [recipient] : recipient }),
+    ...(recipient === undefined ? {} : { recipientAgentIds: recipientList(recipient) }),
+    ...booleanText(rest, "expectsReply"),
+    ...booleanText(rest, "fyi"),
   };
+}
+
+const recipientIdList = z.array(z.string());
+
+/** One id or a JSON-encoded array such as `["agent-a"]` becomes an array. Any other value stays as it is. */
+function recipientList<T>(value: T): T | string[] {
+  if (!isString(value)) return value;
+  const text = value.trim();
+  if (text.startsWith("[")) {
+    try {
+      const parsed = recipientIdList.safeParse(JSON.parse(text));
+      if (parsed.success) return parsed.data;
+    } catch {
+      // Not JSON: one id.
+    }
+  }
+  return [text];
+}
+
+function booleanText(args: DynamicRecord, key: string): DynamicRecord {
+  const value = args[key];
+  return value === "true" || value === "false" ? { [key]: value === "true" } : {};
 }
 
 export const OPENBOT_DYNAMIC_TOOLS = {

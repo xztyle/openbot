@@ -29,6 +29,7 @@ import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { toAgentMessage } from "../../app-message-projection";
+import { writeClipboardText } from "../../clipboard";
 import { WorkspaceChatCard } from "../portfolio/WorkspaceChatCard";
 import { WorkspaceMessageEditor } from "./WorkspaceMessageEditor";
 import { MemberProfile } from "./WorkspaceProfile";
@@ -231,9 +232,9 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
     );
   };
   const copy = (text: string, done: string) =>
-    void navigator.clipboard?.writeText(text).then(
+    void writeClipboardText(text).then(
       () => toast.success(done),
-      () => undefined,
+      () => toast.error(t("app.clipboard.copyFailed")),
     );
   const menuItems = createMemo((): WorkspaceMenuItem[] => {
     if (props.row.pending || deleted()) return [];

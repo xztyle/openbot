@@ -16,6 +16,7 @@ import { WorkspaceContextMenu } from "@openbot/ui/features/workspace/WorkspaceCo
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, Show } from "solid-js";
+import { writeClipboardText } from "../../clipboard";
 import {
   channelApproval,
   channelBrowserTakeover,
@@ -255,9 +256,9 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
               label: t("workspace.app.channel.copyLink"),
               icon: <Link aria-hidden="true" />,
               onSelect: () =>
-                void navigator.clipboard?.writeText(link).then(
+                void writeClipboardText(link).then(
                   () => toast.success(t("workspace.app.message.linkCopied")),
-                  () => undefined,
+                  () => toast.error(t("app.clipboard.copyFailed")),
                 ),
             },
           ]

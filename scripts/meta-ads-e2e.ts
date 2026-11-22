@@ -1,7 +1,8 @@
 // Runs the meta-ads helper of the openbot-meta-ads managed skill and the three Meta event check
 // programs against a fake Graph API on 127.0.0.1 (META_GRAPH_BASE_URL). Checks list paging and
 // insights parsing, PAUSED by default, the spend guard and its audit lines, rate-limit backoff, page
-// tokens for leads, hashing for the Conversions API, that no output holds the token, and that the
+// tokens for leads, hashing for the Conversions API, the launch kit (readiness with and without a
+// token, reach estimate, targeting search, previews, pixel check), that no output holds the token, and that the
 // watcher items have stable IDs through the host's own program launcher and baseline comparison.
 // `bun scripts/meta-ads-e2e.ts`. META_ADS_E2E_NODE selects the Node.js binary (default: node on PATH).
 // Writes .openbot-build/meta-ads-e2e/report.json.
@@ -106,7 +107,8 @@ function initialObjects(): Map<string, FakeObject> {
     effective_status: "ACTIVE",
   });
   add({ id: "401", type: "form", name: "Quote form", status: "ACTIVE" });
-  add({ id: "501", type: "page", name: "Shop page", access_token: PAGE_TOKEN });
+  add({ id: "501", type: "page", name: "Shop page", access_token: PAGE_TOKEN, is_published: true });
+  add({ id: "601", type: "pixel", name: "Shop pixel", last_fired_time: new Date().toISOString() });
   return objects;
 }
 
@@ -116,12 +118,34 @@ const INVALID_FIELDS: Record<string, string[]> = {
   ad: ["daily_budget", "lifetime_budget", "bid_amount", "objective", "spend_cap", "bid_strategy"],
 };
 
-const state: { objects: Map<string, FakeObject>; requests: Recorded[]; rateLimitNext: number; nextId: number } = {
+const state: {
+  objects: Map<string, FakeObject>;
+  requests: Recorded[];
+  rateLimitNext: number;
+  nextId: number;
+  funding: boolean;
+  pixelEvents: DynamicRecord[];
+} = {
   objects: initialObjects(),
   requests: [],
   rateLimitNext: 0,
   nextId: 9000,
+  funding: true,
+  pixelEvents: [],
 };
+const PIXEL_EVENTS: DynamicRecord[] = [
+  { value: "PageView", count: 120 },
+  { value: "Purchase", count: 3 },
+];
+const PREVIEW_BODY =
+  '<iframe src="https://www.facebook.com/ads/api/preview_iframe.php?d=e2e&amp;t=1" width="540" height="690"></iframe>';
+/** A delivery estimate curve: spend in cents, as Meta sends it. */
+const CURVE: DynamicRecord[] = [0, 500, 1000, 2000, 5000, 10000].map((spend) => ({
+  spend,
+  reach: spend * 3,
+  impressions: spend * 4,
+  actions: spend / 1000,
+}));
 
 function newId(): string {
   state.nextId += 1;
@@ -304,7 +328,70 @@ function handler(base: () => string) {
           timezone_name: "Etc/UTC",
           timezone_offset_hours_utc: 0,
           account_status: 1,
+          ...(state.funding
+            ? { funding_source: "8001", funding_source_details: { display_string: "Visa *4242" } }
+            : {}),
         });
+      if (path === "me/accounts")
+        return paged(base(), path, query, [{ id: "501", tasks: ["ADVERTISE", "ANALYZE", "CREATE_CONTENT"] }], response);
+      if (path === "act_123/promote_pages")
+        return paged(base(), path, query, [{ id: "501", name: "Shop page" }], response);
+      if (path === "601/stats")
+        return send(response, {
+          data: [{ start_time: new Date().toISOString(), aggregation: "event", data: state.pixelEvents }],
+        });
+      if (path === "act_123/delivery_estimate" || path === "201/delivery_estimate")
+        return send(response, {
+          data: [
+            {
+              estimate_ready: true,
+              estimate_dau: 12000,
+              estimate_mau_lower_bound: 300000,
+              estimate_mau_upper_bound: 350000,
+              daily_outcomes_curve: CURVE,
+            },
+          ],
+        });
+      if (path === "search") {
+        if (query.type === "adinterest")
+          return paged(
+            base(),
+            path,
+            query,
+            [
+              {
+                id: "6003",
+                name: "Online courses",
+                audience_size_lower_bound: 1000000,
+                audience_size_upper_bound: 1200000,
+                path: ["Interests", "Education", "Online courses"],
+              },
+            ],
+            response,
+          );
+        if (query.type === "adgeolocation")
+          return paged(
+            base(),
+            path,
+            query,
+            [{ key: "BR", name: "Brazil", type: "country", country_code: "BR" }],
+            response,
+          );
+        if (query.type === "adTargetingCategory" && query.class === "behaviors")
+          return paged(
+            base(),
+            path,
+            query,
+            [
+              { id: "7001", name: "Engaged shoppers", type: "behaviors", path: ["Purchase behavior"] },
+              { id: "7002", name: "Frequent travelers", type: "behaviors", path: ["Travel"] },
+            ],
+            response,
+          );
+        return graphError(response, 400, { code: 100, message: "Unknown search type." });
+      }
+      if (path === "302/previews" || path === "act_123/generatepreviews")
+        return send(response, { data: [{ body: PREVIEW_BODY }] });
       if (path === "act_123/campaigns") return paged(base(), path, query, filterRows("campaign"), response);
       if (path === "act_123/adsets") return paged(base(), path, query, filterRows("adset"), response);
       if (path === "act_123/ads") return paged(base(), path, query, filterRows("ad"), response);
@@ -503,6 +590,121 @@ try {
   assert.equal(result.code, 3, "A weaker guard needs --approved.");
   check("settings: a weaker guard is refused without --approved");
 
+  // Launch kit: the readiness checklist with every step ready, then with problems.
+  for (const [key, value] of [
+    ["pageId", "501"],
+    ["pixelId", "601"],
+  ] as const) {
+    result = await cli("config", "set", key, value);
+    assert.equal(result.code, 0, result.stderr);
+  }
+  state.pixelEvents = PIXEL_EVENTS;
+  result = await cli("readiness");
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(at(result.json, "ready"), true, JSON.stringify(at(result.json, "needs")));
+  const readySteps = entries(at(result.json, "steps"));
+  assert.deepEqual(
+    readySteps.map((row) => `${at(row, "step")}:${at(row, "status")}`),
+    ["token:ok", "ad account:ok", "page:ok", "pixel:ok", "spend cap:ok"],
+  );
+  assert.equal(at(readySteps[1], "details", "payment_method"), "Visa *4242");
+  assert.equal(at(readySteps[3], "details", "events_24h", 0, "event"), "PageView");
+  state.funding = false;
+  state.pixelEvents = [];
+  result = await cli("readiness");
+  assert.equal(result.code, 0, "A checklist with missing steps is still a report.");
+  assert.equal(at(result.json, "ready"), false);
+  const problemSteps = entries(at(result.json, "steps"));
+  assert.ok(String(at(problemSteps[1], "needs")).includes("no payment method"));
+  assert.ok(String(at(problemSteps[3], "needs")).includes("no events in 24h"));
+  state.funding = true;
+  result = await cli("pixel-check");
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(at(result.json, "status"), "missing");
+  assert.ok(String(at(result.json, "test")).includes("--test-code"));
+  state.pixelEvents = PIXEL_EVENTS;
+  result = await cli("pixel-check", "--hours", "6");
+  assert.equal(at(result.json, "total"), 123);
+  assert.equal(at(result.json, "status"), "ok");
+  const stats = state.requests.filter((request) => request.path === "601/stats").at(-1);
+  assert.equal(stats?.query.aggregation, "event");
+  assert.equal(Number(stats?.query.end_time) - Number(stats?.query.start_time), 6 * 3600);
+  check("readiness: all steps ok; no payment method and a silent pixel are named; pixel-check");
+
+  result = await cli(
+    "reach-estimate",
+    "--targeting",
+    '{"geo_locations":{"countries":["BR"]}}',
+    "--optimization-goal",
+    "OFFSITE_CONVERSIONS",
+    "--budgets",
+    "10,50",
+  );
+  assert.equal(result.code, 0, result.stderr);
+  const estimate = state.requests.filter((request) => request.path === "act_123/delivery_estimate").at(-1);
+  assert.equal(estimate?.query.optimization_goal, "OFFSITE_CONVERSIONS");
+  assert.equal(estimate?.query.targeting_spec, '{"geo_locations":{"countries":["BR"]}}');
+  assert.equal(at(result.json, "estimate_mau_upper_bound"), 350000);
+  assert.deepEqual(at(result.json, "daily_outcomes", 0), {
+    budget: 10,
+    daily_spend: 10,
+    reach: 3000,
+    impressions: 4000,
+    actions: 1,
+  });
+  assert.equal(at(result.json, "daily_outcomes", 1, "daily_spend"), 50, "The curve's cents become currency units.");
+  result = await cli("reach-estimate", "--adset", "201");
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(entries(at(result.json, "daily_outcomes")).length, 5, "Without --budgets, five points of the curve.");
+  result = await cli("reach-estimate", "--targeting", '{"geo_locations":{"countries":["BR"]}}');
+  assert.equal(result.code, 2, "The account estimate needs an optimization goal.");
+  check("reach-estimate: account and ad set estimates, curve in currency units");
+
+  result = await cli("targeting-search", "online", "courses");
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(at(result.json, "data", 0, "id"), "6003");
+  assert.equal(at(result.json, "data", 0, "audience_size_upper_bound"), 1200000);
+  assert.equal(state.requests.at(-1)?.query.q, "online courses");
+  result = await cli("targeting-search", "brazil", "--type", "geo", "--location-types", "country");
+  assert.equal(at(result.json, "data", 0, "id"), "BR");
+  assert.equal(state.requests.at(-1)?.query.location_types, '["country"]');
+  result = await cli("targeting-search", "shoppers", "--type", "behavior");
+  assert.deepEqual(
+    entries(at(result.json, "data")).map((row) => at(row, "id")),
+    ["7001"],
+  );
+  check("targeting-search: interests, places and behaviors");
+
+  const previews = join(scratch, "previews");
+  result = await cli("preview", "302", "--out", previews);
+  assert.equal(result.code, 0, result.stderr);
+  const shown = entries(at(result.json, "previews"));
+  assert.deepEqual(
+    shown.map((row) => at(row, "format")),
+    ["MOBILE_FEED_STANDARD", "INSTAGRAM_STANDARD", "INSTAGRAM_STORY"],
+  );
+  assert.equal(at(shown[0], "src"), "https://www.facebook.com/ads/api/preview_iframe.php?d=e2e&t=1");
+  assert.ok((await readFile(String(at(shown[0], "file")), "utf8")).includes("preview_iframe.php"));
+  result = await cli(
+    "preview",
+    "--creative",
+    '{"object_story_spec":{"page_id":"501"}}',
+    "--format",
+    "DESKTOP_FEED_STANDARD",
+  );
+  assert.equal(result.code, 0, result.stderr);
+  const draft = state.requests.filter((request) => request.path === "act_123/generatepreviews").at(-1);
+  assert.equal(draft?.method, "GET");
+  assert.equal(draft?.query.ad_format, "DESKTOP_FEED_STANDARD");
+  assert.equal(draft?.query.creative, '{"object_story_spec":{"page_id":"501"}}');
+  assert.ok(String(at(result.json, "previews", 0, "file")).startsWith(join(home, "previews")), "The default folder.");
+  assert.equal(
+    state.requests.filter((request) => request.method === "POST").length,
+    0,
+    "The launch kit sends no change.",
+  );
+  check("preview: saved ad and unsaved creative previews as files with their links; nothing changed");
+
   // Reading: paging, money fields and insights.
   result = await cli("campaigns", "--limit", "500");
   assert.equal(result.code, 0, result.stderr);
@@ -636,6 +838,30 @@ try {
   assert.equal(result.code, 0, result.stderr);
   assert.equal(at(result.json, "data", 0, "id"), "701");
   check("leads: read with the page token");
+
+  const noToken: Record<string, string> = { ...env, META_ADS_HOME: join(scratch, "empty-home") };
+  delete noToken.META_ACCESS_TOKEN_FILE;
+  const bare = await run(noToken, ["readiness"]);
+  outputs.push(bare.stdout, bare.stderr);
+  assert.equal(bare.code, 0, "Readiness without a token is still a report.");
+  assert.equal(bare.stderr, "");
+  assert.equal(
+    at(bare.json, "steps", 0, "needs"),
+    "credential META_ACCESS_TOKEN (save with openbot.request_api_key, shared)",
+  );
+  assert.equal(
+    at(bare.json, "steps", 1, "needs"),
+    "config adAccountId (find it with accounts, then config set adAccountId act_<id>)",
+  );
+  assert.ok(String(at(bare.json, "steps", 4, "needs")).startsWith("guard.dailyBudgetCap is not set"));
+  const tokenless = await run(noToken, ["whoami"]);
+  assert.equal(tokenless.code, 1);
+  assert.equal(
+    at(tokenless.json, "error", "details", "needs", 0),
+    "credential META_ACCESS_TOKEN (save with openbot.request_api_key, shared)",
+  );
+  assert.ok(!tokenless.stderr.includes("    at "), "No stack trace.");
+  check("readiness and whoami without a token: a clean needs credential answer");
 
   const badToken = join(scratch, "bad");
   await writeFile(badToken, "wrong-token-000000\n");

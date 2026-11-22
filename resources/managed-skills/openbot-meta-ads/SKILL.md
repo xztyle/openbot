@@ -1,6 +1,6 @@
 ---
 name: openbot-meta-ads
-description: Manage the user's Meta (Facebook and Instagram) ads through the Marketing API with the meta-ads helper - read results, find losers and winners, pause, change budgets and bids, create campaigns, ad sets, creatives and ads, upload media, audiences, lead form leads, Conversions API events, and set up Meta ads event checks. Use when the user asks about Meta, Facebook or Instagram ads, ad spend, ROAS, cost per purchase, or ad rejections.
+description: Manage the user's Meta (Facebook and Instagram) ads through the Marketing API with the meta-ads helper - check launch readiness, estimate reach, search targeting, preview ads, read results, find losers and winners, pause, change budgets and bids, create campaigns, ad sets, creatives and ads, upload media, audiences, lead form leads, Conversions API events, and set up Meta ads event checks. Use when the user asks about Meta, Facebook or Instagram ads, ad spend, ROAS, cost per purchase, or ad rejections.
 ---
 
 # Meta ads
@@ -58,6 +58,33 @@ Do these steps with the user once. The user does the steps in Meta; you do the O
 7. **Spend guard.** Ask the user for a daily budget cap for the whole account and set it with
    `meta-ads config set guard.dailyBudgetCap <amount>`. Save the person's rules for automatic actions
    (when to pause, what counts as a winner) in your memory and in `meta-ads/rules.md` in the shared folder.
+8. **Check.** `meta-ads readiness` must show every step `ok` before the first launch.
+
+## Launch kit
+
+These commands only read. Use them in this order before the first ad of a campaign goes live:
+
+1. `meta-ads readiness`: one checklist of the token, the ad account (status and payment method), the page
+   (readable, can be promoted, Advertise task), the pixel (events in the last 24 hours) and the spend cap. Each
+   step is `ok`, `missing` or `error`, and `needs` says what to fix, for example
+   `credential META_ACCESS_TOKEN (save with openbot.request_api_key, shared)`, `config pageId` or
+   `guard.dailyBudgetCap is not set: ask the owner for a cap`. It answers exit code 0 also when steps are missing.
+   Fix the needs in order. Never ask for a token in chat.
+2. `meta-ads targeting-search "online courses"` (interests), `--type geo` (countries, regions, cities: use the
+   `id` as the key) or `--type behavior`. Each row has `audience_size_lower_bound` and `_upper_bound`.
+3. `meta-ads reach-estimate --targeting '<JSON>' --optimization-goal OFFSITE_CONVERSIONS --budgets 10,20,50`, or
+   `--adset <id>` for a saved ad set: daily and monthly audience, and reach and results per daily budget in
+   currency units. It is Meta's estimate, not a promise; say so.
+4. `meta-ads pixel-check`: the last event time and the events per name in 24 hours. With no events, send a test
+   event with `capi-send ... --test-code <code>` (Events Manager → the pixel → Test events) and look there.
+5. `meta-ads preview <ad or creative id>` or `meta-ads preview --creative '<creative JSON>'` for a creative that is
+   not saved yet. It saves Meta's preview of each format (`MOBILE_FEED_STANDARD`, `INSTAGRAM_STANDARD`,
+   `INSTAGRAM_STORY` by default, `--format` for others) as an HTML file in `meta-ads/previews/` (or `--out`), and
+   gives each `src` link (valid about 24 hours). Open the file in the browser, take a screenshot, and show it to
+   the owner.
+6. Create the campaign, ad set and ad **PAUSED**. Then get the money approval with `openbot.request_decision`:
+   the preview, the daily budget, the audience, the estimate and the cap. Only after a yes, turn it on with
+   `resume <id>... --approved` (the spend guard and the trust policy still check it).
 
 ## Reading
 

@@ -39,6 +39,32 @@ const PURCHASE_ACTION_TYPES = [
 ];
 const LEAD_ACTION_TYPES = ["lead", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead"];
 const RATE_LIMIT_CODES = new Set([4, 17, 32, 613]);
+const TOKEN_NEEDS = "credential META_ACCESS_TOKEN (save with openbot.request_api_key, shared)";
+const PREVIEW_FORMATS = ["MOBILE_FEED_STANDARD", "INSTAGRAM_STANDARD", "INSTAGRAM_STORY"];
+// AdAccount account_status and disable_reason values. Source: Meta "Ad Account" Graph API reference.
+const ACCOUNT_STATUSES = {
+  1: "ACTIVE",
+  2: "DISABLED",
+  3: "UNSETTLED",
+  7: "PENDING_RISK_REVIEW",
+  8: "PENDING_SETTLEMENT",
+  9: "IN_GRACE_PERIOD",
+  100: "PENDING_CLOSURE",
+  101: "CLOSED",
+  201: "ANY_ACTIVE",
+  202: "ANY_CLOSED",
+};
+const DISABLE_REASONS = {
+  1: "ADS_INTEGRITY_POLICY",
+  2: "ADS_IP_REVIEW",
+  3: "RISK_PAYMENT",
+  4: "GRAY_ACCOUNT_SHUT_DOWN",
+  5: "ADS_AFC_REVIEW",
+  6: "BUSINESS_INTEGRITY_RAR",
+  7: "PERMANENT_CLOSE",
+  8: "UNUSED_RESELLER_ACCOUNT",
+  9: "UNUSED_ACCOUNT",
+};
 
 const FIELDS = {
   account:
@@ -100,6 +126,15 @@ Setup and reading
   lead-forms [--page ID]                 Lead forms of the page.
   leads <form_id> [--hours N | --since ISO] [--page ID]
   audit [--tail N]                       The last changes from the audit log.
+
+Launch kit (read-only)
+  readiness                              Checklist before a launch: token, ad account and payment, page, pixel, cap.
+  reach-estimate (--targeting JSON|@file --optimization-goal G | --adset ID) [--promoted-object JSON]
+                 [--budgets 10,20,50]    Daily and monthly audience, and reach and results at a few daily budgets.
+  targeting-search <text> [--type interest|geo|behavior] [--location-types country,region,city] [--limit N]
+  preview (<ad or creative id> | --creative JSON|@file) [--format MOBILE_FEED_STANDARD,INSTAGRAM_STANDARD,INSTAGRAM_STORY]
+          [--out DIR]                    Saves Meta's preview of each format as an HTML file.
+  pixel-check [--pixel ID] [--hours 24]  Last event time and events per name.
 
 Changes (new objects are always PAUSED; --activate also needs --approved)
   create-campaign --name N --objective OUTCOME_SALES [--daily-budget 50] [--lifetime-budget X] [--bid-strategy S]
@@ -332,6 +367,7 @@ function readToken(options) {
   if (!value)
     throw new CliError(
       "No access token. Set META_ACCESS_TOKEN_FILE to the path of the shared key META_ACCESS_TOKEN (openbot.list_api_keys), or pass --token-file.",
+      { details: { needs: [TOKEN_NEEDS] } },
     );
   if (/\s/.test(value)) throw new CliError("META_ACCESS_TOKEN must hold one value with no spaces.");
   return value;
@@ -1427,7 +1463,386 @@ const commands = {
         }),
     });
   },
+
+  async readiness(context) {
+    const steps = [];
+    const step = (name, status, needs = null, details = undefined) => {
+      steps.push(dropEmpty({ step: name, status, needs, details }));
+      return status === "ok";
+    };
+    let tokenOk = false;
+    let tokenError = null;
+    try {
+      if (!context.graph) tokenError = "No access token.";
+    } catch (error) {
+      if (!(error instanceof CliError)) throw error;
+      tokenError = error.message;
+    }
+    if (tokenError) step("token", "missing", TOKEN_NEEDS, { message: tokenError });
+    else {
+      const me = await readinessRead(() => context.graph.get("me", { fields: "id,name" }));
+      tokenOk = me.ok ? step("token", "ok", null, me.value) : step("token", "error", me.needs, me.details);
+    }
+    const tokenFirst = `${TOKEN_NEEDS} first, to check this`;
+
+    let accountId = null;
+    let account = null;
+    let accountNeeds = "config adAccountId (find it with accounts, then config set adAccountId act_<id>)";
+    try {
+      accountId = context.accountId;
+    } catch (error) {
+      if (!(error instanceof CliError)) throw error;
+      if (context.options.account ?? process.env.META_AD_ACCOUNT_ID ?? context.settings.adAccountId)
+        accountNeeds = error.message;
+    }
+    if (!accountId) step("ad account", "missing", accountNeeds);
+    else if (!tokenOk) step("ad account", "missing", tokenFirst, { id: accountId });
+    else {
+      // funding_source needs more access than the other fields; without it the account is still read.
+      let read = await readinessRead(() =>
+        context.graph.get(accountId, { fields: `${FIELDS.account},funding_source,funding_source_details` }),
+      );
+      const fundingRead = read.ok;
+      if (!read.ok) read = await readinessRead(() => context.account());
+      if (!read.ok) step("ad account", "error", read.needs, read.details);
+      else {
+        account = read.value;
+        const status = Number(account.account_status);
+        const reason = Number(account.disable_reason) || 0;
+        const needs = [];
+        if (status !== 1)
+          needs.push(
+            `ad account ${ACCOUNT_STATUSES[status] ?? status}${reason ? ` (${DISABLE_REASONS[reason] ?? reason})` : ""}: the owner fixes it in Meta Ads Manager, Account quality or Billing`,
+          );
+        if (fundingRead && !account.funding_source)
+          needs.push("ad account has no payment method: the owner adds one in Meta Billing settings");
+        step("ad account", needs.length > 0 ? "missing" : "ok", needs.join("; ") || null, {
+          id: account.id,
+          name: account.name,
+          currency: account.currency,
+          account_status: ACCOUNT_STATUSES[status] ?? status,
+          disable_reason: reason ? (DISABLE_REASONS[reason] ?? reason) : undefined,
+          payment_method: fundingRead
+            ? (account.funding_source_details?.display_string ?? account.funding_source ?? null)
+            : "not readable with this token",
+        });
+      }
+    }
+
+    const pageId = context.options.page ?? context.settings.pageId;
+    if (!pageId) step("page", "missing", "config pageId (the Facebook Page that runs the ads: config set pageId <id>)");
+    else if (!tokenOk) step("page", "missing", tokenFirst, { id: String(pageId) });
+    else {
+      const page = await readinessRead(() =>
+        context.graph.get(graphId(pageId, "pageId"), { fields: "id,name,is_published" }),
+      );
+      if (!page.ok)
+        step(
+          "page",
+          "error",
+          `the token cannot read page ${pageId}: in Business settings assign the page to the system user (task Advertise)`,
+          page.details,
+        );
+      else {
+        const needs = [];
+        if (page.value.is_published === false) needs.push(`page ${pageId} is not published`);
+        // Tasks are listed only for the pages assigned to the token's user, so a missing row is not an error.
+        const assigned = await readinessRead(() => context.graph.list("me/accounts", { fields: "id,tasks" }, 500));
+        const row = assigned.ok ? assigned.value.data.find((entry) => String(entry.id) === String(pageId)) : null;
+        const tasks = Array.isArray(row?.tasks) ? row.tasks : null;
+        if (tasks && !tasks.includes("ADVERTISE"))
+          needs.push(`the system user has no Advertise task on page ${pageId}: add it in Business settings, Pages`);
+        let promotable = null;
+        if (account) {
+          const promote = await readinessRead(() =>
+            context.graph.list(`${accountId}/promote_pages`, { fields: "id,name" }, 500),
+          );
+          if (promote.ok) {
+            promotable = promote.value.data.some((entry) => String(entry.id) === String(pageId));
+            if (!promotable)
+              needs.push(
+                `ad account ${accountId} cannot promote page ${pageId}: connect the page to the ad account in Business settings`,
+              );
+          }
+        }
+        step("page", needs.length > 0 ? "missing" : "ok", needs.join("; ") || null, {
+          id: page.value.id,
+          name: page.value.name,
+          tasks: tasks ?? "not listed for this token",
+          promotable: promotable ?? "not checked",
+        });
+      }
+    }
+
+    const pixelId = context.options.pixel ?? context.settings.pixelId;
+    if (!pixelId)
+      step(
+        "pixel",
+        "missing",
+        "config pixelId (config set pixelId <id>; sales and lead campaigns optimize on its events)",
+      );
+    else if (!tokenOk) step("pixel", "missing", tokenFirst, { id: String(pixelId) });
+    else {
+      const pixel = await readinessRead(() => pixelState(context, graphId(pixelId, "pixelId"), 24));
+      if (!pixel.ok)
+        step("pixel", "error", `the token cannot read pixel ${pixelId}: assign it to the system user`, pixel.details);
+      else
+        step(
+          "pixel",
+          pixel.value.total > 0 ? "ok" : "missing",
+          pixel.value.total > 0
+            ? null
+            : "pixel has no events in 24h: check the site code, or send a test event (see pixel-check)",
+          {
+            id: pixel.value.id,
+            name: pixel.value.name,
+            last_fired_time: pixel.value.last_fired_time,
+            events_24h: pixel.value.events,
+          },
+        );
+    }
+
+    const cap = Number(context.settings.guard?.dailyBudgetCap);
+    if (!Number.isFinite(cap) || cap <= 0)
+      step(
+        "spend cap",
+        "missing",
+        `guard.dailyBudgetCap is ${context.settings.guard?.dailyBudgetCap ?? "not set"}: ask the owner for a cap, then config set guard.dailyBudgetCap <amount>`,
+      );
+    else step("spend cap", "ok", null, { dailyBudgetCap: cap, currency: account?.currency });
+
+    const missing = steps.filter((entry) => entry.status !== "ok");
+    return {
+      ready: missing.length === 0,
+      steps,
+      needs: missing.map((entry) => `${entry.step}: ${entry.needs}`),
+      next:
+        missing.length === 0
+          ? "Ready. Show the owner the preview (preview) and get the money approval with openbot.request_decision before --approved."
+          : "Fix the needs in order. Never ask for a token in chat: use openbot.request_api_key.",
+    };
+  },
+
+  async "reach-estimate"(context) {
+    const { options } = context;
+    const query = {};
+    let path;
+    if (options.adset) {
+      path = `${graphId(options.adset, "--adset")}/delivery_estimate`;
+      if (options["optimization-goal"]) query.optimization_goal = String(options["optimization-goal"]);
+    } else {
+      const targeting = readJsonOption(options, "targeting");
+      if (!targeting)
+        throw new CliError('Use --targeting JSON (for example {"geo_locations":{"countries":["BR"]}}) or --adset ID.', {
+          exit: EXIT.usage,
+        });
+      path = `${context.accountId}/delivery_estimate`;
+      query.targeting_spec = targeting;
+      query.optimization_goal = requireOption(
+        options,
+        "optimization-goal",
+        "For example OFFSITE_CONVERSIONS or REACH.",
+      );
+      const promoted = readJsonOption(options, "promoted-object");
+      if (promoted) query.promoted_object = promoted;
+    }
+    const answer = await context.graph.get(path, query);
+    const row = Array.isArray(answer?.data) ? (answer.data[0] ?? {}) : answer;
+    const account = await context.account().catch(() => null);
+    const offset = currencyOffset(account?.currency ?? "USD");
+    // The curve's spend is in the smallest currency unit, like budgets.
+    const curve = (Array.isArray(row.daily_outcomes_curve) ? row.daily_outcomes_curve : [])
+      .map((point) => ({
+        daily_spend: round((Number(point?.spend) || 0) / offset),
+        reach: Number(point?.reach) || 0,
+        impressions: Number(point?.impressions) || 0,
+        actions: Number(point?.actions) || 0,
+      }))
+      .sort((a, b) => a.daily_spend - b.daily_spend);
+    const budgets = list(options.budgets).map((value) => positiveNumber(value, "--budgets"));
+    let points;
+    if (budgets.length > 0)
+      points = budgets.map((budget) => {
+        const below = curve.filter((point) => point.daily_spend <= budget);
+        return { budget, ...(below.at(-1) ?? curve[0] ?? {}) };
+      });
+    else if (curve.length <= 5) points = curve;
+    else points = [0, 1, 2, 3, 4].map((index) => curve[Math.round((index * (curve.length - 1)) / 4)]);
+    return {
+      currency: account?.currency ?? null,
+      estimate_ready: row.estimate_ready ?? null,
+      estimate_dau: row.estimate_dau ?? null,
+      estimate_mau_lower_bound: row.estimate_mau_lower_bound ?? null,
+      estimate_mau_upper_bound: row.estimate_mau_upper_bound ?? null,
+      daily_outcomes: points,
+      note: "Meta's estimate, not a promise. daily_spend is in normal currency units; actions are results of the optimization goal.",
+    };
+  },
+
+  async "targeting-search"(context, args) {
+    const { options } = context;
+    const text = args.join(" ").trim() || (options.q ? String(options.q) : "");
+    const type = String(options.type ?? "interest");
+    const limit = Number(options.limit ?? 25);
+    let result;
+    if (type === "interest") {
+      if (!text)
+        throw new CliError("Use: targeting-search <text> [--type interest|geo|behavior].", { exit: EXIT.usage });
+      result = await context.graph.list("search", { type: "adinterest", q: text, locale: options.locale }, limit);
+    } else if (type === "geo") {
+      if (!text) throw new CliError("Use: targeting-search <place> --type geo.", { exit: EXIT.usage });
+      const types = list(options["location-types"]);
+      result = await context.graph.list(
+        "search",
+        {
+          type: "adgeolocation",
+          q: text,
+          location_types: types.length > 0 ? types : undefined,
+          locale: options.locale,
+        },
+        limit,
+      );
+    } else if (type === "behavior") {
+      // Meta lists every behavior for this class; the text filters the names here.
+      const all = await context.graph.list("search", { type: "adTargetingCategory", class: "behaviors" }, 1000);
+      const wanted = text.toLowerCase();
+      const data = all.data.filter(
+        (row) =>
+          !wanted ||
+          String(row.name ?? "")
+            .toLowerCase()
+            .includes(wanted),
+      );
+      result = { data: data.slice(0, limit), truncated: data.length > limit };
+    } else throw new CliError("--type must be interest, geo or behavior.", { exit: EXIT.usage });
+    return {
+      type,
+      query: text,
+      count: result.data.length,
+      truncated: result.truncated,
+      data: result.data.map((row) =>
+        dropEmpty({
+          id: row.id ?? row.key,
+          name: row.name,
+          type: row.type,
+          audience_size_lower_bound: row.audience_size_lower_bound,
+          audience_size_upper_bound: row.audience_size_upper_bound,
+          path: row.path,
+          country_code: row.country_code,
+          region: row.region,
+          description: row.description,
+        }),
+      ),
+    };
+  },
+
+  async preview(context, args) {
+    const { options } = context;
+    const formats = options.format ? list(options.format).map((format) => format.toUpperCase()) : PREVIEW_FORMATS;
+    for (const format of formats)
+      if (!/^[A-Z0-9_]{3,60}$/.test(format))
+        throw new CliError(`--format ${format} is not a Meta ad format name.`, { exit: EXIT.usage });
+    const creative = readJsonOption(options, "creative");
+    let path;
+    let name;
+    if (creative) {
+      if (typeof creative !== "object" || Array.isArray(creative))
+        throw new CliError('--creative must be a JSON object, for example {"object_story_spec":{...}}.', {
+          exit: EXIT.usage,
+        });
+      path = `${context.accountId}/generatepreviews`;
+      name = `draft-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+    } else {
+      if (!args[0])
+        throw new CliError("Use: preview <ad or creative id>, or preview --creative JSON.", { exit: EXIT.usage });
+      name = graphId(args[0], "<id>");
+      path = `${name}/previews`;
+    }
+    const out = String(options.out ?? join(context.home, "previews"));
+    mkdirSync(out, { recursive: true });
+    const previews = [];
+    for (const format of formats) {
+      const answer = await context.graph.get(path, creative ? { creative, ad_format: format } : { ad_format: format });
+      const body = String((Array.isArray(answer?.data) ? answer.data[0]?.body : null) ?? "");
+      if (!body) {
+        previews.push({ format, file: null, src: null, error: "Meta sent no preview for this format." });
+        continue;
+      }
+      const file = join(out, `${name}-${format}.html`);
+      writeFileSync(
+        file,
+        `<!doctype html>\n<meta charset="utf-8">\n<title>${name} ${format}</title>\n<body style="margin:0;background:#f0f2f5">\n${body}\n</body>\n`,
+      );
+      const src = /\ssrc="([^"]+)"/.exec(body)?.[1]?.replaceAll("&amp;", "&") ?? null;
+      previews.push({ format, file, src });
+    }
+    return {
+      object: creative ? "unsaved creative" : name,
+      folder: out,
+      previews,
+      note: "Each src link works for about 24 hours. Open the file in a browser, take a screenshot, and show it to the owner before launch.",
+    };
+  },
+
+  async "pixel-check"(context) {
+    const { options } = context;
+    const pixel = graphId(options.pixel ?? context.settings.pixelId, "--pixel (or config set pixelId)");
+    const hours = positiveNumber(options.hours ?? 24, "--hours");
+    const state = await pixelState(context, pixel, hours);
+    return {
+      ...state,
+      status: state.total > 0 ? "ok" : "missing",
+      needs: state.total > 0 ? null : `pixel has no events in ${hours}h`,
+      test: `Open Events Manager, the pixel, Test events, and copy the test code. Then: capi-send --pixel ${pixel} --event PageView --external-id test --test-code <code>. The event shows in Test events within a minute.`,
+    };
+  },
 };
+
+/** One read of the readiness checklist: the value, or what the owner must fix. A rate limit still stops. */
+async function readinessRead(read) {
+  try {
+    return { ok: true, value: await read() };
+  } catch (error) {
+    if (error instanceof CliError && error.exit === EXIT.rateLimited) throw error;
+    if (error instanceof GraphError) {
+      const details = describeGraphError(error);
+      const needs =
+        error.code === 190 || error.code === 102
+          ? `a new ${TOKEN_NEEDS}: the saved token is not valid`
+          : (details.hint ?? details.message);
+      return { ok: false, needs, details };
+    }
+    return { ok: false, needs: String(error?.message ?? error), details: { message: String(error?.message ?? error) } };
+  }
+}
+
+/** The pixel's last event time and its events per name in the last hours (AdsPixel stats, aggregation event). */
+async function pixelState(context, pixel, hours) {
+  const end = Math.floor(Date.now() / 1000);
+  const start = end - Math.round(hours * 3600);
+  const info = await context.graph.get(pixel, { fields: "id,name,last_fired_time,is_unavailable" });
+  const stats = await context.graph.get(`${pixel}/stats`, { aggregation: "event", start_time: start, end_time: end });
+  const counts = {};
+  for (const bucket of Array.isArray(stats?.data) ? stats.data : [])
+    for (const entry of Array.isArray(bucket?.data) ? bucket.data : []) {
+      const event = String(entry?.value ?? "unknown");
+      counts[event] = (counts[event] ?? 0) + (Number(entry?.count) || 0);
+    }
+  const events = Object.entries(counts)
+    .map(([event, count]) => ({ event, count }))
+    .sort((a, b) => b.count - a.count);
+  const fired = Date.parse(String(info?.last_fired_time ?? ""));
+  return {
+    id: info?.id ?? pixel,
+    name: info?.name ?? null,
+    last_fired_time: info?.last_fired_time ?? null,
+    hours_since_last_event: Number.isFinite(fired) ? round((Date.now() - fired) / 3_600_000) : null,
+    is_unavailable: info?.is_unavailable ?? null,
+    period_hours: hours,
+    total: events.reduce((sum, entry) => sum + entry.count, 0),
+    events,
+  };
+}
 
 async function listObjects(context, edge, type) {
   const { options } = context;

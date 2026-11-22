@@ -11,6 +11,7 @@ import type { McpServerConfig } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import { Effect, Result, Schema } from "effect";
+import { z } from "zod";
 import { causeHelpers } from "./effect-boundary";
 import { isLoopback, type McpOAuthAuthority, type McpSignIn, normalizeResource } from "./mcp-oauth-provider";
 import {
@@ -312,6 +313,19 @@ const connectAndCountEffect = Effect.fnUntraced(function* (
   );
 });
 
+/**
+ * The part of a `tools/list` page that the probe reads.
+ *
+ * The SDK v1 `listTools` decodes each tool with a schema that refuses a property schema that is not
+ * an object, such as `"data": true`, which JSON Schema permits. One such tool failed the whole test
+ * and the server was not added (upstream 718cbbdbd). The provider reads the tool schemas itself, so
+ * the probe decodes only the names and the cursor.
+ */
+const LISTED_TOOLS_PAGE = z.object({
+  tools: z.array(z.object({ name: z.string() })),
+  nextCursor: z.string().optional(),
+});
+
 interface ListedTools {
   count: number;
   /** The first names, up to `MCP_PROBE_TOOL_NAMES`. */
@@ -326,7 +340,11 @@ const countToolsEffect = Effect.fnUntraced(function* (client: Client) {
   let cursor: string | undefined;
   for (;;) {
     const page = yield* probeIo((signal) =>
-      client.listTools(cursor === undefined ? undefined : { cursor }, { signal }),
+      client.request(
+        { method: "tools/list", params: cursor === undefined ? undefined : { cursor } },
+        LISTED_TOOLS_PAGE,
+        { signal },
+      ),
     );
     for (const tool of page.tools) if (names.length < MCP_PROBE_TOOL_NAMES) names.push(tool.name.slice(0, 128));
     count += page.tools.length;

@@ -14,8 +14,8 @@ import {
   messageAuthor,
   messageRows,
   peopleNames,
-  rowMessages,
   previewText,
+  rowMessages,
   type WorkspaceMessageRowModel,
 } from "./workspace-model";
 import { savedScrollPlace, saveScrollPlace } from "./workspace-scroll-places";

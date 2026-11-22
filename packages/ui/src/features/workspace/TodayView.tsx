@@ -153,11 +153,6 @@ function greetingKey(hour: number) {
 }
 
 /**
- * Today: the owner's home. What waits for them from every space, with one-tap answers; the agents
- * that work now, with Stop; and the briefing as cards: spend, goals and what the agents made. A new
- * workspace also gets a short guide to goals, loops, the briefing and costs.
- */
-/**
  * Keeps the focus in a list of decision cards when the card that holds it goes away, as one does
  * after Approve, Decline or an answer: the next card takes it, or the heading when none is left.
  * Without it the focus fell to the page, and a keyboard or a screen reader started at the top.
@@ -197,6 +192,11 @@ export function createDecisionFocus(items: () => readonly unknown[]) {
   };
 }
 
+/**
+ * Today: the owner's home. What waits for them from every space, with one-tap answers; the agents
+ * that work now, with Stop; and the briefing as cards: spend, goals and what the agents made. A new
+ * workspace also gets a short guide to goals, loops, the briefing and costs.
+ */
 export function TodayView(props: TodayViewProps): JSX.Element {
   const { t, format } = useText();
   // A phone mounts Today twice (its tab, and the pane behind it): the heading ids must not clash.

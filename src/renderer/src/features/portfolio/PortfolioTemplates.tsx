@@ -8,6 +8,7 @@ import type { AppTextKey } from "@openbot/i18n";
 import { Button, Input, Text, Textarea, toast } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import { createSignal, For, onSettled, Show } from "solid-js";
+import { downloadText } from "../trust/trust-draft";
 import { useWorkspace } from "../workspace/workspace-context";
 
 const STATE_TEXT = {
@@ -52,15 +53,18 @@ export function PortfolioTemplates() {
   }
   onSettled(() => void load());
 
-  async function act(run: () => Promise<TemplateImport>, failed: AppTextKey): Promise<void> {
-    if (busy()) return;
+  /** Whether the host made the change. A failure shows as a toast. */
+  async function act(run: () => Promise<TemplateImport>, failed: AppTextKey): Promise<boolean> {
+    if (busy()) return false;
     setBusy(true);
     try {
       const record = await run();
       setImports((list) => [record, ...list.filter((entry) => entry.id !== record.id)]);
       void ws.spaces.refresh();
+      return true;
     } catch (failure) {
       toast.error(t(failed), { error: failure, fallback: t(failed) });
+      return false;
     } finally {
       setBusy(false);
     }
@@ -87,7 +91,10 @@ export function PortfolioTemplates() {
         calls()?.importTemplate({ template, ...(name().trim() ? { name: name().trim() } : {}) }) ??
         Promise.reject(new Error("unsupported")),
       "portfolio.templates.importFailed",
-    ).then(() => setFile(""));
+    ).then((done) => {
+      // A failed import keeps the pasted text, so the owner can try again.
+      if (done) setFile("");
+    });
   }
 
   async function exportSpace(): Promise<void> {
@@ -96,12 +103,12 @@ export function PortfolioTemplates() {
     setBusy(true);
     try {
       const template = await api.exportTemplate(ws.spaces.current());
-      const text = JSON.stringify(template, null, 2);
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-      link.download = `${template.name.replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase() || "space"}.atelier-template.json`;
-      link.click();
-      URL.revokeObjectURL(link.href);
+      // downloadText keeps the file's address a moment after the click, which Safari reads late.
+      downloadText(
+        `${template.name.replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase() || "space"}.atelier-template.json`,
+        JSON.stringify(template, null, 2),
+        "application/json",
+      );
       toast.success(t("portfolio.templates.exported"));
     } catch (failure) {
       toast.error(t("portfolio.templates.exportFailed"), {

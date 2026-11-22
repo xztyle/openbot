@@ -701,6 +701,10 @@ Network traffic can also occur when:
 - a user or an agent visits a page in the embedded browser;
 - a user submits text that is not a web address in the browser address bar, which sends the query to Google Search;
 - a locally installed Codex plugin connects to its service;
+- the weekly reality check of a space runs. The host sends a `HEAD` request (then a `GET` when a
+  server refuses `HEAD`) to at most 15 public web addresses that the space's agents wrote in their
+  claims of the week, to see whether each one answers. It reads only the status. It sends no user
+  data, and it does not request an address on the local network;
 - a member turned on push notifications in the web app. The computer then sends encrypted push
   messages to the push service of that member's browser; see
   [Web push notifications](#web-push-notifications);
@@ -1045,6 +1049,12 @@ another confirmation. Publishing makes the selected site content publicly access
 only or Ask first, hosted-site changes require confirmation. Site ownership and source validation still apply.
 
 ## Exports
+
+The Portfolio view can export a space as a template file. The file holds the space's agents (names,
+titles, instructions, roles and schedules), the text of their local skills, the playbooks of their
+roles, its loops and its channels. It holds no chats, memories, files, keys, money rows or customer
+facts, and keys, email addresses, phone numbers, long numbers and the query part of links are taken
+out of its text.
 
 The account menu can export a local ZIP containing agent profiles, conversation snapshots, queues,
 and managed message attachments. It intentionally excludes CLI credentials, browser cookies, and

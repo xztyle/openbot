@@ -186,4 +186,5 @@ export const messages = {
   "error.remote.channelDeleteUnsupported": "请更新这台桌面服务器以删除频道。",
   "error.remote.historyRefreshFailed": "消息已发送，但无法刷新对话历史。",
   "error.remote.taskHistoryRefreshFailed": "任务已更改，但无法刷新对话历史。",
+  "error.remote.membershipChanged": "有人同时更改了该成员。请重新加载成员列表后重试。",
 } as const satisfies PartialTranslation<typeof source>;

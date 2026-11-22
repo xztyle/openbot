@@ -193,4 +193,6 @@ export const messages = {
   "error.remote.channelDeleteUnsupported": "채널을 삭제하려면 이 데스크톱 서버를 업데이트해 주세요.",
   "error.remote.historyRefreshFailed": "메시지를 보냈지만 채팅 기록을 새로 고칠 수 없었어요.",
   "error.remote.taskHistoryRefreshFailed": "작업을 변경했지만 채팅 기록을 새로 고칠 수 없었어요.",
+  "error.remote.membershipChanged":
+    "다른 사람이 동시에 이 멤버를 변경했어요. 멤버 목록을 다시 불러온 뒤 다시 시도해 주세요.",
 } as const satisfies PartialTranslation<typeof source>;

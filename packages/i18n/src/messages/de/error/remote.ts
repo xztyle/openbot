@@ -202,4 +202,6 @@ export const messages = {
     "Die Nachricht wurde gesendet, aber der Chatverlauf konnte nicht aktualisiert werden.",
   "error.remote.taskHistoryRefreshFailed":
     "Die Aufgabe wurde geändert, aber der Chatverlauf konnte nicht aktualisiert werden.",
+  "error.remote.membershipChanged":
+    "Jemand hat dieses Mitglied gleichzeitig geändert. Lade die Mitglieder neu und versuche es erneut.",
 } as const satisfies PartialTranslation<typeof source>;

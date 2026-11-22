@@ -197,4 +197,6 @@ export const messages = {
   "error.remote.channelDeleteUnsupported": "Actualiza este servidor de escritorio para eliminar canales.",
   "error.remote.historyRefreshFailed": "El mensaje se envió, pero no se pudo actualizar el historial del chat.",
   "error.remote.taskHistoryRefreshFailed": "La tarea se cambió, pero no se pudo actualizar el historial del chat.",
+  "error.remote.membershipChanged":
+    "Otra persona cambió este miembro al mismo tiempo. Vuelve a cargar los miembros e inténtalo de nuevo.",
 } as const satisfies PartialTranslation<typeof source>;

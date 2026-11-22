@@ -202,4 +202,5 @@ export const messages = {
     "Le message a été envoyé, mais l’historique de la discussion n’a pas pu être actualisé.",
   "error.remote.taskHistoryRefreshFailed":
     "La tâche a été modifiée, mais l’historique de la discussion n’a pas pu être actualisé.",
+  "error.remote.membershipChanged": "Quelqu’un a modifié ce membre au même moment. Rechargez les membres et réessayez.",
 } as const satisfies PartialTranslation<typeof source>;

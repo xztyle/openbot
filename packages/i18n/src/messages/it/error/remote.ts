@@ -198,4 +198,6 @@ export const messages = {
     "Il messaggio è stato inviato, ma non è stato possibile aggiornare la cronologia della chat.",
   "error.remote.taskHistoryRefreshFailed":
     "L'attività è stata modificata, ma non è stato possibile aggiornare la cronologia della chat.",
+  "error.remote.membershipChanged":
+    "Qualcun altro ha modificato questo membro nello stesso momento. Ricarica i membri e riprova.",
 } as const satisfies PartialTranslation<typeof source>;

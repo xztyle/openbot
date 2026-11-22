@@ -25,7 +25,7 @@ export const messages = defineMessages("webClient", {
   "webClient.title.place": "{place} - {workspace} - Atelier",
   "webClient.push.title": "Push notifications",
   "webClient.push.description":
-    "Get a notification on this device when an agent of {host} finishes, needs your input or approval, or a scheduled run fails. It also works when Atelier is closed. The computer sends it to the push service of your browser (Google, Apple, Mozilla or Microsoft), encrypted. It holds the name of the agent and the kind of event, not the text of a message. Atelier accounts do not see it.",
+    "Get a notification on this device when someone on {host} mentions you, writes to you or replies in a thread you follow, or an agent finishes, needs your input or approval, or a scheduled run fails. It also works when Atelier is closed. The computer sends it to the push service of your browser (Google, Apple, Mozilla or Microsoft), encrypted. It holds the names of the agent or the author and of the conversation, and the kind of event, not the text of a message. Atelier accounts do not see it.",
   "webClient.push.noHost": "Connect to a computer first.",
   "webClient.push.browserUnsupported":
     "This browser cannot receive push notifications. On an iPhone or iPad, add Atelier to the Home Screen first.",

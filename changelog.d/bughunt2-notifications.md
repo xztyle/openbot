@@ -19,3 +19,5 @@
   does. An admin's tab still tells.
 - Coming back to the app while the connection is still coming back no longer delays the "When
   you're back" note by up to four minutes: a call that did not reach the server is made again.
+- Settings > Notifications says what push notifications cover: mentions, messages to you and
+  replies in threads you follow, as well as agents that finish or need you.

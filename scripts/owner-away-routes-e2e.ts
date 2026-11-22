@@ -6,13 +6,15 @@
 // - Settings save and come back; a time zone the host does not know is refused with 400.
 // - Focus starts and ends.
 // - A held request shows in the state; an answer reaches the agent once, and a second answer is a 409.
-// - The first `active` after a time away answers with what waited, once.
+// - The first `active` after a time away answers with what waited, once. An admin's `active` reads the
+//   state only: it does not mark the owner back.
 // - The state survives a restart of the host.
 //
 // `bun scripts/owner-away-routes-e2e.ts`. Writes .openbot-build/owner-away-routes-e2e/report.json.
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { OWNER_AWAY_CODECS, OWNER_AWAY_ROUTES } from "@openbot/contracts/team-protocol/owner-away-v1";
+import { runCauseEffect } from "../src/backend/effect-boundary";
 import { OwnerAwayService } from "../src/backend/owner-away";
 import { type JsonObject, type Person, record, startWorkspaceE2e } from "./workspace-e2e-host";
 
@@ -122,6 +124,13 @@ await step("A held request shows, its answer reaches the agent once", async () =
 await step("Coming back after a time away shows what waited, once", async () => {
   service().hold({ agentId: "agent-e2e", kind: "fyi", title: "The landing is live" });
   clock += 60 * 60_000;
+  // An admin's open app is not the owner coming back: the held request stays unseen for the owner.
+  await runCauseEffect(e2e.host().team.updateMember(member.id, { role: "admin" }));
+  const admin = record((await route(OWNER_AWAY_ROUTES.active, member)).body, "state");
+  assert.equal(admin.welcome, undefined);
+  assert.equal(heldOf(admin)[0]?.seen, false, "An admin's app marked the owner's held request seen.");
+  assert.equal(service().activeNow(), false, "An admin's app marked the owner active.");
+  await runCauseEffect(e2e.host().team.updateMember(member.id, { role: "member" }));
   const back = record((await route(OWNER_AWAY_ROUTES.active, owner)).body, "state");
   assert.deepEqual(back.welcome, { held: 1, suppressed: 0 });
   const again = record((await route(OWNER_AWAY_ROUTES.active, owner)).body, "state");

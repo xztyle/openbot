@@ -29,7 +29,10 @@ export async function routeOwnerAway(
   const body = await readJson(request);
   try {
     if (url.pathname === OWNER_AWAY_ROUTES.state) return json(200, away.state());
-    if (url.pathname === OWNER_AWAY_ROUTES.active) return json(200, away.noteActive());
+    // Only the owner's own app in front means the owner is back. An admin's open page reads the state
+    // only: it must not mark the owner's held requests seen or drop the summary of their quiet time.
+    if (url.pathname === OWNER_AWAY_ROUTES.active)
+      return json(200, member.role === "owner" ? away.noteActive() : away.state());
     if (url.pathname === OWNER_AWAY_ROUTES.focus) {
       const until = body.until;
       return json(200, away.setFocus(typeof until === "number" ? until : null));

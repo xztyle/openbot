@@ -11,3 +11,5 @@
   Paste again. The message's touch rule, which turns off selection for the long press, reached it.
 - Phone: an edge swipe while a sheet or dialog is open no longer slides the conversation away under
   it and back. The swipe goes back once nothing covers the conversation.
+- Phone: holding a "Hold to confirm" button in a chat card no longer opens the message's actions
+  halfway through the hold.

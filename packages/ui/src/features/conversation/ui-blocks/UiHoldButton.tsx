@@ -1,4 +1,4 @@
-import { Button, type ButtonProps } from "@openbot/ui";
+import { Button, type ButtonProps, claimLongPress } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
 import { createSignal, onCleanup } from "solid-js";
 
@@ -62,6 +62,8 @@ export function UiHoldButton(props: UiHoldButtonProps) {
       style={{ "--ui-block-hold-duration": `${props.holdMs}ms` }}
       onPointerDown={(event: PointerEvent) => {
         if (event.button > 0) return;
+        // The hold is this button's: the long press of the message around it opens no actions.
+        claimLongPress(event);
         completed = false;
         start();
       }}

@@ -1,5 +1,5 @@
+import { freeSecretName, scanForSecrets } from "@openbot/contracts/secret-hygiene";
 import { describe, expect, it } from "vitest";
-import { freeSecretName, scanForSecrets } from "./secret-hygiene";
 
 const marker = (secret: { label: string }) => `[hidden ${secret.label}]`;
 

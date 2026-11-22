@@ -263,6 +263,20 @@ function markRegisteredSecrets(value: string): string {
   return result + value.slice(copied);
 }
 
+/**
+ * Puts `replacement` where a value registered with `registerSecretValue` stands in `value`, and
+ * nothing else: no label rule, no growth to the token around it. It is for text that people read
+ * as written, such as a chat message, where a log rule would take `token: missing` for a secret.
+ * A value shorter than the log minimum stays, even one registered with `allowShort`: in prose a
+ * short value is more often an ordinary word.
+ */
+export function maskRegisteredSecrets(value: string, replacement: string): string {
+  const pattern = registeredSecretPattern;
+  if (!pattern || !value) return value;
+  pattern.lastIndex = 0;
+  return value.replace(pattern, (match) => (match.length < MIN_REGISTERED_SECRET_LENGTH ? match : replacement));
+}
+
 function applyTextRules(value: string, rules: RedactionRules): string {
   const redacted = value
     .replace(PEM_PRIVATE_KEY, "[redacted]")

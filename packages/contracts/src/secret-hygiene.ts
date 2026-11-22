@@ -94,8 +94,17 @@ function looksLikeSecret(value: string): boolean {
   return /\p{L}/u.test(word) && /[^\p{L}]/u.test(word);
 }
 
-/** Replaces the secrets in `text`. `marker` writes the text that stands where each one was. */
-export function scanForSecrets(text: string, marker: (secret: FoundSecret) => string): SecretScan {
+/**
+ * Replaces the secrets in `text`. `marker` writes the text that stands where each one was.
+ *
+ * `labeled: false` keeps only the shapes that are never words, for text that an agent wrote: its
+ * code samples hold `password = os.getenv("…")`, which the labeled rule would take for a value.
+ */
+export function scanForSecrets(
+  text: string,
+  marker: (secret: FoundSecret) => string,
+  options: { labeled?: boolean } = {},
+): SecretScan {
   const found: FoundSecret[] = [];
   const take = (secret: FoundSecret): string => {
     const known = found.find((item) => item.value === secret.value);
@@ -105,6 +114,7 @@ export function scanForSecrets(text: string, marker: (secret: FoundSecret) => st
   let result = text;
   for (const shape of SHAPES)
     result = result.replace(shape.pattern, (value) => take({ label: shape.label, name: shape.name, value }));
+  if (options.labeled === false) return { text: result, found };
   result = result.replace(LABELED, (whole, word: string, value: string) => {
     // A value that a shape above already replaced is a marker now.
     if (!looksLikeSecret(value)) return whole;

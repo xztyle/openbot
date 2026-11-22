@@ -22,6 +22,7 @@ import {
 import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
+import { channelMessageWithoutSecrets, channelTaskWithoutSecrets, writerOf } from "./channel-secrets";
 import {
   ACTIVITY_ITEM_TYPES,
   projectThreadState,
@@ -660,7 +661,7 @@ export class ChannelStore {
     if (previous !== undefined) return decodeChannel(previous);
     if (!change.tasks.every(isChannelTask)) throw new Error("Invalid channel task.");
     const channel = { ...change.channel, revision: change.channel.revision + 1 };
-    const payload = { ...change, channel };
+    const payload = { ...changeWithoutSecrets(change), channel };
     const written: ChannelMessage[] = [];
     const result = this.database.dispatch(
       commandId,
@@ -807,7 +808,7 @@ export class ChannelStore {
     }
     const pending = this.#messageChanges.get(channelId) ?? [];
     for (const { message, sequence } of rows) {
-      const stored = { ...message, sequence };
+      const stored = { ...channelMessageWithoutSecrets(message), sequence };
       db.prepare("UPDATE projection_channel_messages SET message_json = ? WHERE channel_id = ? AND message_id = ?").run(
         JSON.stringify(stored),
         channelId,
@@ -1367,6 +1368,21 @@ const CHANNEL_PREVIEW_SOURCE_LIMIT = CHANNEL_PREVIEW_LIMIT * 16;
  * One line for a sidebar row. A message can carry no text at all (an attachment, or a question
  * the agent asked), so fall back to a description of what arrived instead of showing an empty row.
  */
+/**
+ * The change as it may be stored: no key or password in a message or in the task it asks for. A
+ * task takes the rules of its request when the request is in the same change, as a send writes both.
+ */
+function changeWithoutSecrets(change: ChannelChange): ChannelChange {
+  const messages = change.messages.map(channelMessageWithoutSecrets);
+  const writers = new Map(change.messages.map((message) => [message.id, writerOf(message)]));
+  return {
+    ...change,
+    messages,
+    ...(change.quietMessages ? { quietMessages: change.quietMessages.map(channelMessageWithoutSecrets) } : {}),
+    tasks: change.tasks.map((task) => channelTaskWithoutSecrets(task, writers.get(task.requestMessageId) ?? "agent")),
+  };
+}
+
 export function channelPreviewText(entry: ChannelMessage): string {
   // A message between agents shows the people its one line, as the transcript does.
   const note = entry.agentNote?.summary.trim();

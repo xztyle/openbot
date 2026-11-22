@@ -32,6 +32,7 @@
     "./chat-visual": "./src/chat-visual.ts",
     "./channel-agent-note": "./src/channel-agent-note.ts",
     "./chat-tag-references": "./src/chat-tag-references.ts",
+    "./secret-hygiene": "./src/secret-hygiene.ts",
     "./conversation-order": "./src/conversation-order.ts",
     "./hosted-servers": "./src/hosted-servers.ts",
     "./hosted-sites": "./src/hosted-sites.ts",

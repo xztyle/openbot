@@ -4,9 +4,9 @@
  * The value stays only in this notice: when it closes unsaved, the secret is gone from Atelier.
  */
 import { WORKSPACE_SHARED_SECRET_SCOPE } from "@openbot/contracts/ipc";
+import { type FoundSecret, freeSecretName, type SecretScan, scanForSecrets } from "@openbot/contracts/secret-hygiene";
 import { toast } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
-import { type FoundSecret, freeSecretName, type SecretScan, scanForSecrets } from "./secret-hygiene";
 import { useWorkspace } from "./workspace-context";
 
 /** A notice stays this long: the reader may need a moment to decide, and nothing else waits on it. */

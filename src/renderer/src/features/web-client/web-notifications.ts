@@ -93,6 +93,11 @@ function browserFocused(): boolean {
   return Boolean(record && record.until > Date.now());
 }
 
+/** The tag of a page notification about `what` (a request, a chat or a channel) of a host, the same in each tab. */
+function notificationTag(hostId: string, what: string): string {
+  return `openbot:${hostId}:${what}`;
+}
+
 /** The shown notifications that wait for an answer, by request, as on desktop. */
 const requestNotifications = new Map<string, Notification>();
 /** As many as the desktop keeps. */
@@ -110,7 +115,9 @@ export function withdrawWebAgentNotification(hostId: string, event: AgentEvent):
 
 /**
  * Shows a host's agent event as a browser notification while no tab of the app has focus, as the
- * desktop does while its window does not have focus. One tab speaks for each host, so no tag is needed.
+ * desktop does while its window does not have focus. Each tab that opened the host gets the event, so
+ * the notification has a tag: the request, or the agent's chat. The browser shows one for each tag,
+ * and a newer one, from this tab or another, replaces the one before it.
  */
 export function showWebAgentNotification(options: {
   hostId: string;
@@ -139,7 +146,11 @@ export function showWebAgentNotification(options: {
   if (!content) return;
   const key = notificationRequestKey(options.hostId, options.event);
   try {
-    const notification = new Notification(content.title, { body: content.body });
+    const notification = new Notification(content.title, {
+      body: content.body,
+      // A request's key names its host already.
+      tag: key ? `openbot:${key}` : notificationTag(options.hostId, `agent:${content.agentId}`),
+    });
     if (key) {
       // A provider can use a request id again. The newest notification replaces the one before it.
       requestNotifications.get(key)?.close();
@@ -166,7 +177,10 @@ export function showWebAgentNotification(options: {
 /** The shown reply notification of each channel, by host. A newer reply in the channel replaces it. */
 const channelNotifications = new Map<string, Notification>();
 
-/** Shows channel replies as browser notifications while no tab of the app has focus, as the desktop does. */
+/**
+ * Shows channel replies as browser notifications while no tab of the app has focus, as the desktop does.
+ * The tag is the channel's, so two tabs of the host show one notification.
+ */
 export function showWebChannelNotifications(options: {
   hostId: string;
   replies: readonly ChannelNotificationContent[];
@@ -176,7 +190,10 @@ export function showWebChannelNotifications(options: {
   for (const reply of options.replies) {
     const key = `${options.hostId}\n${reply.channelId}`;
     try {
-      const notification = new Notification(reply.title, { body: reply.body });
+      const notification = new Notification(reply.title, {
+        body: reply.body,
+        tag: notificationTag(options.hostId, reply.channelId),
+      });
       channelNotifications.get(key)?.close();
       channelNotifications.set(key, notification);
       notification.addEventListener("close", () => {

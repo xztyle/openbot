@@ -12,3 +12,5 @@
   requests stay in the "When you're back" bundle and the summary of their quiet hours still comes.
 - The "While you were away" note names only what waited, in the right number: "1 held request,
   3 notifications" instead of "1 held requests, 3 notifications" or "0 held requests".
+- With two tabs of the app open on the same server, and push notifications off, the computer shows
+  one notification for an agent's event or a channel reply instead of one from each tab.

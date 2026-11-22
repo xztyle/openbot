@@ -167,7 +167,14 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
       const capabilities = await web.connect(hostId);
       // The agent waits for the reader once the client is online, as a host's snapshot says.
       queueMicrotask(() => mock.emitAgentEvent({ type: "browser-takeover-requested", request: REQUEST }));
-      return [...capabilities, "browser-control", "browser-view", "browser-view-frame-point", "browser-view-clipboard"];
+      return [
+        ...capabilities,
+        "browser-control",
+        "browser-view",
+        "browser-view-frame-point",
+        "browser-view-clipboard",
+        "browser-user-control",
+      ];
     },
     respondToTakeover: async (input) => {
       harness.takeoverResponses?.push({ requestId: input.requestId, decision: input.decision });

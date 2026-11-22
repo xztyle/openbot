@@ -936,6 +936,24 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
       "A copy after the agent stopped reaches the host",
     );
   });
+
+  await step(page, viewport, "Take over on a page the agent uses gives the person the page", async () => {
+    await page.evaluate(() => window.liveViewBridge?.acting(true));
+    const lock = page.getByRole("status").filter({ hasText: english("browser.liveView.agentUsing") });
+    await lock.waitFor({ timeout: UI_WAIT_MS });
+    await tab.evaluate(() => window.scrollTo(0, 0));
+    const clicks = Number(await tab.evaluate(nextClicks));
+    const next = await onScreen(page, tab, "#next");
+    await page.mouse.click(next.x, next.y);
+    await page.waitForTimeout(500);
+    assert.equal(Number(await tab.evaluate(nextClicks)), clicks, "A click while the agent acts waits.");
+    await button(lock, english("island.action.takeOver")).click();
+    await lock.waitFor({ state: "detached", timeout: UI_WAIT_MS });
+    await page.mouse.click(next.x, next.y);
+    await waitForTab(tab, clicksAre, nextClicks, String(clicks + 1), "A click after Take over reaches the page");
+    await shot(page, "desktop-taken-over");
+    await page.evaluate(() => window.liveViewBridge?.acting(false));
+  });
   await context.close();
   await tabContext.close();
 }

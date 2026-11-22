@@ -583,6 +583,15 @@
   color: var(--ws-active-text);
 }
 
+/* On the active row's fill (the accent in Craft), a count in the accent or a muted color is not seen. */
+.ws-sidebar-row[data-active] :is(.ws-sidebar-working-count, .ws-sidebar-later-count) {
+  color: inherit;
+}
+
+.ws-sidebar-row[data-active] .ws-working-pulse {
+  background: currentcolor;
+}
+
 .ws-sidebar-row:focus-visible {
   outline: 2px solid var(--openbot-focus-ring);
   outline-offset: -2px;

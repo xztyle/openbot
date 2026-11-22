@@ -11,3 +11,5 @@
   Spanish names those words.
 - Spanish calls Loops "ciclos" everywhere (Today's guide and the learning view said "loop"), says
   "costo" instead of "coste", and greets with "Buenas noches" in the evening.
+- Spanish on the phone: the Agents tab's filters ("Activos", "Esperan") fit their tabs. Before,
+  "Trabajando" and "Esperando" were cut off.

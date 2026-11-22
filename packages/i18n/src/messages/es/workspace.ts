@@ -297,8 +297,8 @@ export const messages = {
   "workspace.fleet.addAgent": "Nuevo agente",
   "workspace.fleet.filter": "Estado del agente",
   "workspace.fleet.all": { one: "Todos {count}", other: "Todos {count}" },
-  "workspace.fleet.working": { one: "Trabajando {count}", other: "Trabajando {count}" },
-  "workspace.fleet.waiting": { one: "Esperando {count}", other: "Esperando {count}" },
+  "workspace.fleet.working": { one: "Activo {count}", other: "Activos {count}" },
+  "workspace.fleet.waiting": { one: "Espera {count}", other: "Esperan {count}" },
   "workspace.fleet.idle": { one: "Inactivos {count}", other: "Inactivos {count}" },
 
   "workspace.org.agents": { one: "{count} agente", other: "{count} agentes" },
@@ -1104,7 +1104,7 @@ export const messages = {
   "workspace.today.guide.intro":
     "Atelier es más que un chat: tus agentes trabajan hacia objetivos, mueven el trabajo por ciclos, te resumen el día cada mañana y te piden permiso antes de gastar.",
   "workspace.today.guide.goal": "Dale un objetivo a tu equipo",
-  "workspace.today.guide.goalHint": "Tu jefe planifica el trabajo en torno a él y te avisa si se retrasa.",
+  "workspace.today.guide.goalHint": "Tu agente principal planifica el trabajo en torno a él y te avisa si se retrasa.",
   "workspace.today.guide.channel": "Crea #general",
   "workspace.today.guide.channelHint": "Una sala para ti y tus agentes. Responden cuando hace falta.",
   "workspace.today.guide.briefing": "Activa el resumen de la mañana",

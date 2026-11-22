@@ -45,7 +45,7 @@ declare global {
 const logger = createOpenBotLogger("web-live-view-e2e");
 const ROOT = resolve(import.meta.dirname, "..");
 const OUT = resolve(ROOT, ".openbot-build/web-live-view-e2e");
-const UI_WAIT_MS = 60_000;
+const UI_WAIT_MS = Number(process.env.UI_WAIT_MS ?? 60_000);
 const english = translateFor("en");
 const DM_PATH = "/app/general/dm/chief";
 const TAB_ID = "browser-tab-signup";
@@ -714,6 +714,32 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
     await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2);
     await page.mouse.wheel(0, 600);
     await waitForTab(tab, scrolledPast, scrollTop, "100", "The wheel scrolls the page");
+  });
+
+  await step(page, viewport, "a press that ends outside the view still lets the button go", async () => {
+    await tab.evaluate(() => {
+      window.scrollTo(0, 0);
+      document.body.dataset.mouseUps = "0";
+      addEventListener("mouseup", () => {
+        document.body.dataset.mouseUps = String(Number(document.body.dataset.mouseUps) + 1);
+      });
+    });
+    await waitUntil(() => host.inputs.some((input) => input.type === "ack"), "Frames are drawn");
+    // A drag that selects text in the field and lets go above the view, as a person's drag often does.
+    const field = await onScreen(page, tab, "#name", { x: 0.9, y: 0.5 });
+    const view = await liveView(page).boundingBox();
+    assert.ok(view);
+    await page.mouse.move(field.x, field.y);
+    await page.mouse.down();
+    await page.mouse.move(field.x - 40, view.y - 30, { steps: 4 });
+    await page.mouse.up();
+    await waitForTab(
+      tab,
+      (expected) => document.body.dataset.mouseUps === expected,
+      () => document.body.dataset.mouseUps,
+      "1",
+      "The page sees the button go up, or it drags on every move after",
+    );
   });
 
   await step(page, viewport, "the view starts again when the connection comes back", async () => {

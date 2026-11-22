@@ -568,11 +568,16 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
     };
   };
 
-  const point = (at: { clientX: number; clientY: number }): { x: number; y: number; sequence: number } | null => {
+  const point = (
+    at: { clientX: number; clientY: number },
+    toEdge = false,
+  ): { x: number; y: number; sequence: number } | null => {
     const box = drawnBox();
     if (!box) return null;
     const x = (at.clientX - box.left) / box.width;
     const y = (at.clientY - box.top) / box.height;
+    // A held button works the page wherever the mouse goes, as a drag out of a browser window does.
+    if (toEdge) return { x: clamp(x, 0, 1), y: clamp(y, 0, 1), sequence: box.size.sequence };
     if (x < 0 || x > 1 || y < 0 || y > 1) return null;
     return { x, y, sequence: box.size.sequence };
   };
@@ -587,10 +592,18 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
   let lastTouchAt = 0;
   const fromTouch = () => performance.now() - lastTouchAt < 800;
 
+  /**
+   * A mouse button pressed on the page. The canvas captures the pointer, so the moves and the release
+   * come here when the mouse leaves the view. A release outside used to stay on this side, and the
+   * page dragged on every move after it, selecting text, until the next click.
+   */
+  let mouseHeld = false;
   const pointer = (event: MouseEvent, action: "move" | "down" | "up") => {
     if (fromTouch()) return;
-    const at = point(event);
+    const at = point(event, mouseHeld && action !== "down");
+    if (action === "up" && event.buttons === 0) mouseHeld = false;
     if (!at) return;
+    if (action === "down") mouseHeld = true;
     send({
       type: "pointer",
       action,
@@ -687,6 +700,7 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
   };
 
   const touchDown = (event: PointerEvent) => {
+    if (event.pointerType === "mouse") canvas()?.setPointerCapture?.(event.pointerId);
     if (event.pointerType !== "touch") return;
     // The view takes the finger: no compatibility mouse event, no scroll or zoom of this page.
     event.preventDefault();

@@ -627,6 +627,55 @@ export function createMockChannels(
     workspaceDmAgents: async (): Promise<WorkspaceDmAgents> => ({ agentIds: [...agentIds()] }),
     /** Every channel id, for the spaces of the preview. */
     channelIds: (): string[] => [...channels.keys()],
+    /**
+     * A message of someone else, as the host posts it: in the channel, or as a reply in a thread whose
+     * root then counts it. For tests of unread counts.
+     */
+    postMessage: (
+      channelId: string,
+      author: ChannelMessage["author"],
+      text: string,
+      threadRootId?: string,
+    ): ChannelMessage => {
+      const channel = requireChannel(channelId);
+      const list = messages.get(channelId) ?? [];
+      const id = `posted-${crypto.randomUUID()}`;
+      const message: ChannelMessage = {
+        id,
+        channelId,
+        sequence: (list.at(-1)?.sequence ?? 0) + 1,
+        author,
+        taskId: null,
+        superseded: false,
+        message: {
+          id,
+          author: author.kind === "agent" ? "assistant" : "user",
+          text,
+          createdAt: new Date().toISOString(),
+          status: "completed",
+        },
+        ...(threadRootId ? { threadRootId } : {}),
+      };
+      list.push(message);
+      messages.set(channelId, list);
+      const updated = { ...channel, revision: channel.revision + 1 };
+      channels.set(channelId, updated);
+      const root = threadRootId ? list.find((entry) => entry.id === threadRootId) : undefined;
+      if (root) {
+        root.threadSummary = {
+          replyCount: (root.threadSummary?.replyCount ?? 0) + 1,
+          lastReplyAt: message.message.createdAt,
+          participantIds: [
+            author.id,
+            ...(root.threadSummary?.participantIds ?? []).filter((item) => item !== author.id),
+          ],
+        };
+        messageChanged(updated, root);
+      }
+      messageChanged(updated, message);
+      changed(channelId, updated.revision);
+      return structuredClone(message);
+    },
     /** Pins a message of the preview, or unpins it, and shows the change as the host does. */
     setMessagePinned: (channelId: string, messageId: string, pinned: boolean): void => {
       const channel = requireChannel(channelId);

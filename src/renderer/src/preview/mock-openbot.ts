@@ -338,6 +338,8 @@ function mockCustomProviderModels(provider: CustomProviderSummary): ClientAgentM
 export interface MockOpenBotControls {
   api: OpenBotDesktopApi;
   emitAgentEvent: (event: AgentEvent) => void;
+  /** Posts a message of someone else in a channel or a thread, as the host does. */
+  postChannelMessage: ReturnType<typeof createMockChannels>["postMessage"];
   onLatestConversationOpened: (listener: (agentId: string) => void) => () => void;
   onLatestDirectConversationOpened: (listener: (memberId: string) => void) => () => void;
   readConversationSnapshot: (agentId: string) => ConversationSnapshot;
@@ -3325,6 +3327,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
   return {
     api,
     emitAgentEvent,
+    postChannelMessage: mockChannels.postMessage,
     onLatestConversationOpened: (listener) => {
       latestConversationListeners.add(listener);
       return () => latestConversationListeners.delete(listener);

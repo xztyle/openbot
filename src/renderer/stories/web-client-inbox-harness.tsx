@@ -43,6 +43,8 @@ declare global {
       sent: { operationId: string; text: string }[];
     };
     harnessUploadMs?: number;
+    /** The mock host, so a test can act as the reader's other tab or device. */
+    harnessHost?: ReturnType<typeof createMockOpenBot>;
     harnessRefusedTexts?: string[];
   }
 }
@@ -62,6 +64,7 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
   });
   for (const item of SAVED)
     void mock.api.agent.workspaceSetSaved?.({ operationId: crypto.randomUUID(), channelId: "general", ...item });
+  window.harnessHost = mock;
   const web = mockWebRuntimeFor(mock, events);
   let hold = 0;
   let down = false;

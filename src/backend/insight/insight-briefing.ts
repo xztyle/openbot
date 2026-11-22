@@ -30,17 +30,25 @@ export interface BriefingFacts {
   alerts: string[];
 }
 
-const NUMBER = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
+/**
+ * Numbers in the briefing's language: "1.250.000 COP" in Spanish, "1,250,000 COP" in English. The
+ * Spanish of Colombia groups four digits too ("1.234"), where Spain's leaves "1234".
+ */
+const NUMBERS = {
+  es: new Intl.NumberFormat("es-CO", { maximumFractionDigits: 2 }),
+  en: new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }),
+} as const;
 
-export function moneyText(amounts: ReadonlyMap<string, number>): string | null {
+export function moneyText(amounts: ReadonlyMap<string, number>, language: "es" | "en" = "en"): string | null {
   if (amounts.size === 0) return null;
-  return [...amounts].map(([currency, amount]) => `${NUMBER.format(amount)} ${currency}`).join(" + ");
+  return [...amounts].map(([currency, amount]) => `${NUMBERS[language].format(amount)} ${currency}`).join(" + ");
 }
 
-export function goalFact(goal: InsightGoal, now: number): BriefingFacts["goals"][number] {
+export function goalFact(goal: InsightGoal, now: number, language: "es" | "en" = "en"): BriefingFacts["goals"][number] {
+  const number = NUMBERS[language];
   return {
     title: goal.title,
-    progress: `${NUMBER.format(goal.current)} / ${NUMBER.format(goal.target)} ${goal.metric}`,
+    progress: `${number.format(goal.current)} / ${number.format(goal.target)} ${goal.metric}`,
     pace: insightGoalPace(goal, now),
     deadline: goal.deadline,
   };
@@ -66,32 +74,38 @@ export function briefingPrompt(facts: BriefingFacts, owner: string): string {
   ].join("\n");
 }
 
+const plural = (count: number, one: string, other: string) => (count === 1 ? one : other);
+
 const WORDS = {
   es: {
     nothing: "Sin novedades desde ayer.",
-    done: (done: number, failed: number) => `${done} tareas terminadas${failed ? `, ${failed} fallaron` : ""}`,
-    tickets: (created: number, closed: number) => `${created} tickets nuevos y ${closed} cerrados`,
-    landings: (count: number) => `${count} landing${count === 1 ? "" : "s"} publicada${count === 1 ? "" : "s"}`,
+    done: (done: number, failed: number) =>
+      `${done} ${plural(done, "tarea terminada", "tareas terminadas")}${failed ? `, ${failed} ${plural(failed, "falló", "fallaron")}` : ""}`,
+    tickets: (created: number, closed: number) =>
+      `${created} ${plural(created, "ticket nuevo", "tickets nuevos")} y ${closed} ${plural(closed, "cerrado", "cerrados")}`,
+    landings: (count: number) => `${count} ${plural(count, "landing publicada", "landings publicadas")}`,
     money: (space: string, spend: string | null, revenue: string | null, sales: number | null) =>
-      `${space} ayer: gasto ${spend ?? "0"}, ingresos ${revenue ?? "0"}${sales !== null ? ` (${sales} ventas)` : ""}`,
-    needs: (count: number) => `${count} cosa${count === 1 ? "" : "s"} esperan por ti`,
+      `${space} ayer: gasto ${spend ?? "0"}, ingresos ${revenue ?? "0"}${sales !== null ? ` (${sales} ${plural(sales, "venta", "ventas")})` : ""}`,
+    needs: (count: number) => `${count} ${plural(count, "cosa espera", "cosas esperan")} por ti`,
     goal: (title: string, progress: string, pace: string) => `Meta ${title}: ${progress} (${PACE.es[pace] ?? pace})`,
     costs: (week: number, previous: number) =>
-      `Costo de agentes esta semana: ${NUMBER.format(week)} USD (semana anterior ${NUMBER.format(previous)} USD)`,
+      `Costo de agentes esta semana: ${NUMBERS.es.format(week)} USD (semana anterior ${NUMBERS.es.format(previous)} USD)`,
     decision: (agent: string, text: string, link: string) => `${agent} decidió: ${text} ${link}`.trimEnd(),
     waits: (agent: string, what: string, link: string | null) => `${agent} espera: ${what}${link ? ` ${link}` : ""}`,
   },
   en: {
     nothing: "Nothing new since yesterday.",
-    done: (done: number, failed: number) => `${done} tasks done${failed ? `, ${failed} failed` : ""}`,
-    tickets: (created: number, closed: number) => `${created} tickets opened and ${closed} closed`,
-    landings: (count: number) => `${count} landing page${count === 1 ? "" : "s"} published`,
+    done: (done: number, failed: number) =>
+      `${done} ${plural(done, "task", "tasks")} done${failed ? `, ${failed} failed` : ""}`,
+    tickets: (created: number, closed: number) =>
+      `${created} ${plural(created, "ticket", "tickets")} opened and ${closed} closed`,
+    landings: (count: number) => `${count} landing ${plural(count, "page", "pages")} published`,
     money: (space: string, spend: string | null, revenue: string | null, sales: number | null) =>
-      `${space} yesterday: spent ${spend ?? "0"}, earned ${revenue ?? "0"}${sales !== null ? ` (${sales} sales)` : ""}`,
-    needs: (count: number) => `${count} thing${count === 1 ? "" : "s"} wait${count === 1 ? "s" : ""} for you`,
+      `${space} yesterday: spent ${spend ?? "0"}, earned ${revenue ?? "0"}${sales !== null ? ` (${sales} ${plural(sales, "sale", "sales")})` : ""}`,
+    needs: (count: number) => `${count} ${plural(count, "thing waits", "things wait")} for you`,
     goal: (title: string, progress: string, pace: string) => `Goal ${title}: ${progress} (${PACE.en[pace] ?? pace})`,
     costs: (week: number, previous: number) =>
-      `Agent cost this week: ${NUMBER.format(week)} USD (week before ${NUMBER.format(previous)} USD)`,
+      `Agent cost this week: ${NUMBERS.en.format(week)} USD (week before ${NUMBERS.en.format(previous)} USD)`,
     decision: (agent: string, text: string, link: string) => `${agent} decided: ${text} ${link}`.trimEnd(),
     waits: (agent: string, what: string, link: string | null) => `${agent} waits: ${what}${link ? ` ${link}` : ""}`,
   },

@@ -713,7 +713,7 @@ export class InsightService {
           kind: "spend-no-sales",
           text: alertText(language, "spend-no-sales", {
             space: space.name,
-            amount: moneyText(spend) ?? "0",
+            amount: moneyText(spend, language) ?? "0",
             days: String(settings.alertDays),
           }),
         });
@@ -726,7 +726,7 @@ export class InsightService {
           kind: "goal-behind",
           text: alertText(language, "goal-behind", {
             goal: goal.title,
-            progress: `${goal.current} / ${goal.target} ${goal.metric}`,
+            progress: goalFact(goal, now, language).progress,
             space: spaceName(goal.spaceId),
           }),
         });
@@ -887,16 +887,17 @@ export class InsightService {
                 new Map([
                   [[...spend.keys()][0] ?? "", round(([...revenue.values()][0] ?? 0) - ([...spend.values()][0] ?? 0))],
                 ]),
+                language,
               )
             : null;
-        return { spend: moneyText(spend), revenue: moneyText(revenue), sales, net };
+        return { spend: moneyText(spend, language), revenue: moneyText(revenue, language), sales, net };
       };
       return [{ space: space.name, yesterday: sum(yesterday, yesterday), week: sum(weekStart, yesterday) }];
     });
     const goals = this.#state.goals
       .filter((goal) => !spaceId || goal.spaceId === spaceId)
       .slice(0, 6)
-      .map((goal) => goalFact(goal, now));
+      .map((goal) => goalFact(goal, now, language));
     const decisions = this.#options.channels
       .ids()
       .filter((channelId) => {
@@ -1084,8 +1085,8 @@ function alertText(language: "es" | "en", kind: InsightAlertKind, values: Record
   const text =
     kind === "spend-no-sales"
       ? es
-        ? `${values.space}: ${values.amount} en anuncios en ${values.days} días y 0 ventas.`
-        : `${values.space}: spent ${values.amount} on ads in ${values.days} days with 0 sales.`
+        ? `${values.space}: ${values.amount} en anuncios en ${values.days} ${values.days === "1" ? "día" : "días"} y 0 ventas.`
+        : `${values.space}: spent ${values.amount} on ads in ${values.days} ${values.days === "1" ? "day" : "days"} with 0 sales.`
       : kind === "goal-behind"
         ? es
           ? `La meta "${values.goal}" (${values.space}) va atrasada: ${values.progress}.`

@@ -92,6 +92,16 @@ async function waitForPath(page: Page, expected: string): Promise<void> {
 /** The pane of the open channel, DM or group. */
 const channelHeading = (page: Page, name: string) => page.getByRole("region", { name, exact: true }).first();
 
+/**
+ * Waits until the page has loaded what it asked for, before a step leaves it. A page left while its
+ * modules load aborts them, and the dev server can then leave the same modules of the next page
+ * pending, so that page stays blank.
+ */
+async function settle(page: Page): Promise<void> {
+  if (page.url() === "about:blank") return;
+  await page.waitForLoadState("networkidle", { timeout: UI_WAIT_MS }).catch(() => undefined);
+}
+
 async function step(page: Page, name: string, check: () => Promise<void>): Promise<void> {
   try {
     await check();
@@ -156,13 +166,15 @@ try {
     if (
       message.type() === "error" &&
       !message.text().startsWith("Failed to load resource") &&
-      !message.text().startsWith("[vite]")
+      !message.text().startsWith("[vite]") &&
+      !message.text().startsWith(`WebSocket connection to 'ws://127.0.0.1:${address.port}/`)
     )
       report.consoleErrors.push(message.text().slice(0, 1_000));
   });
 
   // 1. A shared link to a channel of another space opens that space and the channel.
   await step(page, "link to a channel of another space", async () => {
+    await settle(page);
     await page.goto(`${origin}/app/market-trading/c/cakemaker`, COMMIT);
     await channelHeading(page, "cakemaker").waitFor({ timeout: UI_WAIT_MS });
     await waitForPath(page, "/app/market-trading/c/cakemaker");
@@ -171,6 +183,7 @@ try {
 
   // 2. A reload stays there.
   await step(page, "reload keeps the channel", async () => {
+    await settle(page);
     await page.reload(COMMIT);
     await channelHeading(page, "cakemaker").waitFor({ timeout: UI_WAIT_MS });
     await waitForPath(page, "/app/market-trading/c/cakemaker");
@@ -178,6 +191,7 @@ try {
 
   // 3. A thread, with Back and Forward.
   await step(page, "thread link opens the channel and its thread", async () => {
+    await settle(page);
     await page.goto(`${origin}/app/general/c/general/t/general-root`, COMMIT);
     await channelHeading(page, "general").waitFor({ timeout: UI_WAIT_MS });
     await page.getByText("Started: I compare the plans of both rivals.").waitFor({ timeout: UI_WAIT_MS });
@@ -206,6 +220,7 @@ try {
   // 4. Copy link of a message gives an address that names the server; it opens and marks the message.
   let messageLink = "";
   await step(page, "Copy link of a message", async () => {
+    await settle(page);
     await page.goto(`${origin}/app/general/c/general`, COMMIT);
     await channelHeading(page, "general").waitFor({ timeout: UI_WAIT_MS });
     const row = page.getByRole("article").filter({ hasText: "Thanks all, the site looks great" }).first();
@@ -216,6 +231,7 @@ try {
     assert.match(messageLink, /^http:\/\/127\.0\.0\.1:\d+\/app\/s\/preview-host\/general\/c\/general\/m\/[\w-]+$/u);
   });
   await step(page, "message link marks the message", async () => {
+    await settle(page);
     await page.goto(messageLink, COMMIT);
     await channelHeading(page, "general").waitFor({ timeout: UI_WAIT_MS });
     await page
@@ -229,6 +245,7 @@ try {
 
   // 5. A space that the user picks on the rail is a step; Back returns to the place before it.
   await step(page, "a space picked on the rail gets its own entry", async () => {
+    await settle(page);
     await page.goto(`${origin}/app/general/c/general`, COMMIT);
     await channelHeading(page, "general").waitFor({ timeout: UI_WAIT_MS });
     // The rail lists Trading once the host named its spaces; a click before that is a click on the start.
@@ -244,6 +261,7 @@ try {
 
   // 6. A reply link opens its thread and marks the reply there.
   await step(page, "reply link marks the reply in its thread", async () => {
+    await settle(page);
     await page.goto(`${origin}/app/general/c/general/t/general-root`, COMMIT);
     const reply = page.getByText("Great, add the yearly prices too.");
     await reply.waitFor({ timeout: UI_WAIT_MS });
@@ -254,10 +272,12 @@ try {
     const link = await page.evaluate(() => navigator.clipboard.readText());
     assert.match(link, /\/app\/s\/preview-host\/general\/c\/general\/t\/general-root\/m\/[\w-]+$/u);
     // Let the page load before it is left: a page left while it starts drops the dev server's socket.
+    await settle(page);
     await page.goto(`${origin}/app/general/activity`, COMMIT);
     await page
       .getByRole("heading", { name: english("workspace.view.activity"), exact: true })
       .waitFor({ timeout: UI_WAIT_MS });
+    await settle(page);
     await page.goto(link, COMMIT);
     await page
       .locator("[data-highlighted]")
@@ -268,8 +288,10 @@ try {
 
   // 7. The owner's chat with an agent.
   await step(page, "agent chat link", async () => {
+    await settle(page);
     await page.goto(`${origin}/app/general/dm/chief`, COMMIT);
     await waitForPath(page, "/app/general/dm/chief");
+    await settle(page);
     await page.reload(COMMIT);
     await waitForPath(page, "/app/general/dm/chief");
   });
@@ -277,6 +299,7 @@ try {
 
   // 8. A link to something gone shows the space's home, Today, with a notice.
   await step(page, "a gone channel falls back with a notice", async () => {
+    await settle(page);
     await page.goto(`${origin}/app/general/c/no-such-channel`, COMMIT);
     await page.getByText(english("webClient.location.unavailable")).waitFor({ timeout: UI_WAIT_MS });
     await waitForPath(page, "/app/general/today");
@@ -285,6 +308,7 @@ try {
 
   // 9. A settings page over a place: Back closes it.
   await step(page, "a settings page is a step of its own", async () => {
+    await settle(page);
     await page.goto(`${origin}/app/general/c/random?page=settings`, COMMIT);
     await page.getByRole("heading", { name: english("app.settingsPage.title") }).waitFor({ timeout: UI_WAIT_MS });
     await page.keyboard.press("Escape");
@@ -296,6 +320,7 @@ try {
 
   // 9b. A page with no place opens over the space's home, not over the last chat.
   await step(page, "a page address with no place opens over Today", async () => {
+    await settle(page);
     await page.goto(`${origin}/app/general?page=settings`, COMMIT);
     await page.getByRole("heading", { name: english("app.settingsPage.title") }).waitFor({ timeout: UI_WAIT_MS });
     await waitForPath(page, "/app/general/today?page=settings");
@@ -304,6 +329,7 @@ try {
   // 9c. A link to a section of the server settings opens it, and the client still answers: a sync
   // throw of the section's first read halted every update.
   await step(page, "a server settings section link opens and the client still answers", async () => {
+    await settle(page);
     await page.goto(`${origin}/app/general/c/random?page=server-settings&section=workspace`, COMMIT);
     await page.getByRole("heading", { name: "Preview computer" }).first().waitFor({ timeout: UI_WAIT_MS });
     await page.keyboard.press("Escape");
@@ -316,6 +342,7 @@ try {
 
   // 10. Copy link of a channel header; a link that names the wrong space opens the channel's own.
   await step(page, "Copy link of a channel", async () => {
+    await settle(page);
     await page.goto(`${origin}/app/general/c/cakemaker`, COMMIT);
     await channelHeading(page, "cakemaker").waitFor({ timeout: UI_WAIT_MS });
     await waitForPath(page, "/app/market-trading/c/cakemaker");
@@ -328,10 +355,11 @@ try {
   // 10b. The command bar: a sentence that starts with "tell" goes to the lead; a verb with nothing to
   // act on offers no channel of that name.
   await step(page, "the command bar sends a 'tell me' sentence to the lead", async () => {
+    await settle(page);
     await page.goto(`${origin}/app/general/c/general`, COMMIT);
     await channelHeading(page, "general").waitFor({ timeout: UI_WAIT_MS });
     await page.keyboard.press("Control+k");
-    const field = page.getByRole("textbox", { name: english("workspace.app.switcher.placeholder") });
+    const field = page.getByRole("combobox", { name: english("workspace.app.switcher.placeholder") });
     await field.waitFor({ timeout: UI_WAIT_MS });
     const sentence = "Tell me what the costs are this week";
     await field.fill(sentence);
@@ -360,6 +388,7 @@ try {
   // 11. A phone opens the conversation of the address, and Back goes to the list, not to another place.
   await step(page, "phone opens the linked conversation", async () => {
     await page.setViewportSize({ width: 390, height: 800 });
+    await settle(page);
     await page.goto(`${origin}/app/market-trading/c/cakemaker`, COMMIT);
     await channelHeading(page, "cakemaker").waitFor({ timeout: UI_WAIT_MS });
     await waitForPath(page, "/app/market-trading/c/cakemaker");

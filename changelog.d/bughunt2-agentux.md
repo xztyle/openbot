@@ -6,3 +6,9 @@
   tool gets an error that names it and lists similar tools, instead of one generic message.
 - `send_message` accepts one agent id as a string and `"true"` or `"false"` for `expectsReply` and
   `fyi`, which Claude agents' calls were refused for before the tool saw them.
+
+### Changed
+
+- An agent that another agent creates starts with Computer Use off, unless the creator sets
+  `computerUse` and has it itself. The creator can also start it with workspace access. Full
+  access stays the default, because workspace access stops Grok and OpenCode agents on Linux.

@@ -133,6 +133,7 @@ import { OWNER_TOOL_NAMES, OwnerTools } from "./owner-tools";
 import {
   createAgentToolSchema,
   listModelsToolSchema,
+  newAgentLimits,
   PROFILE_TOOL_NAMES,
   profileToolErrorMessage,
   readAgentToolSchema,
@@ -2037,13 +2038,10 @@ export class OpenBotToolRouter {
       // An effort alone applies to the model the new agent starts on, known only once it exists.
       const lateEffort = requested === null ? args.reasoningEffort : undefined;
       const sectionId = this.#sidebarLayout?.getSnapshot().agentAssignments[senderAgentId] ?? null;
-      // A new agent starts with Full access, Computer Use and the auto-approve grant. A caller without
-      // them passes its limits on, so it cannot get around them through an agent it creates
-      // (upstream 57329ace4).
-      const limits: Pick<UpdateAgentInput, "access" | "computerUse"> = {
-        ...(workspaceAccessEnforced(caller) ? { access: "workspace" } : {}),
-        ...(agentComputerUseEnabled(caller) ? {} : { computerUse: false }),
-      };
+      // A new agent starts with Full access, Computer Use and the auto-approve grant; the limits below
+      // take Computer Use away unless asked for, and pass on the caller's own limits.
+      const limits = newAgentLimits(caller, args);
+      if (typeof limits === "string") return openBotToolFailure(limits);
       const create = (assign?: (agentId: string) => Effect.Effect<SidebarLayoutSnapshot, StoredStateFailure>) =>
         this.#hooks.createAgent(
           {

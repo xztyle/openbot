@@ -70,8 +70,40 @@ export const createAgentToolSchema = z
         "true makes a background teammate: it stays out of the user's agent lists, starts with notifications off, and works with agents as usual. Default false.",
       )
       .optional(),
+    computerUse: z
+      .boolean()
+      .describe(
+        "true gives the new agent Computer Use (control of desktop apps), only when its work needs it and you have it. Default false; the browser tools do not need it.",
+      )
+      .optional(),
+    access: z
+      .enum(AGENT_ACCESS_MODES)
+      .describe(
+        "workspace limits the new agent to writing in its workspace and the shared folder. Default: your own access. full only when you have it.",
+      )
+      .optional(),
   })
   .strict();
+
+/**
+ * What a new agent may do. It gets least privilege that still works: Computer Use only when asked for,
+ * and the caller's own access unless it asks for workspace. Workspace by default would stop Grok and
+ * OpenCode agents on Linux and sandbox Bash. A caller cannot give more than it has (upstream 57329ace4).
+ * Returns the error for a request to widen, which the calling agent can correct.
+ */
+export function newAgentLimits(
+  caller: AgentSummary,
+  request: { access?: AgentAccess | undefined; computerUse?: boolean | undefined },
+): Pick<UpdateAgentInput, "access" | "computerUse"> | string {
+  if (request.computerUse === true && !agentComputerUseEnabled(caller))
+    return "You do not have Computer Use, so a new agent cannot get it from you. Omit computerUse; only the user can turn it on.";
+  if (request.access === "full" && workspaceAccessEnforced(caller))
+    return "Your access is workspace, so a new agent cannot get full access from you. Omit access; only the user can widen it.";
+  return {
+    ...(request.access === "workspace" || workspaceAccessEnforced(caller) ? { access: "workspace" } : {}),
+    ...(request.computerUse === true ? {} : { computerUse: false }),
+  };
+}
 
 export const listModelsToolSchema = z
   .object({

@@ -458,6 +458,7 @@
     "./features/workspace/LoopsView": "./src/features/workspace/LoopsView.tsx",
     "./features/workspace/SecretsView": "./src/features/workspace/SecretsView.tsx",
     "./features/workspace/ConnectionsSection": "./src/features/workspace/ConnectionsSection.tsx",
+    "./features/workspace/MailboxesSection": "./src/features/workspace/MailboxesSection.tsx",
     "./features/workspace/InsightView": "./src/features/workspace/InsightView.tsx",
     "./features/workspace/WhySlowPopover": "./src/features/workspace/WhySlowPopover.tsx",
     "./features/workspace/WorkspaceContextMenu": "./src/features/workspace/WorkspaceContextMenu.tsx",

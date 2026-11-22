@@ -259,6 +259,7 @@ import { hostTrustCalls } from "../trust/trust-port";
 import { RailHelpMenu } from "../window/RailHelpMenu";
 import { ServerSettingsPageTitle, SettingsPageFrame } from "../window/SettingsPageFrame";
 import type { SettingsKind, WindowPage } from "../window/window-page-context";
+import { createAgentMailboxesStore } from "../workspace/agent-mailboxes-store";
 import { createConnectorAccessStore } from "../workspace/connector-access-store";
 import { createOwnerAwayStore } from "../workspace/owner-away-store";
 import { WorkspaceSidebarPane } from "../workspace/WorkspaceSidebarPane";
@@ -2009,6 +2010,13 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       workspace.state.capabilities.includes(FORK_HOST_CAPABILITY) &&
       canAdministerServer(workspace.state.host?.role),
   });
+  const agentMailboxes = createAgentMailboxesStore({
+    request: () => workspace.runtime.admin?.request,
+    enabled: () =>
+      workspace.state.status === "online" &&
+      workspace.state.capabilities.includes(FORK_HOST_CAPABILITY) &&
+      canAdministerServer(workspace.state.host?.role),
+  });
   const workspaceController = createWorkspaceController({
     channels,
     artifactThumbnailUrl: artifactThumbnails.url,
@@ -2151,6 +2159,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     needsYou: needsYouList,
     ownerAway,
     connectorAccess,
+    agentMailboxes,
     secrets: () => canAdministerServer(workspace.state.host?.role),
     efficiency: () =>
       canAdministerServer(workspace.state.host?.role) && serverSupportsCapability(server(), FORK_HOST_CAPABILITY)

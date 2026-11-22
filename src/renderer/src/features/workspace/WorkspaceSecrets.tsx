@@ -5,6 +5,7 @@ import {
 } from "@openbot/contracts/ipc";
 import { toast } from "@openbot/ui";
 import { ConnectionsSection } from "@openbot/ui/features/workspace/ConnectionsSection";
+import { MailboxesSection } from "@openbot/ui/features/workspace/MailboxesSection";
 import { type SecretsGroup, SecretsView } from "@openbot/ui/features/workspace/SecretsView";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, onSettled, Show } from "solid-js";
@@ -37,6 +38,7 @@ export function WorkspaceSecretsView() {
   onSettled(() => {
     void refresh();
     void ws.env.connectorAccess?.refresh();
+    void ws.env.agentMailboxes?.refresh();
   });
 
   /** Runs a change and reads the list again. A failure is thrown on: the form or the confirm shows it. */
@@ -114,30 +116,67 @@ export function WorkspaceSecretsView() {
       }}
       onBack={() => ws.back()}
       footer={
-        <Show when={ws.env.connectorAccess?.state()}>
-          {(state) => (
-            <ConnectionsSection
-              state={state()}
-              spaceId={ws.spaces.current()}
-              onCreateToken={(label) => {
-                const store = ws.env.connectorAccess;
-                if (!store) throw new Error("unsupported");
-                return store.createToken(label);
-              }}
-              onRevokeToken={async (id) => {
-                await ws.env.connectorAccess?.revokeToken(id);
-                toast.success(t("workspace.connections.revoke"));
-              }}
-              onSetSender={async (input) => {
-                await ws.env.connectorAccess?.setSender(input);
-              }}
-              onCopy={async (text) => {
-                await navigator.clipboard.writeText(text);
-                toast.success(t("workspace.connections.copied"));
-              }}
-            />
-          )}
-        </Show>
+        <>
+          <Show when={ws.env.connectorAccess?.state()}>
+            {(state) => (
+              <ConnectionsSection
+                state={state()}
+                spaceId={ws.spaces.current()}
+                onCreateToken={(label) => {
+                  const store = ws.env.connectorAccess;
+                  if (!store) throw new Error("unsupported");
+                  return store.createToken(label);
+                }}
+                onRevokeToken={async (id) => {
+                  await ws.env.connectorAccess?.revokeToken(id);
+                  toast.success(t("workspace.connections.revoke"));
+                }}
+                onSetSender={async (input) => {
+                  await ws.env.connectorAccess?.setSender(input);
+                }}
+                onCopy={async (text) => {
+                  await navigator.clipboard.writeText(text);
+                  toast.success(t("workspace.connections.copied"));
+                }}
+              />
+            )}
+          </Show>
+          <Show when={ws.env.agentMailboxes?.state()}>
+            {(state) => (
+              <MailboxesSection
+                state={state()}
+                spaceId={ws.spaces.current()}
+                agents={agents().filter((agent) => ws.spaces.agentInCurrent(agent.id))}
+                onSave={async (input) => {
+                  const store = ws.env.agentMailboxes;
+                  if (!store) throw new Error("unsupported");
+                  await store.save(input);
+                  toast.success(t("workspace.mailboxes.saved", { address: input.address }));
+                }}
+                onRemove={async (id) => {
+                  await ws.env.agentMailboxes?.remove(id);
+                }}
+                onSetWorker={async (workerUrl) => {
+                  await ws.env.agentMailboxes?.setWorker(workerUrl);
+                }}
+                onNewSecret={async () => {
+                  const store = ws.env.agentMailboxes;
+                  if (!store) throw new Error("unsupported");
+                  try {
+                    return await store.newSecret();
+                  } catch (error) {
+                    toast.error(t("workspace.mailboxes.failed"));
+                    throw error;
+                  }
+                }}
+                onCopy={async (text) => {
+                  await navigator.clipboard.writeText(text);
+                  toast.success(t("workspace.connections.copied"));
+                }}
+              />
+            )}
+          </Show>
+        </>
       }
     />
   );

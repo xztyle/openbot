@@ -23,6 +23,7 @@ import {
   parseUpdateChannelRoutine,
 } from "../ipc/agent-inputs";
 import type { TeamApiAgents } from "./dependencies";
+import { hiddenAuthor, requireVisibleChannel, seesChannel } from "./hidden-agent-channels";
 import { HttpError } from "./http-error";
 import { teamPersonName } from "./person-name";
 import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
@@ -67,10 +68,21 @@ export async function routeChannels(
   if (!channels || !capabilities.has(CHANNEL_CHATS_CAPABILITY))
     throw new HttpError(400, sourceText("error.team.channelsUnsupported"));
   const viewer = requestChannelViewer(context);
-  if (list) return json(200, channels.store.list(member.id, false, viewer));
+  // The agents that hide a whole channel (upstream 31b1a0396). Owners and admins keep every channel:
+  // on an older client, the agents of a provider that its protocol does not know are hidden from them too.
+  const channelHiddenAgentIds: ReadonlySet<string> = canAdministerServer(member.role) ? new Set() : hiddenAgentIds;
+  if (list)
+    return json(
+      200,
+      channels.store
+        .list(member.id, false, viewer)
+        .filter((channel) => seesChannel(channel.members, channelHiddenAgentIds)),
+    );
   if (read) {
     const input = parseChannelRead(channelRequest(url.pathname, await readJson(request)));
-    return json(200, channels.read({ channelId: input.channelId, beforeSequence: input.beforeSequence }, viewer));
+    requireVisibleChannel(channels, input.channelId, channelHiddenAgentIds);
+    const page = channels.read({ channelId: input.channelId, beforeSequence: input.beforeSequence }, viewer);
+    return json(200, { ...page, messages: page.messages.filter((item) => !hiddenAuthor(item, hiddenAgentIds)) });
   }
   if (remove) {
     if (!capabilities.has(CHANNEL_DELETE_CAPABILITY))
@@ -81,8 +93,9 @@ export async function routeChannels(
     await runCauseEffect(channels.deleteChannel(channelId(body)));
     return empty(204);
   }
-  if (settings) return routeChannelSettings(context, agents);
+  if (settings) return routeChannelSettings(context, agents, channels, channelHiddenAgentIds);
   const input = parseChannelCommand(channelRequest(url.pathname, await readJson(request)));
+  requireVisibleChannel(channels, input.channelId, channelHiddenAgentIds);
   if (input.type === "archive" && !canAdministerServer(member.role))
     throw new HttpError(403, sourceText("error.team.membersCannotArchiveChannels"));
   // A restore undoes a delete, so only the people who can delete a channel can restore it.
@@ -150,11 +163,14 @@ function requireChatForAddedAgents(
 async function routeChannelSettings(
   context: TeamApiRequestContext,
   agents: ChannelSettingsAgents,
+  channels: ChannelService,
+  hiddenAgentIds: ReadonlySet<string>,
 ): Promise<RouteOutcome> {
   const { url, request, json, empty } = context;
   // `readJson` has already run the body through the channel wire codec, so every field below is
   // decoded and bounded before the IPC parsers see it.
   const body = await readJson(request);
+  requireVisibleChannel(channels, channelId(body), hiddenAgentIds);
   switch (url.pathname) {
     case CHANNEL_ROUTES.memories:
       return json(200, agents.listChannelMemories(channelId(body)));

@@ -1,6 +1,7 @@
 import {
   agentAccessRank,
   type ChannelCommand,
+  canAdministerServer,
   decodeWorkspaceSettings,
   isWorkspaceChannelCommand,
   parseChannelCommand,
@@ -15,6 +16,7 @@ import type { ChannelService } from "../../backend/channel-service";
 import { type ChannelViewer, channelViewer } from "../../backend/channel-visibility";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import type { TeamApiAdmin } from "./dependencies";
+import { hiddenAuthor, requireVisibleChannel } from "./hidden-agent-channels";
 import { HttpError } from "./http-error";
 import { teamPersonName } from "./person-name";
 import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
@@ -125,13 +127,18 @@ export async function routeWorkspace(
       ...(workspace?.appearance ? { appearance: workspace.appearance } : {}),
     });
   }
+  // As on the channel routes: a channel of only hidden agents does not exist for a member.
+  const channelHiddenAgentIds: ReadonlySet<string> = canAdministerServer(member.role) ? new Set() : hiddenAgentIds;
   if (url.pathname === WORKSPACE_ROUTES.thread) {
     const input = parseChannelRead(body);
     if (!input.threadRootId) throw new HttpError(400, "Provide a thread.");
-    return json(200, channels.read(input, viewer));
+    requireVisibleChannel(channels, input.channelId, channelHiddenAgentIds);
+    const page = channels.read(input, viewer);
+    return json(200, { ...page, messages: page.messages.filter((item) => !hiddenAuthor(item, hiddenAgentIds)) });
   }
   const input = parseChannelCommand(body);
   if (!isWorkspaceChannelCommand(input)) throw new HttpError(400, "Use the channel command route.");
+  requireVisibleChannel(channels, input.channelId, channelHiddenAgentIds);
   requireChatForAgents(context, input, channels, hiddenAgentIds);
   return json(
     200,

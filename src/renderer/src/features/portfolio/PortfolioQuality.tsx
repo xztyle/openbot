@@ -32,8 +32,15 @@ function blankScenario(index: number): SuiteScenario {
  * The Quality tab: the live score of each agent of the space with its weekly trend, and the test suite
  * of the agent the reader opens, with its scenarios, its settings and its runs.
  */
+/** A score out of 10 with one decimal: 6.3. */
+function useScore(): (value: number) => string {
+  const { format } = useText();
+  return (value) => format.number(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
 export function PortfolioQuality() {
   const { t, errorMessage } = useText();
+  const score = useScore();
   const ws = useWorkspace();
   const calls = () => ws.env.portfolio?.();
   const [page, setPage] = createSignal<QualityPage | null>(null);
@@ -80,13 +87,13 @@ export function PortfolioQuality() {
                   fallback={<span class="portfolio-ratio">{t("portfolio.quality.noScore")}</span>}
                 >
                   <span class="portfolio-ratio" data-flagged={quality(agent.id)?.dropped ? "" : undefined}>
-                    {t("portfolio.quality.score", { score: quality(agent.id)?.average7?.toFixed(1) ?? "" })}
+                    {t("portfolio.quality.score", { score: score(quality(agent.id)?.average7 ?? 0) })}
                   </span>
                 </Show>
               </div>
               <Show when={quality(agent.id)?.dropped}>
                 <Text tone="warning">
-                  {t("portfolio.quality.dropped", { before: quality(agent.id)?.previous7?.toFixed(1) ?? "" })}
+                  {t("portfolio.quality.dropped", { before: score(quality(agent.id)?.previous7 ?? 0) })}
                 </Text>
               </Show>
               <Show when={(quality(agent.id)?.trend.length ?? 0) > 1}>
@@ -96,7 +103,7 @@ export function PortfolioQuality() {
                       <span
                         class="portfolio-trend-bar"
                         style={{ "--portfolio-bar": String(point.average / 10) }}
-                        title={`${point.date}: ${point.average.toFixed(1)}`}
+                        title={`${point.date}: ${score(point.average)}`}
                       />
                     )}
                   </For>
@@ -228,42 +235,43 @@ function AgentSuite(props: { agentId: string }) {
     <div class="portfolio-suite">
       <Text tone="muted">{t("portfolio.suite.hint")}</Text>
       <Show when={error()}>{(message) => <Text role="alert">{message()}</Text>}</Show>
-      <For each={scenarios()}>
+      {/* Keyed by id: an edit replaces the scenario, and the fields must stay the same nodes, with focus. */}
+      <For each={scenarios()} keyed={(scenario) => scenario.id}>
         {(scenario, index) => (
           <fieldset class="portfolio-scenario">
             <legend>{t("portfolio.suite.scenario", { number: index() + 1 })}</legend>
             <label>
               <Text tone="muted">{t("portfolio.suite.name")}</Text>
-              <Input value={scenario.name} onValueChange={(name) => edit(index(), { name })} />
+              <Input value={scenario().name} onValueChange={(name) => edit(index(), { name })} />
             </label>
             <label>
               <Text tone="muted">{t("portfolio.suite.persona")}</Text>
               <Textarea
                 rows={2}
-                value={scenario.persona}
+                value={scenario().persona}
                 placeholder={t("portfolio.suite.personaPlaceholder")}
                 onValueChange={(persona) => edit(index(), { persona })}
               />
             </label>
             <label>
               <Text tone="muted">{t("portfolio.suite.input")}</Text>
-              <Textarea rows={2} value={scenario.input} onValueChange={(input) => edit(index(), { input })} />
+              <Textarea rows={2} value={scenario().input} onValueChange={(input) => edit(index(), { input })} />
             </label>
             <label>
               <Text tone="muted">{t("portfolio.suite.rubric")}</Text>
-              <Textarea rows={2} value={scenario.rubric} onValueChange={(rubric) => edit(index(), { rubric })} />
+              <Textarea rows={2} value={scenario().rubric} onValueChange={(rubric) => edit(index(), { rubric })} />
             </label>
             <label>
               <Text tone="muted">{t("portfolio.suite.mustNot")}</Text>
-              <Input value={scenario.mustNot ?? ""} onValueChange={(mustNot) => edit(index(), { mustNot })} />
+              <Input value={scenario().mustNot ?? ""} onValueChange={(mustNot) => edit(index(), { mustNot })} />
             </label>
             <fieldset class="portfolio-actions" aria-label={t("portfolio.suite.turns")}>
               <For each={[1, 2, 3]}>
                 {(turns) => (
                   <Button
                     size="sm"
-                    variant={scenario.turns === turns ? "secondary" : "ghost"}
-                    aria-pressed={scenario.turns === turns ? "true" : "false"}
+                    variant={scenario().turns === turns ? "secondary" : "ghost"}
+                    aria-pressed={scenario().turns === turns ? "true" : "false"}
                     onClick={() => edit(index(), { turns })}
                   >
                     {t("portfolio.suite.turnsOption", { count: turns })}
@@ -347,7 +355,7 @@ function AgentSuite(props: { agentId: string }) {
 }
 
 function SuiteRunCard(props: { run: SuiteRun }) {
-  const { t } = useText();
+  const { t, format } = useText();
   const [expanded, setExpanded] = createSignal(false);
   return (
     <article class="portfolio-run" data-passed={props.run.passed ? "" : undefined}>
@@ -362,7 +370,7 @@ function SuiteRunCard(props: { run: SuiteRun }) {
         </span>
       </div>
       <Text tone="muted">
-        {new Date(props.run.at).toLocaleString()} · {props.run.label}
+        {format.date(Date.parse(props.run.at), { dateStyle: "medium", timeStyle: "short" })} · {props.run.label}
       </Text>
       <Show when={props.run.error}>{(message) => <Text tone="danger">{message()}</Text>}</Show>
       <Show when={props.run.diff.length > 0}>

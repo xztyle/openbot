@@ -3,7 +3,7 @@ import type { AgentSummary } from "@openbot/contracts/ipc";
 import type { DynamicRecord } from "@openbot/contracts/runtime-values";
 import { describe, expect, it } from "vitest";
 import type { DynamicToolCallParams } from "../protocol";
-import { discoverTools, resolveDeferredTool, ToolDiscoveryError } from "./tool-catalog";
+import { claudeBridgedToolName, discoverTools, resolveDeferredTool, ToolDiscoveryError } from "./tool-catalog";
 
 const agent: AgentSummary = {
   id: "chief",
@@ -91,5 +91,17 @@ describe("tool_call", () => {
     expect(
       resolveDeferredTool(call("tool_call", { name: "openbot.send_message", arguments: "not json" })),
     ).toMatchObject({ kind: "invalid", message: expect.stringMatching(/arguments must be a JSON object/) });
+  });
+});
+
+describe("claudeBridgedToolName", () => {
+  it("names the tool that a bare or qualified name calls", () => {
+    expect(claudeBridgedToolName("mcp__openbot__tool_call", { name: "create_agent" })).toBe(
+      "mcp__openbot__create_agent",
+    );
+    expect(claudeBridgedToolName("mcp__openbot__tool_call", { name: "openbot_browser.open" })).toBe(
+      "mcp__openbot_browser__open",
+    );
+    expect(claudeBridgedToolName("mcp__openbot__tool_call", { name: "no_such_tool" })).toBe("mcp__openbot__tool_call");
   });
 });

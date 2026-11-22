@@ -117,7 +117,7 @@ export const VISIBLE_DYNAMIC_TOOLS = [
 export function claudeBridgedToolName(name: string, input: unknown): string {
   if (name !== "mcp__openbot__tool_call" || typeof input !== "object" || input === null || !("name" in input))
     return name;
-  const entry = BUILTIN_TOOL_CATALOG.find((tool) => tool.name === input.name);
+  const entry = isString(input.name) ? findTool(input.name) : undefined;
   return entry ? `mcp__${entry.namespace}__${entry.tool}` : name;
 }
 
@@ -149,7 +149,7 @@ const NAMESPACES = [...new Set(BUILTIN_TOOL_CATALOG.map((entry) => entry.namespa
  * Finds a catalog tool by its qualified name, or by a form models also write: a bare tool name that only
  * one namespace has, such as `create_agent`, or Claude's `mcp__openbot__create_agent`.
  */
-function findTool(name: string): CatalogEntry | undefined {
+export function findTool(name: string): CatalogEntry | undefined {
   const exact = BUILTIN_TOOL_CATALOG.find((entry) => entry.name === name);
   if (exact) return exact;
   const claude = /^mcp__([a-z0-9_]+?)__([a-z0-9_]+)$/i.exec(name);

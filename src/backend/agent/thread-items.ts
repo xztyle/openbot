@@ -22,7 +22,7 @@ import {
   reasoningText,
   type ThreadItem,
 } from "../protocol";
-import { BUILTIN_TOOL_CATALOG } from "./tool-catalog";
+import { findTool } from "./tool-catalog";
 
 export function isNonActionableCodexWarning(message: string): boolean {
   return (
@@ -284,7 +284,7 @@ export function toolUsage(item: ThreadItem): ToolUsage | null {
 /** The built-in tool that a `tool_call` bridge item calls. A name outside the catalog is model text and stays out. */
 function bridgedTool(item: ThreadItem) {
   const name = bridgedToolName(item);
-  return name ? BUILTIN_TOOL_CATALOG.find((entry) => entry.name === name) : undefined;
+  return name ? findTool(name) : undefined;
 }
 
 const TOOL_RESULT_PROGRESS = "Reviewing the latest tool result…";

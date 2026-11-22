@@ -17,3 +17,5 @@
   quick reaction, is no longer lost.
 - iPhone: two quick taps, as on a reaction or the send button, no longer zoom the web app in Safari.
   A pinch still zooms.
+- iPhone: a long press on a link in a message shows Safari's link menu (open, copy, share) again.
+  Before, it opened neither that menu nor the message's actions.

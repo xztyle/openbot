@@ -552,6 +552,11 @@ button.ws-profile-trigger.ws-message-author:hover {
     -webkit-user-select: text;
     user-select: text;
   }
+
+  /* A long press on a link skips the message's actions for the browser's own link menu, so iOS shows it. */
+  .ws-message a[href] {
+    -webkit-touch-callout: default;
+  }
 }
 
 .ws-message-action-more.ui-button {

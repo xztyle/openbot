@@ -153,7 +153,7 @@ export function AgentEfficiencySettings(props: {
   const suggestedRole = () => nameRole(props.agent.name);
 
   return (
-    <SettingsLinkGroup title={t("efficiency.settings.title")}>
+    <SettingsLinkGroup class="efficiency-settings" title={t("efficiency.settings.title")}>
       <Show when={state.error}>{(message) => <Text role="alert">{message()}</Text>}</Show>
       <SettingsField label={t("efficiency.policy.label")}>
         <Select<AgentModelPolicy>

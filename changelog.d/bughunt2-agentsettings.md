@@ -6,3 +6,5 @@
 - "Forget what it learned in this chat" no longer shows the items of one agent under another. When
   you moved to another agent's settings while the list loaded, the list and its Forget button
   showed there, and the button forgot from the agent on the screen.
+- Agent settings, Cost and performance: each hint sits under its own field. Before, the model
+  policy hint touched the Role label under it.

@@ -98,3 +98,17 @@
   max-height: 240px;
   overflow-y: auto;
 }
+
+/* The agent's Cost and performance group holds fields with a hint under each, not link rows: the
+   hint sits under its field, and the next field keeps the usual space above its label. */
+.settings-link-group.efficiency-settings {
+  padding-top: var(--openbot-space-2);
+}
+
+.efficiency-settings > .settings-field:has(+ :not(.settings-field)) {
+  margin-bottom: var(--openbot-space-1);
+}
+
+.efficiency-settings > .settings-field + :not(.settings-field) {
+  margin-bottom: 17px;
+}

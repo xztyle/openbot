@@ -1060,7 +1060,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       hooks: [
         async (hookInput) => {
           if (hookInput.hook_event_name !== "PreToolUse" || config.profileGeneration) return {};
-          if (!classifyToolUse(hookInput.tool_name, hookInput.tool_input)) return {};
+          if (!classifyToolUse(hookInput.tool_name, hookInput.tool_input, config.cwd)) return {};
           const answer = await runCauseEffect(
             this.#trustCheck(threadId, hookInput.tool_name, hookInput.tool_input, "check"),
           ).catch(() => ({
@@ -1101,7 +1101,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           // The trust hook asked first: the owner's approval card answers this tool use.
           const toolUseId = options.toolUseID;
           // Without an id, a classified tool use asks the gate again; an allowed one answers at once.
-          if (toolUseId ? trustAsks.delete(toolUseId) : classifyToolUse(toolName, toolInput) !== null) {
+          if (toolUseId ? trustAsks.delete(toolUseId) : classifyToolUse(toolName, toolInput, config.cwd) !== null) {
             const answer = yield* this.#trustCheck(threadId, toolName, toolInput, "approve");
             if (answer.decision !== "allow")
               return { behavior: "deny", message: answer.reason ?? "The trust policy did not allow this action." };
@@ -2415,6 +2415,8 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
         turnId: this.#threads.get(threadId)?.activeTurn?.id ?? randomUUID(),
         toolName,
         toolInput,
+        // A script that a Bash command runs by a relative path is read from here.
+        cwd: this.#threads.get(threadId)?.config.cwd ?? null,
         phase,
       }),
     ).pipe(toProviderClientOperationError);

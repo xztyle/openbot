@@ -15,7 +15,13 @@ import { openBotToolFailure, openBotToolResult } from "../agent/routine-tools";
 import type { AgentClient } from "../agent-client";
 import { REQUEST_DECISION_ACTIONS, requestDecisionToolSchema } from "../openbot-tools";
 import type { AppServerRequest, DynamicToolCallParams, DynamicToolResult } from "../protocol";
-import { classifyBrowserCall, classifyToolUse, type TrustClassification, trustSummary } from "./trust-classifier";
+import {
+  classifyBrowserCall,
+  classifyCommand,
+  classifyToolUse,
+  type TrustClassification,
+  trustSummary,
+} from "./trust-classifier";
 import type { TrustApprovalAnswer, TrustService, TrustSubject } from "./trust-service";
 
 export { TRUST_CHECK_METHOD } from "./trust-classifier";
@@ -205,7 +211,7 @@ export class TrustToolGate {
     const threadId = isString(params.threadId) ? params.threadId : "";
     const turnId = isString(params.turnId) ? params.turnId : randomUUID();
     const agentId = threadId ? this.#options.agentForThread(threadId) : undefined;
-    const action = classifyToolUse(params.toolName, params.toolInput);
+    const action = classifyToolUse(params.toolName, params.toolInput, isString(params.cwd) ? params.cwd : null);
     const answer = (decision: "allow" | "deny" | "ask", reason?: string) => {
       if (!request.signal?.aborted && client.running)
         client.respond(request.id, { decision, ...(reason ? { reason } : {}) });
@@ -215,6 +221,35 @@ export class TrustToolGate {
     if (params.phase !== "approve" && this.#trust.evaluate(subject, action).kind === "ask") return answer("ask");
     const result = yield* this.#trust.gate(subject, action, this.#approve(client, request, subject, action));
     return result.allowed ? answer("allow") : answer("deny", result.message);
+  });
+
+  /**
+   * A shell command that a provider asks to run: Codex, Muse and the ACP providers ask through
+   * `item/commandExecution/requestApproval` (or the older `execCommandApproval`). Claude asks through
+   * its hook instead. Only money goes through the gate here, so an agent's auto-approve grant cannot
+   * answer a payment or an ad launch for the owner. Null when the call spends nothing; otherwise
+   * whether the gate allowed it.
+   */
+  readonly checkProviderCommand = Effect.fn("TrustToolGate.checkProviderCommand")(function* (
+    this: TrustToolGate,
+    client: TrustClient,
+    request: AppServerRequest,
+    command: string | null,
+  ) {
+    const params = isDynamicRecord(request.params) ? request.params : {};
+    const threadId = isString(params.threadId)
+      ? params.threadId
+      : isString(params.conversationId)
+        ? params.conversationId
+        : "";
+    const agentId = threadId ? this.#options.agentForThread(threadId) : undefined;
+    if (!agentId || !command) return null;
+    const action = classifyCommand(command, { cwd: isString(params.cwd) ? params.cwd : null });
+    if (!action || (action.action !== "pay" && action.action !== "launch_ads")) return null;
+    const turnId = isString(params.turnId) ? params.turnId : String(request.id);
+    const subject = { agentId, threadId: this.#options.publicThreadId(agentId, threadId), turnId };
+    const result = yield* this.#trust.gate(subject, action, this.#approve(client, request, subject, action));
+    return result.allowed;
   });
 
   /** Shows the decision card of `request_decision`. It answers the call when the person answers. */

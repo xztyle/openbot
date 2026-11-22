@@ -1,3 +1,5 @@
+import { readFileSync, statSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import type { TrustAction, TrustAuditCategory, TrustSandbox } from "@openbot/contracts/trust-control";
 import { redactText } from "@openbot/logging";
@@ -11,6 +13,12 @@ import { redactText } from "@openbot/logging";
  * ship with Atelier (`meta-ads`, `hotmart`, `render-sites`, `appctl`) and the common HTTP APIs, so a
  * reader can predict them. They are a guard rail against mistakes, not a sandbox against an agent
  * that tries to hide what it does.
+ *
+ * Money is the one action that always needs the owner, so a shell command gets a second look for
+ * `pay` and `launch_ads` (`expandCommand`): split strings are joined, base64 and hex payloads are
+ * decoded, and a script that the command runs is read, so `echo … | base64 -d | sh`, `python3 -c`
+ * with a built URL, or a script file written first do not walk around the rules. The real boundary is
+ * a broker that holds the money credentials (docs: agent jail notes); this is not that.
  */
 export interface TrustClassification {
   action: TrustAction;
@@ -178,6 +186,9 @@ const PAYMENT_APIS: ReadonlyArray<[RegExp, string]> = [
   [/api\.stripe\.com\/v1\/(charges|payment_intents|payouts|transfers|refunds|invoices\/[^/\s]+\/pay)/u, "stripe"],
   [/api(?:-m)?\.paypal\.com\/v[12]\/(payments|checkout\/orders\/[^/\s]+\/capture)/u, "paypal"],
   [/api\.mercadopago\.com\/v1\/(payments|advanced_payments)/u, "mercadopago"],
+  // A live order of the Alpaca trading API buys or sells with real money. The paper API does not.
+  [/(?<![a-z-])api\.alpaca\.markets\/v2\/orders/u, "alpaca"],
+  [/developers\.hotmart\.com\/payments\/api\/v1\/sales\/[^/\s"']+\/refund/u, "hotmart"],
 ];
 
 const WRITES =
@@ -234,9 +245,128 @@ function classifyMailCommand(command: string): TrustClassification | null {
   return null;
 }
 
+/** A write in program code, where no curl flag says so. */
+const CODE_WRITES =
+  /\b(?:requests|httpx|session|client|axios|got|ky|http|urllib3)\s*\.\s*(?:post|put|patch|delete|request)\s*\(|\bmethod\s*[:=]\s*["'`]?(?:POST|PUT|PATCH|DELETE)\b|urlopen\s*\([^)]*data\s*=|Request\s*\([^)]*data\s*=|\bNet::HTTP::Post\b|\bhttp_post\b/iu;
+
+/** A live payment key in plain sight: whatever writes with it can move money. */
+const LIVE_PAYMENT_KEY = /\b(?:sk|rk)_live_[A-Za-z0-9]{8,}|\bSTRIPE_(?:SECRET|API|RESTRICTED)_KEY\b/u;
+
+/** Spending fields of the Meta Marketing API, in a payload that code builds. */
+const META_SPEND = /daily_budget|lifetime_budget|bid_amount|["']?status["']?\s*[:=]\s*["']?ACTIVE/u;
+
+/**
+ * The money rules on program code or decoded text: a write to a payment API or to the ad objects
+ * of the Meta Graph API, or a write next to a live payment key.
+ */
+function classifyMoneyCode(text: string): TrustClassification | null {
+  const writes = WRITES.test(` ${text}`) || CODE_WRITES.test(text);
+  if (!writes) return null;
+  if (/graph\.facebook\.com/u.test(text) && (/\/(ads|adsets|campaigns)\b/u.test(text) || META_SPEND.test(text)))
+    return {
+      action: "launch_ads",
+      label: "Meta Graph API",
+      summary: trustSummary(text),
+      platform: "meta",
+      ...(/status["']?\s*[:=]\s*["']?ACTIVE/u.test(text) ? { sandbox: "ads" as const } : {}),
+    };
+  for (const [pattern, platform] of PAYMENT_APIS)
+    if (pattern.test(text)) return { action: "pay", label: `${platform} API`, summary: trustSummary(text), platform };
+  if (LIVE_PAYMENT_KEY.test(text))
+    return { action: "pay", label: "payment key", summary: trustSummary(text), platform: "stripe" };
+  return null;
+}
+
+/** The largest script that a command runs which the check reads. */
+const SCRIPT_READ_LIMIT = 256 * 1024;
+/** Helpers that the rules above know by their subcommands. Their own code is not the agent's call. */
+const KNOWN_HELPER = /(?:^|\/)(?:meta-ads|hotmart|render-sites|appctl)(?:\.mjs|\.js)?$/u;
+const SCRIPT_FILE = /\.(?:sh|bash|zsh|py|js|mjs|cjs|ts|rb|pl|php)$/u;
+const INTERPRETER =
+  /(?:^|[\s;&|(])(?:bash|sh|zsh|dash|python[0-9.]*|node|bun|deno|ruby|perl|php|source|\.)\s+(?:-[A-Za-z]+\s+)*([^\s;&|)<>]+)/gu;
+
+export interface CommandContext {
+  /** The folder the command runs in, to find a script that it names by a relative path. */
+  cwd?: string | null;
+  /** Tests only. */
+  readScript?: (path: string) => string | null;
+}
+
+function readScriptFile(path: string): string | null {
+  try {
+    const info = statSync(path);
+    if (!info.isFile() || info.size > SCRIPT_READ_LIMIT) return null;
+    return readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/** Decodes a run that looks like base64 when the result is mostly text. */
+function decodedBase64(token: string): string | null {
+  if (token.length < 16 || token.length > 64 * 1024) return null;
+  const text = Buffer.from(token.replaceAll("-", "+").replaceAll("_", "/"), "base64").toString("utf8");
+  if (text.length < 8) return null;
+  let printable = 0;
+  for (const char of text) if (/[\x20-\x7e\n\r\t]/u.test(char)) printable += 1;
+  return printable / text.length > 0.9 ? text : null;
+}
+
+/**
+ * The text of a command with what it hides made readable: quotes and `+` joins of string pieces
+ * removed, `\x63` escapes and base64 runs decoded (two levels), and each script that it runs read
+ * (one level, never a known helper). The original text comes first.
+ */
+export function expandCommand(command: string, context: CommandContext = {}): string {
+  const parts = [command];
+  const joined = command
+    .replace(/\\\n/gu, "")
+    .replace(/["'`]\s*[+.]\s*["'`]/gu, "")
+    .replace(/\\x([0-9a-fA-F]{2})/gu, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
+    .replace(/\\([0-7]{3})/gu, (_, octal: string) => String.fromCharCode(Number.parseInt(octal, 8)))
+    .replace(/["'`\\]/gu, "");
+  if (joined !== command) parts.push(joined);
+  let decodable = joined;
+  for (let level = 0; level < 2; level += 1) {
+    const decoded: string[] = [];
+    for (const token of decodable.match(/[A-Za-z0-9+/_-]{16,}={0,2}/gu) ?? []) {
+      const text = decodedBase64(token);
+      if (text) decoded.push(text);
+    }
+    if (decoded.length === 0) break;
+    parts.push(...decoded);
+    decodable = decoded.join("\n");
+  }
+  const read = context.readScript ?? readScriptFile;
+  const seen = new Set<string>();
+  const scripts = [...joined.matchAll(INTERPRETER)].map((match) => match[1] ?? "");
+  for (const token of joined.split(/[\s;&|()<>]+/u)) if (SCRIPT_FILE.test(token)) scripts.push(token);
+  for (const token of scripts) {
+    if (!token || token.startsWith("-") || token.startsWith("$") || KNOWN_HELPER.test(token)) continue;
+    const path = isAbsolute(token) ? token : context.cwd ? resolve(context.cwd, token) : null;
+    if (!path || seen.has(path) || seen.size >= 4) continue;
+    seen.add(path);
+    const text = read(path);
+    if (text) parts.push(text);
+  }
+  return parts.join("\n");
+}
+
 /** A shell command of an agent, such as the Bash tool of Claude. The first consequential part wins. */
-export function classifyCommand(command: string): TrustClassification | null {
+export function classifyCommand(command: string, context: CommandContext = {}): TrustClassification | null {
   if (!command.trim()) return null;
+  const found = classifyPlainCommand(command);
+  if (found) return found;
+  // The second look, for money only: the other actions keep the predictable rules above.
+  const expanded = expandCommand(command, context);
+  const money = (classification: TrustClassification | null) =>
+    classification && (classification.action === "pay" || classification.action === "launch_ads")
+      ? { ...classification, summary: trustSummary(command) }
+      : null;
+  return (expanded === command ? null : money(classifyPlainCommand(expanded))) ?? money(classifyMoneyCode(expanded));
+}
+
+function classifyPlainCommand(command: string): TrustClassification | null {
   const mentions = {
     metaAds: command.includes("meta-ads"),
     hotmart: command.includes("hotmart"),
@@ -409,14 +539,18 @@ export function classifyBrowserCall(
 export const TRUST_CHECK_METHOD = "openbot/trust-check";
 
 /** The classification of a Claude tool use: Bash by its command, an MCP tool by its name. */
-export function classifyToolUse(toolName: unknown, toolInput: unknown): TrustClassification | null {
+export function classifyToolUse(
+  toolName: unknown,
+  toolInput: unknown,
+  cwd?: string | null,
+): TrustClassification | null {
   if (typeof toolName !== "string") return null;
   if (toolName === "Bash") {
     const command =
       toolInput && typeof toolInput === "object" && "command" in toolInput && typeof toolInput.command === "string"
         ? toolInput.command
         : "";
-    return classifyCommand(command);
+    return classifyCommand(command, { cwd: cwd ?? null });
   }
   if (toolName.startsWith("mcp__")) return classifyMcpTool(toolName, toolInput);
   return null;

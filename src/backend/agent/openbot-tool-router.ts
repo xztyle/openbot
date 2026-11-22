@@ -126,7 +126,7 @@ import {
   updateProfileToolSchema,
   widensAgentSettings,
 } from "./profile-tools";
-import { apiKeyFormSpec, browserUserControlResult } from "./prompts";
+import { apiKeyFormSpec, browserUserControlResult, commandText } from "./prompts";
 import { ROUTINE_NO_UPDATE_TOOL, ROUTINE_REPORT_FAILURE_TOOL } from "./routine-quiet-runs";
 import type { RoutineScheduler } from "./routine-scheduler";
 import { type OpenBotToolResponse, openBotToolFailure, openBotToolResult } from "./routine-tools";
@@ -487,6 +487,7 @@ export class OpenBotToolRouter {
     return yield* Effect.gen({ self: this }, function* () {
       switch (request.method) {
         case "item/commandExecution/requestApproval":
+          if (yield* this.#answeredMoneyCommand(client, request)) return;
           this.#attention.surfaceApproval(client, request, "command");
           return;
         case "item/fileChange/requestApproval":
@@ -497,6 +498,7 @@ export class OpenBotToolRouter {
           return;
         case "applyPatchApproval":
         case "execCommandApproval":
+          if (request.method === "execCommandApproval" && (yield* this.#answeredMoneyCommand(client, request))) return;
           this.#attention.surfaceLegacyApproval(client, request);
           return;
         case "item/tool/call": {
@@ -868,6 +870,28 @@ export class OpenBotToolRouter {
       { actionId: ACKNOWLEDGE_REQUEST_ACTIONS.start, afterMs: ACKNOWLEDGE_START_MS },
     );
   }
+
+  /**
+   * A provider's command that spends money goes to the owner through the trust gate, never to the
+   * agent's auto-approve grant. True when the gate answered the request.
+   */
+  readonly #answeredMoneyCommand = Effect.fn("OpenBotToolRouter.answeredMoneyCommand")(function* (
+    this: OpenBotToolRouter,
+    client: AgentClient,
+    request: AppServerRequest,
+  ) {
+    if (!this.#trust) return false;
+    const allowed = yield* this.#trust.checkProviderCommand(client, request, commandText(request.params));
+    if (allowed === null) return false;
+    if (!request.signal?.aborted && client.running)
+      client.respond(
+        request.id,
+        request.method === "execCommandApproval"
+          ? { decision: allowed ? "approved" : { denied: { rejection: "The owner did not approve this payment." } } }
+          : { decision: allowed ? "accept" : "decline" },
+      );
+    return true;
+  });
 
   /**
    * The team members whose request this turn serves: the member who wrote a message of the turn, and

@@ -14,6 +14,7 @@ let http: Server;
 let base: string;
 let tokens: OwnerMcpTokens;
 const sent: { agentId: string; text: string }[] = [];
+const LEAKED_KEY = `sk-ant-${"x9Y8z7W6v5".repeat(3)}`;
 
 beforeEach(async () => {
   folder = await mkdtemp(join(tmpdir(), "owner-mcp-"));
@@ -29,8 +30,12 @@ beforeEach(async () => {
       sent.push({ agentId: input.agentId, text: input.text });
       return { deliveryId: "d1" };
     },
-    delivery: (id) => (id === "d1" ? { recipientAgentId: "a1", status: "completed", turnId: "t1" } : null),
-    turnAnswer: () => "On it. Campaign is paused until you approve.",
+    delivery: (id) =>
+      id === "d1" || id === "d2"
+        ? { recipientAgentId: "a1", status: "completed", turnId: id === "d1" ? "t1" : "t2" }
+        : null,
+    turnAnswer: (_agentId, turnId) =>
+      turnId === "t2" ? `Your key is ${LEAKED_KEY}` : "On it. Campaign is paused until you approve.",
     recentMessages: () => [{ from: "owner", text: "status?", at: "2026-11-21T10:00:00.000Z" }],
     attentionItems: () => [
       {
@@ -93,6 +98,19 @@ describe("OwnerMcpServer", () => {
     expect(reply).toEqual({ status: "completed", answer: "On it. Campaign is paused until you approve." });
     const decisions = JSON.parse(textOf(await client.callTool({ name: "list_decisions", arguments: {} })));
     expect(decisions.waiting).toEqual([{ kind: "approval", agent: "Ana", since: "2026-11-21T10:00:00.000Z" }]);
+    await client.close();
+  });
+
+  // Failure mode: an agent's answer that quoted a key went to the chat app's servers as written, and a
+  // key pasted in the chat app reached the agent's thread.
+  it("hides a key in an order and in the reply that leaves for the chat app", async () => {
+    const { token } = await Effect.runPromise(tokens.create("Claude"));
+    const client = await connect(`${base}/mcp/${token}`);
+    await client.callTool({ name: "send_message", arguments: { agent: "ana", text: `Use ${LEAKED_KEY} for it` } });
+    expect(sent).toEqual([{ agentId: "a1", text: "Use [hidden: Anthropic key] for it" }]);
+    const reply = textOf(await client.callTool({ name: "get_reply", arguments: { deliveryId: "d2" } }));
+    expect(reply).not.toContain(LEAKED_KEY);
+    expect(JSON.parse(reply).answer).toBe("Your key is [redacted]");
     await client.close();
   });
 

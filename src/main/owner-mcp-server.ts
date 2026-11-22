@@ -6,7 +6,8 @@ import { CallToolRequestSchema, type CallToolResult, ListToolsRequestSchema } fr
 import type { AgentAttentionItem, LoopDecision } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 import type { OwnerHeldItem } from "@openbot/contracts/team-protocol/owner-away-v1";
-import { createOpenBotLogger, toLogValue } from "@openbot/logging";
+import { createOpenBotLogger, redactSecretValues, toLogValue } from "@openbot/logging";
+import { hideChannelSecrets } from "../backend/channel-secrets";
 import { readBodyWithin } from "./http-body";
 import type { OwnerMcpTokens } from "./owner-mcp-tokens";
 
@@ -208,7 +209,9 @@ export class OwnerMcpServer {
     }
     if (name === "send_message") {
       const agent = this.#agent(args.agent);
-      const message = isString(args.text) ? args.text.trim() : "";
+      // A key pasted into the chat app is hidden before the agent's thread stores it, as the message
+      // box of Atelier hides it.
+      const message = isString(args.text) ? hideChannelSecrets(args.text.trim(), "person") : "";
       if (!message) throw new ToolRefusal("text is empty.");
       if (message.length > MESSAGE_TEXT_LIMIT) throw new ToolRefusal(`text is longer than ${MESSAGE_TEXT_LIMIT}.`);
       const now = this.#now();
@@ -316,8 +319,12 @@ function plain(response: ServerResponse, status: number, message: string): void 
   response.end(JSON.stringify({ error: message }));
 }
 
+/**
+ * Every answer leaves Atelier for the chat app's servers, so a credential in an agent's reply, a
+ * message or a decision goes first, and a value saved in Secrets with it. Email addresses stay.
+ */
 function text(value: ToolAnswer): CallToolResult {
-  return { content: [{ type: "text", text: JSON.stringify(value, null, 1) }] };
+  return { content: [{ type: "text", text: JSON.stringify(redactSecretValues(value), null, 1) }] };
 }
 
 function clip(value: string, limit: number): string {

@@ -82,6 +82,28 @@ describe("workspace outbox", () => {
     expect(delivered.map((message) => message.text)).toEqual(["elsewhere", "bad", "after"]);
   });
 
+  it("keeps another tab's waiting message when this tab stores its own", async () => {
+    const first = setup({ ready: false });
+    const second = setup({ ready: false });
+    const theirs = first.outbox.add(input("general", "from the first tab"));
+    second.outbox.add(input("general", "from the second tab"));
+    expect(
+      readOutbox("reader:host")
+        .map((message) => message.text)
+        .sort(),
+    ).toEqual(["from the first tab", "from the second tab"]);
+
+    // The first tab connects: its message is still stored, so it goes rather than being taken as sent.
+    first.setReady(true);
+    first.outbox.connected();
+    await new Promise((done) => setTimeout(done, 0));
+    expect(first.delivered.map((message) => message.id)).toEqual([theirs.id]);
+    expect(readOutbox("reader:host").map((message) => message.text)).toEqual(["from the second tab"]);
+    // A message this tab sent never comes back from a later store of the other tab.
+    second.outbox.add(input("random", "later"));
+    expect(readOutbox("reader:host").map((message) => message.text)).toEqual(["from the second tab", "later"]);
+  });
+
   it("waits again when the send failed because the connection went", async () => {
     const harness = setup({ ready: true, fail: () => true });
     harness.outbox.add(input("general", "lost"));

@@ -72,10 +72,15 @@ export function readOutbox(storageKey: string): OutboxMessage[] {
   }
 }
 
-/** False when this computer could not store them. */
-function writeOutbox(storageKey: string, messages: readonly OutboxMessage[]): boolean {
+/**
+ * False when this computer could not store them. `known` holds every message this tab has had: a
+ * stored one that it does not know is another tab's, which has not sent it yet, so it stays.
+ */
+function writeOutbox(storageKey: string, messages: readonly OutboxMessage[], known: ReadonlySet<string>): boolean {
   try {
     const key = `${OUTBOX_KEY}:${storageKey}`;
+    const others = readOutbox(storageKey).filter((message) => !known.has(message.id));
+    if (others.length) messages = [...messages, ...others].sort((left, right) => left.createdAt - right.createdAt);
     if (messages.length === 0) window.localStorage.removeItem(key);
     else window.localStorage.setItem(key, JSON.stringify(messages.slice(-OUTBOX_LIMIT)));
     return true;
@@ -93,6 +98,8 @@ export function createWorkspaceOutbox(options: OutboxOptions) {
    * written in Solid 2 gives its new value only after the next flush.
    */
   let list: readonly OutboxMessage[] = readOutbox(storageKey);
+  /** Every message this tab has had for this storage key, sent ones too. */
+  let known = new Set(list.map((message) => message.id));
   // Written from the composer's handlers and the connection's effects alike.
   const [messages, setMessages] = createSignal<readonly OutboxMessage[]>(list, { ownedWrite: true });
   let flushing = false;
@@ -102,11 +109,12 @@ export function createWorkspaceOutbox(options: OutboxOptions) {
 
   const show = (next: readonly OutboxMessage[]) => {
     list = next;
+    for (const message of next) known.add(message.id);
     setMessages(next);
   };
   const save = (next: readonly OutboxMessage[]) => {
     show(next);
-    stored = writeOutbox(storageKey, next);
+    stored = writeOutbox(storageKey, next, known);
   };
   const update = (id: string, patch: Partial<OutboxMessage>) =>
     save(list.map((message) => (message.id === id ? { ...message, ...patch } : message)));
@@ -184,6 +192,7 @@ export function createWorkspaceOutbox(options: OutboxOptions) {
     /** The reader or the server changed: their own messages show and wait. */
     reload() {
       storageKey = options.storageKey();
+      known = new Set();
       show(readOutbox(storageKey));
       void flush();
     },

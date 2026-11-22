@@ -36,6 +36,7 @@ import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, redactText } from "@openbot/logging";
 import { Deferred, Effect, Exit, Result, Schema, Scope } from "effect";
 import type { AgentLifecycleFailed } from "../agent-service";
+import { hideChannelSecrets } from "../channel-secrets";
 import { causeHelpers } from "../effect-boundary";
 import type { MessagingOrigin } from "../mailbox-store";
 import type { SidebarLayoutStore } from "../sidebar-layout-store";
@@ -1560,10 +1561,16 @@ export class MessagingService {
       ],
       { concurrency: "unbounded" },
     );
-    const named = withMentionNames(message.text, mentioned);
+    // A key that a person pasted in Telegram, Slack or Discord is hidden before the thread stores it
+    // and the agent reads it, as the message box of the app hides it. The platform still holds it.
+    const named = hideChannelSecrets(withMentionNames(message.text, mentioned), "person");
     const quote = message.replyTo;
     const replyTo = quote
-      ? { authorName: quote.authorName, text: withMentionNames(quote.text, mentioned), sentAt: quote.sentAt }
+      ? {
+          authorName: quote.authorName,
+          text: hideChannelSecrets(withMentionNames(quote.text, mentioned), "person"),
+          sentAt: quote.sentAt,
+        }
       : null;
     // A conversation keeps its agent. A new one goes to the workspace's orchestrator, which asks its
     // teammates; without one, nothing answers.

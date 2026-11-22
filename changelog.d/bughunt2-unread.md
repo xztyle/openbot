@@ -10,3 +10,5 @@
 - Workspace: an agent you have not written to lately that writes to you shows its DM row with the
   unread count again. Its messages had no row, so the sidebar, the Space rail, the phone's Chat tab
   and the tab title all left them out.
+- Web and desktop: a mention in a conversation whose bell is set to Nothing counts once in the tab
+  title and the Dock badge, as on the Space rail, instead of twice.

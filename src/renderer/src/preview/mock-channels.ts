@@ -636,6 +636,7 @@ export function createMockChannels(
       author: ChannelMessage["author"],
       text: string,
       threadRootId?: string,
+      extra: Partial<Pick<ChannelMessage, "mentions" | "alsoInChannel">> = {},
     ): ChannelMessage => {
       const channel = requireChannel(channelId);
       const list = messages.get(channelId) ?? [];
@@ -655,6 +656,7 @@ export function createMockChannels(
           status: "completed",
         },
         ...(threadRootId ? { threadRootId } : {}),
+        ...extra,
       };
       list.push(message);
       messages.set(channelId, list);

@@ -65,6 +65,12 @@ interface ReadState {
   firstUnreadMessageId: string | null;
   throughMessageId: string | null;
 }
+interface SidebarPrefs {
+  order: { channels: string[]; direct: string[] };
+  muted?: string[];
+  notifyMentions?: string[];
+  notifyNothing?: string[];
+}
 declare global {
   interface Window {
     /** The mock host of `web-client-inbox-harness.tsx`: the parts that this check uses. */
@@ -81,13 +87,16 @@ declare global {
           workspaceActivity?(input: { limit: number }): Promise<{ threads: { unreadCount: number }[] }>;
           workspaceDmAgents?(...args: unknown[]): Promise<{ agentIds: string[]; recentAgentIds?: string[] }>;
           listConversationReads(...args: unknown[]): Promise<Record<string, ReadState>>;
+          workspaceSidebar(): Promise<{ sidebar: SidebarPrefs | null }>;
+          setWorkspaceSidebar(prefs: SidebarPrefs): Promise<unknown>;
         };
       };
       postChannelMessage(
         channelId: string,
-        author: { kind: "agent"; id: string; name: string },
+        author: { kind: "agent" | "member"; id: string; name: string },
         text: string,
         threadRootId?: string,
+        extra?: { mentions?: { kind: "member"; id: string; name: string }[] },
       ): unknown;
     };
   }
@@ -293,6 +302,30 @@ async function desktop(browser: Browser): Promise<void> {
     assert.deepEqual(await threads(), [0], "the thread is read when the reader is back");
   });
   await remote.context().close();
+
+  const nothing = await open(browser, "desktop");
+  await step(nothing, "desktop", "a mention in a channel set to Nothing counts once in the tab title", async () => {
+    await nothing.evaluate(async () => {
+      const host = window.harnessHost;
+      if (!host) throw new Error("No mock host.");
+      const current = (await host.api.agent.workspaceSidebar()).sidebar ?? { order: { channels: [], direct: [] } };
+      await host.api.agent.setWorkspaceSidebar({
+        ...current,
+        muted: [],
+        notifyMentions: [],
+        notifyNothing: ["general"],
+      });
+      host.postChannelMessage("general", { kind: "member", id: "ana", name: "Ana" }, "@Preview a look?", undefined, {
+        mentions: [{ kind: "member", id: "preview", name: "Preview User" }],
+      });
+    });
+    await until(
+      nothing,
+      (value) => hasRow(value, /^General, 2 mentions/u) && value.title.startsWith("(2)"),
+      "the title and the rail disagree",
+    );
+  });
+  await nothing.context().close();
 
   const hidden = await open(browser, "desktop", true);
   await step(hidden, "desktop", "an agent not written to lately shows its unread DM", async () => {

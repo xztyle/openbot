@@ -1,7 +1,8 @@
 // Checks the workspace message box on the web client against a mock host
 // (`src/renderer/stories/web-client-inbox-harness.tsx`), on an iPhone and on a computer: a message
 // that waits in the outbox keeps its files through Edit, two tabs that send while offline both
-// deliver, and an edit in place hides a pasted password as the message box does.
+// deliver, an edit in place hides a pasted password as the message box does, and an agent DM that
+// cannot send yet leaves its draft alone.
 //
 // `bun scripts/workspace-composer-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>]`
 // Writes report.json to .openbot-build/workspace-composer-e2e, or to --out.
@@ -18,6 +19,7 @@ const logger = createOpenBotLogger("workspace-composer-e2e");
 const ROOT = resolve(import.meta.dirname, "..");
 const UI_WAIT_MS = 60_000;
 const CHANNEL_PATH = "/app/general/c/general";
+const DM_PATH = "/app/general/dm/chief";
 
 function option(name: string): string | undefined {
   return process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
@@ -87,7 +89,7 @@ async function settle(page: Page): Promise<void> {
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
 }
 
-const composer = (page: Page) => page.locator(".ws-composer").filter({ visible: true }).last();
+const composer = (page: Page) => page.locator(".ws-composer, .composer").filter({ visible: true }).last();
 const editor = (page: Page) => composer(page).locator(".composer-editor-surface").first();
 const outbox = (page: Page) => page.locator(".ws-outbox-message").filter({ visible: true });
 const sentCount = (page: Page, text: string) =>
@@ -237,6 +239,25 @@ async function checkEditInPlaceHidesSecret(page: Page, device: string) {
   });
 }
 
+/**
+ * Return in an agent DM whose agent cannot take a message yet (the connection is away) sends
+ * nothing, so the draft stays as written: a password in it is not swapped for a marker, and no
+ * notice says that a message hid it.
+ */
+async function checkDmUnsentKeepsDraft(page: Page, device: string) {
+  await load(page, `${CHANNEL_ORIGIN()}${DM_PATH}`);
+  await page.evaluate(() => window.harnessConnection?.drop(60_000));
+  await page.waitForTimeout(300);
+  await editor(page).click();
+  await page.keyboard.type("la clave: Pan-de-oro77");
+  await page.keyboard.press("Enter");
+  await settle(page);
+  await step(device, "an agent DM that cannot send yet keeps a password in the draft as written", async () => {
+    assert.equal((await editor(page).innerText()).trim(), "la clave: Pan-de-oro77");
+    assert.equal(await page.getByText(/hid a password/u).count(), 0, "A notice says a message hid the password.");
+  });
+}
+
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 const server = await createServer({
@@ -283,6 +304,11 @@ try {
   {
     const context = await newDevice(browser, false);
     await checkEditInPlaceHidesSecret(await newPage(context), "desktop");
+    await context.close();
+  }
+  {
+    const context = await newDevice(browser, false);
+    await checkDmUnsentKeepsDraft(await newPage(context), "desktop");
     await context.close();
   }
   report.passed = report.steps.every((item) => item.passed) && report.pageErrors.length === 0;

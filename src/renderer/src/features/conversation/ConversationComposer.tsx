@@ -202,7 +202,15 @@ export function ConversationComposer() {
       return;
     }
     // A pasted key or password never reaches the agent: a marker takes its place before the send,
-    // and a notice offers to save it in Secrets.
+    // and a notice offers to save it in Secrets. A box that cannot send yet, such as while the
+    // agent starts, keeps the draft as it is and says nothing.
+    const sends =
+      !attachmentBusy() &&
+      (voicePhase() === "recording" || (voicePhase() === "idle" && agentReady() && !providerUpdateRequired()));
+    if (!sends) {
+      submitComposer();
+      return;
+    }
     const scanned = secrets.scan(draft.text);
     if (scanned.found.length > 0) flush(() => updateCurrentDraft({ text: scanned.text }));
     submitComposer();

@@ -12,3 +12,7 @@
 - The web app loads about 300 KB (64 KB compressed) less script before the workspace shows: Money,
   Org chart, Storage, Loops, Secrets, Reviews, Portfolio, Insights and Trust load when you open
   them.
+- The web tab no longer draws its icon again for each message when the unread count stays the
+  same, and a reconnect or a server update no longer reads the selected agent's settings, the
+  connectors, the routines' time zones and the loop decisions again when nothing they depend on
+  changed.

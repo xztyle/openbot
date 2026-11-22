@@ -14,7 +14,7 @@ import { AGENT_BACKUP_MODELS_CAPABILITY } from "@openbot/contracts/team-protocol
 import { AGENT_HOST_SETTINGS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-host-settings-v1";
 import { AGENT_TASK_LIMIT_CAPABILITY } from "@openbot/contracts/team-protocol/agent-task-limit-v1";
 import { currentText } from "@openbot/ui/text";
-import { createEffect, createStore, untrack } from "solid-js";
+import { createEffect, createMemo, createStore, untrack } from "solid-js";
 import { serverCanAdminister } from "../servers/server-capabilities";
 import { type AgentsPort, agentsPort } from "./agents-port";
 
@@ -80,9 +80,11 @@ export function createRemoteAgentAdmin(
     });
   }
   let hostReadGeneration = 0;
-  // A settings change on another client updates the agent's timestamp in the released summary.
+  // A settings change on another client updates the agent's timestamp in the released summary. Each
+  // read is behind a memo: an effect runs again each time its source runs, also with the same key, and
+  // a change of the server or the agent summary read the four settings of the agent again.
   createEffect(
-    () => JSON.stringify([hostKey(), target()?.updatedAt]),
+    createMemo(() => JSON.stringify([hostKey(), target()?.updatedAt])),
     () => {
       const requestKey = untrack(hostKey);
       const generation = ++hostReadGeneration;
@@ -116,7 +118,7 @@ export function createRemoteAgentAdmin(
   }
   let backupReadGeneration = 0;
   createEffect(
-    () => JSON.stringify([backupKey(), target()?.updatedAt]),
+    createMemo(() => JSON.stringify([backupKey(), target()?.updatedAt])),
     () => {
       const requestKey = untrack(backupKey);
       const generation = ++backupReadGeneration;
@@ -151,7 +153,7 @@ export function createRemoteAgentAdmin(
   }
   let taskLimitReadGeneration = 0;
   createEffect(
-    () => JSON.stringify([taskLimitKey(), target()?.updatedAt]),
+    createMemo(() => JSON.stringify([taskLimitKey(), target()?.updatedAt])),
     () => {
       const requestKey = untrack(taskLimitKey);
       const generation = ++taskLimitReadGeneration;
@@ -189,7 +191,7 @@ export function createRemoteAgentAdmin(
   // A new agent never shows the values of the previous one while its own are read. A change of
   // Permissions on another client updates the agent's timestamp, so the same agent reads again.
   createEffect(
-    () => JSON.stringify([key(), target()?.updatedAt]),
+    createMemo(() => JSON.stringify([key(), target()?.updatedAt])),
     () => {
       const requestKey = untrack(key);
       const generation = ++adminReadGeneration;

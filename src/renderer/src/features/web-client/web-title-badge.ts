@@ -1,5 +1,5 @@
 import type { TextValue } from "@openbot/ui/text";
-import { createEffect, onCleanup } from "solid-js";
+import { createEffect, createMemo, onCleanup } from "solid-js";
 
 /** What the tab tells: a count of things for the user, or only that something is unread. */
 export interface WebTitleBadge {
@@ -132,39 +132,36 @@ export function createWebTitleBadge(options: {
     icon = null;
   }
 
-  createEffect(
-    () => {
-      const place = options.place?.() ?? null;
-      const title = place ? options.t("webClient.title.place", place) : baseTitle;
-      const count = options.badge().count;
-      return count > 0 ? options.t("webClient.title.attention", { count, title }) : title;
-    },
-    (title) => {
-      document.title = title;
-    },
-  );
-  // A change of place keeps the icon; only a change of the badge draws it again. The badge is read
-  // again with each message, and a drawing reads the page's computed style, so an unchanged badge
-  // draws nothing.
-  createEffect(
-    () => {
-      const { count, unread } = options.badge();
-      return `${count}:${unread ? 1 : 0}`;
-    },
-    (key) => {
-      const [count, unread] = key.split(":");
-      const badge = { count: Number(count), unread: unread === "1" };
-      const current = ++drawing;
-      if (badge.count === 0 && !badge.unread) {
-        restoreIcon();
-        return;
-      }
-      void drawIcon(badge).then((href) => {
-        if (current !== drawing || !href) return;
-        iconLink().link.href = href;
-      });
-    },
-  );
+  // Memos in front of the effects: an effect runs again each time its source runs, also with the same
+  // value, and the badge is read again with each message.
+  const title = createMemo(() => {
+    const place = options.place?.() ?? null;
+    const title = place ? options.t("webClient.title.place", place) : baseTitle;
+    const count = options.badge().count;
+    return count > 0 ? options.t("webClient.title.attention", { count, title }) : title;
+  });
+  createEffect(title, (title) => {
+    document.title = title;
+  });
+  // A change of place keeps the icon; only a change of the badge draws it again. A drawing reads the
+  // page's computed style, so an unchanged badge draws nothing.
+  const badgeKey = createMemo(() => {
+    const { count, unread } = options.badge();
+    return `${count}:${unread ? 1 : 0}`;
+  });
+  createEffect(badgeKey, (key) => {
+    const [count, unread] = key.split(":");
+    const badge = { count: Number(count), unread: unread === "1" };
+    const current = ++drawing;
+    if (badge.count === 0 && !badge.unread) {
+      restoreIcon();
+      return;
+    }
+    void drawIcon(badge).then((href) => {
+      if (current !== drawing || !href) return;
+      iconLink().link.href = href;
+    });
+  });
   onCleanup(() => {
     drawing++;
     document.title = baseTitle;

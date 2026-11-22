@@ -9,7 +9,7 @@ import type {
 import { routineOnceInstant } from "@openbot/team-client/routine-schedule";
 import { toast } from "@openbot/ui";
 import { currentText } from "@openbot/ui/text";
-import { createEffect, onCleanup, untrack } from "solid-js";
+import { createEffect, createMemo, onCleanup, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { desktopEventRoutinesApi, type EventRoutinesApi } from "../conversation/routine-webhooks-api";
 import type { HostTimezoneCalls } from "../servers/ServerTimezoneSetting";
@@ -267,13 +267,14 @@ export function createRoutineTimezonePrompt(targets: () => RoutineZoneTarget[]):
     for (const target of current) void check(target);
   }
 
-  createEffect(
-    () =>
-      targets()
-        .map((target) => target.id)
-        .join("\n"),
-    () => checkAll(),
+  // A memo: an effect runs again each time its source runs, also with the same servers, and each run
+  // read the routines of every server.
+  const targetIds = createMemo(() =>
+    targets()
+      .map((target) => target.id)
+      .join("\n"),
   );
+  createEffect(targetIds, () => checkAll());
   // A focus reads every server only after the device zone changed. Otherwise it reads only the servers
   // with a prompt, so a prompt closes when another device moved those routines.
   const recheck = () => {

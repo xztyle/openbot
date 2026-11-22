@@ -114,6 +114,8 @@ declare global {
     openbotStress?: {
       stream(channelId: string, flushes: number, gapMs: number): Promise<void>;
       drop(holdMs: number): void;
+      post(channelId: string, text: string): Promise<void>;
+      postDm(agentId: string, text: string): Promise<void>;
       calls: Record<string, number>;
       resetCalls(): void;
     };
@@ -362,6 +364,68 @@ async function desktop(browser: Browser, origin: string) {
     );
   }
 
+  if (runs("typing")) {
+    // Typing in #general's box with a 4x slower CPU while a reply streams in another channel: the time
+    // from each key to the next frame, and the effects that each key runs with an unchanged value.
+    const surface = page.locator(".ws-composer .composer-editor-surface").filter({ visible: true }).last();
+    await surface.click();
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+    await takeEffectRuns(page);
+    await takeLongTasks(page);
+    const streaming = page.evaluate(() => window.openbotStress?.stream("load-9", 40, 100));
+    const delays: number[] = [];
+    for (const character of "the numbers for this week look fine") {
+      const started = Date.now();
+      await page.keyboard.type(character);
+      await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => done())));
+      delays.push(Date.now() - started);
+    }
+    await streaming;
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+    const typingTasks = await takeLongTasks(page);
+    const sorted = [...delays].sort((a, b) => a - b);
+    report.metrics.typing = {
+      keys: delays.length,
+      medianMs: sorted[Math.floor(sorted.length / 2)] ?? 0,
+      worstMs: sorted.at(-1) ?? 0,
+      longTasks: typingTasks.length,
+      longTaskMs: Math.round(sum(typingTasks)),
+      ...(EFFECTS ? { repeatedEffects: repeatedEffects(await takeEffectRuns(page)) } : {}),
+    };
+    check(
+      "a key shows within 100 ms (median) on a 4x slower CPU while a reply streams",
+      (sorted[Math.floor(sorted.length / 2)] ?? 0) <= 100,
+      `median ${sorted[Math.floor(sorted.length / 2)]} ms, worst ${sorted.at(-1)} ms`,
+    );
+    await page.keyboard.press("Control+A");
+    await page.keyboard.press("Backspace");
+  }
+
+  if (runs("resync")) {
+    // Messages that came while the connection was down show once each after the reconnect: in the
+    // open channel, and in a channel that is not open (its unread count).
+    const missed = ["Missed while offline: one", "Missed while offline: two"];
+    await page.evaluate(() => window.openbotStress?.drop(1_500));
+    await page.waitForTimeout(200);
+    for (const text of missed) await page.evaluate((body) => window.openbotStress?.post("general", body), text);
+    await page.evaluate(() => window.openbotStress?.post("load-7", "Missed in a closed channel"));
+    let shown: number[] = [];
+    const deadline = Date.now() + 20_000;
+    while (Date.now() < deadline) {
+      shown = await Promise.all(missed.map((text) => page.getByText(text, { exact: true }).count()));
+      if (shown.every((count) => count >= 1)) break;
+      await page.waitForTimeout(250);
+    }
+    await page.waitForTimeout(1_500);
+    shown = await Promise.all(missed.map((text) => page.getByText(text, { exact: true }).count()));
+    report.metrics.resync = { shown };
+    check(
+      "messages from the time offline show once each in the open channel after the reconnect",
+      shown.every((count) => count === 1),
+      JSON.stringify(shown),
+    );
+  }
+
   if (runs("reconnect")) {
     const reconnectOnce = async () => {
       await page.evaluate(() => window.openbotStress?.drop(300));
@@ -380,10 +444,12 @@ async function desktop(browser: Browser, origin: string) {
     const kindsBefore = await elementKinds(page);
     const detachedBefore = await detachedKinds(cdp);
     await resetCalls(page);
+    await takeEffectRuns(page);
     const cycles = Number(option("cycles") ?? 10);
     const started = Date.now();
     for (let index = 0; index < cycles; index++) await reconnectOnce();
     const reconnectCalls = await calls(page);
+    const reconnectEffects = EFFECTS ? repeatedEffects(await takeEffectRuns(page)) : null;
     // The last toasts end, so what stays is what nothing lets go.
     await page.waitForTimeout(8_000);
     const listenersAfter = await listenerCounts(cdp);
@@ -399,6 +465,7 @@ async function desktop(browser: Browser, origin: string) {
       await new Promise((done) => out.end(done));
     }
     report.metrics.reconnect = {
+      ...(reconnectEffects ? { repeatedEffects: reconnectEffects } : {}),
       grownElements: grown(kindsBefore, kindsAfter),
       grownDetached: grown(detachedBefore, await detachedKinds(cdp)),
       cycles,

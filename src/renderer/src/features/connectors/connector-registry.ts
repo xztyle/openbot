@@ -106,15 +106,15 @@ export function createConnectorRegistry(
   );
   // GitHub tells its availability only after a read, so a new server is read before it can show. A
   // joined server's capabilities come after its id, so the connectors it can reach are part of the key.
-  createEffect(
-    () => {
-      const id = server()?.id;
-      return id ? `${id}:${reachable().map((controller) => controller.id)}` : undefined;
-    },
-    (key) => {
-      if (key) reload();
-    },
-  );
+  // A memo, so a server change that keeps the key (a status update) does not read every connector
+  // again: an effect runs again each time its source runs, also with the same value.
+  const readKey = createMemo(() => {
+    const id = server()?.id;
+    return id ? `${id}:${reachable().map((controller) => controller.id)}` : undefined;
+  });
+  createEffect(readKey, (key) => {
+    if (key) reload();
+  });
   return {
     entries,
     get: (id) => entries().find((entry) => entry.id === id) ?? { id, access: "hidden" },

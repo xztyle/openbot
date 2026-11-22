@@ -155,7 +155,7 @@ import { type AgentSidebar, handleSidebarTool } from "./sidebar-tools";
 import { LOCAL_SKILL_TOOL_DEFINITIONS, type LocalSkillTools, runLocalSkillTool } from "./skill-tools";
 import { isDynamicToolCall } from "./thread-items";
 import { toolCallIdempotencyKey } from "./tool-call-idempotency";
-import { discoverTools, resolveDeferredTool } from "./tool-catalog";
+import { discoverTools, resolveDeferredTool, ToolDiscoveryError } from "./tool-catalog";
 import { ToolOperationFailed, toolStep, toToolOperationFailed } from "./tool-operation";
 import type { AgentBrowserHost } from "./turn-lifecycle";
 import { handleUpdateAgentsTool } from "./update-agents-tool";
@@ -550,24 +550,33 @@ export class OpenBotToolRouter {
           if (!isDynamicToolCall(request.params)) throw new Error("Invalid dynamic tool request.");
           let params = request.params;
           if (params.namespace === "openbot") {
-            if (params.tool === "tool_search" || params.tool === "tool_describe") {
+            let discovery = params.tool === "tool_search" || params.tool === "tool_describe";
+            if (params.tool === "tool_call") {
+              const resolved = resolveDeferredTool(params);
+              if (resolved.kind === "invalid") {
+                client.respond(request.id, openBotToolFailure(resolved.message));
+                return;
+              }
+              // A model sometimes calls tool_search or tool_describe through tool_call.
+              discovery = resolved.kind === "discovery";
+              params = resolved.params;
+            }
+            if (discovery) {
               const agentId = this.#conversation.agentForThread(params.threadId);
               if (!agentId) throw new Error("The calling Atelier agent is unknown.");
               try {
                 const result = discoverTools(params, this.#requireAgent(agentId));
                 client.respond(request.id, openBotToolResult(result));
-              } catch {
-                client.respond(request.id, openBotToolFailure(sourceText("error.agent.toolRequestInvalid")));
+              } catch (error) {
+                // Only ToolDiscoveryError text is written for the agent; it names no argument value.
+                client.respond(
+                  request.id,
+                  openBotToolFailure(
+                    error instanceof ToolDiscoveryError ? error.message : sourceText("error.agent.toolRequestInvalid"),
+                  ),
+                );
               }
               return;
-            }
-            if (params.tool === "tool_call") {
-              const resolved = resolveDeferredTool(params);
-              if (!resolved) {
-                client.respond(request.id, openBotToolFailure(sourceText("error.agent.toolRequestInvalid")));
-                return;
-              }
-              params = resolved;
             }
           }
           if (params.namespace === "openbot" && (params.tool === "history_search" || params.tool === "history_read")) {

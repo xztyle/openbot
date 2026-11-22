@@ -1,5 +1,5 @@
 import type { AgentSummary } from "@openbot/contracts/ipc";
-import { sourceText } from "@openbot/i18n/source";
+import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { z } from "zod";
 import { BROWSER_DYNAMIC_TOOLS, OPENBOT_BROWSER_NAMESPACE } from "../browser-tools";
 import { OPENBOT_DYNAMIC_TOOLS, OPENBOT_TOOL_DEFINITIONS } from "../openbot-tools";
@@ -48,15 +48,31 @@ const searchShape = {
   query: searchQuery.optional(),
   limit: z.number().int().min(1).max(10).optional(),
 };
-const describeShape = { names: z.array(qualifiedName).min(1).max(10) };
+// Models often send one name as `name`, or `names` as one string or a JSON-encoded array, so describe
+// accepts each of them. Claude's MCP layer checks the shape before Atelier sees the call.
+const describeShape = {
+  names: z
+    .union([z.array(qualifiedName).min(1).max(10), qualifiedName.max(2_000)])
+    .describe('Qualified tool names, such as ["openbot.create_agent", "openbot_browser.open"].')
+    .optional(),
+  name: qualifiedName.describe("One qualified tool name, instead of names.").optional(),
+};
 // Claude's bundled schema converter does not support the current Zod record processor, and Muse
-// rejects recursive schemas. Arguments arrive as JSON, and the target tool validates them.
-const callShape = { name: qualifiedName, arguments: z.object({}).catchall(z.unknown()) };
+// rejects recursive schemas. Arguments arrive as JSON, and the target tool validates them. A model
+// sometimes sends them as a JSON-encoded string, which the call decodes.
+const callShape = {
+  name: qualifiedName.describe('The qualified tool name, such as "openbot.create_agent".'),
+  arguments: z
+    .union([z.object({}).catchall(z.unknown()), z.string().max(1_000_000)])
+    .describe('The tool\'s arguments as a JSON object, such as {"tabId":"…"}. Omit for a tool without arguments.')
+    .optional(),
+};
 const searchSchema = z
   .strictObject(searchShape)
   .refine((input) => input.queries !== undefined || input.query !== undefined);
 const describeSchema = z.strictObject(describeShape);
 const callSchema = z.strictObject(callShape);
+const DISCOVERY_TOOLS = new Set(["tool_search", "tool_describe"]);
 
 export const VISIBLE_TOOL_DEFINITIONS = [
   ...OPENBOT_TOOL_DEFINITIONS.filter((tool) => DIRECT_NAMES.has(tool.name)),
@@ -67,13 +83,14 @@ export const VISIBLE_TOOL_DEFINITIONS = [
   },
   {
     name: "tool_describe",
-    description: "Load exact input schemas and operating guidance for up to ten qualified built-in tool names.",
+    description:
+      'Load exact input schemas and operating guidance for up to ten qualified built-in tool names, such as {"names":["openbot.create_agent","openbot_browser.open"]}.',
     shape: describeShape,
   },
   {
     name: "tool_call",
     description:
-      "Call one original built-in tool by its qualified name and JSON arguments. Uses normal permissions and approvals. Cannot call discovery tools.",
+      'Call one original built-in tool by its qualified name and JSON arguments, such as {"name":"openbot_browser.list_tabs","arguments":{}}. Uses normal permissions and approvals.',
     shape: callShape,
   },
 ];
@@ -121,19 +138,132 @@ function words(text: string): string[] {
 /** Each step to describe a tool sends the full context again, so search includes the schemas of its best matches. */
 const READY_SEARCH_RESULTS = 3;
 
-function requireTool(name: string) {
-  const tool = BUILTIN_TOOL_CATALOG.find((entry) => entry.name === name);
-  if (!tool) throw new Error(sourceText("error.agent.toolRequestInvalid"));
+/** A tool-call failure whose message tells the calling agent how to correct its call. */
+export class ToolDiscoveryError extends Error {}
+
+type CatalogEntry = (typeof BUILTIN_TOOL_CATALOG)[number];
+
+const NAMESPACES = [...new Set(BUILTIN_TOOL_CATALOG.map((entry) => entry.namespace))];
+
+/**
+ * Finds a catalog tool by its qualified name, or by a form models also write: a bare tool name that only
+ * one namespace has, such as `create_agent`, or Claude's `mcp__openbot__create_agent`.
+ */
+function findTool(name: string): CatalogEntry | undefined {
+  const exact = BUILTIN_TOOL_CATALOG.find((entry) => entry.name === name);
+  if (exact) return exact;
+  const claude = /^mcp__([a-z0-9_]+?)__([a-z0-9_]+)$/i.exec(name);
+  if (claude) return BUILTIN_TOOL_CATALOG.find((entry) => entry.namespace === claude[1] && entry.tool === claude[2]);
+  const bare = BUILTIN_TOOL_CATALOG.filter((entry) => entry.tool === name);
+  return bare.length === 1 ? bare[0] : undefined;
+}
+
+/** A name is model text: only a plain tool-name shape goes back into the error. */
+function shownName(name: string): string {
+  return /^[\w.-]{1,80}$/.test(name) ? `"${name}"` : "That name";
+}
+
+/** The catalog tools that share the most words with an unknown name, such as `open` for `open_tab`. */
+function similarTools(name: string): string[] {
+  const asked = new Set(words(name).filter((word) => !NAMESPACES.includes(word)));
+  return BUILTIN_TOOL_CATALOG.map((entry) => ({
+    entry,
+    score: words(entry.tool).filter((word) => asked.has(word)).length,
+  }))
+    .filter((match) => match.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4)
+    .map(({ entry }) => entry.name);
+}
+
+function unknownToolError(name: string): ToolDiscoveryError {
+  const similar = similarTools(name);
+  return new ToolDiscoveryError(
+    `${shownName(name)} is not a built-in tool. ${
+      similar.length > 0 ? `Similar tools: ${similar.join(", ")}. ` : ""
+    }Use a qualified name from tool_search, such as "openbot.send_message" or "openbot_browser.open".`,
+  );
+}
+
+function requireTool(name: string): CatalogEntry {
+  const tool = findTool(name);
+  if (!tool) throw unknownToolError(name);
   return tool;
 }
 
-/** Returns null for an invalid envelope. No supplied values are echoed into errors or logs. */
-export function resolveDeferredTool(params: DynamicToolCallParams): DynamicToolCallParams | null {
+/** `names` as an array, one string, a JSON-encoded array, or names separated by commas or spaces. */
+function describeNames(input: { names?: string | string[] | undefined; name?: string | undefined }): string[] {
+  const listed =
+    input.names === undefined ? [] : typeof input.names === "string" ? splitNames(input.names) : input.names;
+  const names = [...listed, ...(input.name === undefined ? [] : [input.name])]
+    .map((name) => name.trim())
+    .filter(Boolean);
+  if (names.length === 0)
+    throw new ToolDiscoveryError(
+      'tool_describe needs names, an array of qualified tool names, such as {"names":["openbot.create_agent"]}.',
+    );
+  if (names.length > 10) throw new ToolDiscoveryError("tool_describe takes at most ten names. Split the request.");
+  return names;
+}
+
+const nameList = z.array(z.string());
+
+function splitNames(text: string): string[] {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = nameList.safeParse(JSON.parse(trimmed));
+      if (parsed.success) return parsed.data;
+    } catch {
+      // Not JSON: read it as a list of names.
+    }
+  }
+  return trimmed.split(/[\s,]+/);
+}
+
+/** Decodes arguments that a model sent as a JSON-encoded object. */
+function callArguments(value: string | DynamicRecord | undefined): DynamicRecord {
+  if (value === undefined) return {};
+  if (!isString(value)) return value;
+  const text = value.trim();
+  if (text === "") return {};
+  try {
+    const parsed = JSON.parse(text);
+    if (isDynamicRecord(parsed)) return parsed;
+  } catch {
+    // Reported below.
+  }
+  throw new ToolDiscoveryError(
+    'tool_call arguments must be a JSON object, such as {"name":"openbot_browser.list_tabs","arguments":{}}.',
+  );
+}
+
+export type DeferredTool =
+  | { kind: "call"; params: DynamicToolCallParams }
+  | { kind: "discovery"; params: DynamicToolCallParams }
+  | { kind: "invalid"; message: string };
+
+/**
+ * Resolves a tool_call envelope. A call of tool_search or tool_describe through tool_call runs it, and an
+ * invalid envelope gets a message that says how to correct it. No argument values are echoed into errors.
+ */
+export function resolveDeferredTool(params: DynamicToolCallParams): DeferredTool {
   const parsed = callSchema.safeParse(params.arguments);
-  if (!parsed.success) return null;
-  const entry = BUILTIN_TOOL_CATALOG.find((tool) => tool.name === parsed.data.name);
-  if (!entry) return null;
-  return { ...params, namespace: entry.namespace, tool: entry.tool, arguments: parsed.data.arguments };
+  if (!parsed.success)
+    return {
+      kind: "invalid",
+      message:
+        'tool_call needs name, a qualified tool name, and arguments, a JSON object, such as {"name":"openbot_browser.list_tabs","arguments":{}}.',
+    };
+  try {
+    const args = callArguments(parsed.data.arguments);
+    const bare = parsed.data.name.replace(/^openbot\./, "");
+    if (DISCOVERY_TOOLS.has(bare)) return { kind: "discovery", params: { ...params, tool: bare, arguments: args } };
+    const entry = requireTool(parsed.data.name);
+    return { kind: "call", params: { ...params, namespace: entry.namespace, tool: entry.tool, arguments: args } };
+  } catch (error) {
+    return { kind: "invalid", message: error instanceof ToolDiscoveryError ? error.message : String(error) };
+  }
 }
 
 function toolGuidanceFor(entries: readonly (typeof BUILTIN_TOOL_CATALOG)[number][], agent: AgentSummary): string[] {
@@ -143,7 +273,10 @@ function toolGuidanceFor(entries: readonly (typeof BUILTIN_TOOL_CATALOG)[number]
 export function discoverTools(params: DynamicToolCallParams, agent: AgentSummary) {
   if (params.tool === "tool_search") {
     const parsed = searchSchema.safeParse(params.arguments);
-    if (!parsed.success) throw new Error(sourceText("error.agent.toolRequestInvalid"));
+    if (!parsed.success)
+      throw new ToolDiscoveryError(
+        'tool_search needs queries, an array of keywords, or query, one string, such as {"query":"send email"}.',
+      );
     const queries = [...(parsed.data.queries ?? []), ...(parsed.data.query ? [parsed.data.query] : [])].map((query) =>
       query.toLowerCase(),
     );
@@ -182,8 +315,11 @@ export function discoverTools(params: DynamicToolCallParams, agent: AgentSummary
       : { ...result, note: BROWSER_SEARCH_NOTE };
   }
   const parsed = describeSchema.safeParse(params.arguments);
-  if (!parsed.success) throw new Error(sourceText("error.agent.toolRequestInvalid"));
-  const entries = [...new Set(parsed.data.names)].map(requireTool);
+  if (!parsed.success)
+    throw new ToolDiscoveryError(
+      'tool_describe needs names, up to ten qualified tool names, such as {"names":["openbot.create_agent"]}.',
+    );
+  const entries = [...new Set(describeNames(parsed.data).map(requireTool))];
   return {
     tools: entries.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
     guidance: toolGuidanceFor(entries, agent),

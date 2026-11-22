@@ -138,7 +138,7 @@ export function readWeek(db: DatabaseSync, agentId: string, since: string, auto:
   // The turns of the agent's own work, without its background reviews, gates and condensing.
   const work = new Map<string, string>();
   for (const row of usage) {
-    if (/^(gate|condense|memory-review|profile|side):/u.test(row.session_id)) continue;
+    if (/^(gate|condense|memory-review|profile|side|grader|fanout):/u.test(row.session_id)) continue;
     const previous = work.get(row.turn_id);
     if (!previous || modelTier(previous) === "small") work.set(row.turn_id, row.model);
   }

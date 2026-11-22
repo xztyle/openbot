@@ -171,6 +171,7 @@ import {
   type LocalAttentionResponse,
   type PromptResponder,
 } from "./agent/attention-registry";
+import { fanoutCandidates, reviewJudgeCandidates } from "./agent/background-models";
 import { BootRecovery } from "./agent/boot-recovery";
 import { BrowserUploads } from "./agent/browser-uploads";
 import type { ChatVisualPreviewHost } from "./agent/chat-visual-preview";
@@ -207,6 +208,7 @@ import {
 } from "./agent/model-choice";
 import { ModelPolicy, tierModel } from "./agent/model-policy";
 import { OpenBotToolRouter } from "./agent/openbot-tool-router";
+import type { OrderCardsPort } from "./agent/order-tools";
 import { ProfileClients } from "./agent/profile-clients";
 import {
   GenerationUsageLimitError,
@@ -243,6 +245,7 @@ import { ThreadLifecycle } from "./agent/thread-lifecycle";
 import { toToolOperationFailed } from "./agent/tool-operation";
 import { type AgentBrowserHost, type FinishedAnswer, TurnLifecycle } from "./agent/turn-lifecycle";
 import {
+  backgroundUsageObserver,
   condenseUsageObserver,
   gateUsageObserver,
   memoryReviewUsageObserver,
@@ -251,6 +254,7 @@ import {
 import { toUsageReadFailed, UsageLimitGate, type UsageLimitKey } from "./agent/usage-limit-gate";
 import { WarmGenerations } from "./agent/warm-generations";
 import type { WebhookRoutineWriter } from "./agent/webhook-routine-tool";
+import { WideResearch } from "./agent/wide-research";
 import type { AgentApiKeys } from "./agent-api-keys";
 import type { AgentProvider } from "./agent-client";
 import type { SpaceAgentTables } from "./agent-data/space-agent-tables";
@@ -567,6 +571,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #workspaceSettings: () => WorkspaceSettings;
   /** The Motion ticket each agent works on now (`setCurrentTickets`). */
   #currentTicket: (agentId: string) => WorkspaceFleetTicket | null = () => null;
+  /** Makes the Motion cards of orders between agents (`setOrderCards`). */
+  #orderCards: OrderCardsPort | null = null;
+  /** The disposable clients of the grader and the wide research runs, apart from the profile drafts'. */
+  readonly #backgroundClients = new ProfileClients();
+  readonly #wideResearch: WideResearch;
   /** User sends still before their mailbox write, by idempotency key: a retry joins the first call. */
   readonly #pendingUserSends = new Map<string, Deferred.Deferred<QueuedMessageReceipt, AgentLifecycleFailed>>();
   readonly #store: AgentStore;
@@ -1094,6 +1103,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             .stopOpenCode()
             .pipe(
               Effect.andThen(this.#gateClients.stopOpenCode()),
+              Effect.andThen(this.#backgroundClients.stopOpenCode()),
               Effect.andThen(this.#warmGenerations.stopIdle("opencode")),
               Effect.andThen(this.#gateGenerations.stopIdle("opencode")),
             ),
@@ -1888,6 +1898,26 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             .pipe(Effect.mapError((failure) => new AgentRemovalFailed({ cause: failure.cause }))),
       },
     });
+    this.#wideResearch = new WideResearch({
+      generate: (input) =>
+        this.#backgroundGeneration(
+          fanoutCandidates(input.tier, this.#endpoints.available()),
+          input.agentId,
+          input.prompt,
+          { kind: "fanout", sessionId: input.sessionId, web: input.web, timeoutMs: input.timeoutMs, lowEffort: true },
+        ).pipe(Effect.map((result) => result.text)),
+      cost: (agentId, runId) => this.#store.database.usage.sessionCostUsd(agentId, `fanout:${runId}:`),
+      directory: (agentId) => this.#store.spaces.agentSharedDirectory(agentId),
+      finished: (agentId, text) => {
+        Effect.runFork(
+          this.sendMessage({ agentId, text }, undefined, undefined, "operator-note").pipe(
+            Effect.catchCause((cause) =>
+              Effect.sync(() => logger.warn("Could not send the wide research note.", { agentId, cause })),
+            ),
+          ),
+        );
+      },
+    });
     this.#tools = new OpenBotToolRouter({
       capturedSteps: (session) => this.#threads.capturedWorkSteps(session).pipe(toToolOperationFailed),
       store,
@@ -1914,6 +1944,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       ...(this.#localSkillTools === undefined ? {} : { localSkillTools: this.#localSkillTools }),
       ...(this.#routineFlowTools === undefined ? {} : { routineFlowTools: this.#routineFlowTools }),
       loops: () => this.loops,
+      orderCards: () => this.#orderCards,
+      wideResearch: this.#wideResearch,
       ...(options.approvalAutomation === undefined ? {} : { approvalAutomation: options.approvalAutomation }),
       ...(options.visualPreview === undefined ? {} : { visualPreview: options.visualPreview }),
       ownerAway: options.ownerAway ?? null,
@@ -2202,6 +2234,91 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   /** The fleet reads the current tickets again. */
   currentTicketsChanged(): void {
     this.workspace?.fleetChanged();
+  }
+
+  /** Who makes the Motion card of an order that `send_message` carries with `card`. */
+  setOrderCards(port: OrderCardsPort | null): void {
+    this.#orderCards = port;
+  }
+
+  /** The newest messages of the agent's own chat, oldest first: the evidence of its recent work. */
+  recentWork(agentId: string): readonly ConversationMessage[] {
+    const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+    if (!agent) return [];
+    return this.#store.database.readConversationPage(agentId, agent.threadId, { type: "latest" }, 100).messages;
+  }
+
+  /**
+   * One answer of the independent grader of a Motion ticket of `agentId` (`motion-grader.ts`), in a
+   * fresh context without tools: the workspace's cheap model, or for an important ticket a model of
+   * the other vendor (`reviewJudgeCandidates`). Its usage counts under the agent as a `grader` session.
+   */
+  generateReviewText(input: { agentId: string; important: boolean; prompt: string }) {
+    return Effect.suspend(() => {
+      const agent = this.#store.list().find((candidate) => candidate.id === input.agentId);
+      const gate = this.#workspaceSettings().gate;
+      const candidates = reviewJudgeCandidates(
+        agent ?? { provider: "claude", model: "" },
+        input.important,
+        this.#endpoints.available(),
+        gate,
+      );
+      return this.#backgroundGeneration(candidates, input.agentId, input.prompt, {
+        kind: "grader",
+        lowEffort: !input.important,
+      });
+    });
+  }
+
+  /**
+   * One generation without the agent's tools on the first candidate model whose provider starts and
+   * answers; a model that fails hands over to the next. `web` lets it search and read the web.
+   */
+  #backgroundGeneration(
+    candidates: readonly AgentModelOption[],
+    agentId: string,
+    prompt: string,
+    options: { kind: "grader" | "fanout"; sessionId?: string; web?: boolean; timeoutMs?: number; lowEffort?: boolean },
+  ): Effect.Effect<{ text: string; model: string }, ProfileGenerationFailed> {
+    return Effect.gen({ self: this }, function* () {
+      let last: unknown = new Error(sourceText("error.provider.noModel"));
+      for (const candidate of candidates) {
+        if (this.#stopping) break;
+        const started = yield* Effect.result(this.#providers.ensureProvider(candidate.provider));
+        if (Result.isFailure(started)) {
+          last = started.failure;
+          continue;
+        }
+        const effort = options.lowEffort
+          ? (AGENT_REASONING_EFFORTS.find((value) => candidate.supportedReasoningEfforts.includes(value)) ??
+            candidate.defaultReasoningEffort)
+          : candidate.defaultReasoningEffort;
+        const model = { ...candidate, defaultReasoningEffort: effort };
+        const client = this.#providers.createProfileClient(candidate.provider);
+        const answer = yield* Effect.result(
+          this.#backgroundClients.run(client, (cancelled) =>
+            generateTextWithoutTools(
+              client,
+              model,
+              prompt,
+              cancelled,
+              backgroundUsageObserver(
+                options.kind,
+                this.#store.database.usage,
+                candidate.provider,
+                candidate.id,
+                agentId,
+                options.sessionId,
+              ),
+              { ...(options.web ? { web: true } : {}), ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}) },
+            ),
+          ),
+        );
+        if (Result.isSuccess(answer)) return { text: answer.success, model: `${candidate.provider}/${candidate.id}` };
+        last = answer.failure;
+      }
+      return yield* new ProfileGenerationFailed({ cause: last instanceof Error ? last : new Error(String(last)) });
+    });
   }
 
   /**
@@ -5545,6 +5662,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     return (
       this.#profileClients.usesProvider(provider) ||
       this.#gateClients.usesProvider(provider) ||
+      this.#backgroundClients.usesProvider(provider) ||
       this.#drain.hasStartingDeliveries(provider) ||
       this.#store.list().some((agent) => providerForAgent(agent) === provider && this.#runsTurn(agent.id))
     );
@@ -5597,6 +5715,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       ...(yield* this.#providers.dispose()),
       ...this.#profileClients.release(),
       ...this.#gateClients.release(),
+      ...this.#backgroundClients.release(),
     ];
     for (const [agentId, snapshot] of this.#conversation.activeSnapshots()) {
       if (!snapshot.activeTurnId) continue;

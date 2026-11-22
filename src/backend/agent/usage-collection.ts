@@ -315,3 +315,26 @@ export function memoryReviewUsageObserver(
     }
   };
 }
+
+/**
+ * Collects the usage of one background generation that works for an agent, under that agent, as its
+ * own session: `grader` for the independent grader of its Motion tickets, `fanout` for one item of a
+ * wide research run. The performance reviews leave these sessions out of the agent's turns.
+ */
+export function backgroundUsageObserver(
+  kind: "grader" | "fanout",
+  usage: AgentUsage,
+  provider: ProviderSession["provider"],
+  model: AgentSummary["model"],
+  agentId: string,
+  sessionId: string = randomUUID(),
+): (notification: { method: string; params?: unknown }) => void {
+  const session = { id: `${kind}:${sessionId}`, provider, createdAt: new Date().toISOString() };
+  return ({ method, params }) => {
+    try {
+      collectProviderUsage(usage, { id: agentId, model }, session, method, params);
+    } catch (error) {
+      logger.warn("Could not save the usage of a background generation.", { provider, kind, error });
+    }
+  };
+}

@@ -244,9 +244,14 @@ export function claudeSignInSettings(userSettings: unknown, overridden: Readonly
   return Object.keys(env).length > 0 ? { ...settings, env } : settings;
 }
 
+/** The only tools of a generation without tools that may read the web (a wide research item). */
+const WEB_RESEARCH_TOOLS = ["WebSearch", "WebFetch"];
+
 export interface ClaudeAgentQueryConfig {
   developerInstructions: string;
   profileGeneration?: boolean;
+  /** With `profileGeneration`: the generation may search and read the web, and use nothing else. */
+  webResearch?: boolean;
   workspaceOnly?: boolean;
   /** Whether the agent loads the user's own Claude Code setup from `~/.claude`. Off by default. */
   userSetup?: boolean;
@@ -316,7 +321,7 @@ export function claudeAgentQueryOptions(config: ClaudeAgentQueryConfig) {
       ? config.developerInstructions
       : { type: "preset", preset: "claude_code", append: config.developerInstructions },
     ...(config.profileGeneration
-      ? { tools: [] }
+      ? { tools: config.webResearch ? WEB_RESEARCH_TOOLS : [] }
       : { disallowedTools: [...CLAUDE_NATIVE_SCHEDULING, ...CLAUDE_UNSHOWN_TOOLS] }),
     settingSources: config.profileGeneration ? [] : config.workspaceOnly ? user : [...user, "project", "local"],
     strictMcpConfig: true,
@@ -350,6 +355,8 @@ interface ThreadConfig {
   additionalDirectories: string[];
   persistSession: boolean;
   profileGeneration: boolean;
+  /** With `profileGeneration`: only the web search and fetch tools. */
+  webResearch?: boolean;
   /** Part of the config so that a change restarts the query with the new servers. */
   computerUse: boolean;
   /**
@@ -1117,7 +1124,10 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     const canUseTool: CanUseTool = (toolName, toolInput, options) =>
       runCauseEffect(
         Effect.gen({ self: this }, function* () {
-          if (config.profileGeneration) return { behavior: "deny", message: "Profile generation has no tools." };
+          if (config.profileGeneration)
+            return config.webResearch && WEB_RESEARCH_TOOLS.includes(toolName)
+              ? { behavior: "allow", updatedInput: toolInput }
+              : { behavior: "deny", message: "Profile generation has no tools." };
           if (config.workspaceOnly) {
             const outside = yield* claudeWriteOutsideRoots(
               toolName,
@@ -2794,6 +2804,9 @@ function readThreadConfig(params: unknown): ThreadConfig {
     additionalDirectories: [...new Set([cwd, ...roots])],
     persistSession: !isRecord(params) || params.persistSession !== false,
     profileGeneration: isRecord(params) && params.profileGeneration === true,
+    ...(isRecord(params) && params.profileGeneration === true && params.webResearch === true
+      ? { webResearch: true }
+      : {}),
     computerUse: computerUseParam(params),
     workspaceOnly: isRecord(params) && params.workspaceOnly === true,
   };

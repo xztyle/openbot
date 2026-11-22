@@ -18,6 +18,7 @@ import { HISTORY_TOOL_DEFINITIONS } from "./agent/history-tools";
 import { LOOP_TOOL_DEFINITIONS } from "./agent/loop-tools";
 import { MCP_SERVER_TOOL_DEFINITIONS } from "./agent/mcp-tools";
 import { MEMORY_RECALL_TOOL_DEFINITIONS } from "./agent/memory-tool-inputs";
+import { ORDER_TOOL_DEFINITIONS, orderCardSchema } from "./agent/order-tools";
 import {
   createAgentToolSchema,
   listModelsToolSchema,
@@ -35,6 +36,7 @@ import {
 } from "./agent/sidebar-tools";
 import { LOCAL_SKILL_TOOL_DEFINITIONS } from "./agent/skill-tools";
 import { CREATE_WEBHOOK_ROUTINE_TOOL, UPDATE_WEBHOOK_ROUTINE_TOOL } from "./agent/webhook-routine-tool";
+import { WIDE_RESEARCH_TOOL_DEFINITION } from "./agent/wide-research";
 import { API_KEY_NAME_PATTERN } from "./agent-api-keys";
 import { START_TASK_TOOL, startTaskToolSchema } from "./agent-tasks/agent-tasks";
 import {
@@ -1133,8 +1135,15 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
           "True only for information nobody acts on now, such as a status update: it does not wake the recipient and joins its next turn. Never for an order or review request.",
         )
         .optional(),
+      card: orderCardSchema
+        .describe(
+          "For a real order (work the one recipient must do): Atelier makes a Motion card for it, assigned to the recipient, and names it in the message, so the order is tracked and nudged when it stalls. Give criteria and a dedupeKey. A big order (estimateHours 4+, a budget, or planFirst) starts with a plan the recipient's manager approves.",
+        )
+        .optional(),
     },
   },
+  ...ORDER_TOOL_DEFINITIONS,
+  WIDE_RESEARCH_TOOL_DEFINITION,
 ];
 
 /** What a `send_message` call must hold, as its error says. */

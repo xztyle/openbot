@@ -369,6 +369,21 @@ export class AgentUsage {
    * reported none. The tokens add the known counts, as the analytics total does. The cost is `null`
    * when one record has no cost, so a partial sum never reads as complete.
    */
+  /**
+   * The estimated cost so far of the sessions of one agent whose id starts with `sessionPrefix`, such
+   * as `fanout:<run id>:` for the items of one wide research run. A record without a cost counts 0.
+   */
+  sessionCostUsd(agentId: string, sessionPrefix: string): number {
+    const row = databaseRow(
+      this.#core.connection
+        .prepare(
+          "SELECT COALESCE(SUM(estimated_cost_usd), 0) AS cost FROM agent_usage_records WHERE agent_id = ? AND substr(session_id, 1, ?) = ?",
+        )
+        .get(agentId, sessionPrefix.length, sessionPrefix),
+    );
+    return row ? (optionalNumberColumn(row, "cost") ?? 0) : 0;
+  }
+
   readTurnTotals(agentId: string, turnId: string, since: string): { tokens: number; costUsd: number | null } | null {
     const rows = databaseRows(
       this.#core.connection

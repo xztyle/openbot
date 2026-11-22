@@ -118,6 +118,16 @@ import {
   requestedToolModel,
   requireReasoningEffort,
 } from "./model-tools";
+import {
+  handleOrderTool,
+  looksLikeOrder,
+  needsPlan,
+  type OrderCard,
+  type OrderCardsPort,
+  OrderPlans,
+  orderCardSchema,
+  planApprover,
+} from "./order-tools";
 import { OWNER_TOOL_NAMES, OwnerTools } from "./owner-tools";
 import {
   createAgentToolSchema,
@@ -148,6 +158,7 @@ import { discoverTools, resolveDeferredTool } from "./tool-catalog";
 import { ToolOperationFailed, toolStep, toToolOperationFailed } from "./tool-operation";
 import type { AgentBrowserHost } from "./turn-lifecycle";
 import { handleUpdateAgentsTool } from "./update-agents-tool";
+import type { WideResearch } from "./wide-research";
 
 const logger = createOpenBotLogger("openbot-tool-router");
 
@@ -298,6 +309,10 @@ export interface OpenBotToolRouterOptions {
   routineFlowTools?: (() => RoutineFlowTools) | undefined;
   /** The loops of the spaces, for the loop tools. */
   loops?: (() => LoopService | null) | undefined;
+  /** Makes the Motion card of an order (`send_message` with `card`); null where there is no Motion board. */
+  orderCards?: (() => OrderCardsPort | null) | undefined;
+  /** `wide_research`; absent, the tool answers that this host has none. */
+  wideResearch?: WideResearch | null | undefined;
   approvalAutomation?: ApprovalAutomationPolicy | undefined;
   /** Draws pages for `html_preview`; null where no window can draw one. */
   visualPreview?: ChatVisualPreviewHost | null | undefined;
@@ -361,6 +376,9 @@ export class OpenBotToolRouter {
   readonly #localSkillTools: (() => LocalSkillTools) | undefined;
   readonly #routineFlowTools: (() => RoutineFlowTools) | undefined;
   readonly #loops: (() => LoopService | null) | undefined;
+  readonly #orderCards: (() => OrderCardsPort | null) | undefined;
+  readonly #wideResearch: WideResearch | null;
+  readonly #plans: OrderPlans;
   readonly #approvalAutomation: ApprovalAutomationPolicy;
   readonly #visualPreview: ChatVisualPreviewHost | null;
   readonly #screenCapture: ScreenCaptureHost | null;
@@ -401,6 +419,9 @@ export class OpenBotToolRouter {
     this.#localSkillTools = options.localSkillTools;
     this.#routineFlowTools = options.routineFlowTools;
     this.#loops = options.loops;
+    this.#orderCards = options.orderCards;
+    this.#wideResearch = options.wideResearch ?? null;
+    this.#plans = new OrderPlans(options.store.database.userDataPath);
     this.#approvalAutomation = options.approvalAutomation ?? NO_APPROVAL_AUTOMATION;
     this.#visualPreview = options.visualPreview ?? null;
     this.#screenCapture = options.screenCapture ?? null;
@@ -1432,6 +1453,18 @@ export class OpenBotToolRouter {
     const loopResult = yield* handleLoopTool(params.tool, params.arguments, senderAgentId, this.#loops?.() ?? null);
     if (loopResult) return loopResult;
 
+    const orderResult = yield* handleOrderTool(params.tool, params.arguments, senderAgentId, {
+      plans: this.#plans,
+      agents: () => this.#hooks.listAgents(),
+      notify: (input) => this.#notifyAgent(input),
+    }).pipe(Effect.mapError((cause) => new ToolOperationFailed({ cause })));
+    if (orderResult) return orderResult;
+
+    if (params.tool === "wide_research") {
+      const research = this.#wideResearch?.handleTool(params.tool, params.arguments, senderAgentId);
+      return research ?? openBotToolFailure("Wide research is unavailable on this server.");
+    }
+
     if (params.tool === "suggest_marketplace_app") {
       const args = params.arguments;
       if (!isRecord(args) || !isString(args.app)) throw new Error("app must be a Marketplace app slug.");
@@ -2161,6 +2194,89 @@ export class OpenBotToolRouter {
     Effect.uninterruptible,
   );
 
+  /**
+   * A message from one agent to another that a tool sends for it (a plan and its verdict): it wakes
+   * the recipient and asks no reply. A retry with the same key sends nothing twice.
+   */
+  #notifyAgent(input: { from: string; to: string; text: string; key: string }) {
+    return Effect.gen({ self: this }, function* () {
+      if (this.#mailbox.receiptForKey(input.key)) return;
+      const receipt = yield* this.#mailbox.enqueue({
+        sender: { kind: "agent", agentId: input.from },
+        recipientAgentIds: [input.to],
+        text: input.text,
+        sourcePaths: [],
+        replyToMessageId: null,
+        expectsReply: false,
+        idempotencyKey: input.key,
+      });
+      for (const delivery of receipt.deliveries)
+        yield* this.#hooks.steerWhenBusy(delivery.recipientAgentId, delivery.id);
+      this.#mailboxSync.emitQueue(input.to);
+      this.#drain.scheduleDrain(input.to);
+    });
+  }
+
+  /**
+   * The Motion card of an order that a `send_message` call asks for with `card`: made as the sender,
+   * assigned to the one recipient, before the message goes, so the message can name it. A big order
+   * also starts in plan mode. Null with a reason when no card can be made: the message goes anyway.
+   */
+  #orderCard(
+    senderAgentId: string,
+    recipients: readonly string[],
+    text: string,
+    summary: string | undefined,
+    raw: unknown,
+  ): Effect.Effect<{ card: OrderCard | null; append: string; note: string | null }> {
+    return Effect.promise(async () => {
+      const none = (note: string) => ({ card: null, append: "", note });
+      const parsed = orderCardSchema.safeParse(raw === true ? {} : raw);
+      if (!parsed.success) return none(`No card: ${z.prettifyError(parsed.error)}`);
+      const port = this.#orderCards?.() ?? null;
+      if (!port?.available()) return none("No card: this server has no Motion board.");
+      const [recipient] = recipients;
+      if (!recipient || recipients.length > 1)
+        return none("No card: an order card goes to one recipient. Send one message per assignee.");
+      const agents = this.#hooks.listAgents();
+      const title = parsed.data.title ?? summary ?? text.split("\n")[0]?.slice(0, 120) ?? "Order";
+      try {
+        const card = await port.create({
+          senderAgentId,
+          recipientAgentId: recipient,
+          recipientName: agents.find((agent) => agent.id === recipient)?.name ?? recipient,
+          text,
+          card: { ...parsed.data, title: title.slice(0, 200) },
+        });
+        const lines = [
+          `Motion card: ${card.key} “${card.title}” ${card.url} (assigned to you${card.existing ? ", made earlier" : ""}). Keep it current as you work, and request review on it when done.`,
+        ];
+        if (needsPlan(parsed.data)) {
+          const approver = planApprover(agents, recipient, senderAgentId);
+          if (approver) {
+            this.#plans.expect({
+              assigneeAgentId: recipient,
+              approverAgentId: approver,
+              cardKey: card.key,
+              title: card.title,
+            });
+            const approverName =
+              approver === senderAgentId ? "I" : (agents.find((agent) => agent.id === approver)?.name ?? approver);
+            lines.push(
+              `Plan first: this is a big order. Before you spend money or start building, send your plan with openbot.submit_plan {"card":"${card.key}"}; ${approverName} approve${approverName === "I" ? "" : "s"} it, and you start when the approval reaches you.`,
+            );
+          }
+        }
+        return { card, append: `\n\n${lines.join("\n")}`, note: null };
+      } catch (error) {
+        logger.warn("Could not make the Motion card of an order.", { error });
+        return none(
+          `No card: Motion refused it (${error instanceof Error ? error.message.slice(0, 200) : "failed"}). The message went without one.`,
+        );
+      }
+    });
+  }
+
   readonly #sendMessage = Effect.fn("OpenBotToolRouter.sendMessage")(
     function* (
       this: OpenBotToolRouter,
@@ -2270,8 +2386,13 @@ export class OpenBotToolRouter {
         .findDeliveriesByTurn(senderAgentId, params.turnId)
         .map(({ delivery }) => this.#mailbox.messagingOrigin(delivery.id))
         .find((origin) => origin !== null);
-      const text = args.text;
       const summary = isString(args.summary) ? args.summary.slice(0, 240) : undefined;
+      // An order with `card`: its Motion card first, so the message names it. A retry finds its message.
+      const order =
+        args.card !== undefined && args.card !== false && !fyi && !this.#mailbox.receiptForKey(idempotencyKey)
+          ? yield* this.#orderCard(senderAgentId, recipientValues, args.text, summary, args.card)
+          : null;
+      const text = `${args.text}${order?.append ?? ""}`;
       const receipt = yield* this.#mailbox
         .enqueue({
           sender: { kind: "agent", agentId: senderAgentId },
@@ -2301,15 +2422,34 @@ export class OpenBotToolRouter {
       this.#conversation.emitConversation(snapshot);
       // A held note starts no turn. The sender learns it here, so work it meant to start is sent again
       // without fyi.
-      if (fyi) return openBotToolResult({ ...receipt, note: sourceText("status.agent.messageHeld") });
+      if (fyi)
+        return openBotToolResult({
+          ...receipt,
+          note: looksLikeOrder(args.text)
+            ? `${sourceText("status.agent.messageHeld")} It reads like an order: if they must act on it, send it again without fyi and with card.`
+            : sourceText("status.agent.messageHeld"),
+        });
+      const orderNote = order
+        ? (order.note ?? `Card ${order.card?.key} made and assigned; Atelier nudges it when it stalls.`)
+        : args.card === undefined &&
+            !replyToMessageId?.trim() &&
+            looksLikeOrder(args.text) &&
+            this.#orderCards?.()?.available()
+          ? "Sent. It reads like an order: give a real order card ({title, criteria, dedupeKey}) next time, so it shows on Motion and cannot stall."
+          : null;
       // A sleeping teammate keeps the message in its queue until a person or its lead wakes it.
       const sleeping = recipientValues.filter((recipient) => known.get(recipient)?.sleepingSince !== undefined);
       if (sleeping.length > 0)
         return openBotToolResult({
           ...receipt,
           note: `Asleep, so the message waits until it wakes: ${sleeping.map((id) => known.get(id)?.name ?? id).join(", ")}. Do not wait for an answer now.`,
+          ...(order?.card ? { card: order.card } : {}),
         });
-      return openBotToolResult(receipt);
+      return openBotToolResult({
+        ...receipt,
+        ...(order?.card ? { card: order.card } : {}),
+        ...(orderNote ? { note: orderNote } : {}),
+      });
     },
     Effect.catchDefect((cause) => Effect.fail(new ToolOperationFailed({ cause }))),
     Effect.uninterruptible,

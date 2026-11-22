@@ -18,6 +18,7 @@ export * from "./item";
 export * from "./long-press";
 export * from "./marker";
 export * from "./message";
+export * from "./modal-stack";
 export * from "./motion-tooltip";
 export * from "./option-grid";
 export * from "./overlay-mount";

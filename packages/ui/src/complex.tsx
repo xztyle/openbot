@@ -14,6 +14,7 @@ import type { ValidComponent } from "@solidjs/web";
 import { createContext, createEffect, createSignal, merge, onCleanup, untrack, useContext } from "solid-js";
 import { claimLongPress, longPressClaimed } from "./long-press";
 import { useMenuMotion } from "./menu-motion";
+import { trackModal } from "./modal-stack";
 import { claimTooltip, installTooltipCoordinator, isKeyboardFocus, tooltipMayOpen } from "./tooltip-coordinator";
 import { createPressedPopupCue } from "./utils";
 
@@ -248,7 +249,13 @@ interface DialogApi {
 }
 
 export const Dialog: DialogApi = {
-  Root: (props) => <DialogPrimitive.Root {...props} onOpenChange={focusRestoreHandler(() => props.onOpenChange)} />,
+  Root: (props) => {
+    trackModal(
+      () => props.open === true && props.modal !== false && props.onOpenChange !== undefined,
+      () => props.onOpenChange?.(false),
+    );
+    return <DialogPrimitive.Root {...props} onOpenChange={focusRestoreHandler(() => props.onOpenChange)} />;
+  },
   Portal: (props) => <DialogPrimitive.Portal {...props} />,
   Trigger: (props) => <DialogPrimitive.Trigger data-cuelume-open="" {...props} />,
   Overlay: (props) => <DialogPrimitive.Overlay {...props} class={withBaseClass("ui-dialog-overlay", props.class)} />,
@@ -288,9 +295,13 @@ interface AlertDialogApi {
 }
 
 export const AlertDialog: AlertDialogApi = {
-  Root: (props) => (
-    <AlertDialogPrimitive.Root {...props} onOpenChange={focusRestoreHandler(() => props.onOpenChange)} />
-  ),
+  Root: (props) => {
+    trackModal(
+      () => props.open === true && props.onOpenChange !== undefined,
+      () => props.onOpenChange?.(false),
+    );
+    return <AlertDialogPrimitive.Root {...props} onOpenChange={focusRestoreHandler(() => props.onOpenChange)} />;
+  },
   Portal: (props) => <AlertDialogPrimitive.Portal {...props} />,
   Trigger: (props) => <AlertDialogPrimitive.Trigger data-cuelume-open="" {...props} />,
   Overlay: (props) => (

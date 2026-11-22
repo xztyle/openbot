@@ -205,6 +205,14 @@ await check("never touches a manual memory and marks an item stale when its memo
   assert.equal(state.memories.length, 2);
 });
 
+await check("skips an idle agent at night once its memories were read", async () => {
+  const memories = ["a", "b", "c", "d"].map((id) => memory(id, `Fact ${id}.`));
+  const { learning, state } = host([JSON.stringify({}), JSON.stringify({})], memories);
+  await Effect.runPromise(learning.dreamAgent("a"));
+  await Effect.runPromise(learning.dreamAgent("a"));
+  assert.equal(state.prompts.length, 1);
+});
+
 await check("refuses a second decision of the same item", async () => {
   const { learning } = host(
     [JSON.stringify({ stale: [{ memoryId: "m3", why: "Old." }] })],

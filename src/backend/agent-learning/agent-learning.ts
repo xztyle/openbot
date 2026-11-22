@@ -81,8 +81,11 @@ interface StoredLearning {
   version: 1;
   settings: LearningSettings;
   items: LearningReviewItem[];
-  /** The local date of the last nightly run, and per agent the last chat message that a cleanup read. */
-  dream: { date: string | null; cursors: Record<string, string> };
+  /**
+   * The local date of the last nightly run, per agent the last chat message that a cleanup read, and
+   * when it ran (epoch milliseconds).
+   */
+  dream: { date: string | null; cursors: Record<string, string>; at: Record<string, number> };
   /** The UTC date and count of the lessons, for the daily cap, and each agent's last lesson. */
   lessons: { date: string; count: number; last: Record<string, number> };
   /** The chat turns that each background memory review read, by the review's turn id. */
@@ -93,7 +96,7 @@ const EMPTY: StoredLearning = {
   version: 1,
   settings: { dreaming: true, taskLearning: true },
   items: [],
-  dream: { date: null, cursors: {} },
+  dream: { date: null, cursors: {}, at: {} },
   lessons: { date: "", count: 0, last: {} },
   provenance: {},
 };
@@ -153,7 +156,15 @@ function decodeStored(value: unknown): StoredLearning | null {
     version: 1,
     settings: { dreaming: settings.dreaming !== false, taskLearning: settings.taskLearning !== false },
     items: Array.isArray(value.items) ? value.items.filter(isItem) : [],
-    dream: { date: isString(dream.date) ? dream.date : null, cursors: stringRecord(dream.cursors) },
+    dream: {
+      date: isString(dream.date) ? dream.date : null,
+      cursors: stringRecord(dream.cursors),
+      at: isDynamicRecord(dream.at)
+        ? Object.fromEntries(
+            Object.entries(dream.at).filter((entry): entry is [string, number] => typeof entry[1] === "number"),
+          )
+        : {},
+    },
     lessons: {
       date: isString(lessons.date) ? lessons.date : "",
       count: typeof lessons.count === "number" ? lessons.count : 0,
@@ -498,18 +509,23 @@ export class AgentLearning {
     const excerpt = afterCursor(messages, stored.dream.cursors[agentId]);
     const cursor = messages.at(-1)?.id;
     const base = hooks.memoryBase(agentId);
-    const saveCursor = cursor
-      ? this.#store.update((current) => ({
-          ...current,
-          dream: {
-            ...current.dream,
-            cursors: { ...current.dream.cursors, ...Object.fromEntries([[agentId, cursor]]) },
-          },
-        }))
-      : Effect.void;
+    const lastRun = stored.dream.at[agentId] ?? 0;
+    const saveCursor = this.#store.update((current) => ({
+      ...current,
+      dream: {
+        ...current.dream,
+        cursors: cursor
+          ? { ...current.dream.cursors, ...Object.fromEntries([[agentId, cursor]]) }
+          : current.dream.cursors,
+        at: { ...current.dream.at, ...Object.fromEntries([[agentId, Date.now()]]) },
+      },
+    }));
+    // A night pass needs a person in the chat since the last one, or enough memories with one that
+    // changed since then: an idle agent whose memories stay the same costs nothing.
+    const changedMemory = base.memories.some((entry) => Date.parse(entry.memory.updatedAt) > lastRun);
     const worthIt = manual
       ? base.memories.length > 0 || excerpt.length > 0
-      : base.memories.length >= DREAM_MIN_MEMORIES || excerpt.some(isPersonMessage);
+      : excerpt.some(isPersonMessage) || (base.memories.length >= DREAM_MIN_MEMORIES && changedMemory);
     if (!worthIt) {
       yield* saveCursor;
       return [];
@@ -900,6 +916,7 @@ export class AgentLearning {
       dream: {
         ...stored.dream,
         cursors: Object.fromEntries(Object.entries(stored.dream.cursors).filter(([id]) => id !== agentId)),
+        at: Object.fromEntries(Object.entries(stored.dream.at).filter(([id]) => id !== agentId)),
       },
       provenance: Object.fromEntries(
         Object.entries(stored.provenance).filter(([, entry]) => entry.agentId !== agentId),

@@ -7,9 +7,11 @@
 // 2. stream: a reply streams into a channel that is not open (50 flushes, 100 ms apart), then into the
 //    open channel. Counts the host calls (the channel list, the open page, the agent's steps) and the
 //    main thread's long tasks.
-// 3. reconnect: lost connections in a row (`--cycles=<n>`, 10). Counts the reads of each reconnect and
+// 3. typing: a key's time to the next frame on a 4x slower CPU while a reply streams elsewhere.
+// 4. resync: messages that came while the connection was down show once each after the reconnect.
+// 5. reconnect: lost connections in a row (`--cycles=<n>`, 10). Counts the reads of each reconnect and
 //    checks the window and document listeners, the elements and the heap after a GC.
-// 4. idle: 60 s in the foreground without an event. Counts the host calls.
+// 6. idle: the second minute in the foreground without an event. Counts the host calls.
 //
 // `bun scripts/web-perf-stress-e2e.ts [--only=<phase,...>] [--latency=<ms>] [--cycles=<n>] [--effects]
 //   [--snapshot=<file>] [--browser-executable=<path>] [--headed]`
@@ -504,14 +506,16 @@ async function desktop(browser: Browser, origin: string) {
   }
 
   if (runs("idle")) {
-    await page.waitForTimeout(3_000);
+    // The first minute ends the bounded retries of a load, such as the artifacts' three reads for their
+    // images; the second minute is the steady state.
+    await page.waitForTimeout(60_000);
     await resetCalls(page);
     await takeLongTasks(page);
     await page.waitForTimeout(60_000);
     const idle = await calls(page);
     const idleTasks = await takeLongTasks(page);
     report.metrics.idleMinute = { calls: idle, longTasks: idleTasks.length };
-    check("an idle minute makes at most 6 host calls", sum(Object.values(idle)) <= 6, JSON.stringify(idle));
+    check("a steady idle minute makes at most 2 host calls", sum(Object.values(idle)) <= 2, JSON.stringify(idle));
   }
   await context.close();
 }

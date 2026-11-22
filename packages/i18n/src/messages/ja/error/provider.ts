@@ -255,6 +255,8 @@ export const messages = {
   "error.provider.clineVersionUnreadable": "Cline CLI のバージョンを読み取れません。",
   "error.provider.clineSignIn": "Cline を使うには Cline でサインインするか、CLINE_API_KEY を設定してください。",
   "error.provider.usageLimitReached": "アカウントが使用量の上限に達しました。",
+  "error.provider.claudeContextFull":
+    "このチャットは Claude には長くなりすぎました。Atelier はチャット履歴を引き継いだ新しい Claude Code セッションを開始しました。もう一度お試しください。",
   "error.provider.foreignReasoning":
     "別のアカウントまたは API キーが受け取ったため、{provider} はこのチャットの以前の推論を受け付けませんでした。Atelier はチャット履歴を引き継いだ新しい {provider} セッションを開始しました。もう一度お試しください。",
   "error.provider.opencodeSessionRejected":

@@ -250,6 +250,8 @@ export const messages = {
   "error.provider.clineVersionUnreadable": "Cline CLI sürümü okunamıyor.",
   "error.provider.clineSignIn": "Cline'ı kullanmak için Cline ile oturum açın veya CLINE_API_KEY ayarlayın.",
   "error.provider.usageLimitReached": "Hesap kullanım sınırına ulaştı.",
+  "error.provider.claudeContextFull":
+    "Bu sohbet Claude için çok uzun hale geldi. Atelier sohbet geçmişiyle yeni bir Claude Code oturumu başlattı. Tekrar deneyin.",
   "error.provider.foreignReasoning":
     "Farklı bir hesap veya API anahtarı aldığı için {provider} bu sohbetteki önceki akıl yürütmeyi kabul etmedi. Atelier sohbet geçmişiyle yeni bir {provider} oturumu başlattı. Tekrar deneyin.",
   "error.provider.opencodeSessionRejected":

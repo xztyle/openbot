@@ -100,6 +100,14 @@ function isMuseMcpStartupFault(provider: AgentProvider, message: string): boolea
 }
 
 /**
+ * Claude Code compacts a session that is too long for the model before it gives up, and then ends
+ * each later turn of that session with this text, also after a restart.
+ */
+function isClaudeContextOverflow(provider: AgentProvider, message: string): boolean {
+  return provider === "claude" && /^Prompt is too long\b/.test(message);
+}
+
+/**
  * The failure to show when the provider refused the session's own history, or null when it did
  * not. Each turn of a refused session fails the same way, so the caller closes the session.
  */
@@ -108,6 +116,7 @@ export function refusedSessionFailure(provider: AgentProvider, message: string):
     return sourceText("error.provider.foreignReasoning", { provider: providerLabel(provider) });
   if (isRejectedOpenCodeRequest(provider, message)) return sourceText("error.provider.opencodeSessionRejected");
   if (isMuseMcpStartupFault(provider, message)) return sourceText("error.provider.museMcpStartupFault");
+  if (isClaudeContextOverflow(provider, message)) return sourceText("error.provider.claudeContextFull");
   return null;
 }
 

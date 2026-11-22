@@ -244,6 +244,8 @@ export const messages = {
   "error.provider.clineVersionUnreadable": "Cline CLI 버전을 읽을 수 없어요.",
   "error.provider.clineSignIn": "Cline을 사용하려면 Cline으로 로그인하거나 CLINE_API_KEY를 설정하세요.",
   "error.provider.usageLimitReached": "계정이 사용 한도에 도달했어요.",
+  "error.provider.claudeContextFull":
+    "이 채팅이 Claude가 처리하기에 너무 길어졌어요. Atelier가 채팅 기록으로 새 Claude Code 세션을 시작했어요. 다시 시도해 주세요.",
   "error.provider.foreignReasoning":
     "다른 계정이나 API 키가 받은 추론이라서 {provider}이(가) 이 채팅의 이전 추론을 수락하지 않았어요. Atelier가 채팅 기록으로 새 {provider} 세션을 시작했어요. 다시 시도해 주세요.",
   "error.provider.opencodeSessionRejected":

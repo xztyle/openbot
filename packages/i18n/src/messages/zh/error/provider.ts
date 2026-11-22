@@ -223,6 +223,8 @@ export const messages = {
   "error.provider.clineVersionUnreadable": "无法读取 Cline CLI 版本。",
   "error.provider.clineSignIn": "请使用 Cline 登录，或设置 CLINE_API_KEY 以使用 Cline。",
   "error.provider.usageLimitReached": "该账号已达到用量上限。",
+  "error.provider.claudeContextFull":
+    "此聊天对 Claude 来说已经太长。Atelier 已带着聊天记录开启新的 Claude Code 会话，请重试。",
   "error.provider.foreignReasoning":
     "此前的推理内容由另一个账号或 API 密钥接收，因此 {provider} 未接受它。Atelier 已带着聊天记录开启新的 {provider} 会话，请重试。",
   "error.provider.opencodeSessionRejected":

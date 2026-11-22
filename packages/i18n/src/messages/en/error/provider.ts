@@ -252,6 +252,8 @@ export const messages = defineMessages("error.provider", {
   "error.provider.clineVersionUnreadable": "Unable to read the Cline CLI version.",
   "error.provider.clineSignIn": "Sign in with Cline or set CLINE_API_KEY to use Cline.",
   "error.provider.usageLimitReached": "The account reached its usage limit.",
+  "error.provider.claudeContextFull":
+    "This chat became too long for Claude. Atelier started a new Claude Code session with the chat history. Try again.",
   "error.provider.foreignReasoning":
     "{provider} did not accept the earlier reasoning in this chat, because a different account or API key received it. Atelier started a new {provider} session with the chat history. Try again.",
   "error.provider.opencodeSessionRejected":

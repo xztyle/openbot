@@ -248,6 +248,8 @@ export const messages = {
   "error.provider.clineVersionUnreadable": "Не удалось прочитать версию Cline CLI.",
   "error.provider.clineSignIn": "Войдите через Cline или задайте CLINE_API_KEY, чтобы использовать Cline.",
   "error.provider.usageLimitReached": "Аккаунт достиг лимита использования.",
+  "error.provider.claudeContextFull":
+    "Этот чат стал слишком длинным для Claude. Atelier начал новую сессию Claude Code с историей чата. Повторите попытку.",
   "error.provider.foreignReasoning":
     "{provider} не принял предыдущие рассуждения в этом чате, потому что их получил другой аккаунт или API-ключ. Atelier начал новую сессию {provider} с историей чата. Повторите попытку.",
   "error.provider.opencodeSessionRejected":

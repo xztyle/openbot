@@ -133,16 +133,16 @@ async function showSidebar(page: Page, viewport: ViewportName): Promise<void> {
   if (await sidebar.isVisible()) return;
   const back = page.getByRole("button", { name: english("workspace.layout.back"), exact: true }).first();
   if (await back.isVisible()) await back.click();
-  // Back shows the tab the conversation came from; the list is the Home tab.
+  // Back shows the tab the conversation came from; the list is the Chat tab.
   if (!(await sidebar.isVisible()))
     await page
       .getByRole("navigation", { name: english("workspace.phone.tabs") })
-      .getByRole("button", { name: new RegExp(`^${english("workspace.phone.home")}`, "u") })
+      .getByRole("button", { name: new RegExp(`^${english("workspace.phone.chat")}`, "u") })
       .click();
   await sidebar.waitFor({ timeout: UI_WAIT_MS });
 }
 
-/** Drafts & sent: a top row of the sidebar on a computer, a shortcut of Home on a phone. */
+/** Drafts & sent: a top row of the sidebar on a computer, a shortcut of the Chat tab on a phone. */
 function draftsEntry(page: Page, viewport: ViewportName): Locator {
   const name = new RegExp(`^${english("workspace.view.drafts")}`, "u");
   return viewport === "phone"

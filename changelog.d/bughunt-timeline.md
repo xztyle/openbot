@@ -8,3 +8,5 @@
 - Workspace: "N new messages" while you read above, the "new messages since" banner and a thread's
   reply count count each folded progress line, so a run of new updates no longer shows as "Jump to
   latest" with no count.
+- Web: opening the workspace before the server connects no longer throws an error from the decision
+  queue and guardrails lists; they read again on the next poll.

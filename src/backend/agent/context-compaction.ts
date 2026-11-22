@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AgentContextCategoryUsage, AgentContextState } from "@openbot/contracts/ipc";
+import { createOpenBotLogger } from "@openbot/logging";
 import { Effect, Schema } from "effect";
 import type { AgentClient } from "../agent-client";
 import type { AgentStore } from "../agent-store";
@@ -24,6 +25,15 @@ const CONTEXT_COMPACTION_THRESHOLD = 0.8;
 const CONTEXT_COMPACTION_TIMEOUT_MS = 120_000;
 /** Usage arrives after each model step; one runtime snapshot carries the latest value of a burst. */
 const USAGE_CHANGE_DELAY_MS = 250;
+/**
+ * A Claude prompt cache lives one hour at most, so the first request after a longer idle writes the
+ * whole session to the cache again. Above `IDLE_HANDOFF_MIN_TOKENS`, a new session that starts from
+ * the history handoff writes about 40,000 tokens instead.
+ */
+export const IDLE_HANDOFF_AFTER_MS = 60 * 60_000;
+export const IDLE_HANDOFF_MIN_TOKENS = 120_000;
+
+const logger = createOpenBotLogger("context-compaction");
 
 export interface ContextCompactionOptions {
   /** How long a compaction runs before OpenBot stops it. Tests make it short. */
@@ -91,6 +101,10 @@ export class ContextCompaction {
   readonly #changed: () => void;
   readonly #compacted: (threadId: string) => void;
   readonly #timers = new Map<string, NodeJS.Timeout>();
+  /** When each provider thread last reported a model step. */
+  readonly #activity = new Map<string, number>();
+  /** The threads that `reserveIdleHandoff` reserved, which `request` hands off. */
+  readonly #idleHandoffs = new Set<string>();
   #usageTimer: NodeJS.Timeout | null = null;
 
   constructor(options: ContextCompactionOptions) {
@@ -129,6 +143,7 @@ export class ContextCompaction {
     categories?: AgentContextCategoryUsage[],
   ): void {
     if (!Number.isFinite(usedTokens) || usedTokens < 0 || !Number.isFinite(windowTokens) || windowTokens <= 0) return;
+    this.#activity.set(threadId, Date.now());
     const display = this.#display.get(threadId) ?? { usage: null, compaction: null };
     const previous = display.usage;
     display.usage = {
@@ -207,6 +222,35 @@ export class ContextCompaction {
     this.#awaitingPostCompaction.delete(threadId);
   }
 
+  /**
+   * Reserves a handoff of a session that compacts by itself (Claude) before the delivery that
+   * wakes it: its last model step is older than the prompt cache and its context holds at least
+   * `IDLE_HANDOFF_MIN_TOKENS`. The next `request` replaces the session, and the new one starts from
+   * the history handoff. A session that no model step reported since this process started is left
+   * alone: its age is unknown.
+   */
+  reserveIdleHandoff(agentId: string, threadId: string, now = Date.now()): boolean {
+    const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+    if (!agent || this.#providers.clientForAgent(agent)?.contextCompaction !== "native") return false;
+    const usage = this.#display.get(threadId)?.usage;
+    const at = this.#activity.get(threadId);
+    if (!usage || at === undefined || usage.usedTokens < IDLE_HANDOFF_MIN_TOKENS || now - at < IDLE_HANDOFF_AFTER_MS)
+      return false;
+    if (this.#compactingAgents.has(agentId) || this.#display.get(threadId)?.compaction?.status === "running")
+      return false;
+    const phase = this.#budgets.get(threadId)?.phase;
+    if ((phase !== undefined && phase !== "idle") || !this.#rotatesSession(agentId, threadId)) return false;
+    this.#idleHandoffs.add(threadId);
+    this.#compactingAgents.set(agentId, { threadId, client: null });
+    this.observeCompaction(threadId, "running");
+    logger.info("Handing off an idle session before its wake.", {
+      agentId,
+      contextSize: usage.usedTokens,
+      idleMinutes: Math.round((now - at) / 60_000),
+    });
+    return true;
+  }
+
   /** One clause of the drain guard the queue engine composes. False means "hold this agent's queue". */
   mayDrain(agentId: string): boolean {
     return !this.#compactingAgents.has(agentId) && !this.#refusals.has(agentId);
@@ -277,6 +321,14 @@ export class ContextCompaction {
     const budget = this.#budgets.get(threadId);
     const agent = this.#store.list().find((candidate) => candidate.id === agentId);
     const client = agent ? this.#providers.clientForAgent(agent) : null;
+    if (this.#idleHandoffs.delete(threadId)) {
+      if (client && this.#providers.isReady()) yield* this.#rotate(agentId, threadId, client);
+      else this.#release(agentId, threadId);
+      // A session that was not replaced and kept no budget still shows the running compaction.
+      this.abandonCompaction(threadId);
+      this.#scheduleDrain(agentId);
+      return;
+    }
     if (
       budget?.phase !== "requested" ||
       !client ||
@@ -380,6 +432,8 @@ export class ContextCompaction {
   /** Drops a retired provider thread's budget. The agent keeps compacting until `forgetAgent`. */
   forgetThread(threadId: string): void {
     this.#budgets.delete(threadId);
+    this.#activity.delete(threadId);
+    this.#idleHandoffs.delete(threadId);
     const displayed = this.#display.delete(threadId);
     this.#durations.delete(threadId);
     this.#awaitingPostCompaction.delete(threadId);
@@ -428,6 +482,8 @@ export class ContextCompaction {
     for (const hold of this.#refusals.values()) clearTimeout(hold.timer);
     this.#refusals.clear();
     this.#budgets.clear();
+    this.#activity.clear();
+    this.#idleHandoffs.clear();
     this.#display.clear();
     this.#durations.clear();
     this.#awaitingPostCompaction.clear();

@@ -202,4 +202,5 @@ export const messages = {
   "error.remote.taskHistoryRefreshFailed": "タスクは変更されましたが、チャット履歴を更新できませんでした。",
   "error.remote.membershipChanged":
     "同時に別の人がこのメンバーを変更しました。メンバーを再読み込みして、もう一度お試しください。",
+  "error.remote.controlNotAllowed": "このコンピューターのオーナーは、あなたのロールによる操作を許可していません。",
 } as const satisfies PartialTranslation<typeof source>;

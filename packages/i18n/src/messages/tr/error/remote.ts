@@ -197,4 +197,5 @@ export const messages = {
   "error.remote.taskHistoryRefreshFailed": "Görev değiştirildi, ancak sohbet geçmişi yenilenemedi.",
   "error.remote.membershipChanged":
     "Başka biri bu üyeyi aynı anda değiştirdi. Üyeleri yeniden yükleyin ve tekrar deneyin.",
+  "error.remote.controlNotAllowed": "Bu bilgisayarın sahibi, rolünüzün onu kontrol etmesine izin vermiyor.",
 } as const satisfies PartialTranslation<typeof source>;

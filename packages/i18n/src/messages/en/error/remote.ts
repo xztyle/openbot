@@ -196,4 +196,5 @@ export const messages = defineMessages("error.remote", {
   "error.remote.taskHistoryRefreshFailed": "The task was changed, but chat history could not refresh.",
   "error.remote.membershipChanged":
     "Someone changed this member at the same time. Load the members again and try again.",
+  "error.remote.controlNotAllowed": "The owner of this computer does not let your role control it.",
 });

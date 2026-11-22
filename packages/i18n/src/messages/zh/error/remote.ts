@@ -187,4 +187,5 @@ export const messages = {
   "error.remote.historyRefreshFailed": "消息已发送，但无法刷新对话历史。",
   "error.remote.taskHistoryRefreshFailed": "任务已更改，但无法刷新对话历史。",
   "error.remote.membershipChanged": "有人同时更改了该成员。请重新加载成员列表后重试。",
+  "error.remote.controlNotAllowed": "此电脑的所有者不允许你的角色控制它。",
 } as const satisfies PartialTranslation<typeof source>;

@@ -203,4 +203,5 @@ export const messages = {
   "error.remote.taskHistoryRefreshFailed":
     "La tâche a été modifiée, mais l’historique de la discussion n’a pas pu être actualisé.",
   "error.remote.membershipChanged": "Quelqu’un a modifié ce membre au même moment. Rechargez les membres et réessayez.",
+  "error.remote.controlNotAllowed": "Le propriétaire de cet ordinateur ne permet pas à votre rôle de le contrôler.",
 } as const satisfies PartialTranslation<typeof source>;

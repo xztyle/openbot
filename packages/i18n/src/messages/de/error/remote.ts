@@ -204,4 +204,5 @@ export const messages = {
     "Die Aufgabe wurde geändert, aber der Chatverlauf konnte nicht aktualisiert werden.",
   "error.remote.membershipChanged":
     "Jemand hat dieses Mitglied gleichzeitig geändert. Lade die Mitglieder neu und versuche es erneut.",
+  "error.remote.controlNotAllowed": "Der Eigentümer dieses Computers erlaubt deiner Rolle keine Fernsteuerung.",
 } as const satisfies PartialTranslation<typeof source>;

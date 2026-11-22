@@ -196,4 +196,5 @@ export const messages = {
   "error.remote.taskHistoryRefreshFailed": "Zadanie zostało zmienione, ale nie udało się odświeżyć historii czatu.",
   "error.remote.membershipChanged":
     "Ktoś inny zmienił tego członka w tym samym czasie. Wczytaj członków ponownie i spróbuj jeszcze raz.",
+  "error.remote.controlNotAllowed": "Właściciel tego komputera nie pozwala twojej roli na sterowanie nim.",
 } as const satisfies PartialTranslation<typeof source>;

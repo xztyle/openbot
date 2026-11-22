@@ -35,7 +35,12 @@ import type {
   UpdateHostIdentityInput,
   UpdateTeamMemberInput,
 } from "@openbot/contracts/ipc";
-import { type AgentAccessLevel, conversationMessageSender, SIGNED_OUT_CHANNEL_MEMBER_ID } from "@openbot/contracts/ipc";
+import {
+  type AgentAccessLevel,
+  conversationMessageSender,
+  DEFAULT_REMOTE_CONTROL_POLICY,
+  SIGNED_OUT_CHANNEL_MEMBER_ID,
+} from "@openbot/contracts/ipc";
 import type { LiveActivityRelayPush } from "@openbot/contracts/live-activity-relay";
 import type { HostRestartState } from "@openbot/contracts/team-protocol/host-update-v1";
 import { sourceText } from "@openbot/i18n/source";
@@ -56,6 +61,7 @@ import {
   PushNotificationSendFailure,
   PushNotificationService,
 } from "./push-notifications";
+import type { RemoteControlPolicyStore } from "./remote-control-policy-store";
 import type { RemoteDesktopRuntimePaths } from "./remote-desktop-runtime-artifact";
 import { appendRemoteDiagnosticLog } from "./remote-diagnostics";
 import { RemoteScreenGateway, type RemoteScreenGatewayCreateRuntime } from "./remote-screen-gateway";
@@ -156,6 +162,8 @@ interface HostServiceOptions {
     appPath: string,
   ) => Effect.Effect<void, RemoteWorkflowError>;
   remoteDesktopRuntimePaths?: RemoteDesktopRuntimePaths | null;
+  /** Who may control this computer through remote desktop. Absent: the owner and the admins. */
+  remoteControlPolicy?: Pick<RemoteControlPolicyStore, "get">;
   remoteDesktopStateDirectory?: string;
   /** Only a test supplies this. The gateway builds the real Sunshine and Moonlight runtime itself. */
   createRemoteDesktopRuntime?: RemoteScreenGatewayCreateRuntime;
@@ -450,6 +458,7 @@ export class HostService extends EventEmitter<HostEvents> {
       browser: options.browser,
       browserView: this.#browserView,
       remoteScreen: this.#remoteScreen,
+      remoteControlAccess: () => (this.#options.remoteControlPolicy?.get() ?? DEFAULT_REMOTE_CONTROL_POLICY).access,
       redeemCentralTicket: options.redeemCentralTicket,
       ...(options.chat === undefined ? {} : { chat: options.chat }),
       onPresence: (snapshot) => this.emit("presence", snapshot),

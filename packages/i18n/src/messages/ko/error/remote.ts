@@ -195,4 +195,5 @@ export const messages = {
   "error.remote.taskHistoryRefreshFailed": "작업을 변경했지만 채팅 기록을 새로 고칠 수 없었어요.",
   "error.remote.membershipChanged":
     "다른 사람이 동시에 이 멤버를 변경했어요. 멤버 목록을 다시 불러온 뒤 다시 시도해 주세요.",
+  "error.remote.controlNotAllowed": "이 컴퓨터의 소유자가 내 역할의 원격 제어를 허용하지 않아요.",
 } as const satisfies PartialTranslation<typeof source>;

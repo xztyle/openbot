@@ -206,4 +206,5 @@ export const messages = {
   "error.remote.taskHistoryRefreshFailed": "A tarefa foi alterada, mas não foi possível atualizar o histórico do chat.",
   "error.remote.membershipChanged":
     "Outra pessoa alterou este membro ao mesmo tempo. Carregue os membros novamente e tente de novo.",
+  "error.remote.controlNotAllowed": "O proprietário deste computador não permite que sua função o controle.",
 } as const satisfies PartialTranslation<typeof source>;

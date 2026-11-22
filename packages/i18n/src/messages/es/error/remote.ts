@@ -199,4 +199,5 @@ export const messages = {
   "error.remote.taskHistoryRefreshFailed": "La tarea se cambió, pero no se pudo actualizar el historial del chat.",
   "error.remote.membershipChanged":
     "Otra persona cambió este miembro al mismo tiempo. Vuelve a cargar los miembros e inténtalo de nuevo.",
+  "error.remote.controlNotAllowed": "El propietario de este equipo no permite que tu rol lo controle.",
 } as const satisfies PartialTranslation<typeof source>;

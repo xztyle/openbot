@@ -294,6 +294,7 @@ import { ProviderUseSettingsStore } from "./provider-use-settings-store";
 import { RelayedMessagingInstalls } from "./relayed-messaging-installs";
 import { decodeQueuedMessageReceipt } from "./remote-agent-decoding";
 import { RemoteConnectTrace } from "./remote-connect-trace";
+import { createRemoteControlPolicyStore } from "./remote-control-policy-store";
 import { RemoteDesktopManager } from "./remote-desktop-manager";
 import { resolveRemoteDesktopRuntime } from "./remote-desktop-runtime-artifact";
 import { loadOrCreateRemoteDesktopCredentials } from "./remote-desktop-secret-store";
@@ -426,6 +427,7 @@ const PROVIDER_ENVIRONMENT_PREFERENCE_FILE = "openbot-provider-environment-v1.js
 const REMOTE_SESSION_REUSE_PREFERENCE_FILE = "openbot-remote-session-reuse-preference-v1.json";
 const EXTERNAL_LINK_PREFERENCE_FILE = "openbot-external-link-preference-v1.json";
 const REMOTE_NETWORK_ROUTE_PREFERENCE_FILE = "openbot-remote-network-route-v1.json";
+const REMOTE_CONTROL_POLICY_FILE = "openbot-remote-control-policy-v1.json";
 const APP_BEHAVIOR_PREFERENCE_FILE = "openbot-app-behavior-preference-v1.json";
 const DYNAMIC_ISLAND_PREFERENCE_FILE = "openbot-dynamic-island-preference-v1.json";
 const BROWSER_STATE_FILE = "openbot-browser-state-v1.json";
@@ -1297,6 +1299,8 @@ export async function createApplicationServices({
     join(app.getPath("userData"), REMOTE_NETWORK_ROUTE_PREFERENCE_FILE),
   );
   await runCauseEffect(remoteNetworkRoute.load());
+  const remoteControlPolicy = createRemoteControlPolicyStore(join(app.getPath("userData"), REMOTE_CONTROL_POLICY_FILE));
+  await runCauseEffect(remoteControlPolicy.load());
   const appBehavior = new AppBehaviorService({
     path: join(app.getPath("userData"), APP_BEHAVIOR_PREFERENCE_FILE),
     loginItem: createLoginItem({ appVariant, server: Boolean(hostedServer || serverModeEnvironment) }),
@@ -2885,6 +2889,7 @@ export async function createApplicationServices({
     platform: process.platform === "darwin" || process.platform === "win32" ? process.platform : "linux",
     unattended: false,
     remoteDesktopRuntimePaths: remoteDesktopRuntime,
+    remoteControlPolicy,
     openRemoteDesktopSetup: (action, appPath) =>
       Effect.tryPromise({
         try: async () => {

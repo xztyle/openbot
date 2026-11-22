@@ -490,6 +490,32 @@ export const REMOTE_DESKTOP_ERROR_CODES = [
 
 export type RemoteDesktopErrorCode = (typeof REMOTE_DESKTOP_ERROR_CODES)[number];
 
+/**
+ * Who may control this computer through remote desktop. `members` is every member, `admins` is the
+ * owner and the admins, and `owner` is only the owner (upstream f9ca3ddda).
+ */
+export const REMOTE_CONTROL_ACCESS_LEVELS = ["owner", "admins", "members"] as const;
+export type RemoteControlAccess = (typeof REMOTE_CONTROL_ACCESS_LEVELS)[number];
+
+/**
+ * The host's remote control choice, as it is stored. Atelier's default is the owner and the admins:
+ * a shared server should not let every member control it. Upstream keeps every member.
+ */
+export interface RemoteControlPolicy {
+  access: RemoteControlAccess;
+}
+
+export const DEFAULT_REMOTE_CONTROL_POLICY: RemoteControlPolicy = { access: "admins" };
+
+export function isRemoteControlAccess(value: unknown): value is RemoteControlAccess {
+  return isOneOf(REMOTE_CONTROL_ACCESS_LEVELS, value);
+}
+
+export function remoteControlAllowsRole(access: RemoteControlAccess, role: TeamRole): boolean {
+  if (access === "members") return true;
+  return access === "admins" ? canAdministerServer(role) : role === "owner";
+}
+
 export interface RemoteDesktopSession {
   id: string;
   serverId: string;
@@ -528,4 +554,4 @@ export interface RemoteDesktopSelectDisplayInput {
 }
 
 import { INPUT_LIMITS } from "./input-limits";
-import { isBoolean, isDynamicRecord, isNumber, isString } from "./runtime-values";
+import { isBoolean, isDynamicRecord, isNumber, isOneOf, isString } from "./runtime-values";

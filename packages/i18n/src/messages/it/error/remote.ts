@@ -200,4 +200,5 @@ export const messages = {
     "L'attività è stata modificata, ma non è stato possibile aggiornare la cronologia della chat.",
   "error.remote.membershipChanged":
     "Qualcun altro ha modificato questo membro nello stesso momento. Ricarica i membri e riprova.",
+  "error.remote.controlNotAllowed": "Il proprietario di questo computer non consente al tuo ruolo di controllarlo.",
 } as const satisfies PartialTranslation<typeof source>;

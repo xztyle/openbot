@@ -102,6 +102,15 @@ Every copy OpenBot starts gets `CUA_DRIVER_RS_TELEMETRY_ENABLED=0` and
 a user chose, and OpenBot pins the version, so a release check could only offer an update OpenBot
 would refuse.
 
+## Who may control the computer
+
+`openbot-remote-control-policy-v1.json` in the user data folder sets which roles may use the
+remote-screen setup, test, session and display routes: `owner`, `admins` (the owner and the admins)
+or `members`. A missing or unreadable file reads as `admins`; upstream's default is `members`. A
+refused role gets a 403 `HttpError` with only a message, because the released protocols reject an
+unknown error code. Atelier has no settings screen, question on the host or "Stop all" for it yet
+(upstream f9ca3ddda has them); the owner edits the file and restarts.
+
 ## Remote desktop permission checks and live tests
 
 `RemoteScreenGateway` owns setup checks and live-test session ownership. The optional

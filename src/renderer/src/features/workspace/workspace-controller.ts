@@ -371,6 +371,7 @@ const SAVED_VIEWS: readonly WorkspaceView[] = [
   "loops",
   "insights",
   "trust",
+  "knowledge",
   "space-agents",
   "drafts",
 ];
@@ -1800,6 +1801,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (view === "portfolio") return Boolean(env.portfolio?.());
     if (view === "loops") return Boolean(channels.port().agent.workspaceLoops);
     if (view === "trust") return Boolean(env.trust?.());
+    // The decision log and the memory of the space, which the learning routes serve with the reviews.
+    if (view === "knowledge") return Boolean(env.efficiency?.());
     if (view === "routines") return env.routines?.available() === true;
     if (view === "later") return later.supported();
     if (view === "search") return search.supported();

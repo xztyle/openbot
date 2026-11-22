@@ -10,6 +10,7 @@ import {
   Activity,
   ArrowLeftRight,
   AtSign,
+  BookOpen,
   Bookmark,
   Bot,
   Briefcase,
@@ -112,6 +113,7 @@ const VIEW_ICON: Record<WorkspaceView, () => JSX.Element> = {
   loops: () => <Kanban />,
   insights: () => <Target />,
   trust: () => <ShieldCheck />,
+  knowledge: () => <BookOpen />,
   routines: () => <Workflow />,
   search: () => <Search />,
 };
@@ -188,6 +190,7 @@ export function useJumpEntries() {
       "loops",
       "insights",
       "trust",
+      "knowledge",
       "routines",
     ] as const
   ).map((view) => ({ view, label: () => workspaceViewLabel(view, t) }));

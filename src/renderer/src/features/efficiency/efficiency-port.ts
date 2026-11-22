@@ -17,6 +17,7 @@ import type {
   LearningReviewItem,
   LearningReviewsInput,
   LearningReviewsPage,
+  SpaceKnowledge,
   SettingsCheckpoint,
 } from "@openbot/contracts/agent-learning";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
@@ -46,6 +47,22 @@ export interface EfficiencyCalls {
   settingsHistory(agentId: string): Promise<SettingsCheckpoint[]>;
   rollback(checkpointId: string): Promise<SettingsCheckpoint>;
   forgetConversation(agentId: string, confirm: boolean): Promise<ForgetConversationResult>;
+  /** The decision log and the customer, product and supplier memory of a space. */
+  knowledge(spaceId: string, query?: string): Promise<SpaceKnowledge>;
+  /** Removes a decision, an entity or one fact of an entity, and answers the space's knowledge. */
+  removeKnowledge(input: RemoveSpaceKnowledgeInput): Promise<SpaceKnowledge>;
+}
+
+export interface RemoveSpaceKnowledgeInput {
+  spaceId: string;
+  kind: "decision" | "entity" | "fact";
+  id: string;
+  /** The entity of a fact. */
+  entityId?: string;
+}
+
+function isKnowledge(value: unknown): value is SpaceKnowledge {
+  return isDynamicRecord(value) && Array.isArray(value.decisions) && Array.isArray(value.entities);
 }
 
 // The route codecs of agent-efficiency-v1 check each answer on the way in; these only name its type.
@@ -145,6 +162,12 @@ export function hostEfficiencyCalls(request: () => TeamApiRequest): EfficiencyCa
       request()("POST", AGENT_LEARNING_ROUTES.history, field("checkpoints", isCheckpoints), { agentId }),
     rollback: (checkpointId) =>
       request()("POST", AGENT_LEARNING_ROUTES.rollback, field("checkpoint", isCheckpoint), { checkpointId }),
+    knowledge: (spaceId, query) =>
+      request()("POST", AGENT_LEARNING_ROUTES.knowledge, decoder(isKnowledge), {
+        spaceId,
+        ...(query?.trim() ? { query: query.trim() } : {}),
+      }),
+    removeKnowledge: (input) => request()("POST", AGENT_LEARNING_ROUTES.removeKnowledge, decoder(isKnowledge), { ...input }),
     forgetConversation: (agentId, confirm) =>
       request()("POST", AGENT_LEARNING_ROUTES.forgetConversation, decoder(isForgetResult), {
         agentId,

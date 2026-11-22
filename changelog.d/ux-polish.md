@@ -15,6 +15,12 @@
   channels and in the agent's own chat, and the owner answers them with taps there, on this
   computer and on a joined server. The web client now draws a card in the agent's own chat too,
   where it showed the card's text and its `[card:…]` marker.
+- More > Knowledge shows what a space's agents know together: the decision log (what was decided,
+  why, what else was considered and what came of it) and the customer, product and supplier memory,
+  with search, a filter by kind, and a remove button for a wrong decision, entity or fact. Owners
+  and admins of a server with agent learning.
+- The morning briefing also reads the space's decision log, so a decision an agent logged outside a
+  hands-off channel reaches the briefing. A decision that a channel already showed is said once.
 
 ### Fixed
 

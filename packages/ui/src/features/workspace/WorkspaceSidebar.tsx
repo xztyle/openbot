@@ -10,6 +10,7 @@ import {
   AtSign,
   Blocks,
   Bookmark,
+  BookOpen,
   Bot,
   Briefcase,
   Check,
@@ -73,6 +74,8 @@ export type WorkspaceView =
   | "insights"
   /** Trust and control: what agents may do, their budgets, and the audit trail. */
   | "trust"
+  /** What the space's agents know together: the decision log and the customer, product and supplier memory. */
+  | "knowledge"
   /** The agents of the space that shows. */
   | "space-agents"
   /** Slack's Drafts & sent: the unsent drafts of each conversation, and the reader's sent messages. */
@@ -188,6 +191,8 @@ export interface WorkspaceSidebarProps {
   showInsights?: boolean | undefined;
   /** The Trust view (rules, budgets, audit trail), for the owner and the admins. */
   showTrust?: boolean | undefined;
+  /** The Knowledge view shows under More: a fork host's owner or admin. */
+  showKnowledge?: boolean | undefined;
   /** Shows the Agents view of the space that shows, on a host with spaces. */
   showSpaceAgents?: boolean | undefined;
   /** Opens the server's apps (Discord, Slack, Telegram and other connectors), for an owner or an admin. */
@@ -241,6 +246,7 @@ const MORE_VIEWS = [
   "reviews",
   "portfolio",
   "insights",
+  "knowledge",
   "trust",
 ] as const satisfies readonly WorkspaceView[];
 type MoreView = (typeof MORE_VIEWS)[number];
@@ -315,7 +321,9 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                 ? Boolean(props.showInsights)
                 : view === "trust"
                   ? Boolean(props.showTrust)
-                  : true;
+                  : view === "knowledge"
+                    ? Boolean(props.showKnowledge)
+                    : true;
   const MORE_ICON: Record<MoreView, () => JSX.Element> = {
     dms: () => <MessagesSquare aria-hidden="true" />,
     loops: () => <Kanban aria-hidden="true" />,
@@ -328,6 +336,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
     portfolio: () => <Briefcase aria-hidden="true" />,
     insights: () => <Target aria-hidden="true" />,
     trust: () => <ShieldCheck aria-hidden="true" />,
+    knowledge: () => <BookOpen aria-hidden="true" />,
   };
   const moreLabel = (view: MoreView) =>
     view === "dms"
@@ -350,7 +359,9 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                       ? t("insight.title")
                       : view === "trust"
                         ? t("trust.title")
-                        : t("workspace.view.secrets");
+                        : view === "knowledge"
+                          ? t("workspace.knowledge.title")
+                          : t("workspace.view.secrets");
   /** The view under More that shows now: it gets a row of its own above More while it shows. */
   const activeMore = () => MORE_VIEWS.find((view) => view === props.activeView && moreAvailable(view));
   const moreItems = (): WorkspaceMenuItem[] => [

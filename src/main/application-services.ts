@@ -2980,6 +2980,7 @@ export async function createApplicationServices({
       postNotice: (channelId, name, text) => service.channels.postNotice(channelId, name, text) !== null,
     },
     attention: () => service.attentionItems(),
+    loggedDecisions: (spaceId) => service.learning.knowledge.recentDecisions(spaceId, 20),
     usageLimit: (agentId) => service.usageLimitFor(agentId),
     routines: {
       list: (agentId) => service.listRoutines(agentId),

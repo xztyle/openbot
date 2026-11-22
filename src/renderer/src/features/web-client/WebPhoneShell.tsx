@@ -6,6 +6,7 @@ import {
   ArrowLeftRight,
   Bell,
   Blocks,
+  BookOpen,
   Bookmark,
   Bot,
   Briefcase,
@@ -306,6 +307,13 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
         icon: <ShieldCheck />,
         onSelect: () => openView("trust"),
       });
+    if (ws.viewAvailable("knowledge"))
+      rows.push({
+        id: "knowledge",
+        label: t("workspace.knowledge.title"),
+        icon: <BookOpen />,
+        onSelect: () => openView("knowledge"),
+      });
     const apps = ws.env.openApps;
     if (apps) rows.push({ id: "apps", label: t("workspace.view.apps"), icon: <Blocks />, onSelect: apps });
     if (ws.viewAvailable("routines"))
@@ -332,6 +340,13 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
       chips.push({ id: "money", label: t("workspace.view.money"), icon: <Coins />, onSelect: () => openView("money") });
     if (ws.viewAvailable("insights"))
       chips.push({ id: "insights", label: t("insight.title"), icon: <Target />, onSelect: () => openView("insights") });
+    if (ws.viewAvailable("knowledge"))
+      chips.push({
+        id: "knowledge",
+        label: t("workspace.knowledge.title"),
+        icon: <BookOpen />,
+        onSelect: () => openView("knowledge"),
+      });
     if (ws.viewAvailable("portfolio"))
       chips.push({
         id: "portfolio",

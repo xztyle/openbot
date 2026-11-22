@@ -100,6 +100,8 @@ const calls: EfficiencyCalls = {
     record(`dream:${agentId}`);
     return [];
   },
+  knowledge: unused,
+  removeKnowledge: unused,
   forgetConversation: async (agentId, confirm) => {
     record(`forget:${agentId}:${confirm}`);
     return {

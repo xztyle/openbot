@@ -1,0 +1,147 @@
+/* The Knowledge view: the decision log and the memory of a space, as cards in one column. */
+
+.knowledge-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-2) var(--openbot-space-4);
+  border-bottom: 1px solid var(--openbot-border);
+}
+
+.knowledge-tabs,
+.knowledge-filters {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-1);
+}
+
+.knowledge-search.ui-input {
+  flex: 1 1 200px;
+  max-width: 320px;
+  margin-left: auto;
+}
+
+.ws-view-scroll.knowledge-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-3);
+  padding: var(--openbot-space-4);
+}
+
+.knowledge-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  max-width: 760px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.knowledge-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-card, var(--openbot-radius-lg));
+  background: var(--openbot-bg-surface);
+  padding: var(--openbot-space-3) var(--openbot-space-4);
+}
+
+.knowledge-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+.knowledge-card-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.knowledge-type {
+  margin-left: var(--openbot-space-1);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-regular);
+}
+
+.knowledge-text,
+.knowledge-outcome {
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-md);
+  overflow-wrap: anywhere;
+}
+
+.knowledge-outcome {
+  color: var(--openbot-text-primary);
+}
+
+.knowledge-label {
+  color: var(--openbot-text-primary);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.knowledge-meta {
+  margin: 0;
+  color: var(--openbot-text-dim);
+  font-size: var(--openbot-text-sm);
+}
+
+.knowledge-facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.knowledge-fact {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-md);
+}
+
+.knowledge-fact > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-remove.ui-button {
+  flex: none;
+  color: var(--openbot-text-secondary);
+}
+
+.knowledge-alert {
+  margin: 0;
+  color: var(--openbot-danger);
+}
+
+@media (pointer: coarse) {
+  .knowledge-remove.ui-button,
+  .knowledge-tabs .ui-button,
+  .knowledge-filters .ui-button {
+    min-width: var(--openbot-touch-target);
+    min-height: var(--openbot-touch-target);
+  }
+
+  .knowledge-search.ui-input {
+    min-height: var(--openbot-touch-target);
+    max-width: none;
+  }
+}

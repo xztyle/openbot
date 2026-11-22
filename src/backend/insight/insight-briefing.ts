@@ -24,6 +24,7 @@ export interface BriefingFacts {
     week: { spend: string | null; revenue: string | null; sales: number | null; net: string | null };
   }[];
   goals: { title: string; progress: string; pace: string; deadline: string | null }[];
+  /** `link` is empty for a logged decision that no channel shows. */
   decisions: { agent: string; text: string; link: string }[];
   costs: { weekUsd: number; previousWeekUsd: number; idleUsd: number; top: { agent: string; usd: number }[] };
   alerts: string[];
@@ -77,7 +78,7 @@ const WORDS = {
     goal: (title: string, progress: string, pace: string) => `Meta ${title}: ${progress} (${PACE.es[pace] ?? pace})`,
     costs: (week: number, previous: number) =>
       `Costo de agentes esta semana: ${NUMBER.format(week)} USD (semana anterior ${NUMBER.format(previous)} USD)`,
-    decision: (agent: string, text: string, link: string) => `${agent} decidió: ${text} ${link}`,
+    decision: (agent: string, text: string, link: string) => `${agent} decidió: ${text} ${link}`.trimEnd(),
     waits: (agent: string, what: string, link: string | null) => `${agent} espera: ${what}${link ? ` ${link}` : ""}`,
   },
   en: {
@@ -91,7 +92,7 @@ const WORDS = {
     goal: (title: string, progress: string, pace: string) => `Goal ${title}: ${progress} (${PACE.en[pace] ?? pace})`,
     costs: (week: number, previous: number) =>
       `Agent cost this week: ${NUMBER.format(week)} USD (week before ${NUMBER.format(previous)} USD)`,
-    decision: (agent: string, text: string, link: string) => `${agent} decided: ${text} ${link}`,
+    decision: (agent: string, text: string, link: string) => `${agent} decided: ${text} ${link}`.trimEnd(),
     waits: (agent: string, what: string, link: string | null) => `${agent} waits: ${what}${link ? ` ${link}` : ""}`,
   },
 } as const;

@@ -1,3 +1,4 @@
+import type { SpaceDecision } from "@openbot/contracts/agent-learning";
 import { randomUUID } from "node:crypto";
 import {
   type AgentAttentionItem,
@@ -139,6 +140,11 @@ export interface InsightServiceOptions {
   loopDecisions?: () => readonly { spaceId: string; title: string; amountUsd?: number | undefined }[];
   /** The pushes that quiet hours or focus held back (`OwnerAwayService.state().suppressed`). */
   heldNotifications?: () => number;
+  /**
+   * The newest entries of a space's decision log (`SpaceKnowledgeStore.recentDecisions`): what agents
+   * decided with `log_decision`, also where no channel shows it.
+   */
+  loggedDecisions?: (spaceId: string) => Effect.Effect<readonly SpaceDecision[], unknown>;
 }
 
 function localClock(now: number, timeZone: string): { date: string; minutes: number } {
@@ -911,6 +917,31 @@ export class InsightService {
         text: message.message.text.replace(CHANNEL_DECISION_PREFIX, "").trim().slice(0, 240),
         link: `[#${this.#channelName(channelId)}](channel:${channelId})`,
       }));
+    // The decision log of each space: what agents decided outside a hands-off channel too. A logged
+    // decision that a channel already showed is said once.
+    const logged = this.#options.loggedDecisions;
+    if (logged) {
+      const said = decisions.map((decision) => decision.text.toLowerCase());
+      const entries: SpaceDecision[] = [];
+      for (const space of spaces) {
+        const recent = yield* logged(space.id).pipe(Effect.orElseSucceed((): readonly SpaceDecision[] => []));
+        entries.push(...recent.filter((entry) => entry.createdAt >= since));
+      }
+      for (const entry of entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt))) {
+        if (decisions.length >= 5) break;
+        const text = `${entry.decision} (${entry.why})`.slice(0, 240);
+        if (said.some((line) => line.includes(entry.decision.toLowerCase()))) continue;
+        said.push(entry.decision.toLowerCase());
+        decisions.push({
+          agent: entry.agentId ? name(entry.agentId) : this.#options.owner()?.name ?? "",
+          text,
+          link:
+            entry.channelId && this.#options.channels.exists(entry.channelId)
+              ? `[#${this.#channelName(entry.channelId)}](channel:${entry.channelId})`
+              : "",
+        });
+      }
+    }
     const costs = this.#costs(7, this.#zone(), now);
     const scopedCosts = costs.agents.filter((agent) => inScope(agent.agentId));
     const facts: BriefingFacts = {

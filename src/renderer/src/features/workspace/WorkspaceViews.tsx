@@ -36,6 +36,9 @@ const WorkspaceReviewsView = lazy(() =>
 const WorkspacePortfolioView = lazy(() =>
   import("../portfolio/WorkspacePortfolio").then((module) => ({ default: module.WorkspacePortfolioView })),
 );
+const WorkspaceKnowledgeView = lazy(() =>
+  import("./WorkspaceKnowledge").then((module) => ({ default: module.WorkspaceKnowledgeView })),
+);
 const WorkspaceTrustView = lazy(() =>
   import("../trust/WorkspaceTrustView").then((module) => ({ default: module.WorkspaceTrustView })),
 );
@@ -126,6 +129,11 @@ export function WorkspaceViewPane(props: { view: WorkspaceView }) {
       <Match when={props.view === "trust"}>
         <Loading>
           <WorkspaceTrustView />
+        </Loading>
+      </Match>
+      <Match when={props.view === "knowledge"}>
+        <Loading>
+          <WorkspaceKnowledgeView />
         </Loading>
       </Match>
       <Match when={props.view === "space-agents"}>

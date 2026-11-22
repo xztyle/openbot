@@ -386,6 +386,7 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
         showPortfolio={ws.viewAvailable("portfolio")}
         showInsights={ws.viewAvailable("insights")}
         showTrust={ws.viewAvailable("trust")}
+        showKnowledge={ws.viewAvailable("knowledge")}
         onOpenApps={ws.env.openApps}
         channels={ws.sidebarChannels()}
         directMessages={ws.sidebarDirectMessages()}

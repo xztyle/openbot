@@ -44,6 +44,8 @@ export function workspaceViewLabel(view: WorkspaceView, t: TextValue["t"]): stri
       return t("insight.title");
     case "trust":
       return t("trust.title");
+    case "knowledge":
+      return t("workspace.knowledge.title");
     case "routines":
       return t("workspace.app.menu.routines");
     case "search":

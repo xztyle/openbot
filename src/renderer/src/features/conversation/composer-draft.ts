@@ -1,5 +1,11 @@
 import { serializeChatTagReference } from "@openbot/contracts/chat-tag-references";
-import { isAttachmentSummary, type MarketplaceSkillDetail, SKILL_CREATION_REQUEST } from "@openbot/contracts/ipc";
+import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
+import {
+  type DraftAttachment,
+  isAttachmentSummary,
+  type MarketplaceSkillDetail,
+  SKILL_CREATION_REQUEST,
+} from "@openbot/contracts/ipc";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { decodeQueueEditRequest, type QueueEditRequest } from "@openbot/contracts/team-protocol/queue-edit-v1";
 import { skillExamplePrompt } from "@openbot/ui/components/SkillPreview";
@@ -120,4 +126,47 @@ function decodeStoredQueueEdit(value: unknown): StoredQueueEdit | null {
     backup: value.backup,
     ...(pendingSave ? { pendingSave } : {}),
   };
+}
+
+/**
+ * The message box after a queue edit ended before its Save: the message started, or somebody deleted
+ * it. A changed edit keeps its text and the files that it added, after the draft from before the
+ * edit, so no typed text is lost. An unchanged edit gives back the draft from before the edit, as
+ * Cancel does. `dropped` are the added files that the box does not keep, for the caller to discard.
+ */
+export function draftAfterEndedEdit(
+  draft: ComposerDraft,
+  backup: ComposerDraft,
+  originalAttachmentIds: readonly string[],
+  changed: boolean,
+): { next: ComposerDraft; dropped: DraftAttachment[] } {
+  const original = new Set(originalAttachmentIds);
+  // The files of the message belong to it. Only files added during the edit can go in a new message.
+  const added = draft.attachments.filter((attachment) => !original.has(attachment.id));
+  if (!changed) return { next: backup, dropped: added };
+  const attachments = [...backup.attachments, ...added];
+  const before = backup.text.trim();
+  return {
+    next: {
+      text: before ? `${backup.text}\n\n${draft.text}` : draft.text,
+      attachments: attachments.slice(0, INPUT_LIMITS.attachments),
+      replyToMessageId: before ? backup.replyToMessageId : draft.replyToMessageId,
+    },
+    dropped: attachments.slice(INPUT_LIMITS.attachments),
+  };
+}
+
+/** Whether a queue edit changed its message: the text, or the files that it keeps or adds. */
+export function queueEditChanged(
+  draft: ComposerDraft,
+  originalText: string | undefined,
+  originalAttachmentIds: readonly string[],
+): boolean {
+  const original = new Set(originalAttachmentIds);
+  return (
+    originalText === undefined ||
+    draft.text !== originalText ||
+    draft.attachments.length !== originalAttachmentIds.length ||
+    draft.attachments.some((attachment) => !original.has(attachment.id))
+  );
 }

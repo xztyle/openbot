@@ -375,6 +375,9 @@ export function createRemoteApiApp(
             : JSON.stringify(message);
         await runtime.runPromise(signal.receive(socket, input));
       },
+      pong(ws) {
+        signal.pong(socketAdapter(ws, config.trustProxy));
+      },
       async close(ws) {
         await runtime.runPromise(signal.disconnect(socketAdapter(ws, config.trustProxy)));
       },
@@ -391,6 +394,8 @@ interface ElysiaSocketLike {
   remoteAddress?: string;
   send(data: string): unknown;
   close(code?: number, reason?: string): void;
+  ping(): unknown;
+  terminate(): void;
 }
 
 function socketAdapter(ws: ElysiaSocketLike, trustProxy: boolean): SignalSocket {
@@ -401,6 +406,10 @@ function socketAdapter(ws: ElysiaSocketLike, trustProxy: boolean): SignalSocket 
       ws.send(message);
     },
     close: (code, reason) => ws.close(code, reason.slice(0, 123)),
+    ping: () => {
+      ws.ping();
+    },
+    terminate: () => ws.terminate(),
   };
 }
 
@@ -633,6 +642,8 @@ export function prometheusMetrics(signal: SignalService): string {
     `openbot_remote_queued_deliveries_total ${metrics.queuedDeliveries}`,
     "# TYPE openbot_remote_queued_deliveries_flushed_total counter",
     `openbot_remote_queued_deliveries_flushed_total ${metrics.queuedDeliveriesFlushed}`,
+    "# TYPE openbot_remote_dead_host_sockets_total counter",
+    `openbot_remote_dead_host_sockets_total ${metrics.deadHostSockets}`,
     "# TYPE openbot_remote_discord_deliveries_total counter",
     `openbot_remote_discord_deliveries_total ${metrics.discordDeliveries}`,
     "# TYPE openbot_remote_discord_deliveries_unavailable_total counter",

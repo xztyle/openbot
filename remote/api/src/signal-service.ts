@@ -103,6 +103,10 @@ export interface SignalSocket {
   ip: string;
   send(message: string): void;
   close(code: number, reason: string): void;
+  /** A WebSocket ping. A live peer answers it with a pong (`SignalService.pong`). */
+  ping?(): void;
+  /** Ends the socket at once, without the closing handshake that a dead peer never answers. */
+  terminate?(): void;
 }
 
 interface AuthenticatedPeer {
@@ -176,12 +180,19 @@ export interface SignalMetrics {
   // Slack, Discord and Telegram events kept for a hosted server that starts, and sent to it later.
   queuedDeliveries: number;
   queuedDeliveriesFlushed: number;
+  /** Host sockets that Signal ended because they answered neither messages nor pings. */
+  deadHostSockets: number;
 }
 
 /** The result of the authorization of one Discord API call. */
 export type DiscordCaller = { ok: true; hostId: string } | { ok: false; code: "unauthorized" | "unknown_guild" };
 
 export interface SignalServiceOptions {
+  /**
+   * How often Signal pings a host socket that sent nothing, and after how long without a message or a
+   * pong it ends the socket. Default: 10 s and 30 s.
+   */
+  hostLiveness?: { pingMilliseconds: number; deadAfterMilliseconds: number };
   /** Signal holds the Discord bot token: an `ingress` socket with a Discord route gets a session. */
   discord?: boolean;
   /** The Bot API and the file tokens. Without them, Telegram is off. */
@@ -283,6 +294,9 @@ const TURN_CREDENTIAL_REUSE_MILLISECONDS = 5 * 60_000;
 // The older sockets of a host stay registered. This limits them, because host sockets are not in the
 // account's connection limit.
 const MAXIMUM_SOCKETS_PER_HOST = 4;
+// See `#hostSeenAt`. A live host answers a ping within a round trip; three missed checks end it.
+const HOST_PING_MILLISECONDS = 10_000;
+const HOST_DEAD_AFTER_MILLISECONDS = 30_000;
 const INITIAL_TICKET_TTL_MILLISECONDS = 3 * 60_000;
 const MAXIMUM_EXPIRATION_TIMER_MILLISECONDS = 24 * 60 * 60_000;
 const INGRESS_RATE_FACTOR = 10;
@@ -344,6 +358,16 @@ export class SignalService {
   readonly #connectionDropTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #peerExpirationTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #helloTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /**
+   * When each host socket last sent a message or a pong. A host that restarted or lost its network can
+   * leave its socket half open: Signal saw no close, kept it as the host's current socket and gave it
+   * every client hello, which then waited 30 s for an offer that never came, until the idle timeout
+   * (two minutes) closed it. A host socket that stays silent through pings is ended, so a client
+   * hello is held (`host-waiting`) until the host says hello again.
+   */
+  readonly #hostSeenAt = new Map<string, number>();
+  readonly #hostLiveness: { pingMilliseconds: number; deadAfterMilliseconds: number };
+  #hostLivenessTimer: ReturnType<typeof setInterval> | null = null;
   readonly #usedTicketIds = new Map<string, number>();
   readonly #revokedEpochs = new Map<string, number>();
   readonly #revokedSessions = new Map<string, number>();
@@ -378,6 +402,7 @@ export class SignalService {
     webhookDeliveriesUnavailable: 0,
     queuedDeliveries: 0,
     queuedDeliveriesFlushed: 0,
+    deadHostSockets: 0,
   };
 
   readonly dependencies: Layer.Layer<SignalTokens>;
@@ -400,6 +425,51 @@ export class SignalService {
     this.#telegram = options.telegram ?? null;
     this.#fork = options.fork ?? ((work) => void Effect.runFork(work));
     this.#queue = new IngressQueue(options.routeWaker ?? null, { fork: this.#fork });
+    this.#hostLiveness = options.hostLiveness ?? {
+      pingMilliseconds: HOST_PING_MILLISECONDS,
+      deadAfterMilliseconds: HOST_DEAD_AFTER_MILLISECONDS,
+    };
+  }
+
+  /** A pong from a socket: a host that answers is alive. */
+  pong(socket: SignalSocket): void {
+    if (this.#hostSeenAt.has(socket.id)) this.#hostSeenAt.set(socket.id, Date.now());
+  }
+
+  #watchHost(socket: SignalSocket): void {
+    this.#hostSeenAt.set(socket.id, Date.now());
+    if (this.#hostLivenessTimer !== null || !socket.ping || !socket.terminate) return;
+    this.#hostLivenessTimer = setInterval(() => this.#checkHosts(), this.#hostLiveness.pingMilliseconds);
+    this.#hostLivenessTimer.unref?.();
+  }
+
+  #checkHosts(): void {
+    const now = Date.now();
+    for (const [socketId, seenAt] of this.#hostSeenAt) {
+      const socket = this.#sockets.get(socketId);
+      const peer = this.#peers.get(socketId);
+      if (!socket || peer?.peer !== "host") {
+        this.#hostSeenAt.delete(socketId);
+        continue;
+      }
+      const silent = now - seenAt;
+      if (silent >= this.#hostLiveness.deadAfterMilliseconds && socket.terminate) {
+        this.#hostSeenAt.delete(socketId);
+        // Out of the host's sockets at once, so the next client hello is held, not given to it. The
+        // close handler then runs `disconnect`, which releases its clients.
+        const hostSockets = this.#hosts.get(peer.claims.hostId);
+        hostSockets?.delete(socketId);
+        if (hostSockets?.size === 0) this.#hosts.delete(peer.claims.hostId);
+        this.#metrics.deadHostSockets += 1;
+        socket.terminate();
+        continue;
+      }
+      if (silent >= this.#hostLiveness.pingMilliseconds) socket.ping?.();
+    }
+    if (this.#hostSeenAt.size === 0 && this.#hostLivenessTimer !== null) {
+      clearInterval(this.#hostLivenessTimer);
+      this.#hostLivenessTimer = null;
+    }
   }
 
   /** The Bot API and the file tokens, or `null` when Telegram is off. */
@@ -408,6 +478,8 @@ export class SignalService {
   }
 
   close(): void {
+    if (this.#hostLivenessTimer !== null) clearInterval(this.#hostLivenessTimer);
+    this.#hostLivenessTimer = null;
     for (const timer of this.#connectionDropTimers.values()) clearTimeout(timer);
     for (const timer of this.#peerExpirationTimers.values()) clearTimeout(timer);
     for (const timer of this.#helloTimers.values()) clearTimeout(timer);
@@ -440,6 +512,7 @@ export class SignalService {
   readonly receive = Effect.fn("Signal.receive")((socket: SignalSocket, input: string | Uint8Array) =>
     Effect.gen({ self: this }, function* () {
       const tokens = yield* SignalTokens;
+      if (this.#hostSeenAt.has(socket.id)) this.#hostSeenAt.set(socket.id, Date.now());
       if (!this.#acceptMessage(socket)) {
         this.#fail(socket, "rate_limited", "Too many signal messages.", 1008);
         return;
@@ -551,6 +624,7 @@ export class SignalService {
   readonly disconnect = Effect.fn("Signal.disconnect")((socket: SignalSocket) =>
     Effect.gen({ self: this }, function* () {
       this.#sockets.delete(socket.id);
+      this.#hostSeenAt.delete(socket.id);
       const peer = this.#peers.get(socket.id);
       this.#clearPeerExpiration(socket.id);
       this.#clearHelloTimer(socket.id);
@@ -1463,6 +1537,7 @@ export class SignalService {
           }
           hostSockets.add(socket.id);
           this.#hosts.set(claims.hostId, hostSockets);
+          this.#watchHost(socket);
           this.#send(socket, {
             type: "ready",
             version: 1,

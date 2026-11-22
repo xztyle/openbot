@@ -197,6 +197,18 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
     for (const child of scroller.children) observer.observe(child);
     return () => observer.disconnect();
   });
+  // A reply that came while the window was in the background is read when the reader comes back to it.
+  onSettled(() => {
+    const back = () => {
+      if (document.visibilityState === "visible") notePlace();
+    };
+    window.addEventListener("focus", back);
+    document.addEventListener("visibilitychange", back);
+    return () => {
+      window.removeEventListener("focus", back);
+      document.removeEventListener("visibilitychange", back);
+    };
+  });
   onCleanup(() => {
     opened = false;
     ws.marks.releaseThread(props.channelId, props.rootId);

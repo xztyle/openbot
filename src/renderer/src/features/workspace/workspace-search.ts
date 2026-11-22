@@ -20,7 +20,7 @@ import {
 import { currentText } from "@openbot/ui/text";
 import { createEffect, createStore } from "solid-js";
 import type { ChannelsController } from "../channels/channels-controller";
-import { otherMembers, readerJoined, type WorkspaceDirectory } from "./workspace-model";
+import { conversationName, otherMembers, readerJoined, type WorkspaceDirectory } from "./workspace-model";
 
 const RECENT_KEY = "openbot.workspace.searches.v1";
 const RECENT_LIMIT = 10;
@@ -80,6 +80,16 @@ export interface WorkspaceSearchDeps {
 
 function folded(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
+}
+
+/**
+ * The `in:` value that names a conversation: `#name` for a channel, `@name` of one of the others for
+ * a DM or a group, which `in:` reads as the conversations with that member.
+ */
+export function searchInValue(directory: WorkspaceDirectory, channel: ChannelSummary): string {
+  return channelKind(channel) === "channel"
+    ? `#${channel.name}`
+    : `@${otherMembers(directory, channel)[0]?.name ?? conversationName(directory, channel)}`;
 }
 
 /** Whether `name` matches a typed name: the same, or the start of it or of one of its words. */

@@ -8,12 +8,14 @@
 
 import { ConfirmDialog } from "@openbot/ui";
 import { type ShortcutGroup, ShortcutsSheet } from "@openbot/ui/features/workspace/ShortcutsSheet";
+import { withSearchModifier } from "@openbot/ui/features/workspace/workspace-search-query";
 import { useText } from "@openbot/ui/text";
 import { createSignal, onSettled } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { currentDevicePlatform } from "../../send-shortcut-preference";
 import { useWorkspace } from "./workspace-context";
 import { toggleDebugMode } from "./workspace-debug";
+import { searchInValue } from "./workspace-search";
 
 /** Whether a key press comes from a field the reader types in. */
 export function typingTarget(target: EventTarget | null): boolean {
@@ -157,8 +159,10 @@ export function WorkspaceKeyboard() {
         if (key === "g" && !(route.kind === "agent" && document.querySelector(".chat-search")))
           return take(() => startSearch());
         if (key === "f" && route.kind === "channel") {
-          const name = ws.summary(route.channelId)?.name;
-          return take(() => startSearch(name ? `in:#${name} ` : undefined));
+          // A DM or a group is `in:@name`: a `#` names only channels.
+          const channel = ws.summary(route.channelId);
+          const value = channel ? searchInValue(ws.directory(), channel) : null;
+          return take(() => startSearch(value ? `${withSearchModifier("", "in", value)} ` : undefined));
         }
         if (key === "/" && !(route.kind === "view" && route.view === "routines"))
           return take(() => ws.openDialog({ kind: "shortcuts" }));

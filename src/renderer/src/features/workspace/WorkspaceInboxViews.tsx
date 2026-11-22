@@ -36,6 +36,7 @@ import {
   previewText,
   readerJoined,
 } from "./workspace-model";
+import { searchInValue } from "./workspace-search";
 
 type Workspace = ReturnType<typeof useWorkspace>;
 
@@ -367,10 +368,7 @@ export function WorkspaceSearchView() {
       .map((channel) => {
         const name = conversationName(ws.directory(), channel);
         return {
-          value:
-            channelKind(channel) === "channel"
-              ? `#${channel.name}`
-              : `@${otherMembers(ws.directory(), channel)[0]?.name ?? name}`,
+          value: searchInValue(ws.directory(), channel),
           label: channelKind(channel) === "channel" ? `#${name}` : name,
         };
       })

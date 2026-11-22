@@ -1,13 +1,28 @@
 import type { AttachmentPreviewKind, AttachmentSummary, WorkspaceArtifactFile } from "@openbot/contracts/ipc";
-import type { useWorkspace } from "./workspace-context";
+import { toast } from "@openbot/ui";
+import { currentText } from "@openbot/ui/text";
+
+/** The members of the workspace that opening an artifact reads. */
+export interface ArtifactOpener {
+  artifacts: { artifacts(filter?: { channelId: string }): readonly { id: string; url?: string | undefined }[] };
+  artifactRecord(id: string): { file?: WorkspaceArtifactFile | undefined } | undefined;
+  channels: {
+    port(): {
+      openUrl(url: string): unknown;
+      fileActions: "native" | "browser";
+      agent: { openAttachment(input: { attachmentId: string; action: "open" }): Promise<unknown> };
+    };
+  };
+}
 
 /**
  * Opens an artifact: its address, or the file an agent attached. With `view`, a browser shows the file
  * in the viewer, as it shows a file of a message: without it, Open only downloaded the file, and a
- * failed download said nothing. The desktop opens the file in the app of the system.
+ * failed download said nothing. The desktop opens the file in the app of the system. A file that
+ * does not open is a toast.
  */
 export function openArtifact(
-  ws: ReturnType<typeof useWorkspace>,
+  ws: ArtifactOpener,
   id: string,
   channelId?: string,
   view?: (attachment: AttachmentSummary) => void,
@@ -27,7 +42,10 @@ export function openArtifact(
     void ws.channels
       .port()
       .agent.openAttachment({ attachmentId, action: "open" })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        const text = currentText();
+        toast.error(text.errorMessage(error, text.t("attachment.error.open")));
+      });
 }
 
 /** The file of an artifact as the attachment of its message, with the preview kind that the host gives one. */

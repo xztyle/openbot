@@ -3757,7 +3757,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                     agents={workspace.profiles()}
                     onOpenLink={(url) => void openWebLink(url)}
                     onAttachmentAction={(attachment) =>
-                      void runtime.agent.openAttachment({ attachmentId: attachment.id, action: "download" })
+                      void runtime.agent
+                        .openAttachment({ attachmentId: attachment.id, action: "download" })
+                        .catch((error: unknown) =>
+                          actionToast.error(text.errorMessage(error, t("attachment.error.open"))),
+                        )
                     }
                     approvals={workspace.state.approvals}
                     onRespondApproval={async (approval, decision) => {

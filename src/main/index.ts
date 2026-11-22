@@ -27,6 +27,7 @@ import {
   screen,
   shell,
 } from "electron";
+import { replaceInvalidLinuxSystemLanguages } from "../backend/browser-policy";
 import { runCauseEffect } from "../backend/effect-boundary";
 import { readAppVariant, resolveAppIconPath, resolveLogoColorIconPath } from "./app-icon";
 import { type ApplicationServices, createApplicationServices } from "./application-services";
@@ -1085,6 +1086,8 @@ if (!hasSingleInstanceLock) {
     .then(async () => {
       // Startup marks for `dev:bench`, which reads them over the inspector. They change nothing.
       performance.mark("openbot:when-ready");
+      // A C or POSIX locale gives Chromium no valid language: pages stayed blank or failed (upstream #13535).
+      replaceInvalidLinuxSystemLanguages();
       if (!(await Effect.runPromise(hostAllowsTenantLaunch()))) {
         app.quit();
         return;

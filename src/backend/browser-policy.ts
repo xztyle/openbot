@@ -50,8 +50,32 @@ function preferredBrowserLanguages(): string {
 }
 
 export function preferredBrowserLanguageCodes(): string {
-  const languages = app.getPreferredSystemLanguages();
+  const languages = validLanguageTags(app.getPreferredSystemLanguages());
   return (languages.length > 0 ? languages : [app.getLocale()]).join(",");
+}
+
+/**
+ * A Linux server with a C or POSIX locale gives Chromium `C` or `POSIX` as its language, which is no
+ * language tag: pages that read `navigator.languages` stayed blank or failed. Before the browser
+ * starts, `LANGUAGE` names only valid tags, or the app locale.
+ */
+export function replaceInvalidLinuxSystemLanguages(): void {
+  if (process.platform !== "linux") return;
+  const languages = app.getPreferredSystemLanguages();
+  const valid = validLanguageTags(languages);
+  if (valid.length === languages.length) return;
+  const [locale = "en-US"] = validLanguageTags([app.getLocale()]);
+  process.env.LANGUAGE = (valid.length > 0 ? valid : [locale]).map((tag) => tag.replaceAll("-", "_")).join(":");
+}
+
+function validLanguageTags(values: readonly string[]): string[] {
+  return values.filter((value) => {
+    try {
+      return /^[a-z]{2,3}(?:-|$)/.test(Intl.getCanonicalLocales(value)[0] ?? "");
+    } catch {
+      return false;
+    }
+  });
 }
 
 function setRequestHeader(headers: Record<string, string>, name: string, value: string): void {

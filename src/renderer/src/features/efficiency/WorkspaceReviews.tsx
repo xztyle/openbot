@@ -30,7 +30,7 @@ interface PlaybookDraft {
  * For an owner or an admin of a host with agent-efficiency-v1.
  */
 export function WorkspaceReviewsView() {
-  const { t, errorMessage } = useText();
+  const { t, format, errorMessage } = useText();
   const ws = useWorkspace();
   const calls = () => ws.env.efficiency?.();
   const [tab, setTab] = createSignal<"reviews" | "playbooks" | "learning">("reviews");
@@ -76,7 +76,12 @@ export function WorkspaceReviewsView() {
       }),
   );
   const pendingCount = () => shown().filter((review) => review.proposal?.state === "pending").length;
-  const learned = createMemo(() => (learning() ?? []).filter((item) => item.agentId === null || inSpace(item.agentId)));
+  // An item of one agent shows in that agent's space; a change of a whole space only in that space.
+  const learned = createMemo(() =>
+    (learning() ?? []).filter((item) =>
+      item.agentId === null ? item.spaceId === null || item.spaceId === ws.spaces.current() : inSpace(item.agentId),
+    ),
+  );
   const learningPending = () => learned().filter((item) => item.state === "pending");
   const learningDone = () =>
     learned()
@@ -182,11 +187,14 @@ export function WorkspaceReviewsView() {
                 <Show when={saved().autoTurns > 0} fallback={<Text tone="muted">{t("efficiency.savings.none")}</Text>}>
                   <Text>
                     {t("efficiency.savings.line", {
-                      auto: String(saved().autoTurns),
-                      turns: String(saved().turns),
-                      small: String(saved().smallTurns),
-                      cost: saved().costUsd.toFixed(2),
-                      fixed: saved().fixedCostUsd.toFixed(2),
+                      auto: format.number(saved().autoTurns),
+                      turns: format.number(saved().turns),
+                      small: format.number(saved().smallTurns),
+                      cost: format.number(saved().costUsd, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                      fixed: format.number(saved().fixedCostUsd, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      }),
                     })}
                   </Text>
                 </Show>

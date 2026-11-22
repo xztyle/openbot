@@ -1,5 +1,7 @@
 // The learning card and the agent's learning settings on fake host calls, for
 // `scripts/agent-learning-e2e.ts`. Each call the page makes lands in the body's `data-learning-calls`.
+// While the body has `data-hold-forget`, the forget preview waits; the "lead" link of the hash
+// (`#lead`) shows the settings of another agent.
 import type { LearningReviewItem, SettingsCheckpoint } from "@openbot/contracts/agent-learning";
 import { render } from "@solidjs/web";
 import { createSignal, For } from "solid-js";
@@ -104,6 +106,15 @@ const calls: EfficiencyCalls = {
   removeKnowledge: unused,
   forgetConversation: async (agentId, confirm) => {
     record(`forget:${agentId}:${confirm}`);
+    if (document.body.dataset.holdForget !== undefined)
+      await new Promise<void>((resolve) => {
+        const watch = new MutationObserver(() => {
+          if (document.body.dataset.holdForget !== undefined) return;
+          watch.disconnect();
+          resolve();
+        });
+        watch.observe(document.body, { attributes: true, attributeFilter: ["data-hold-forget"] });
+      });
     return {
       memories: [{ id: "m9", text: "The bakery opens at 8 on Sundays." }],
       facts: [],
@@ -114,6 +125,9 @@ const calls: EfficiencyCalls = {
 
 function Page() {
   const [list, setList] = createSignal(items);
+  const agentOfHash = () => (location.hash === "#lead" ? "lead" : "chief");
+  const [agentId, setAgentId] = createSignal(agentOfHash());
+  window.addEventListener("hashchange", () => setAgentId(agentOfHash()));
   return (
     <div style={{ display: "flex", "flex-direction": "column", gap: "16px", padding: "16px", "max-width": "880px" }}>
       <For each={list()} keyed={(item) => item.id}>
@@ -126,7 +140,7 @@ function Page() {
           />
         )}
       </For>
-      <AgentLearningSettings agentId="chief" calls={calls} agentName={(id) => (id === "lead" ? "Lead" : id)} />
+      <AgentLearningSettings agentId={agentId()} calls={calls} agentName={(id) => (id === "lead" ? "Lead" : id)} />
     </div>
   );
 }

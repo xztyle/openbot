@@ -1,6 +1,7 @@
 // Checks the learning card and the agent's learning settings on a phone: Undo of a cleanup that
 // applied by itself, Apply of a lesson, the settings history with its diff and Roll back, and the
-// forget of one chat with its confirm step. The page runs on fake host calls
+// forget of one chat with its confirm step, and a forget preview that comes back after the panel
+// moved to another agent, which must not show there. The page runs on fake host calls
 // (`src/renderer/stories/agent-learning-harness.tsx`); each call it makes is checked.
 //
 // `bun scripts/agent-learning-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>]`
@@ -106,6 +107,30 @@ try {
   await page.getByRole("button", { name: "Forget 1 item learned in this chat" }).tap();
   await page.getByText("1 item forgotten").waitFor();
   assert.deepEqual((await calls()).slice(2), ["rollback:c1", "forget:chief:false", "forget:chief:true"]);
+
+  // A preview that comes back after the panel moved to another agent is dropped: its items and
+  // its confirm button would forget the other agent's chat.
+  await page.evaluate(() => {
+    document.body.dataset.holdForget = "";
+  });
+  await page.getByRole("button", { name: "Forget what it learned in this chat" }).tap();
+  await page.waitForFunction(() => (document.body.dataset.learningCalls ?? "").split("\n").length === 6);
+  await page.evaluate(() => {
+    location.hash = "lead";
+  });
+  await page.getByRole("button", { name: "Forget what it learned in this chat" }).waitFor();
+  await page.evaluate(() => {
+    delete document.body.dataset.holdForget;
+  });
+  // The buttons come back once the held preview is done.
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll("button")].some(
+      (button) => button.textContent === "Tidy memories now" && !button.disabled,
+    ),
+  );
+  assert.equal(await page.getByRole("button", { name: "Forget 1 item learned in this chat" }).count(), 0);
+  assert.equal(await page.getByText("The bakery opens at 8 on Sundays.").count(), 0);
+  assert.deepEqual((await calls()).slice(5), ["forget:chief:false"]);
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   assert.ok(overflow <= 0, `The page scrolls sideways by ${overflow}px on a phone.`);

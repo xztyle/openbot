@@ -78,14 +78,22 @@ export function AgentLearningSettings(props: {
     },
   );
 
-  async function run(work: () => Promise<string | null>, fallback: string): Promise<void> {
+  /**
+   * Runs one action for the agent that shows now. Its note, error and found items belong to that
+   * agent: when the panel moved to another agent meanwhile, they are dropped, so a forget never
+   * lists one agent's memories over the confirm button of another.
+   */
+  async function run(work: (agentId: string) => Promise<string | null>, fallback: string): Promise<void> {
+    const agentId = props.agentId;
+    const current = () => props.agentId === agentId;
     setBusy(true);
     setError(null);
     setNote(null);
     try {
-      setNote(await work());
+      const done = await work(agentId);
+      if (current()) setNote(done);
     } catch (failure) {
-      setError(errorMessage(failure, fallback));
+      if (current()) setError(errorMessage(failure, fallback));
     } finally {
       setBusy(false);
     }
@@ -152,9 +160,9 @@ export function AgentLearningSettings(props: {
                         variant="ghost"
                         disabled={busy()}
                         onClick={() =>
-                          void run(async () => {
+                          void run(async (agentId) => {
                             await props.calls.rollback(checkpoint().id);
-                            reload(props.agentId);
+                            if (props.agentId === agentId) reload(agentId);
                             return t("efficiency.history.rolledBack");
                           }, t("efficiency.history.rollbackFailed"))
                         }
@@ -194,10 +202,10 @@ export function AgentLearningSettings(props: {
               variant="ghost"
               disabled={busy()}
               onClick={() =>
-                void run(async () => {
-                  const found = await props.calls.forgetConversation(props.agentId, false);
+                void run(async (agentId) => {
+                  const found = await props.calls.forgetConversation(agentId, false);
                   if (found.memories.length + found.facts.length === 0) return t("efficiency.learning.forgetNothing");
-                  setForget(found);
+                  if (props.agentId === agentId) setForget(found);
                   return null;
                 }, t("efficiency.learning.forgetFailed"))
               }
@@ -211,8 +219,8 @@ export function AgentLearningSettings(props: {
               variant="destructive"
               disabled={busy()}
               onClick={() =>
-                void run(async () => {
-                  const done = await props.calls.forgetConversation(props.agentId, true);
+                void run(async (agentId) => {
+                  const done = await props.calls.forgetConversation(agentId, true);
                   setForget(null);
                   return t("efficiency.learning.forgotten", { count: done.forgotten });
                 }, t("efficiency.learning.forgetFailed"))

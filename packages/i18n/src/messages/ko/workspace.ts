@@ -485,4 +485,50 @@ export const messages = {
   "workspace.secretHygiene.save": "시크릿으로 저장",
   "workspace.secretHygiene.saved": "시크릿에 {name}(으)로 저장했습니다. 이제 에이전트가 사용할 수 있습니다.",
   "workspace.secretHygiene.saveFailed": "시크릿을 저장하지 못했습니다. 시크릿 화면에서 추가하세요.",
+  "workspace.connections.chatTitle": "채팅 앱",
+  "workspace.connections.chatDescription":
+    "Claude나 ChatGPT에서 에이전트와 대화하세요. 액세스 링크로 Atelier를 사용자 지정 커넥터로 추가합니다. 텍스트만 지원하며 승인과 결제는 여기에서만 합니다.",
+  "workspace.connections.gatewayOff":
+    "서버에 아직 공개 커넥터 주소가 없습니다. 서버 운영자가 HTTPS 뒤에서 OPENBOT_CONNECTOR_LISTEN과 OPENBOT_CONNECTOR_PUBLIC_URL을 설정합니다.",
+  "workspace.connections.newLink": "새 액세스 링크",
+  "workspace.connections.newLinkDescription": "사용할 앱 이름을 붙이면 어떤 링크를 취소할지 알 수 있습니다.",
+  "workspace.connections.label": "앱",
+  "workspace.connections.labelPlaceholder": "내 휴대폰의 Claude",
+  "workspace.connections.create": "만들기",
+  "workspace.connections.createdTitle": "지금 링크를 복사하세요",
+  "workspace.connections.createdDescription":
+    "Atelier는 한 번만 보여 줍니다. 사용자 지정 커넥터의 서버 URL에 붙여 넣으세요. 이 링크가 있으면 누구나 내 이름으로 에이전트에게 메시지를 보낼 수 있으니 비공개로 보관하세요.",
+  "workspace.connections.copyLink": "복사",
+  "workspace.connections.link": "커넥터 URL",
+  "workspace.connections.token": "액세스 토큰",
+  "workspace.connections.revoke": "취소",
+  "workspace.connections.revokeTitle": "이 링크를 취소할까요?",
+  "workspace.connections.revokeDescription": "이 링크를 쓰는 앱은 즉시 접근 권한을 잃습니다.",
+  "workspace.connections.neverUsed": "{time}에 생성 · 아직 사용 안 함",
+  "workspace.connections.lastUsed": "마지막 사용 {time}",
+  "workspace.connections.hooksTitle": "이 공간으로 들어오는 웹훅",
+  "workspace.connections.hooksDescription":
+    "Stripe 판매, Hotmart 구매, 새 YouTube 동영상이 에이전트의 웹훅 루틴을 깨울 수 있습니다. 주소를 서비스에 복사하고 발신자를 고르세요.",
+  "workspace.connections.hooksEmpty":
+    "이 공간에는 아직 웹훅 루틴이 없습니다. 에이전트에게 만들어 달라고 하세요. 예: Stripe 판매용 웹훅 루틴을 만들어 줘.",
+  "workspace.connections.copyUrl": "주소 복사",
+  "workspace.connections.sender": "발신자",
+  "workspace.connections.inboxLine": "{owner} · {sender}",
+  "workspace.connections.lastEvent": "마지막 이벤트 {time} ({status})",
+  "workspace.connections.scheme.openbot": "Atelier 서명",
+  "workspace.connections.scheme.stripe": "Stripe",
+  "workspace.connections.scheme.hotmart": "Hotmart",
+  "workspace.connections.scheme.youtube": "YouTube",
+  "workspace.connections.hint.openbot": "웹훅 문서에 나온 대로 루틴 자체의 시크릿으로 서명하는 모든 시스템.",
+  "workspace.connections.hint.stripe":
+    "Stripe의 개발자 > 웹훅에서 이 주소로 엔드포인트를 추가한 뒤 서명 시크릿(whsec_…)을 붙여 넣으세요.",
+  "workspace.connections.hint.hotmart":
+    "Hotmart의 도구 > 웹훅에서 이 주소로 웹훅(버전 2.0.0)을 추가한 뒤 계정의 hottok을 붙여 넣으세요.",
+  "workspace.connections.hint.youtube":
+    "임의의 시크릿을 정해 여기에 붙여 넣으세요. 그러면 에이전트가 같은 hub.secret으로 pubsubhubbub.appspot.com에서 채널 피드에 이 주소를 구독합니다.",
+  "workspace.connections.secret": "발신자 시크릿",
+  "workspace.connections.secretKept": "저장됨. 비워 두면 그대로 유지됩니다.",
+  "workspace.connections.save": "저장",
+  "workspace.connections.failed": "실패했습니다. 다시 시도하세요.",
+  "workspace.connections.copied": "복사됨",
 } as const satisfies PartialTranslation<typeof source>;

@@ -134,7 +134,9 @@ result. The relay does not keep requests while the host is offline. If you do no
 is lost.
 
 GitHub and Linear sign their requests in their own way, so they cannot post to this URL. Use the
-[forwarder](webhooks-forwarder.md) on the host computer for them.
+[forwarder](webhooks-forwarder.md) on the host computer for them. Stripe, Hotmart and YouTube can
+post to the routine's inbox address on the [connector gateway](connector-gateway.md), which checks
+their own signatures.
 
 ### Quiet runs and the hourly limit
 

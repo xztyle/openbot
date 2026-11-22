@@ -494,4 +494,51 @@ export const messages = {
   "workspace.secretHygiene.save": "Salvar como segredo",
   "workspace.secretHygiene.saved": "Salvo como {name} em Segredos. Os agentes já podem usar.",
   "workspace.secretHygiene.saveFailed": "O segredo não foi salvo. Adicione em Segredos.",
+  "workspace.connections.chatTitle": "Apps de chat",
+  "workspace.connections.chatDescription":
+    "Fale com seus agentes pelo Claude ou ChatGPT: adicione o Atelier como conector personalizado com um link de acesso. Só texto; aprovações e dinheiro ficam aqui.",
+  "workspace.connections.gatewayOff":
+    "O servidor ainda não tem um endereço público de conectores. Quem administra o servidor define OPENBOT_CONNECTOR_LISTEN e OPENBOT_CONNECTOR_PUBLIC_URL atrás de HTTPS.",
+  "workspace.connections.newLink": "Novo link de acesso",
+  "workspace.connections.newLinkDescription": "Dê o nome do app que vai usar, para saber qual link revogar.",
+  "workspace.connections.label": "App",
+  "workspace.connections.labelPlaceholder": "Claude no meu celular",
+  "workspace.connections.create": "Criar",
+  "workspace.connections.createdTitle": "Copie o link agora",
+  "workspace.connections.createdDescription":
+    "O Atelier mostra só uma vez. Cole como URL do servidor de um conector personalizado. Quem tiver o link pode falar com seus agentes como você, então mantenha em sigilo.",
+  "workspace.connections.copyLink": "Copiar",
+  "workspace.connections.link": "URL do conector",
+  "workspace.connections.token": "Token de acesso",
+  "workspace.connections.revoke": "Revogar",
+  "workspace.connections.revokeTitle": "Revogar este link?",
+  "workspace.connections.revokeDescription": "O app que usa o link perde o acesso na hora.",
+  "workspace.connections.neverUsed": "Criado {time} · ainda não usado",
+  "workspace.connections.lastUsed": "Último uso {time}",
+  "workspace.connections.hooksTitle": "Webhooks deste espaço",
+  "workspace.connections.hooksDescription":
+    "Uma venda no Stripe, uma compra na Hotmart ou um vídeo novo no YouTube podem acordar a rotina de webhook de um agente. Copie o endereço no serviço e escolha quem envia.",
+  "workspace.connections.hooksEmpty":
+    "Ainda não há rotina de webhook neste espaço. Peça a um agente para criar, por exemplo: crie uma rotina de webhook para as vendas do Stripe.",
+  "workspace.connections.copyUrl": "Copiar endereço",
+  "workspace.connections.sender": "Remetente",
+  "workspace.connections.inboxLine": "{owner} · {sender}",
+  "workspace.connections.lastEvent": "Último evento {time} ({status})",
+  "workspace.connections.scheme.openbot": "Assinatura do Atelier",
+  "workspace.connections.scheme.stripe": "Stripe",
+  "workspace.connections.scheme.hotmart": "Hotmart",
+  "workspace.connections.scheme.youtube": "YouTube",
+  "workspace.connections.hint.openbot":
+    "Qualquer sistema que assine com o segredo da rotina, como mostra a documentação de webhooks.",
+  "workspace.connections.hint.stripe":
+    "No Stripe, adicione um endpoint com este endereço em Desenvolvedores, Webhooks, e cole o segredo de assinatura (whsec_…).",
+  "workspace.connections.hint.hotmart":
+    "Na Hotmart, adicione um webhook (versão 2.0.0) com este endereço em Ferramentas, Webhook, e cole o hottok da conta.",
+  "workspace.connections.hint.youtube":
+    "Invente um segredo e cole aqui. Depois um agente inscreve este endereço no feed do canal em pubsubhubbub.appspot.com com o mesmo hub.secret.",
+  "workspace.connections.secret": "Segredo do remetente",
+  "workspace.connections.secretKept": "Salvo. Deixe vazio para manter.",
+  "workspace.connections.save": "Salvar",
+  "workspace.connections.failed": "Não deu certo. Tente de novo.",
+  "workspace.connections.copied": "Copiado",
 } as const satisfies PartialTranslation<typeof source>;

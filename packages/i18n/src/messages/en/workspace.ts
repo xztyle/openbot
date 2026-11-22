@@ -1025,4 +1025,51 @@ export const messages = defineMessages("workspace", {
   "workspace.secretHygiene.save": "Save as secret",
   "workspace.secretHygiene.saved": "Saved as {name} in Secrets. Agents can use it now.",
   "workspace.secretHygiene.saveFailed": "The secret was not saved. Add it in Secrets instead.",
+  "workspace.connections.chatTitle": "Chat apps",
+  "workspace.connections.chatDescription":
+    "Talk to your agents from Claude or ChatGPT: add Atelier as a custom connector with an access link. Text only; approvals and money stay here.",
+  "workspace.connections.gatewayOff":
+    "The server has no public connector address yet. Whoever runs the server sets OPENBOT_CONNECTOR_LISTEN and OPENBOT_CONNECTOR_PUBLIC_URL behind HTTPS.",
+  "workspace.connections.newLink": "New access link",
+  "workspace.connections.newLinkDescription": "Name the app that uses it, so you know which link to revoke.",
+  "workspace.connections.label": "App",
+  "workspace.connections.labelPlaceholder": "Claude on my phone",
+  "workspace.connections.create": "Create",
+  "workspace.connections.createdTitle": "Copy the link now",
+  "workspace.connections.createdDescription":
+    "Atelier shows it once. Paste it as the server URL of a custom connector. Anyone with it can message your agents as you, so keep it private.",
+  "workspace.connections.copyLink": "Copy",
+  "workspace.connections.link": "Connector URL",
+  "workspace.connections.token": "Access token",
+  "workspace.connections.revoke": "Revoke",
+  "workspace.connections.revokeTitle": "Revoke this link?",
+  "workspace.connections.revokeDescription": "The app that uses it loses access at once.",
+  "workspace.connections.neverUsed": "Made {time} · not used yet",
+  "workspace.connections.lastUsed": "Last used {time}",
+  "workspace.connections.hooksTitle": "Webhooks into this space",
+  "workspace.connections.hooksDescription":
+    "A Stripe sale, a Hotmart purchase or a new YouTube video can wake an agent's webhook routine. Copy its address into the service and choose who sends.",
+  "workspace.connections.hooksEmpty":
+    "No webhook routine in this space yet. Ask an agent to make one, for example: make a webhook routine for Stripe sales.",
+  "workspace.connections.copyUrl": "Copy address",
+  "workspace.connections.sender": "Sender",
+  "workspace.connections.inboxLine": "{owner} · {sender}",
+  "workspace.connections.lastEvent": "Last event {time} ({status})",
+  "workspace.connections.scheme.openbot": "Atelier signature",
+  "workspace.connections.scheme.stripe": "Stripe",
+  "workspace.connections.scheme.hotmart": "Hotmart",
+  "workspace.connections.scheme.youtube": "YouTube",
+  "workspace.connections.hint.openbot":
+    "Any system that signs with the routine's own secret, as the webhook docs show.",
+  "workspace.connections.hint.stripe":
+    "In Stripe, add an endpoint with this address under Developers, Webhooks, then paste its signing secret (whsec_…).",
+  "workspace.connections.hint.hotmart":
+    "In Hotmart, add a webhook (version 2.0.0) with this address under Tools, Webhook, then paste the account's hottok.",
+  "workspace.connections.hint.youtube":
+    "Make up a secret and paste it here. An agent then subscribes this address to the channel's feed at pubsubhubbub.appspot.com with the same hub.secret.",
+  "workspace.connections.secret": "Sender's secret",
+  "workspace.connections.secretKept": "Saved. Leave empty to keep it.",
+  "workspace.connections.save": "Save",
+  "workspace.connections.failed": "That did not work. Try again.",
+  "workspace.connections.copied": "Copied",
 });

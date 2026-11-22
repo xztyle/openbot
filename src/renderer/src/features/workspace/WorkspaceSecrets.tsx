@@ -4,9 +4,10 @@ import {
   type WorkspaceSecret,
 } from "@openbot/contracts/ipc";
 import { toast } from "@openbot/ui";
+import { ConnectionsSection } from "@openbot/ui/features/workspace/ConnectionsSection";
 import { type SecretsGroup, SecretsView } from "@openbot/ui/features/workspace/SecretsView";
 import { useText } from "@openbot/ui/text";
-import { createMemo, createSignal, onSettled } from "solid-js";
+import { createMemo, createSignal, onSettled, Show } from "solid-js";
 import { useWorkspace } from "./workspace-context";
 import { memberById } from "./workspace-model";
 
@@ -33,7 +34,10 @@ export function WorkspaceSecretsView() {
       else toast.error(t("workspace.secrets.loadFailed"));
     }
   }
-  onSettled(() => void refresh());
+  onSettled(() => {
+    void refresh();
+    void ws.env.connectorAccess?.refresh();
+  });
 
   /** Runs a change and reads the list again. A failure is thrown on: the form or the confirm shows it. */
   async function change(run: () => Promise<void>, done: string) {
@@ -109,6 +113,32 @@ export function WorkspaceSecretsView() {
         );
       }}
       onBack={() => ws.back()}
+      footer={
+        <Show when={ws.env.connectorAccess?.state()}>
+          {(state) => (
+            <ConnectionsSection
+              state={state()}
+              spaceId={ws.spaces.current()}
+              onCreateToken={(label) => {
+                const store = ws.env.connectorAccess;
+                if (!store) throw new Error("unsupported");
+                return store.createToken(label);
+              }}
+              onRevokeToken={async (id) => {
+                await ws.env.connectorAccess?.revokeToken(id);
+                toast.success(t("workspace.connections.revoke"));
+              }}
+              onSetSender={async (input) => {
+                await ws.env.connectorAccess?.setSender(input);
+              }}
+              onCopy={async (text) => {
+                await navigator.clipboard.writeText(text);
+                toast.success(t("workspace.connections.copied"));
+              }}
+            />
+          )}
+        </Show>
+      }
     />
   );
 }

@@ -258,6 +258,7 @@ import { hostTrustCalls } from "../trust/trust-port";
 import { RailHelpMenu } from "../window/RailHelpMenu";
 import { ServerSettingsPageTitle, SettingsPageFrame } from "../window/SettingsPageFrame";
 import type { SettingsKind, WindowPage } from "../window/window-page-context";
+import { createConnectorAccessStore } from "../workspace/connector-access-store";
 import { createOwnerAwayStore } from "../workspace/owner-away-store";
 import { WorkspaceSidebarPane } from "../workspace/WorkspaceSidebarPane";
 import { WorkspaceAgentFrame, WorkspaceChrome, WorkspaceMain } from "../workspace/WorkspaceView";
@@ -1999,6 +2000,13 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         action: { label: t("workspace.away.welcomeShow"), onClick: () => ws.openView("activity") },
       }),
   });
+  const connectorAccess = createConnectorAccessStore({
+    request: () => workspace.runtime.admin?.request,
+    enabled: () =>
+      workspace.state.status === "online" &&
+      workspace.state.capabilities.includes(FORK_HOST_CAPABILITY) &&
+      canAdministerServer(workspace.state.host?.role),
+  });
   const workspaceController = createWorkspaceController({
     channels,
     artifactThumbnailUrl: artifactThumbnails.url,
@@ -2140,6 +2148,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     takeovers: () => workspace.state.takeovers,
     needsYou: needsYouList,
     ownerAway,
+    connectorAccess,
     secrets: () => canAdministerServer(workspace.state.host?.role),
     efficiency: () =>
       canAdministerServer(workspace.state.host?.role) && serverSupportsCapability(server(), FORK_HOST_CAPABILITY)

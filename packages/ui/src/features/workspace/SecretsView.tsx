@@ -37,6 +37,8 @@ export interface SecretsViewProps {
   onSave: (input: { scope: string; name: string; value: string }) => Promise<void>;
   onRemove: (scope: string, name: string) => Promise<void>;
   onBack?: (() => void) | undefined;
+  /** More settings under the keys, such as the connector access links. */
+  footer?: JSX.Element;
   class?: string;
 }
 
@@ -140,6 +142,7 @@ export function SecretsView(props: SecretsViewProps): JSX.Element {
             )}
           </For>
         </Show>
+        {props.footer}
       </div>
       {/* A create flow is the shared form dialog: a sheet on a phone (docs/ux/standard.md § 2). */}
       <FormDialog

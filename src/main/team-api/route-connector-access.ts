@@ -52,7 +52,7 @@ export async function routeConnectorAccess(
   } catch (error) {
     if (error instanceof OwnerMcpTokenLimit || error instanceof WebhookInboxSecretMissing)
       throw new HttpError(409, error.message);
-    if (error instanceof WebhookInboxGone) throw new HttpError(404, error.message);
+    if (error instanceof WebhookInboxGone) throw new HttpError(409, error.message);
     throw error;
   }
 }

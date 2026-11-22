@@ -615,4 +615,52 @@ export const messages = {
   "workspace.secretHygiene.save": "Сохранить как секрет",
   "workspace.secretHygiene.saved": "Сохранено как {name} в секретах. Агенты уже могут его использовать.",
   "workspace.secretHygiene.saveFailed": "Секрет не сохранён. Добавьте его в разделе секретов.",
+  "workspace.connections.chatTitle": "Чат-приложения",
+  "workspace.connections.chatDescription":
+    "Общайтесь с агентами из Claude или ChatGPT: добавьте Atelier как свой коннектор по ссылке доступа. Только текст; одобрения и деньги остаются здесь.",
+  "workspace.connections.gatewayOff":
+    "У сервера пока нет публичного адреса коннекторов. Администратор сервера задаёт OPENBOT_CONNECTOR_LISTEN и OPENBOT_CONNECTOR_PUBLIC_URL за HTTPS.",
+  "workspace.connections.newLink": "Новая ссылка доступа",
+  "workspace.connections.newLinkDescription":
+    "Назовите приложение, которое будет её использовать, чтобы знать, какую ссылку отзывать.",
+  "workspace.connections.label": "Приложение",
+  "workspace.connections.labelPlaceholder": "Claude на телефоне",
+  "workspace.connections.create": "Создать",
+  "workspace.connections.createdTitle": "Скопируйте ссылку сейчас",
+  "workspace.connections.createdDescription":
+    "Atelier показывает её один раз. Вставьте её как URL сервера своего коннектора. Любой, у кого она есть, может писать агентам от вашего имени, поэтому храните её в тайне.",
+  "workspace.connections.copyLink": "Копировать",
+  "workspace.connections.link": "URL коннектора",
+  "workspace.connections.token": "Токен доступа",
+  "workspace.connections.revoke": "Отозвать",
+  "workspace.connections.revokeTitle": "Отозвать эту ссылку?",
+  "workspace.connections.revokeDescription": "Приложение, которое её использует, сразу потеряет доступ.",
+  "workspace.connections.neverUsed": "Создана {time} · ещё не использовалась",
+  "workspace.connections.lastUsed": "Последнее использование {time}",
+  "workspace.connections.hooksTitle": "Вебхуки этого пространства",
+  "workspace.connections.hooksDescription":
+    "Продажа в Stripe, покупка в Hotmart или новое видео на YouTube могут разбудить рутину вебхука агента. Скопируйте её адрес в сервис и выберите отправителя.",
+  "workspace.connections.hooksEmpty":
+    "В этом пространстве пока нет рутин вебхуков. Попросите агента создать её, например: создай рутину вебхука для продаж в Stripe.",
+  "workspace.connections.copyUrl": "Копировать адрес",
+  "workspace.connections.sender": "Отправитель",
+  "workspace.connections.inboxLine": "{owner} · {sender}",
+  "workspace.connections.lastEvent": "Последнее событие {time} ({status})",
+  "workspace.connections.scheme.openbot": "Подпись Atelier",
+  "workspace.connections.scheme.stripe": "Stripe",
+  "workspace.connections.scheme.hotmart": "Hotmart",
+  "workspace.connections.scheme.youtube": "YouTube",
+  "workspace.connections.hint.openbot":
+    "Любая система, которая подписывает секретом рутины, как описано в документации вебхуков.",
+  "workspace.connections.hint.stripe":
+    "В Stripe добавьте эндпоинт с этим адресом в разделе «Разработчики» → «Вебхуки», затем вставьте его секрет подписи (whsec_…).",
+  "workspace.connections.hint.hotmart":
+    "В Hotmart добавьте вебхук (версия 2.0.0) с этим адресом в разделе «Инструменты» → «Webhook», затем вставьте hottok аккаунта.",
+  "workspace.connections.hint.youtube":
+    "Придумайте секрет и вставьте его сюда. Затем агент подпишет этот адрес на ленту канала на pubsubhubbub.appspot.com с тем же hub.secret.",
+  "workspace.connections.secret": "Секрет отправителя",
+  "workspace.connections.secretKept": "Сохранено. Оставьте пустым, чтобы не менять.",
+  "workspace.connections.save": "Сохранить",
+  "workspace.connections.failed": "Не получилось. Попробуйте ещё раз.",
+  "workspace.connections.copied": "Скопировано",
 } as const satisfies PartialTranslation<typeof source>;

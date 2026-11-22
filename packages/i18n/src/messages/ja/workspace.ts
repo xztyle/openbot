@@ -489,4 +489,51 @@ export const messages = {
   "workspace.secretHygiene.save": "シークレットに保存",
   "workspace.secretHygiene.saved": "{name} としてシークレットに保存しました。エージェントが使えます。",
   "workspace.secretHygiene.saveFailed": "シークレットを保存できませんでした。シークレット画面から追加してください。",
+  "workspace.connections.chatTitle": "チャットアプリ",
+  "workspace.connections.chatDescription":
+    "Claude や ChatGPT からエージェントと話せます。アクセスリンクで Atelier をカスタムコネクタとして追加してください。テキストのみで、承認とお金はここに残ります。",
+  "workspace.connections.gatewayOff":
+    "サーバーにはまだ公開コネクタアドレスがありません。サーバーの管理者が HTTPS の背後で OPENBOT_CONNECTOR_LISTEN と OPENBOT_CONNECTOR_PUBLIC_URL を設定します。",
+  "workspace.connections.newLink": "新しいアクセスリンク",
+  "workspace.connections.newLinkDescription": "使うアプリの名前を付けておくと、取り消すリンクがわかります。",
+  "workspace.connections.label": "アプリ",
+  "workspace.connections.labelPlaceholder": "スマホの Claude",
+  "workspace.connections.create": "作成",
+  "workspace.connections.createdTitle": "今すぐリンクをコピー",
+  "workspace.connections.createdDescription":
+    "Atelier は一度だけ表示します。カスタムコネクタのサーバー URL に貼り付けてください。持っている人はあなたとしてエージェントに送信できるので、他人に見せないでください。",
+  "workspace.connections.copyLink": "コピー",
+  "workspace.connections.link": "コネクタ URL",
+  "workspace.connections.token": "アクセストークン",
+  "workspace.connections.revoke": "取り消す",
+  "workspace.connections.revokeTitle": "このリンクを取り消しますか？",
+  "workspace.connections.revokeDescription": "使っているアプリはすぐにアクセスできなくなります。",
+  "workspace.connections.neverUsed": "{time} に作成 · 未使用",
+  "workspace.connections.lastUsed": "最終使用 {time}",
+  "workspace.connections.hooksTitle": "このスペースへの Webhook",
+  "workspace.connections.hooksDescription":
+    "Stripe の売上、Hotmart の購入、YouTube の新しい動画でエージェントの Webhook ルーティンを起動できます。アドレスをサービスにコピーし、送信元を選んでください。",
+  "workspace.connections.hooksEmpty":
+    "このスペースにはまだ Webhook ルーティンがありません。エージェントに作成を頼んでください。例: Stripe の売上用に Webhook ルーティンを作って。",
+  "workspace.connections.copyUrl": "アドレスをコピー",
+  "workspace.connections.sender": "送信元",
+  "workspace.connections.inboxLine": "{owner} · {sender}",
+  "workspace.connections.lastEvent": "最終イベント {time} ({status})",
+  "workspace.connections.scheme.openbot": "Atelier 署名",
+  "workspace.connections.scheme.stripe": "Stripe",
+  "workspace.connections.scheme.hotmart": "Hotmart",
+  "workspace.connections.scheme.youtube": "YouTube",
+  "workspace.connections.hint.openbot":
+    "Webhook のドキュメントのとおり、ルーティン自身のシークレットで署名する任意のシステム。",
+  "workspace.connections.hint.stripe":
+    "Stripe の「開発者」→「Webhook」でこのアドレスのエンドポイントを追加し、署名シークレット（whsec_…）を貼り付けます。",
+  "workspace.connections.hint.hotmart":
+    "Hotmart の「ツール」→「Webhook」でこのアドレスの Webhook（バージョン 2.0.0）を追加し、アカウントの hottok を貼り付けます。",
+  "workspace.connections.hint.youtube":
+    "任意のシークレットを決めてここに貼り付けます。その後エージェントが同じ hub.secret で pubsubhubbub.appspot.com のチャンネルフィードにこのアドレスを登録します。",
+  "workspace.connections.secret": "送信元のシークレット",
+  "workspace.connections.secretKept": "保存済み。空欄のままなら変更しません。",
+  "workspace.connections.save": "保存",
+  "workspace.connections.failed": "うまくいきませんでした。もう一度お試しください。",
+  "workspace.connections.copied": "コピーしました",
 } as const satisfies PartialTranslation<typeof source>;

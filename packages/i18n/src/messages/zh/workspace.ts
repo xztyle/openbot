@@ -476,4 +476,50 @@ export const messages = {
   "workspace.secretHygiene.save": "保存为密钥",
   "workspace.secretHygiene.saved": "已保存为密钥 {name}，智能体现在可以使用。",
   "workspace.secretHygiene.saveFailed": "未能保存该密钥，请在密钥页面中添加。",
+  "workspace.connections.chatTitle": "聊天应用",
+  "workspace.connections.chatDescription":
+    "在 Claude 或 ChatGPT 中与你的智能体对话：用访问链接把 Atelier 添加为自定义连接器。仅限文字；审批和付款仍在这里完成。",
+  "workspace.connections.gatewayOff":
+    "服务器还没有公开的连接器地址。服务器管理员需在 HTTPS 之后设置 OPENBOT_CONNECTOR_LISTEN 和 OPENBOT_CONNECTOR_PUBLIC_URL。",
+  "workspace.connections.newLink": "新建访问链接",
+  "workspace.connections.newLinkDescription": "填写使用它的应用名称，方便以后知道要撤销哪个链接。",
+  "workspace.connections.label": "应用",
+  "workspace.connections.labelPlaceholder": "手机上的 Claude",
+  "workspace.connections.create": "创建",
+  "workspace.connections.createdTitle": "请立即复制链接",
+  "workspace.connections.createdDescription":
+    "Atelier 只显示一次。请把它粘贴为自定义连接器的服务器 URL。拿到它的人都能以你的身份给智能体发消息，请妥善保管。",
+  "workspace.connections.copyLink": "复制",
+  "workspace.connections.link": "连接器 URL",
+  "workspace.connections.token": "访问令牌",
+  "workspace.connections.revoke": "撤销",
+  "workspace.connections.revokeTitle": "撤销此链接？",
+  "workspace.connections.revokeDescription": "使用它的应用会立即失去访问权限。",
+  "workspace.connections.neverUsed": "创建于 {time} · 尚未使用",
+  "workspace.connections.lastUsed": "上次使用 {time}",
+  "workspace.connections.hooksTitle": "此空间的 Webhook",
+  "workspace.connections.hooksDescription":
+    "一笔 Stripe 销售、一次 Hotmart 购买或一个新的 YouTube 视频都能唤醒智能体的 Webhook 例程。把它的地址复制到该服务中，并选择发送方。",
+  "workspace.connections.hooksEmpty":
+    "此空间还没有 Webhook 例程。请让智能体创建一个，例如：为 Stripe 销售创建一个 Webhook 例程。",
+  "workspace.connections.copyUrl": "复制地址",
+  "workspace.connections.sender": "发送方",
+  "workspace.connections.inboxLine": "{owner} · {sender}",
+  "workspace.connections.lastEvent": "最近事件 {time}（{status}）",
+  "workspace.connections.scheme.openbot": "Atelier 签名",
+  "workspace.connections.scheme.stripe": "Stripe",
+  "workspace.connections.scheme.hotmart": "Hotmart",
+  "workspace.connections.scheme.youtube": "YouTube",
+  "workspace.connections.hint.openbot": "任何使用例程自身密钥签名的系统，详见 Webhook 文档。",
+  "workspace.connections.hint.stripe":
+    "在 Stripe 的“开发者 > Webhook”中用此地址添加端点，然后粘贴它的签名密钥（whsec_…）。",
+  "workspace.connections.hint.hotmart":
+    "在 Hotmart 的“工具 > Webhook”中用此地址添加 Webhook（2.0.0 版），然后粘贴账户的 hottok。",
+  "workspace.connections.hint.youtube":
+    "自拟一个密钥粘贴到这里。之后智能体会用同一个 hub.secret 在 pubsubhubbub.appspot.com 上为该频道订阅此地址。",
+  "workspace.connections.secret": "发送方密钥",
+  "workspace.connections.secretKept": "已保存。留空则保持不变。",
+  "workspace.connections.save": "保存",
+  "workspace.connections.failed": "操作未成功，请重试。",
+  "workspace.connections.copied": "已复制",
 } as const satisfies PartialTranslation<typeof source>;

@@ -479,4 +479,52 @@ export const messages = {
   "workspace.secretHygiene.saved": "Als {name} unter Geheimnisse gespeichert. Agenten können es jetzt nutzen.",
   "workspace.secretHygiene.saveFailed":
     "Das Geheimnis wurde nicht gespeichert. Füge es stattdessen unter Geheimnisse hinzu.",
+  "workspace.connections.chatTitle": "Chat-Apps",
+  "workspace.connections.chatDescription":
+    "Sprich mit deinen Agenten aus Claude oder ChatGPT: Füge Atelier mit einem Zugriffslink als eigenen Connector hinzu. Nur Text; Freigaben und Geld bleiben hier.",
+  "workspace.connections.gatewayOff":
+    "Der Server hat noch keine öffentliche Connector-Adresse. Wer den Server betreibt, setzt OPENBOT_CONNECTOR_LISTEN und OPENBOT_CONNECTOR_PUBLIC_URL hinter HTTPS.",
+  "workspace.connections.newLink": "Neuer Zugriffslink",
+  "workspace.connections.newLinkDescription":
+    "Benenne die App, die ihn nutzt, damit du weißt, welchen Link du widerrufst.",
+  "workspace.connections.label": "App",
+  "workspace.connections.labelPlaceholder": "Claude auf meinem Handy",
+  "workspace.connections.create": "Erstellen",
+  "workspace.connections.createdTitle": "Kopiere den Link jetzt",
+  "workspace.connections.createdDescription":
+    "Atelier zeigt ihn nur einmal. Füge ihn als Server-URL eines eigenen Connectors ein. Wer ihn hat, kann deinen Agenten in deinem Namen schreiben, also halte ihn geheim.",
+  "workspace.connections.copyLink": "Kopieren",
+  "workspace.connections.link": "Connector-URL",
+  "workspace.connections.token": "Zugriffstoken",
+  "workspace.connections.revoke": "Widerrufen",
+  "workspace.connections.revokeTitle": "Diesen Link widerrufen?",
+  "workspace.connections.revokeDescription": "Die App, die ihn nutzt, verliert sofort den Zugriff.",
+  "workspace.connections.neverUsed": "Erstellt {time} · noch nicht genutzt",
+  "workspace.connections.lastUsed": "Zuletzt genutzt {time}",
+  "workspace.connections.hooksTitle": "Webhooks in diesen Bereich",
+  "workspace.connections.hooksDescription":
+    "Ein Stripe-Verkauf, ein Hotmart-Kauf oder ein neues YouTube-Video kann die Webhook-Routine eines Agenten starten. Kopiere ihre Adresse in den Dienst und wähle den Absender.",
+  "workspace.connections.hooksEmpty":
+    "Noch keine Webhook-Routine in diesem Bereich. Bitte einen Agenten, eine anzulegen, zum Beispiel: Lege eine Webhook-Routine für Stripe-Verkäufe an.",
+  "workspace.connections.copyUrl": "Adresse kopieren",
+  "workspace.connections.sender": "Absender",
+  "workspace.connections.inboxLine": "{owner} · {sender}",
+  "workspace.connections.lastEvent": "Letztes Ereignis {time} ({status})",
+  "workspace.connections.scheme.openbot": "Atelier-Signatur",
+  "workspace.connections.scheme.stripe": "Stripe",
+  "workspace.connections.scheme.hotmart": "Hotmart",
+  "workspace.connections.scheme.youtube": "YouTube",
+  "workspace.connections.hint.openbot":
+    "Jedes System, das mit dem eigenen Geheimnis der Routine signiert, wie in der Webhook-Doku beschrieben.",
+  "workspace.connections.hint.stripe":
+    "Lege in Stripe unter Entwickler, Webhooks einen Endpunkt mit dieser Adresse an und füge dann sein Signaturgeheimnis (whsec_…) ein.",
+  "workspace.connections.hint.hotmart":
+    "Lege in Hotmart unter Tools, Webhook einen Webhook (Version 2.0.0) mit dieser Adresse an und füge dann den Hottok des Kontos ein.",
+  "workspace.connections.hint.youtube":
+    "Denk dir ein Geheimnis aus und füge es hier ein. Ein Agent abonniert dann mit demselben hub.secret diese Adresse für den Kanal-Feed bei pubsubhubbub.appspot.com.",
+  "workspace.connections.secret": "Geheimnis des Absenders",
+  "workspace.connections.secretKept": "Gespeichert. Leer lassen, um es zu behalten.",
+  "workspace.connections.save": "Speichern",
+  "workspace.connections.failed": "Das hat nicht geklappt. Versuche es noch einmal.",
+  "workspace.connections.copied": "Kopiert",
 } as const satisfies PartialTranslation<typeof source>;

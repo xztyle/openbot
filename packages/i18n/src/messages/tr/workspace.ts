@@ -493,4 +493,52 @@ export const messages = {
   "workspace.secretHygiene.save": "Gizli olarak kaydet",
   "workspace.secretHygiene.saved": "Gizli bilgilere {name} olarak kaydedildi. Ajanlar artık kullanabilir.",
   "workspace.secretHygiene.saveFailed": "Gizli bilgi kaydedilmedi. Gizli bilgiler bölümünden ekleyin.",
+  "workspace.connections.chatTitle": "Sohbet uygulamaları",
+  "workspace.connections.chatDescription":
+    "Ajanlarınızla Claude veya ChatGPT üzerinden konuşun: Atelier'i bir erişim bağlantısıyla özel bağlayıcı olarak ekleyin. Yalnızca metin; onaylar ve para burada kalır.",
+  "workspace.connections.gatewayOff":
+    "Sunucunun henüz herkese açık bir bağlayıcı adresi yok. Sunucuyu yöneten kişi HTTPS arkasında OPENBOT_CONNECTOR_LISTEN ve OPENBOT_CONNECTOR_PUBLIC_URL ayarlar.",
+  "workspace.connections.newLink": "Yeni erişim bağlantısı",
+  "workspace.connections.newLinkDescription":
+    "Hangi bağlantıyı iptal edeceğinizi bilmek için onu kullanan uygulamayı adlandırın.",
+  "workspace.connections.label": "Uygulama",
+  "workspace.connections.labelPlaceholder": "Telefonumdaki Claude",
+  "workspace.connections.create": "Oluştur",
+  "workspace.connections.createdTitle": "Bağlantıyı şimdi kopyalayın",
+  "workspace.connections.createdDescription":
+    "Atelier bunu yalnızca bir kez gösterir. Özel bağlayıcının sunucu URL'si olarak yapıştırın. Bağlantıya sahip olan herkes ajanlarınıza sizin adınıza yazabilir; gizli tutun.",
+  "workspace.connections.copyLink": "Kopyala",
+  "workspace.connections.link": "Bağlayıcı URL'si",
+  "workspace.connections.token": "Erişim belirteci",
+  "workspace.connections.revoke": "İptal et",
+  "workspace.connections.revokeTitle": "Bu bağlantı iptal edilsin mi?",
+  "workspace.connections.revokeDescription": "Onu kullanan uygulama erişimi hemen kaybeder.",
+  "workspace.connections.neverUsed": "{time} oluşturuldu · henüz kullanılmadı",
+  "workspace.connections.lastUsed": "Son kullanım {time}",
+  "workspace.connections.hooksTitle": "Bu alana gelen webhook'lar",
+  "workspace.connections.hooksDescription":
+    "Bir Stripe satışı, Hotmart alımı veya yeni bir YouTube videosu bir ajanın webhook rutinini uyandırabilir. Adresini hizmete kopyalayın ve göndereni seçin.",
+  "workspace.connections.hooksEmpty":
+    "Bu alanda henüz webhook rutini yok. Bir ajandan oluşturmasını isteyin, örneğin: Stripe satışları için bir webhook rutini oluştur.",
+  "workspace.connections.copyUrl": "Adresi kopyala",
+  "workspace.connections.sender": "Gönderen",
+  "workspace.connections.inboxLine": "{owner} · {sender}",
+  "workspace.connections.lastEvent": "Son olay {time} ({status})",
+  "workspace.connections.scheme.openbot": "Atelier imzası",
+  "workspace.connections.scheme.stripe": "Stripe",
+  "workspace.connections.scheme.hotmart": "Hotmart",
+  "workspace.connections.scheme.youtube": "YouTube",
+  "workspace.connections.hint.openbot":
+    "Webhook belgelerinde gösterildiği gibi rutinin kendi gizli anahtarıyla imzalayan her sistem.",
+  "workspace.connections.hint.stripe":
+    "Stripe'ta Geliştiriciler, Webhook'lar altında bu adresle bir uç nokta ekleyin, ardından imza anahtarını (whsec_…) yapıştırın.",
+  "workspace.connections.hint.hotmart":
+    "Hotmart'ta Araçlar, Webhook altında bu adresle bir webhook (sürüm 2.0.0) ekleyin, ardından hesabın hottok değerini yapıştırın.",
+  "workspace.connections.hint.youtube":
+    "Bir gizli anahtar belirleyip buraya yapıştırın. Ardından bir ajan aynı hub.secret ile bu adresi pubsubhubbub.appspot.com üzerinden kanal akışına abone eder.",
+  "workspace.connections.secret": "Gönderenin gizli anahtarı",
+  "workspace.connections.secretKept": "Kaydedildi. Korumak için boş bırakın.",
+  "workspace.connections.save": "Kaydet",
+  "workspace.connections.failed": "Olmadı. Tekrar deneyin.",
+  "workspace.connections.copied": "Kopyalandı",
 } as const satisfies PartialTranslation<typeof source>;

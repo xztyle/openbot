@@ -57,6 +57,7 @@ import type { ChannelsController } from "../channels/channels-controller";
 import type { MessagingApi } from "../connectors/messaging-connector";
 import type { StorageHygieneCalls } from "../storage-hygiene/storage-hygiene-port";
 import type { TrustCalls } from "../trust/trust-port";
+import type { ConnectorAccessStore } from "./connector-access-store";
 import type { OwnerAwayStore } from "./owner-away-store";
 import { createWorkspaceFrecency } from "./workspace-frecency";
 import { createWorkspaceLater } from "./workspace-later";
@@ -230,6 +231,8 @@ export interface WorkspaceEnvironment {
   needsYou?: (() => readonly AgentAttentionItem[]) | undefined;
   /** The owner's quiet hours, focus and "When you're back" list. Only the owner's web client has it. */
   ownerAway?: OwnerAwayStore | undefined;
+  /** The owner's MCP access links and webhook senders, under Secrets. Only the owner's web client has it. */
+  connectorAccess?: ConnectorAccessStore | undefined;
   /** Whether the host is this computer: a browser secret can then be saved to the Vault. */
   localHost?: (() => boolean) | undefined;
   /** Opens the browser tab of a takeover, where the shell has the browser. */

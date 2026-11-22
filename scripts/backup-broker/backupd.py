@@ -505,6 +505,11 @@ def backup(reason="manual", spaces=True):
             if index.exists():
                 (files / "data/OpenBot/Spaces").mkdir(parents=True, exist_ok=True)
                 shutil.copy2(index, files / "data/OpenBot/Spaces/index.json")
+            # The folders made here and the copied index belong to the data owner, as on the host: a
+            # staging copy runs as that user and must create the spaces this backup leaves out.
+            for rel in ("data/OpenBot", "data/OpenBot/Spaces", "data/OpenBot/Spaces/index.json"):
+                if (files / rel).exists():
+                    os.chown(files / rel, uid, uid)
             for name in space_names() if spaces else []:
                 component(f"space:{name}", data / "OpenBot" / "Spaces" / name, f"data/OpenBot/Spaces/{name}",
                           TREE_EXCLUDES, limit, guard=True)
@@ -1051,6 +1056,12 @@ def staging_up(from_id=None, image=None, fresh_db=False, view=True, wait=True):
         run(["mount", "-t", "overlay", "overlay", "-o",
              f"lowerdir={snap_dir / 'files/data'},upperdir={upper},workdir={work}", str(merged)])
         os.chown(merged, c["data_uid"], c["data_uid"])
+        # Backups before the ownership fix made these as root, and OpenBot (the data owner) then could
+        # not create a space the backup left out: the copy stopped at start with EACCES.
+        for rel in ("OpenBot", "OpenBot/Spaces", "OpenBot/Spaces/index.json"):
+            target = merged / rel
+            if target.exists() and not target.is_symlink() and target.stat().st_uid == 0:
+                os.chown(target, c["data_uid"], c["data_uid"])
         db = merged / ".config/OpenBot/openbot.db"
         try:
             if fresh_db:

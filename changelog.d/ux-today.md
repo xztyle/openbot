@@ -25,7 +25,6 @@
 - A loop decision opens Loops on that loop, in its own space, with the card in view.
 - The owner and the admins can change loops and decide gates; "New loop" says when no template
   loaded and offers to describe the loop to the lead agent.
-
 - A computer has one search field, the top bar's, and Ctrl+K: the sidebar's "Jump to" button and
   "Filter conversations" field are gone there.
 - The briefing form starts from your time zone (a list, not a text box) and, for a briefing that

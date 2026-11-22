@@ -27,8 +27,8 @@ export function WorkspaceMoneyView() {
       const known = totals.get(row.agentId) ?? { cost: 0, turns: 0 };
       totals.set(row.agentId, { cost: known.cost + row.costUsd, turns: known.turns + row.turns });
     }
-    // Without the report, today's cost of the fleet is all there is.
-    if (!report) for (const [agentId, usd] of today()) if (usd) totals.set(agentId, { cost: usd, turns: 0 });
+    // Without the report's rows, today's cost of the fleet is all there is.
+    if (totals.size === 0) for (const [agentId, usd] of today()) if (usd) totals.set(agentId, { cost: usd, turns: 0 });
     return [...totals]
       .filter(([, total]) => total.cost > 0)
       .sort(([, left], [, right]) => right.cost - left.cost)

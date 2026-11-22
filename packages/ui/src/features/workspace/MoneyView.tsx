@@ -113,10 +113,13 @@ export function MoneyView(props: MoneyViewProps): JSX.Element {
                     </Show>
                   </dd>
                 </div>
-                <div>
-                  <dt>{t("insight.costs.total", { days: props.report?.days ?? 30 })}</dt>
-                  <dd>{cost(current().totalUsd)}</dd>
-                </div>
+                {/* A report of 7 days is the week tile already: one tile, not two that say the same. */}
+                <Show when={(props.report?.days ?? 7) !== 7}>
+                  <div>
+                    <dt>{t("insight.costs.total", { days: props.report?.days ?? 30 })}</dt>
+                    <dd>{cost(current().totalUsd)}</dd>
+                  </div>
+                </Show>
               </>
             )}
           </Show>

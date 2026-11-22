@@ -99,7 +99,7 @@ async function shot(page: Page, label: string): Promise<void> {
 
 /**
  * Opens a view as the reader does: on a computer from the sidebar row; on a phone from the shortcut
- * chips of the Home tab (or the DMs tab). The page is not loaded again, so the mock host keeps what
+ * chips of the Chat tab. The page is not loaded again, so the mock host keeps what
  * the walk changed.
  */
 async function openView(page: Page, view: "unreads" | "threads" | "later" | "dms", title: string): Promise<void> {
@@ -109,11 +109,7 @@ async function openView(page: Page, view: "unreads" | "threads" | "later" | "dms
   const phone = page.viewportSize()?.width === VIEWPORTS.phone.viewport.width;
   if (phone) await tabs.waitFor({ timeout: UI_WAIT_MS });
   if (phone) {
-    if (view === "dms") {
-      await tabs.getByRole("button", { name: new RegExp(`^${english("workspace.phone.dms")}`, "u") }).click();
-      return;
-    }
-    await tabs.getByRole("button", { name: new RegExp(`^${english("workspace.phone.home")}`, "u") }).click();
+    await tabs.getByRole("button", { name: new RegExp(`^${english("workspace.phone.chat")}`, "u") }).click();
     await page
       .getByRole("list", { name: english("workspace.phone.shortcuts") })
       .getByRole("button", { name: new RegExp(`^${english(`workspace.view.${view}`)}`, "u") })
@@ -261,12 +257,12 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
       await shot(page, `${viewport}-search-field`);
       await page.keyboard.press("Enter");
     } else {
-      // A phone: the Home header's search opens Jump to, whose first row searches the messages.
+      // A phone: the Chat header's search opens Jump to, whose first row searches the messages.
       const back = page.getByRole("button", { name: english("workspace.layout.back"), exact: true }).first();
       if (await back.isVisible()) await back.click();
       await page
         .getByRole("navigation", { name: english("workspace.phone.tabs") })
-        .getByRole("button", { name: new RegExp(`^${english("workspace.phone.home")}`, "u") })
+        .getByRole("button", { name: new RegExp(`^${english("workspace.phone.chat")}`, "u") })
         .click();
       await button(page, english("workspace.app.menu.search")).click();
       const jump = page.getByRole("dialog", { name: english("workspace.app.switcher.title") });

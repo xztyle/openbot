@@ -616,6 +616,8 @@ export function ImageLightbox(props: {
               event.pointerType === "mouse" || zoomed() || pointers.size > 1
                 ? undefined
                 : { x: event.clientX, y: event.clientY };
+            // A second finger turns a drag down into a pinch: the image the first finger moved goes back.
+            if (!swipeStart) dismissDrag(0);
           }}
           onPointerMove={(event: PointerEvent) => {
             const start = swipeStart;

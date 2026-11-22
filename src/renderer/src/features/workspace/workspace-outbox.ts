@@ -85,8 +85,7 @@ function writeOutbox(storageKey: string, messages: readonly OutboxMessage[], kno
   try {
     const key = `${OUTBOX_KEY}:${storageKey}`;
     const others = readOutbox(storageKey).filter((message) => !known.has(message.id));
-    if (others.length)
-      messages = [...messages, ...others].sort((left, right) => left.createdAt - right.createdAt);
+    if (others.length) messages = [...messages, ...others].sort((left, right) => left.createdAt - right.createdAt);
     if (messages.length === 0) window.localStorage.removeItem(key);
     else window.localStorage.setItem(key, JSON.stringify(messages.slice(-OUTBOX_LIMIT)));
     return true;

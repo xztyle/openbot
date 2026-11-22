@@ -6,6 +6,7 @@ import { useText } from "@openbot/ui/text";
 import { createSignal, onSettled, Show, untrack } from "solid-js";
 import { composerToolbar, useComposerSources } from "./workspace-composer-sources";
 import { useWorkspace } from "./workspace-context";
+import { useSecretHygiene } from "./workspace-secret-offer";
 
 /**
  * Slack's edit in place: the message becomes a message box with its text, Enter saves and Escape
@@ -20,6 +21,7 @@ export function WorkspaceMessageEditor(props: {
 }) {
   const { t, errorMessage } = useText();
   const ws = useWorkspace();
+  const secrets = useSecretHygiene();
   const original = untrack(() => props.entry.message.text);
   const [text, setText] = createSignal(original);
   const [saving, setSaving] = createSignal(false);
@@ -57,12 +59,19 @@ export function WorkspaceMessageEditor(props: {
     setSaving(true);
     setError(null);
     try {
-      await ws.editMessage(props.channelId, props.entry.id, body);
+      // A pasted key or password never reaches the host, as in the message box.
+      const scanned = secrets.scan(body);
+      await ws.editMessage(props.channelId, props.entry.id, scanned.text);
+      secrets.offer(scanned.found);
     } catch (cause) {
       setError(errorMessage(cause, t("workspace.app.error.edit")));
+      return;
     } finally {
       setSaving(false);
     }
+    // The box takes keys while the save is on its way; what was typed meanwhile is saved too.
+    const latest = text().trim();
+    if (latest && latest !== body) await save();
   }
 
   return (
@@ -101,7 +110,7 @@ export function WorkspaceMessageEditor(props: {
               value={text()}
               placeholder={t("workspace.app.edit.hint")}
               ariaLabel={t("workspace.app.edit.label")}
-              disabled={saving()}
+              disabled={false}
               focusRequest={focus()}
               formatRequest={format()}
               textRequest={textRequest()}

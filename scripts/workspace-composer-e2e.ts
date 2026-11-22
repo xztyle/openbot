@@ -1,7 +1,7 @@
 // Checks the workspace message box on the web client against a mock host
 // (`src/renderer/stories/web-client-inbox-harness.tsx`), on an iPhone and on a computer: a message
-// that waits in the outbox keeps its files through Edit, and two tabs that send while offline both
-// deliver.
+// that waits in the outbox keeps its files through Edit, two tabs that send while offline both
+// deliver, and an edit in place hides a pasted password as the message box does.
 //
 // `bun scripts/workspace-composer-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>]`
 // Writes report.json to .openbot-build/workspace-composer-e2e, or to --out.
@@ -214,6 +214,29 @@ async function checkTwoTabsOffline(context: BrowserContext, device: string) {
   await second.close();
 }
 
+/** An edit in place on a computer hides a pasted password, as the message box does. */
+async function checkEditInPlaceHidesSecret(page: Page, device: string) {
+  await load(page, `${CHANNEL_ORIGIN()}${CHANNEL_PATH}`);
+  await editor(page).click();
+  await page.keyboard.type("nota para editar");
+  await page.keyboard.press("Enter");
+  const sent = page.locator(".ws-message").filter({ hasText: "nota para editar" });
+  await sent.first().waitFor({ timeout: 10_000 });
+  await page.keyboard.press("ArrowUp");
+  const inPlace = page.locator(".ws-message-edit .composer-editor-surface").first();
+  await inPlace.waitFor({ timeout: 5_000 });
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.type("la clave: Pan-de-oro77");
+  await page.keyboard.press("Enter");
+  await step(device, "an edit in place hides a password before it reaches the host", async () => {
+    const edited = page.locator(".ws-message").filter({ hasText: "la clave:" }).first();
+    await edited.waitFor({ timeout: 10_000 });
+    const text = await edited.innerText();
+    assert.doesNotMatch(text, /Pan-de-oro77/u, "The password went to the host.");
+    assert.match(text, /\[hidden: password\]/u);
+  });
+}
+
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 const server = await createServer({
@@ -255,6 +278,11 @@ try {
   {
     const context = await newDevice(browser, false);
     await checkTwoTabsOffline(context, "desktop");
+    await context.close();
+  }
+  {
+    const context = await newDevice(browser, false);
+    await checkEditInPlaceHidesSecret(await newPage(context), "desktop");
     await context.close();
   }
   report.passed = report.steps.every((item) => item.passed) && report.pageErrors.length === 0;

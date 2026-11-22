@@ -915,13 +915,14 @@ export function createComposerActions(deps: ComposerActionsDeps) {
         .catch(() => {});
   }
 
-  function submitComposer(): void {
-    if (deps.attachmentBusy()) return;
+  /** Sends what the composer holds. False when nothing went, such as while the agent starts. */
+  function submitComposer(): boolean {
+    if (deps.attachmentBusy()) return false;
     const phase = deps.voicePhase();
     if (phase === "recording") {
       const agentId = deps.voice.agentId;
       const serverId = deps.voice.serverId;
-      if (!agentId || !serverId) return;
+      if (!agentId || !serverId) return false;
       const target = { agentId, serverId };
       const draft = copyComposerDraft(deps.drafts()[composerDraftKey(target)] ?? EMPTY_DRAFT);
       const deliveryId =
@@ -933,7 +934,7 @@ export function createComposerActions(deps: ComposerActionsDeps) {
       if (deliveryId && targetIsActive && !deps.editingEditId() && delivery?.status !== "queued") {
         deps.setComposerError(t("composer.error.queuedUnavailable"), target);
         void cancelQueuedMessageEdit();
-        return;
+        return false;
       }
       deps.voice.submitRequest = {
         agentId,
@@ -949,11 +950,12 @@ export function createComposerActions(deps: ComposerActionsDeps) {
           : undefined,
       };
       deps.stopVoiceRecording();
-      return;
+      return true;
     }
     // While the agent starts or its server reconnects, a send waits with the client until it is ready.
-    if (phase !== "idle" || !deps.acceptsSend()) return;
+    if (phase !== "idle" || !deps.acceptsSend()) return false;
     void submitMessage();
+    return true;
   }
 
   /**

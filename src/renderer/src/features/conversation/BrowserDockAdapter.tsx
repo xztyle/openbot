@@ -14,9 +14,10 @@ import type { ComposerAgent, ComposerMcpServer, ComposerSkill } from "@openbot/u
 import { BrowserDock, type BrowserIslandContent } from "@openbot/ui/features/browser/BrowserDock";
 import { browserActionLabel } from "@openbot/ui/features/browser/browser-action-labels";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createMemo, createSignal, Show, snapshot, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, flush, Show, snapshot, untrack } from "solid-js";
 import { deviceSendShortcut } from "../../send-shortcut-preference";
 import { serverSupportsCapability } from "../servers/server-capabilities";
+import { useSecretHygiene } from "../workspace/workspace-secret-offer";
 import { conversationPort } from "./conversation-port";
 import { conversationRuntime } from "./conversation-runtime";
 import { useConversationViewScope } from "./conversation-scope";
@@ -54,6 +55,7 @@ export function BrowserDockAdapter(adapterProps: { tab: BrowserTab | undefined; 
     setActiveRightPanel,
   } = useConversationViewScope();
   const { t } = useText();
+  const secrets = useSecretHygiene();
   const control = () => (adapterProps.tab ? browserControlForTab(adapterProps.tab) : undefined);
   const working = () => Boolean(props.activeTurnId) || control()?.phase === "acting";
   const [handoffPending, setHandoffPending] = createSignal(false);
@@ -204,7 +206,12 @@ export function BrowserDockAdapter(adapterProps: { tab: BrowserTab | undefined; 
       });
       return;
     }
-    void submitComposer();
+    // A pasted key or password never reaches the agent, as in the chat's message box.
+    const draft = currentDraft();
+    const scanned = secrets.scan(draft.text);
+    if (scanned.found.length > 0) flush(() => updateCurrentDraft({ text: scanned.text }));
+    if (submitComposer()) secrets.offer(scanned.found);
+    else if (scanned.found.length > 0) flush(() => updateCurrentDraft({ text: draft.text }));
   }
 
   /** Answers the card on the page. An answer for a card that has gone does nothing. */

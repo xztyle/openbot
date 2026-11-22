@@ -311,9 +311,9 @@ async function checkEditInPlaceHidesSecret(page: Page, device: string) {
 }
 
 /**
- * Return in an agent DM whose agent cannot take a message yet (the connection is away) sends
- * nothing, so the draft stays as written: a password in it is not swapped for a marker, and no
- * notice says that a message hid it.
+ * Return in an agent DM while the connection is away. A DM that cannot send yet keeps the draft as
+ * written, with no notice that a message hid a password. A DM that holds the send until the
+ * connection is back sends it with a marker in place of the password, and says so.
  */
 async function checkDmUnsentKeepsDraft(page: Page, device: string) {
   await load(page, `${CHANNEL_ORIGIN()}${DM_PATH}`);
@@ -323,10 +323,22 @@ async function checkDmUnsentKeepsDraft(page: Page, device: string) {
   await page.keyboard.type("la clave: Pan-de-oro77");
   await page.keyboard.press("Enter");
   await settle(page);
-  await step(device, "an agent DM that cannot send yet keeps a password in the draft as written", async () => {
-    assert.equal((await editor(page).innerText()).trim(), "la clave: Pan-de-oro77");
-    assert.equal(await page.getByText(/hid a password/u).count(), 0, "A notice says a message hid the password.");
-  });
+  await step(
+    device,
+    "an agent DM offline: a password is never sent, and the notice matches what happened",
+    async () => {
+      const draft = (await editor(page).innerText()).trim();
+      const notice = await page.getByText(/hid a password/u).count();
+      if (draft === "la clave: Pan-de-oro77") {
+        assert.equal(notice, 0, "A notice says a message hid the password, but nothing was sent.");
+        return;
+      }
+      assert.equal(draft, "", `The draft holds ${JSON.stringify(draft)}.`);
+      assert.ok(notice > 0, "The password was taken out without a notice.");
+      const shown = await page.evaluate(() => document.body.innerText);
+      assert.doesNotMatch(shown, /Pan-de-oro77/u, "The password shows in the waiting message.");
+    },
+  );
 }
 
 rmSync(OUT, { recursive: true, force: true });

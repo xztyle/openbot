@@ -2,6 +2,7 @@
 
 import { AGENT_LEARNING_ROUTES } from "@openbot/contracts/team-protocol/agent-learning-v1";
 import { GUARDRAILS_ROUTES } from "@openbot/contracts/team-protocol/guardrails-v1";
+import { OWNER_AWAY_ROUTES } from "@openbot/contracts/team-protocol/owner-away-v1";
 import { Effect } from "effect";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { forkRouteIpcHandlers } from "./fork-route-handlers";
@@ -49,6 +50,7 @@ describe("fork route handler", () => {
     const { sent, call } = register();
     await expect(call("remote-1", { path: AGENT_LEARNING_ROUTES.queue, body: {} })).resolves.toEqual({ entries: [] });
     await call("remote-1", { path: GUARDRAILS_ROUTES.resume, body: { scope: "agent", id: "a1" } });
+    await call("remote-1", { path: OWNER_AWAY_ROUTES.active });
     expect(sent).toEqual([
       { serverId: "remote-1", path: AGENT_LEARNING_ROUTES.queue, init: { method: "POST", body: {} } },
       {
@@ -56,6 +58,8 @@ describe("fork route handler", () => {
         path: GUARDRAILS_ROUTES.resume,
         init: { method: "POST", body: { scope: "agent", id: "a1" } },
       },
+      // A request without a body sends an empty one.
+      { serverId: "remote-1", path: OWNER_AWAY_ROUTES.active, init: { method: "POST", body: {} } },
     ]);
   });
 

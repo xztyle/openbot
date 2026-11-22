@@ -1,7 +1,7 @@
 import { type BrowserTakeoverRequest, CHANNEL_CHATS_CAPABILITY } from "@openbot/contracts/ipc";
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import { createWorkspaceLinkUrl } from "@openbot/contracts/workspace-links";
-import { Bot, CheckCheck, Search, Settings, Store } from "@openbot/ui";
+import { Bot, CheckCheck, Search, Settings, Store, toast } from "@openbot/ui";
 import { modelNameOf } from "@openbot/ui/components/model-name";
 import { computeSidebarAgentStates } from "@openbot/ui/features/sidebar/sidebar-agent-states";
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
@@ -37,6 +37,9 @@ import { isReaderAuthor } from "../team/reader-identity";
 import { usePresence } from "../team/team-context";
 import { hostTrustCalls } from "../trust/trust-port";
 import { useUsage } from "../usage/usage-context";
+import { createAgentMailboxesStore } from "./agent-mailboxes-store";
+import { createConnectorAccessStore } from "./connector-access-store";
+import { createOwnerAwayStore } from "./owner-away-store";
 import { workspaceAttention } from "./workspace-attention";
 import { WorkspaceProvider } from "./workspace-context";
 import { createWorkspaceController, desktopMessageLink } from "./workspace-controller";
@@ -194,6 +197,26 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
   const portfolioCalls = hostPortfolioCalls(() => forkRequest);
   const trustCalls = hostTrustCalls(() => forkRequest);
   const forkOwner = () => serverHasForkOwnerRoutes(activeServer());
+  // Quiet hours, focus and "When you're back", the MCP access links and the agents' mailboxes of the
+  // owner, as the web client has them. The app in front tells the host so, as a browser tab does.
+  const ownerRoutes = () => (scope.loaded() && forkOwner() ? forkRequest : undefined);
+  const ownerAway = createOwnerAwayStore({
+    request: ownerRoutes,
+    enabled: () => ownerRoutes() !== undefined,
+    hostId: () => activeServerId(),
+    onWelcome: (welcome) =>
+      toast(t("workspace.away.welcome", welcome), {
+        action: { label: t("workspace.away.welcomeShow"), onClick: () => controller.openView("activity") },
+      }),
+  });
+  const connectorAccess = createConnectorAccessStore({
+    request: ownerRoutes,
+    enabled: () => ownerRoutes() !== undefined,
+  });
+  const agentMailboxes = createAgentMailboxesStore({
+    request: ownerRoutes,
+    enabled: () => ownerRoutes() !== undefined,
+  });
   const controller = createWorkspaceController({
     channels,
     agents: agentList,
@@ -280,6 +303,9 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
       const server = activeServer();
       if (server) openServerSettings(server.id, null, "storage");
     },
+    ownerAway,
+    connectorAccess,
+    agentMailboxes,
     efficiency: () => (forkOwner() ? efficiencyCalls : undefined),
     portfolio: () => (forkOwner() ? portfolioCalls : undefined),
     trust: () => (forkOwner() ? trustCalls : undefined),

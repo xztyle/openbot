@@ -1,15 +1,19 @@
 import { isDynamicRecord } from "../runtime-values";
 import { AGENT_EFFICIENCY_ROUTES } from "./agent-efficiency-v1";
 import { AGENT_LEARNING_ROUTES } from "./agent-learning-v1";
+import { AGENT_MAILBOXES_ROUTES } from "./agent-mailboxes-v1";
+import { CONNECTOR_ACCESS_ROUTES } from "./connector-access-v1";
 import { GUARDRAILS_ROUTES } from "./guardrails-v1";
+import { OWNER_AWAY_ROUTES } from "./owner-away-v1";
 import { PORTFOLIO_ROUTES } from "./portfolio-v1";
 import { TRUST_CONTROL_ROUTES } from "./trust-control-v1";
 import { decodeTeamProtocolV2Json, type TeamProtocolV2Json } from "./v2";
 
 /**
  * The owner routes of a fork host that the desktop sends through main to a joined server: sleep,
- * reviews and playbooks, learning, the decision queue and knowledge, the portfolio, trust and the
- * guardrails. The browser client sends them itself. Each is a POST, and the host checks the role.
+ * reviews and playbooks, learning, the decision queue and knowledge, the portfolio, trust, the
+ * guardrails, the owner's quiet hours and focus, the MCP access links and webhook senders, and the
+ * agents' mailboxes. The browser client sends them itself. Each is a POST, and the host checks the role.
  */
 export const FORK_OWNER_ROUTES: ReadonlySet<string> = new Set<string>([
   ...Object.values(AGENT_EFFICIENCY_ROUTES),
@@ -17,6 +21,9 @@ export const FORK_OWNER_ROUTES: ReadonlySet<string> = new Set<string>([
   ...Object.values(PORTFOLIO_ROUTES),
   ...Object.values(TRUST_CONTROL_ROUTES),
   ...Object.values(GUARDRAILS_ROUTES),
+  ...Object.values(OWNER_AWAY_ROUTES),
+  ...Object.values(CONNECTOR_ACCESS_ROUTES),
+  ...Object.values(AGENT_MAILBOXES_ROUTES),
 ]);
 
 export interface ForkRouteRequest {

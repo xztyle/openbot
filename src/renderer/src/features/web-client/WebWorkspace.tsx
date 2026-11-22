@@ -3398,7 +3398,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                           }))}
                           onSelectServer={selectServer}
                           moreSections={phoneMoreSections()}
-                          banner={workspace.state.workspaceLoaded ? serverNotices() : undefined}
+                          banner={serverNotices()}
                         />
                       </div>
                     </Show>

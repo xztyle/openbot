@@ -2,6 +2,20 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/mcp";
 
 export const messages = {
+  "mcp.connection.accounts": "Cuentas",
+  "mcp.connection.remove": "Quitar la cuenta",
+  "mcp.chat.title": "Apps de este chat",
+  "mcp.chat.description":
+    "Elige las cuentas que puede usar este chat. Estas opciones también aplican a su trabajo programado.",
+  "mcp.chat.off": "Desactivado",
+  "mcp.chat.read": "Solo lectura",
+  "mcp.chat.write": "Permitir cambios",
+  "mcp.chat.empty": "Primero conecta una app en Marketplace y luego elige su cuenta aquí.",
+  "mcp.chat.readHint":
+    "Solo lectura oculta y bloquea las herramientas que pueden enviar, editar o borrar. Las herramientas sin una clasificación de lectura confiable siguen bloqueadas.",
+  "mcp.chat.limit":
+    "Estos controles aplican a las herramientas de apps. La terminal, el navegador y otros chats siguen sus propios ajustes de acceso.",
+  "mcp.chat.failed": "No se pudieron guardar los ajustes de apps del chat.",
   "mcp.connect.unreachable": "No se pudo acceder a ese servidor.",
   "mcp.connect.title": "Conectar {name}",
   "mcp.connect.notConnected": "Sin conexión",
@@ -24,6 +38,7 @@ export const messages = {
   "mcp.signIn.description":
     "Inicia sesión en tu cuenta de {name}. Atelier obtiene las herramientas a las que puede acceder esa cuenta, pero no la contraseña.",
   "mcp.signIn.waiting": "Esperando al navegador…",
+  "mcp.signIn.waitingHelp": "¿Cerraste la pestaña del navegador? Cancela e intenta de nuevo.",
   "mcp.signIn.continue": "Continuar en {name}",
   "mcp.signIn.pageDescription": "Esta página está abierta en el navegador de {host}. Inicia sesión aquí.",
   "mcp.server.loadFailed": "No se pudieron cargar los servidores MCP.",
@@ -57,6 +72,13 @@ export const messages = {
   "mcp.panel.editTitle": "Editar servidor MCP",
   "mcp.panel.changesNotSaved": "Cambios sin guardar",
   "mcp.panel.title": "Servidores MCP",
+  "mcp.connection.name": "Nombre de la conexión",
+  "mcp.remote.returned": "Vuelve a Atelier para terminar de conectar. Puedes cerrar esta pestaña.",
+  "mcp.remote.popupBlocked": "Permite las ventanas emergentes para Atelier e intenta conectar de nuevo.",
+  "mcp.remote.denied": "El inicio de sesión de la app se canceló o fue rechazado.",
+  "mcp.remote.cancelled": "Se canceló el inicio de sesión de la app.",
+  "mcp.remote.timedOut": "El inicio de sesión de la app tardó demasiado. Intenta de nuevo.",
+  "mcp.remote.windowClosed": "Se cerró la ventana de inicio de sesión. Intenta de nuevo.",
   "mcp.panel.description":
     "Los servidores de Model Context Protocol proporcionan herramientas adicionales a los agentes de este servidor. Los agentes de Claude y Codex solo reciben los servidores de esta lista; los agentes de OpenCode y Grok también pueden iniciar servidores desde sus propios archivos de configuración.",
   "mcp.panel.connectCustom": "Conectar un MCP personalizado",

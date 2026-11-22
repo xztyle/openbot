@@ -65,16 +65,38 @@ export const messages = {
   "settings.showAgentSteps.title": "Mostrar pasos del agente",
   "settings.showAgentSteps.description":
     "Abre por defecto el razonamiento, los pasos de herramientas y los cambios de recuerdos de cada turno en este dispositivo y navegador.",
-  "settings.debugMode.title": "Modo depuración",
-  "settings.debugMode.description":
-    "Muestra todo en este dispositivo: los pasos y herramientas de los agentes en los canales, los mensajes entre agentes y los mensajes largos completos, y las notas ocultas.",
   "settings.busyMessage.title": "Orientar a los agentes mientras trabajan",
   "settings.busyMessage.description":
     "Los mensajes nuevos se incorporan al trabajo actual del agente, no a la cola. Funciona con ChatGPT y Claude.",
+  "settings.showAgentReasoning.title": "Mostrar el razonamiento del agente",
+  "settings.showAgentReasoning.description":
+    "Muestra una línea de lo que pensó el agente en cada fila Pensando. Si está desactivado, la fila Pensando queda cerrada, sin línea, y aun así puedes abrirla. Este ajuste es solo para este dispositivo.",
+  "settings.showAgentMessages.title": "Mostrar los mensajes entre agentes",
+  "settings.showAgentMessages.description":
+    "Muestra cada mensaje entre agentes en su propia fila, con sus archivos. Si está desactivado, los mensajes quedan en el chat como una sola fila contraída, y aun así puedes abrir cada uno. Este ajuste es solo para este dispositivo.",
+  "settings.debugMode.title": "Modo depuración",
+  "settings.debugMode.description":
+    "Muestra todo en este dispositivo: los pasos y herramientas de los agentes en los canales, los mensajes entre agentes y los mensajes largos completos, y las notas ocultas.",
   "settings.agentCreationLimit.title": "Agentes que pueden crear los agentes",
   "settings.agentCreationLimit.description":
     "Cuántos agentes nuevos pueden crear tus agentes en 24 horas. Los agentes que creas tú no cuentan.",
   "settings.agentCreationLimit.unlimited": "Sin límite",
+  "settings.agentDefaults.title": "Valores predeterminados",
+  "settings.agentDefaults.description": "Los agentes siguen estos valores, salvo que los cambies para un agente.",
+  "settings.agentDefaults.value": "Predeterminado: {value}",
+  "settings.agentDefaults.on": "Activado",
+  "settings.agentDefaults.off": "Desactivado",
+  "settings.agentDefaults.followDefault": "Predeterminado ({value})",
+  "settings.agentDefaults.count": "{on} de {total} activados",
+  "settings.agentDefaults.open": "Abrir {name}",
+  "settings.agentDefaults.agentList": "Activado para {names}",
+  "settings.agentDefaults.defaultTitle": "Predeterminado",
+  "settings.agentDefaults.defaultDescription": "Los agentes nuevos lo usan. Los agentes en Predeterminado lo siguen.",
+  "settings.agentDefaults.agents": "Agentes",
+  "settings.agentDefaults.setAll": "Aplicar a todos",
+  "settings.agentDefaults.setAllLabel": "Definir {setting} para todos los agentes",
+  "settings.agentDefaults.agentLabel": "{setting} para {agent}",
+  "settings.agentDefaults.loadFailed": "No se pudieron leer los agentes.",
   "settings.keepRemoteSessions.title": "Conexión rápida a servidores",
   "settings.keepRemoteSessions.description":
     "Mantener la conexión con los servidores entre inicios. Atelier se abre aproximadamente un segundo más rápido. Al cerrar Atelier, el servicio de Atelier no cierra la conexión.",
@@ -137,6 +159,9 @@ export const messages = {
     "Enviar metadatos de uso y fiabilidad con tu ID de cuenta y correo electrónico al sistema de análisis alojado por Atelier. Este ajuste se aplica a este navegador.",
   "settings.tab.general.title": "General",
   "settings.tab.general.description": "Controla cómo funciona Atelier en este equipo.",
+  "settings.tab.agents.title": "Agentes",
+  "settings.tab.agents.description":
+    "Elige qué pueden hacer los agentes de este computador cuando no lo defines para un agente.",
   "settings.tab.notifications.title": "Notificaciones",
   "settings.tab.notifications.description": "Elige cómo te avisa Atelier.",
   "settings.tab.voice.title": "Voz",

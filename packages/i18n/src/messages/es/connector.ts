@@ -421,6 +421,9 @@ export const messages = {
   "connector.bitwarden.disconnect": "Desconectar Bitwarden",
   "connector.bitwarden.connected": "Conectado",
   "connector.bitwarden.disconnected": "Sin conexión",
+  "connector.bitwarden.disconnectTitle": "Desconectar Bitwarden",
+  "connector.bitwarden.disconnectSummary":
+    "Atelier olvida la clave de sesión y deja de llenar inicios de sesión desde Bitwarden. Tu bóveda queda como está.",
   "connector.bitwarden.actionFailed": "Atelier no pudo cambiar la conexión de Bitwarden.",
   "connector.bitwarden.descriptionHost":
     "Rellena los inicios de sesión del navegador en {host} desde Bitwarden o Vaultwarden.",

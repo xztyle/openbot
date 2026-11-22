@@ -11,6 +11,8 @@ export const messages = {
     "Este servidor no admite archivos adjuntos MP3 o MOV. Actualiza Atelier en el host e inténtalo de nuevo.",
   "error.attachment.emlUnsupported":
     "Este servidor no admite archivos adjuntos EML. Actualiza Atelier en el host e inténtalo de nuevo.",
+  "error.attachment.textUnsupported":
+    "Este servidor no admite este tipo de archivo de texto. Actualiza Atelier en el host e intenta de nuevo.",
   "error.attachment.zipUnsupported":
     "Este servidor no admite archivos adjuntos ZIP. Actualiza Atelier en el host e inténtalo de nuevo.",
   "error.attachment.previewTooLarge": "El archivo supera el límite de 100 MB.",

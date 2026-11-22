@@ -1,4 +1,34 @@
 import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/uiBlock";
 
-export const messages = {} as const satisfies PartialTranslation<typeof source>;
+export const messages = {
+  "uiBlock.status.pending": "Necesita tu respuesta",
+  "uiBlock.status.answered": "Respondido",
+  "uiBlock.status.expired": "Vencido",
+  "uiBlock.status.closed": "Cerrado",
+  "uiBlock.outcome.expired": "Nadie respondió a tiempo",
+  "uiBlock.outcome.closed": "Cerrado sin respuesta",
+  "uiBlock.outcome.autoAnswered": "{outcome} (nadie respondió a tiempo)",
+  "uiBlock.confirm.holdHint": "Mantén presionado el botón para confirmar, o tócalo para confirmar en un segundo paso",
+  "uiBlock.confirm.prompt": "¿Confirmar: {action}?",
+  "uiBlock.confirm.accept": "Confirmar",
+  "uiBlock.confirm.autoActionLabel": "{action} · {seconds} s",
+  "uiBlock.confirm.previewLabel": "Vista previa",
+  "uiBlock.confirm.showFullPreview": "Ver todo",
+  "uiBlock.confirm.hideFullPreview": "Ver menos",
+  "uiBlock.choice.submit": "Enviar",
+  "uiBlock.choice.shortcutHint": "Presiona de {first} a {last} para elegir",
+  "uiBlock.choice.selectedCount": { one: "{count} seleccionada", other: "{count} seleccionadas" },
+  "uiBlock.choice.noneSelected": "Nada seleccionado",
+  "uiBlock.quick.label": "Respuestas rápidas",
+  "uiBlock.quick.textLabel": "Tu propia respuesta",
+  "uiBlock.quick.textPlaceholder": "O escribe tu propia respuesta",
+  "uiBlock.quick.send": "Enviar",
+  "uiBlock.form.submit": "Enviar",
+  "uiBlock.form.required": "Este campo es obligatorio",
+  "uiBlock.form.choose": "Elige una opción",
+  "uiBlock.form.notSet": "Sin definir",
+  "uiBlock.form.invalid": "Algunas respuestas no son válidas. Revísalas e intenta de nuevo.",
+  "uiBlock.skip": "Omitir",
+  "uiBlock.error.answerFailed": "No se pudo enviar tu respuesta. Intenta de nuevo.",
+} as const satisfies PartialTranslation<typeof source>;

@@ -29,6 +29,7 @@ export const messages = {
   "prompt.approval.truncated":
     "Aquí solo se ve el principio de esta solicitud. Permítela solo si eso te basta para decidir.",
   "prompt.approval.label": "Aprobación del agente",
+  "prompt.approval.labelFrom": "Aprobación para {name}",
   "prompt.teammate.question": "{name} necesita tu respuesta",
   "prompt.teammate.approval": "{name} necesita tu aprobación",
   "prompt.teammate.browser": "{name} te necesita en el navegador",

@@ -21,6 +21,8 @@ export const messages = {
   "queue.item.heldNote": "Espera al próximo turno",
   "queue.item.heldNoteReason":
     "Información de un compañero. No inicia ningún turno: el agente la lee con su próximo mensaje.",
+  "queue.item.moveUpLabel": "Subir el mensaje en cola {position}",
+  "queue.item.moveDownLabel": "Bajar el mensaje en cola {position}",
   "queue.item.runAsTask": "Ejecutar como tarea",
   "queue.item.runAsTaskLabel": "Ejecutar el mensaje en cola {position} como tarea",
   "queue.item.deleteLabel": "Eliminar mensaje en cola {position}",
@@ -30,4 +32,13 @@ export const messages = {
   "queue.deleteHeld.title": "¿Eliminar mensaje en cola?",
   "queue.deleteHeld.body": "Otro dispositivo está editando este mensaje. El agente no lo recibirá.",
   "queue.deleteHeld.keep": "Conservar",
+  "queue.stopAndClear.action": "Detener y vaciar la cola",
+  "queue.stopAndClear.title": "¿Detener al agente y vaciar la cola?",
+  "queue.stopAndClear.body": {
+    one: "El agente deja lo que está haciendo y se cancela el mensaje en cola. Queda en el chat marcado como Cancelado.",
+    other:
+      "El agente deja lo que está haciendo y se cancelan {count} mensajes en cola. Quedan en el chat marcados como Cancelado.",
+  },
+  "queue.stopAndClear.confirm": "Detener y vaciar",
+  "queue.stopAndClear.keep": "Seguir trabajando",
 } as const satisfies PartialTranslation<typeof source>;

@@ -91,6 +91,7 @@ export const messages = {
   "browser.secret.notAddedToChat": "Este valor no se añade al chat.",
   "browser.secret.codeLength": "Código de {digits} dígitos",
   "browser.secret.password": "Contraseña",
+  "browser.secret.saveToVault": "Guardar en la Bóveda",
   "browser.secret.signInPage": "Página de inicio de sesión",
   "browser.secret.openSignInPage": "Abrir página de inicio de sesión en el navegador",
   "browser.secret.openInBrowser": "Abrir en el navegador",

@@ -10,6 +10,12 @@ export const messages = {
   "status.agent.modelSwitchedForError": "Error del proveedor. Se cambió a {model}.",
   "status.agent.modelReturnedAfterError": "Se volvió a {model} tras el error del proveedor.",
   "status.agent.marketplaceSuggested": "Se sugirió una aplicación de Marketplace: {app}.",
+  "status.agent.messageDuplicate":
+    "Un mensaje idéntico para este agente todavía está en cola o en curso. Atelier no lo volvió a enviar.",
+  "status.agent.messageHeld":
+    "Enviado como fyi: no despierta a los destinatarios, que lo leen en su siguiente turno. Si alguien debe actuar ya, envíalo de nuevo sin fyi.",
+  "status.agent.toolFailed": "Falló un paso de herramienta: {tool}. {reason}",
+  "status.agent.toolFailedNoReason": "Falló un paso de herramienta ({tool}). Decidiendo qué intentar ahora…",
   "status.agent.channelMemberAdded": "{agent} agregó a {member} al canal. {person} lo pidió.",
   "status.agent.channelMemberRemoved": "{agent} quitó a {member} del canal. {person} lo pidió.",
   "status.agent.channelInstructionsChanged": "{agent} cambió las instrucciones del canal. {person} lo pidió.",
@@ -30,6 +36,11 @@ export const messages = {
   "status.agent.screenCaptureWindow": "Capturar la ventana {name} y enviar la imagen al modelo del agente.",
   "status.agent.screenCaptureRegion":
     "Capturar el área de la pantalla en {x}, {y}, de {width} × {height} puntos, y enviar la imagen al modelo del agente.",
+  "status.agent.vaultCardFill":
+    "Llenar la tarjeta guardada {card} en {site}. Si lo apruebas, los agentes podrán llenar esta tarjeta en este sitio sin aprobación. Quita el sitio en Ajustes del servidor > Bóveda.",
+  "status.agent.vaultCardFillFrames": "Los campos de la tarjeta están en marcos de {origins}.",
+  "status.agent.secretKeyFill":
+    "Llenar la clave guardada {name} en el campo de contraseña de {site}. Si lo apruebas, los agentes podrán llenar esta clave en este sitio sin aprobación. Quita la clave en Secretos para retirar la aprobación.",
   "status.agent.secretKeyCodeFill":
     "Rellenar un código de verificación en dos pasos de la clave guardada {name} en el campo de código de {site}. Si lo apruebas, los agentes podrán rellenar códigos de esta clave en este sitio sin aprobación. Elimina la clave en Secretos para quitar la aprobación.",
   "status.agent.screenCaptureProgress": "Pidiendo permiso para capturar la pantalla…",
@@ -43,6 +54,19 @@ export const messages = {
   "status.agent.skillUsing": "Usando la habilidad {name}…",
   "status.agent.skillReading": "Leyendo una habilidad…",
   "status.agent.memoryChanges": "Recuerdos: {saved} guardados, {updated} actualizados, {forgotten} olvidados.",
+  "status.agent.mcpServerAdd":
+    "Agregar el servidor MCP {name}: {target}. Todos los agentes de este servidor reciben sus herramientas. Atelier se conecta para probarlo.",
+  "status.agent.mcpServerChange":
+    "Cambiar el servidor MCP {name} a {target}. Todos los agentes de este servidor reciben sus herramientas. Atelier se conecta para probarlo.",
+  "status.agent.mcpServerEnable": "Activar el servidor MCP {name} para todos los agentes de este servidor.",
+  "status.agent.mcpServerDisable": "Desactivar el servidor MCP {name} para todos los agentes de este servidor.",
+  "status.agent.mcpServerRemove":
+    "Quitar el servidor MCP {name} y su inicio de sesión de todos los agentes de este servidor.",
+  "status.agent.mcpSignInRequested":
+    "El servidor MCP {name} necesita que inicies sesión. Hazlo en Ajustes del servidor, MCP.",
+  "status.agent.vaultAdded": "Guardado en la Bóveda: {name}",
+  "status.agent.vaultUpdated": "Cambiado en la Bóveda: {name}",
+  "status.agent.vaultDeleted": "Borrado de la Bóveda: {name}",
   "status.agent.trustAsk.pay": "{agent} quiere hacer un pago. La política de confianza te pregunta primero.",
   "status.agent.trustAsk.launchAds":
     "{agent} quiere lanzar o financiar anuncios. La política de confianza te pregunta primero.",

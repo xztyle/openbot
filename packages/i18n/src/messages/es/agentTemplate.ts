@@ -29,6 +29,10 @@ export const messages = {
   "agentTemplate.publish.published": "Publicado",
   "agentTemplate.publish.unpublish": "Retirar",
   "agentTemplate.publish.unpublishing": "Retirando…",
+  "agentTemplate.publish.unpublishTitle": "¿Dejar de publicar {name}?",
+  "agentTemplate.publish.unpublishDescription":
+    "El enlace deja de funcionar para todos los que lo tienen. Puedes volver a publicarlo después.",
+  "agentTemplate.publish.audience": "Cualquiera con el enlace puede leer esto y agregar una copia de este agente.",
   "agentTemplate.publish.unpublishFailed": "No se pudo retirar la publicación del agente.",
   "agentTemplate.publish.lastUpdated": "Última actualización: {date}",
   "agentTemplate.publish.context": "Contexto",

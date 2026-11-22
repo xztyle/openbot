@@ -15,6 +15,10 @@ export const messages = {
   // A workflow output step that tells the user its result.
   "notification.workflowOutput": "Un flujo de trabajo tiene un resultado nuevo.",
   "notification.failed": "Se detuvo con un error.",
+  "notification.unattendedRunFailed": "Una ejecución programada se detuvo con un error.",
+  "notification.eventCheckFailing": "Una comprobación de eventos sigue fallando.",
+  "notification.eventCheckTurnFailed": "Un turno de comprobación de eventos se detuvo con un error.",
+  "notification.eventCheckDeliveryFailed": "Una comprobación de eventos no pudo entregarle un evento al agente.",
   "notification.channelTitle": "{agent} en {channel}",
   "notification.teammateTitle": "{agent}: {teammate} te necesita",
   "notification.channelMessage": "Envió un mensaje.",

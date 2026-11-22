@@ -10,6 +10,7 @@ export const messages = {
   "error.agent.accessLocalOnly": "El acceso del agente solo se puede cambiar en el equipo que lo ejecuta.",
   "error.agent.duplicateCleanupFailed": "No se pudo duplicar el agente ni eliminar la copia incompleta.",
   "error.agent.commitEffectsFailed": "La transacción se confirmó, pero fallaron sus efectos guardados.",
+  "error.agent.toolFailed": "Falló la herramienta {tool}: {reason}",
   "error.agent.settingsLocalOnly": "Los ajustes del agente solo se pueden cambiar en el equipo que lo ejecuta.",
   "error.agent.skillsLocalOnly": "Las habilidades solo se pueden cambiar en el equipo que ejecuta el agente.",
   "error.agent.addLocalOnly": "Los agentes solo se pueden añadir en el equipo que los ejecuta.",
@@ -61,6 +62,10 @@ export const messages = {
   "error.agent.managerUnknown": "Ese responsable ya no existe.",
   "error.agent.managerOtherSpace": "Un agente solo puede reportar a un agente del mismo espacio.",
   "error.agent.managerLoop": "Ese cambio crearía un bucle: el nuevo responsable ya reporta a este agente.",
+  "error.agent.messageRateLimit":
+    "Enviaste {sent} mensajes a {name} en los últimos {minutes} minutos. El límite es {limit}. Deja de enviarle mensajes a este agente ahora y pregúntale al usuario cómo seguir.",
+  "error.agent.creationLimit":
+    "Los agentes ya crearon {made} agentes en las últimas {hours} horas. El límite es {limit}. No crees otro agente. Pregúntale al usuario cómo seguir.",
   "error.agent.changedWhileDuplicating": "El agente cambió mientras se duplicaba. Inténtalo de nuevo.",
   "error.agent.duplicatedAgentGone": "El agente duplicado ya no existe.",
   "error.agent.stateCorrupt":
@@ -131,6 +136,12 @@ export const messages = {
   "error.agent.screenCaptureShared":
     "La captura de pantalla no funciona en una conversación de Slack, Discord o Telegram, porque otras personas reciben sus archivos.",
   "error.agent.screenCaptureDeclined": "El usuario no permitió esta captura de pantalla. No se capturó nada.",
+  "error.agent.mcpServerDeclined": "El usuario no permitió este cambio del servidor MCP. No cambió nada.",
+  "error.agent.mcpServerNotSaved": "El servidor MCP no respondió, así que no se guardó. {error}",
+  "error.agent.mcpServerKeysMove":
+    "El servidor MCP {name} guarda claves para su servidor actual. Pídele al usuario que cambie su dirección, comando, argumentos o transporte en Ajustes del servidor, MCP.",
+  "error.agent.mcpServerUnknown":
+    "No hay ningún servidor MCP llamado {name}. Llama a list_mcp_servers para ver los nombres.",
   "error.agent.screenCaptureWindowMissing":
     "Esa ventana no está abierta ahora. Llama a list_capture_sources para obtener los ID de ventana actuales.",
   "error.agent.screenCaptureDisplayMissing":

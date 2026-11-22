@@ -44,6 +44,17 @@ export const messages = {
   "error.import.hostBusy": "El servidor está leyendo otras exportaciones. Inténtalo de nuevo en unos minutos.",
   "error.import.skillKept":
     "{name}: el servidor ya tiene la habilidad «{skill}», por lo que el agente usa esa habilidad. Pide a un administrador que la actualice.",
+  "error.import.hermesNoProfiles":
+    "Esta carpeta no tiene perfiles de Hermes. Elige la carpeta de Hermes, que contiene config.yaml o SOUL.md.",
+  "error.import.hermesClosed": "Los perfiles de Hermes ya no están abiertos. Léelos de nuevo.",
+  "error.import.hermesProfileMissing": "La selección nombra un perfil de Hermes que no se leyó.",
+  "error.import.hermesSoulLong":
+    "{name}: SOUL.md tiene más de {limit} caracteres, así que las instrucciones conservan el comienzo. El archivo completo está en imported/hermes/SOUL.md.",
+  "error.import.hermesSkillSkipped": "{name}: se omite la habilidad «{skill}». {reason}",
+  "error.import.hermesSkillCodeAdded":
+    "Tiene código que no tenía cuando se leyeron los perfiles. Léelos de nuevo para permitirlo.",
+  "error.import.hermesLinkNotSaved":
+    "{name}: Atelier no pudo guardar qué agente vino de este perfil, así que la próxima importación lo agregará como un agente nuevo.",
   "error.import.transferRemoteTooLarge":
     "Un archivo de transferencia para un servidor al que te uniste debe ocupar menos de 100 MB. Desactiva los archivos del espacio de trabajo o exporta menos agentes.",
   "error.import.transferNotFile": "Este archivo no es un archivo de transferencia de Atelier.",

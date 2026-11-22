@@ -163,6 +163,7 @@ export const messages = {
     "{provider} no respondió a tiempo. El equipo puede estar ocupado. Atelier lo intentará de nuevo.",
   "error.provider.cliTimedOutRefresh":
     "{provider} no respondió a tiempo. El equipo puede estar ocupado. Actualiza los proveedores para intentarlo de nuevo.",
+  "error.provider.stoppedRepeatedly": "{provider} se detuvo varias veces. Atelier sigue intentando iniciarlo de nuevo.",
   "error.provider.acpStartTimedOut":
     "{provider} no terminó de iniciarse en {seconds} s. El equipo puede estar ocupado.",
   "error.provider.acpModelsTimedOut": "{provider} no listó sus modelos en {seconds} s. El equipo puede estar ocupado.",

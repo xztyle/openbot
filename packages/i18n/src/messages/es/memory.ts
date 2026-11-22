@@ -27,6 +27,7 @@ export const messages = {
   "memory.editText": "Editar recuerdo: {text}",
   "memory.edit": "Editar recuerdo",
   "memory.delete": "Eliminar recuerdo",
+  "memory.discardDescription": "El texto de memoria que cambiaste no está guardado. Se perderá.",
   "memory.learned": "Aprendido automáticamente",
   "memory.manual": "Añadido manualmente",
   "memory.unknownDate": "Fecha desconocida",

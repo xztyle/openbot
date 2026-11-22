@@ -2,6 +2,11 @@ import type { PartialTranslation } from "../../../message";
 import type { messages as source } from "../../en/error/mcp";
 
 export const messages = {
+  "error.mcp.chatUnknown": "Este chat ya no está disponible.",
+  "error.mcp.chatConnectionGone":
+    "Una cuenta de app no está disponible o está elegida dos veces. Vuelve a cargar las opciones.",
+  "error.mcp.chatUnreachable": "No se pudo contactar esta app.",
+  "error.mcp.chatDenied": "Este chat no permite esta acción de la app.",
   "error.mcp.redirectByName": "No se puede acceder a esta dirección por nombre.",
   "error.mcp.redirectGetOnly": "Esta dirección solo responde a GET.",
   "error.mcp.redirectNotSignIn": "Esta dirección no forma parte de un inicio de sesión.",

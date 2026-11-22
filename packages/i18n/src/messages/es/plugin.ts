@@ -9,6 +9,9 @@ export const messages = {
   "plugin.askPrompt": "Pregunta a {name}: {prompt}",
   "plugin.section.apps": "Apps",
   "plugin.section.skills": "Habilidades",
+  "plugin.skillsPerAgent":
+    "La app funciona para cada agente que permitas. Las habilidades le dicen a un agente cómo usarla, y cada agente tiene las suyas.",
+  "plugin.skillsName": "Habilidades de {name}",
   "plugin.section.information": "Información",
   "plugin.info.developer": "Desarrollador",
   "plugin.info.category": "Categoría",
@@ -16,6 +19,8 @@ export const messages = {
   "plugin.uninstallDialog.title": "¿Desconectar {name}?",
   "plugin.uninstallDialog.description":
     "Esto elimina lo que {name} instaló en este equipo. No cambia nada más en este host ni en este agente.",
+  "plugin.uninstallDialog.descriptionOnHost":
+    "Esto quita lo que {name} instaló en {host}. No cambia nada más en este host ni en este agente.",
   "plugin.uninstallDialog.confirm": "Desconectar",
   "plugin.uninstallDialog.appsLabel": "Apps que se eliminarán: {number}",
   "plugin.uninstallDialog.appsTitle": "Apps eliminadas de este host",

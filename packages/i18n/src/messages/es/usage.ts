@@ -56,6 +56,8 @@ export const messages = {
   "usage.breakdown.byAgent": "Uso por agente",
   "usage.breakdown.byDay": "Uso y coste diarios",
   "usage.unknownModel": "Modelo desconocido",
+  "usage.deletedAgent": "Agente borrado",
+  "usage.deletedAgentNumbered": "Agente borrado {number}",
   "usage.footer": "Recopilación iniciada {started} · Actualizado {updated}",
   "usage.updatedNever": "nunca",
   "usage.about.title": "Acerca de estas estimaciones",

@@ -2,12 +2,69 @@ import type { PartialTranslation } from "../../../message";
 import type { messages as source } from "../../en/error/backend";
 
 export const messages = {
+  "error.backend.eventCheckProgram":
+    "Elige un programa .mjs, .js, .py o .sh existente dentro de la carpeta Watchers del directorio compartido de tu espacio.",
+  "error.backend.eventCheckMissingVariable":
+    "Agrega la variable privada obligatoria en los ajustes Variables privadas (.env) de esta comprobación de eventos antes de activarla.",
+  "error.backend.eventCheckProgramChanged":
+    "El programa o los ajustes de dirección de esta comprobación de eventos cambiaron después de aprobar sus variables privadas. La comprobación está en pausa y sus variables no se usan. Revisa el programa y apruébalo en los ajustes Variables privadas (.env) de esta comprobación.",
+  "error.backend.eventCheckApprovalNeeded":
+    "Esta comprobación de eventos no se puede activar hasta que el usuario apruebe su programa. Pídele al usuario que la abra en los ajustes del agente y la apruebe en Variables privadas (.env).",
+  "error.backend.eventCheckCredentialField":
+    "El campo «{field}» parece una credencial, así que no se guardó. Quítalo. Las credenciales van solo en los ajustes Variables privadas (.env) de esta comprobación de eventos.",
+  "error.backend.eventCheckFieldName": "nombre",
+  "error.backend.eventCheckFieldInstruction": "instrucción",
+  "error.backend.eventCheckFieldArguments": "argumentos",
+  "error.backend.eventCheckFieldAccount": "etiqueta de la cuenta",
+  "error.backend.eventCheckWorkspaceOnly":
+    "Este agente tiene acceso Solo espacio de trabajo, así que no puede crear, cambiar, probar, ejecutar ni activar comprobaciones de eventos. Pídele al usuario que lo haga o que le dé acceso completo al agente.",
+  "error.backend.eventCheckDelivery":
+    "Se encontró un evento. La entrega está en espera y se reintentará; el evento guardado sigue en este host.",
+  "error.backend.eventCheckSelfEvents":
+    "Para omitir los eventos propios, define los ID de usuario de la cuenta conectada y la ruta real del autor del cambio. Si la app no indica autores de cambios, deja la comprobación en pausa.",
+  "error.backend.eventCheckSchedule":
+    "Las comprobaciones de eventos deben tener al menos 30 segundos entre sí. Usa una zona horaria y un horario válidos.",
+  "error.backend.eventCheckBusy": "Esta comprobación de eventos ya se está ejecutando.",
+  "error.backend.eventCheckFailed":
+    "Falló la comprobación de la app. Revisa la cuenta elegida, la herramienta de lectura, las rutas del resultado, la paginación, los autores de cambios y el acceso. No se cambió la línea base.",
+  "error.backend.eventCheckAuth":
+    "La app no aceptó las credenciales guardadas. Define un valor nuevo en los ajustes Variables privadas (.env) de esta comprobación de eventos.",
+  "error.backend.eventCheckRateLimited": "La app limitó las solicitudes. La comprobación espera y vuelve a intentar.",
+  "error.backend.eventCheckConfig":
+    "La app no aceptó los ajustes de esta comprobación. Corrígelos y vuelve a probarla.",
+  "error.backend.eventCheckUpstream":
+    "No se pudo contactar la app o envió un error. La comprobación lo intentará más tarde.",
+  "error.backend.eventCheckStreak":
+    "La comprobación de eventos «{name}» falló {count} veces seguidas. Último error: {reason}",
+  "error.backend.eventCheckDeliveryFailed":
+    "La comprobación de eventos «{name}» encontró un evento pero no pudo entregárselo al agente. El evento está guardado. El host lo vuelve a intentar.",
+  "error.backend.eventCheckTurnFailed": "Un turno de comprobación de eventos se detuvo con un error: {reason}",
+  "error.backend.eventCheckTurnUnknown": "El agente no dio ningún motivo.",
+  "error.backend.routineRunMerged": "Esta ejecución por evento se combinó con otros eventos en una sola ejecución.",
+  "error.backend.eventCheckUnsupported": "Este host no admite comprobaciones de eventos.",
+  "error.backend.eventCheckTemplateUnknown": "Este host no tiene esa plantilla de comprobación de eventos.",
+  "error.backend.eventCheckTemplateField":
+    "Completa el ajuste obligatorio «{name}» antes de instalar esta comprobación de eventos.",
+  "error.backend.eventCheckTemplateWrite":
+    "Atelier no pudo escribir el programa de la plantilla en OpenBot/Shared/Watchers. Revisa que la carpeta exista y tenga espacio y permisos.",
+  "error.backend.eventCheckTemplateBoolean": "«{name}» debe ser true o false.",
+  "error.backend.eventCheckTemplateProgram":
+    "El programa de esta plantilla no coincide con la versión revisada. No se instaló nada.",
+  "error.backend.eventCheckTemplatePicker":
+    "«{name}» tiene una opción que este ajuste no puede usar. Vuelve a elegir las conversaciones.",
+  "error.backend.eventCheckDiscoverUnsupported":
+    "Esta comprobación de eventos no puede listar opciones. Actualízala a la última versión de su plantilla y deja su programa como está.",
+  "error.backend.eventCheckTemplateCurrent": "Esta comprobación de eventos ya usa la última versión de su plantilla.",
+  "error.backend.eventCheckTemplateNotLinked": "Esta comprobación de eventos no viene de una plantilla.",
   "error.backend.eventsUnavailable": "Los eventos no están disponibles en este host.",
   "error.backend.databaseIntegrity": "La base de datos de Atelier no superó la comprobación de integridad.",
   "error.backend.webhookRouteLimit": "Un host puede tener un máximo de {limit} rutinas de webhook.",
   "error.backend.webhookSettingsInvalid": "Comprueba los ajustes del webhook e inténtalo de nuevo.",
   "error.backend.webhookRouteUnavailable":
     "La ruta pública del webhook no está lista. Comprueba la conexión del host e inténtalo de nuevo.",
+  "error.backend.webhookTestUnavailable":
+    "El host no puede recibir el evento de prueba ahora. Revisa que tenga la sesión iniciada e intenta de nuevo.",
+  "error.backend.webhookTestFailed": "El evento de prueba no llegó a la rutina. Intenta de nuevo.",
   "error.backend.browserViewRemoteOnly": "La vista del navegador en directo solo está disponible para un host remoto.",
   "error.backend.browserViewUnsupported": "Este host remoto no admite una vista del navegador en directo.",
   "error.backend.browserViewLimit": "Hay demasiadas vistas del navegador abiertas en este host.",
@@ -320,7 +377,10 @@ export const messages = {
   "error.backend.steerQueuedOnly": "Solo se puede orientar con mensajes en cola.",
   "error.backend.promptInactive": "Esta pregunta ya no está activa.",
   "error.backend.promptAnswerMismatch": "Una respuesta no coincide con ninguna pregunta activa.",
+  "error.backend.uiBlockAnswerInvalid": "Esta respuesta no encaja con el bloque del agente.",
+  "error.backend.uiBlockActionNotAllowed": "Solo el dueño del servidor o un administrador pueden elegir esta acción.",
   "error.backend.approvalInactive": "Esta aprobación ya no está activa.",
+  "error.backend.approvalOwnerOnly": "Solo el dueño del servidor puede aprobar esta acción.",
   "error.backend.takeoverInactive": "Esta toma de control del navegador ya no está activa.",
   "error.backend.authSubmitting": "Ya se están enviando los datos de autenticación.",
   "error.backend.apiKeySaveFailed": "Atelier no pudo guardar la clave de API. Inténtalo de nuevo.",

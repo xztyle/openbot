@@ -1,8 +1,7 @@
 import type { AppTextKey } from "@openbot/i18n";
-import type { ComponentProps, JSX } from "@solidjs/web";
+import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, createUniqueId, For, flush, onSettled, Show } from "solid-js";
-import { Button, buttonVariants, IconButton } from "../../button";
-import { Popover } from "../../complex";
+import { Button, IconButton } from "../../button";
 import { Input } from "../../form";
 import { Clock3, Search } from "../../icons";
 import { OptionGrid, OptionGridOption } from "../../option-grid";
@@ -528,56 +527,5 @@ function SectionPlaceholder(props: {
       data-section={props.section}
       style={{ "--ws-emoji-rows": String(props.rows) }}
     />
-  );
-}
-
-type PopoverPlacement = ComponentProps<typeof Popover.Root>["placement"];
-
-export interface EmojiPickerPopoverProps extends EmojiPickerProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  /** The content of the trigger button, such as an icon. */
-  trigger: JSX.Element;
-  /** The accessible name and tooltip of the trigger. */
-  triggerLabel: string;
-  triggerClass?: string | undefined;
-  placement?: PopoverPlacement | undefined;
-}
-
-/** A trigger button and the emoji picker that it opens. A pick closes the popover. */
-export function EmojiPickerPopover(props: EmojiPickerPopoverProps): JSX.Element {
-  const { t } = useText();
-  return (
-    <Popover.Root
-      open={props.open}
-      onOpenChange={props.onOpenChange}
-      placement={props.placement ?? "top-end"}
-      gutter={4}
-    >
-      <Popover.Trigger
-        class={cx(buttonVariants({ variant: "ghost", size: "icon-sm" }), "ui-icon-button", props.triggerClass)}
-        aria-label={props.triggerLabel}
-        title={props.triggerLabel}
-      >
-        {props.trigger}
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content class="ui-popover-menu-surface ws-emoji-popover" aria-label={t("workspace.emoji.label")}>
-          <Show when={props.open}>
-            <EmojiPicker
-              onPick={(emoji) => {
-                props.onPick(emoji);
-                props.onOpenChange(false);
-              }}
-              recent={props.recent}
-              skinTone={props.skinTone}
-              onSkinToneChange={props.onSkinToneChange}
-              autofocus={props.autofocus ?? true}
-              class={props.class}
-            />
-          </Show>
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
   );
 }

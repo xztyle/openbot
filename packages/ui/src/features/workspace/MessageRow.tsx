@@ -15,7 +15,7 @@ import {
 import { useText } from "../../text";
 import { LabelTooltip, LabelTooltipTrigger } from "../../tooltip";
 import { cx, usesTouchLayout } from "../../utils";
-import { EmojiPicker, type EmojiPickerProps } from "./EmojiPicker";
+import { EmojiPicker, type EmojiPickerProps } from "./emoji-picker-lazy";
 import { LongMessageFold } from "./LongMessageFold";
 import { MemberProfilePopover } from "./MemberProfileCard";
 import { AvatarStack, MemberAvatar, MemberName } from "./WorkspaceAvatar";

@@ -7,7 +7,7 @@
 import { channelKind, channelVisibility } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import type { ComposerChannel, ComposerEmoji, ComposerMember } from "@openbot/ui/features/conversation/composer-picker";
-import { searchEmoji, withSkinTone } from "@openbot/ui/features/workspace/emoji-data";
+import { emojiData } from "@openbot/ui/features/workspace/emoji-picker-lazy";
 import { usesTouchLayout } from "@openbot/ui/utils";
 import { createMemo, createSignal } from "solid-js";
 import { useWorkspace } from "./workspace-context";
@@ -91,10 +91,14 @@ export function useComposerSources(channelId: () => string) {
 /** Slack's `:smile`: the emoji whose short code or name starts with the letters, in the reader's skin tone. */
 export function useEmojiSearch(): (query: string) => ComposerEmoji[] {
   const ws = useWorkspace();
-  return (query) =>
-    searchEmoji(query, 8).map((entry) => ({
-      emoji: withSkinTone(entry, ws.state.emoji.skinTone),
+  // The emoji list is its own chunk. The first `:` loads it, and the picker runs this again when it is there.
+  return (query) => {
+    const data = emojiData();
+    if (!data) return [];
+    return data.searchEmoji(query, 8).map((entry) => ({
+      emoji: data.withSkinTone(entry, ws.state.emoji.skinTone),
       name: entry.n,
       code: entry.k?.startsWith(":") ? (entry.k.slice(1).split(" ")[0] ?? entry.n) : entry.n.replaceAll(" ", "_"),
     }));
+  };
 }

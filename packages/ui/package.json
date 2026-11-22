@@ -436,6 +436,7 @@
     "./features/workspace/ChannelHeader": "./src/features/workspace/ChannelHeader.tsx",
     "./features/workspace/EmojiPicker": "./src/features/workspace/EmojiPicker.tsx",
     "./features/workspace/emoji-data": "./src/features/workspace/emoji-data.ts",
+    "./features/workspace/emoji-picker-lazy": "./src/features/workspace/emoji-picker-lazy.tsx",
     "./features/workspace/CreateChannelDialog": "./src/features/workspace/CreateChannelDialog.tsx",
     "./features/workspace/FleetView": "./src/features/workspace/FleetView.tsx",
     "./features/workspace/StorageView": "./src/features/workspace/StorageView.tsx",

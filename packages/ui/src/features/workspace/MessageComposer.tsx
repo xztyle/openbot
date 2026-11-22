@@ -20,7 +20,7 @@ import {
 } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
-import { EmojiPickerPopover, type EmojiPickerProps } from "./EmojiPicker";
+import { EmojiPickerPopover, type EmojiPickerProps } from "./emoji-picker-lazy";
 
 export type ComposerFormat =
   | "bold"

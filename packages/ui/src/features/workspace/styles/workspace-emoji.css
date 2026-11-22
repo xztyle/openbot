@@ -17,6 +17,11 @@
   color: var(--openbot-text-primary);
 }
 
+/* The picker's place while its chunk loads: about the height of the search, tabs and grid. */
+.ws-emoji-picker-loading {
+  min-height: calc(var(--ws-emoji-cell) * 10);
+}
+
 /* In a message's phone sheet the picker takes the sheet's width; the cells stay finger-sized. */
 .ws-sheet-emoji {
   width: 100%;

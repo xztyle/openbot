@@ -9,7 +9,7 @@ import { FormDialog } from "../../form-dialog";
 import { SmilePlus } from "../../icons";
 import { useText } from "../../text";
 import { AVATAR_HUE_LABEL } from "../agents/avatar-hue-label";
-import { EmojiPickerPopover } from "../workspace/EmojiPicker";
+import { EmojiPickerPopover } from "../workspace/emoji-picker-lazy";
 import { WorkspaceSelect } from "../workspace/WorkspaceSelect";
 import { SpaceMark } from "./SpaceRail";
 

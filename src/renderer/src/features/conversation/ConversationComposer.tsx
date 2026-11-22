@@ -52,7 +52,7 @@ import { ReplyQuote } from "@openbot/ui/features/conversation/ReplyQuote";
 import { SavedReplies } from "@openbot/ui/features/conversation/SavedReplies";
 import { SpeakingBar } from "@openbot/ui/features/conversation/SpeakingBar";
 import { VoiceRecordingMorph, voiceButtonLabel } from "@openbot/ui/features/conversation/VoiceRecordingMorph";
-import { EmojiPickerPopover } from "@openbot/ui/features/workspace/EmojiPicker";
+import { EmojiPickerPopover } from "@openbot/ui/features/workspace/emoji-picker-lazy";
 import {
   type ComposerFormat,
   ComposerFormatToggle,

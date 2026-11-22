@@ -1,4 +1,5 @@
-import { EmojiPicker, EmojiPickerPopover } from "@openbot/ui/features/workspace/EmojiPicker";
+import { EmojiPicker } from "@openbot/ui/features/workspace/EmojiPicker";
+import { EmojiPickerPopover } from "@openbot/ui/features/workspace/emoji-picker-lazy";
 import { SmilePlus } from "@openbot/ui/icons";
 import { createSignal } from "solid-js";
 import { fn } from "storybook/test";

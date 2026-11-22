@@ -2700,6 +2700,17 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
         scheduleActivity(300);
     }),
   );
+  // A conversation read here or on another device of the reader is told only by `channels-changed`, and
+  // its mentions and DMs in Activity are read with it: Activity reads again when a count goes down.
+  let readCounts = new Map<string, number>();
+  createEffect(
+    () => channels.state.channels.map((channel) => [channel.id, channel.unreadCount] as const),
+    (counts) => {
+      const previous = readCounts;
+      readCounts = new Map(counts);
+      if (counts.some(([id, count]) => count < (previous.get(id) ?? 0))) scheduleActivity(300);
+    },
+  );
   /** The channel whose work a thread is, by the threads that the channel list names. */
   const channelOfThread = createMemo(() => {
     const byThread = new Map<string, string>();

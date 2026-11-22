@@ -268,6 +268,63 @@ export class AgentUsage {
     }));
   }
 
+  /**
+   * Each agent's turns, tokens and estimated cost since `since`, for the guardrail budgets. The tokens
+   * add the known counts, as `readTurnTotals` does; a record with no cost adds none.
+   */
+  dailyTotals(since: string): Array<{ agentId: string; turns: number; tokens: number; costUsd: number }> {
+    const totals = new Map<string, { agentId: string; turns: number; tokens: number; costUsd: number }>();
+    const entry = (agentId: string) => {
+      let value = totals.get(agentId);
+      if (!value) {
+        value = { agentId, turns: 0, tokens: 0, costUsd: 0 };
+        totals.set(agentId, value);
+      }
+      return value;
+    };
+    for (const row of databaseRows(
+      this.#core.connection
+        .prepare(
+          `SELECT agent_id, COUNT(*) AS turns FROM agent_usage_activity
+           WHERE occurred_at >= ? AND kind = 'turn' GROUP BY agent_id`,
+        )
+        .all(since),
+    ))
+      entry(requiredStringColumn(row, "agent_id")).turns = optionalNumberColumn(row, "turns") ?? 0;
+    for (const row of databaseRows(
+      this.#core.connection
+        .prepare(
+          `SELECT agent_id, COALESCE(SUM(estimated_cost_usd), 0) AS cost_usd,
+             COALESCE(SUM(COALESCE(json_extract(tokens_json, '$.uncachedInput'), 0)
+               + COALESCE(json_extract(tokens_json, '$.cachedInput'), 0)
+               + COALESCE(json_extract(tokens_json, '$.cacheCreation'), 0)
+               + COALESCE(json_extract(tokens_json, '$.output'), 0)), 0) AS tokens
+           FROM agent_usage_records WHERE occurred_at >= ? GROUP BY agent_id`,
+        )
+        .all(since),
+    )) {
+      const value = entry(requiredStringColumn(row, "agent_id"));
+      value.tokens = optionalNumberColumn(row, "tokens") ?? 0;
+      value.costUsd = optionalNumberColumn(row, "cost_usd") ?? 0;
+    }
+    return [...totals.values()];
+  }
+
+  /** The estimated cost of each agent on one provider since `since`, for its share of a usage window. */
+  costsSince(since: string, provider: string): Map<string, number> {
+    const rows = databaseRows(
+      this.#core.connection
+        .prepare(
+          `SELECT agent_id, COALESCE(SUM(estimated_cost_usd), 0) AS cost_usd FROM agent_usage_records
+           WHERE occurred_at >= ? AND provider = ? GROUP BY agent_id`,
+        )
+        .all(since, provider),
+    );
+    return new Map(
+      rows.map((row) => [requiredStringColumn(row, "agent_id"), optionalNumberColumn(row, "cost_usd") ?? 0]),
+    );
+  }
+
   startTurn(agentId: string, sessionId: string, turnId: string, provider: string, model: string): void {
     this.#core.connection
       .prepare("INSERT OR IGNORE INTO agent_usage_activity VALUES (?, ?, ?, ?, ?, ?, 'turn', ?)")

@@ -8,11 +8,15 @@ import {
   type UiBlockResponse,
   type UiConfirmField,
 } from "@openbot/contracts/ui-blocks";
+import { sourceText } from "@openbot/i18n/source";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { PromptResponder, SurfacedUiBlock } from "../agent/attention-registry";
 import { openBotToolFailure, openBotToolResult } from "../agent/routine-tools";
 import type { AgentClient } from "../agent-client";
+import type { GuardrailsService } from "../guardrails/guardrails-service";
+import { MoneyApprovals, moneyDigest, moneyEffect } from "../guardrails/money-approvals";
+import { guardrailToolCall } from "../guardrails/tool-fingerprint";
 import { REQUEST_DECISION_ACTIONS, requestDecisionToolSchema } from "../openbot-tools";
 import type { AppServerRequest, DynamicToolCallParams, DynamicToolResult } from "../protocol";
 import {
@@ -20,6 +24,7 @@ import {
   classifyCommand,
   classifyToolUse,
   type TrustClassification,
+  trustCategory,
   trustSummary,
 } from "./trust-classifier";
 import type { TrustApprovalAnswer, TrustService, TrustSubject } from "./trust-service";
@@ -54,6 +59,8 @@ export interface TrustAttention {
     block: SurfacedUiBlock,
     autoAnswer?: { actionId: string; afterMs: number },
   ): void;
+  /** Ends a waiting approval as unanswered: a money approval that expired. */
+  cancelRequest(client: TrustClient, requestId: string | number): void;
 }
 
 export interface TrustToolGateOptions {
@@ -64,6 +71,21 @@ export interface TrustToolGateOptions {
   listTabs(): BrowserTab[];
   /** Slack, Discord and Telegram show no card, so a decision cannot wait there. */
   messagingThread(publicThreadId: string): boolean;
+  /** The injection monitor and the expiry of money approvals. Null where no guardrails run. */
+  guardrails?: GuardrailsService | null;
+}
+
+/** The guardrails' answer for one call: refuse it, or how the trust gate must treat it. */
+type GuardCheck = { allowed: true; askOwner: boolean; tainted: boolean } | { allowed: false; message: string };
+
+function isMoney(action: TrustClassification | null): action is TrustClassification {
+  return action?.action === "pay" || action?.action === "launch_ads";
+}
+
+/** The action without its browser surface, so the pass of an earlier approval does not cover it. */
+function withoutSurface(action: TrustClassification): TrustClassification {
+  const { surface: _surface, ...rest } = action;
+  return rest;
 }
 
 const OPTION_IDS: readonly string[] = ["option1", "option2", "option3"];
@@ -79,6 +101,7 @@ export class TrustToolGate {
   readonly #trust: TrustService;
   readonly #attention: TrustAttention;
   readonly #options: TrustToolGateOptions;
+  readonly #money = new MoneyApprovals();
 
   constructor(options: TrustToolGateOptions) {
     this.#trust = options.trust;
@@ -86,35 +109,141 @@ export class TrustToolGate {
     this.#options = options;
   }
 
+  /**
+   * The approval card of one action. A money card shows the effect (the target, the amount, the budget
+   * before and after) and, for a payment, what the owner pays by hand and where; it expires after the
+   * guardrails' `moneyApprovalHours`, and the call then does not run.
+   */
   #approve(
     client: TrustClient,
     request: AppServerRequest,
     subject: Required<Pick<TrustSubject, "agentId" | "threadId" | "turnId">>,
     action: TrustClassification,
   ) {
-    return (reason: string) =>
-      this.#attention.awaitToolApproval(
+    return (reason: string) => {
+      const money = isMoney(action);
+      const effect = money ? moneyEffect(action, this.#trust.audit) : null;
+      const policy = this.#options.guardrails?.policy();
+      const hours = money && policy?.enabled ? policy.moneyApprovalHours : null;
+      let expired = false;
+      const timer =
+        hours === null
+          ? null
+          : setTimeout(() => {
+              expired = true;
+              this.#attention.cancelRequest(client, request.id);
+            }, hours * 3_600_000);
+      timer?.unref?.();
+      const command = effect
+        ? [effect.headline, effect.payByHand].filter(Boolean).join("\n")
+        : action.amount === undefined
+          ? action.summary
+          : `${action.summary} (${action.amount} ${action.currency ?? "USD"})`;
+      return this.#attention
+        .awaitToolApproval(
+          client,
+          request,
+          {
+            requestId: request.id,
+            agentId: subject.agentId,
+            threadId: subject.threadId,
+            turnId: subject.turnId,
+            kind: "permissions",
+            command,
+            cwd: null,
+            reason:
+              hours === null
+                ? reason
+                : `${reason} ${sourceText("status.agent.moneyApprovalExpires", { hours: String(hours) })}`,
+            grantRoot: null,
+            permissions: null,
+          },
+          // Full access does not answer it, and only the owner can: the money and the name are theirs.
+          { alwaysAsk: true, ownerOnly: true },
+        )
+        .pipe(
+          Effect.ensuring(Effect.sync(() => timer && clearTimeout(timer))),
+          Effect.tap(() =>
+            Effect.sync(() => {
+              if (expired) this.#options.guardrails?.moneyExpired(subject.agentId, subject.turnId, action.summary);
+            }),
+          ),
+        );
+    };
+  }
+
+  /** The guardrails' check of a call before the trust gate: the injection monitor. */
+  #guard(agentId: string, turnId: string, name: string, input: unknown, action: TrustClassification | null) {
+    const guardrails = this.#options.guardrails;
+    return guardrails
+      ? guardrails.checkAction(agentId, turnId, name, input, action).pipe(Effect.map((check): GuardCheck => check))
+      : Effect.succeed<GuardCheck | null>(null);
+  }
+
+  /**
+   * Runs one classified action through the trust gate with the guardrails' money rules: an identical
+   * call that the owner approved minutes ago runs once without a second card, a changed call asks
+   * again; after untrusted content no pass of an earlier approval covers money, and a money action
+   * that the monitor could not clear asks the owner even within a budget.
+   */
+  readonly #gate = Effect.fn("TrustToolGate.gate")(function* (
+    this: TrustToolGate,
+    client: TrustClient,
+    request: AppServerRequest,
+    subject: Required<Pick<TrustSubject, "agentId" | "threadId" | "turnId">>,
+    action: TrustClassification,
+    guard: GuardCheck | null,
+  ) {
+    const money = isMoney(action);
+    const digest = money ? moneyDigest(action) : null;
+    if (digest && this.#money.consume(subject.agentId, digest)) return { allowed: true as const };
+    const gated = money && guard?.allowed && guard.tainted ? withoutSurface(action) : action;
+    let accepted = false;
+    const approve = (reason: string) =>
+      this.#approve(
         client,
         request,
-        {
-          requestId: request.id,
-          agentId: subject.agentId,
-          threadId: subject.threadId,
-          turnId: subject.turnId,
-          kind: "permissions",
-          command:
-            action.amount === undefined
-              ? action.summary
-              : `${action.summary} (${action.amount} ${action.currency ?? "USD"})`,
-          cwd: null,
-          reason,
-          grantRoot: null,
-          permissions: null,
-        },
-        // Full access does not answer it, and only the owner can: the money and the name are theirs.
-        { alwaysAsk: true, ownerOnly: true },
+        subject,
+        gated,
+      )(reason).pipe(
+        Effect.tap((answer) =>
+          Effect.sync(() => {
+            accepted = answer === "accept";
+          }),
+        ),
       );
-  }
+    if (money && guard?.allowed && guard.askOwner && this.#trust.evaluate(subject, gated).kind === "allow") {
+      const answer = yield* approve(
+        sourceText("status.agent.trustAskAfterUntrusted", {
+          agent: this.#trust.agentName(subject.agentId) ?? subject.agentId,
+        }),
+      );
+      const name = this.#trust.agentName(subject.agentId);
+      this.#trust.record({
+        actor: { kind: "agent", id: subject.agentId, ...(name ? { name } : {}) },
+        category: trustCategory(gated.action),
+        action: gated.label,
+        summary: gated.summary,
+        ...(gated.amount === undefined ? {} : { amount: gated.amount, currency: gated.currency ?? "USD" }),
+        ...(gated.platform ? { platform: normalizeTrustPlatform(gated.platform) } : {}),
+        agentId: subject.agentId,
+        threadId: subject.threadId,
+        turnId: subject.turnId,
+        outcome: answer === "accept" ? "approved" : "declined",
+        ...(answer === "cancel" ? {} : { answeredBy: "owner" }),
+      });
+      if (answer !== "accept")
+        return {
+          allowed: false as const,
+          message: `The owner did not approve ${gated.label}. Do not retry it or try it another way.`,
+        };
+      if (digest) this.#money.grant(subject.agentId, digest);
+      return { allowed: true as const };
+    }
+    const result = yield* this.#trust.gate(subject, gated, approve);
+    if (result.allowed && accepted && digest) this.#money.grant(subject.agentId, digest);
+    return result;
+  });
 
   /**
    * Checks a browser tool call before it runs. Null lets it run; a result refuses it. `params` has the
@@ -131,9 +260,17 @@ export class TrustToolGate {
     const tabId = isString(args.tabId) ? args.tabId : undefined;
     const tab = tabId ? this.#options.listTabs().find((candidate) => candidate.id === tabId) : undefined;
     const action = classifyBrowserCall(params.tool, params.arguments, tab?.url);
+    const guard = yield* this.#guard(
+      agentId,
+      params.turnId,
+      `openbot_browser.${params.tool}`,
+      params.arguments,
+      action,
+    );
+    if (guard && !guard.allowed) return openBotToolFailure(guard.message);
     if (!action) return null;
     const subject = { agentId, threadId: params.threadId, turnId: params.turnId };
-    const result = yield* this.#trust.gate(subject, action, this.#approve(client, request, subject, action));
+    const result = yield* this.#gate(client, request, subject, action, guard);
     return result.allowed ? null : openBotToolFailure(result.message);
   });
 
@@ -179,21 +316,26 @@ export class TrustToolGate {
     request: AppServerRequest,
     params: DynamicToolCallParams,
   ) {
-    if (params.tool !== "create_agent") return null;
     const agentId = this.#options.agentForThread(params.threadId);
     if (!agentId) return null;
     const args = isDynamicRecord(params.arguments) ? params.arguments : {};
-    const action: TrustClassification = {
-      action: "create_agent",
-      label: "openbot.create_agent",
-      summary: trustSummary(`Create the agent ${isString(args.name) ? args.name : ""}`),
-    };
+    const action: TrustClassification | null =
+      params.tool === "create_agent"
+        ? {
+            action: "create_agent",
+            label: "openbot.create_agent",
+            summary: trustSummary(`Create the agent ${isString(args.name) ? args.name : ""}`),
+          }
+        : null;
+    const guard = yield* this.#guard(agentId, params.turnId, `openbot.${params.tool}`, params.arguments, action);
+    if (guard && !guard.allowed) return openBotToolFailure(guard.message);
+    if (!action) return null;
     const subject = {
       agentId,
       threadId: this.#options.publicThreadId(agentId, params.threadId),
       turnId: params.turnId,
     };
-    const result = yield* this.#trust.gate(subject, action, this.#approve(client, request, subject, action));
+    const result = yield* this.#gate(client, request, subject, action, guard);
     return result.allowed ? null : openBotToolFailure(result.message);
   });
 
@@ -216,10 +358,23 @@ export class TrustToolGate {
       if (!request.signal?.aborted && client.running)
         client.respond(request.id, { decision, ...(reason ? { reason } : {}) });
     };
-    if (!agentId || !action) return answer("allow");
+    if (!agentId) return answer("allow");
+    const call = guardrailToolCall(params.toolName, params.toolInput);
+    const guard = call ? yield* this.#guard(agentId, turnId, call.name, call.input, action) : null;
+    if (guard && !guard.allowed) return answer("deny", guard.message);
+    if (!action) return answer("allow");
     const subject = { agentId, threadId: this.#options.publicThreadId(agentId, threadId), turnId };
-    if (params.phase !== "approve" && this.#trust.evaluate(subject, action).kind === "ask") return answer("ask");
-    const result = yield* this.#trust.gate(subject, action, this.#approve(client, request, subject, action));
+    if (params.phase !== "approve") {
+      const gated = isMoney(action) && guard?.allowed && guard.tainted ? withoutSurface(action) : action;
+      const asks =
+        this.#trust.evaluate(subject, gated).kind === "ask" || (isMoney(action) && guard?.allowed && guard.askOwner);
+      if (asks) {
+        // The owner approved this exact call a moment ago, such as before a retry: it runs once more.
+        if (isMoney(action) && this.#money.consume(agentId, moneyDigest(action))) return answer("allow");
+        return answer("ask");
+      }
+    }
+    const result = yield* this.#gate(client, request, subject, action, guard);
     return result.allowed ? answer("allow") : answer("deny", result.message);
   });
 
@@ -245,10 +400,13 @@ export class TrustToolGate {
     const agentId = threadId ? this.#options.agentForThread(threadId) : undefined;
     if (!agentId || !command) return null;
     const action = classifyCommand(command, { cwd: isString(params.cwd) ? params.cwd : null });
-    if (!action || (action.action !== "pay" && action.action !== "launch_ads")) return null;
     const turnId = isString(params.turnId) ? params.turnId : String(request.id);
+    // The guardrails check a high-impact command of a turn that read untrusted content.
+    const guard = yield* this.#guard(agentId, turnId, "Bash", { command }, action);
+    if (guard && !guard.allowed) return false;
+    if (!action || (action.action !== "pay" && action.action !== "launch_ads")) return null;
     const subject = { agentId, threadId: this.#options.publicThreadId(agentId, threadId), turnId };
-    const result = yield* this.#trust.gate(subject, action, this.#approve(client, request, subject, action));
+    const result = yield* this.#gate(client, request, subject, action, guard);
     return result.allowed;
   });
 

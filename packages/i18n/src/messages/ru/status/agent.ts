@@ -36,4 +36,7 @@ export const messages = {
   "status.agent.skillUsing": "Использование навыка {name}…",
   "status.agent.skillReading": "Чтение навыка…",
   "status.agent.memoryChanges": "Память: сохранено {saved}, обновлено {updated}, забыто {forgotten}.",
+  "status.agent.moneyApprovalExpires": "Истекает через {hours} ч без ответа, и действие не выполняется.",
+  "status.agent.trustAskAfterUntrusted":
+    "{agent} прочитал внешний контент (веб-страницу, письмо или вебхук) в этом ходе, и проверка безопасности не смогла одобрить этот платёж. Решать вам.",
 } as const satisfies PartialTranslation<typeof source>;

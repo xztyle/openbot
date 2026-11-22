@@ -289,6 +289,8 @@ import { EventCheckDelivery } from "./event-check-delivery";
 import type { EventCheckReader } from "./event-check-reader";
 import type { EventCheckScheduler } from "./event-check-scheduler";
 import type { EventCheckTemplates } from "./event-check-templates";
+import { guardrailsRuntime } from "./guardrails/guardrails-runtime";
+import type { GuardrailsService } from "./guardrails/guardrails-service";
 import type { HostMemory } from "./host-memory";
 import type { InsightService } from "./insight/insight-service";
 import { motionTicketCreator } from "./loops/loop-motion";
@@ -369,6 +371,8 @@ export interface AgentServiceOptions {
   securityAudit?: SecurityAuditSink;
   /** The trust policy that gates spend, publishing, email and deletes, and its audit trail. */
   trust?: TrustService;
+  /** Budgets, run breakers, the stuck watch, the injection monitor and the subscription failover. */
+  guardrails?: GuardrailsService;
   store: AgentStore;
   mailbox: MailboxStore;
   browser: AgentBrowserHost;
@@ -600,6 +604,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #threads: ThreadLifecycle;
   readonly #memoryHold: MemoryHold;
   readonly #usageLimits: UsageLimitGate;
+  readonly #guardrails: GuardrailsService | null;
   readonly #drain: DrainScheduler;
   readonly #modelPolicy: ModelPolicy;
   readonly #sessionSettings: SessionSettings;
@@ -674,6 +679,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#busyMessageMode = busyMessageMode;
     this.#localSkillTools = localSkillTools;
     this.#routineFlowTools = routineFlowTools;
+    this.#guardrails = options.guardrails ?? null;
     this.#store = store;
     // First of the sub-objects, because `#emitError` reads it to redact and every one of them is
     // given that callback.
@@ -1389,7 +1395,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         Boolean(this.#conversation.workingSnapshot(agentId)?.activeTurnId || this.#mailbox.nextQueued(agentId)) ||
         (this.#tasks.oneTurnAtATime(agentId) &&
           this.#conversation.workingTaskSnapshots(agentId).some((snapshot) => snapshot.activeTurnId)) ||
-        !this.#usageLimits.mayDrain(agentId),
+        !this.#usageLimits.mayDrain(agentId) ||
+        // A paused agent takes no new channel work: another member can answer.
+        (this.#guardrails?.pauseFor(agentId) ?? null) !== null,
       usageLimited: (agentId) => !this.#usageLimits.mayDrain(agentId),
       skipAtLimit: (task) => this.#channelRoutines.skipAtLimit(task.channelId, task.requestMessageId),
       usageLimitBackup: (agentId) => this.#usageLimitBackup(agentId) !== undefined || this.#poolBackup(agentId),
@@ -1642,6 +1650,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         servesModel: (model) => this.#endpoints.serves(model),
         requeueChannelDelivery: (deliveryId, continueWork) => this.#requeueChannelDelivery(deliveryId, continueWork),
         mayFailOver: (agentId) => this.#usageLimitBackup(agentId) !== undefined || this.#poolBackup(agentId),
+        guardrailsHold: (agentId, headSender) => !(this.#guardrails?.mayDrain(agentId, headSender) ?? true),
         turnEnded: (turnId) => this.#turn.hasEnded(turnId),
         turnRestarting: (turnId) => this.#turn.forgetEnded(turnId),
         startRequestedNewChat: (agentId) => this.#startRequestedNewChat(agentId),
@@ -1751,6 +1760,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         listAgents: () => this.listAgents(),
         redactMcp: (text) => this.#mcp.redact(text),
         emitToolUsage: (usage) => this.emit("toolUsage", usage),
+        observeToolStep: (agentId, threadId, turnId, item, completed) =>
+          this.#guardrails?.observeTool(agentId, threadId, turnId, item, completed),
+        observeContext: (agentId, threadId, tokens) => this.#guardrails?.observeContext(agentId, threadId, tokens),
         turnModel: (agentId, turnId) => this.#drain.modelForTurn(agentId, turnId),
         mayFailOver: (agentId) => this.#usageLimitBackup(agentId) !== undefined || this.#poolBackup(agentId),
         requeueChannelDelivery: (deliveryId, continueWork) => this.#requeueChannelDelivery(deliveryId, continueWork),
@@ -1889,6 +1901,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       mcpServers: mcpServersFromGateway(this.#mcp, options.prepareMcpTest),
       apiKeys: options.agentApiKeys ?? null,
       trust: options.trust ?? null,
+      guardrails: options.guardrails ?? null,
       hooks: {
         listAgents: () => this.listAgents(),
         listModels: () => this.listModels(),
@@ -1951,6 +1964,25 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             : Effect.fail({ message: "Goals are not available yet." }),
       },
     });
+    this.#guardrails?.connect(
+      guardrailsRuntime({
+        store,
+        mailbox,
+        status: () => this.getStatus(),
+        models: () => this.#endpoints.available(),
+        usageAccounts: (provider) => this.#providers.usageAccounts(provider),
+        poolOf: (provider) => this.#providers.accountPool(provider),
+        clientFor: (agent) => this.#providers.clientForAgent(agent),
+        publicThread: (agentId, threadId) => this.#conversation.publicThreadId(agentId, threadId),
+        routineTrigger: (agentId, routineId) => this.#routines.getRecord(agentId, routineId)?.trigger.kind ?? null,
+        interrupt: (agentId, turnId, executionThreadId) => this.interrupt(agentId, turnId, executionThreadId),
+        scheduleDrain: (agentId) => this.#drain.scheduleDrain(agentId),
+        generateCheap: (prompt) => this.generateCheapText(prompt, Date.now() + 20_000),
+        ownerAway: options.ownerAway ?? null,
+        modelReady: (choice) => this.#usageLimitReady(choice),
+        changed: () => undefined,
+      }),
+    );
   }
 
   getStatus(): AgentStatus {
@@ -3838,6 +3870,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   ) {
     const returning = move === "return";
     const failingOver = move === "provider-error";
+    // The guardrails move an agent off a subscription pool that nearly ran out, and back after it.
+    const poolFailover = move === "pool-failover";
     const handedOverThreads = (previous: AgentSummary) => [
       ...(previous.threadId ? [previous.threadId] : []),
       ...this.#tasks.threadIdsForAgent(previous.id),
@@ -4045,7 +4079,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           }
         : undefined;
     const moved = previousChoice && nextChoice && !sameAgentModelChoice(previousChoice, nextChoice);
-    const leaving = Boolean(moved && input.leaveUsageLimit && (wasHeld || failingOver));
+    const leaving = Boolean(moved && input.leaveUsageLimit && (wasHeld || failingOver || poolFailover));
     const returnTo =
       leaving && previous && previousChoice
         ? (previous.usageLimitReturn ?? {
@@ -4196,7 +4230,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         },
         move: "next-turn",
       };
-    if (!agent.usageLimitReturn && !agent.backupModels?.automatic) return null;
+    // The guardrails' failover: a Sonnet-class agent whose subscription pool nearly ran out.
+    const failover =
+      !agent.usageLimitReturn && this.#hasWaitingWork(agentId)
+        ? (this.#guardrails?.failoverChoice(agent) ?? null)
+        : null;
+    if (!agent.usageLimitReturn && !agent.backupModels?.automatic && !failover) return null;
     if (this.#runsTurn(agentId) || this.#mailbox.hasStartedDelivery(agentId)) return null;
     // The agent keeps its reasoning effort where the other model has it. It goes back with the effort it left.
     const move = (choice: AgentModelChoice, reasoningEffort = agent.reasoningEffort) => {
@@ -4214,8 +4253,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             : reasoningEffort,
       };
     };
-    if (agent.usageLimitReturn && this.#usageLimitReady(agent.usageLimitReturn))
+    if (
+      agent.usageLimitReturn &&
+      this.#usageLimitReady(agent.usageLimitReturn) &&
+      !this.#guardrails?.holdsReturn(agentId, agent.usageLimitReturn)
+    )
       return { input: move(agent.usageLimitReturn, agent.usageLimitReturn.reasoningEffort), move: "return" };
+    if (failover) return { input: { ...move(failover), leaveUsageLimit: true }, move: "pool-failover" };
     const limited = !this.#usageLimits.mayDrain(agentId);
     const failed = !limited && this.#usageLimits.isFailed(usageLimitOf(agentModelChoice(agent)));
     if (!limited && !failed) return null;
@@ -4495,7 +4539,15 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             logger.info("A pool move waits: the agent's Claude session still runs background work.", { agentId });
             return false;
           }
+          const before = this.#store.list().find((candidate) => candidate.id === agentId);
           yield* this.#applyAgentUpdate(move.input, undefined, move.move);
+          if (move.move === "return") this.#guardrails?.returned(agentId);
+          if (move.move === "pool-failover" && before)
+            this.#guardrails?.failedOver(
+              agentId,
+              { provider: before.provider, model: before.model },
+              { provider: move.input.provider ?? before.provider, model: move.input.model ?? before.model },
+            );
           return true;
         }),
       )
@@ -5344,6 +5396,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   readonly stop = Effect.fn("AgentService.stop")(function* (this: AgentService) {
     this.#stopping = true;
+    this.#guardrails?.dispose();
     if (this.#deployDrainTimer) clearTimeout(this.#deployDrainTimer);
     this.#deployDrainTimer = null;
     const channelStop = yield* Effect.forkChild(
@@ -6406,6 +6459,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#escalations?.observe(event);
     this.#observeAttention(event);
     this.#modelPolicy.observe(event);
+    this.#guardrails?.observe(event);
     if (event.type === "agents-changed") this.playbooks.scheduleSync();
     // Before the channels and the tasks take theirs: the fleet follows the turns of channel threads too.
     this.workspace?.observe(event);
@@ -6449,7 +6503,7 @@ export class AgentLifecycleFailed extends Schema.TaggedError<AgentLifecycleFaile
 const POOL_READ_INTERVAL_MS = 4 * 60_000;
 
 /** Why `#usageLimitMove` changes an agent's model, when it is not the switch for a usage limit. */
-type ModelMove = "return" | "provider-error" | "next-turn";
+type ModelMove = "return" | "provider-error" | "next-turn" | "pool-failover";
 
 /** The fields of an update that a queued `pendingRuntime` holds. */
 const RUNTIME_UPDATE_KEYS: ReadonlySet<string> = new Set([

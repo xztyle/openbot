@@ -59,4 +59,7 @@ export const messages = {
     "{agent} quiere gastar {amount} en {platform}. Supera el presupuesto total: {spent} de {limit} gastados.",
   "status.agent.trustAskUnknown":
     "{agent} quiere gastar en {platform} y no se sabe el importe. Un presupuesto cubre {platform}.",
+  "status.agent.moneyApprovalExpires": "Caduca en {hours} h si nadie responde, y la acción no se ejecuta.",
+  "status.agent.trustAskAfterUntrusted":
+    "{agent} leyó contenido externo (una web, un email o un webhook) en este turno y el control de seguridad no pudo validar este pago. Decides tú.",
 } as const satisfies PartialTranslation<typeof source>;

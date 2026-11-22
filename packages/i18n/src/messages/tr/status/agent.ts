@@ -34,4 +34,7 @@ export const messages = {
   "status.agent.skillUsing": "{name} becerisini kullanıyor…",
   "status.agent.skillReading": "Bir beceri okuyor…",
   "status.agent.memoryChanges": "Bellek: {saved} kaydedildi, {updated} güncellendi, {forgotten} unutuldu.",
+  "status.agent.moneyApprovalExpires": "{hours} saat içinde yanıt gelmezse süresi dolar ve işlem çalışmaz.",
+  "status.agent.trustAskAfterUntrusted":
+    "{agent} bu turda dış içerik okudu (bir web sayfası, e-posta veya webhook) ve güvenlik kontrolü bu ödemeyi onaylayamadı. Karar sizin.",
 } as const satisfies PartialTranslation<typeof source>;

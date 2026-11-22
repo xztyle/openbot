@@ -108,6 +108,7 @@ try {
     surfaceUiBlock: (_client, _request, block) => {
       captured.block = block;
     },
+    cancelRequest: () => undefined,
   };
   const gate = new TrustToolGate({
     trust,

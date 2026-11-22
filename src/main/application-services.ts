@@ -12,6 +12,8 @@ import { EventCheckApiReader } from "../backend/event-check-api-reader";
 import { EventCheckEnvironment } from "../backend/event-check-environment";
 import { EventCheckStore } from "../backend/event-check-store";
 import { EventCheckTemplates } from "../backend/event-check-templates";
+import { GuardrailEventLog } from "../backend/guardrails/guardrail-event-log";
+import { GuardrailsService } from "../backend/guardrails/guardrails-service";
 import { DiscordConnectFailed, toDiscordConnectFailed } from "../backend/messaging/discord/discord-connect";
 import { SlackConnectFailed, toSlackConnectFailed } from "../backend/messaging/slack/slack-connect";
 import { routineFlowRoutines } from "../backend/routine-flows/routine-flow-routines";
@@ -1799,8 +1801,14 @@ export async function createApplicationServices({
     audit: new TrustAuditLog(join(app.getPath("userData"), "trust-audit")),
     directory: { agents: () => store.list(), spaceOf: (agentId) => store.spaces.agentSpaceId(agentId) },
   });
+  // Guardrails: budgets, run breakers, the stuck watch, the injection monitor and the failover.
+  const guardrails = new GuardrailsService({
+    file: join(app.getPath("userData"), "guardrails-v1.json"),
+    events: new GuardrailEventLog(join(app.getPath("userData"), "guardrails")),
+  });
   const service: AgentService = new AgentService({
     trust,
+    guardrails,
     store,
     mailbox,
     browser,
@@ -2663,6 +2671,7 @@ export async function createApplicationServices({
     eventChecks: service.eventChecks,
     securityAudit,
     trust,
+    guardrails,
     // Present, so the host advertises the push routes. The key pair and the subscriptions are in a file
     // of this profile, not in the database.
     webPush,

@@ -78,4 +78,7 @@ export const messages = defineMessages("status.agent", {
     "{agent} wants to spend {amount} on {platform}. This goes over the total budget: {spent} of {limit} spent.",
   "status.agent.trustAskUnknown":
     "{agent} wants to spend on {platform}, and the amount is not known. A budget covers {platform}.",
+  "status.agent.moneyApprovalExpires": "It expires in {hours} h if nobody answers, and the call does not run.",
+  "status.agent.trustAskAfterUntrusted":
+    "{agent} read outside content (a web page, an email or a webhook) in this turn, and the security check could not clear this payment. You decide.",
 });

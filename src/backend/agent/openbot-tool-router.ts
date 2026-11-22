@@ -53,6 +53,7 @@ import {
 } from "../collaboration-limits";
 import type { ProviderSession } from "../database/provider-sessions";
 import type { EventCheckScheduler } from "../event-check-scheduler";
+import type { GuardrailsService } from "../guardrails/guardrails-service";
 import type { LoopService } from "../loops/loop-service";
 import type { MailboxStore } from "../mailbox-store";
 import { agentMcpServers } from "../mcp-provider-shapes";
@@ -299,6 +300,8 @@ export interface OpenBotToolRouterOptions {
   sharePreviews?: SharePreviewDrawer | null | undefined;
   /** The trust policy and audit trail; null where nothing enforces one. */
   trust?: TrustService | null | undefined;
+  /** The guardrails: the injection monitor and money approval expiry. Null where none run. */
+  guardrails?: GuardrailsService | null | undefined;
   hooks: OpenBotToolRouterHooks;
 }
 
@@ -354,6 +357,7 @@ export class OpenBotToolRouter {
   readonly #interruptTool: AgentInterruptTool;
   readonly #ownerTools: OwnerTools;
   readonly #trust: TrustToolGate | null;
+  readonly #guardrails: GuardrailsService | null;
 
   constructor(options: OpenBotToolRouterOptions) {
     this.#history = new HistoryTools({
@@ -407,8 +411,10 @@ export class OpenBotToolRouter {
           publicThreadId: (agentId, threadId) => options.conversation.publicThreadId(agentId, threadId),
           listTabs: () => options.browser.listTabs(),
           messagingThread: (threadId) => options.messaging.linkForThread(threadId) !== null,
+          guardrails: options.guardrails ?? null,
         })
       : null;
+    this.#guardrails = options.guardrails ?? null;
     this.#interruptTool = new AgentInterruptTool({
       store: options.store,
       mailbox: options.mailbox,
@@ -629,6 +635,8 @@ export class OpenBotToolRouter {
               Effect.raceFirst(cancelled),
               Effect.onInterrupt(() => Effect.sync(() => this.#browser.endControl(params.threadId, params.turnId))),
             );
+            // Page text is untrusted: the guardrails check the turn's next high-impact action.
+            this.#guardrails?.observeBrowserResult(params.turnId, params.tool, result);
             if (!signal?.aborted && client.running) client.respond(toolRequest.id, result);
             return;
           }

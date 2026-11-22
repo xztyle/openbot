@@ -95,6 +95,11 @@ export interface DrainHooks {
   /** Whether a ready automatic backup can take this agent's work after a usage limit. */
   mayFailOver(agentId: string): boolean;
   /**
+   * Whether a guardrails pause (a budget or a loop) holds this agent's next delivery. `headSender` is
+   * the sender kind of that delivery: the owner's own messages are never held.
+   */
+  guardrailsHold?(agentId: string, headSender: string | null): boolean;
+  /**
    * Starts the move of this agent to another model for a usage limit, if one is due: back to its own
    * model, or to a backup model during a hold. True when a move started; the move schedules the drain
    * again when it ends. Each path that starts a queue comes here, so no message runs on the wrong model.
@@ -373,6 +378,8 @@ export class DrainScheduler {
     if (!this.#compaction.mayDrain(agentId)) return "compaction";
     if (!this.#routines.mayDrain(agentId)) return "routine";
     if (!this.#usageLimits.mayDrain(agentId)) return "usage-limit";
+    if (this.#hooks.guardrailsHold?.(agentId, this.#mailbox.nextQueued(agentId, taskId)?.delivery.sender.kind ?? null))
+      return "guardrails";
     return null;
   }
 

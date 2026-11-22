@@ -42,4 +42,7 @@ export const messages = {
   "status.agent.vaultAdded": "已保存到保险库：{name}",
   "status.agent.vaultUpdated": "已在保险库中修改：{name}",
   "status.agent.vaultDeleted": "已从保险库删除：{name}",
+  "status.agent.moneyApprovalExpires": "如果 {hours} 小时内无人回复，将过期且不会执行。",
+  "status.agent.trustAskAfterUntrusted":
+    "{agent} 在本轮读取了外部内容（网页、邮件或 Webhook），安全检查无法确认这笔付款。请你决定。",
 } as const satisfies PartialTranslation<typeof source>;

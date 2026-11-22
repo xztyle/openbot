@@ -41,4 +41,7 @@ export const messages = {
   "status.agent.mcpServerDisable": "이 서버의 모든 에이전트에 MCP 서버 {name}을(를) 꺼요.",
   "status.agent.mcpServerRemove": "이 서버의 모든 에이전트에서 MCP 서버 {name}과(와) 로그인 정보를 제거해요.",
   "status.agent.mcpSignInRequested": "MCP 서버 {name}에 로그인이 필요해요. 서버 설정의 MCP에서 로그인해 주세요.",
+  "status.agent.moneyApprovalExpires": "{hours}시간 안에 응답이 없으면 만료되고 실행되지 않습니다.",
+  "status.agent.trustAskAfterUntrusted":
+    "{agent}이(가) 이번 턴에 외부 콘텐츠(웹 페이지, 이메일 또는 웹훅)를 읽었고 보안 검사가 이 결제를 확인하지 못했습니다. 결정해 주세요.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -32,4 +32,7 @@ export const messages = {
   "status.agent.skillUsing": "スキル {name} を使用しています…",
   "status.agent.skillReading": "スキルを読み込んでいます…",
   "status.agent.memoryChanges": "メモリー: {saved} 件保存、{updated} 件更新、{forgotten} 件忘却。",
+  "status.agent.moneyApprovalExpires": "{hours} 時間以内に回答がない場合は期限切れになり、実行されません。",
+  "status.agent.trustAskAfterUntrusted":
+    "{agent} はこのターンで外部コンテンツ（Web ページ、メール、Webhook）を読みました。セキュリティチェックはこの支払いを確認できませんでした。判断してください。",
 } as const satisfies PartialTranslation<typeof source>;

@@ -73,6 +73,8 @@
     "./ui-blocks": "./src/ui-blocks.ts",
     "./trust-control": "./src/trust-control.ts",
     "./team-protocol/trust-control-v1": "./src/team-protocol/trust-control-v1.ts",
+    "./guardrails": "./src/guardrails.ts",
+    "./team-protocol/guardrails-v1": "./src/team-protocol/guardrails-v1.ts",
     "./workspace-links": "./src/workspace-links.ts",
     "./team-protocol": "./src/team-protocol/index.ts",
     "./team-protocol/queue-edit-v1": "./src/team-protocol/queue-edit-v1.ts",

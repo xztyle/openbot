@@ -101,6 +101,7 @@ interface HostServiceOptions {
   eventChecks?: ForwardedApiOptions["eventChecks"];
   securityAudit?: ForwardedApiOptions["securityAudit"];
   trust?: ForwardedApiOptions["trust"];
+  guardrails?: ForwardedApiOptions["guardrails"];
   /** Present, so the host advertises the push routes. Its owner stops it with the application. */
   webPush?: ForwardedApiOptions["webPush"];
   ownerAway?: ForwardedApiOptions["ownerAway"];
@@ -411,6 +412,7 @@ export class HostService extends EventEmitter<HostEvents> {
       ...(options.eventChecks === undefined ? {} : { eventChecks: options.eventChecks }),
       ...(options.securityAudit === undefined ? {} : { securityAudit: options.securityAudit }),
       ...(options.trust === undefined ? {} : { trust: options.trust }),
+      ...(options.guardrails === undefined ? {} : { guardrails: options.guardrails }),
       ...(options.webPush === undefined ? {} : { webPush: options.webPush }),
       ...(options.ownerAway === undefined ? {} : { ownerAway: options.ownerAway }),
       ...(options.connectorAccess === undefined ? {} : { connectorAccess: options.connectorAccess }),

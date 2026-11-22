@@ -1679,6 +1679,21 @@ export class ProviderRuntime implements ProviderPort {
     return members.filter((member) => !pool.leftOut.includes(member.accountId));
   }
 
+  /**
+   * The last usage reading of each plan account of the provider, its own sign-in first, for the
+   * guardrails meter. An account with no reading yet has null.
+   */
+  usageAccounts(provider: AgentProvider): Array<{ accountId: string; limit: AccountUsageLimit | null }> {
+    const own = this.#usageUnreported.has(provider) ? null : (this.#lastUsage.get(provider) ?? null);
+    return [
+      ...(this.ownSignInUsesKey(provider) ? [] : [{ accountId: DEFAULT_PROVIDER_ACCOUNT_ID, limit: own }]),
+      ...(this.#providerAccounts?.planAccounts(provider) ?? []).map((accountId) => ({
+        accountId,
+        limit: this.#providerAccounts?.keptUsage(accountId) ?? null,
+      })),
+    ];
+  }
+
   /** Shows the account that the pool uses now in the provider's row. */
   setPoolInUse(provider: AgentProvider, accountId: string | null): void {
     if ((this.#poolInUse.get(provider) ?? null) === accountId) return;

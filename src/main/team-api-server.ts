@@ -230,6 +230,7 @@ import { eventCheckCapability, routeEventChecks } from "./team-api/route-event-c
 import { routeEvents } from "./team-api/route-events";
 import { routeFiles } from "./team-api/route-files";
 import { routeFocusUse } from "./team-api/route-focus-use";
+import { routeGuardrails } from "./team-api/route-guardrails";
 import { routeHostAdmin } from "./team-api/route-host-admin";
 import { routeHostBackups } from "./team-api/route-host-backups";
 import { routeHostTimezone } from "./team-api/route-host-timezone";
@@ -1075,6 +1076,7 @@ export class TeamApiServer {
       if ((await routeEventChecks(context, this.#options.eventChecks)) === "handled") return;
       if ((await routeSecurityAudit(context, this.#options.securityAudit)) === "handled") return;
       if ((await routeTrustControl(context, this.#options.trust)) === "handled") return;
+      if ((await routeGuardrails(context, this.#options.guardrails)) === "handled") return;
       if ((await routeMcpChat(context, this.#options.chatMcp)) === "handled") return;
       if ((await routeMcpOAuth(context, this.#options.mcpOAuth)) === "handled") return;
       return this.#json(response, 404, { error: sourceText("error.team.routeNotFound") });

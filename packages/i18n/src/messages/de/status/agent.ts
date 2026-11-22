@@ -35,4 +35,7 @@ export const messages = {
   "status.agent.skillUsing": "Fähigkeit {name} wird verwendet…",
   "status.agent.skillReading": "Fähigkeit wird gelesen…",
   "status.agent.memoryChanges": "Erinnerungen: {saved} gespeichert, {updated} aktualisiert, {forgotten} vergessen.",
+  "status.agent.moneyApprovalExpires": "Sie läuft nach {hours} h ohne Antwort ab, und die Aktion läuft nicht.",
+  "status.agent.trustAskAfterUntrusted":
+    "{agent} hat in diesem Schritt externe Inhalte gelesen (eine Webseite, eine E-Mail oder einen Webhook), und die Sicherheitsprüfung konnte diese Zahlung nicht freigeben. Du entscheidest.",
 } as const satisfies PartialTranslation<typeof source>;

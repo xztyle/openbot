@@ -1,6 +1,7 @@
 import type { Effect } from "effect";
 import type { ChannelService } from "../../backend/channel-service";
 import type { EventCheckScheduler } from "../../backend/event-check-scheduler";
+import type { GuardrailsService } from "../../backend/guardrails/guardrails-service";
 import type { OwnerAwayService } from "../../backend/owner-away";
 import type { SecurityAuditLog } from "../../backend/security-audit-log";
 import type { SpaceService } from "../../backend/spaces/space-service";
@@ -565,6 +566,8 @@ export interface TeamApiOptions {
   hostBackups?: HostBackups | undefined;
   /** `trust-control-v1` (`fork-host-v1`): the trust policy and the audit trail, for an owner or admin. */
   trust?: TrustService | undefined;
+  /** `guardrails-v1` (`fork-host-v1`): budgets, pauses, the subscription meter and events, for an owner or admin. */
+  guardrails?: GuardrailsService | undefined;
   /** `web-push-v1`: a member's browser gives its push subscription, and the host sends it push messages. */
   webPush?: Pick<WebPushService, "publicKey" | "register" | "remove"> | undefined;
   /** `file-tickets-v1`: signed links that a browser downloads from the host's own download address. */

@@ -95,6 +95,14 @@ import {
   isClaudeTaskNotification,
 } from "./conversation-snapshots";
 import { runCauseEffect } from "./effect-boundary";
+import { untrustedNote } from "./guardrails/injection-guard";
+import {
+  guardedClaudeToolUse,
+  toolCommand,
+  toolInputDigest,
+  toolResultFields,
+  untrustedClaudeResult,
+} from "./guardrails/tool-fingerprint";
 import { skillFolderNames } from "./home-skills";
 import { IdleThreadPool } from "./idle-thread-pool";
 import {
@@ -370,6 +378,8 @@ interface ActiveTurn {
   assistantMessages: Map<string, string>;
   thinkingMessages: Map<string, string>;
   toolCalls: Map<string, string>;
+  /** The shell command of each running Bash call, so its result can be judged as web content. */
+  toolCommands: Map<string, string>;
   /**
    * Set when Claude refuses the turn for a spent plan window. The refusal arrives as an assistant
    * message that only states the limit, so its text is held here and not published as the answer.
@@ -1060,7 +1070,13 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       hooks: [
         async (hookInput) => {
           if (hookInput.hook_event_name !== "PreToolUse" || config.profileGeneration) return {};
-          if (!classifyToolUse(hookInput.tool_name, hookInput.tool_input, config.cwd)) return {};
+          // A high-impact call that the trust policy does not govern still goes to the host: the
+          // guardrails check it when the turn read untrusted content.
+          if (
+            !classifyToolUse(hookInput.tool_name, hookInput.tool_input, config.cwd) &&
+            !guardedClaudeToolUse(hookInput.tool_name, hookInput.tool_input)
+          )
+            return {};
           const answer = await runCauseEffect(
             this.#trustCheck(threadId, hookInput.tool_name, hookInput.tool_input, "check"),
           ).catch(() => ({
@@ -1076,6 +1092,25 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
               permissionDecisionReason: answer.reason ?? "The trust policy asks the owner first.",
             },
           };
+        },
+      ],
+    };
+    /**
+     * Marks a result from the web, a browser or an email as untrusted data in the agent's context, once
+     * per source in each turn: a browser loop of hundreds of steps gets the note once.
+     */
+    const untrustedNoted = new Map<string, string>();
+    const untrustedHooks: HookCallbackMatcher = {
+      matcher: "WebFetch|WebSearch|Bash|mcp__.*",
+      hooks: [
+        async (hookInput) => {
+          if (hookInput.hook_event_name !== "PostToolUse" || config.profileGeneration) return {};
+          const source = untrustedClaudeResult(hookInput.tool_name, hookInput.tool_input);
+          if (!source) return {};
+          const turnId = this.#threads.get(threadId)?.activeTurn?.id ?? "";
+          if (untrustedNoted.get(source) === turnId) return {};
+          untrustedNoted.set(source, turnId);
+          return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: untrustedNote(source) } };
         },
       ],
     };
@@ -1271,10 +1306,11 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
                     ...(claudeWorkspaceHooks(config.cwd, config.additionalDirectories).PreToolUse ?? []),
                     trustHooks,
                   ],
+                  PostToolUse: [untrustedHooks],
                 },
                 managedSettings: CLAUDE_WORKSPACE_MANAGED_SETTINGS,
               }
-            : { hooks: { PreToolUse: [trustHooks] } }),
+            : { hooks: { PreToolUse: [trustHooks], PostToolUse: [untrustedHooks] } }),
           ...(plugins.length ? { plugins } : {}),
           mcpServers,
           env: withClaudeClientLabels({
@@ -1528,6 +1564,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       assistantMessages: new Map<string, string>(),
       thinkingMessages: new Map<string, string>(),
       toolCalls: new Map<string, string>(),
+      toolCommands: new Map<string, string>(),
       usageLimit: null,
       unprompted,
       lastActivityAt: Date.now(),
@@ -1796,6 +1833,8 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
         if (turn.toolCalls.has(toolCall.id)) continue;
         const name = claudeBridgedToolName(toolCall.name, toolCall.input);
         turn.toolCalls.set(toolCall.id, name);
+        const command = toolCommand(toolCall.input);
+        if (command !== null) turn.toolCommands.set(toolCall.id, command);
         this.#emitToolCall(runtime, toolCall.id, name, false, toolCall.input);
         const plan = foldClaudePlanCall(runtime.plan, toolCall);
         if (plan) this.#emitPlan(runtime, plan);
@@ -1829,8 +1868,13 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
         const name = turn.toolCalls.get(toolCallId);
         if (!name) continue;
         turn.toolCalls.delete(toolCallId);
+        const command = turn.toolCommands.get(toolCallId) ?? null;
+        turn.toolCommands.delete(toolCallId);
         // A failed result carries the tool's own error text, which the activity line and the log show.
-        this.#emitToolCall(runtime, toolCallId, name, true, undefined, isError, isError ? text : undefined);
+        this.#emitToolCall(runtime, toolCallId, name, true, undefined, isError, isError ? text : undefined, {
+          text,
+          command,
+        });
       }
       return;
     }
@@ -1964,6 +2008,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     input?: unknown,
     failed = false,
     failure?: string,
+    result?: { text: string; command: string | null },
   ): void {
     const turn = runtime.activeTurn;
     if (!turn) return;
@@ -2000,6 +2045,9 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
             ? {}
             : { arguments: bridged ? { name: "openbot.send_message", arguments: recipients } : recipients }),
           ...(failed && failure ? { error: failure } : {}),
+          // The guardrails count repeated calls and read untrusted results; nothing stores these.
+          ...(!completed && input !== undefined ? { inputDigest: toolInputDigest(name, input) } : {}),
+          ...(result ? toolResultFields(name, result.command, result.text) : {}),
         },
       },
     });

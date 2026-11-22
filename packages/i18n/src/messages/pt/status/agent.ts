@@ -34,4 +34,7 @@ export const messages = {
   "status.agent.skillUsing": "Usando a habilidade {name}…",
   "status.agent.skillReading": "Lendo uma habilidade…",
   "status.agent.memoryChanges": "Memórias: {saved} salvas, {updated} atualizadas, {forgotten} esquecidas.",
+  "status.agent.moneyApprovalExpires": "Expira em {hours} h se ninguém responder, e a ação não é executada.",
+  "status.agent.trustAskAfterUntrusted":
+    "{agent} leu conteúdo externo (uma página, um e-mail ou um webhook) neste turno, e a verificação de segurança não pôde validar este pagamento. Você decide.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -144,6 +144,10 @@ export interface TurnHooks {
   redactMcp(text: string): string;
   /** A finished tool step, for product analytics only. It never reaches a renderer or a remote client. */
   emitToolUsage(usage: ToolUsageSignal): void;
+  /** Each tool step of a running turn, started and completed, for the guardrails. Must not wait. */
+  observeToolStep?(agentId: string, threadId: string, turnId: string, item: ThreadItem, completed: boolean): void;
+  /** The context of one request in a provider thread, for the guardrails' token breaker. Must not wait. */
+  observeContext?(agentId: string, threadId: string, tokens: number): void;
   /** The model this turn was started with, or null when the drain no longer knows it. */
   turnModel(agentId: string, turnId: string): string | null;
   /** Whether a provider error moves this agent to a backup model: it switches without asking and has a ready one. */
@@ -708,6 +712,7 @@ export class TurnLifecycle {
         this.#compaction.updateBudget(threadId, params, agentId);
         const usage = getRecord(params, "tokenUsage");
         const last = getRecord(usage, "last");
+        if (typeof last?.totalTokens === "number") this.#hooks.observeContext?.(agentId, threadId, last.totalTokens);
         if (typeof last?.totalTokens === "number" && typeof usage?.modelContextWindow === "number")
           this.#compaction.observeUsage(
             threadId,
@@ -1470,6 +1475,7 @@ export class TurnLifecycle {
   ) {
     const usage = completed ? toolUsage(item) : null;
     if (usage) this.#hooks.emitToolUsage({ ...usage, agentId, turnId });
+    if (isToolItem(item)) this.#hooks.observeToolStep?.(agentId, threadId, turnId, item, completed);
     // The log keeps what the activity line shows for a moment: which tool failed, in which turn, and why.
     const failure = completed ? toolFailure(item) : null;
     if (failure) logger.warn("A tool step failed.", { agentId, turnId, tool: failure.tool, cause: failure.reason });

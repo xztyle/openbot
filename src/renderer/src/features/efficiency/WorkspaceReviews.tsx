@@ -183,7 +183,7 @@ export function WorkspaceReviewsView() {
           <Show when={savings()}>
             {(saved) => (
               <div class="efficiency-section">
-                <h3>{t("efficiency.savings.title", { days: String(saved().days) })}</h3>
+                <h3>{t("efficiency.savings.title", { days: format.number(saved().days) })}</h3>
                 <Show when={saved().autoTurns > 0} fallback={<Text tone="muted">{t("efficiency.savings.none")}</Text>}>
                   <Text>
                     {t("efficiency.savings.line", {
@@ -198,7 +198,9 @@ export function WorkspaceReviewsView() {
                     })}
                   </Text>
                 </Show>
-                <Text tone="muted">{t("efficiency.savings.switches", { count: String(saved().warmSwitches) })}</Text>
+                <Text tone="muted">
+                  {t("efficiency.savings.switches", { count: format.number(saved().warmSwitches) })}
+                </Text>
               </div>
             )}
           </Show>

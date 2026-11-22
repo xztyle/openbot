@@ -76,7 +76,7 @@ export function ReviewCard(props: {
       </Show>
       <Show when={card().smallModelShare}>
         {(share) => (
-          <Text tone="muted">{t("efficiency.review.small", { share: String(Math.round(share() * 100)) })}</Text>
+          <Text tone="muted">{t("efficiency.review.small", { share: format.number(Math.round(share() * 100)) })}</Text>
         )}
       </Show>
       <Show when={props.review.proposal}>

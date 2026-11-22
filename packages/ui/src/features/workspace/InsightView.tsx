@@ -972,7 +972,7 @@ function InsightCosts(props: SectionProps): JSX.Element {
                 >
                   <span class="ws-insight-line">
                     {t("insight.costs.line", {
-                      turns: agent().turns,
+                      turns: format.number(agent().turns),
                       tokens: format.compact(agent().tokens),
                       side: format.currencyUsd(agent().sideCostUsd),
                     })}

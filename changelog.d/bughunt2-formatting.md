@@ -20,3 +20,4 @@
 - Workspace lists (Activity, Unreads, Threads, Later, Drafts, Search) say "Yesterday" for
   yesterday, give a date of another year its year, and show a date, not a weekday, for a time ahead.
 - The reconnect countdown says "Next attempt in 1 second", not "1 seconds".
+- Insights and Reviews group the turn counts of an agent, such as 12,480 turns instead of 12480.

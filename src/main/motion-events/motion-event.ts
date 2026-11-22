@@ -42,6 +42,8 @@ export interface MotionIssue {
   statusCategory: "todo" | "in_progress" | "done" | null;
   due: string | null;
   assignees: MotionPerson[];
+  /** `urgent`, `high`, `medium`, `low` or none, as Motion sends it. Absent from an older Motion. */
+  priority?: string | null;
 }
 
 export interface MotionEvent {
@@ -128,6 +130,7 @@ function issue(value: unknown): MotionIssue | null {
     statusCategory: category(status.category),
     due: text(value.due, 32),
     assignees: people(value.assignees),
+    priority: text(value.priority, 16),
   };
 }
 

@@ -69,7 +69,9 @@ import {
   htmlRenderToolSchema,
   logDecisionToolSchema,
   normalizeSendMessageArguments,
+  postCardToolSchema,
   removeApiKeyToolSchema,
+  reportValidationToolSchema,
   requestApiKeyToolSchema,
   routineReportFailureToolSchema,
   SEND_MESSAGE_USAGE,
@@ -245,6 +247,17 @@ export interface OpenBotToolRouterHooks {
     agentId: string,
     input: { decision: string; why: string; alternatives?: string | undefined; channelId?: string | undefined },
   ): Effect.Effect<void>;
+  /** `post_card`: an interactive card in the chat of the turn. Absent before the portfolio service is attached. */
+  postCard?(
+    agentId: string,
+    turnId: string,
+    input: z.infer<typeof postCardToolSchema>,
+  ): Effect.Effect<OpenBotToolResponse>;
+  /** `report_validation`: the research agent's score of a new space from a template. */
+  reportValidation?(
+    agentId: string,
+    input: z.infer<typeof reportValidationToolSchema>,
+  ): Effect.Effect<OpenBotToolResponse>;
   /** The goals tool of the insight service; absent before the service is attached. */
   goals?(
     agentId: string,
@@ -1443,6 +1456,24 @@ export class OpenBotToolRouter {
       const spaceMemory = this.#hooks.spaceMemory;
       if (!spaceMemory) return openBotToolFailure("The space memory is not available on this host yet.");
       return yield* spaceMemory(senderAgentId, params.turnId, parsed.data);
+    }
+
+    if (params.tool === "post_card") {
+      const parsed = postCardToolSchema.safeParse(params.arguments);
+      if (!parsed.success)
+        return openBotToolFailure(`${z.prettifyError(parsed.error)}\nCorrect the arguments and retry.`);
+      const postCard = this.#hooks.postCard;
+      if (!postCard) return openBotToolFailure("Cards are not available on this host yet. Ask in words instead.");
+      return yield* postCard(senderAgentId, params.turnId, parsed.data);
+    }
+
+    if (params.tool === "report_validation") {
+      const parsed = reportValidationToolSchema.safeParse(params.arguments);
+      if (!parsed.success)
+        return openBotToolFailure(`${z.prettifyError(parsed.error)}\nCorrect the arguments and retry.`);
+      const report = this.#hooks.reportValidation;
+      if (!report) return openBotToolFailure("This host has no validation stage.");
+      return yield* report(senderAgentId, parsed.data);
     }
 
     if (params.tool === "goals") {

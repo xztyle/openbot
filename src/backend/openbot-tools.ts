@@ -255,6 +255,86 @@ export const goalsToolSchema = z.strictObject({
   note: z.string().trim().max(200).optional().describe("For progress: what moved it, in a few words."),
 });
 
+const cardText = (max: number) => z.string().trim().min(1).max(max);
+const cardId = z
+  .string()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/)
+  .describe("Letters, digits and _ . : -, up to 64 characters.");
+
+export const postCardToolSchema = z.strictObject({
+  action: z
+    .enum(["post", "status", "close"])
+    .optional()
+    .describe(
+      "post (the default): show a new card. status: read a card's answer. close: close a card you no longer need.",
+    ),
+  cardId: z.string().max(36).optional().describe("For status and close: the cardId that post gave."),
+  card: z
+    .strictObject({
+      type: z
+        .enum(["choice", "approve", "form", "table"])
+        .describe(
+          "choice: pick one option (or several with multiple). approve: approve or reject one thing. form: a few fields. table: rows of options with columns, such as ad variants, to approve or reject each row (mode approve-each) or to pick one (pick-one) or several (pick-many).",
+        ),
+      title: cardText(200).describe("The question, such as Approve these 5 ad variants?"),
+      detail: z.string().trim().max(1_200).optional().describe("One or two lines of context."),
+      options: z
+        .array(z.strictObject({ id: cardId, label: cardText(80), detail: z.string().trim().max(200).optional() }))
+        .min(2)
+        .max(12)
+        .optional()
+        .describe("For choice."),
+      multiple: z.boolean().optional().describe("For choice: several options may be picked."),
+      approveLabel: z.string().trim().max(80).optional().describe("For approve: the approve button."),
+      rejectLabel: z.string().trim().max(80).optional().describe("For approve: the reject button."),
+      fields: z
+        .array(
+          z.strictObject({
+            id: cardId,
+            label: cardText(80),
+            kind: z.enum(["text", "number", "select"]),
+            options: z.array(cardText(80)).max(12).optional().describe("For select."),
+            required: z.boolean().optional(),
+          }),
+        )
+        .min(1)
+        .max(8)
+        .optional()
+        .describe("For form."),
+      submitLabel: z.string().trim().max(80).optional().describe("For form: the submit button."),
+      columns: z.array(cardText(80)).min(1).max(6).optional().describe("For table: the column names."),
+      rows: z
+        .array(
+          z.strictObject({
+            id: cardId,
+            cells: z
+              .array(z.union([z.string().max(200), z.number()]))
+              .min(1)
+              .max(6),
+          }),
+        )
+        .min(1)
+        .max(20)
+        .optional()
+        .describe("For table: one cell per column; the first cell names the row."),
+      mode: z
+        .enum(["approve-each", "pick-one", "pick-many"])
+        .optional()
+        .describe("For table. The default is approve-each."),
+    })
+    .optional()
+    .describe("For post: the card."),
+});
+
+export const reportValidationToolSchema = z.strictObject({
+  score: z.number().min(0).max(100).describe("0 to 100: how likely the business earns money soon with little spend."),
+  verdict: z.enum(["go", "test", "stop"]).describe("go: build it. test: a small cheap test first. stop: do not build."),
+  demand: z.string().trim().min(1).max(800).describe("Who pays and why, with the evidence you found."),
+  competition: z.string().trim().min(1).max(800).describe("Who already sells this, and at what price."),
+  risks: z.string().trim().min(1).max(800).describe("What can go wrong: legal, money, platform rules."),
+  summary: z.string().trim().min(1).max(1_200).describe("Two or three sentences for the owner."),
+});
+
 /** `request_decision`: the action ids of its card besides the options (`option1`…`option3`). */
 export const REQUEST_DECISION_ACTIONS = { change: "change", no: "no" } as const;
 
@@ -902,6 +982,23 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     description:
       "The shared memory of your space, which every agent of the space reads: its customers, products and suppliers with their facts, and its decision log. Remember a lasting fact about one of them here instead of in your own memory, so your teammates know it too. Recall before you work for a customer or on a product. Record what came of a decision with outcome.",
     shape: spaceMemoryToolSchema.shape,
+  },
+  {
+    name: "post_card",
+    description: [
+      "Post a small card in this chat that the owner answers with taps: a choice, an approve or reject, a short form, or a table of options (such as 5 ad variants to approve or reject one by one).",
+      "You do not wait: end your turn after you post it. The answer comes back to you later as a message that starts with Card answer, with the card id, and your work continues from there.",
+      "Use it instead of a long question in words when taps make the answer easier. For spending money use request_decision, which also shows in Needs you.",
+      'Write every label in the owner\'s language. The result is JSON {"status":"posted","cardId"}. status gives {"status":"open"|"answered"|"closed","answer"}.',
+      'Example: {"card":{"type":"table","title":"Approve these ad variants?","columns":["Variant","Hook","Budget/day"],"rows":[{"id":"v1","cells":["A","Before Christmas…","5 USD"]},{"id":"v2","cells":["B","Your first cake…","5 USD"]}],"mode":"approve-each"}}.',
+    ].join(" "),
+    shape: postCardToolSchema.shape,
+  },
+  {
+    name: "report_validation",
+    description:
+      "Report the result of the validation stage of a new business that you were asked to research: a score, a verdict and short notes. The owner sees it and decides whether the team starts building. Call it once, after the research.",
+    shape: reportValidationToolSchema.shape,
   },
   {
     name: "goals",

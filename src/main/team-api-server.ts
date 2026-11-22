@@ -246,6 +246,7 @@ import { routeMcpSignIn } from "./team-api/route-mcp-sign-in";
 import { routeMcpSignInApp } from "./team-api/route-mcp-sign-in-app";
 import { routeOnePasswordConnector } from "./team-api/route-onepassword-connector";
 import { routeOwnerAway } from "./team-api/route-owner-away";
+import { routePortfolio } from "./team-api/route-portfolio";
 import { routePromptCacheTtl } from "./team-api/route-prompt-cache-ttl";
 import { routeProviderAccountPool, routeProviderAccounts } from "./team-api/route-provider-accounts";
 import { routeProviderEnvironment } from "./team-api/route-provider-environment";
@@ -979,6 +980,7 @@ export class TeamApiServer {
       if ((await routeWorkspaceFleet(context, this.#options.agents, hidden)) === "handled") return;
       if ((await routeAgentEfficiency(context, this.#options.agents, hidden)) === "handled") return;
       if ((await routeAgentLearning(context, this.#options.agents, hidden)) === "handled") return;
+      if ((await routePortfolio(context, this.#options.agents, hidden)) === "handled") return;
       if ((await routeWorkspaceLoops(context, this.#options.agents.loops)) === "handled") return;
       if ((await routeWorkspaceInsight(context, this.#options.agents.insight, hidden)) === "handled") return;
       if ((await routeWorkspaceSidebar(context, this.#options.workspaceSidebar)) === "handled") return;

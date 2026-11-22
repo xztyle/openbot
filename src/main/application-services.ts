@@ -273,6 +273,7 @@ import { NotificationPreferenceStore } from "./notification-preference-store";
 import { OnePasswordConnectorService } from "./onepassword-connector-service";
 import { OnePasswordConnectorStore } from "./onepassword-connector-store";
 import { wireOwnerAway } from "./owner-away-wiring";
+import { startPortfolioHost } from "./portfolio-host";
 import { PromptCacheTtlPreferenceStore } from "./prompt-cache-ttl-preference-store";
 import { ProviderAccountsHost } from "./provider-accounts-host";
 import { createProviderCliAppVersionStore } from "./provider-cli-app-version-store";
@@ -2554,11 +2555,12 @@ export async function createApplicationServices({
         agentId,
       ),
     ticketsChanged: () => service.currentTicketsChanged(),
-    taskDone: ({ agentIds, key, title }) =>
-      service.learning.taskFinished(
-        agentIds.filter((agentId) => service.listAgents().some((agent) => agent.id === agentId)),
-        { source: "task", ref: key, title },
-      ),
+    taskDone: ({ agentIds, key, title, priority }) => {
+      const known = agentIds.filter((agentId) => service.listAgents().some((agent) => agent.id === agentId));
+      if (service.portfolio)
+        void Effect.runPromise(service.portfolio.cardDone({ key, title, agentIds: known, priority: priority ?? null }));
+      return service.learning.taskFinished(known, { source: "task", ref: key, title });
+    },
   });
   const motion = motionEvents;
   service.setCurrentTickets((agentId) => motion.tickets.current(agentId));
@@ -2958,6 +2960,24 @@ export async function createApplicationServices({
   await Effect.runPromise(insight.start());
   teardown.push(TEARDOWN_ORDER.insight, "the insight service", async () => {
     insight.stop();
+  });
+  // Test suites, live scores, space templates, value, the weekly reality check and chat cards
+  // (`backend/portfolio`), on the insight service. Nothing in it wakes an agent by itself.
+  const portfolio = startPortfolioHost({
+    userData: app.getPath("userData"),
+    service,
+    insight,
+    skills,
+    owner: () => {
+      const actor = host.channelActor();
+      return actor.id === SIGNED_OUT_CHANNEL_MEMBER_ID ? null : actor;
+    },
+    timeZone: () => serverTimezone.effective(),
+    running: () => true,
+  });
+  await Effect.runPromise(portfolio.start());
+  teardown.push(TEARDOWN_ORDER.insight, "the portfolio service", async () => {
+    portfolio.dispose();
   });
   const signedInState = centralAuth.getState();
   if (signedInState.status === "signed_in") {

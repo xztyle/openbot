@@ -209,6 +209,7 @@ export type TeamApiAgents = TeamApiAgentMethods & {
       | "settingsHistory"
       | "rollbackSettings"
       | "forgetConversation"
+      | "portfolio"
     >
   >;
 

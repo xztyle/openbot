@@ -210,6 +210,11 @@ export interface AgentLearningHooks {
   addSkillLesson(agentId: string, skillId: string, text: string): Effect.Effect<void, unknown>;
   copySkill(skillId: string, toAgentId: string): Effect.Effect<void, unknown>;
   redact(text: string): string;
+  /**
+   * Rehearses an item that changes instructions, a playbook or a skill before it applies (the agent's
+   * test suite). `block` refuses the accept, `warn` applies it with the note on the item.
+   */
+  vet?(item: LearningReviewItem): Effect.Effect<{ outcome: "apply" | "warn" | "block"; note: string | null }>;
 }
 
 /** A refusal of a decision, which the route answers as 409 with its text. */
@@ -363,6 +368,20 @@ export class AgentLearning {
     }
     if (input.decision === "accept") {
       if (item.state !== "pending") return yield* Effect.fail(new LearningRefused("The item does not wait any more."));
+      const verdict = this.#hooks.vet ? yield* this.#hooks.vet(item) : null;
+      if (verdict?.outcome === "block")
+        return yield* Effect.fail(
+          new LearningRefused(
+            `${verdict.note ?? "The agent's test suite fails with this change."} Dismiss it or edit the suite.`,
+          ),
+        );
+      if (verdict?.outcome === "warn" && verdict.note) {
+        const note = `${item.note} ${verdict.note}`.slice(0, LEARNING_LIMITS.note);
+        yield* this.#store.update((stored) => ({
+          ...stored,
+          items: stored.items.map((entry) => (entry.id === item.id ? { ...entry, note } : entry)),
+        }));
+      }
       const applied = yield* this.#apply(item);
       return yield* this.#settle(item.id, applied ? "applied" : "stale");
     }

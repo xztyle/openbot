@@ -128,6 +128,7 @@ import {
   type BusyMessageMode,
   CONDENSED_ORIGINAL_LIMIT,
   CONTEXT_RESET_ITEM_TYPE,
+  channelKind,
   DEFAULT_BUSY_MESSAGE_MODE,
   DEFAULT_PROVIDER_ACCOUNT_ID,
   DEFAULT_WORKSPACE_CONDENSE,
@@ -223,7 +224,7 @@ import { type CondenseModel, condenseAnswer } from "./agent/reply-condenser";
 import { RoutinePrechecks } from "./agent/routine-prechecks";
 import { quietRoutineRun } from "./agent/routine-quiet-runs";
 import { type RoutineMutationOptions, RoutineScheduler, toRoutineOperationFailed } from "./agent/routine-scheduler";
-import { localTimezone } from "./agent/routine-tools";
+import { localTimezone, openBotToolFailure } from "./agent/routine-tools";
 import { buildRuntimeSnapshot } from "./agent/runtime-snapshot";
 import type { ScreenCaptureHost } from "./agent/screen-capture";
 import { SessionSettings } from "./agent/session-settings";
@@ -304,6 +305,8 @@ import { McpServerStore } from "./mcp-server-store";
 import { MessagingThreads, toMessagingThreadFailed } from "./messaging/messaging-threads";
 import type { OwnerAwayService } from "./owner-away";
 import type { PasswordVault } from "./password-vault";
+import type { PortfolioService } from "./portfolio/portfolio-service";
+import { postCardTool, reportValidationTool } from "./portfolio/portfolio-tools";
 import { decodeRecordResponse, getString } from "./protocol";
 import { NO_PROVIDER_CREDENTIALS, type ProviderClientContext } from "./provider-drivers";
 import { providerHistoryPersistence } from "./provider-history-persistence";
@@ -538,6 +541,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly loops: LoopService;
   /** Goals, money, costs and the briefing (`insight/`), which the application attaches after start. */
   insight: InsightService | null = null;
+  /** Test suites, live scores, templates, value, the reality check and cards (`portfolio/`), attached after start. */
+  portfolio: PortfolioService | null = null;
   readonly messaging: MessagingThreads;
   readonly #profileSave: ProfileSave;
   readonly #profileClients = new ProfileClients();
@@ -581,6 +586,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   /** The skill library of the reviews, with each save in the settings history. Null without skill learning. */
   readonly #learnedSkills: (() => SkillLearner) | null;
   readonly #skillLibrary: (() => SkillLearner) | null;
+  readonly #reviewSkills: AgentServiceOptions["reviewSkills"];
   readonly #waits: AgentWaits;
   readonly #tasks: AgentTasks;
   readonly #tables: SpaceAgentTables | null;
@@ -758,6 +764,14 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       ...(options.agentMemoryLimit ? { limit: options.agentMemoryLimit } : {}),
     });
     this.settingsHistory = new SettingsHistory(join(store.database.userDataPath, SETTINGS_HISTORY_FILE));
+    // A change of an agent's settings runs its test suite again, after a short wait.
+    this.settingsHistory.onRecord((checkpoint) =>
+      this.portfolio?.suites.settingsChanged(
+        checkpoint.agentId,
+        checkpoint.id,
+        checkpoint.changes.map((change) => change.field),
+      ),
+    );
     this.playbooks = new RolePlaybooks({
       path: join(store.database.userDataPath, ROLE_PLAYBOOKS_FILE),
       agents: () => this.#store.list(),
@@ -781,6 +795,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     });
     const rawSkillLearner = options.skillLearner;
     this.#skillLibrary = rawSkillLearner ?? null;
+    this.#reviewSkills = options.reviewSkills;
     this.#learnedSkills = rawSkillLearner ? () => recordedSkillLearner(rawSkillLearner(), this.settingsHistory) : null;
     const skillLearner = this.#learnedSkills;
     this.learning = new AgentLearning({
@@ -809,6 +824,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           ? options.copySkill(skillId, toAgentId)
           : Effect.fail(new Error("This host cannot install a skill on another agent.")),
       redact: (text) => this.#mcp.redact(text),
+      vet: (item) =>
+        this.portfolio ? this.portfolio.vetLearning(item) : Effect.succeed({ outcome: "apply", note: null }),
     });
     this.#memoryReview = new MemoryReview({
       memories: this.#memories,
@@ -1770,7 +1787,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         takeRoutinePreview: (deliveryId) => this.#routines.takePreviewBeforeRun(deliveryId),
         closeRoutineSession: (externalThreadId) => this.#threads.closeRoutineThread(externalThreadId),
         conversationTurnEnded: (agentId, turn) => this.#memoryReview.turnEnded(agentId, turn),
-        answerFinished: (answer) => this.#condenseLater(answer),
+        answerFinished: (answer) => {
+          this.#condenseLater(answer);
+          this.#scoreAnswerLater(answer);
+        },
         routineAnswered: (agentId, deliveryId, answer) => {
           const agent = this.#store.list().find((item) => item.id === agentId);
           const run = this.#routines.runForDelivery(deliveryId);
@@ -1863,6 +1883,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             .cancel(agentId)
             .pipe(Effect.andThen(this.learning.forgetAgent(agentId)))
             .pipe(Effect.andThen(this.settingsHistory.forgetAgent(agentId)))
+            .pipe(Effect.andThen(Effect.suspend(() => this.portfolio?.forgetAgent(agentId) ?? Effect.void)))
             .pipe(Effect.andThen(this.#providers.stopAgentProcess(agentId)))
             .pipe(Effect.mapError((failure) => new AgentRemovalFailed({ cause: failure.cause }))),
       },
@@ -1958,6 +1979,24 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         // The first person is the host user of this computer; signed out, the signed-out reader.
         channelHost: () => options.channelPeople?.()[0] ?? { id: SIGNED_OUT_CHANNEL_MEMBER_ID, name: "You" },
         placeChannel: (channelId, spaceId) => this.spaces.place("channel", channelId, spaceId),
+        postCard: (agentId, turnId, input) =>
+          this.portfolio
+            ? postCardTool(
+                this.portfolio,
+                {
+                  channelFor: (id, turn) => this.#cardChannel(id, turn),
+                  postInChannel: (id, channelId, text) => this.channels.postTeamQuestion(id, channelId, text),
+                  postInOwnChat: (id, text) => this.#appendAgentLine(id, text),
+                },
+                agentId,
+                turnId,
+                input,
+              )
+            : Effect.succeed(openBotToolFailure("Cards are not available on this host yet. Ask in words instead.")),
+        reportValidation: (agentId, input) =>
+          this.portfolio
+            ? reportValidationTool(this.portfolio, agentId, input)
+            : Effect.succeed(openBotToolFailure("This host has no validation stage.")),
         goals: (agentId, input) =>
           this.insight
             ? this.insight.goalTool(agentId, input)
@@ -3094,6 +3133,135 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   }).bind(this);
 
   /** Adds a line of a background memory review to the agent's own chat. It wakes nobody. */
+  /** The channel of a card that an agent posts in a turn: the turn's channel, else its DM with a person. */
+  #cardChannel(agentId: string, turnId: string): string | null {
+    const context = this.channels.teamContext(agentId, turnId);
+    if (context) return context.channelId;
+    const store = this.channels.store;
+    const archived = store.archivedIds();
+    return (
+      store
+        .ids()
+        .filter((channelId) => !archived.has(channelId))
+        .map((channelId) => store.get(channelId))
+        .find(
+          (channel) => channelKind(channel) === "dm" && channel.members.some((member) => member.agentId === agentId),
+        )?.id ?? null
+    );
+  }
+
+  /** Adds a line of the agent to its own chat, beside the turn that runs, such as a card it posted. */
+  #appendAgentLine(agentId: string, text: string): void {
+    const database = this.#store.database;
+    const message: ConversationMessage = {
+      id: randomUUID(),
+      author: "assistant",
+      text,
+      createdAt: new Date().toISOString(),
+      status: "completed",
+    };
+    this.#conversation.withConversationTransaction(agentId, ({ threadId, snapshot }) => {
+      snapshot.messages.push(message);
+      sortConversationMessages(snapshot.messages);
+      snapshot.revision = database.appendConversationMessage({
+        agentId,
+        threadId,
+        activeTurnId: snapshot.activeTurnId,
+        message,
+        eventType: "thread.card-posted",
+      });
+      return { result: undefined, snapshot };
+    });
+  }
+
+  /** Gives a finished answer to a person to the live score, which samples a few of them. */
+  #scoreAnswerLater(answer: FinishedAnswer): void {
+    const quality = this.portfolio?.quality;
+    if (!quality) return;
+    try {
+      const asked = answer.senders
+        .filter((sender) => sender.kind === "user")
+        .map((sender) => sender.text)
+        .join("\n")
+        .trim();
+      if (!asked) return;
+      const text = this.#conversation
+        .loadedSnapshot(answer.agentId)
+        ?.messages.find((message) => message.id === answer.messageId)?.text;
+      const found =
+        text ??
+        this.#store.database
+          .readConversationPage(answer.agentId, answer.threadId, { type: "latest" }, 20)
+          .messages.find((message) => message.id === answer.messageId)?.text;
+      if (!found) return;
+      quality.finished({ agentId: answer.agentId, turnId: answer.turnId, asked, answer: found });
+    } catch (cause) {
+      logger.warn("Could not give an answer to the live score.", { agentId: answer.agentId, cause });
+    }
+  }
+
+  /**
+   * The agent as a rehearsal sees it: its instructions, the playbooks of its role and the text of its
+   * local skills. Null for an unknown agent.
+   */
+  readonly sandboxProfile = Effect.fn("AgentService.sandboxProfile")(function* (this: AgentService, agentId: string) {
+    const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+    if (!agent) return null;
+    const snapshot = yield* this.playbooks.snapshot().pipe(Effect.orElseSucceed(() => null));
+    const playbooks = (snapshot?.playbooks ?? [])
+      .filter((playbook) => agentHasPlaybookRole(agent, playbook.roles))
+      .map((playbook) => ({ slug: playbook.slug, content: playbook.content }));
+    const listed = yield* (this.#reviewSkills?.(agentId) ?? Effect.succeed([])).pipe(
+      Effect.orElseSucceed((): readonly ReviewSkill[] => []),
+    );
+    const learner = this.#skillLibrary?.();
+    const skills: { name: string; instructions: string }[] = [];
+    for (const skill of listed.slice(0, 10)) {
+      const source = learner ? yield* learner.read(skill.skillId).pipe(Effect.orElseSucceed(() => null)) : null;
+      skills.push({ name: skill.name, instructions: source?.instructions ?? skill.description ?? "" });
+    }
+    return { name: agent.name, title: agent.title, instructions: agent.description, playbooks, skills };
+  });
+
+  /**
+   * Runs a prompt with no tools on the agent's own model (`own`) or its small model (`small`), as the
+   * rehearsals of the test suites and their judges do. Null when no model can run it.
+   */
+  generateWithoutTools(agentId: string, prompt: string, tier: "own" | "small") {
+    const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+    if (!agent) return Effect.succeed(null);
+    if (tier === "small")
+      return this.#generateReview(agent, prompt, "portfolio_generation_failed").pipe(
+        Effect.map((answer) => answer?.text ?? null),
+      );
+    return Effect.gen({ self: this }, function* () {
+      yield* this.#providers.ensureProvider(agent.provider);
+      const model =
+        this.#endpoints
+          .available()
+          .find((candidate) => candidate.provider === agent.provider && candidate.id === agent.model) ??
+        this.#backgroundModel(agent);
+      if (!model) return null;
+      const client = this.#providers.createProfileClient(agent.provider);
+      return yield* this.#profileClients.run(client, (cancelled) =>
+        generateTextWithoutTools(
+          client,
+          model,
+          prompt,
+          cancelled,
+          memoryReviewUsageObserver(this.#store.database.usage, agent.provider, model.id, agent.id),
+        ),
+      );
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.sync(() => {
+          this.#emitError("portfolio_generation_failed", cause, agent.id);
+          return null;
+        }),
+      ),
+    );
+  }
+
   #appendReviewMessage(agentId: string, message: ConversationMessage): void {
     const database = this.#store.database;
     this.#conversation.withConversationTransaction(agentId, ({ threadId, snapshot }) => {

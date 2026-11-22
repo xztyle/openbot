@@ -105,9 +105,15 @@ export function isCutText(text: string | null): boolean {
  */
 export class SettingsHistory {
   readonly #store: JsonStore<StoredHistory>;
+  readonly #listeners = new Set<(checkpoint: SettingsCheckpoint) => void>();
 
   constructor(path: string) {
     this.#store = new JsonStore(path, EMPTY, decodeStored);
+  }
+
+  /** Calls `listener` after each recorded checkpoint, such as the test suite that runs after a change. */
+  onRecord(listener: (checkpoint: SettingsCheckpoint) => void): void {
+    this.#listeners.add(listener);
   }
 
   /** The checkpoints of one agent, newest first. */
@@ -148,6 +154,12 @@ export class SettingsHistory {
       );
       return { ...stored, checkpoints: [...mine, ...stored.checkpoints.filter((item) => item.agentId !== agentId)] };
     });
+    for (const listener of this.#listeners)
+      try {
+        listener(checkpoint);
+      } catch {
+        // A listener never fails the record.
+      }
     return checkpoint;
   });
 

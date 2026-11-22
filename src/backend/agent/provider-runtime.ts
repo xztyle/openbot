@@ -289,6 +289,8 @@ export interface ProviderHooks {
   isStopping(): boolean;
   /** True while a turn on this provider runs or starts, which replacing its CLI would cut short. */
   isProviderBusy(provider: AgentProvider): boolean;
+  /** `isProviderBusy` without the turns and starts of this agent. Absent: as `isProviderBusy`. */
+  isProviderBusyApartFrom?(provider: AgentProvider, agentId: string): boolean;
   /** True while a turn of this agent runs. An agent's own process stays while its own turn runs. */
   isAgentBusy(agentId: string): boolean;
   /** True while an agent is set to this provider, so a turn on it can come at any time. */
@@ -846,14 +848,7 @@ export class ProviderRuntime implements ProviderPort {
         this.#lastUsed.set(provider, now);
         continue;
       }
-      if (
-        this.#hooks.isProviderBusy(provider) ||
-        this.#providerStarts.has(provider) ||
-        this.#providerConnectionCommands.has(provider) ||
-        this.isReplacingCli(provider) ||
-        this.#cliLogin.has(provider) ||
-        (provider === "codex" && this.#codexLogin.pending)
-      ) {
+      if (this.#providerInUse(provider)) {
         this.#lastUsed.set(provider, now);
         continue;
       }
@@ -866,14 +861,8 @@ export class ProviderRuntime implements ProviderPort {
         ? PROVIDER_IDLE_RELEASE_MS
         : PROVIDER_UNASSIGNED_RELEASE_MS;
       if (now - lastUsed < limit) continue;
-      // Out of the map before it stops, so #handleExit reads the exit as expected, not as a crash.
-      this.#clients.delete(provider);
-      this.#released.add(provider);
-      this.#startFailures.delete(provider);
-      this.#conversation.unloadClientThreads(client);
       logger.info("Stopped an idle provider CLI.", { provider });
-      yield* client.stop().pipe(toProviderOperationFailed).pipe(Effect.ignore);
-      yield* this.#hooks.onClientStopped(client);
+      yield* this.#releaseClient(provider, client);
     }
     for (const [agentId, confined] of this.#confined) {
       if (confined.client.canReleaseProcess?.() === false) {
@@ -886,6 +875,39 @@ export class ProviderRuntime implements ProviderPort {
       yield* this.#stopConfined(agentId, confined);
     }
   }, Effect.uninterruptible);
+
+  /**
+   * True while a turn, a start, a connection command, a CLI change or a sign-in uses the provider's
+   * process. `apartFrom` leaves out the turns and starts of that agent.
+   */
+  #providerInUse(provider: AgentProvider, apartFrom?: string): boolean {
+    const busy =
+      apartFrom === undefined
+        ? this.#hooks.isProviderBusy(provider)
+        : (this.#hooks.isProviderBusyApartFrom?.(provider, apartFrom) ?? this.#hooks.isProviderBusy(provider));
+    return (
+      busy ||
+      this.#providerStarts.has(provider) ||
+      this.#providerConnectionCommands.has(provider) ||
+      this.isReplacingCli(provider) ||
+      this.#cliLogin.has(provider) ||
+      (provider === "codex" && this.#codexLogin.pending)
+    );
+  }
+
+  readonly #releaseClient = Effect.fn("ProviderRuntime.releaseClient")(function* (
+    this: ProviderRuntime,
+    provider: AgentProvider,
+    client: AgentClient,
+  ) {
+    // Out of the map before it stops, so #handleExit reads the exit as expected, not as a crash.
+    this.#clients.delete(provider);
+    this.#released.add(provider);
+    this.#startFailures.delete(provider);
+    this.#conversation.unloadClientThreads(client);
+    yield* client.stop().pipe(toProviderOperationFailed).pipe(Effect.ignore);
+    yield* this.#hooks.onClientStopped(client);
+  });
 
   /** Closes the idle threads of each client and each Workspace only process, when memory is low. */
   readonly releaseIdleThreads = Effect.fn("ProviderRuntime.releaseIdleThreads")(function* (this: ProviderRuntime) {
@@ -2309,6 +2331,14 @@ export class ProviderRuntime implements ProviderPort {
     agent: AgentSummary,
   ) {
     const provider = providerForAgent(agent);
+    const shared = this.#clients.get(provider);
+    // Codex adds a new turn of a thread to the turn that runs there. A process that still runs a turn
+    // that OpenBot ended, as when a stopped command hangs, would hold each next turn of that thread
+    // too. It is replaced as an idle one is, and the next turn resumes the thread on a new process.
+    if (shared?.replaceForNextTurn?.() && !this.#providerInUse(provider, agent.id)) {
+      logger.info("Replaced a provider CLI that still runs a stopped turn.", { provider });
+      yield* this.#releaseClient(provider, shared);
+    }
     yield* this.ensureProvider(provider);
     yield* this.#awaitConfinedStart(agent.id);
     if (provider === "acp" && this.#removingCustomRuntime)
@@ -2316,7 +2346,7 @@ export class ProviderRuntime implements ProviderPort {
     const own = this.#ownProcessFor(agent);
     const current = this.#confined.get(agent.id);
     const key = own ? this.#confinedKey(provider, own) : null;
-    if (current && current.key === key) {
+    if (current && current.key === key && !current.client.replaceForNextTurn?.()) {
       current.lastUsed = Date.now();
       return current.client;
     }

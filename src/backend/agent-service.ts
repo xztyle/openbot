@@ -1034,6 +1034,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         sharedRoot: (agentId) => this.#store.spaces.agentSharedDirectory(agentId),
         isStopping: () => this.#stopping,
         isProviderBusy: (provider) => this.#isProviderBusy(provider),
+        isProviderBusyApartFrom: (provider, agentId) => this.#isProviderBusyApartFrom(provider, agentId),
         isAgentBusy: (agentId) => this.#runsTurn(agentId),
         isProviderAssigned: (provider) => this.#store.list().some((agent) => providerForAgent(agent) === provider),
         captureConfigRevision: () => this.#endpoints.committedRevision(),
@@ -5680,6 +5681,23 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       this.#backgroundClients.usesProvider(provider) ||
       this.#drain.hasStartingDeliveries(provider) ||
       this.#store.list().some((agent) => providerForAgent(agent) === provider && this.#runsTurn(agent.id))
+    );
+  }
+
+  /** `#isProviderBusy` without this agent: another agent's turn runs, or its delivery starts. */
+  #isProviderBusyApartFrom(provider: AgentProvider, agentId: string): boolean {
+    return (
+      this.#profileClients.usesProvider(provider) ||
+      this.#gateClients.usesProvider(provider) ||
+      this.#backgroundClients.usesProvider(provider) ||
+      this.#store
+        .list()
+        .some(
+          (agent) =>
+            agent.id !== agentId &&
+            providerForAgent(agent) === provider &&
+            (this.#runsTurn(agent.id) || this.#mailbox.startingDeliveriesForAgent(agent.id).length > 0),
+        )
     );
   }
 

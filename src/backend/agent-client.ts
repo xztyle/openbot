@@ -23,6 +23,11 @@ export interface AgentClient {
   readonly readHistory?: ReadProviderHistory;
   /** False when stopping this client would lose a live provider session with no recovery path. */
   readonly canReleaseProcess?: () => boolean;
+  /**
+   * True when the process must be replaced before the next turn, and nothing that uses it is lost:
+   * it still runs a turn that OpenBot ended, such as a stopped turn whose command hangs.
+   */
+  readonly replaceForNextTurn?: () => boolean;
   start(): void;
   stop(): Effect.Effect<void, ProviderClientOperationError>;
   /**
@@ -113,6 +118,17 @@ export class RequestTimeoutError extends Error {
 export class ProviderTurnActiveError extends Error {
   constructor(readonly providerName: string) {
     super(`${providerName} is in a turn that it started itself.`);
+  }
+}
+
+/**
+ * The provider still runs a turn of this session that OpenBot ended. Nothing ran, so the caller
+ * queues the message again and tries it later, when the process can be replaced.
+ */
+export class ProviderSessionBusyError extends ProviderTurnActiveError {
+  constructor(providerName: string) {
+    super(providerName);
+    this.message = `${providerName} still runs a stopped turn of this session.`;
   }
 }
 

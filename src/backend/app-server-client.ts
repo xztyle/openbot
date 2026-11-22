@@ -5,7 +5,7 @@ import { type DynamicRecord, isNumber, isString } from "@openbot/contracts/runti
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger } from "@openbot/logging";
 import { Effect, Fiber } from "effect";
-import { type AgentProvider, RequestTimeoutError } from "./agent-client";
+import { type AgentProvider, ProviderSessionBusyError, RequestTimeoutError } from "./agent-client";
 import { agentInheritedEnvironment } from "./agent-inherited-environment";
 import { cliSpawnTarget } from "./cli";
 import { JsonLineDecoder, LineTooLongError } from "./jsonl";
@@ -46,6 +46,21 @@ const CODEX_TOOL_STALL_MS = 60 * 60_000;
 const CODEX_STALL_CHECK_MS = 60_000;
 /** Items that show model output. An open one does not raise the stall limit as a tool does. */
 const OUTPUT_ITEM_TYPES: ReadonlySet<unknown> = new Set(["agentMessage", "reasoning", "userMessage", "plan"]);
+/**
+ * How long Codex may take to end a stopped turn before OpenBot ends it, as for ACP and Claude. Codex
+ * answers `turn/interrupt` only when the turn ends, and a command that hangs keeps it from ending
+ * (upstream be190a7c0).
+ */
+const CODEX_STOP_GRACE_MS = 10_000;
+/** The requests that start or continue work on a thread. A process replaced during one would cut it. */
+const THREAD_WORK_METHODS: ReadonlySet<string> = new Set([
+  "thread/start",
+  "thread/resume",
+  "thread/fork",
+  "thread/compact/start",
+  "turn/start",
+  "turn/steer",
+]);
 
 const logger = createOpenBotLogger("codex-app-server");
 
@@ -104,8 +119,24 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
   readonly #hostRequests = new Map<RequestId, string>();
   /** The thread that started each subagent thread, so a subagent's events count for its parent's turn. */
   readonly #subagentParents = new Map<string, string>();
-  /** Turns that OpenBot ended for a stall. Their late events and requests are dropped. */
-  readonly #abandonedTurns = new Set<string>();
+  /**
+   * Turns that OpenBot ended for a stall, or after a Stop that Codex did not answer in
+   * `CODEX_STOP_GRACE_MS`, with their thread. Their late events and requests are dropped. This process
+   * may still run them, and Codex adds a new turn of that thread to the turn that runs there.
+   */
+  readonly #abandonedTurns = new Map<string, { threadId: string }>();
+  /** The turns that run in this process, by `[threadId, turnId]`, from `turn/started` to `turn/completed`. */
+  readonly #liveTurns = new Set<string>();
+  /** The stop deadline of each stopped turn, and the `turn/interrupt` requests that wait for its end. */
+  readonly #stopWatches = new Map<string, { timer: ReturnType<typeof setTimeout>; requests: RequestId[] }>();
+  /**
+   * The threads with a stopped turn whose subagents must stop too, until the thread starts a new turn.
+   * Codex stops only the thread that `turn/interrupt` names, and its subagents worked on and used the
+   * plan's usage for hours, while the chat showed them as stopped (upstream 717d77fcc).
+   */
+  readonly #stoppedParents = new Set<string>();
+  /** The `THREAD_WORK_METHODS` requests that wait for an answer. */
+  #threadWork = 0;
   #stallCheck: { timer: ReturnType<typeof setInterval>; at: number } | null = null;
   #process: ChildProcessWithoutNullStreams | null = null;
   /** The end of a process that failed. `stop` waits for it, because `#process` no longer holds it. */
@@ -223,6 +254,21 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
   });
 
   /**
+   * True when this process still runs a turn that OpenBot ended, and nothing else uses it: no other
+   * turn and no session start. The runtime then replaces the process before the next turn, and the
+   * next turn resumes the thread on the new process (upstream be190a7c0). Codex 0.160 cannot list
+   * background terminals, so a background command of another thread does not keep the process, as
+   * it does not keep it from an idle release either.
+   */
+  replaceForNextTurn(): boolean {
+    return this.running && this.#abandonedTurns.size > 0 && this.#liveTurns.size === 0 && this.#threadWork === 0;
+  }
+
+  #abandonedThreads(): ReadonlySet<string> {
+    return new Set([...this.#abandonedTurns.values()].map(({ threadId }) => threadId));
+  }
+
+  /**
    * Moves a replaced thread out of the list that the Codex app and ChatGPT show. Without this, each
    * replacement session adds a row that starts with the OpenBot handoff to the user's own Codex
    * history.
@@ -331,15 +377,32 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
   ) {
     const id = this.#nextId++;
     const child = this.#process;
+    if ((method === "turn/start" || method === "turn/steer") && isRecord(params) && isString(params.threadId)) {
+      // Codex would add this turn to the ended turn that still runs in the thread. The drain tries the
+      // message again, and a later try starts it on a new process.
+      if (this.#abandonedThreads().has(params.threadId))
+        return yield* Effect.fail(new ProviderClientOperationError({ cause: new ProviderSessionBusyError("Codex") }));
+    }
+    let counted = false;
     return yield* Effect.callback<T, ProviderClientOperationError>((resume) => {
+      if (THREAD_WORK_METHODS.has(method)) {
+        this.#threadWork += 1;
+        counted = true;
+      }
       this.#pending.set(id, {
-        resolve: (value) =>
+        resolve: (value) => {
+          // A Stop can come before `turn/started`; the stop deadline then still knows the turn.
+          if (method === "turn/start" && isRecord(params) && isString(params.threadId) && isRecord(value)) {
+            const turn = value.turn;
+            if (isRecord(turn) && isString(turn.id)) this.#liveTurns.add(JSON.stringify([params.threadId, turn.id]));
+          }
           resume(
             Effect.try({
               try: () => decoder(value),
               catch: (cause) => new ProviderClientOperationError({ cause }),
             }),
-          ),
+          );
+        },
         reject: (cause) => resume(Effect.fail(new ProviderClientOperationError({ cause }))),
       });
       try {
@@ -347,6 +410,8 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
         if (method === "turn/interrupt" && isRecord(params) && isString(params.threadId) && isString(params.turnId)) {
           this.#interruptedTurns.add(JSON.stringify([params.threadId, params.turnId]));
           this.#cancelToolRequests(params.threadId, params.turnId, "the turn was interrupted");
+          this.#watchStop(params.threadId, params.turnId, id, child);
+          this.#stopSubagentsOf(params.threadId);
         }
       } catch (cause) {
         resume(Effect.fail(new ProviderClientOperationError({ cause })));
@@ -362,7 +427,12 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
             ),
           ),
       }),
-      Effect.ensuring(Effect.sync(() => this.#pending.delete(id))),
+      Effect.ensuring(
+        Effect.sync(() => {
+          this.#pending.delete(id);
+          if (counted) this.#threadWork -= 1;
+        }),
+      ),
     );
   });
 
@@ -439,10 +509,12 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
       } else {
         const turnKey = turnKeyOf(message.params);
         if (turnKey !== null && this.#abandonedTurns.has(turnKey)) {
-          // The late events of a turn that OpenBot already ended as stalled.
+          // The late events of a turn that OpenBot already ended; its end only shows that it no longer runs.
           if (message.method === "turn/completed") this.#abandonedTurns.delete(turnKey);
           return;
         }
+        if (turnKey !== null && message.method === "turn/started") this.#liveTurns.add(turnKey);
+        if (turnKey !== null && message.method === "turn/completed") this.#endStopWatch(turnKey);
         this.#observeSubagents(message.method, message.params);
         this.#observeTurnClock(message.method, message.params, turnKey);
         if (
@@ -507,12 +579,31 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
     this.#noteTurnActivity(params.threadId);
   }
 
-  /** Links each subagent thread to the thread that started it. */
+  /**
+   * Links each subagent thread to the thread that started it. A turn that a subagent of a stopped
+   * thread starts is stopped too; a new turn of any other thread lets its own subagents work again.
+   */
   #observeSubagents(method: string, params: unknown): void {
-    if ((method !== "item/started" && method !== "item/completed") || !isRecord(params)) return;
+    if (!isRecord(params) || !isString(params.threadId)) return;
     const threadId = params.threadId;
+    if (method === "turn/started") {
+      const turnId = isRecord(params.turn) ? params.turn.id : undefined;
+      if (!isString(turnId)) return;
+      const parent = this.#subagentParents.get(threadId);
+      if (parent !== undefined && this.#stoppedParents.has(parent)) this.#stopSubagentTurn(threadId, turnId);
+      // A Stop can come before `turn/started` of the turn that it stops.
+      else if (!this.#interruptedTurns.has(JSON.stringify([threadId, turnId]))) this.#stoppedParents.delete(threadId);
+      return;
+    }
+    if (method === "turn/completed") {
+      // Codex does not stop a subagent when the turn that started it ends, and no later `wait` of that
+      // turn reads its result. The chat shows it as stopped then, so it stops (upstream 372d739e4 keeps
+      // it running with a Stop; the workspace has no Stop for an idle agent).
+      if ([...this.#subagentParents.values()].includes(threadId)) this.#stopSubagentsOf(threadId);
+      return;
+    }
     const item = params.item;
-    if (!isString(threadId) || !isRecord(item)) return;
+    if ((method !== "item/started" && method !== "item/completed") || !isRecord(item)) return;
     const children =
       item.type === "collabAgentToolCall" && Array.isArray(item.receiverThreadIds)
         ? item.receiverThreadIds.filter(isString)
@@ -522,6 +613,69 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
     for (const child of children) {
       if (this.#subagentParents.get(child) === threadId || this.#isSubagentOf(threadId, child)) continue;
       this.#subagentParents.set(child, threadId);
+      // A subagent that the stopped turn started just before its end.
+      if (this.#stoppedParents.has(threadId)) this.#stopSubagent(child);
+    }
+  }
+
+  /** Stops the subagents of a stopped thread, and their own subagents. A second Stop sends their Stops again. */
+  #stopSubagentsOf(threadId: string): void {
+    this.#stoppedParents.add(threadId);
+    for (const [child, parent] of this.#subagentParents) if (parent === threadId) this.#stopSubagent(child);
+  }
+
+  #stopSubagent(threadId: string): void {
+    for (const clock of this.#turnClocks.values())
+      if (clock.threadId === threadId) this.#stopSubagentTurn(threadId, clock.turnId);
+    this.#stopSubagentsOf(threadId);
+  }
+
+  /** Sends the Stop of a subagent's turn. It has the same deadline as a Stop of the person's turn. */
+  #stopSubagentTurn(threadId: string, turnId: string): void {
+    if (this.#interruptedTurns.has(JSON.stringify([threadId, turnId]))) return;
+    Effect.runFork(this.request("turn/interrupt", { threadId, turnId }, decodeRecordResponse).pipe(Effect.ignore));
+  }
+
+  /** Starts the deadline of a stopped turn, or adds a second Stop of it to that deadline. */
+  #watchStop(threadId: string, turnId: string, requestId: RequestId, child: ChildProcessWithoutNullStreams | null) {
+    const key = JSON.stringify([threadId, turnId]);
+    const watch = this.#stopWatches.get(key);
+    if (watch) {
+      watch.requests.push(requestId);
+      return;
+    }
+    const timer = setTimeout(() => this.#abandonStoppedTurn(threadId, turnId, child), CODEX_STOP_GRACE_MS);
+    timer.unref?.();
+    this.#stopWatches.set(key, { timer, requests: [requestId] });
+  }
+
+  #endStopWatch(key: string): void {
+    this.#liveTurns.delete(key);
+    const watch = this.#stopWatches.get(key);
+    if (watch) clearTimeout(watch.timer);
+    this.#stopWatches.delete(key);
+  }
+
+  /**
+   * Ends a stopped turn that Codex did not end in `CODEX_STOP_GRACE_MS`, as a Stop that Codex
+   * confirmed does: the Stop succeeds, and the turn completes as interrupted. Without this, a command
+   * that hangs kept the chat busy, and the agent's queue waited until OpenBot restarted.
+   */
+  #abandonStoppedTurn(threadId: string, turnId: string, child: ChildProcessWithoutNullStreams | null): void {
+    const key = JSON.stringify([threadId, turnId]);
+    const requests = this.#stopWatches.get(key)?.requests ?? [];
+    this.#stopWatches.delete(key);
+    if (this.#process !== child || !this.#liveTurns.has(key)) return;
+    logger.warn("Ended a stopped Codex turn that Codex did not end.", { threadId });
+    this.#handleMessage({
+      method: "turn/completed",
+      params: { threadId, turn: { id: turnId, status: "interrupted" } },
+    });
+    this.#abandonedTurns.set(key, { threadId });
+    for (const id of requests) {
+      const pending = this.#pending.get(id);
+      this.#pending.delete(id);
+      pending?.resolve({});
     }
   }
 
@@ -603,7 +757,7 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
       params: { threadId, turnId, message: sourceText("error.agent.turnStalled", { provider: "ChatGPT" }) },
     });
     this.#handleMessage({ method: "turn/completed", params: { threadId, turn: { id: turnId, status: "failed" } } });
-    this.#abandonedTurns.add(key);
+    this.#abandonedTurns.set(key, { threadId });
   }
 
   #cancelToolRequests(threadId?: string, turnId?: string, interruption?: string): void {
@@ -613,6 +767,10 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
       this.#hostRequests.clear();
       this.#subagentParents.clear();
       this.#abandonedTurns.clear();
+      this.#liveTurns.clear();
+      this.#stoppedParents.clear();
+      for (const watch of this.#stopWatches.values()) clearTimeout(watch.timer);
+      this.#stopWatches.clear();
       if (this.#stallCheck) clearInterval(this.#stallCheck.timer);
       this.#stallCheck = null;
     }

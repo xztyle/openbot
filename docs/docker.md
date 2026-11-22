@@ -655,6 +655,8 @@ work on `:1`, at the size of `OPENBOT_DISPLAY_SIZE`, which the script names in
 window. On a stop, tini gives the signal to OpenBot and waits for it.
 `/opt/OpenBot/hosted/mode` is `container`, so the `openbot` command talks to the control socket and
 does not use systemd.
+Only `status` and `health` answer a process of an agent. Other requests must come from
+`docker exec` (see [who may use the control socket](self-hosted-server.md#who-may-use-the-control-socket)).
 
 ## Limits
 

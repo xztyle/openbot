@@ -5,8 +5,11 @@
  *
  * Nobody can use the window, so the `openbot` terminal command (`scripts/hosting/openbot`) talks to
  * this process over a Unix socket in the runtime directory that systemd makes for the service user
- * (mode 0700). Only that user and root can connect. Agents run as the same user and already have
- * full access to its files, so the socket gives them nothing new. The socket answers a closed list
+ * (mode 0700). Only that user and root can connect. Agents run as the same user, so the file mode does
+ * not keep them out: each connection is checked with the kernel's peer credentials
+ * (`control-socket-peer.ts`), and only `status` and `health` answer a process that descends from main.
+ * Everything else answers only an operator: `docker exec`, or a shell on the server that is not part
+ * of the service. The socket answers a closed list
  * of requests: status, health, the email-code sign-in, the sign-in with an operator's one-time claim,
  * the server name, sign-out, a Mobile Connect code, an operator-started database snapshot, the
  * sanitized diagnostics report, the analytics switch, the security audit rows, and a CPU profile or
@@ -32,6 +35,7 @@ import type { DatabaseSnapshot, DatabaseSnapshotError } from "../backend/databas
 import { runCauseEffect } from "../backend/effect-boundary";
 import type { SecurityAuditLog } from "../backend/security-audit-log";
 import type { CentralAuthManager } from "./central-auth-manager";
+import { type ControlCaller, ControlSocketPeers } from "./control-socket-peer";
 import type { HostService } from "./host-service";
 import { readBodyWithin } from "./http-body";
 import { createHostedMobileConnect } from "./mobile-connect-host";
@@ -52,6 +56,12 @@ const MAX_EMAIL_LENGTH = 254;
 /** The name of a server whose owner signed in without one. The same default as a mobile connect. */
 const DEFAULT_SERVER_NAME = "OpenBot";
 const DEFAULT_AUDIT_ROWS = 50;
+/**
+ * The routes that any process of the service user may call: the Docker health check and the state.
+ * Every other route changes the account, the host or an agent, or reads what an agent must not see,
+ * so it answers only an operator (`control-socket-peer.ts`).
+ */
+const OPEN_ROUTES: ReadonlySet<string> = new Set(["GET /v1/health", "GET /v1/status"]);
 const MAX_AUDIT_ROWS = 200;
 
 export interface ServerModeEnvironment {
@@ -119,6 +129,8 @@ export interface ServerModeOptions {
   };
   /** Tests only. */
   uid?: number;
+  /** Tests only: who is on the other end of a connection. */
+  caller?: (socket: Socket) => Promise<ControlCaller>;
 }
 
 export interface Answer {
@@ -149,9 +161,11 @@ export class ServerMode {
   #publishing: Deferred.Deferred<void> | null = null;
   /** One snapshot at a time: two copies would compete for the disk and the main thread. */
   #snapshotRunning = false;
+  readonly #peers: ControlSocketPeers;
 
   constructor(options: ServerModeOptions) {
     this.#options = options;
+    this.#peers = new ControlSocketPeers({ onError: options.onError });
   }
 
   /** Binds the control socket. It refuses a runtime directory that another user could enter. */
@@ -244,6 +258,16 @@ export class ServerMode {
   async #handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     let answer: Answer;
     try {
+      const route = `${request.method ?? ""} ${request.url?.split("?")[0] ?? ""}`;
+      if (!OPEN_ROUTES.has(route)) {
+        const caller = await (this.#options.caller ?? ((socket) => this.#peers.caller(socket)))(request.socket);
+        if (caller !== "operator") {
+          this.#options.log?.(`The control socket refused ${route} to a process of an agent.`);
+          answer = failure(403, "operator_only");
+          this.#answer(response, answer);
+          return;
+        }
+      }
       // The spaces routes read a larger JSON body of their own.
       const spaces = await this.#spacesRoute(request);
       const raw = spaces ? null : await readBody(request);
@@ -260,6 +284,10 @@ export class ServerMode {
       // The messages of the account and host services are the ones the app shows. They name no secret.
       answer = failure(400, "failed", error instanceof Error ? error.message : null);
     }
+    this.#answer(response, answer);
+  }
+
+  #answer(response: ServerResponse, answer: Answer): void {
     response
       .writeHead(answer.status, {
         "content-type": answer.body === undefined ? "text/plain; charset=utf-8" : "application/json; charset=utf-8",

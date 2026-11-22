@@ -1,0 +1,3 @@
+### Security
+
+- The server control socket now asks the kernel which process connected. Agents run as the same user as OpenBot, so before, a prompt-injected agent could call it to make a Mobile Connect code, sign the server out or in to another account, write a database snapshot anywhere, message other agents as the owner, or move agents between spaces. Now only `status` and `health` answer a process of an agent; everything else answers only an operator who runs it through `docker exec` or from a login shell on the server. Operators need no token, and `openbot` explains the new `operator_only` refusal.

@@ -248,6 +248,34 @@ It starts a D-Bus session with an unlocked keyring, as on a hosted server, and r
 Xvfb with `OPENBOT_SERVER=1`. Main (`src/main/server-mode.ts`) then opens the control socket
 `/run/openbot/control.sock` and publishes the host after each sign-in.
 
+### Who may use the control socket
+
+Agents run as the service user, so the mode of the socket and its folder does not keep them out.
+Main asks the kernel which process connected (`SO_PEERCRED` and `SO_PEERPIDFD`, read by a small Perl
+helper in `src/main/control-socket-peer.ts`) and walks that process's parents:
+
+- A process that descends from main is an agent. So is an orphan that PID 1 adopted and that is
+  still in the service's cgroup (a double fork does not get an agent out).
+- A process whose chain starts outside the PID namespace (`docker exec`), or that runs in another
+  cgroup (an operator's login shell, `sudo -u openbot openbot …`), is an operator.
+- When the helper cannot tell, the caller counts as an agent.
+
+`GET /v1/status` and `GET /v1/health` answer anyone, so the health check and `openbot status`
+work everywhere. Every other route answers an agent with `403` and `error=operator_only`: sign-in,
+sign-out, the server name, Mobile Connect, backup, analytics, the audit rows, diagnostics, the
+spaces routes, the debug routes, `POST /v1/agents/<id>/message` and `POST /v1/resume-interrupted`.
+
+Operators need no token. Run the request from outside the service, as before:
+
+```sh
+sudo docker exec -i openbot openbot backup /data/backups/openbot.db
+printf '%s' '{"system":true,"text":"Continue."}' | sudo docker exec -i openbot \
+  curl -s --unix-socket /run/openbot/control.sock -H 'content-type: application/json' \
+  --data-binary @- http://openbot/v1/agents/<agentId>/message
+```
+
+The check is not a jail: an agent still runs as the service user and can read its files.
+
 The server has two Xvfb displays, one in each of two nested `xvfb-run` commands that share one
 authority file. The outer one starts the agent display, at the [display size](#display-size), and
 the script names it in `OPENBOT_AGENT_DISPLAY`. The inner one starts the display that OpenBot shows

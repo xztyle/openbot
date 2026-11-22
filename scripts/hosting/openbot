@@ -125,6 +125,7 @@ check_answer() {
       account_signed_out | account_code_sent) message="Sign in first with: openbot login" ;;
       account_error | account_loading) message="OpenBot could not check the account yet. Run: openbot status" ;;
       session_not_storable) message="This server cannot store the session securely. The claim was not used." ;;
+      operator_only) message="Only an operator can do this: run it with docker exec, or from a login shell on the server, not from an agent." ;;
       *) message="OpenBot refused the request ($(value error))." ;;
     esac
   fi
@@ -261,6 +262,7 @@ backup_command() {
         fail "The backup failed ($(value error)). No file was left. The OpenBot log has the reason."
         ;;
       unavailable) fail "This OpenBot cannot make a backup." ;;
+      operator_only) check_answer || exit 1 ;;
       *) check_answer || exit 1 ;;
     esac
   fi

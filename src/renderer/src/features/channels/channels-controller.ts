@@ -105,6 +105,9 @@ function channelAction(input: ChannelCommand, creating: boolean, page: ChannelPa
   return input.draft.members.some((member) => !members.has(member.agentId)) ? "member_added" : null;
 }
 
+/** The least time between two list reads that `channels-changed` events ask for. */
+const LIST_REFRESH_SPACING_MS = 1_000;
+
 export function createChannelsController(env: ChannelsEnvironment) {
   const [opened, setOpened] = createSignal<{ channelId: string } | null>(null);
   const [state, setState] = createStore<ChannelsState>({
@@ -152,6 +155,8 @@ export function createChannelsController(env: ChannelsEnvironment) {
    */
   let reading: Promise<void> | null = null;
   let readAgain = false;
+  /** A request that waits behind the read in flight needs the open page, not only the list. */
+  let readAgainPage = false;
   let readToken = 0;
   let laterRead: Promise<void> | null = null;
   let settleLaterRead: (() => void) | null = null;
@@ -159,6 +164,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
     // Navigation carries the selection it wants, so it never waits behind the read it replaces.
     if (reading && selectedOverride === undefined) {
       readAgain = true;
+      if (!listOnly) readAgainPage = true;
       return reading;
     }
     const token = ++readToken;
@@ -169,8 +175,12 @@ export function createChannelsController(env: ChannelsEnvironment) {
       laterRead = null;
       settleLaterRead = null;
       if (readAgain && !disposed) {
+        // Requests for the list only, such as the changes of a streaming reply, read only the list
+        // again: a page read for each of them read the open channel's 100 messages many times a second.
+        const listOnlyAgain = !readAgainPage;
         readAgain = false;
-        void refresh().finally(() => settle?.());
+        readAgainPage = false;
+        void refresh(undefined, listOnlyAgain).finally(() => settle?.());
       } else settle?.();
     });
     reading = run;
@@ -186,6 +196,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
   function refreshAfter(): Promise<void> {
     if (!reading) return refresh();
     readAgain = true;
+    readAgainPage = true;
     laterRead ??= new Promise<void>((resolve) => {
       settleLaterRead = resolve;
     });
@@ -491,6 +502,8 @@ export function createChannelsController(env: ChannelsEnvironment) {
     window.addEventListener("focus", focus);
     return () => {
       disposed = true;
+      clearTimeout(listTimer);
+      settleListWait?.();
       window.removeEventListener("focus", focus);
     };
   });
@@ -549,8 +562,39 @@ export function createChannelsController(env: ChannelsEnvironment) {
    * channel, only the list is read again; otherwise the open page is read too.
    */
   function changed(channelId: string, revision: number): Promise<void> {
-    const live = state.selectedId === channelId && (liveRevisions.get(channelId) ?? -1) >= revision;
-    return refresh(undefined, live);
+    // The open page holds only its own channel, so a change of another channel needs only the list.
+    const pageCurrent = state.selectedId !== channelId || (liveRevisions.get(channelId) ?? -1) >= revision;
+    return pageCurrent ? refreshListSoon() : refresh(undefined, false);
+  }
+
+  /**
+   * A list read for a `channels-changed` event, at most one each `LIST_REFRESH_SPACING_MS`. A
+   * streaming reply changes its channel about ten times a second, and each change read the whole
+   * list, on every device. The last change of a burst is always read.
+   */
+  let listReadAt = 0;
+  let listTimer: ReturnType<typeof setTimeout> | undefined;
+  let listWaiting: Promise<void> | null = null;
+  let settleListWait: (() => void) | null = null;
+  function refreshListSoon(): Promise<void> {
+    if (listWaiting) return listWaiting;
+    const wait = listReadAt + LIST_REFRESH_SPACING_MS - Date.now();
+    if (wait <= 0) {
+      listReadAt = Date.now();
+      return refresh(undefined, true);
+    }
+    const waiting = new Promise<void>((resolve) => {
+      settleListWait = resolve;
+      listTimer = setTimeout(() => {
+        listTimer = undefined;
+        listWaiting = null;
+        settleListWait = null;
+        listReadAt = Date.now();
+        void refresh(undefined, true).finally(resolve);
+      }, wait);
+    });
+    listWaiting = waiting;
+    return waiting;
   }
 
   /**

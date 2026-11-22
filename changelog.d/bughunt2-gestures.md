@@ -15,3 +15,5 @@
   halfway through the hold.
 - Phone: a quick tap on a message's actions right after the long press that opened them, such as a
   quick reaction, is no longer lost.
+- iPhone: two quick taps, as on a reaction or the send button, no longer zoom the web app in Safari.
+  A pinch still zooms.

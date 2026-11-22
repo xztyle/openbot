@@ -1,5 +1,6 @@
 // Checks the touch gestures of the web client on an iPhone, with real touch events (CDP
 // `Input.dispatchTouchEvent`), as a finger sends them:
+// 0. two quick taps do not zoom the page (iOS's double-tap zoom is off, the pinch stays);
 // 1. a long press on a message opens its actions; a long press on the message box's buttons, or on the
 //    space around the messages, opens nothing (the workspace's menu is a right-click on a computer);
 //    a text field inside a message, as an agent's form, still selects text;
@@ -182,6 +183,12 @@ try {
   await app.goto(`${origin}${CHANNEL_PATH}`, { waitUntil: "commit" });
   await app.locator(".ws-message").first().waitFor({ timeout: UI_WAIT_MS });
   await app.waitForTimeout(1500);
+
+  await step(app, "a double tap does not zoom the page", async () => {
+    // Safari zooms on a double tap unless the page says `touch-action: manipulation`.
+    const action = await app.evaluate(() => getComputedStyle(document.documentElement).touchAction);
+    assert.equal(action, "manipulation");
+  });
 
   // 1. Long press.
   await step(app, "a long press on a message opens its actions", async () => {

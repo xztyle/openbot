@@ -55,6 +55,14 @@ body {
   ) {
     font-size: var(--openbot-text-xl);
   }
+
+  /*
+   * Two quick taps, as on a reaction or the send button, zoom the page in Safari on an iPhone, and
+   * the app's fixed frame stays zoomed. A pinch still zooms; a pane still scrolls.
+   */
+  html:has(.web-app) {
+    touch-action: manipulation;
+  }
 }
 
 .web-app-frame {

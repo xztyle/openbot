@@ -63,6 +63,8 @@ interface HarnessWindow {
     removeTab(tabId: string): void;
     /** The next close of a tab fails on the host, as a refused close does. */
     failNextClose(): void;
+    /** Chief acts on the tab, or stops, as the host's browser control state says. */
+    acting(on: boolean): void;
   };
   /** The tabs the client asked the host to close, in order. */
   closedTabs?: string[];
@@ -111,6 +113,26 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     failNextClose: () => {
       failNextClose = true;
     },
+    acting: (on) =>
+      mock.emitAgentEvent({
+        type: "browser-control-changed",
+        state: {
+          sessions: on
+            ? [
+                {
+                  id: "control-1",
+                  threadId: "thread-chief",
+                  turnId: "turn-acting",
+                  callId: "call-acting",
+                  tabId: TAB.id,
+                  action: "click",
+                  phase: "acting",
+                  startedAt: new Date().toISOString(),
+                },
+              ]
+            : [],
+        },
+      }),
   };
   const web = mockWebRuntimeFor(mock, events);
   return {

@@ -11,3 +11,5 @@
   workspace's menu (New channel, Browse channels…) over the page.
 - A phone on its side shows the browser view with the one bar of a phone, so the page has more of
   the short screen. Before, it had the tab row and the address row of a computer.
+- A copy (Ctrl+C or Cmd+C) in the live view while the agent acts on the tab no longer stops the
+  copies after it. Before, no copy worked again until the view reconnected.

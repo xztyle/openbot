@@ -787,7 +787,9 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
    * on the host only once it is on the clipboard, so a write that fails loses nothing.
    */
   const copy = (cut: boolean) => {
-    if (pendingCopy) return;
+    // A held view sends no copy, and a copy that waits for an answer that never comes held back
+    // every copy after it until the stream ended.
+    if (pendingCopy || props.locked) return;
     let failure: "empty" | "tooLarge" | undefined;
     let copied = "";
     const answer = new Promise<CopyAnswer>((resolve) => {

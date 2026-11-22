@@ -36,6 +36,7 @@ declare global {
       addTab(tabId: string, title: string): void;
       removeTab(tabId: string): void;
       failNextClose(): void;
+      acting(on: boolean): void;
     };
     takeoverResponses?: { requestId: string | number; decision: string }[];
     closedTabs?: string[];
@@ -915,6 +916,25 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
   await step(page, viewport, "the DM header's Browser menu opens the agent's tab live", async () => {
     await browserFromHeader(page, host, false);
     await shot(page, "desktop-header-browser");
+  });
+
+  await step(page, viewport, "a copy while the agent acts does not hold back the copies after it", async () => {
+    await page.evaluate(() => window.liveViewBridge?.acting(true));
+    await page.getByText(english("browser.liveView.agentUsing"), { exact: true }).waitFor({ timeout: UI_WAIT_MS });
+    const view = page.getByRole("tabpanel").getByRole("img", { name: english("browser.liveView.label") });
+    await view.focus();
+    await page.keyboard.press("ControlOrMeta+C");
+    await page.evaluate(() => window.liveViewBridge?.acting(false));
+    await page
+      .getByText(english("browser.liveView.agentUsing"), { exact: true })
+      .waitFor({ state: "detached", timeout: UI_WAIT_MS });
+    const copies = host.inputs.filter((input) => input.type === "copy").length;
+    await view.focus();
+    await page.keyboard.press("ControlOrMeta+C");
+    await waitUntil(
+      () => host.inputs.filter((input) => input.type === "copy").length > copies,
+      "A copy after the agent stopped reaches the host",
+    );
   });
   await context.close();
   await tabContext.close();

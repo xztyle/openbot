@@ -23,6 +23,14 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* The phone's Chat and More tabs are the sidebar's ink, so the strips under the notch and beside
+   them are too. Today, Agents and Inbox are views on the canvas, as the page is. */
+.web-app:has(> .web-app-window > .web-app-frame[data-web-phone-shell][data-web-mobile-pane="workspace"]):not(
+  :has(.ws-phone-tab-view)
+) {
+  background: var(--openbot-bg-sidebar);
+}
+
 /*
  * iOS zooms the page into a field whose text is smaller than 16px, and does not zoom out after.
  * Dialogs and menus render outside `.web-app`, so these rules are not scoped to it.

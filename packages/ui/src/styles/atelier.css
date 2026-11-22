@@ -26,7 +26,8 @@
 }
 
 /* The sidebar and the space rail read their own ink: in Riso Press light the sidebar is navy. */
-:root[data-atelier-theme] :is(.ws-sidebar, .ws-frame-sidebar, .space-rail, .window-rail) {
+/* The top bar is on the frame, which is the sidebar's color, so it reads the same ink. */
+:root[data-atelier-theme] :is(.ws-sidebar, .ws-frame-sidebar, .space-rail, .window-rail, .ws-topbar) {
   --openbot-text-primary: var(--atelier-sidebar-text);
   --openbot-text-secondary: color-mix(in srgb, var(--atelier-sidebar-text) 84%, var(--atelier-sidebar));
   /* At least 4.5:1 on the sidebar in every theme: a phone shows its tabs on this ink too. */
@@ -109,11 +110,39 @@
 }
 
 /* On the navy sidebar of Riso Press light, the accent text marks (the AI badge, initials) go lighter. */
-:root[data-atelier-theme="riso"][data-openbot-color-scheme="light"] :is(.ws-sidebar, .ws-frame-sidebar) {
+:root[data-atelier-theme="riso"][data-openbot-color-scheme="light"] :is(.ws-sidebar, .ws-frame-sidebar, .ws-topbar) {
   --openbot-accent-text: color-mix(in srgb, var(--atelier-accent) 45%, var(--atelier-sidebar-text));
 }
 
-/* The phone's tab views read the canvas ink (above), so they keep the canvas accent text too. */
+/*
+ * Riso Press light is the one theme whose sidebar ink is dark on a light page. On a phone the whole
+ * shell is the sidebar, so the tab bar's "+" button, and on a computer the top bar's search and
+ * "Needs you", are printed on the ink: the "+" button was navy on navy, and "Needs you" was amber on
+ * navy.
+ */
+:root[data-atelier-theme="riso"][data-openbot-color-scheme="light"] :is(.ws-sidebar, .ws-frame-sidebar, .ws-topbar) {
+  --openbot-bg-surface: color-mix(in srgb, var(--atelier-sidebar-text) 9%, var(--atelier-sidebar));
+  --openbot-bg-surface-raised: color-mix(in srgb, var(--atelier-sidebar-text) 12%, var(--atelier-sidebar));
+  --openbot-bg-grouped: var(--openbot-bg-surface);
+  --openbot-tabs-bar-bg: color-mix(in srgb, var(--atelier-sidebar-text) 7%, var(--atelier-sidebar));
+  --openbot-tabs-pill-bg: color-mix(in srgb, var(--atelier-sidebar-text) 18%, var(--atelier-sidebar));
+  --openbot-surface-light: var(--atelier-sidebar-text);
+  --openbot-text-on-light: var(--atelier-sidebar);
+  --openbot-bg-control-active: color-mix(in srgb, var(--atelier-sidebar-text) 22%, var(--atelier-sidebar));
+  --openbot-warning-text: var(--atelier-warn-fill);
+}
+
+/* The phone's tab views read the canvas ink (above), so they keep the canvas accent text, surfaces and
+   filled buttons too. */
 :root[data-atelier-theme="riso"][data-openbot-color-scheme="light"] .ws-phone-tab-view {
   --openbot-accent-text: var(--atelier-accent-text);
+  --openbot-bg-surface: var(--atelier-surface);
+  --openbot-bg-surface-raised: var(--atelier-surface);
+  --openbot-bg-grouped: var(--atelier-surface);
+  --openbot-tabs-bar-bg: var(--atelier-surface2);
+  --openbot-tabs-pill-bg: var(--atelier-surface);
+  --openbot-surface-light: var(--atelier-text);
+  --openbot-text-on-light: var(--atelier-canvas);
+  --openbot-bg-control-active: color-mix(in srgb, var(--atelier-surface2) 90%, var(--atelier-text));
+  --openbot-warning-text: var(--atelier-warn);
 }

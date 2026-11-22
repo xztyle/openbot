@@ -85,6 +85,8 @@ await Promise.all([
     access(resolve(resourcesPath, "hosting", file)),
   ),
   ...HOSTED_SCRIPTS.map((file) => access(resolve(resourcesPath, "hosting", file), constants.X_OK)),
+  // The launcher of the agent jail on a server (src/backend/agent-jail.ts).
+  access(resolve(resourcesPath, "agent-runtime", "agent-jail.py")),
   // The Computer Use driver of this architecture.
   access(resolve(resourcesPath, `cua-driver/linux/${architecture}/cua-driver`)),
   access(resolve(resourcesPath, `cua-driver/linux/${architecture}/wayland-helper/winrects@cua/extension.js`)),

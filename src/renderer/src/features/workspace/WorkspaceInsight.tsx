@@ -115,7 +115,7 @@ export function WorkspaceInsightView() {
       }}
       spaces={spaces()}
       member={(agentId) => memberById(ws.directory(), agentId)}
-      onSaveGoal={(goal: InsightGoalDraft) => act({ kind: "goal-save", goal }, t("insight.save"))}
+      onSaveGoal={(goal: InsightGoalDraft) => act({ kind: "goal-save", goal }, t("insight.saved"))}
       onRemoveGoal={(goalId) => quick({ kind: "goal-remove", goalId })}
       onSetProgress={(goalId, value) => quick({ kind: "goal-progress", goalId, value })}
       onAddMoney={(entry: InsightMoneyDraft) => act({ kind: "money-add", entry })}
@@ -123,7 +123,7 @@ export function WorkspaceInsightView() {
       onSync={() => quick({ kind: "money-sync" })}
       onDismissAlert={(alertId) => void quick({ kind: "alert-dismiss", alertId }).catch(() => undefined)}
       onSaveBriefing={(settings: InsightBriefingSettings) =>
-        act({ kind: "briefing-save", settings }, t("insight.save"))
+        act({ kind: "briefing-save", settings }, t("insight.saved"))
       }
       onSendBriefing={() => quick({ kind: "briefing-send" })}
       onOpenChannel={(channelId) => ws.openChannel(channelId)}

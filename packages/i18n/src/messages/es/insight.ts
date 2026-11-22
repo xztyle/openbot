@@ -13,6 +13,7 @@ export const messages = {
   "insight.loadFailed": "No se cargaron los resultados",
   "insight.failed": "No funcionó. Inténtalo de nuevo.",
   "insight.save": "Guardar",
+  "insight.saved": "Guardado",
   "insight.space": "Espacio",
   "insight.allSpaces": "Todos los espacios",
   "insight.alerts": "Alertas",

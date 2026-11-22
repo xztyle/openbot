@@ -250,6 +250,7 @@ const EMPTY_GOAL = (spaceId: string): InsightGoalDraft => ({
 
 function InsightGoals(props: SectionProps): JSX.Element {
   const { t, format, errorMessage } = useText();
+  const calendarDay = useCalendarDay();
   const [editing, setEditing] = createSignal<InsightGoalDraft | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -398,7 +399,9 @@ function InsightGoals(props: SectionProps): JSX.Element {
                             target: format.number(goal().target),
                             metric: goal().metric,
                           })}
-                          {goal().deadline ? ` · ${t("insight.goal.by", { date: goal().deadline ?? "" })}` : ""}
+                          {goal().deadline
+                            ? ` · ${t("insight.goal.by", { date: calendarDay(goal().deadline ?? "") })}`
+                            : ""}
                           {` · ${sourceLabel(goal().source)}`}
                         </span>
                         <Show when={(goal().costUsd ?? 0) > 0}>
@@ -551,8 +554,37 @@ function totals(entries: readonly InsightMoneyEntry[]): MoneyTotals {
   return result;
 }
 
+/** A `YYYY-MM-DD` day in the reader's format. Noon UTC names the same day in every zone. */
+function useCalendarDay(): (day: string) => string {
+  const { format } = useText();
+  return (day) => {
+    const at = Date.parse(`${day}T12:00:00Z`);
+    return Number.isNaN(at) ? day : format.date(at, { dateStyle: "medium", timeZone: "UTC" });
+  };
+}
+
+/**
+ * The day of `at` in the report's zone, `YYYY-MM-DD`, as the host dates its rows. The UTC day would
+ * be tomorrow for an evening in the Americas, and an entry on it would fall outside the report.
+ */
+function reportDay(at: number, timeZone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(at);
+    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)?.value ?? "";
+    return `${part("year")}-${part("month")}-${part("day")}`;
+  } catch {
+    return new Date(at).toISOString().slice(0, 10);
+  }
+}
+
 function InsightMoney(props: SectionProps): JSX.Element {
   const { t, format, errorMessage } = useText();
+  const calendarDay = useCalendarDay();
   const [adding, setAdding] = createSignal<InsightMoneyDraft | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [syncing, setSyncing] = createSignal(false);
@@ -597,7 +629,7 @@ function InsightMoney(props: SectionProps): JSX.Element {
       setBusy(false);
     }
   }
-  const today = () => new Date(props.report.at).toISOString().slice(0, 10);
+  const today = () => reportDay(props.report.at, props.report.timeZone);
   return (
     <>
       <div class="ws-insight-actions">
@@ -682,6 +714,8 @@ function InsightMoney(props: SectionProps): JSX.Element {
                         weekday: "short",
                         day: "numeric",
                         month: "short",
+                        // The row is a calendar day: noon UTC names it in every zone, from -12 to +14.
+                        timeZone: "UTC",
                       })}
                       titleEnd={net(day().money) ?? undefined}
                     >
@@ -701,7 +735,7 @@ function InsightMoney(props: SectionProps): JSX.Element {
                   <For each={item().entries.filter((entry) => entry.source === "manual")} keyed={(entry) => entry.id}>
                     {(entry) => (
                       <WorkspaceListRow
-                        title={`${entry().date} · ${t(MONEY_KIND_KEY[entry().kind])}`}
+                        title={`${calendarDay(entry().date)} · ${t(MONEY_KIND_KEY[entry().kind])}`}
                         titleEnd={`${format.number(entry().amount, { maximumFractionDigits: 2 })} ${entry().currency}`}
                         actions={
                           <IconButton

@@ -13,6 +13,7 @@ export const messages = defineMessages("insight", {
   "insight.loadFailed": "Insights did not load",
   "insight.failed": "That did not work. Try again.",
   "insight.save": "Save",
+  "insight.saved": "Saved",
   "insight.space": "Space",
   "insight.allSpaces": "All spaces",
   "insight.alerts": "Alerts",

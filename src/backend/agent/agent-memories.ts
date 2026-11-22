@@ -20,12 +20,17 @@ import {
   AgentMemoryStore,
 } from "../agent-memory-store";
 import type { AgentStore } from "../agent-store";
+import { hideChannelSecrets } from "../channel-secrets";
 import { normalizeMemoryText } from "../memory-store";
 import { type DynamicToolCallParams, isRecord } from "../protocol";
 import type { ConversationRuntime } from "./conversation-runtime";
 import type { MemoryReviewOperation } from "./memory-review-prompt";
 import { listMemoriesInput, searchMemoriesInput, setMemoryInclusionInput } from "./memory-tool-inputs";
 import { type OpenBotToolResponse, openBotToolFailure, openBotToolResult } from "./routine-tools";
+
+/** What the agent hears when its memory held a key: the agent reads English, as in its other notes. */
+const MEMORY_SECRET_HIDDEN =
+  "A key or token in the text was hidden before the memory was saved. Keep keys with save_api_key, never in a memory.";
 
 type PendingMemoryMutation =
   | {
@@ -145,14 +150,14 @@ export class AgentMemories {
 
   create(input: CreateAgentMemoryInput): AgentMemory {
     this.#conversation.requireKnownAgent(input.agentId);
-    const memory = this.#memories.createManual(input.agentId, input.text);
+    const memory = this.#memories.createManual(input.agentId, hideChannelSecrets(input.text, "person"));
     this.stateChanged(input.agentId);
     return memory;
   }
 
   update(input: UpdateAgentMemoryInput): AgentMemory {
     this.#conversation.requireKnownAgent(input.agentId);
-    const memory = this.#memories.updateManual(input.agentId, input.memoryId, input.text);
+    const memory = this.#memories.updateManual(input.agentId, input.memoryId, hideChannelSecrets(input.text, "person"));
     this.stateChanged(input.agentId);
     return memory;
   }
@@ -327,7 +332,9 @@ export class AgentMemories {
       const args = params.arguments;
       if (!isRecord(args) || !isString(args.text))
         return openBotToolFailure(sourceText("error.backend.memoryTextRequired"));
-      const text = args.text.trim();
+      const written = args.text.trim();
+      // A memory goes into every later prompt and shows in Knowledge: a key in it stays hidden there.
+      const text = hideChannelSecrets(written, "agent");
       if (!text) return openBotToolFailure(sourceText("error.backend.memoryTextRequired"));
       if (text.length > INPUT_LIMITS.agentMemoryText)
         return openBotToolFailure(sourceText("error.backend.memoryTextTooLong"));
@@ -413,7 +420,16 @@ export class AgentMemories {
         status: "staged",
         memoryId: memoryId ?? null,
         inclusion,
-        ...(inclusion !== intendedInclusion ? { note: sourceText("error.backend.memoryEssentialBudget") } : {}),
+        ...(inclusion !== intendedInclusion || text !== written
+          ? {
+              note: [
+                inclusion !== intendedInclusion ? sourceText("error.backend.memoryEssentialBudget") : "",
+                text !== written ? MEMORY_SECRET_HIDDEN : "",
+              ]
+                .filter(Boolean)
+                .join(" "),
+            }
+          : {}),
       });
     }
 

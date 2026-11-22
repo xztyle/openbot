@@ -100,6 +100,8 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
   const [formError, setFormError] = createSignal<string | null>(null);
   const [phoneStage, setPhoneStage] = createSignal<string | null>(null);
   const [blocked, setBlocked] = createSignal<string[]>([]);
+  // The unsaved field values of each item, by item id: another item's panel never shows or saves them.
+  const [drafts, setDrafts] = createSignal<Record<string, Record<string, string>>>({});
 
   const loops = () => props.board?.loops ?? [];
   const loop = createMemo(() => loops().find((candidate) => candidate.id === selectedLoopId()) ?? loops()[0] ?? null);
@@ -116,6 +118,13 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
     return current && entry ? { loop: current, item: entry } : null;
   });
   const agent = (id: string | undefined) => (id ? props.agents.find((member) => member.id === id) : undefined);
+
+  /** Shows one item, without the answer of the last action on another one. */
+  function openItem(id: string | null) {
+    setItemId(id);
+    setBlocked([]);
+    setFormError(null);
+  }
 
   async function run(action: WorkspaceLoopAction): Promise<WorkspaceLoopActionResult | null> {
     setBusy(true);
@@ -223,7 +232,7 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
                   onDecide={(decisionId, approve, note) =>
                     void run({ kind: "decide", decisionId, approve, ...(note ? { note } : {}) })
                   }
-                  onOpenItem={setItemId}
+                  onOpenItem={openItem}
                   focusDecisionId={props.focusDecisionId}
                 />
               </Show>
@@ -259,7 +268,7 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
                       agent={agent}
                       hiddenOnPhone={(phoneStage() ?? current().stages[0]?.id) !== stage().id}
                       selectedItemId={itemId()}
-                      onOpen={setItemId}
+                      onOpen={openItem}
                       onAdd={index() === 0 && props.canEdit ? () => setAdding(true) : undefined}
                     />
                   )}
@@ -269,28 +278,31 @@ export function LoopsView(props: LoopsViewProps): JSX.Element {
           )}
         </Show>
       </Show>
-      <Show when={opened()}>
-        {(open) => (
-          <ItemPanel
-            loop={open().loop}
-            item={open().item}
-            experiments={(props.board?.experiments ?? []).filter((experiment) => experiment.itemId === itemId())}
-            events={(props.board?.events ?? []).filter((event) => event.itemId === itemId())}
-            decisions={(props.board?.decisions ?? []).filter((decision) => decision.itemId === itemId())}
-            agents={props.agents}
-            agent={agent}
-            canEdit={props.canEdit}
-            busy={busy()}
-            error={formError()}
-            blocked={blocked()}
-            onAction={run}
-            onOpenAgent={props.onOpenAgent}
-            onClose={() => {
-              setItemId(null);
-              setBlocked([]);
-              setFormError(null);
-            }}
-          />
+      {/* Keyed by the item: the move note and the panel's scroll are of one item. */}
+      <Show when={opened()?.item.id} keyed>
+        {(openedId) => (
+          <Show when={opened()}>
+            {(open) => (
+              <ItemPanel
+                loop={open().loop}
+                item={open().item}
+                draft={drafts()[openedId] ?? {}}
+                onDraft={(draft) => setDrafts((current) => ({ ...current, [openedId]: draft }))}
+                experiments={(props.board?.experiments ?? []).filter((experiment) => experiment.itemId === itemId())}
+                events={(props.board?.events ?? []).filter((event) => event.itemId === itemId())}
+                decisions={(props.board?.decisions ?? []).filter((decision) => decision.itemId === itemId())}
+                agents={props.agents}
+                agent={agent}
+                canEdit={props.canEdit}
+                busy={busy()}
+                error={formError()}
+                blocked={blocked()}
+                onAction={run}
+                onOpenAgent={props.onOpenAgent}
+                onClose={() => openItem(null)}
+              />
+            )}
+          </Show>
         )}
       </Show>
       <FormDialog
@@ -667,12 +679,15 @@ function ItemPanel(props: {
   busy: boolean;
   error: string | null;
   blocked: readonly string[];
+  /** The values typed and not saved yet, as text by field key. */
+  draft: Readonly<Record<string, string>>;
+  onDraft: (draft: Record<string, string>) => void;
   onAction: (action: WorkspaceLoopAction) => Promise<WorkspaceLoopActionResult | null>;
   onOpenAgent?: ((agentId: string) => void) | undefined;
   onClose: () => void;
 }): JSX.Element {
   const { t, format } = useText();
-  const [draft, setDraft] = createSignal<Record<string, string>>({});
+  const draft = () => props.draft;
   const [moveNote, setMoveNote] = createSignal("");
   const stage = () => props.loop.stages.find((candidate) => candidate.id === props.item.stageId);
   const next = () => {
@@ -696,7 +711,7 @@ function ItemPanel(props: {
       values[key] = trimmed === "" ? null : numeric && Number.isFinite(Number(trimmed)) ? Number(trimmed) : trimmed;
     }
     void props.onAction({ kind: "save-item", loopId: props.loop.id, itemId: props.item.id, values }).then((result) => {
-      if (result) setDraft({});
+      if (result) props.onDraft({});
     });
   }
 
@@ -763,7 +778,7 @@ function ItemPanel(props: {
                       inputmode={field().type === "text" || field().type === "url" ? undefined : "decimal"}
                       onInput={(event) => {
                         const value = event.currentTarget.value;
-                        setDraft((current) => ({ ...current, [field().key]: value }));
+                        props.onDraft({ ...props.draft, [field().key]: value });
                       }}
                     />
                   </Show>
@@ -776,7 +791,7 @@ function ItemPanel(props: {
               <Button size="sm" disabled={props.busy} onClick={save}>
                 {t("workspace.loops.save")}
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setDraft({})}>
+              <Button size="sm" variant="ghost" onClick={() => props.onDraft({})}>
                 {t("workspace.loops.cancel")}
               </Button>
             </div>

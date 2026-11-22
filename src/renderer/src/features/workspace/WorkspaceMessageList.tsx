@@ -13,6 +13,7 @@ import {
   keepUnchangedRows,
   messageRows,
   peopleNames,
+  rowMessages,
   type WorkspaceMessageRowModel,
 } from "./workspace-model";
 import { savedScrollPlace, saveScrollPlace } from "./workspace-scroll-places";
@@ -104,10 +105,12 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
   const unreadCount = createMemo(() => {
     const from = unreadIndex();
     if (from < 0) return 0;
+    // A row of folded progress lines counts each line.
     return rows()
       .slice(from)
-      .filter((row) => !row.pending && !(row.entry.author.kind === "member" && ws.env.isReader(row.entry.author.id)))
-      .length;
+      .filter((row) => !row.pending)
+      .flatMap(rowMessages)
+      .filter((entry) => !(entry.author.kind === "member" && ws.env.isReader(entry.author.id))).length;
   });
   /** "12 new messages since 10:15", or only the time when every message after the divider is the reader's. */
   const unreadLabel = () => {
@@ -119,16 +122,23 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
   };
   /** Where the reader left this conversation, for their next visit while the app runs. */
   const placeId = `${ws.env.storageKey()}:channel:${props.channelId}`;
-  /** The last row when the reader left the end: the rows after it are new to them. */
-  const [awayKey, setAwayKey] = createSignal<string | null>(null);
+  /**
+   * The newest message when the reader left the end: the messages after it are new to them. A
+   * sequence, not a row: a new progress line folds the row before it away.
+   */
+  const [awaySequence, setAwaySequence] = createSignal<number | null>(null);
+  const newestSequence = (list: readonly WorkspaceMessageRowModel[]) =>
+    list
+      .filter((row) => !row.pending)
+      .flatMap(rowMessages)
+      .reduce((top, entry) => Math.max(top, entry.sequence), 0);
   const newSinceAway = createMemo(() => {
-    const key = awayKey();
-    if (key === null) return 0;
-    const from = indexByKey().get(key);
-    if (from === undefined) return 0;
+    const away = awaySequence();
+    if (away === null) return 0;
     return rows()
-      .slice(from + 1)
-      .filter((row) => !row.pending).length;
+      .filter((row) => !row.pending)
+      .flatMap(rowMessages)
+      .filter((entry) => entry.sequence > away).length;
   });
   /** The "new" divider is above the screen: the banner offers to jump back to it. */
   const [unreadAbove, setUnreadAbove] = createSignal(false);
@@ -193,7 +203,7 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
     notePlace();
     if (follow !== atEnd()) {
       setAtEnd(follow);
-      setAwayKey(follow ? null : (untrack(rows).at(-1)?.key ?? null));
+      setAwaySequence(follow ? null : newestSequence(untrack(rows)));
       props.onAtEnd?.(follow);
     }
     const unread = untrack(unreadIndex);

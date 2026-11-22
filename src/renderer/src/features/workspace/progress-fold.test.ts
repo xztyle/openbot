@@ -1,9 +1,10 @@
 import type { ChannelMessage } from "@openbot/contracts/ipc";
 import { describe, expect, it } from "vitest";
-import { foldProgressRows, messageRows } from "./workspace-model";
+import { foldProgressRows, messageRows, rowMessages } from "./workspace-model";
 
 // Failure mode: a run of an agent's short lines folds away a line the reader has to see (a question,
-// a chat card, a link, a mention), or a link to a folded line finds nothing to scroll to.
+// a chat card, a link, a mention), a link to a folded line finds nothing to scroll to, or the counts
+// of new messages miss the folded lines.
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 22, 10, minute)).toISOString();
 const line = (
   id: string,
@@ -50,5 +51,10 @@ describe("progress fold", () => {
     const entries = [line("a", 0), line("b", 1), line("c", 2), line("d", 3), line("e", 4), line("f", 5)];
     expect(ids(entries, "c")).toContain("c");
     expect(ids(entries)).not.toContain("c");
+  });
+
+  it("counts each folded line", () => {
+    const rows = fold(run(line("c", 2)));
+    expect(rows.flatMap(rowMessages).map((entry) => entry.id)).toEqual(["a", "b", "c", "d", "e"]);
   });
 });

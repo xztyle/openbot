@@ -636,6 +636,11 @@ export function foldProgressRows(
   return out;
 }
 
+/** The messages a row stands for: itself, and the progress lines folded into it. */
+export function rowMessages(row: WorkspaceMessageRowModel): readonly ChannelMessage[] {
+  return row.progress?.length ? [row.entry, ...row.progress] : [row.entry];
+}
+
 /**
  * The rows of a channel transcript or a thread. The steps of each agent turn go on its answer; a
  * turn that has not answered yet is a row of its own. Messages of one author within five minutes

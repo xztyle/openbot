@@ -21,6 +21,7 @@ import {
   messageRows,
   peopleNames,
   readerJoined,
+  rowMessages,
 } from "./workspace-model";
 import { savedScrollPlace, saveScrollPlace } from "./workspace-scroll-places";
 
@@ -89,7 +90,11 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
   });
   const root = () => rows().find((row) => row.entry.id === props.rootId && !row.pending);
   const replies = () => rows().filter((row) => row !== root());
-  const replyCount = () => replies().filter((row) => !row.pending).length;
+  /** A row of folded progress lines counts each line. */
+  const replyCount = () =>
+    replies()
+      .filter((row) => !row.pending)
+      .reduce((count, row) => count + rowMessages(row).length, 0);
   const archived = () => channel()?.archived === true;
   const work = createAgentWork({
     channelId: props.channelId,

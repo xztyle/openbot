@@ -135,4 +135,10 @@ export const messages = {
   "error.team.connectorTokenLimit": "最多只能有 {limit} 个访问令牌，请先撤销一个。",
   "error.team.webhookInboxSecretMissing": "此发送方需要密钥，请粘贴该服务显示的签名密钥。",
   "error.team.webhookInboxGone": "此 Webhook 例程已不存在，请刷新列表。",
+  "error.team.mailboxAddressInvalid": "请输入一个邮箱地址，例如 sales@example.com。",
+  "error.team.mailboxAgentUnknown": "该智能体已不存在，请选择其他智能体。",
+  "error.team.mailboxAddressTaken": "{address} 已分配给一个智能体。",
+  "error.team.mailboxGone": "此地址已不存在，请刷新列表。",
+  "error.team.mailboxLimit": "最多只能有 {limit} 个地址，请先删除一个。",
+  "error.team.mailboxWorkerUrlInvalid": "请粘贴 Worker 的 https 地址，例如 https://atelier-mail.example.workers.dev。",
 } as const satisfies PartialTranslation<typeof source>;

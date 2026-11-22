@@ -190,6 +190,7 @@ import { GateGenerations } from "./agent/gate-generations";
 import { type AgentHostedSites, HostedSiteCoordinator } from "./agent/hosted-site-coordinator";
 import { ImageGenRuntime } from "./agent/image-gen-runtime";
 import { InputEscalations } from "./agent/input-escalations";
+import type { AgentMailPort } from "./agent/mail-tools";
 import { MailboxSync } from "./agent/mailbox-sync";
 import { type GitHubConnectorSource, McpGateway, type TestMcpServerOptions } from "./agent/mcp-gateway";
 import { mcpServersFromGateway } from "./agent/mcp-tools";
@@ -418,6 +419,8 @@ export interface AgentServiceOptions {
   routineFlowTools?: () => RoutineFlowTools;
   /** Built after the service, so read when a tool call needs it. */
   webhookRoutines?: () => WebhookRoutineWriter;
+  /** The agent mailboxes (`email_reply`, `email_send`). Built after the service; null where there are none. */
+  agentMail?: () => AgentMailPort | null;
   /**
    * Whose approvals are answered without asking. The main process owns the preference, because it
    * is a property of this computer and never crosses the Team API. Omitted, every approval asks.
@@ -1946,6 +1949,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       loops: () => this.loops,
       orderCards: () => this.#orderCards,
       wideResearch: this.#wideResearch,
+      ...(options.agentMail === undefined ? {} : { mail: options.agentMail }),
       ...(options.approvalAutomation === undefined ? {} : { approvalAutomation: options.approvalAutomation }),
       ...(options.visualPreview === undefined ? {} : { visualPreview: options.visualPreview }),
       ownerAway: options.ownerAway ?? null,

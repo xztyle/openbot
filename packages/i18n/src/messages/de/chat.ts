@@ -425,4 +425,6 @@ export const messages = {
   "chat.compaction.failed": "Kontext konnte nicht komprimiert werden",
   "chat.compaction.tokens": "{before} → {after} Tokens",
   "chat.compaction.continues": "Nachrichten in der Warteschlange werden weiter verarbeitet.",
+  "chat.marker.notice.inboundMail": "{agent} hat eine Mail bekommen",
+  "chat.marker.notice.inboundMailUnnamed": "Der Agent hat eine Mail bekommen",
 } as const satisfies PartialTranslation<typeof source>;

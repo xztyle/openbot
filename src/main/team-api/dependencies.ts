@@ -10,6 +10,7 @@ import type { AcpRegistry } from "../acp-registry";
 import type { AgentAccessStore } from "../agent-access-store";
 import type { AgentAdminSettingsService } from "../agent-admin-settings";
 import type { AgentHostSettingsService } from "../agent-host-settings";
+import type { AgentMail } from "../agent-mail/agent-mail";
 import type { AgentMarketplaceService } from "../agent-marketplace-service";
 import type { AgentMemoryLimitSetting } from "../agent-memory-limit-preference-store";
 import type { AgentTemplateService } from "../agent-template-service";
@@ -563,6 +564,8 @@ export interface TeamApiOptions {
   ownerAway?: OwnerAwayService | undefined;
   /** `connector-access-v1` (`fork-host-v1`): the owner's MCP tokens and the webhook inbox senders. */
   connectorAccess?: ConnectorAccess | undefined;
+  /** `agent-mailboxes-v1` (`fork-host-v1`): the agents' mail addresses and the mail Worker link. */
+  agentMailboxes?: AgentMail | undefined;
   /** `host-backups-v1` (`fork-host-v1`): the host's backup broker, for Server settings > Backups. */
   hostBackups?: HostBackups | undefined;
   /** `trust-control-v1` (`fork-host-v1`): the trust policy and the audit trail, for an owner or admin. */

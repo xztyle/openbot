@@ -37,4 +37,6 @@ export const messages = {
   "status.agent.moneyApprovalExpires": "{hours} saat içinde yanıt gelmezse süresi dolar ve işlem çalışmaz.",
   "status.agent.trustAskAfterUntrusted":
     "{agent} bu turda dış içerik okudu (bir web sayfası, e-posta veya webhook) ve güvenlik kontrolü bu ödemeyi onaylayamadı. Karar sizin.",
+  "status.agent.mailFirstRecipient":
+    "{address} adresine ilk e-posta. Göndermek için onaylayın; bu kişiye sonraki e-postalar onay gerektirmez.",
 } as const satisfies PartialTranslation<typeof source>;

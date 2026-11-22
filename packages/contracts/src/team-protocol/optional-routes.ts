@@ -12,6 +12,7 @@ import { AGENT_HOST_SETTINGS_CODECS } from "./agent-host-settings-v1";
 import { AGENT_IMPORT_CODECS } from "./agent-import-v1";
 import { AGENT_INSTALL_CODECS } from "./agent-install-v1";
 import { AGENT_LEARNING_CODECS } from "./agent-learning-v1";
+import { AGENT_MAILBOXES_CODECS } from "./agent-mailboxes-v1";
 import { AGENT_MEMORIES_CODECS } from "./agent-memories-v1";
 import { AGENT_MEMORY_LIMIT_CODECS } from "./agent-memory-limit-v1";
 import { AGENT_PUBLISH_CODECS } from "./agent-publish-v1";
@@ -179,6 +180,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...WORKSPACE_FLEET_CODECS,
   ...OWNER_AWAY_CODECS,
   ...CONNECTOR_ACCESS_CODECS,
+  ...AGENT_MAILBOXES_CODECS,
   ...HOST_BACKUPS_CODECS,
   ...WORKSPACE_LOOPS_CODECS,
   ...WORKSPACE_SIDEBAR_CODECS,

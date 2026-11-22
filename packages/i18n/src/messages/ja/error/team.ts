@@ -140,4 +140,11 @@ export const messages = {
   "error.team.webhookInboxSecretMissing":
     "この送信元にはシークレットが必要です。サービスに表示される署名シークレットを貼り付けてください。",
   "error.team.webhookInboxGone": "この Webhook ルーティンはもうありません。一覧を再読み込みしてください。",
+  "error.team.mailboxAddressInvalid": "sales@example.com のようなメールアドレスを 1 つ入力してください。",
+  "error.team.mailboxAgentUnknown": "そのエージェントはもういません。別のエージェントを選んでください。",
+  "error.team.mailboxAddressTaken": "{address} はすでにエージェントに割り当てられています。",
+  "error.team.mailboxGone": "このアドレスはもうありません。一覧を再読み込みしてください。",
+  "error.team.mailboxLimit": "アドレスは最大 {limit} 件です。先に 1 件削除してください。",
+  "error.team.mailboxWorkerUrlInvalid":
+    "https://atelier-mail.example.workers.dev のような Worker の https アドレスを貼り付けてください。",
 } as const satisfies PartialTranslation<typeof source>;

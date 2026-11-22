@@ -402,4 +402,6 @@ export const messages = {
   "chat.compaction.failed": "컨텍스트를 압축할 수 없어요",
   "chat.compaction.tokens": "{before} → {after} 토큰",
   "chat.compaction.continues": "대기 중인 메시지는 계속 처리돼요.",
+  "chat.marker.notice.inboundMail": "{agent}에게 메일이 왔습니다",
+  "chat.marker.notice.inboundMailUnnamed": "에이전트에게 메일이 왔습니다",
 } as const satisfies PartialTranslation<typeof source>;

@@ -164,4 +164,11 @@ export const messages = defineMessages("error.team", {
   "error.team.webhookInboxSecretMissing":
     "This sender needs its secret. Paste the signing secret that the service shows.",
   "error.team.webhookInboxGone": "This webhook routine is gone. Reload the list.",
+  "error.team.mailboxAddressInvalid": "Write one mail address, such as ventas@example.com.",
+  "error.team.mailboxAgentUnknown": "That agent is gone. Pick another one.",
+  "error.team.mailboxAddressTaken": "{address} already goes to an agent.",
+  "error.team.mailboxGone": "This address is gone. Reload the list.",
+  "error.team.mailboxLimit": "At most {limit} addresses can exist. Remove one first.",
+  "error.team.mailboxWorkerUrlInvalid":
+    "Paste the Worker's https address, such as https://atelier-mail.example.workers.dev.",
 });

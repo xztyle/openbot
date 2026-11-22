@@ -140,4 +140,11 @@ export const messages = {
   "error.team.webhookInboxSecretMissing":
     "Bu gönderenin gizli anahtarı gerekiyor. Hizmetin gösterdiği imza anahtarını yapıştırın.",
   "error.team.webhookInboxGone": "Bu webhook rutini artık yok. Listeyi yenileyin.",
+  "error.team.mailboxAddressInvalid": "satis@ornek.com gibi bir e-posta adresi yazın.",
+  "error.team.mailboxAgentUnknown": "Bu ajan artık yok. Başka birini seçin.",
+  "error.team.mailboxAddressTaken": "{address} zaten bir ajana gidiyor.",
+  "error.team.mailboxGone": "Bu adres artık yok. Listeyi yenileyin.",
+  "error.team.mailboxLimit": "En fazla {limit} adres olabilir. Önce birini kaldırın.",
+  "error.team.mailboxWorkerUrlInvalid":
+    "Worker'ın https adresini yapıştırın, örneğin https://atelier-mail.example.workers.dev.",
 } as const satisfies PartialTranslation<typeof source>;

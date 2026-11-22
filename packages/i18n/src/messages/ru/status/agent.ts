@@ -39,4 +39,6 @@ export const messages = {
   "status.agent.moneyApprovalExpires": "Истекает через {hours} ч без ответа, и действие не выполняется.",
   "status.agent.trustAskAfterUntrusted":
     "{agent} прочитал внешний контент (веб-страницу, письмо или вебхук) в этом ходе, и проверка безопасности не смогла одобрить этот платёж. Решать вам.",
+  "status.agent.mailFirstRecipient":
+    "Первое письмо на {address}. Одобрите его, чтобы отправить; следующие письма этому человеку не требуют одобрения.",
 } as const satisfies PartialTranslation<typeof source>;

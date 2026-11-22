@@ -81,8 +81,11 @@ export interface GuardrailsRuntime {
   meterAccounts(): MeterAccount[];
   /** The provider and account an agent uses now. */
   agentAccount(agentId: string): { provider: string; accountId: string } | null;
-  /** The messages that started a turn. `untrusted`: a webhook or an event check. */
-  turnTask(agentId: string, turnId: string): Array<TurnTask & { untrusted: "webhook" | "event-check" | null }>;
+  /** The messages that started a turn. `untrusted`: a webhook, an event check or a mail to an agent mailbox. */
+  turnTask(
+    agentId: string,
+    turnId: string,
+  ): Array<TurnTask & { untrusted: "webhook" | "event-check" | "email" | null }>;
   /** Gives a line to a running turn. False when the provider took none. */
   steer(agentId: string, threadId: string, turnId: string, text: string): Effect.Effect<boolean>;
   /** Stops a running turn. `threadId` is its provider thread, when known. */

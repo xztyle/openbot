@@ -13,6 +13,7 @@ import type { EventRoutineOwner } from "@openbot/contracts/ipc-events";
 import type { OwnerHeldItem } from "@openbot/contracts/team-protocol/owner-away-v1";
 import type { Effect } from "effect";
 import { runCauseEffect } from "../backend/effect-boundary";
+import { AgentMail, type AgentMailHooks } from "./agent-mail/agent-mail";
 import { ConnectorAccess } from "./connector-access";
 import { ConnectorGateway, connectorGatewayConfig } from "./connector-gateway";
 import type { HostEventsService } from "./host-events-service";
@@ -23,6 +24,7 @@ import { WebhookInbox } from "./webhook-inbox";
 
 const TOKENS_FILE = "openbot-owner-mcp-tokens-v1.json";
 const INBOXES_FILE = "openbot-webhook-inboxes-v1.json";
+const MAILBOXES_FILE = "openbot-agent-mailboxes-v1.json";
 /** Messages that are not the conversation: progress notes, plans, questions and quiet routine answers. */
 const NOT_CONVERSATION = new Set([
   "commentary",
@@ -52,6 +54,8 @@ export interface ConnectorWiringOptions {
   attentionItems: () => AgentAttentionItem[];
   loopDecisions: () => LoopDecision[];
   heldItems: () => OwnerHeldItem[];
+  /** The agent mailboxes' way into agents and loops. */
+  mail: AgentMailHooks;
 }
 
 /**
@@ -61,6 +65,7 @@ export interface ConnectorWiringOptions {
 export function createConnectors(options: ConnectorWiringOptions): {
   access: ConnectorAccess;
   gateway: ConnectorGateway;
+  mail: AgentMail;
 } {
   const tokens = new OwnerMcpTokens({ file: join(options.userData, TOKENS_FILE) });
   const agents = () =>
@@ -111,7 +116,19 @@ export function createConnectors(options: ConnectorWiringOptions): {
     cipher: options.cipher,
     events: options.events,
   });
-  const gateway = new ConnectorGateway({ config: connectorGatewayConfig(), mcp, inbox });
+  // The gateway is made after the mailboxes, which read its address only when settings ask.
+  let gatewayRef: ConnectorGateway | null = null;
+  const mail = new AgentMail({
+    file: join(options.userData, MAILBOXES_FILE),
+    cipher: options.cipher,
+    hooks: options.mail,
+    gateway: {
+      listening: () => gatewayRef?.listening() ?? false,
+      publicUrl: () => gatewayRef?.publicUrl() ?? null,
+    },
+  });
+  const gateway = new ConnectorGateway({ config: connectorGatewayConfig(), mcp, inbox, mail });
+  gatewayRef = gateway;
   const ownerName = (owner: EventRoutineOwner) =>
     owner.kind === "agent"
       ? (options.listAgents().find((agent) => agent.id === owner.id)?.name ?? owner.id)
@@ -125,5 +142,5 @@ export function createConnectors(options: ConnectorWiringOptions): {
     ownerSpaceId: (owner) =>
       owner.kind === "agent" ? options.spaceOfAgent(owner.id).id : options.spaceOfChannel(owner.id),
   });
-  return { access, gateway };
+  return { access, gateway, mail };
 }

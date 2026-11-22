@@ -155,4 +155,11 @@ export const messages = {
   "error.team.webhookInboxSecretMissing":
     "Cet expéditeur a besoin de son secret. Collez le secret de signature affiché par le service.",
   "error.team.webhookInboxGone": "Cette routine webhook n'existe plus. Rechargez la liste.",
+  "error.team.mailboxAddressInvalid": "Saisissez une adresse e-mail, comme ventes@exemple.fr.",
+  "error.team.mailboxAgentUnknown": "Cet agent n'existe plus. Choisissez-en un autre.",
+  "error.team.mailboxAddressTaken": "{address} est déjà attribuée à un agent.",
+  "error.team.mailboxGone": "Cette adresse n'existe plus. Rechargez la liste.",
+  "error.team.mailboxLimit": "Il peut y avoir au plus {limit} adresses. Supprimez-en une d'abord.",
+  "error.team.mailboxWorkerUrlInvalid":
+    "Collez l'adresse https du Worker, comme https://atelier-mail.example.workers.dev.",
 } as const satisfies PartialTranslation<typeof source>;

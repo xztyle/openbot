@@ -953,6 +953,8 @@ function markerLabel(
       return agent ? t("chat.marker.notice.restartResume", { agent }) : t("chat.marker.notice.restartResumeUnnamed");
     if (marker.notice === "motion-event")
       return agent ? t("chat.marker.notice.motionEvent", { agent }) : t("chat.marker.notice.motionEventUnnamed");
+    if (marker.notice === "inbound-email")
+      return agent ? t("chat.marker.notice.inboundMail", { agent }) : t("chat.marker.notice.inboundMailUnnamed");
     return agent ? t("chat.marker.notice.operatorNote", { agent }) : t("chat.marker.notice.operatorNoteUnnamed");
   }
   if (marker.kind === "model-switch" || marker.kind === "channel-change" || marker.kind === "vault-change")

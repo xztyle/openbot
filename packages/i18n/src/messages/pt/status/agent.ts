@@ -37,4 +37,6 @@ export const messages = {
   "status.agent.moneyApprovalExpires": "Expira em {hours} h se ninguém responder, e a ação não é executada.",
   "status.agent.trustAskAfterUntrusted":
     "{agent} leu conteúdo externo (uma página, um e-mail ou um webhook) neste turno, e a verificação de segurança não pôde validar este pagamento. Você decide.",
+  "status.agent.mailFirstRecipient":
+    "Primeiro e-mail para {address}. Aprove para enviar; os próximos para essa pessoa não precisam do seu OK.",
 } as const satisfies PartialTranslation<typeof source>;

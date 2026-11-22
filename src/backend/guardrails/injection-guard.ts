@@ -54,6 +54,8 @@ const SECRET_VARS = /\$\{?[A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD|PASSWD)[A-Z0-9_]*
 const AGENT_TOOLS = new Set(["create_agent", "update_agents", "update_profile", "set_team_sleep", "interrupt_agent"]);
 const SECRET_TOOLS = new Set(["save_api_key", "remove_api_key", "save_mcp_server", "link_event_check_secret"]);
 const SITE_TOOLS = new Set(["publish_site", "replace_site", "delete_site"]);
+/** Mail from an agent mailbox leaves Atelier: a reply to a stranger is a send. */
+const MAIL_TOOLS = new Set(["email_reply", "email_send"]);
 
 function line(text: string): string {
   const clean = redactText(text.replace(/\s+/gu, " ").trim());
@@ -88,6 +90,7 @@ export function impactOf(name: string, input: unknown, trust: TrustClassificatio
     if (AGENT_TOOLS.has(tool)) return { kind: "agents", label: name, summary };
     if (SECRET_TOOLS.has(tool)) return { kind: "secret", label: name, summary };
     if (SITE_TOOLS.has(tool)) return { kind: "deploy", label: name, summary };
+    if (MAIL_TOOLS.has(tool)) return { kind: "send", label: name, summary };
     return null;
   }
   if (server === "openbot_browser") return tool === "submit_secret" ? { kind: "secret", label: name, summary } : null;

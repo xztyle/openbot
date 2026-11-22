@@ -81,4 +81,6 @@ export const messages = defineMessages("status.agent", {
   "status.agent.moneyApprovalExpires": "It expires in {hours} h if nobody answers, and the call does not run.",
   "status.agent.trustAskAfterUntrusted":
     "{agent} read outside content (a web page, an email or a webhook) in this turn, and the security check could not clear this payment. You decide.",
+  "status.agent.mailFirstRecipient":
+    "First mail to {address}. Approve it to send it; later mails to this person need no OK.",
 });

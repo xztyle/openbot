@@ -108,9 +108,11 @@ export function guardrailsRuntime(options: GuardrailsRuntimeOptions): Guardrails
               : `routine ${sender.routineName}`;
         const untrusted = context.eventCheck
           ? ("event-check" as const)
-          : sender.kind === "routine" && options.routineTrigger(agentId, sender.routineId) === "webhook"
-            ? ("webhook" as const)
-            : null;
+          : context.notice === "inbound-email"
+            ? ("email" as const)
+            : sender.kind === "routine" && options.routineTrigger(agentId, sender.routineId) === "webhook"
+              ? ("webhook" as const)
+              : null;
         return { from, text, untrusted };
       }),
     steer: (agentId, threadId, turnId, text) =>

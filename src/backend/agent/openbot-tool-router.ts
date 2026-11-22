@@ -106,6 +106,7 @@ import { HistoryTools } from "./history-tools";
 import type { HostedSiteCoordinator } from "./hosted-site-coordinator";
 import { isHostedSiteMutationTool } from "./hosted-site-events";
 import { handleLoopTool } from "./loop-tools";
+import { type AgentMailPort, MAIL_TOOLS, parseMailToolCall } from "./mail-tools";
 import type { MailboxSync } from "./mailbox-sync";
 import { type AgentMcpServers, handleMcpServerTool, isMcpServerTool } from "./mcp-tools";
 import {
@@ -313,6 +314,8 @@ export interface OpenBotToolRouterOptions {
   orderCards?: (() => OrderCardsPort | null) | undefined;
   /** `wide_research`; absent, the tool answers that this host has none. */
   wideResearch?: WideResearch | null | undefined;
+  /** The agent mailboxes for `email_reply` and `email_send`; null where the host has none. */
+  mail?: (() => AgentMailPort | null) | undefined;
   approvalAutomation?: ApprovalAutomationPolicy | undefined;
   /** Draws pages for `html_preview`; null where no window can draw one. */
   visualPreview?: ChatVisualPreviewHost | null | undefined;
@@ -378,6 +381,7 @@ export class OpenBotToolRouter {
   readonly #loops: (() => LoopService | null) | undefined;
   readonly #orderCards: (() => OrderCardsPort | null) | undefined;
   readonly #wideResearch: WideResearch | null;
+  readonly #mail: (() => AgentMailPort | null) | undefined;
   readonly #plans: OrderPlans;
   readonly #approvalAutomation: ApprovalAutomationPolicy;
   readonly #visualPreview: ChatVisualPreviewHost | null;
@@ -421,6 +425,7 @@ export class OpenBotToolRouter {
     this.#loops = options.loops;
     this.#orderCards = options.orderCards;
     this.#wideResearch = options.wideResearch ?? null;
+    this.#mail = options.mail;
     this.#plans = new OrderPlans(options.store.database.userDataPath);
     this.#approvalAutomation = options.approvalAutomation ?? NO_APPROVAL_AUTOMATION;
     this.#visualPreview = options.visualPreview ?? null;
@@ -699,6 +704,12 @@ export class OpenBotToolRouter {
             }
             if (toolRequest.params.tool === "acknowledge_request") {
               this.#acknowledgeRequest(client, toolRequest, toolRequest.params);
+              return;
+            }
+            // Mail leaves Atelier: the first mail to a new recipient waits for the owner's card.
+            if (MAIL_TOOLS.has(toolRequest.params.tool)) {
+              const result = yield* this.#mailTool(client, toolRequest, toolRequest.params);
+              if (!toolRequest.signal?.aborted && client.running) client.respond(toolRequest.id, result);
               return;
             }
             if (isHostedSiteMutationTool(toolRequest.params.tool)) {
@@ -1746,6 +1757,66 @@ export class OpenBotToolRouter {
     const image = yield* Effect.result(host.capture(capture));
     if (Result.isFailure(image)) return captureFailure(image.failure);
     return yield* this.#showCapture(agent.id, threadId, params, messageId, image.success);
+  });
+
+  /**
+   * `email_reply` and `email_send`: the host's mailboxes check the address, the mode, the limits and
+   * an opt-out; the first mail to a new recipient waits for the owner's approval card, which Full
+   * access does not answer.
+   */
+  readonly #mailTool = Effect.fn("OpenBotToolRouter.mailTool")(function* (
+    this: OpenBotToolRouter,
+    client: AgentClient,
+    request: AppServerRequest,
+    params: DynamicToolCallParams,
+  ) {
+    const agentId = this.#conversation.agentForThread(params.threadId);
+    if (!agentId) return openBotToolFailure(sourceText("error.agent.toolRequestInvalid"));
+    const port = this.#mail?.() ?? null;
+    if (!port)
+      return openBotToolFailure(
+        "This server has no agent mailboxes. Tell the owner that mail needs the mail Worker and an address in Secrets, under Agent mailboxes.",
+      );
+    const call = parseMailToolCall(params.tool, params.arguments);
+    if ("error" in call) return openBotToolFailure(`${call.error}\nCorrect the arguments and retry.`);
+    const planned = port.plan(agentId, call);
+    if (!planned.ok) return openBotToolFailure(planned.message);
+    const { plan } = planned;
+    if (plan.needsApproval) {
+      const decision = yield* this.#attention.awaitToolApproval(
+        client,
+        request,
+        {
+          requestId: request.id,
+          agentId,
+          threadId: this.#conversation.publicThreadId(agentId, params.threadId),
+          turnId: params.turnId,
+          kind: "permissions",
+          command: [
+            `From: ${plan.from}`,
+            `To: ${plan.to}`,
+            `Subject: ${plan.subject}`,
+            "",
+            call.input.text.slice(0, 1_500),
+          ].join("\n"),
+          cwd: null,
+          reason: sourceText("status.agent.mailFirstRecipient", { address: plan.to }),
+          grantRoot: null,
+          permissions: null,
+        },
+        { alwaysAsk: true, ownerOnly: true },
+      );
+      if (decision !== "accept")
+        return openBotToolFailure(
+          `The owner did not approve the first mail to ${plan.to}. Do not retry it or write to them another way.`,
+        );
+    }
+    const sent = yield* Effect.promise(() =>
+      port
+        .send(agentId, call, { approved: plan.needsApproval, key: `${params.turnId}:${params.callId}` })
+        .catch(() => ({ ok: false as const, message: "The mail was not sent. Try again later." })),
+    );
+    return sent.ok ? openBotToolResult(sent.result) : openBotToolFailure(sent.message);
   });
 
   /**

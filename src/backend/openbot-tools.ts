@@ -16,6 +16,7 @@ import { DATA_TOOL_DEFINITIONS } from "./agent/data-tools";
 import { EVENT_CHECK_TOOL_DEFINITIONS } from "./agent/event-check-tools";
 import { HISTORY_TOOL_DEFINITIONS } from "./agent/history-tools";
 import { LOOP_TOOL_DEFINITIONS } from "./agent/loop-tools";
+import { MAIL_TOOL_DEFINITIONS } from "./agent/mail-tools";
 import { MCP_SERVER_TOOL_DEFINITIONS } from "./agent/mcp-tools";
 import { MEMORY_RECALL_TOOL_DEFINITIONS } from "./agent/memory-tool-inputs";
 import { ORDER_TOOL_DEFINITIONS, orderCardSchema } from "./agent/order-tools";
@@ -597,6 +598,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   ...LOCAL_SKILL_TOOL_DEFINITIONS,
   ...ROUTINE_FLOW_TOOL_DEFINITIONS,
   ...LOOP_TOOL_DEFINITIONS,
+  ...MAIL_TOOL_DEFINITIONS,
   ...MCP_SERVER_TOOL_DEFINITIONS,
   {
     name: "list_sites",

@@ -45,4 +45,5 @@ export const messages = {
   "status.agent.moneyApprovalExpires": "如果 {hours} 小时内无人回复，将过期且不会执行。",
   "status.agent.trustAskAfterUntrusted":
     "{agent} 在本轮读取了外部内容（网页、邮件或 Webhook），安全检查无法确认这笔付款。请你决定。",
+  "status.agent.mailFirstRecipient": "这是发给 {address} 的第一封邮件。批准后发送；之后发给此人的邮件无需再批准。",
 } as const satisfies PartialTranslation<typeof source>;

@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
+import type { AgentMail } from "./agent-mail/agent-mail";
 import type { OwnerMcpServer } from "./owner-mcp-server";
 import type { WebhookInbox } from "./webhook-inbox";
 
@@ -37,7 +38,7 @@ export function connectorGatewayConfig(env: NodeJS.ProcessEnv = process.env): Co
 
 /**
  * The host's one inbound HTTP door for outside systems: the owner's MCP endpoint (`/mcp`) and the
- * webhook inboxes (`/hooks/<route id>`). The operator turns it on with `OPENBOT_CONNECTOR_LISTEN`
+ * webhook inboxes (`/hooks/<route id>`), one of which is the agent mailboxes' inbox. The operator turns it on with `OPENBOT_CONNECTOR_LISTEN`
  * and puts an HTTPS proxy in front. Every path authenticates on its own: a token for MCP, the
  * sender's signature for a hook. Anything else is 404.
  */
@@ -45,16 +46,20 @@ export class ConnectorGateway {
   readonly #config: ConnectorGatewayConfig | null;
   readonly #mcp: Pick<OwnerMcpServer, "handle">;
   readonly #inbox: Pick<WebhookInbox, "handle">;
+  readonly #mail: Pick<AgentMail, "owns" | "handle"> | null;
   #server: Server | null = null;
 
   constructor(options: {
     config: ConnectorGatewayConfig | null;
     mcp: Pick<OwnerMcpServer, "handle">;
     inbox: Pick<WebhookInbox, "handle">;
+    /** The agent mailboxes' inbox, one route under `/hooks/` that the mail Worker posts to. */
+    mail?: Pick<AgentMail, "owns" | "handle">;
   }) {
     this.#config = options.config;
     this.#mcp = options.mcp;
     this.#inbox = options.inbox;
+    this.#mail = options.mail ?? null;
   }
 
   /** The public base address, when the gateway listens and the operator named it. */
@@ -99,6 +104,7 @@ export class ConnectorGateway {
   async #route(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
     if (path === "/mcp" || path.startsWith("/mcp/")) return this.#mcp.handle(request, response);
+    if (this.#mail?.owns(path)) return this.#mail.handle(request, response);
     if (path.startsWith("/hooks/")) return this.#inbox.handle(request, response);
     response.writeHead(404, { "content-type": "application/json" });
     response.end(JSON.stringify({ error: "not found" }));

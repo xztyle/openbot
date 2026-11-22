@@ -106,6 +106,7 @@ interface HostServiceOptions {
   webPush?: ForwardedApiOptions["webPush"];
   ownerAway?: ForwardedApiOptions["ownerAway"];
   connectorAccess?: ForwardedApiOptions["connectorAccess"];
+  agentMailboxes?: ForwardedApiOptions["agentMailboxes"];
   hostBackups?: ForwardedApiOptions["hostBackups"];
   downloadTickets?: ForwardedApiOptions["downloadTickets"];
   attachmentPreviews?: ForwardedApiOptions["attachmentPreviews"];
@@ -416,6 +417,7 @@ export class HostService extends EventEmitter<HostEvents> {
       ...(options.webPush === undefined ? {} : { webPush: options.webPush }),
       ...(options.ownerAway === undefined ? {} : { ownerAway: options.ownerAway }),
       ...(options.connectorAccess === undefined ? {} : { connectorAccess: options.connectorAccess }),
+      ...(options.agentMailboxes === undefined ? {} : { agentMailboxes: options.agentMailboxes }),
       ...(options.hostBackups === undefined ? {} : { hostBackups: options.hostBackups }),
       ...(options.downloadTickets === undefined ? {} : { downloadTickets: options.downloadTickets }),
       ...(options.attachmentPreviews === undefined ? {} : { attachmentPreviews: options.attachmentPreviews }),

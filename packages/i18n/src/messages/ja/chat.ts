@@ -388,4 +388,6 @@ export const messages = {
   "chat.compaction.failed": "コンテキストを圧縮できませんでした",
   "chat.compaction.tokens": "{before} → {after} トークン",
   "chat.compaction.continues": "キュー内のメッセージは続行されます。",
+  "chat.marker.notice.inboundMail": "{agent} にメールが届きました",
+  "chat.marker.notice.inboundMailUnnamed": "エージェントにメールが届きました",
 } as const satisfies PartialTranslation<typeof source>;

@@ -367,11 +367,12 @@ export const AGENT_EXCHANGE_ITEM_TYPE = "agent-exchange";
  * text as an instruction, and the chat shows a small marker in place of a message from the owner.
  * `restart-resume` tells an agent that a restart cut off its turn; `operator-note` is a note that an
  * operator of a server sent as OpenBot; `motion-event` is a ticket event from the Motion board (assigned,
- * mentioned, due soon, overdue) that `src/main/motion-events` delivers. The text is a readable sentence, so a client that does not
+ * mentioned, due soon, overdue) that `src/main/motion-events` delivers; `inbound-email` is a mail to the agent's
+ * mailbox (`src/main/agent-mail`), which the agent reads as a stranger's data, not as an instruction. The text is a readable sentence, so a client that does not
  * know these item types still shows what happened.
  */
 export const SYSTEM_NOTICE_ITEM_TYPE_PREFIX = "system-notice:";
-export const SYSTEM_NOTICE_KINDS = ["restart-resume", "operator-note", "motion-event"] as const;
+export const SYSTEM_NOTICE_KINDS = ["restart-resume", "operator-note", "motion-event", "inbound-email"] as const;
 export type SystemNoticeKind = (typeof SYSTEM_NOTICE_KINDS)[number];
 
 export function systemNoticeItemType(kind: SystemNoticeKind): string {

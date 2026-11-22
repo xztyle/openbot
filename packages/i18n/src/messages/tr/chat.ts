@@ -412,4 +412,6 @@ export const messages = {
   "chat.compaction.failed": "Bağlam sıkıştırılamadı",
   "chat.compaction.tokens": "{before} → {after} token",
   "chat.compaction.continues": "Kuyruktaki mesajlar devam ediyor.",
+  "chat.marker.notice.inboundMail": "{agent} bir e-posta aldı",
+  "chat.marker.notice.inboundMailUnnamed": "Ajan bir e-posta aldı",
 } as const satisfies PartialTranslation<typeof source>;

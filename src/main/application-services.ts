@@ -1807,6 +1807,8 @@ export async function createApplicationServices({
     file: join(app.getPath("userData"), "guardrails-v1.json"),
     events: new GuardrailEventLog(join(app.getPath("userData"), "guardrails")),
   });
+  // Set once the connector gateway exists; the agent service is built first.
+  let connectorsReady: ReturnType<typeof createConnectors> | null = null;
   const service: AgentService = new AgentService({
     trust,
     guardrails,
@@ -1945,6 +1947,8 @@ export async function createApplicationServices({
     routineFlowTools: () => routineFlowRuntime,
     // `events` is built later, after the account service and the relay.
     webhookRoutines: () => agentWebhookRoutineWriter(events),
+    // `connectors` is built later, after the event service; a mail tool reads it when it runs.
+    agentMail: () => connectorsReady?.mail.port ?? null,
     approvalAutomation,
     busyMessageMode: () => busyMessageMode.get().mode,
     agentMemoryLimit: () => agentMemoryLimit.get().limit,
@@ -2385,7 +2389,30 @@ export async function createApplicationServices({
     attentionItems: () => service.attentionItems(),
     loopDecisions: () => service.loops.pendingDecisions(),
     heldItems: () => ownerAway.state().held,
+    mail: {
+      agent: (agentId) => {
+        const agent = service.listAgents().find((item) => item.id === agentId && item.hiddenAt === undefined);
+        return agent ? { id: agent.id, name: agent.name, spaceId: service.spaces.store.agentSpace(agent.id).id } : null;
+      },
+      deliver: async (input) => {
+        await runCauseEffect(service.sendMessage(input, undefined, undefined, "inbound-email"));
+      },
+      loopCard: ({ agentId, threadId, title, from, question }) => {
+        const loop = service.loops.loopsForAgent(agentId).find((item) => item.templateId === "customer-inbox");
+        if (!loop) return;
+        service.loops.saveItemForAgent(agentId, {
+          kind: "save-item",
+          loopId: loop.id,
+          externalId: threadId,
+          title,
+          ownerAgentId: agentId,
+          values: { channel: "Email", from, question },
+          note: "Mail received",
+        });
+      },
+    },
   });
+  connectorsReady = connectors;
   await connectors.gateway.start();
   teardown.push(TEARDOWN_ORDER.hostEvents, "the connector gateway", () => connectors.gateway.stop());
   // After `teamStore.initialize()` and before `HostService`, which reads the account it activates.
@@ -2685,6 +2712,8 @@ export async function createApplicationServices({
     ownerAway,
     // The owner's MCP tokens and the webhook inbox senders (`connector-access-v1`, `fork-host-v1`).
     connectorAccess: connectors.access,
+    // The agents' mail addresses and the mail Worker link (`agent-mailboxes-v1`, `fork-host-v1`).
+    agentMailboxes: connectors.mail,
     // Server settings > Backups: the host's backup broker (`host-backups-v1`). Without its socket the
     // section says that backups are not set up.
     hostBackups: new HostBackups(),

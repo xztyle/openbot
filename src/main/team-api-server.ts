@@ -208,6 +208,7 @@ import { routeAgentHidden, visibleSnapshot } from "./team-api/route-agent-hidden
 import { routeAgentImport } from "./team-api/route-agent-import";
 import { routeAgentInstall } from "./team-api/route-agent-install";
 import { routeAgentLearning } from "./team-api/route-agent-learning";
+import { routeAgentMailboxes } from "./team-api/route-agent-mailboxes";
 import { routeAgentMemoryPage } from "./team-api/route-agent-memories";
 import { routeAgentMemoryLimit } from "./team-api/route-agent-memory-limit";
 import { routeAgentPublish } from "./team-api/route-agent-publish";
@@ -1066,6 +1067,7 @@ export class TeamApiServer {
       if ((await routeWebPush(context, this.#options.webPush)) === "handled") return;
       if ((await routeOwnerAway(context, this.#options.ownerAway)) === "handled") return;
       if ((await routeConnectorAccess(context, this.#options.connectorAccess)) === "handled") return;
+      if ((await routeAgentMailboxes(context, this.#options.agentMailboxes)) === "handled") return;
       if ((await routeHostBackups(context, this.#options.hostBackups)) === "handled") return;
       if ((await routePushNotifications(context, this.#options.pushNotifications)) === "handled") return;
       if (

@@ -138,4 +138,11 @@ export const messages = {
   "error.team.webhookInboxSecretMissing":
     "이 발신자에는 시크릿이 필요합니다. 서비스가 보여 주는 서명 시크릿을 붙여 넣으세요.",
   "error.team.webhookInboxGone": "이 웹훅 루틴은 더 이상 없습니다. 목록을 새로 고치세요.",
+  "error.team.mailboxAddressInvalid": "sales@example.com 같은 메일 주소를 하나 입력하세요.",
+  "error.team.mailboxAgentUnknown": "그 에이전트는 더 이상 없습니다. 다른 에이전트를 고르세요.",
+  "error.team.mailboxAddressTaken": "{address} 는 이미 에이전트에 연결되어 있습니다.",
+  "error.team.mailboxGone": "이 주소는 더 이상 없습니다. 목록을 새로 고치세요.",
+  "error.team.mailboxLimit": "주소는 최대 {limit}개까지 있을 수 있습니다. 먼저 하나를 지우세요.",
+  "error.team.mailboxWorkerUrlInvalid":
+    "https://atelier-mail.example.workers.dev 같은 Worker의 https 주소를 붙여 넣으세요.",
 } as const satisfies PartialTranslation<typeof source>;

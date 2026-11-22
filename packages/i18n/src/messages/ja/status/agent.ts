@@ -35,4 +35,6 @@ export const messages = {
   "status.agent.moneyApprovalExpires": "{hours} 時間以内に回答がない場合は期限切れになり、実行されません。",
   "status.agent.trustAskAfterUntrusted":
     "{agent} はこのターンで外部コンテンツ（Web ページ、メール、Webhook）を読みました。セキュリティチェックはこの支払いを確認できませんでした。判断してください。",
+  "status.agent.mailFirstRecipient":
+    "{address} への最初のメールです。承認すると送信されます。この相手への以降のメールに承認は不要です。",
 } as const satisfies PartialTranslation<typeof source>;

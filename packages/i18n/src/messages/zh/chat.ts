@@ -403,4 +403,6 @@ export const messages = {
   "chat.compaction.failed": "无法压缩上下文",
   "chat.compaction.tokens": "{before} → {after} 个 token",
   "chat.compaction.continues": "排队中的消息会继续执行。",
+  "chat.marker.notice.inboundMail": "{agent} 收到一封邮件",
+  "chat.marker.notice.inboundMailUnnamed": "智能体收到一封邮件",
 } as const satisfies PartialTranslation<typeof source>;

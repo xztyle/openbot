@@ -509,4 +509,6 @@ export const messages = {
   "chat.compaction.failed": "Не удалось сжать контекст",
   "chat.compaction.tokens": "{before} → {after} токенов",
   "chat.compaction.continues": "Сообщения в очереди продолжат отправляться.",
+  "chat.marker.notice.inboundMail": "{agent} получил письмо",
+  "chat.marker.notice.inboundMailUnnamed": "Агент получил письмо",
 } as const satisfies PartialTranslation<typeof source>;

@@ -101,6 +101,8 @@ const LANDSCAPE: Phone = {
 /** The model of Safari's visual viewport and keyboard. It runs in the page before the app. */
 function installKeyboardModel(keyboard: number): void {
   const state = { open: false, height: window.innerHeight, offsetTop: 0 };
+  // The keyboard of a phone on its side is lower (206px on an iPhone 13).
+  const keyboardHeight = () => (window.innerWidth > window.innerHeight ? Math.min(keyboard, 206) : keyboard);
   class FakeVisualViewport extends EventTarget {
     get width() {
       return window.innerWidth;
@@ -159,7 +161,7 @@ function installKeyboardModel(keyboard: number): void {
   const open = () => {
     if (state.open) return;
     state.open = true;
-    state.height = window.innerHeight - keyboard;
+    state.height = window.innerHeight - keyboardHeight();
     reveal();
     fire("resize");
     fire("scroll");
@@ -187,10 +189,14 @@ function installKeyboardModel(keyboard: number): void {
     });
   document.addEventListener("input", follow);
   document.addEventListener("selectionchange", follow);
-  // Chrome on Android resizes the page itself (`keyboard` is 0 there).
+  // Chrome on Android resizes the page itself (`keyboard` is 0 there). Safari keeps the keyboard
+  // open through a rotation, and pans the visible part again to the caret.
   window.addEventListener("resize", () => {
-    state.height = window.innerHeight - (state.open ? keyboard : 0);
+    state.height = window.innerHeight - (state.open ? keyboardHeight() : 0);
+    state.offsetTop = Math.min(state.offsetTop, Math.max(0, window.innerHeight - state.height));
+    if (state.open) reveal();
     fire("resize");
+    fire("scroll");
   });
 }
 
@@ -647,6 +653,21 @@ try {
         "The app is not the visible part.",
       );
     });
+    // Safari keeps the keyboard open through a rotation. The visible height alone then had no
+    // keyboard in it, so the keyboard counted as closed and the bars over the box pushed it out.
+    await page.setViewportSize({ width: PORTRAIT.width, height: PORTRAIT.height });
+    await settle(page);
+    await phoneShot(browser, page, { ...PORTRAIT, name: "landscape" }, "03-rotated-to-portrait-keyboard");
+    await step(phone, "rotated to portrait with the keyboard open: the box stays on the keyboard", async () => {
+      assert.equal((await visible(page)).open, true, "The keyboard model closed.");
+      await checkKeyboardLayout(page, PORTRAIT);
+    });
+    await page.setViewportSize({ width: phone.width, height: phone.height });
+    await settle(page);
+    await phoneShot(browser, page, phone, "04-rotated-back-keyboard");
+    await step(phone, "rotated back with the keyboard open: the box stays on the keyboard", () =>
+      checkKeyboardLayout(page, phone),
+    );
     await context.close();
   }
 

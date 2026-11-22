@@ -46,10 +46,16 @@ export function createWebVisualViewport() {
     let tallest = viewport.height;
     let open = false;
     const measure = () => {
-      // A new width is a rotation: the tallest height starts again.
+      /*
+       * A new width is a rotation: the tallest height starts again. Safari keeps the keyboard open
+       * through a rotation, so the visible height alone then had no keyboard in it: the keyboard
+       * counted as closed and the box went out of view. Safari's layout viewport (`innerHeight`)
+       * does not shrink for the keyboard; Chrome on Android shrinks both, as before. A pinch zoom
+       * also changes the width, and keeps the visible height alone.
+       */
       if (Math.abs(viewport.width - width) > 1) {
         width = viewport.width;
-        tallest = viewport.height;
+        tallest = viewport.scale > 1.01 ? viewport.height : Math.max(viewport.height, window.innerHeight);
       }
       tallest = Math.max(tallest, viewport.height);
       const typing = document.activeElement?.matches(TEXT_FIELD) ?? false;

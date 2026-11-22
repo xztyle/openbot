@@ -286,11 +286,13 @@ export function useJumpEntries() {
     const taken = ws.channels.state.channels.some(
       (channel) => channelKind(channel) === "channel" && channel.name === name,
     );
-    if (name && !taken && !text.startsWith("@"))
-      ranked.push({ id: `create:${name}`, label: t("workspace.jump.create", { name }), kind: "create" });
-    // The messages too, as Slack's phone search offers, after the names.
+    // The messages too, as Slack's phone search offers, after the names. The search comes before
+    // "Create #…": with no name that matches, Enter (a phone keyboard's Search key) searches the
+    // words instead of starting a channel named after them.
     if (ws.search.supported())
       ranked.push({ id: `search:${text}`, label: t("workspace.jump.searchMessages", { query: text }), kind: "search" });
+    if (name && !taken && !text.startsWith("@"))
+      ranked.push({ id: `create:${name}`, label: t("workspace.jump.create", { name }), kind: "create" });
     return ranked;
   }
 

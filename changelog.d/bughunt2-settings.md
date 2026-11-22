@@ -12,3 +12,6 @@
 - Settings > Connections & secrets, and a link to a server settings section such as
   `?page=server-settings&section=connections`, open the server settings. Before, the web client
   stopped answering: no tap, view or message updated until a reload.
+- Secrets: when the browser refuses to copy a new access link, a webhook address or a new mail
+  secret, a notice says it was not copied. Before, nothing showed, and the dialog that shows a link
+  or secret once could be closed with nothing copied.

@@ -17,3 +17,5 @@
 - Loops on a phone: removing the stage that showed no longer leaves an empty board.
 - Loops: a dialog no longer opens with the error of an earlier action, and a refused action reads
   the board again, so an item that an agent moved or removed shows where it is.
+- Secrets: when the host refuses to revoke an access link, the question stays open with the
+  reason. Before, nothing happened and the link kept working without a word.

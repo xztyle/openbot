@@ -1,6 +1,6 @@
 import type { ConnectorAccessState } from "@openbot/contracts/team-protocol/connector-access-v1";
 import { ConnectionsSection } from "@openbot/ui/features/workspace/ConnectionsSection";
-import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 
 const STATE: ConnectorAccessState = {
@@ -71,5 +71,15 @@ describe("ConnectionsSection", () => {
     fireEvent.submit(form);
     await waitFor(() => expect(props.onCreateToken).toHaveBeenCalledWith("ChatGPT"));
     expect(await screen.findByDisplayValue("https://connect.example.com/mcp/atm_new")).toBeTruthy();
+  });
+
+  it("keeps the revoke question open with the reason when the host refuses", async () => {
+    const props = setup();
+    props.onRevokeToken.mockRejectedValueOnce(new Error("The host is offline."));
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke" }));
+    expect(await within(dialog).findByText("The host is offline.")).toBeTruthy();
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
   });
 });

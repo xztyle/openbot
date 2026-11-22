@@ -51,6 +51,7 @@ export function ConnectionsSection(props: ConnectionsSectionProps): JSX.Element 
   const [label, setLabel] = createSignal("");
   const [created, setCreated] = createSignal<{ token: string; url: string | null } | null>(null);
   const [revoking, setRevoking] = createSignal<string | null>(null);
+  const [revokeError, setRevokeError] = createSignal<string | null>(null);
   const [editing, setEditing] = createSignal<ConnectorInbox | null>(null);
   const [scheme, setScheme] = createSignal<ConnectorInboxScheme>("openbot");
   const [secret, setSecret] = createSignal("");
@@ -96,7 +97,10 @@ export function ConnectionsSection(props: ConnectionsSectionProps): JSX.Element 
                     variant="ghost"
                     size="icon-xs"
                     label={t("workspace.connections.revoke")}
-                    onClick={() => setRevoking(token().id)}
+                    onClick={() => {
+                      setRevokeError(null);
+                      setRevoking(token().id);
+                    }}
                   >
                     <Trash2 />
                   </IconButton>
@@ -284,11 +288,17 @@ export function ConnectionsSection(props: ConnectionsSectionProps): JSX.Element 
         title={t("workspace.connections.revokeTitle")}
         description={t("workspace.connections.revokeDescription")}
         confirmLabel={t("workspace.connections.revoke")}
+        error={revokeError()}
         onCancel={() => setRevoking(null)}
         onConfirm={async () => {
           const id = revoking();
-          if (id) await props.onRevokeToken(id);
-          setRevoking(null);
+          // A refused revoke keeps the dialog open with the reason: the link still works.
+          try {
+            if (id) await props.onRevokeToken(id);
+            setRevoking(null);
+          } catch (cause) {
+            setRevokeError(errorMessage(cause, t("workspace.connections.failed")));
+          }
         }}
       />
     </>

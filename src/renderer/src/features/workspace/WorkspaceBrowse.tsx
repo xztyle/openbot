@@ -171,8 +171,7 @@ export function ChannelBrowser(props: { onClose: () => void }) {
                       loading={busy() === channel.id}
                       onClick={() =>
                         void act(channel.id, async () => {
-                          await ws.join(channel.id);
-                          props.onClose();
+                          if (await ws.join(channel.id)) props.onClose();
                         })
                       }
                     >

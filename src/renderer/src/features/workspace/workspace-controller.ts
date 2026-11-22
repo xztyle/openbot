@@ -2457,11 +2457,13 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     }
   }
 
-  async function join(channelId: string): Promise<void> {
-    if (await run({ type: "join", operationId: crypto.randomUUID(), channelId }, "workspace.app.error.join")) {
-      await channels.refresh();
-      openChannel(channelId);
-    }
+  /** Joins a channel and opens it. A failure is a toast, and `false`: the browser stays open. */
+  async function join(channelId: string): Promise<boolean> {
+    if (!(await run({ type: "join", operationId: crypto.randomUUID(), channelId }, "workspace.app.error.join")))
+      return false;
+    await channels.refresh();
+    openChannel(channelId);
+    return true;
   }
 
   /** Leaves a channel. A failure comes back as its message, for the confirm that asked. */

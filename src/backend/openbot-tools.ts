@@ -666,6 +666,14 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
       timezone: z.string().min(1).max(128).describe("IANA timezone such as Europe/Warsaw.").optional(),
       limitPolicy: routineLimitPolicyZodSchema.optional(),
       missedPolicy: routineMissedPolicyZodSchema.optional(),
+      precheck: z
+        .string()
+        .max(2_000)
+        .nullable()
+        .optional()
+        .describe(
+          "A cheap shell check that runs in your workspace before each scheduled run, with a plain environment and 60 seconds: exit 1 means nothing to do, so the run is skipped and costs no turn; exit 0 starts the run with its output; another exit starts the run anyway. Use one for a routine that polls and is usually quiet, such as curl and jq on an API. null removes it.",
+        ),
     },
   },
   {
@@ -718,6 +726,14 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
       active: z.boolean().optional(),
       limitPolicy: routineLimitPolicyZodSchema.optional(),
       missedPolicy: routineMissedPolicyZodSchema.optional(),
+      precheck: z
+        .string()
+        .max(2_000)
+        .nullable()
+        .optional()
+        .describe(
+          "A cheap shell check that runs in your workspace before each scheduled run, with a plain environment and 60 seconds: exit 1 means nothing to do, so the run is skipped and costs no turn; exit 0 starts the run with its output; another exit starts the run anyway. Use one for a routine that polls and is usually quiet, such as curl and jq on an API. null removes it.",
+        ),
     },
   },
   {

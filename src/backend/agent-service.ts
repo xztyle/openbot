@@ -216,6 +216,7 @@ import { isPlanLimitDiagnostic } from "./agent/provider-diagnostics";
 import { type AgentClientFactory, ProviderRuntime, toProviderOperationFailed } from "./agent/provider-runtime";
 import { QueueControls } from "./agent/queue-controls";
 import { type CondenseModel, condenseAnswer } from "./agent/reply-condenser";
+import { RoutinePrechecks } from "./agent/routine-prechecks";
 import { quietRoutineRun } from "./agent/routine-quiet-runs";
 import { type RoutineMutationOptions, RoutineScheduler, toRoutineOperationFailed } from "./agent/routine-scheduler";
 import { localTimezone } from "./agent/routine-tools";
@@ -495,6 +496,8 @@ export interface AgentServiceOptions {
 const USER_SEND_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** How long a deploy hold outlives its wait, for a deploy that stopped before it restarted the server. */
 const DEPLOY_DRAIN_HOLD_GRACE_MS = 5 * 60_000;
+/** The cheap checks of scheduled routine runs. See `routine-prechecks.ts`. */
+const ROUTINE_PRECHECKS_FILE = "openbot-routine-prechecks-v1.json";
 /** The `send_message` recipient limit, so one message can reach every section-mate the prompt names. */
 const MAX_SECTION_TEAMMATES = 32;
 
@@ -797,6 +800,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       waits: this.#waits,
       ...(options.timezone ? { timezone: options.timezone } : {}),
       webhookRoutines: options.webhookRoutines,
+      prechecks: new RoutinePrechecks(join(store.database.userDataPath, ROUTINE_PRECHECKS_FILE)),
       store,
       mailbox,
       conversation: this.#conversation,

@@ -18,7 +18,11 @@ import type {
   TestRoutineInput,
   UpdateRoutineInput,
 } from "@openbot/contracts/ipc";
-import { routineConversationEventItemType, routineRunConversationEventItemType } from "@openbot/contracts/ipc";
+import {
+  routineConversationEventItemType,
+  routineRunConversationEventItemType,
+  workspaceAccessEnforced,
+} from "@openbot/contracts/ipc";
 import type { EventRoutine } from "@openbot/contracts/ipc-events";
 import { type DynamicRecord, isBoolean } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
@@ -36,6 +40,12 @@ import type { RoutineDueSource, RoutineTimer } from "../routine-timer";
 import { type ConversationRuntime, withDatabaseTransaction } from "./conversation-runtime";
 import { routineStatusForDelivery } from "./delivery-content";
 import { mergeEventInstructions, RoutineEventDigest } from "./routine-event-digest";
+import {
+  ROUTINE_PRECHECK_MAX_LENGTH,
+  type RoutinePrechecks,
+  runRoutinePrecheck,
+  withPrecheckOutput,
+} from "./routine-prechecks";
 import { isEventStartedRun, quietRoutineRun } from "./routine-quiet-runs";
 import {
   localTimezone,
@@ -124,6 +134,8 @@ export interface RoutineSchedulerOptions {
   timezone?: () => string;
   /** Built after the service, so read when a tool call needs it. Omitted, the tool refuses. */
   webhookRoutines?: (() => WebhookRoutineWriter) | undefined;
+  /** The cheap checks before scheduled runs. Omitted, a routine has none and the tools refuse one. */
+  prechecks?: RoutinePrechecks | undefined;
 }
 
 /** The agent preview before a routine run, and the routine task the run showed in its place. */
@@ -161,6 +173,9 @@ export class RoutineScheduler implements RoutineDueSource {
   readonly #timer: RoutineTimer;
   readonly #timezone: () => string;
   readonly #webhookRoutines: (() => WebhookRoutineWriter) | undefined;
+  readonly #prechecks: RoutinePrechecks | undefined;
+  /** What the check of a routine printed, for the run that it let start. Keyed by routine id. */
+  readonly #precheckOutputs = new Map<string, string>();
   /**
    * The timezone a member's client sent with a message, by delivery. A routine the agent creates in
    * the turn that runs the message runs on that clock, not on the host's, and a later message from
@@ -188,7 +203,65 @@ export class RoutineScheduler implements RoutineDueSource {
     this.#waits = options.waits;
     this.#timezone = options.timezone ?? localTimezone;
     this.#webhookRoutines = options.webhookRoutines;
+    this.#prechecks = options.prechecks;
   }
+
+  /**
+   * The check of a routine as a tool gives it: a command, null to remove it, or undefined to keep
+   * it. An agent whose workspace access is enforced runs no check: the command would run outside
+   * its sandbox.
+   */
+  #toolPrecheck(args: DynamicRecord, agentId: string): string | null | undefined {
+    const value = args.precheck;
+    if (value === undefined) return undefined;
+    if (value !== null && (typeof value !== "string" || value.length > ROUTINE_PRECHECK_MAX_LENGTH))
+      throw new RoutineInputError(
+        `precheck must be a shell command of at most ${ROUTINE_PRECHECK_MAX_LENGTH} characters, or null.`,
+      );
+    if (!this.#prechecks) throw new RoutineInputError("This server runs no routine pre-checks.");
+    const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+    if (value && agent && workspaceAccessEnforced(agent))
+      throw new RoutineInputError("An agent limited to its workspace cannot have a routine pre-check.");
+    return value?.trim() ? value : null;
+  }
+
+  readonly #savePrecheck = Effect.fn("RoutineScheduler.savePrecheck")(function* (
+    this: RoutineScheduler,
+    routineId: string,
+    command: string | null,
+  ) {
+    const prechecks = this.#prechecks;
+    if (!prechecks) return;
+    const live = new Set(this.#store.list().flatMap((agent) => this.#routines.listRecords(agent.id).map((r) => r.id)));
+    yield* Effect.tryPromise({
+      try: () => prechecks.set(routineId, command, live),
+      catch: (cause) => new RoutineOperationFailed({ cause }),
+    });
+  });
+
+  /** A routine as the tools show it, with its check. */
+  #withPrecheck<T extends { id: string }>(routine: T): T & { precheck?: string } {
+    const precheck = this.#prechecks?.get(routine.id);
+    return precheck ? { ...routine, precheck } : routine;
+  }
+
+  /**
+   * Runs the check of a due routine. False when it found nothing, so the occurrence is skipped;
+   * true when the run starts, with what the check printed kept for its delivery.
+   */
+  readonly #passesPrecheck = Effect.fn("RoutineScheduler.passesPrecheck")(function* (
+    this: RoutineScheduler,
+    agentId: string,
+    routineId: string,
+  ) {
+    const command = this.#prechecks?.get(routineId);
+    const workspace = this.#store.list().find((agent) => agent.id === agentId)?.workspacePath;
+    if (!command || !workspace) return true;
+    const outcome = yield* Effect.promise(() => runRoutinePrecheck(command, workspace));
+    if (outcome.kind === "quiet") return false;
+    if (outcome.kind === "work" && outcome.output) this.#precheckOutputs.set(routineId, outcome.output);
+    return true;
+  });
 
   noteDeliveryTimezone(deliveryId: string, timezone: string): void {
     this.#deliveryTimezones.set(deliveryId, timezone);
@@ -642,7 +715,7 @@ export class RoutineScheduler implements RoutineDueSource {
       const args = routineToolArguments(params.arguments, ["agentId"]);
       const agentId = this.#toolAgentId(args, senderAgentId);
       return openBotToolResult({
-        routines: this.list(agentId),
+        routines: this.list(agentId).map((routine) => this.#withPrecheck(routine)),
         webhookRoutines: this.#routines
           .listRecords(agentId)
           .flatMap((routine) =>
@@ -661,8 +734,10 @@ export class RoutineScheduler implements RoutineDueSource {
         "timezone",
         "limitPolicy",
         "missedPolicy",
+        "precheck",
       ]);
       const agentId = this.#toolAgentId(args, senderAgentId);
+      const precheck = this.#toolPrecheck(args, agentId);
       const active = args.active === undefined ? true : args.active;
       if (!isBoolean(active)) throw new RoutineInputError("active must be a boolean.");
       const timezone =
@@ -694,7 +769,8 @@ export class RoutineScheduler implements RoutineDueSource {
         },
         agentId === senderAgentId ? { turnId: params.turnId } : {},
       );
-      return openBotToolResult(routine);
+      if (precheck) yield* this.#savePrecheck(routine.id, precheck);
+      return openBotToolResult(this.#withPrecheck(routine));
     }
 
     if (params.tool === CREATE_WEBHOOK_ROUTINE_TOOL) {
@@ -787,6 +863,7 @@ export class RoutineScheduler implements RoutineDueSource {
         "active",
         "limitPolicy",
         "missedPolicy",
+        "precheck",
       ]);
       const policies = routineToolPolicies(args);
       const input: UpdateRoutineInput = {
@@ -794,6 +871,7 @@ export class RoutineScheduler implements RoutineDueSource {
         routineId: routineToolString(args.routineId, "routineId", INPUT_LIMITS.identifier, "routineId is required."),
         ...policies,
       };
+      const precheck = this.#toolPrecheck(args, input.agentId);
       let hasUpdate = Object.keys(policies).length > 0;
       if (args.name !== undefined) {
         input.name = routineToolString(args.name, "name", INPUT_LIMITS.routineName, "A routine name is required.");
@@ -817,8 +895,13 @@ export class RoutineScheduler implements RoutineDueSource {
         input.schedule = routineToolSchedule(args.schedule);
         hasUpdate = true;
       }
-      if (!hasUpdate) throw new RoutineInputError("At least one routine update is required.");
-      return openBotToolResult(this.update(input, input.agentId === senderAgentId ? { turnId: params.turnId } : {}));
+      if (!hasUpdate && precheck === undefined) throw new RoutineInputError("At least one routine update is required.");
+      const updated = hasUpdate
+        ? this.update(input, input.agentId === senderAgentId ? { turnId: params.turnId } : {})
+        : this.list(input.agentId).find((routine) => routine.id === input.routineId);
+      if (!updated) throw new RoutineInputError(sourceText("error.backend.routineGone"));
+      if (precheck !== undefined) yield* this.#savePrecheck(updated.id, precheck);
+      return openBotToolResult(this.#withPrecheck(updated));
     }
 
     if (params.tool === "delete_routine") {
@@ -932,6 +1015,28 @@ export class RoutineScheduler implements RoutineDueSource {
         if (index > 0) yield* Effect.yieldNow;
         if (!active()) break;
         if (this.#hooks.excludedAgents().has(due.routine.agentId)) continue;
+        // A routine with a cheap check runs it first. When it finds nothing, the occurrence moves on
+        // as a run would, and no turn starts. A one-time routine always runs.
+        if (
+          due.routine.trigger.schedule.kind !== "once" &&
+          !this.#hasLiveRun(due.routine.agentId, due.routine.id) &&
+          !(yield* this.#passesPrecheck(due.routine.agentId, due.routine.id))
+        ) {
+          yield* routineStep(() => {
+            const current = this.#routines.get(due.routine.agentId, due.routine.id);
+            if (!current?.active || current.trigger.id !== due.triggerId || current.trigger.nextRunAt !== due.nextRunAt)
+              return;
+            const { nextRunAt } = collapseMissedOccurrences(
+              current.trigger.schedule,
+              current.timezone,
+              new Date(current.trigger.nextRunAt),
+              now,
+            );
+            this.#routines.advanceTrigger(current.id, current.trigger.id, nextRunAt.toISOString());
+            changedAgents.add(current.agentId);
+          });
+          continue;
+        }
         const run = yield* routineStep(() => {
           // Enqueueing an earlier run can yield. A pause, edit or delete in that time must
           // apply before this occurrence starts, rather than firing the saved due list.
@@ -1055,6 +1160,14 @@ export class RoutineScheduler implements RoutineDueSource {
     return deliveryId;
   }, Effect.uninterruptible);
 
+  /** The task of a run, and what its check printed when a scheduled run passed one. */
+  #runText(run: RoutineRun): string {
+    if (run.kind !== "scheduled") return run.instruction;
+    const output = this.#precheckOutputs.get(run.routineId);
+    this.#precheckOutputs.delete(run.routineId);
+    return output ? withPrecheckOutput(run.instruction, output) : run.instruction;
+  }
+
   /** `waitId` is the one open wait a script event names; null wakes every wait the run matches. */
   readonly #enqueueRunEffect = Effect.fn("RoutineScheduler.enqueueRun")(function* (
     this: RoutineScheduler,
@@ -1089,7 +1202,7 @@ export class RoutineScheduler implements RoutineDueSource {
             scheduledFor: run.scheduledFor,
           },
           recipientAgentIds: [agent.id],
-          text: run.instruction,
+          text: this.#runText(run),
           draftIds: [],
           replyToMessageId: null,
           idempotencyKey: run.triggerId ? `routine:${run.triggerId}:${run.scheduledFor}` : `routine:manual:${run.id}`,

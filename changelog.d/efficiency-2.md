@@ -4,6 +4,10 @@
   `POST /v1/drain` on the control socket holds new turns and answers when none runs, or after a
   timeout. See [Docker](docs/docker.md#health-logs-and-diagnostics).
 
+- A scheduled routine can have a cheap pre-check, a shell command that the agent sets. When it
+  finds nothing to do, the run is skipped and costs no turn. Most runs of polling routines found
+  nothing before.
+
 ### Changed
 
 - Claude agents compact their chats at 250,000 tokens by default, instead of Claude Code's own size

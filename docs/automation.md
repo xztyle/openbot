@@ -130,6 +130,15 @@ answer for "nothing needs me". If the agent then answers only that marker, the r
 and no notification. Without the marker in the task, the answer stays visible. A Test run always stays
 visible. The same applies to a run that a webhook started.
 
+A scheduled routine can have a pre-check: a cheap shell command that the agent sets with `precheck`
+in `create_routine` or `update_routine`. Before each scheduled run, the server runs it in the agent's
+workspace, for 60 seconds at most, with only `PATH`, `HOME` and `LANG` set. Exit 1 means nothing to
+do: the occurrence is skipped, and no turn starts. Exit 0 starts the run, and the first 4,000
+characters that the command printed follow the task. Any other exit, or a timeout, starts the run as
+if there were no check. A one-time routine, a Test run and a run that a script or webhook starts
+skip the check. An agent that is limited to its workspace cannot have one. The checks are kept in
+`openbot-routine-prechecks-v1.json`.
+
 A routine starts at most 20 runs an hour from scripts and webhooks together. A later event does not
 start a run at once. It waits, and the waiting events go out as one run that has all of them, when
 a place frees. A restart ends the wait, and each waiting run then starts on its own. The limit of 30

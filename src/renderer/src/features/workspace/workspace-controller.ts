@@ -2599,9 +2599,19 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     return channel.createdBy?.kind === "member" && env.isReader(channel.createdBy.id);
   }
 
-  /** Moves agents or channels to a space; the sidebar reads the spaces again from the answer. */
+  /**
+   * Moves agents or channels to a space; the sidebar reads the spaces again from the answer. The
+   * conversation that shows goes along with its space, so its row stays on the sidebar beside it.
+   */
   async function moveToSpace(input: { agentIds?: string[]; channelIds?: string[] }, spaceId: string) {
+    const open = untrack(activeConversationId);
     await spaces.act({ kind: "move", spaceId, ...input });
+    const moved =
+      open !== undefined &&
+      (open.startsWith(AGENT_DM_PREFIX)
+        ? input.agentIds?.includes(open.slice(AGENT_DM_PREFIX.length))
+        : input.channelIds?.includes(open));
+    if (moved && untrack(activeConversationId) === open && untrack(spaces.current) !== spaceId) spaces.select(spaceId);
   }
 
   // ---------------------------------------------------------------- Jump to, search, Unreads, Later

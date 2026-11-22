@@ -233,6 +233,20 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     return tabId ? allBrowserTabs().find((tab) => tab.id === tabId) : undefined;
   });
   /**
+   * Whether the step the agent asked for is on this tab: the takeover tab, or a popup that it opened,
+   * such as the window of a sign-in. The dock over such a popup hands the page back, as over its opener.
+   */
+  const browserTakeoverCovers = (tabId: string | undefined): boolean => {
+    const takeoverId = deps.props.browserTakeover?.tabId;
+    if (!takeoverId || !tabId) return false;
+    const visited = new Set<string>();
+    for (let current: string | undefined = tabId; current && !visited.has(current); current = openerOf(current)) {
+      if (current === takeoverId) return true;
+      visited.add(current);
+    }
+    return false;
+  };
+  /**
    * The tab that the takeover card shows live: the takeover tab, or a popup that it opened, which
    * the view follows as the full view does. The card used to show the takeover tab only, so a click
    * on "Continue with Google" in the card seemed to do nothing while the popup waited on the host.
@@ -240,13 +254,7 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
   const browserTakeoverLiveTab = createMemo(() => {
     const takeover = browserTakeoverTab();
     const active = activeBrowserTab();
-    if (!takeover || !active || active.id === takeover.id) return takeover;
-    const visited = new Set<string>();
-    for (let tabId: string | undefined = active.id; tabId && !visited.has(tabId); tabId = openerOf(tabId)) {
-      if (tabId === takeover.id) return active;
-      visited.add(tabId);
-    }
-    return takeover;
+    return active && browserTakeoverCovers(active.id) ? active : takeover;
   });
   const [browserTakeoverPreview, setBrowserTakeoverPreview] = createSignal<BrowserTakeoverPreviewState>({
     status: "idle",
@@ -769,6 +777,7 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     activeBrowserTab,
     browserTakeoverTab,
     browserTakeoverLiveTab,
+    browserTakeoverCovers,
     browserTakeoverPreview,
     browserTakeoverResolution,
     respondToBrowserTakeover,

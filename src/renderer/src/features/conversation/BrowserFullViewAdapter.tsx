@@ -38,6 +38,7 @@ export default function BrowserFullViewAdapter() {
     browserExpandedOpen,
     browserTabOwner,
     browserTabs,
+    browserTakeoverCovers,
     closeBrowserTab,
     navigateBrowserTab,
     openBrowserAddress,
@@ -67,10 +68,7 @@ export default function BrowserFullViewAdapter() {
   const liveViewLocked = () => {
     const tab = activeBrowserTab();
     return Boolean(
-      tab &&
-        !tab.userControl &&
-        props.browserTakeover?.tabId !== tab.id &&
-        browserControlForTab(tab)?.phase === "acting",
+      tab && !tab.userControl && !browserTakeoverCovers(tab.id) && browserControlForTab(tab)?.phase === "acting",
     );
   };
   const takeOverLiveView = () => {

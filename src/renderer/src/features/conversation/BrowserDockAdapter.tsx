@@ -48,6 +48,7 @@ export function BrowserDockAdapter(adapterProps: { tab: BrowserTab | undefined; 
     cancelQueuedMessageEdit,
     reorderPresentedQueue,
     browserControlForTab,
+    browserTakeoverCovers,
     respondToBrowserTakeover,
     takeBrowserControl,
     releaseBrowserControl,
@@ -76,7 +77,7 @@ export function BrowserDockAdapter(adapterProps: { tab: BrowserTab | undefined; 
 
   const takeover = () => {
     const request = props.browserTakeover;
-    return request && request.tabId === adapterProps.tab?.id ? request : undefined;
+    return request && browserTakeoverCovers(adapterProps.tab?.id) ? request : undefined;
   };
   /**
    * The cards that the user answered. A card goes from the dock at once, and the dock shows the agent's work.

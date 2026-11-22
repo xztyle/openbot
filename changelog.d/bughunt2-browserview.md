@@ -5,3 +5,5 @@
   the card seemed to do nothing.
 - A drag in the live view that ends outside the view lets the mouse button go on the page. Before,
   the page kept the button down and selected text on every move until the next click.
+- The dock over a sign-in popup of a page that an agent asked you to use shows Hand back, as over the
+  page itself. Before, the popup had no Hand back until it closed.

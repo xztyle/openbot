@@ -578,6 +578,24 @@ async function phone(browser: Browser, origin: string): Promise<void> {
     await fit.waitFor({ state: "detached", timeout: UI_WAIT_MS });
   });
 
+  await step(
+    page,
+    viewport,
+    "a tap opens a sign-in popup full screen, and its close goes back to the page",
+    async () => {
+      await button(page, english("browser.liveView.fit"))
+        .tap({ timeout: 2_000 })
+        .catch(() => undefined);
+      await signInThroughPopup(page, host, tab, true, async () => {
+        // The popup is part of the step the agent asked for: the dock over it still hands the page back.
+        await page
+          .locator("#browser-expanded-panel")
+          .getByRole("button", { name: handBackName })
+          .waitFor({ timeout: 5_000 });
+      });
+    },
+  );
+
   await step(page, viewport, "I'm done hands the page back once", async () => {
     await page.getByRole("button", { name: handBackName }).last().tap();
     await handedBack(page);
@@ -612,14 +630,21 @@ async function phone(browser: Browser, origin: string): Promise<void> {
  * A click through the live view opens a sign-in popup on the host: the view shows the popup, a click
  * in it answers the opener and closes it, and the view goes back to the opener.
  */
-async function signInThroughPopup(page: Page, host: TabHost, tab: Page): Promise<void> {
+async function signInThroughPopup(
+  page: Page,
+  host: TabHost,
+  tab: Page,
+  touch = false,
+  inPopup?: () => Promise<void>,
+): Promise<void> {
+  const press = (at: { x: number; y: number }) =>
+    touch ? page.touchscreen.tap(at.x, at.y) : page.mouse.click(at.x, at.y);
   const opened = tab.context().waitForEvent("page");
   await tab.evaluate(() => window.scrollTo(0, 0));
   const before = host.starts;
   await waitUntil(() => host.inputs.filter((input) => input.type === "ack").length > 0, "Frames are drawn");
   // The click goes through the live view, as the person's click on "Continue with Facebook" did.
-  const oauth = await onScreen(page, tab, "#oauth");
-  await page.mouse.click(oauth.x, oauth.y);
+  await press(await onScreen(page, tab, "#oauth"));
   const popup = await opened;
   await popup.waitForLoadState();
   host.pages.set(POPUP_ID, popup);
@@ -630,9 +655,9 @@ async function signInThroughPopup(page: Page, host: TabHost, tab: Page): Promise
   await waitUntil(() => host.current === POPUP_ID && host.starts > before, "The view shows the popup");
   await viewing(page, host);
   await page.waitForTimeout(300);
-  await shot(page, "desktop-popup");
-  const authorize = await onScreen(page, popup, "#authorize");
-  await page.mouse.click(authorize.x, authorize.y);
+  await shot(page, touch ? "phone-popup" : "desktop-popup");
+  await inPopup?.();
+  await press(await onScreen(page, popup, "#authorize"));
   await closed;
   await page.evaluate((id) => window.liveViewBridge?.removeTab(id), POPUP_ID);
   host.pages.delete(POPUP_ID);

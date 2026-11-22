@@ -28,7 +28,7 @@ body {
 .web-app:has(> .web-app-window > .web-app-frame[data-web-phone-shell][data-web-mobile-pane="workspace"]):not(
   :has(.ws-phone-tab-view)
 ) {
-  background: var(--openbot-bg-sidebar);
+  background: var(--atelier-sidebar, var(--openbot-bg-sidebar));
 }
 
 /*

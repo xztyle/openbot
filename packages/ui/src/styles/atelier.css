@@ -28,6 +28,7 @@
 /* The sidebar and the space rail read their own ink: in Riso Press light the sidebar is navy. */
 /* The top bar is on the frame, which is the sidebar's color, so it reads the same ink. */
 :root[data-atelier-theme] :is(.ws-sidebar, .ws-frame-sidebar, .space-rail, .window-rail, .ws-topbar) {
+  --openbot-bg-sidebar: var(--atelier-sidebar);
   --openbot-text-primary: var(--atelier-sidebar-text);
   --openbot-text-secondary: color-mix(in srgb, var(--atelier-sidebar-text) 84%, var(--atelier-sidebar));
   /* At least 4.5:1 on the sidebar in every theme: a phone shows its tabs on this ink too. */
@@ -115,6 +116,15 @@
 }
 
 /*
+ * Riso Press light is the one theme whose sidebar is dark on a light page. Dialogs, sheets, code
+ * blocks and other panels outside the sidebar paint `--openbot-bg-sidebar` and write the page's dark
+ * text on it, so outside the sidebar's ink that token is paper; the ink scope above sets it back.
+ */
+:root[data-atelier-theme="riso"][data-openbot-color-scheme="light"] {
+  --openbot-bg-sidebar: var(--atelier-surface2);
+}
+
+/*
  * Riso Press light is the one theme whose sidebar ink is dark on a light page. On a phone the whole
  * shell is the sidebar, so the tab bar's "+" button, and on a computer the top bar's search and
  * "Needs you", are printed on the ink: the "+" button was navy on navy, and "Needs you" was amber on
@@ -145,6 +155,7 @@
   --openbot-text-on-light: var(--atelier-canvas);
   --openbot-bg-control-active: color-mix(in srgb, var(--atelier-surface2) 90%, var(--atelier-text));
   --openbot-warning-text: var(--atelier-warn);
+  --openbot-bg-sidebar: var(--atelier-surface2);
 }
 
 /* On a computer, as `window.css` lays out these pages; a phone shows them on their own screen. */

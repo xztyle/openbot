@@ -38,6 +38,7 @@ import {
   createRemoteConnectionRecovery,
   isSafeConnectionError,
   type RemoteRecoveryStatus,
+  WEB_RETRY_COOLDOWN_MS,
 } from "@openbot/team-client/remote-recovery";
 import { reconcilePendingRequests } from "@openbot/team-client/runtime-attention";
 import { registerAgentFaces } from "@openbot/ui/features/agents/agent-face-directory";
@@ -382,6 +383,7 @@ export function createWebWorkspace(
       },
       // A hosted server that starts comes online soon, so the next attempt does not wait for the backoff.
       () => (state.hostedSleep === "waking" ? WAKE_RECONNECT_DELAY_MS : null),
+      WEB_RETRY_COOLDOWN_MS,
     );
   }
   /**

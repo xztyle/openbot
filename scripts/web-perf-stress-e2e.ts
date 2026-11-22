@@ -11,7 +11,9 @@
 // 4. resync: messages that came while the connection was down show once each after the reconnect.
 // 5. reconnect: lost connections in a row (`--cycles=<n>`, 10). Counts the reads of each reconnect and
 //    checks the window and document listeners, the elements and the heap after a GC.
-// 6. idle: the second minute in the foreground without an event. Counts the host calls.
+// 6. restart: the host is away for 40 s, with and without its restart notice; the time from its
+//    return to the workspace online.
+// 7. idle: the second minute in the foreground without an event. Counts the host calls.
 //
 // `bun scripts/web-perf-stress-e2e.ts [--only=<phase,...>] [--latency=<ms>] [--cycles=<n>] [--effects]
 //   [--snapshot=<file>] [--browser-executable=<path>] [--headed]`
@@ -116,6 +118,13 @@ declare global {
     openbotStress?: {
       stream(channelId: string, flushes: number, gapMs: number): Promise<void>;
       drop(holdMs: number): void;
+      /**
+       * The host goes away for `downMs`: each connect fails until then, as a host that restarts.
+       * `announce` first sends the host's restart notice, as a deploy does.
+       */
+      restart(downMs: number, announce: boolean): void;
+      /** When a connect last succeeded, in ms since the epoch. */
+      connectedAt: number;
       post(channelId: string, text: string): Promise<void>;
       postDm(agentId: string, text: string): Promise<void>;
       calls: Record<string, number>;
@@ -425,6 +434,37 @@ async function desktop(browser: Browser, origin: string) {
       "messages from the time offline show once each in the open channel after the reconnect",
       shown.every((count) => count === 1),
       JSON.stringify(shown),
+    );
+  }
+
+  if (runs("restart")) {
+    // The host goes away for 40 s, longer than the four quick attempts (2, 4, 8 and 16 s) of a round.
+    // Without a notice the client waits for its cooldown; with the deploy's restart notice it asks every
+    // few seconds. The time counts from the host's return to the workspace online again.
+    const backAfter = async (announce: boolean) => {
+      const downMs = Number(option("restart-down") ?? 40_000);
+      await page.evaluate(([ms, notice]) => window.openbotStress?.restart(ms, notice), [downMs, announce] as const);
+      const backAt = Date.now() + downMs;
+      await page.waitForFunction((at) => (window.openbotStress?.connectedAt ?? 0) >= at, backAt, {
+        timeout: downMs + 200_000,
+        polling: 250,
+      });
+      const connectedAt = await page.evaluate(() => window.openbotStress?.connectedAt ?? 0);
+      return Math.max(0, connectedAt - backAt);
+    };
+    const plain = await backAfter(false);
+    await page.waitForTimeout(2_000);
+    const announced = await backAfter(true);
+    report.metrics.restart = { onlineAfterHostBackMs: { noNotice: plain, restartNotice: announced } };
+    check(
+      "after a 40 s restart with no notice, online within 45 s of the host's return",
+      plain <= 45_000,
+      `${plain} ms`,
+    );
+    check(
+      "after a 40 s announced restart, online within 8 s of the host's return",
+      announced <= 8_000,
+      `${announced} ms`,
     );
   }
 

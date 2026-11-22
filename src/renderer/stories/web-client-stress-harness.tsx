@@ -7,6 +7,8 @@
  *   flush sends the growing message (`channel-message`) and then `channels-changed`.
  * - `drop(holdMs)` reports the host offline and holds the next connect for `holdMs`. The host's events
  *   of that time are lost, as on a real connection.
+ * - `restart(downMs, announce)` makes every connect fail for `downMs`, as a host that restarts, after
+ *   the host's restart notice when `announce` is set.
  * - `post(channelId, text)` and `postDm(agentId, text)` add a message on the host.
  * - `?latency=<ms>` delays each host call, as a phone's link does.
  * - `calls` counts every call of the runtime and its channel port, by name; `resetCalls()` clears it.
@@ -42,6 +44,13 @@ declare global {
     openbotStress?: {
       stream(channelId: string, flushes: number, gapMs: number): Promise<void>;
       drop(holdMs: number): void;
+      /**
+       * The host goes away for `downMs`: each connect fails until then, as a host that restarts.
+       * `announce` first sends the host's restart notice, as a deploy does.
+       */
+      restart(downMs: number, announce: boolean): void;
+      /** When a connect last succeeded, in ms since the epoch. */
+      connectedAt: number;
       /** A message from the host in a channel, or from an agent in its chat; lost while the connection is down. */
       post(channelId: string, text: string): Promise<void>;
       postDm(agentId: string, text: string): Promise<void>;
@@ -133,6 +142,7 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
   });
   const calls: Record<string, number> = {};
   let hold = 0;
+  let downUntil = 0;
   let revision = 1_000;
 
   async function stream(channelId: string, flushes: number, gapMs: number): Promise<void> {
@@ -166,10 +176,17 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     }
   }
 
-  window.openbotStress = {
+  const stress: NonNullable<Window["openbotStress"]> = {
+    connectedAt: 0,
     stream,
     drop(holdMs) {
       hold = holdMs;
+      down = true;
+      events.connection({ hostId: "preview-host", state: "offline", message: null });
+    },
+    restart(downMs, announce) {
+      downUntil = Date.now() + downMs;
+      if (announce) events.event("preview-host", { type: "host-restart", state: "restarting", version: null });
       down = true;
       events.connection({ hostId: "preview-host", state: "offline", message: null });
     },
@@ -205,15 +222,19 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
       for (const key of Object.keys(calls)) delete calls[key];
     },
   };
+  window.openbotStress = stress;
   const result: WebWorkspaceRuntime = {
     ...web,
     ...(web.channels ? { channels: counted(web.channels, "channels.", calls) } : {}),
     connect: async (host) => {
+      if (Date.now() < downUntil) throw new Error("The host is offline.");
       const wait = hold;
       hold = 0;
       if (wait) await new Promise((done) => setTimeout(done, wait));
       down = false;
-      return web.connect(host);
+      const capabilities = await web.connect(host);
+      stress.connectedAt = Date.now();
+      return capabilities;
     },
   };
   return counted(result, "", calls);

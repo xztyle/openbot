@@ -29,9 +29,15 @@ export const REMOTE_RETRY_COOLDOWN_MS = 120_000;
 /** Up to this fraction of a wait is added at random, so phones that lost the same service do not retry together. */
 const REMOTE_RETRY_JITTER = 0.2;
 
-function remoteRetryDelay(attempt: number): number {
-  const delay =
-    attempt >= REMOTE_RETRY_LIMIT ? REMOTE_RETRY_COOLDOWN_MS : REMOTE_RETRY_INTERVAL_MS * 2 ** Math.max(0, attempt - 1);
+/**
+ * The cooldown of a web client. A browser tab holds a Signal hello while its host is offline
+ * (`waitForHost`), so its attempts fail only for a cause that ends soon, such as a host that just
+ * restarted; two minutes kept the workspace away long after the host was back.
+ */
+export const WEB_RETRY_COOLDOWN_MS = 30_000;
+
+function remoteRetryDelay(attempt: number, cooldownMs: number): number {
+  const delay = attempt >= REMOTE_RETRY_LIMIT ? cooldownMs : REMOTE_RETRY_INTERVAL_MS * 2 ** Math.max(0, attempt - 1);
   return Math.round(delay * (1 + REMOTE_RETRY_JITTER * Math.random()));
 }
 
@@ -183,6 +189,8 @@ export function createRemoteConnectionRecovery(
   onStatus: (status: RemoteRecoveryStatus) => void = () => {},
   /** The wait while the host starts, such as a hosted server after a wake. It replaces the backoff. */
   startingRetryDelay: () => number | null = () => null,
+  /** The wait after the last attempt of a round. */
+  cooldownMs: number = REMOTE_RETRY_COOLDOWN_MS,
 ) {
   let active = false;
   let disposed = false;
@@ -213,7 +221,7 @@ export function createRemoteConnectionRecovery(
   function scheduleRetry(start: () => void = startRun) {
     if (disposed || suspended) return;
     const startingDelay = startingRetryDelay();
-    retryAt ??= Date.now() + (startingDelay ?? retryDelay ?? remoteRetryDelay(attempt));
+    retryAt ??= Date.now() + (startingDelay ?? retryDelay ?? remoteRetryDelay(attempt, cooldownMs));
     // A host that began to start during a longer wait does not wait for the rest of it.
     if (startingDelay !== null) retryAt = Math.min(retryAt, Date.now() + startingDelay);
     retryDelay = null;
@@ -259,7 +267,7 @@ export function createRemoteConnectionRecovery(
     refreshRequested = false;
     interrupted = false;
     attempt += 1;
-    retryDelay = remoteRetryDelay(attempt);
+    retryDelay = remoteRetryDelay(attempt, cooldownMs);
     // A foreground read is not a lost connection. Keep the workspace usable
     // until the transport reports a failure or the read fails.
     if (!online) onStatus({ phase: "connecting", attempt, remainingSeconds: Math.ceil(retryDelay / 1000) });

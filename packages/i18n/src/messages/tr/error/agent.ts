@@ -132,4 +132,6 @@ export const messages = {
   "error.agent.screenCaptureEmptyWindows":
     "Windows boş bir görüntü verdi. Kullanıcıdan bilgisayarın kilidini açmasını ve korumalı içeriği kapatmasını isteyin. Bir kuruluş ilkesi de ekran yakalamayı engelleyebilir.",
   "error.agent.screenCaptureFailed": "Ekran yakalama başarısız oldu. Tekrar deneyin.",
+  "error.agent.compactionLoopStopped":
+    "{provider} bağlamı tekrar tekrar sıkıştırdı ve her seferinde devam edemeyecek kadar dolu kaldı, bu yüzden Atelier bu turu durdurdu. Bu ajanın gerek duymadığı MCP sunucularını veya bilgisayar kullanımını kapatın, ardından bir mesaj gönderin. Siz veya ajan {provider} uygulamasının ne zaman sıkıştırdığını değiştirdiyseniz, bu değişikliği geri alın.",
 } as const satisfies PartialTranslation<typeof source>;

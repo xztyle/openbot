@@ -145,4 +145,6 @@ export const messages = {
   "error.agent.screenCaptureEmptyWindows":
     "Windows a renvoyé une image vide. Demandez à l’utilisateur de déverrouiller l’ordinateur et de fermer le contenu protégé. Une stratégie de l’organisation peut aussi bloquer la capture d’écran.",
   "error.agent.screenCaptureFailed": "La capture d’écran a échoué. Réessayez.",
+  "error.agent.compactionLoopStopped":
+    "{provider} a compacté le contexte encore et encore, et il restait chaque fois trop plein pour continuer : Atelier a donc arrêté ce tour. Désactivez les serveurs MCP ou l'utilisation de l'ordinateur dont cet agent n'a pas besoin, puis envoyez un message. Si vous ou l'agent avez changé le moment où {provider} compacte, annulez ce changement.",
 } as const satisfies PartialTranslation<typeof source>;

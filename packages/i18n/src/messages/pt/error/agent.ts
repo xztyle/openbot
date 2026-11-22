@@ -135,4 +135,6 @@ export const messages = {
   "error.agent.screenCaptureEmptyWindows":
     "O Windows retornou uma imagem vazia. Peça ao usuário para desbloquear o computador e fechar o conteúdo protegido. Uma política da organização também pode impedir a captura de tela.",
   "error.agent.screenCaptureFailed": "A captura de tela falhou. Tente de novo.",
+  "error.agent.compactionLoopStopped":
+    "{provider} compactou o contexto várias vezes, e em cada vez ele continuou cheio demais para continuar, então o Atelier parou este turno. Desative os servidores MCP ou o uso do computador de que este agente não precisa e envie uma mensagem. Se você ou o agente mudaram quando o {provider} compacta, desfaça essa mudança.",
 } as const satisfies PartialTranslation<typeof source>;

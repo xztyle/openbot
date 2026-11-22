@@ -1,3 +1,4 @@
+import { agentProviderName } from "@openbot/contracts/agent-providers";
 import {
   type AgentEvent,
   type AgentSummary,
@@ -36,6 +37,7 @@ import {
   type DynamicToolCallParams,
   type DynamicToolResult,
   decodeAccountLoginCompletedResult,
+  decodeRecordResponse,
   getArray,
   getRecord,
   getString,
@@ -253,6 +255,11 @@ export class TurnLifecycle {
    */
   readonly #turnErrors = new Map<string, string>();
   /**
+   * Running turns that OpenBot stopped because their provider compacted again and again with no use
+   * (upstream 63b51fa40). Their `interrupted` end is a failure with the reason that the error gave.
+   */
+  readonly #compactionLoops = new Set<string>();
+  /**
    * The client, provider thread and start time of each running turn, from its `turn/started`.
    * `produced` is set by the first item or delta: a refused turn is run again only without one.
    * `acted` is narrower: a tool step or answer text, which a turn run again would repeat. Thinking
@@ -386,6 +393,7 @@ export class TurnLifecycle {
     this.#failedTurns.clear();
     this.#turnAssociations.clear();
     this.#turnErrors.clear();
+    this.#compactionLoops.clear();
     this.#limitedTurns.clear();
     this.#failoverTurns.clear();
     this.#failoverRetries.clear();
@@ -579,6 +587,14 @@ export class TurnLifecycle {
           if (this.#conversation.loadedClientFor(threadId) !== source) return;
           if (notification.method === "item/started") this.#observedCompactions.set(threadId, turnId);
           else this.#observedCompactions.delete(threadId);
+          if (
+            notification.method === "item/started" &&
+            source.contextCompaction === "events" &&
+            this.#runningTurns.has(turnId) &&
+            !this.#compaction.isCompactionTurn(threadId, turnId) &&
+            this.#compaction.repeatsCompaction(threadId)
+          )
+            this.#stopCompactionLoop(source, agentId, threadId, turnId);
           if (!this.#compaction.isCompactionTurn(threadId, turnId))
             this.#compaction.observeCompaction(
               threadId,
@@ -675,7 +691,9 @@ export class TurnLifecycle {
         const turn = getRecord(params, "turn");
         const turnId = getString(turn, "id");
         if (!turnId) return;
-        const status = getString(turn, "status") ?? "completed";
+        const reported = getString(turn, "status") ?? "completed";
+        // OpenBot stopped this turn for a compaction loop: its end is a failure, with the loop's reason.
+        const status = this.#compactionLoops.delete(turnId) && reported === "interrupted" ? "failed" : reported;
         if (status === "failed" && !this.#turnErrors.has(turnId)) {
           this.#hooks.emitFailure?.({
             code: "agent_error",
@@ -841,6 +859,34 @@ export class TurnLifecycle {
       }
     }
   }).bind(this);
+
+  /**
+   * Stops a turn whose provider compacts again and again with no use: each compaction leaves the
+   * session above the provider's own limit, so the turn makes no progress. The error says what to
+   * change, and the turn ends as failed; it does not continue, because it would compact again.
+   */
+  #stopCompactionLoop(source: AgentClient, agentId: string, threadId: string, turnId: string): void {
+    // Codex can start one more compaction before it handles the stop.
+    if (this.#compactionLoops.has(turnId)) return;
+    this.#compactionLoops.add(turnId);
+    logger.warn("A provider compacted again and again; OpenBot stops its turn.", { provider: source.provider });
+    const message = sourceText("error.agent.compactionLoopStopped", { provider: agentProviderName(source.provider) });
+    // The failed delivery keeps this reason, not the provider's text.
+    this.#turnErrors.set(turnId, message);
+    const context = {
+      causeCode: classifyFailure(message),
+      provider: source.provider,
+      model: this.#hooks.turnModel(agentId, turnId),
+      turnId,
+      severity: "error" as const,
+    };
+    const taskId = this.#taskForThread(agentId, threadId);
+    if (taskId !== null) {
+      this.#hooks.emitFailure?.({ code: "agent_error", agentId, ...context });
+      this.#hooks.taskFailed(taskId, message);
+    } else this.#hooks.emitError("agent_error", message, agentId, context);
+    Effect.runFork(source.request("turn/interrupt", { threadId, turnId }, decodeRecordResponse).pipe(Effect.ignore));
+  }
 
   /**
    * Records a call to the no-update tool. `quiet` when the turn runs only quiet routine runs, so

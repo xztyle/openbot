@@ -117,4 +117,6 @@ export const messages = {
   "error.agent.screenCaptureEmptyWindows":
     "Windows 返回了空图像。请让用户解锁电脑并关闭受保护的内容；组织策略也可能阻止截屏。",
   "error.agent.screenCaptureFailed": "截屏失败，请重试。",
+  "error.agent.compactionLoopStopped":
+    "{provider} 反复压缩上下文，但每次压缩后仍然太满，无法继续，因此 Atelier 停止了这一轮。请关闭此智能体不需要的 MCP 服务器或电脑操控，然后发送一条消息。如果你或智能体更改过 {provider} 的压缩时机，请撤销该更改。",
 } as const satisfies PartialTranslation<typeof source>;

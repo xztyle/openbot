@@ -144,4 +144,6 @@ export const messages = {
   "error.agent.screenCaptureEmptyWindows":
     "Windows が空の画像を返しました。コンピューターのロックを解除し、保護されたコンテンツを閉じるようユーザーに依頼してください。組織のポリシーによって画面キャプチャが止められている場合もあります。",
   "error.agent.screenCaptureFailed": "画面キャプチャに失敗しました。もう一度お試しください。",
+  "error.agent.compactionLoopStopped":
+    "{provider} がコンテキストを何度も圧縮しましたが、毎回いっぱいのままで続行できなかったため、Atelier はこのターンを停止しました。このエージェントに不要な MCP サーバーやコンピューター操作をオフにしてから、メッセージを送信してください。{provider} が圧縮するタイミングをあなたかエージェントが変更した場合は、その変更を元に戻してください。",
 } as const satisfies PartialTranslation<typeof source>;

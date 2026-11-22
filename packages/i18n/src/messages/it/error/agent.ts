@@ -140,4 +140,6 @@ export const messages = {
   "error.agent.screenCaptureEmptyWindows":
     "Windows ha restituito un'immagine vuota. Chiedi all'utente di sbloccare il computer e chiudere i contenuti protetti. Anche un criterio dell'organizzazione può bloccare l'acquisizione dello schermo.",
   "error.agent.screenCaptureFailed": "L'acquisizione dello schermo non è riuscita. Riprova.",
+  "error.agent.compactionLoopStopped":
+    "{provider} ha compattato il contesto più e più volte, e ogni volta è rimasto troppo pieno per continuare, quindi Atelier ha fermato questo turno. Disattiva i server MCP o l'uso del computer che questo agente non usa, poi invia un messaggio. Se tu o l'agente avete cambiato quando {provider} compatta, annulla la modifica.",
 } as const satisfies PartialTranslation<typeof source>;

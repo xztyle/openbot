@@ -5,7 +5,8 @@
 // Four cases: a compaction that ends by itself, one that runs past the start deadline and ends by
 // itself, one that the run deadline stops, and one that does not stop, so that OpenBot sends a turn
 // that Codex refuses. Then a chat whose compactions fail, and one that each compaction leaves full
-// while Codex reports a small estimate during each compaction: both stop after 2.
+// while Codex reports a small estimate during each compaction: both stop after 2. Last, a turn in
+// which Codex compacts again after each step stops at its third compaction.
 // `bun scripts/codex-compaction-queue-e2e.ts`. Writes .openbot-build/codex-compaction-queue-e2e/report.json.
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -13,6 +14,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { AGENT_PROVIDERS, type AgentEvent } from "@openbot/contracts/ipc";
+import { sourceText } from "@openbot/i18n/source";
 import { Effect } from "effect";
 import type { AgentBrowserHost } from "../src/backend/agent/turn-lifecycle";
 import { getString, isRecord } from "../src/backend/protocol";
@@ -62,6 +64,8 @@ let turns = 0;
 const threadTurns = new Map();
 /** threadId -> { turnId, finish } of the compaction turn that runs. */
 const compacting = new Map();
+/** The turns that compact again after each step, until a \`turn/interrupt\` or 20 compactions. */
+const looping = new Set();
 process.stdout.on("error", (error) => {
   if (error.code === "EPIPE") process.exit(0);
   throw error;
@@ -97,6 +101,30 @@ const answer = (message) => {
       threadTurns.set(params.threadId, count);
       const used = control().growUsage ? 84000 + 6000 * (count - 1) : 90000;
       write({ method: "thread/tokenUsage/updated", params: { threadId: params.threadId, turnId, tokenUsage: { total: { totalTokens: used }, last: { totalTokens: used }, modelContextWindow: 100000 } } });
+      // \`loop\`: Codex compacts after each step, and each compaction leaves 60% of the window, still
+      // above its own limit.
+      if (control().loop) {
+        let left = 20;
+        looping.add(turnId);
+        const again = () => {
+          if (!looping.has(turnId)) return;
+          if (left-- === 0) {
+            looping.delete(turnId);
+            return write({ method: "turn/completed", params: { threadId: params.threadId, turn: { id: turnId, status: "completed" } } });
+          }
+          const item = { type: "contextCompaction", id: "self-compact-" + turnId + "-" + left };
+          write({ method: "item/started", params: { threadId: params.threadId, turnId, item } });
+          log({ method: "selfCompaction", threadId: params.threadId });
+          setTimeout(() => {
+            if (!looping.has(turnId)) return;
+            write({ method: "item/completed", params: { threadId: params.threadId, turnId, item } });
+            const tokenUsage = { total: { totalTokens: 60000 }, last: { totalTokens: 60000 }, modelContextWindow: 100000 };
+            write({ method: "thread/tokenUsage/updated", params: { threadId: params.threadId, turnId, tokenUsage } });
+            setTimeout(again, 10);
+          }, 10);
+        };
+        return again();
+      }
       setTimeout(() => {
         const item = { type: "agentMessage", id: "message-" + turnId, text: "Done.", phase: "final_answer" };
         write({ method: "item/completed", params: { threadId: params.threadId, turnId, item } });
@@ -129,6 +157,7 @@ const answer = (message) => {
       return;
     }
     case "turn/interrupt": {
+      looping.delete(params.turnId);
       write({ id: message.id, result: {} });
       const compaction = compacting.get(params.threadId);
       if (compaction?.turnId === params.turnId) {
@@ -188,6 +217,7 @@ const report: {
   cases: CaseReport[];
   failedCompactions?: { compactions: number; failed: number; stopNotices: number; messages: string[] };
   ineffectiveCompactions?: { compactions: number; turns: number; notices: number; messages: string[] };
+  compactionLoop?: { compactions: number; interrupts: number; status: string | null; error: string | null };
   passed: boolean;
   error?: string;
 } = {
@@ -465,6 +495,41 @@ try {
   assert.equal(ineffectiveCompactions.turns, 4, "ineffective compactions: not every message ran");
   assert.equal(ineffectiveCompactions.compactions, 2, "ineffective compactions: OpenBot did not stop after 2");
   assert.equal(ineffectiveCompactions.notices, 1, "ineffective compactions: one notice");
+
+  // Codex compacts by itself after each step of one turn, and each compaction leaves the session
+  // above its own limit. One upstream session compacted 559 times (upstream 63b51fa40). OpenBot stops
+  // the turn at the third compaction, and the message fails with what to change.
+  await writeFile(controlPath, JSON.stringify({ compactionMs: 200, ignoreInterrupt: false, loop: true }));
+  const looper = await runCauseEffect(
+    agents.createAgent({
+      name: "Compaction loop",
+      description: "Checks that a turn that compacts again and again stops.",
+      avatarSeed: "compaction-loop",
+      avatarHue: null,
+      initialMessage: "Loop.",
+    }),
+  );
+  const loopDelivery = await waitFor("the looping turn to end", () => {
+    const delivery = agents.listQueue(looper.id).deliveries[0];
+    return delivery && ["failed", "completed"].includes(delivery.status) ? delivery : null;
+  });
+  const loopSession = store.activeProviderSession(looper.id)?.externalSessionId;
+  const loopEntries = protocol().filter((line) => line.threadId === loopSession);
+  const compactionLoop = {
+    compactions: loopEntries.filter((line) => line.method === "selfCompaction").length,
+    interrupts: loopEntries.filter((line) => line.method === "turn/interrupt").length,
+    status: loopDelivery.status,
+    error: loopDelivery.error ?? null,
+  };
+  report.compactionLoop = compactionLoop;
+  assert.equal(compactionLoop.compactions, 3, "compaction loop: not stopped at the third compaction");
+  assert.equal(compactionLoop.interrupts, 1, "compaction loop: one stop");
+  assert.equal(compactionLoop.status, "failed", "compaction loop: the message did not fail");
+  assert.equal(
+    compactionLoop.error,
+    sourceText("error.agent.compactionLoopStopped", { provider: "ChatGPT" }),
+    "compaction loop: the error does not say what to change",
+  );
   report.passed = true;
 } catch (error) {
   report.error = error instanceof Error ? (error.stack ?? error.message) : String(error);

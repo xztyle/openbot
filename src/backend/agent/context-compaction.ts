@@ -26,6 +26,10 @@ interface ThreadContextBudget {
   failedCompactions: number;
   /** A compaction ended, and the next usage report is its result. */
   awaitingUsage: boolean;
+  /** The first usage after the last compaction, until the provider starts its next compaction. */
+  compactionResultTokens: number | null;
+  /** Provider compactions in a row that started before the session grew from the last result. */
+  repeatedCompactions: number;
 }
 
 const logger = createOpenBotLogger("context-compaction");
@@ -40,6 +44,18 @@ const CONTEXT_COMPACTION_THRESHOLD = 0.8;
 const INEFFECTIVE_COMPACTION_SHARE = CONTEXT_COMPACTION_THRESHOLD - 0.1;
 const INEFFECTIVE_COMPACTION_LIMIT = 2;
 const FAILED_COMPACTION_LIMIT = 2;
+/**
+ * After this many compactions in a row that the provider started with almost no growth since the
+ * last result, OpenBot stops the turn. Codex compacts again after each step while a compaction
+ * leaves the session above its own limit, which OpenBot cannot read: one upstream session compacted
+ * 559 times (upstream 63b51fa40).
+ */
+const REPEATED_COMPACTION_LIMIT = 2;
+
+/** How much a session must grow after a compaction before another compaction of it can help. */
+function minimumGrowth(contextWindow: number): number {
+  return Math.max(1_024, Math.floor(contextWindow * 0.05));
+}
 
 function newBudget(usedTokens: number, contextWindow: number): ThreadContextBudget {
   return {
@@ -52,6 +68,8 @@ function newBudget(usedTokens: number, contextWindow: number): ThreadContextBudg
     ineffectiveCompactions: 0,
     failedCompactions: 0,
     awaitingUsage: false,
+    compactionResultTokens: null,
+    repeatedCompactions: 0,
   };
 }
 
@@ -341,6 +359,7 @@ export class ContextCompaction {
     this.#budgets.set(threadId, budget);
     if (budget.awaitingUsage) {
       budget.awaitingUsage = false;
+      budget.compactionResultTokens = usedTokens;
       this.#checkCompaction(budget, agentId);
     }
 
@@ -358,8 +377,7 @@ export class ContextCompaction {
       return;
     }
 
-    const minimumGrowth = Math.max(1_024, Math.floor(contextWindow * 0.05));
-    if (budget.lastCompactedTokens !== null && usedTokens < budget.lastCompactedTokens + minimumGrowth) {
+    if (budget.lastCompactedTokens !== null && usedTokens < budget.lastCompactedTokens + minimumGrowth(contextWindow)) {
       return;
     }
     budget.pending = true;
@@ -385,6 +403,26 @@ export class ContextCompaction {
         sourceText("error.backend.contextCompactionIneffective", { percent: String(percent) }),
         agentId,
       );
+  }
+
+  /**
+   * The provider started a compaction of its own in a turn of this session. True when it compacts
+   * again and again with no use: the session has grown by less than the growth rule since the
+   * result of the last compaction, `REPEATED_COMPACTION_LIMIT` times in a row. The provider's own
+   * limit sets when it compacts, so only the growth tells that the last result is still above it.
+   */
+  repeatsCompaction(threadId: string): boolean {
+    const budget = this.#budgets.get(threadId);
+    if (!budget || budget.compactionResultTokens === null || budget.contextWindow <= 1) return false;
+    const grown = budget.usedTokens - budget.compactionResultTokens >= minimumGrowth(budget.contextWindow);
+    budget.compactionResultTokens = null;
+    budget.repeatedCompactions = grown ? 0 : budget.repeatedCompactions + 1;
+    if (!grown)
+      logger.warn("The provider compacted again with no growth since the last compaction.", {
+        usedPercent: Math.round((budget.usedTokens / budget.contextWindow) * 100),
+        repeatedCompactions: budget.repeatedCompactions,
+      });
+    return budget.repeatedCompactions >= REPEATED_COMPACTION_LIMIT;
   }
 
   #countFailure(threadId: string, agentId: string): void {

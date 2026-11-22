@@ -11,6 +11,10 @@
  *   (default 600, up to 1800), so a deploy restarts the server between turns. It answers `drained`
  *   and the turns that still run. `POST /v1/drain/cancel` ends the hold; it also ends by itself five
  *   minutes after the wait, for a deploy that did not restart.
+ * - `POST /v1/restart-notice` tells every device that the server restarts now (`state=restarting`,
+ *   the default) or that it does not (`state=none`), so they ask again every few seconds instead of
+ *   backing off to a two-minute wait. A deploy sends it before it stops the container. The drain sends
+ *   `waiting` while it waits for turns. A notice that no restart follows ends after five minutes.
  *
  * A body is JSON or form fields. Every action is logged without the text. The resume route keeps the
  * deliveries it handled in a small file, so a second call, or a call after another restart, does not
@@ -22,6 +26,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { QueuedMessageReceipt, SendMessageInput, SystemNoticeKind } from "@openbot/contracts/ipc";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
+import type { HostRestartState } from "@openbot/contracts/team-protocol/host-update-v1";
 import { Effect, Result } from "effect";
 
 /** The reason that boot recovery writes on a delivery that the previous run left unfinished. */
@@ -60,7 +65,12 @@ export interface ServerAgentOperationsDependencies {
   drain?: (timeoutMs: number) => Promise<readonly { turnId: string; agentId: string }[]>;
   /** Ends the hold of `drain`. */
   endDrain?: () => void;
+  /** `HostService.announceRestart`: the `host-restart` event to every connected device. */
+  announceRestart?: (state: HostRestartState) => void;
 }
+
+/** A restart notice that no restart followed ends after this long. */
+const RESTART_NOTICE_MS = 5 * 60_000;
 
 /** The default and the longest wait of `POST /v1/drain`. */
 const DRAIN_DEFAULT_SECONDS = 600;
@@ -85,6 +95,22 @@ export type ResumeOutcome =
 export function createServerAgentOperations(dependencies: ServerAgentOperationsDependencies) {
   /** One resume pass at a time, so two calls cannot both send the note for one delivery. */
   let resuming: Promise<ControlAnswer> | null = null;
+  let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Sends a restart notice; a notice other than `none` ends by itself if no restart follows. */
+  function announce(state: HostRestartState): void {
+    const { announceRestart } = dependencies;
+    if (!announceRestart) return;
+    clearTimeout(noticeTimer);
+    noticeTimer = undefined;
+    announceRestart(state);
+    if (state === "none") return;
+    noticeTimer = setTimeout(() => {
+      noticeTimer = undefined;
+      announceRestart("none");
+    }, RESTART_NOTICE_MS);
+    noticeTimer.unref?.();
+  }
 
   async function route(method: string | undefined, path: string, rawBody: string): Promise<ControlAnswer | null> {
     const message = path.match(/^\/v1\/agents\/([^/]+)\/message$/u);
@@ -98,6 +124,7 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
       if (!drain || !endDrain) return failure(404, "not_found");
       if (path === "/v1/drain/cancel") {
         endDrain();
+        announce("none");
         dependencies.log("Deploy drain cancelled.");
         return { status: 200, lines: { drain: "cancelled" } };
       }
@@ -106,6 +133,7 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
         ? Math.min(DRAIN_MAX_SECONDS, Math.max(0, requested))
         : DRAIN_DEFAULT_SECONDS;
       const startedAt = Date.now();
+      announce("waiting");
       const running = await drain(seconds * 1_000);
       const waited = Math.round((Date.now() - startedAt) / 1_000);
       dependencies.log(`Deploy drain: ${running.length} turns still run after ${waited} s.`);
@@ -120,6 +148,15 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
           ),
         },
       };
+    }
+    if (path === "/v1/restart-notice") {
+      if (method !== "POST") return failure(405, "method_not_allowed");
+      if (!dependencies.announceRestart) return failure(404, "not_found");
+      const state = readFields(rawBody).state ?? "restarting";
+      if (state !== "restarting" && state !== "none") return failure(400, "invalid_state");
+      announce(state);
+      dependencies.log(`Restart notice sent: ${state}.`);
+      return { status: 200, lines: { restart_notice: state } };
     }
     if (path === "/v1/resume-interrupted") {
       if (method !== "POST") return failure(405, "method_not_allowed");
@@ -316,6 +353,8 @@ interface Fields {
   dryRun: boolean;
   /** The operator message goes as a note from OpenBot, not as the owner. */
   system: boolean;
+  /** The state of `POST /v1/restart-notice`. */
+  state: string | undefined;
 }
 
 /** A JSON object, or form fields (`delivery` may repeat). */
@@ -337,6 +376,7 @@ function readFields(rawBody: string): Fields {
       deliveryIds: ids,
       dryRun: record.dryRun === true,
       system: record.system === true,
+      state: isString(record.state) ? record.state : undefined,
     };
   }
   const form = new URLSearchParams(trimmed);
@@ -352,6 +392,7 @@ function readFields(rawBody: string): Fields {
     ),
     dryRun: form.get("dry_run") === "1" || form.get("dry_run") === "yes",
     system: form.get("system") === "1" || form.get("system") === "yes" || form.get("system") === "true",
+    state: form.get("state") ?? undefined,
   };
 }
 

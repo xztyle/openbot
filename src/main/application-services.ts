@@ -3554,6 +3554,7 @@ export async function createApplicationServices({
         log: (message) => logger.info(message),
         drain: (timeoutMs) => Effect.runPromise(service.drainForDeploy(timeoutMs)),
         endDrain: () => service.endDeployDrain(),
+        announceRestart: (state) => host.announceRestart(state, null),
       })
     : undefined;
   // The turns that this start's recovery cut off continue by themselves once the agents are ready,

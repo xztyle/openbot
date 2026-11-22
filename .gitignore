@@ -61,3 +61,4 @@ keys
 
 # Persistent local development identity and migration recovery.
 .openbot/
+__pycache__/

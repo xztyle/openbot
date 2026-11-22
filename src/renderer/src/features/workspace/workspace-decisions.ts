@@ -106,13 +106,15 @@ const PROPOSAL_KEY = {
 
 /**
  * The dollar amount of a money approval's effect line, for the money order of the queue and the card:
- * "Hotmart · pay 19.00 USD · product X", "Meta ads · daily budget 10 USD → 50 USD" (the new amount,
- * after the arrow) or "$19". An amount in another currency is not dollars, and gives none.
+ * "Hotmart · pay 19.00 USD · product X", "Meta ads · daily budget 10 → 50 USD" (the new amount,
+ * after the arrow) or "Pay (19 USD)". The host always writes the currency code. A bare "$" is not
+ * dollars: in Colombia or Mexico it is the peso, and in a shell command "$1" is an argument. An
+ * amount in another currency gives none.
  */
 export function amountIn(text: string): number | undefined {
   const line = text.split("\n")[0] ?? "";
   const after = line.split("→").at(-1) ?? line;
-  const match = /\$\s?(\d[\d,]*(?:\.\d+)?)/u.exec(after) ?? /(\d[\d,]*(?:\.\d+)?)\s?USD\b/u.exec(after);
+  const match = /(?:^|[\s(])(\d[\d,]*(?:\.\d+)?)\s?USD\b/u.exec(after);
   const value = match?.[1] ? Number(match[1].replaceAll(",", "")) : Number.NaN;
   return Number.isFinite(value) ? value : undefined;
 }

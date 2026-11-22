@@ -105,7 +105,12 @@ function PortfolioValue() {
   const [title, setTitle] = createSignal("");
   const [worth, setWorth] = createSignal("");
   const [rating, setRating] = createSignal(4);
-  const [agentId, setAgentId] = createSignal<string | null>(null);
+  const [picked, setPicked] = createSignal<string | null>(null);
+  /** The agent the rating is for: one picked in another space counts as the whole space here. */
+  const agentId = () => {
+    const id = picked();
+    return id && ws.spaces.agentInCurrent(id) ? id : null;
+  };
   const [busy, setBusy] = createSignal(false);
 
   const spaceName = (spaceId: string) => ws.spaces.list().find((space) => space.id === spaceId)?.name ?? spaceId;
@@ -270,7 +275,7 @@ function PortfolioValue() {
             size="sm"
             variant={agentId() === null ? "secondary" : "ghost"}
             aria-pressed={agentId() === null ? "true" : "false"}
-            onClick={() => setAgentId(null)}
+            onClick={() => setPicked(null)}
           >
             {t("portfolio.value.wholeSpace")}
           </Button>
@@ -280,7 +285,7 @@ function PortfolioValue() {
                 size="sm"
                 variant={agentId() === agent.id ? "secondary" : "ghost"}
                 aria-pressed={agentId() === agent.id ? "true" : "false"}
-                onClick={() => setAgentId(agent.id)}
+                onClick={() => setPicked(agent.id)}
               >
                 {agent.name}
               </Button>

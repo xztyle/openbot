@@ -7,3 +7,7 @@
   now also marks the agent chats of the space read, as its confirm says.
 - On a phone, the space switcher has Delete space for owners and admins. Before, a space could only be
   deleted from the space rail on a computer.
+- Portfolio's Rate an outcome no longer credits an agent of the space you looked at before. An agent
+  picked there counts as the whole space after a switch.
+- Removing an entry from Knowledge and switching space before the answer no longer shows the old
+  space's knowledge in the new one.

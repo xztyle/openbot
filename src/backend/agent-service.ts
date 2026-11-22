@@ -1632,6 +1632,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       ...(options.ownerAway ? { ownerNote: () => options.ownerAway?.turnNote() ?? null } : {}),
       hooks: {
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
+        staleTurnSettlement: (agentId, threadId, turnId) =>
+          this.#turnRunsNowhere(agentId, turnId) ? this.#settleStaleOwnTurn(agentId, threadId, turnId) : null,
         redactMcp: (text) => this.#mcp.redact(text),
         isStopping: () => this.#stopping,
         isDeployDraining: () => this.#deployDrainUntil !== null && Date.now() < this.#deployDrainUntil,
@@ -2128,6 +2130,36 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   currentTicketsChanged(): void {
     this.workspace?.fleetChanged();
   }
+
+  /**
+   * Whether no provider runs this turn of the agent's own chat any more: the provider ended it, its
+   * normal end does not run, and no message starts or runs on it. A turn that waits for its
+   * `turn/started` keeps a starting or running message, so it stays.
+   */
+  #turnRunsNowhere(agentId: string, turnId: string): boolean {
+    return (
+      !this.#stopping &&
+      this.#turn.hasEnded(turnId) &&
+      this.#turn.turnStartedAt(turnId) === null &&
+      !this.#turn.isCompleting(turnId) &&
+      this.#mailbox.findDeliveriesByTurn(agentId, turnId).length === 0 &&
+      this.#mailbox.startingDeliveriesForAgent(agentId).length === 0
+    );
+  }
+
+  readonly #settleStaleOwnTurn = Effect.fn("AgentService.settleStaleOwnTurn")(function* (
+    this: AgentService,
+    agentId: string,
+    threadId: string,
+    turnId: string,
+  ) {
+    if (!this.#turnRunsNowhere(agentId, turnId)) return;
+    logger.warn("A chat turn that no provider runs held the agent's queue. It ends as interrupted.", {
+      agentId,
+      turnId,
+    });
+    yield* this.#turn.settleOrphanedTurn(agentId, threadId, turnId, "interrupted");
+  });
 
   getRuntimeSnapshot(): AgentRuntimeSnapshot {
     return buildRuntimeSnapshot({

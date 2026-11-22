@@ -66,6 +66,11 @@ export interface DrainHooks {
   /** A deploy waits for the running turns to end before it restarts the server: no new turn starts. */
   isDeployDraining?(): boolean;
   /**
+   * Ends the active turn of the agent's own chat when no provider runs it any more, or null when the
+   * turn may still run. The settle schedules the drain again, so the waiting messages start.
+   */
+  staleTurnSettlement(agentId: string, threadId: string, turnId: string): Effect.Effect<void> | null;
+  /**
    * Whether the catalogue still serves this model. A removed endpoint's models stay in the running
    * OpenCode process until it restarts, and the restart waits for a busy agent, so this is what
    * keeps a delivery off an endpoint the user has taken out.
@@ -217,6 +222,8 @@ export class DrainScheduler {
   readonly #drainCalls = new Map<string, number>();
   /** The last hold `#reportHold` logged per lane, so a waiting queue logs once per reason. */
   readonly #reportedHolds = new Map<string, string>();
+  /** The stale turns of the agents' own chats that a settle ends now, so a drain starts only one. */
+  readonly #settlingTurns = new Set<string>();
   /**
    * The model each lane's running turn was started with, by lane key. The agent record can be moved
    * to another model while that turn runs, but the CLI keeps the session it opened, so this is the
@@ -364,6 +371,22 @@ export class DrainScheduler {
   }
 
   /**
+   * An agent's own chat can name a turn after it ended, for example after a Claude usage limit. The
+   * queue then waits with "active-turn" until a restart, and `interrupt_agent` is refused. A turn that
+   * no provider runs ends here as interrupted, as a Stop ends such a turn.
+   */
+  #settleStaleOwnTurn(lane: Lane): void {
+    if (lane.taskId !== null) return;
+    const snapshot = this.#conversation.workingSnapshot(lane.agentId);
+    const turnId = snapshot?.activeTurnId;
+    if (!snapshot?.threadId || !turnId || this.#settlingTurns.has(turnId)) return;
+    const settlement = this.#hooks.staleTurnSettlement(lane.agentId, snapshot.threadId, turnId);
+    if (!settlement) return;
+    this.#settlingTurns.add(turnId);
+    Effect.runFork(settlement.pipe(Effect.ensuring(Effect.sync(() => this.#settlingTurns.delete(turnId)))));
+  }
+
+  /**
    * Logs once why a queued message of this lane waits, and again only when the reason changes. A
    * queue that never starts again then names the clause that holds it.
    */
@@ -439,6 +462,7 @@ export class DrainScheduler {
       this.#heldBy(lane) ||
       (this.#heldByMachine(lane) && "machine");
     if (hold) this.#reportHold(lane, hold);
+    if (hold === "active-turn") this.#settleStaleOwnTurn(lane);
     if (followUsageLimit && (!hold || hold === "usage-limit") && this.#hooks.followUsageLimit(lane.agentId))
       return true;
     if (hold) return false;
@@ -549,6 +573,7 @@ export class DrainScheduler {
       (this.#heldByMachine(lane) && "machine");
     if (hold) {
       this.#reportHold(lane, hold);
+      if (hold === "active-turn") this.#settleStaleOwnTurn(lane);
       return;
     }
     this.#reportedHolds.delete(key);

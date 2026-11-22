@@ -7,17 +7,24 @@
 
 import type { Server } from "node:http";
 import { join } from "node:path";
+import type { ConversationMessage } from "@openbot/contracts/ipc";
 import {
   DEFAULT_WORKSPACE_MOTION_EVENTS,
   type McpServerConfig,
   type WorkspaceMotionEventsSettings,
 } from "@openbot/contracts/ipc";
+import type { DynamicRecord } from "@openbot/contracts/runtime-values";
 import { createOpenBotLogger, registerSecretValue } from "@openbot/logging";
 import { Effect } from "effect";
 import type { McpAgent } from "../../backend/mcp-agent-values";
+import { MotionClient, motionServer } from "./motion-client";
 import { startMotionEventsServer } from "./motion-events-server";
 import { type MotionEventsAgent, MotionEventsService, type WaitingTicket } from "./motion-events-service";
+import { MotionGrader } from "./motion-grader";
+import { MotionOrders } from "./motion-orders";
 import { type MotionStartInput, MotionTickets } from "./motion-tickets";
+
+export { motionServer } from "./motion-client";
 
 const logger = createOpenBotLogger("motion-events");
 const CALL_TIMEOUT_MS = 15_000;
@@ -48,13 +55,12 @@ export interface MotionEventsHostOptions {
   ticketsChanged: () => void;
   /** A ticket of these local agents is done: each may learn a lesson from the work. */
   taskDone?: (input: { agentIds: string[]; key: string; title: string; priority?: string | null }) => void;
-}
-
-/** The `motion` MCP row: the board the agents use. */
-export function motionServer(configs: readonly McpServerConfig[]): McpServerConfig | undefined {
-  return configs.find(
-    (config) => config.enabled && config.transport === "http" && config.name.trim().toLowerCase() === "motion",
-  );
+  /** The agent's recent chat, the evidence the grader reads. */
+  evidence: (agentId: string) => readonly ConversationMessage[];
+  /** One answer of the grader's judge, in a fresh context (`AgentService.generateReviewText`). */
+  judge: (input: { agentId: string; important: boolean; prompt: string }) => Promise<{ text: string; model: string }>;
+  /** Whether the chat app proxy reports the agents' Motion calls to `observeToolCall`. */
+  observesToolCalls: boolean;
 }
 
 /** Motion's operation URL from its MCP address (`http://host:8080/mcp` → `http://host:8080/api/v1/<op>`). */
@@ -87,6 +93,10 @@ function motionCaller(options: MotionEventsHostOptions) {
 export interface MotionEventsHost {
   tickets: MotionTickets;
   events: MotionEventsService;
+  grader: MotionGrader;
+  orders: MotionOrders;
+  /** A Motion tool call of an agent's turn, after it answered. */
+  observeToolCall(agentId: string, tool: string, args: unknown): void;
   close(): Promise<void>;
 }
 
@@ -118,6 +128,32 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
     log: (message) => logger.info(message),
   });
   await events.start();
+  const motion = new MotionClient(options);
+  const tool = (caller: Parameters<MotionClient["tool"]>[0], name: string, args: DynamicRecord) =>
+    motion.tool(caller, name, args);
+  const grader = new MotionGrader({
+    tool,
+    agents: options.agents,
+    evidence: options.evidence,
+    judge: options.judge,
+    escalate: (ticket, body) => events.escalate(ticket, body),
+    tell: (agentId, text, clientMessageId) =>
+      void Effect.runPromise(options.send({ agentId, text, clientMessageId }, true)).catch(() => undefined),
+    stateFile: join(options.userData, "motion-grader-v1.json"),
+    log: (message) => logger.info(message),
+  });
+  const orders = new MotionOrders({
+    tool,
+    available: () => motion.available(),
+    observesToolCalls: () => options.observesToolCalls,
+    agents: options.agents,
+    currentTicket: (agentId) => tickets.current(agentId),
+    woken: (agentId, issueId) => events.noteWoken(agentId, issueId),
+    note: (input) => events.note(input),
+    stateFile: join(options.userData, "motion-orders-v1.json"),
+    log: (message) => logger.info(message),
+  });
+  await orders.start();
   let server: Server | null = null;
   const listen = options.environment.OPENBOT_MOTION_EVENTS_LISTEN?.trim();
   if (listen) {
@@ -131,6 +167,9 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
       secret,
       receive: async (event) => {
         const outcome = await events.receive(event);
+        if (outcome.outcome !== "duplicate") orders.observeEvent(event);
+        // A ticket in review with no reviewer of its own: the independent grader takes it.
+        if (outcome.grade) void grader.grade(event);
         // A done ticket, or one the agent was taken off, is nobody's current ticket any more.
         if (event.issue.statusCategory === "done") tickets.settle(event.issue.key);
         if (
@@ -166,8 +205,16 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
   return {
     tickets,
     events,
+    grader,
+    orders,
+    observeToolCall: (agentId, name, args) => {
+      tickets.observeToolCall(agentId, name, args);
+      grader.observeToolCall(agentId, name, args);
+      orders.observeToolCall(agentId, name, args);
+    },
     close: async () => {
       events.dispose();
+      orders.dispose();
       const open = server;
       if (open) await new Promise<void>((resolve) => open.close(() => resolve()));
     },

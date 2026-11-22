@@ -1746,7 +1746,7 @@ export async function createApplicationServices({
             // The same endpoint the agents' providers get: a signed-in server through the OAuth proxy.
             endpoint: (config) => Effect.suspend(() => service.mcpEndpoint(config)),
             onToolCall: ({ config, agentId, tool, arguments: args }) => {
-              if (agentId && motionServer([config])) motionEvents?.tickets.observeToolCall(agentId, tool, args);
+              if (agentId && motionServer([config])) motionEvents?.observeToolCall(agentId, tool, args);
             },
           }),
         )
@@ -2561,9 +2561,13 @@ export async function createApplicationServices({
         void Effect.runPromise(service.portfolio.cardDone({ key, title, agentIds: known, priority: priority ?? null }));
       return service.learning.taskFinished(known, { source: "task", ref: key, title });
     },
+    evidence: (agentId) => service.recentWork(agentId),
+    judge: (input) => Effect.runPromise(service.generateReviewText(input)),
+    observesToolCalls: chatMcp !== undefined,
   });
   const motion = motionEvents;
   service.setCurrentTickets((agentId) => motion.tickets.current(agentId));
+  service.setOrderCards(motion.orders);
   teardown.push(TEARDOWN_ORDER.motionEvents, "the Motion events", () => motion.close());
   const attachmentPreviews = new AttachmentPreviews(join(app.getPath("userData"), "attachment-previews"));
   const downloadTickets = new DownloadTickets({

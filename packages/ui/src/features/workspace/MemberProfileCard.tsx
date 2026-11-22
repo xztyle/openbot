@@ -139,6 +139,8 @@ export function MemberProfileCard(props: MemberProfileCardProps): JSX.Element {
 export function agentStatusText(status: AgentWorkStatus, text: Pick<TextValue, "t" | "format">): string {
   const { t, format } = text;
   if (status.state === "working") {
+    // Messages that wait for the agent are not a task: "2 messages waiting", not "Working on …".
+    if (status.queued !== undefined) return status.task;
     return status.channelName
       ? t("workspace.agent.workingIn", { task: status.task, channel: status.channelName })
       : t("workspace.agent.working", { task: status.task });
@@ -162,7 +164,10 @@ export function AgentStatusLine(props: { status: AgentWorkStatus; class?: string
   const text = useText();
   const line = () => agentStatusText(props.status, text);
   return (
-    <p class={cx("ws-agent-status", props.class)} data-state={props.status.state}>
+    <p
+      class={cx("ws-agent-status", props.class)}
+      data-state={props.status.state === "working" && props.status.queued !== undefined ? "queued" : props.status.state}
+    >
       <span class="ws-agent-status-dot" aria-hidden="true" />
       <span class="ws-truncate">{line()}</span>
     </p>

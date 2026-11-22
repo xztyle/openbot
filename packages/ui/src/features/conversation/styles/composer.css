@@ -1071,5 +1071,5 @@
 
 .composer[data-layout="workspace"][data-has-content] .voice-button:not(.voice-button-active):not(:disabled) {
   background: var(--openbot-success);
-  color: var(--openbot-text-on-status);
+  color: var(--openbot-text-on-success);
 }

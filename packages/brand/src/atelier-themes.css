@@ -50,6 +50,7 @@
 
 :root[data-atelier-theme="craft"][data-openbot-color-scheme="light"] {
   color-scheme: light;
+  --atelier-on-status: #ffffff;
   --atelier-canvas: #f6f1e7;
   --atelier-surface: #fffdf8;
   --atelier-surface2: #efe8da;
@@ -102,6 +103,7 @@
 
 :root[data-atelier-theme="modern"][data-openbot-color-scheme="light"] {
   color-scheme: light;
+  --atelier-on-status: #ffffff;
   --atelier-canvas: #fafaf9;
   --atelier-surface: #ffffff;
   --atelier-surface2: #f1f1ef;
@@ -154,6 +156,7 @@
 
 :root[data-atelier-theme="riso"][data-openbot-color-scheme="light"] {
   color-scheme: light;
+  --atelier-on-status: #ffffff;
   --atelier-canvas: #f3efe6;
   --atelier-surface: #fbf9f4;
   --atelier-surface2: #eae4d6;
@@ -213,11 +216,14 @@
   --openbot-image-outline: color-mix(in srgb, var(--atelier-text) 10%, transparent);
   --openbot-hover: color-mix(in srgb, var(--atelier-text) 6%, transparent);
   --openbot-dialog-ring: color-mix(in srgb, var(--atelier-text) 10%, transparent);
+  /* A 2 px ring in the accent: the keyboard's place must show on every surface. */
+  --openbot-focus-ring: 0 0 0 2px var(--atelier-accent);
 
   --openbot-text-primary: var(--atelier-text);
   --openbot-text-secondary: color-mix(in srgb, var(--atelier-text) 70%, var(--atelier-text2));
   --openbot-text-muted: var(--atelier-text2);
-  --openbot-text-dim: color-mix(in srgb, var(--atelier-text2) 72%, var(--atelier-canvas));
+  /* Dim text (times, metadata) still reads at 4.5:1 or more on canvas and surface in every theme. */
+  --openbot-text-dim: color-mix(in srgb, var(--atelier-text2) 94%, var(--atelier-canvas));
   --openbot-text-placeholder: var(--atelier-text2);
   --openbot-text-readable: var(--atelier-text2);
   --openbot-settings-text-muted: var(--atelier-text2);
@@ -257,6 +263,10 @@
   --openbot-warning-soft: color-mix(in srgb, var(--atelier-warn-fill) 16%, transparent);
   --openbot-approval-badge-soft: color-mix(in srgb, var(--atelier-warn-fill) 20%, transparent);
   --openbot-danger: var(--atelier-danger);
+  /* The text on a danger or success fill, such as an unread count: dark on the light fills of a
+     dark theme, white on the deep fills of a light theme, at 4.5:1 or more. */
+  --openbot-text-on-danger: var(--atelier-on-status, #07130c);
+  --openbot-text-on-success: var(--atelier-on-status, #07130c);
   --openbot-danger-hover: color-mix(in srgb, var(--atelier-danger) 84%, var(--atelier-canvas));
   --openbot-danger-text: var(--atelier-danger);
   --openbot-danger-soft: color-mix(in srgb, var(--atelier-danger) 14%, transparent);

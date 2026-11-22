@@ -139,6 +139,8 @@
   --openbot-text-placeholder: #bfbfbf;
   --openbot-text-on-accent: #ffffff;
   --openbot-text-on-status: #07130c;
+  --openbot-text-on-danger: var(--openbot-text-on-status);
+  --openbot-text-on-success: var(--openbot-text-on-status);
   /* Hue 210, sampled from the reference UIs rather than picked: their status dot is
      #007cf7 and their link and section headings are #42a0ff, both hue 210. The palette
      sat at hue 206, which reads cyan next to them, and accent-text was 71% light,
@@ -298,6 +300,8 @@
    * the text-* namespace so text-* means exactly the six steps above. */
   --openbot-glyph-xs: 7px;
   --openbot-glyph-sm: 8px;
+  /* A badge that names who wrote a message (AI): the smallest size that stays legible. */
+  --openbot-glyph-md: 9px;
 
   --openbot-weight-regular: 400;
   --openbot-weight-medium: 500;

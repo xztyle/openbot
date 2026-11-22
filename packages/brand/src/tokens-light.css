@@ -101,6 +101,7 @@
   --openbot-warning-soft: rgba(240, 138, 0, 0.14);
   --openbot-approval-badge-soft: rgba(240, 138, 0, 0.18);
   --openbot-danger: #e8222d;
+  --openbot-text-on-danger: #ffffff;
   --openbot-danger-hover: #f04a53;
   --openbot-danger-text: #c0141d;
   --openbot-danger-soft: rgba(232, 34, 45, 0.12);

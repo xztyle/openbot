@@ -846,13 +846,9 @@ function InsightCosts(props: SectionProps): JSX.Element {
       <dl class="ws-insight-stats">
         <div>
           <dt>{t("insight.costs.total", { days: props.days })}</dt>
-          <dd>{format.currencyUsd(costs().totalUsd)}</dd>
-        </div>
-        <div>
-          <dt>{t("insight.costs.week")}</dt>
           <dd>
-            {format.currencyUsd(costs().weekUsd)}
-            <Show when={change()}>
+            {format.currencyUsd(costs().totalUsd)}
+            <Show when={props.days === 7 ? change() : null}>
               {(value) => (
                 <span class="ws-muted">
                   {" "}
@@ -862,6 +858,23 @@ function InsightCosts(props: SectionProps): JSX.Element {
             </Show>
           </dd>
         </div>
+        {/* With 7 days chosen the first tile is the week already: one tile, with the change. */}
+        <Show when={props.days !== 7}>
+          <div>
+            <dt>{t("insight.costs.week")}</dt>
+            <dd>
+              {format.currencyUsd(costs().weekUsd)}
+              <Show when={change()}>
+                {(value) => (
+                  <span class="ws-muted">
+                    {" "}
+                    {format.percent(value(), { signDisplay: "exceptZero", maximumFractionDigits: 0 })}
+                  </span>
+                )}
+              </Show>
+            </dd>
+          </div>
+        </Show>
         <div>
           <dt>{t("insight.costs.side")}</dt>
           <dd>{format.currencyUsd(costs().sideUsd)}</dd>

@@ -129,13 +129,13 @@
 
 .ws-jump-latest.ui-button {
   position: absolute;
+  /* At the edge by the composer, not over the middle of the text the reader reads. */
+  right: var(--openbot-space-4);
   bottom: var(--openbot-space-3);
-  left: 50%;
   z-index: 2;
   gap: var(--openbot-space-1);
   border-radius: var(--openbot-radius-pill);
   box-shadow: var(--openbot-shadow-dialog);
-  transform: translateX(-50%);
 }
 
 .ws-message-content {

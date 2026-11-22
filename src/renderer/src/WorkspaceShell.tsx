@@ -287,7 +287,7 @@ function WorkspaceShellFrame(props: { account: () => CentralAuthUser }) {
             <Show when={!chatWindow}>
               <WorkspaceServerRail />
               <Show when={workspaceOn()} fallback={<WorkspaceSidebar peopleEnabled={activePeopleEnabled()} />}>
-                <div class="sidebar ws-frame-sidebar">
+                <div id="agent-sidebar" class="sidebar ws-frame-sidebar">
                   <WorkspaceSidebarPane
                     searchShortcut={globalSearchShortcutLabel(platform.appInfo()?.platform ?? currentDevicePlatform())}
                   />

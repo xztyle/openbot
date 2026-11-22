@@ -107,7 +107,13 @@ export interface AgentStepView {
 /** What an agent does now, for the fleet and the profile. */
 export type AgentWorkStatus =
   | { state: "idle" }
-  | { state: "working"; task: string; channelName?: string | undefined }
+  | {
+      state: "working";
+      task: string;
+      channelName?: string | undefined;
+      /** Nothing runs yet: this many messages wait for the agent. `task` then says so in words. */
+      queued?: number | undefined;
+    }
   | {
       state: "waiting";
       personName: string;

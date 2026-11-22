@@ -28,13 +28,13 @@
 /* "3 new replies" or "Jump to latest", as over the channel transcript. */
 .ws-thread-jump.ui-button {
   position: absolute;
+  /* At the edge by the composer, not over the middle of the text the reader reads. */
+  right: var(--openbot-space-4);
   bottom: var(--openbot-space-3);
-  left: 50%;
   z-index: 2;
   gap: var(--openbot-space-1);
   border-radius: var(--openbot-radius-pill);
   box-shadow: var(--openbot-shadow-dialog);
-  transform: translateX(-50%);
 }
 
 .ws-thread-bottom {
@@ -685,6 +685,12 @@
   animation: ws-pulse 1.6s var(--openbot-ease-in-out) infinite;
 }
 
+/* Messages wait for the agent and nothing runs yet: a steady dot, not the working pulse. */
+.ws-agent-status[data-state="queued"] .ws-agent-status-dot {
+  background: var(--openbot-accent);
+  opacity: 0.55;
+}
+
 .ws-agent-status[data-state="waiting"] .ws-agent-status-dot {
   background: var(--openbot-warning);
 }
@@ -745,8 +751,15 @@
   fill: currentColor;
 }
 
-/* A finger needs 44 px: the hit area grows around the small button. */
+/* A finger needs 44 px: Stop is the owner's brake, so on a touch screen it is a full-size button. */
 @media (hover: none), (pointer: coarse) {
+  .ws-typing-stop.ui-button {
+    min-width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
+    padding-inline: var(--openbot-space-3);
+    font-size: var(--openbot-text-base);
+  }
+
   .ws-typing-stop.ui-button::after {
     position: absolute;
     top: 50%;

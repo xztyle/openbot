@@ -466,7 +466,7 @@ button.ws-profile-trigger.ws-message-author:hover {
 
 .ws-composer-save.ui-button {
   background: var(--openbot-success);
-  color: var(--openbot-text-on-status);
+  color: var(--openbot-text-on-success);
 }
 
 .ws-message-deleted {
@@ -1409,7 +1409,7 @@ button.ws-profile-trigger.ws-message-author:hover {
 
 .ws-composer-send.ui-button[data-ready] {
   background: var(--openbot-success);
-  color: var(--openbot-text-on-status);
+  color: var(--openbot-text-on-success);
 }
 
 .ws-composer-send > svg {
@@ -1553,8 +1553,10 @@ button.ws-profile-trigger.ws-message-author:hover {
   top: calc(100% - var(--openbot-control-md) - var(--openbot-space-3));
   display: flex;
   height: var(--openbot-control-md);
-  justify-content: center;
+  /* At the edge by the composer, not over the middle of the text the reader reads. */
+  justify-content: flex-end;
   margin-bottom: calc(-1 * var(--openbot-control-md));
+  padding-inline-end: var(--openbot-space-4);
   pointer-events: none;
 }
 
@@ -1578,7 +1580,7 @@ button.ws-profile-trigger.ws-message-author:hover {
   }
 
   .ws-jump-latest-dock > .ws-jump-latest.ui-button {
-    height: 36px;
+    height: var(--openbot-touch-target);
     padding-inline: var(--openbot-space-3);
   }
 }

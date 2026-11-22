@@ -66,6 +66,11 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
     return unread?.id ?? null;
   });
   const followState = () => ws.marks.thread(props.channelId, props.rootId);
+  /** A reply that a link named. */
+  const focusId = () => {
+    const focus = ws.state.focus;
+    return focus?.channelId === props.channelId && focus.messageId !== props.rootId ? focus.messageId : undefined;
+  };
   const rows = createMemo(() => {
     const current = channel();
     const built = messageRows(entries(), {
@@ -79,14 +84,10 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
       everything: debugMode(),
     });
     // Debug mode shows every line; otherwise a run of progress lines folds to one row.
-    return debugMode() ? built : foldProgressRows(built);
+    // A linked reply stays a row of its own, so the panel can scroll to it.
+    return debugMode() ? built : foldProgressRows(built, { keepId: focusId() });
   });
   const root = () => rows().find((row) => row.entry.id === props.rootId && !row.pending);
-  /** A reply that a link named. */
-  const focusId = () => {
-    const focus = ws.state.focus;
-    return focus?.channelId === props.channelId && focus.messageId !== props.rootId ? focus.messageId : undefined;
-  };
   const replies = () => rows().filter((row) => row !== root());
   const replyCount = () => replies().filter((row) => !row.pending).length;
   const archived = () => channel()?.archived === true;

@@ -69,7 +69,9 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
 
   const rows = createMemo<readonly WorkspaceMessageRowModel[]>((previous) =>
     keepUnchangedRows(
-      (debugMode() ? (rows: WorkspaceMessageRowModel[]) => rows : foldProgressRows)(
+      ((rows: WorkspaceMessageRowModel[]) =>
+        // A linked or lit message stays a row of its own, so the list can scroll to it.
+        debugMode() ? rows : foldProgressRows(rows, { keepId: props.focusId ?? props.highlightedId }))(
         messageRows(props.entries, {
           firstUnreadId: props.firstUnreadId,
           working: props.working,

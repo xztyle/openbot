@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { foldProgressRows, messageRows } from "./workspace-model";
 
 // Failure mode: a run of an agent's short lines folds away a line the reader has to see (a question,
-// a chat card, a link, a mention).
+// a chat card, a link, a mention), or a link to a folded line finds nothing to scroll to.
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 22, 10, minute)).toISOString();
 const line = (
   id: string,
@@ -22,8 +22,9 @@ const line = (
   ...fields,
 });
 
-const fold = (entries: ChannelMessage[]) => foldProgressRows(messageRows(entries, { steps: false }));
-const ids = (entries: ChannelMessage[]) => fold(entries).map((row) => row.entry.id);
+const fold = (entries: ChannelMessage[], keepId?: string) =>
+  foldProgressRows(messageRows(entries, { steps: false }), { keepId });
+const ids = (entries: ChannelMessage[], keepId?: string) => fold(entries, keepId).map((row) => row.entry.id);
 const run = (middle: ChannelMessage) => [line("a", 0), line("b", 1), middle, line("d", 3), line("e", 4)];
 
 describe("progress fold", () => {
@@ -43,5 +44,11 @@ describe("progress fold", () => {
     ["a streaming line", line("c", 2, "Writing", { status: "streaming" })],
   ])("never folds %s", (_name, middle) => {
     expect(ids(run(middle))).toContain("c");
+  });
+
+  it("keeps a linked line as its own row", () => {
+    const entries = [line("a", 0), line("b", 1), line("c", 2), line("d", 3), line("e", 4), line("f", 5)];
+    expect(ids(entries, "c")).toContain("c");
+    expect(ids(entries)).not.toContain("c");
   });
 });

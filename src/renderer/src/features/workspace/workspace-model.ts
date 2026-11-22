@@ -572,7 +572,7 @@ const PROGRESS_LINE_RICH = /https?:\/\/|[@#]\[|\[card:/u;
  * line that names someone, a pinned or condensed line, one with a card or a link, or one that still
  * streams is never a step: the fold would hide what it asks for or shows.
  */
-function progressLine(row: WorkspaceMessageRowModel): boolean {
+function isProgressLine(row: WorkspaceMessageRowModel): boolean {
   const entry = row.entry;
   const text = entry.message.text.trim();
   return (
@@ -604,7 +604,14 @@ function progressLine(row: WorkspaceMessageRowModel): boolean {
  * folded in (`progress`), and the newest line shows as its own row, so a long run of "Checked rival
  * 1 … 37" reads as one row that opens, not a wall. The "new" divider and a day start end a run.
  */
-export function foldProgressRows(rows: readonly WorkspaceMessageRowModel[]): WorkspaceMessageRowModel[] {
+export function foldProgressRows(
+  rows: readonly WorkspaceMessageRowModel[],
+  options: {
+    /** A message that a link named, or the lit one: it stays a row of its own, so the list can show it. */
+    keepId?: string | undefined;
+  } = {},
+): WorkspaceMessageRowModel[] {
+  const progressLine = (row: WorkspaceMessageRowModel) => row.entry.id !== options.keepId && isProgressLine(row);
   const out: WorkspaceMessageRowModel[] = [];
   let index = 0;
   while (index < rows.length) {

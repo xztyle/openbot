@@ -8,3 +8,5 @@
   the file.
 - Browser client: an iPhone photo in HEIC, picked in the Files app or dropped from a Mac, now goes up
   as a JPEG with the same name in Safari. Before, the host refused it as a file type it does not take.
+- Browser client: an artifact's picture shows again after many other artifacts were shown. Before,
+  once more than 120 pictures had loaded, the oldest stayed blank until the page was loaded again.

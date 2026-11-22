@@ -66,6 +66,8 @@ export function createWebArtifactThumbnails(
       for (const [oldKey, old] of entries) {
         if (entries.size <= CACHE_LIMIT) break;
         entries.delete(oldKey);
+        // A card that shows it again reads it again.
+        started.delete(oldKey);
         urls.revoke(old);
       }
       setShown(new Map(entries));
@@ -87,7 +89,15 @@ export function createWebArtifactThumbnails(
       }
       const key = `${host}:${record.id}:${record.thumbnailVersion}`;
       const url = shown().get(key);
-      if (url) return url;
+      if (url) {
+        // Shown now, so it is the last to go. The order is not reactive: nothing renders from it.
+        const entry = entries.get(key);
+        if (entry) {
+          entries.delete(key);
+          entries.set(key, entry);
+        }
+        return url;
+      }
       // The write comes after the download, never while a list renders.
       if (!started.has(key)) {
         started.add(key);

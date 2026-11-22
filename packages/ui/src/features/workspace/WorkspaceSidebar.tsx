@@ -394,6 +394,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
     <WorkspaceContextMenu
       items={() => props.workspaceMenu ?? []}
       label={t("workspace.sidebar.workspaceMenu", { name: props.workspaceName })}
+      longPress={false}
     >
       <nav
         ref={nav}

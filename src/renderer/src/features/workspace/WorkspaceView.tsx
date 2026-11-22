@@ -55,6 +55,7 @@ export function WorkspaceMain() {
       <WorkspaceContextMenu
         items={workspaceMenu}
         label={t("workspace.sidebar.workspaceMenu", { name: ws.env.serverName() })}
+        longPress={false}
       >
         <div class="ws-main-frame">
           <WorkspaceTopBar />
@@ -163,6 +164,7 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
       <WorkspaceContextMenu
         items={workspaceMenu}
         label={t("workspace.sidebar.workspaceMenu", { name: ws.env.serverName() })}
+        longPress={false}
       >
         <section class="ws-agent-dm">
           <WorkspaceTopBar />

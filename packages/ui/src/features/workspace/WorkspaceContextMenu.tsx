@@ -21,6 +21,12 @@ export interface WorkspaceContextMenuProps {
   class?: string | undefined;
   /** Above the items in the phone sheet, such as a message's quick reactions. */
   sheetHeader?: ((controls: WorkspaceSheetControls) => JSX.Element) | undefined;
+  /**
+   * False for the menu of a whole area, such as the workspace's menu around the conversation: on a
+   * touch screen a long press there lands on the message box, a button or the space between rows,
+   * so it opens nothing. The area's own menu button has the same items.
+   */
+  longPress?: boolean | undefined;
 }
 
 /**
@@ -60,7 +66,7 @@ export function WorkspaceContextMenu(props: WorkspaceContextMenuProps): JSX.Elem
   const touch = usesTouchLayout();
   const [sheet, setSheet] = createSignal<{ open: boolean; itemsHidden: boolean }>({ open: false, itemsHidden: false });
   const press = createLongPress({
-    enabled: () => touch && props.items().length > 0,
+    enabled: () => touch && props.longPress !== false && props.items().length > 0,
     onLongPress: () => setSheet({ open: true, itemsHidden: false }),
   });
   const controls: WorkspaceSheetControls = {

@@ -11,6 +11,7 @@ import { AGENT_HIDDEN_CODECS } from "./agent-hidden-v1";
 import { AGENT_HOST_SETTINGS_CODECS } from "./agent-host-settings-v1";
 import { AGENT_IMPORT_CODECS } from "./agent-import-v1";
 import { AGENT_INSTALL_CODECS } from "./agent-install-v1";
+import { AGENT_LEARNING_CODECS } from "./agent-learning-v1";
 import { AGENT_MEMORIES_CODECS } from "./agent-memories-v1";
 import { AGENT_MEMORY_LIMIT_CODECS } from "./agent-memory-limit-v1";
 import { AGENT_PUBLISH_CODECS } from "./agent-publish-v1";
@@ -95,6 +96,7 @@ export type { OptionalRouteCodec } from "./admin-wire";
 
 const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...AGENT_EFFICIENCY_CODECS,
+  ...AGENT_LEARNING_CODECS,
   ...EVENT_CHECKS_CODECS,
   ...EVENT_CHECK_API_CODECS,
   ...EVENT_CHECK_TEMPLATES_CODECS,

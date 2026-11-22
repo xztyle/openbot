@@ -7,3 +7,8 @@
 - A Claude agent that was idle for more than an hour, with a chat above 120,000 tokens, starts a
   new session from its chat history before it reads the message that wakes it. Its prompt cache had
   expired, so the old session would have been written to the cache again in full.
+
+### Fixed
+
+- The desktop app sets the Dock or taskbar badge only when its count changes. Before, it set it
+  about 100 times a second while agents worked, and the trace log filled up every few minutes.

@@ -301,11 +301,11 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     },
   );
   // The Dock or taskbar icon counts what the web tab title counts. Main takes it only from the main
-  // window, and a closed workspace clears it.
-  createEffect(
-    () => workspaceAttention(controller).count,
-    (count) => void window.openbot.notifications.setBadgeCount(count).catch(() => undefined),
-  );
+  // window, and a closed workspace clears it. A memo, because an effect runs again each time its
+  // source runs, also with the same value: the unread state changes many times a second while agents
+  // stream, and every run was an IPC call and a trace line.
+  const badgeCount = createMemo(() => workspaceAttention(controller).count);
+  createEffect(badgeCount, (count) => void window.openbot.notifications.setBadgeCount(count).catch(() => undefined));
   onCleanup(() => void window.openbot.notifications.setBadgeCount(0).catch(() => undefined));
   return <WorkspaceProvider controller={controller}>{props.children}</WorkspaceProvider>;
 }

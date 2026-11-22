@@ -358,6 +358,11 @@
   font-size: var(--openbot-text-sm);
 }
 
+/* An unread row is tinted, and its time is part of what is new: the dim ink would fall under 4.5:1. */
+.ws-row[data-unread] .ws-row-title-end {
+  color: var(--openbot-text-secondary);
+}
+
 .ws-row-trailing {
   display: flex;
   flex: 0 0 auto;

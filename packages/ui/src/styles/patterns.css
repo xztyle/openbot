@@ -381,3 +381,67 @@
     min-height: var(--openbot-touch-target);
   }
 }
+
+/*
+ * Touch targets on a phone: every control a finger hits is at least --openbot-touch-target on each
+ * side (docs/ux/standard.md § 7d). Icon buttons of headers, composers and attachments grow to it.
+ * Links inside text (an agent's name, "Show more", "Show original") keep the line's height and get
+ * an invisible hit area of that height instead, so the text does not move.
+ */
+@media (max-width: 720px) and (pointer: coarse), (max-height: 520px) and (pointer: coarse) {
+  :is(
+      .ws-channel-header-actions,
+      .ws-composer-tools,
+      .ws-composer-send-group,
+      .composer-workspace-tools,
+      .composer-primary-actions,
+      .message-attachment
+    )
+    > :is(.ui-button, .composer-button),
+  .composer-toolbar > .composer-button,
+  .saved-replies > .ui-icon-button.ui-button {
+    min-width: var(--openbot-touch-target);
+    min-height: var(--openbot-touch-target);
+  }
+
+  .saved-reply-chip.ui-button,
+  .provider-model-trigger {
+    min-height: var(--openbot-touch-target);
+  }
+
+  .ws-channel-intro .ui-button {
+    min-height: var(--openbot-touch-target);
+  }
+
+  :is(
+    .message-copy .reference-chip,
+    .ws-fold-toggle.ui-button,
+    .ws-message-condensed-toggle.ui-button,
+    .awaiting-replies-text .ui-button,
+    .chat-action-target,
+    .chat-action-marker-summary > .ui-button,
+    .ws-reaction.ui-button,
+    .ws-reaction-add.ui-button,
+    .ws-fleet-money-link.ui-button,
+    .message-copy .message-link
+  ) {
+    position: relative;
+  }
+
+  :is(
+    .message-copy .reference-chip,
+    .ws-fold-toggle.ui-button,
+    .ws-message-condensed-toggle.ui-button,
+    .awaiting-replies-text .ui-button,
+    .chat-action-target,
+    .chat-action-marker-summary > .ui-button,
+    .ws-reaction.ui-button,
+    .ws-reaction-add.ui-button,
+    .ws-fleet-money-link.ui-button,
+    .message-copy .message-link
+  )::after {
+    position: absolute;
+    inset: calc((100% - var(--openbot-touch-target)) / 2) 0;
+    content: "";
+  }
+}

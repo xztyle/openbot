@@ -42,6 +42,25 @@
   --atelier-symbol-blend: normal;
 }
 
+/* A phone's tab views (Today, Agents, Inbox) sit in the sidebar frame but are views: they read the
+   canvas ink, so their cards on the surface keep their contrast (Riso Press light put light text on
+   them). Chat, the home list, keeps the sidebar's ink. */
+:root[data-atelier-theme] .ws-phone-tab-view {
+  --openbot-text-primary: var(--atelier-text);
+  --openbot-text-secondary: color-mix(in srgb, var(--atelier-text) 70%, var(--atelier-text2));
+  --openbot-text-muted: var(--atelier-text2);
+  --openbot-text-dim: color-mix(in srgb, var(--atelier-text2) 94%, var(--atelier-canvas));
+  --openbot-text-placeholder: var(--atelier-text2);
+  --openbot-hover: color-mix(in srgb, var(--atelier-text) 6%, transparent);
+  --openbot-border: var(--atelier-border);
+  --openbot-border-strong: color-mix(in srgb, var(--atelier-border) 86%, var(--atelier-text));
+  --openbot-bg-control: var(--atelier-surface);
+  --openbot-bg-control-hover: var(--atelier-surface2);
+  --atelier-symbol-background: var(--atelier-canvas);
+  background-color: var(--atelier-canvas);
+  color: var(--openbot-text-primary);
+}
+
 /* The sidebar is a surface of its own in each theme (paper, gallery stone, riso navy). */
 :root[data-atelier-theme] :is(.ws-frame-sidebar, .ws-sidebar) {
   background-color: var(--atelier-sidebar);
@@ -92,4 +111,9 @@
 /* On the navy sidebar of Riso Press light, the accent text marks (the AI badge, initials) go lighter. */
 :root[data-atelier-theme="riso"][data-openbot-color-scheme="light"] :is(.ws-sidebar, .ws-frame-sidebar) {
   --openbot-accent-text: color-mix(in srgb, var(--atelier-accent) 45%, var(--atelier-sidebar-text));
+}
+
+/* The phone's tab views read the canvas ink (above), so they keep the canvas accent text too. */
+:root[data-atelier-theme="riso"][data-openbot-color-scheme="light"] .ws-phone-tab-view {
+  --openbot-accent-text: var(--atelier-accent-text);
 }

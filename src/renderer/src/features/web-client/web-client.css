@@ -128,13 +128,13 @@ body {
    * app. Their icons keep their size.
    */
   .web-app :is(.composer-toolbar, .ws-composer-footer) :is(.ui-button, .composer-button) {
-    min-width: 40px;
-    min-height: 40px;
+    min-width: var(--openbot-touch-target);
+    min-height: var(--openbot-touch-target);
   }
 
   .web-app .saved-replies .ui-button {
-    min-width: 36px;
-    min-height: 36px;
+    min-width: var(--openbot-touch-target);
+    min-height: var(--openbot-touch-target);
   }
 
   /*

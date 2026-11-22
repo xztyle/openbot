@@ -147,7 +147,7 @@
   }
 
   .ws-channel-header-actions > .ui-icon-button {
-    width: 40px;
+    width: var(--openbot-touch-target);
     height: var(--openbot-touch-target);
   }
 }

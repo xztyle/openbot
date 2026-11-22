@@ -488,6 +488,15 @@
   gap: var(--openbot-space-2);
 }
 
+/* The guide's surface is tinted on a phone's home, where the dim text falls under 4.5:1. */
+.ws-today-guide-head > .ws-today-card-meta {
+  color: var(--openbot-text-secondary);
+}
+
+.ws-today-guide-head > .ui-button {
+  color: var(--openbot-text-primary);
+}
+
 .ws-today-guide-title {
   margin: 0;
   color: var(--openbot-text-primary);

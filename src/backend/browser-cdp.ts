@@ -630,6 +630,7 @@ export class BrowserCdpEngine {
     );
   });
   #retainDebugger = false;
+  #idleDetach: NodeJS.Immediate | undefined;
   #ownsDebugger = false;
   #closing = false;
   #disposed = false;
@@ -2077,6 +2078,8 @@ export class BrowserCdpEngine {
     this.#disposed = true;
     yield* Scope.close(this.#scope, Exit.void);
     this.#retainDebugger = false;
+    clearImmediate(this.#idleDetach);
+    this.#idleDetach = undefined;
     this.#detachOwnedDebugger();
     this.#targetSessions.clear();
     this.#targets.clear();
@@ -2776,11 +2779,28 @@ export class BrowserCdpEngine {
       Effect.ensuring(
         Effect.sync(() => {
           this.#activeLeases -= 1;
-          if (this.#activeLeases === 0 && !this.#retainDebugger) this.#detachOwnedDebugger();
+          this.#releaseIdleDebugger();
         }),
       ),
     );
   });
+
+  /**
+   * A lease can end inside a CDP message: a command fails while Chromium detaches the frame sessions of
+   * a committing navigation. A detach there frees the sessions that Chromium still uses, and the main
+   * process crashes. Detach on a later task, if the debugger is still idle then.
+   */
+  #releaseIdleDebugger(): void {
+    if (!this.#debuggerIdle() || this.#idleDetach) return;
+    this.#idleDetach = setImmediate(() => {
+      this.#idleDetach = undefined;
+      if (this.#debuggerIdle()) this.#detachOwnedDebugger();
+    });
+  }
+
+  #debuggerIdle(): boolean {
+    return this.#activeLeases === 0 && !this.#retainDebugger;
+  }
 
   #detachOwnedDebugger(): void {
     if (!this.#ownsDebugger) return;

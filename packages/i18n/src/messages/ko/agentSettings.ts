@@ -144,6 +144,7 @@ export const messages = {
     "밖에 있는 파일을 편집할 때는 먼저 물어봐요. 명령은 밖에 쓸 수 없어요.",
   "agentSettings.runtime.workspaceUnlimited":
     "컴퓨터 제어와 Atelier 브라우저는 제한되지 않아요. 아래에서 컴퓨터 제어를 끌 수 있어요.",
+  "agentSettings.runtime.workspaceUnlimitedNoSwitch": "컴퓨터 제어와 Atelier 브라우저는 제한되지 않아요.",
   "agentSettings.computerUse.title": "컴퓨터 제어",
   "agentSettings.computerUse.description": "이 에이전트가 이 컴퓨터의 앱을 제어하도록 허용",
   "agentSettings.automation.title": "로컬 스크립트",

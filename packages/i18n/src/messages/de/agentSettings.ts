@@ -159,6 +159,8 @@ export const messages = {
     "Eine Dateibearbeitung außerhalb fragt dich zuerst. Ein Befehl kann nicht außerhalb schreiben.",
   "agentSettings.runtime.workspaceUnlimited":
     "Computersteuerung und der Atelier-Browser sind nicht beschränkt. Du kannst Computersteuerung unten deaktivieren.",
+  "agentSettings.runtime.workspaceUnlimitedNoSwitch":
+    "Computersteuerung und der Atelier-Browser sind nicht beschränkt.",
   "agentSettings.computerUse.title": "Computersteuerung",
   "agentSettings.computerUse.description": "Diesem Agenten erlauben, Apps auf diesem Computer zu steuern",
   "agentSettings.automation.title": "Lokale Skripte",

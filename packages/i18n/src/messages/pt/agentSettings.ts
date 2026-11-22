@@ -147,6 +147,7 @@ export const messages = {
     "A edição de um arquivo fora desses locais pede sua aprovação. Um comando não pode gravar fora desses locais.",
   "agentSettings.runtime.workspaceUnlimited":
     "O Uso do computador e o navegador do Atelier não são limitados; você pode desativar o Uso do computador abaixo.",
+  "agentSettings.runtime.workspaceUnlimitedNoSwitch": "O Uso do computador e o navegador do Atelier não são limitados.",
   "agentSettings.computerUse.title": "Uso do computador",
   "agentSettings.computerUse.description": "Permitir que este agente controle aplicativos neste computador",
   "agentSettings.automation.title": "Scripts locais",

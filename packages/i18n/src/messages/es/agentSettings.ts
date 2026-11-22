@@ -366,6 +366,7 @@ export const messages = {
     "Una edición de archivo fuera te pedirá permiso primero. Un comando no puede escribir fuera.",
   "agentSettings.runtime.workspaceUnlimited":
     "El uso del equipo y el navegador de Atelier no están limitados; puedes desactivar el uso del equipo a continuación.",
+  "agentSettings.runtime.workspaceUnlimitedNoSwitch": "El uso del equipo y el navegador de Atelier no están limitados.",
   "agentSettings.limit.count": "{length} de {max} caracteres",
   "agentSettings.limit.reached": "Se alcanzó el límite de {max} caracteres. El texto de más se corta.",
   "agentSettings.limit.cut": "El texto pegado se cortó en {max} caracteres.",

@@ -180,6 +180,7 @@ export const messages = {
     "Изменение файла за пределами рабочего пространства сначала требует вашего подтверждения. Команда не может записывать за его пределами.",
   "agentSettings.runtime.workspaceUnlimited":
     "Управление компьютером и браузер Atelier не ограничены; управление компьютером можно отключить ниже.",
+  "agentSettings.runtime.workspaceUnlimitedNoSwitch": "Управление компьютером и браузер Atelier не ограничены.",
   "agentSettings.computerUse.title": "Управление компьютером",
   "agentSettings.computerUse.description": "Разрешить этому агенту управлять приложениями на этом компьютере",
   "agentSettings.automation.title": "Локальные скрипты",

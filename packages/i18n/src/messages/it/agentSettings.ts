@@ -152,6 +152,8 @@ export const messages = {
     "Una modifica a un file all'esterno te la chiede prima. Un comando non può scrivere all'esterno.",
   "agentSettings.runtime.workspaceUnlimited":
     "Il controllo del computer e il browser di Atelier non sono limitati; puoi disattivare il controllo del computer qui sotto.",
+  "agentSettings.runtime.workspaceUnlimitedNoSwitch":
+    "Il controllo del computer e il browser di Atelier non sono limitati.",
   "agentSettings.computerUse.title": "Controllo del computer",
   "agentSettings.computerUse.description": "Permetti a questo agente di controllare le app su questo computer",
   "agentSettings.automation.title": "Script locali",

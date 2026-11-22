@@ -1,6 +1,8 @@
 // Checks the ways into an agent's settings in the web client, on an iPhone and on a desktop: the
 // gear of a Fleet card opens the settings of that agent, also the agent whose chat was open last.
 // The New agent dialog of an Atelier theme offers faces and no color, which an Atelier face ignores.
+// The Permissions page of an agent on a host offers no Computer Use switch, and its note does not
+// point to one.
 // It serves the web client on a mock host (`src/renderer/stories/web-client-harness.tsx`) at every
 // address under `/app`, as the site does, and drives it in Chromium. No account service, host or
 // provider is needed.
@@ -180,6 +182,29 @@ try {
     assert.equal(await dialog.getByRole("group", { name: english("agent.setup.color") }).count(), 0);
   });
   await page.close();
+
+  // 3. Permissions of a Workspace only agent on the host: the note names no switch that is not there.
+  const permissions = await newPage(phone);
+  await step(permissions, "phone", "Permissions does not point to a Computer Use switch it lacks", async () => {
+    await openFleet(permissions, "phone");
+    const gear = fleetSettings(permissions, "Sales Outbound");
+    await gear.waitFor({ timeout: UI_WAIT_MS });
+    await gear.tap();
+    await settingsShowFor(permissions, "Sales Outbound");
+    await permissions
+      .getByRole("button", { name: new RegExp(`^${english("agentSettings.permissions.title")}`, "u") })
+      .tap();
+    const note = permissions.getByText(english("agentSettings.runtime.workspaceNote"), { exact: false });
+    await note.waitFor({ timeout: UI_WAIT_MS });
+    const text = (await note.textContent()) ?? "";
+    assert.ok(text.includes(english("agentSettings.runtime.workspaceUnlimitedNoSwitch")), text);
+    assert.ok(!text.includes(english("agentSettings.runtime.workspaceUnlimited")), text);
+    assert.equal(
+      await permissions.getByRole("switch", { name: english("agentSettings.computerUse.title") }).count(),
+      0,
+    );
+  });
+  await permissions.close();
 
   report.passed = report.steps.every((item) => item.passed) && report.pageErrors.length === 0;
 } finally {

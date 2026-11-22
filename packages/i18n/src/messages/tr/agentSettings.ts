@@ -146,6 +146,8 @@ export const messages = {
     "Dışarıdaki bir dosya düzenlemesi önce size sorar. Bir komut dışarıya yazamaz.",
   "agentSettings.runtime.workspaceUnlimited":
     "Bilgisayar Kullanımı ve Atelier tarayıcısı sınırlandırılmamıştır; Bilgisayar Kullanımını aşağıdan kapatabilirsiniz.",
+  "agentSettings.runtime.workspaceUnlimitedNoSwitch":
+    "Bilgisayar Kullanımı ve Atelier tarayıcısı sınırlandırılmamıştır.",
   "agentSettings.computerUse.title": "Bilgisayar Kullanımı",
   "agentSettings.computerUse.description": "Bu ajanın bu bilgisayardaki uygulamaları kontrol etmesine izin verin",
   "agentSettings.automation.title": "Yerel betikler",

@@ -155,6 +155,7 @@ export const messages = {
     "Une modification de fichier à l’extérieur vous demande d’abord. Une commande ne peut pas écrire à l’extérieur.",
   "agentSettings.runtime.workspaceUnlimited":
     "Computer Use et le navigateur Atelier ne sont pas limités ; vous pouvez désactiver Computer Use ci-dessous.",
+  "agentSettings.runtime.workspaceUnlimitedNoSwitch": "Computer Use et le navigateur Atelier ne sont pas limités.",
   "agentSettings.computerUse.title": "Computer Use",
   "agentSettings.computerUse.description": "Autoriser cet agent à contrôler les apps de cet ordinateur",
   "agentSettings.automation.title": "Scripts locaux",

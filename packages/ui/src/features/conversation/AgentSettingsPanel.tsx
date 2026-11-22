@@ -1536,7 +1536,10 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                 >
                   {t("agentSettings.runtime.workspaceNote")}{" "}
                   {agentForeignProvider() === undefined ? workspaceEnforcementNote(draft.runtime.provider) : null}{" "}
-                  {t("agentSettings.runtime.workspaceUnlimited")}
+                  {/* The Computer Use switch is on this page only where the agent's computer is this one. */}
+                  {props.computerUseEditable
+                    ? t("agentSettings.runtime.workspaceUnlimited")
+                    : t("agentSettings.runtime.workspaceUnlimitedNoSwitch")}
                 </Show>
               </Text>
               <Show when={props.computerUseEditable}>

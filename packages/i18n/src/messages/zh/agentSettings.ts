@@ -145,6 +145,7 @@ export const messages = {
   "agentSettings.runtime.workspaceEnforcedClaude": "在工作区外编辑文件会先询问你；命令无法在外部写入。",
   "agentSettings.runtime.workspaceUnlimited":
     "Computer Use 和 Atelier 浏览器不受该限制；你可以在下方关闭 Computer Use。",
+  "agentSettings.runtime.workspaceUnlimitedNoSwitch": "Computer Use 和 Atelier 浏览器不受该限制。",
   "agentSettings.computerUse.title": "Computer Use",
   "agentSettings.computerUse.description": "允许该助手控制这台电脑上的应用",
   "agentSettings.automation.title": "本地脚本",

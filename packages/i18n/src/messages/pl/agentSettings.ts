@@ -171,6 +171,8 @@ export const messages = {
     "Edycja pliku poza tymi folderami najpierw zapyta cię o zgodę. Polecenie nie może zapisać poza nimi.",
   "agentSettings.runtime.workspaceUnlimited":
     "Sterowanie komputerem i przeglądarka Atelier nie są ograniczone; Sterowanie komputerem możesz wyłączyć poniżej.",
+  "agentSettings.runtime.workspaceUnlimitedNoSwitch":
+    "Sterowanie komputerem i przeglądarka Atelier nie są ograniczone.",
   "agentSettings.computerUse.title": "Sterowanie komputerem",
   "agentSettings.computerUse.description": "Pozwól temu agentowi sterować aplikacjami na tym komputerze",
   "agentSettings.automation.title": "Lokalne skrypty",

@@ -545,6 +545,13 @@ button.ws-profile-trigger.ws-message-author:hover {
     -webkit-user-select: none;
     user-select: none;
   }
+
+  /* A field in a message, as a form an agent sends, still selects and pastes: the long press skips it. */
+  .ws-message :is(input, textarea, [contenteditable=""], [contenteditable="true"]) {
+    -webkit-touch-callout: default;
+    -webkit-user-select: text;
+    user-select: text;
+  }
 }
 
 .ws-message-action-more.ui-button {

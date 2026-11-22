@@ -2,6 +2,7 @@
 // `Input.dispatchTouchEvent`), as a finger sends them:
 // 1. a long press on a message opens its actions; a long press on the message box's buttons, or on the
 //    space around the messages, opens nothing (the workspace's menu is a right-click on a computer);
+//    a text field inside a message, as an agent's form, still selects text;
 // 2. a sheet follows a finger that drags it down: a short drag springs back, a long one closes it;
 // 3. in the image viewer, a pinch that starts while the first finger drifts down leaves the image in
 //    place and the backdrop at full strength.
@@ -197,6 +198,30 @@ try {
     });
     await closeDialogs(app);
   }
+
+  await step(app, "a field in a message keeps its text selection", async () => {
+    // A message holds no text selection on a touch screen, but a field in it, as an agent's form, does.
+    const selection = await app.evaluate(() => {
+      const body = document.querySelector(".ws-message .ws-message-body");
+      if (!body) return null;
+      const field = document.createElement("input");
+      const editor = document.createElement("div");
+      editor.contentEditable = "true";
+      body.append(field, editor);
+      const values = [
+        getComputedStyle(body).userSelect,
+        getComputedStyle(field).userSelect,
+        getComputedStyle(editor).userSelect,
+      ];
+      field.remove();
+      editor.remove();
+      return values;
+    });
+    assert.ok(selection, "No message.");
+    assert.equal(selection[0], "none", "The message text is selectable on a touch screen.");
+    assert.notEqual(selection[1], "none", "The field has no text selection.");
+    assert.notEqual(selection[2], "none", "The editable text has no text selection.");
+  });
 
   // 2. A sheet follows the finger.
   await step(app, "a short drag down springs the sheet back", async () => {

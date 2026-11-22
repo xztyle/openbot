@@ -7,3 +7,5 @@
   it down, and closes when you drag it far or flick it. Before, the handle did nothing.
 - Image viewer: a pinch whose first finger drifted down before the second one landed no longer
   leaves the image lower and the backdrop faded.
+- Phone and tablet: a text field in a message, such as a form an agent sends, selects text and offers
+  Paste again. The message's touch rule, which turns off selection for the long press, reached it.

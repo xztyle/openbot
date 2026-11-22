@@ -87,6 +87,8 @@ declare global {
           workspaceActivity?(input: { limit: number }): Promise<{ threads: { unreadCount: number }[] }>;
           workspaceDmAgents?(...args: unknown[]): Promise<{ agentIds: string[]; recentAgentIds?: string[] }>;
           listConversationReads(...args: unknown[]): Promise<Record<string, ReadState>>;
+          markConversationRead(input: { agentId: string; throughMessageId: string | null }): Promise<unknown>;
+          readConversationPage(input: { agentId: string }): Promise<{ messages: unknown[] }>;
           workspaceSidebar(): Promise<{ sidebar: SidebarPrefs | null }>;
           setWorkspaceSidebar(prefs: SidebarPrefs): Promise<unknown>;
         };
@@ -326,6 +328,53 @@ async function desktop(browser: Browser): Promise<void> {
     );
   });
   await nothing.context().close();
+
+  const space = await browser.newContext(VIEWPORTS.desktop).then((context) => context.newPage());
+  space.on("pageerror", (error) => report.pageErrors.push(`desktop: ${error.message}`));
+  // Sales has two unread messages until its chat is marked read; its chat has Chief's newest message.
+  await space.addInitScript(() => {
+    let host: Window["harnessHost"];
+    Object.defineProperty(window, "harnessHost", {
+      configurable: true,
+      get: () => host,
+      set(value: NonNullable<Window["harnessHost"]>) {
+        host = value;
+        const agent = value.api.agent;
+        let unread = 2;
+        const reads = agent.listConversationReads.bind(agent);
+        agent.listConversationReads = async (...args: unknown[]) => ({
+          ...(await reads(...args)),
+          ...(unread ? { sales: { unreadCount: unread, firstUnreadMessageId: null, throughMessageId: null } } : {}),
+        });
+        const mark = agent.markConversationRead.bind(agent);
+        agent.markConversationRead = async (input) => {
+          if (input.agentId === "sales") unread = 0;
+          return mark(input);
+        };
+        const page = agent.readConversationPage.bind(agent);
+        agent.readConversationPage = async (input) => {
+          const result = await page(input);
+          if (input.agentId !== "sales" || result.messages.length) return result;
+          return { ...result, messages: (await page({ ...input, agentId: "chief" })).messages.slice(-1) };
+        };
+      },
+    });
+  });
+  await space.goto(`${origin}/app`, { waitUntil: "commit" });
+  await space.waitForFunction(() => window.harnessHost && document.querySelector(".ws-sidebar-row"), null, {
+    timeout: UI_WAIT_MS,
+  });
+  await step(space, "desktop", "Shift+Escape reads the agents' DMs of the space too", async () => {
+    await until(space, (value) => hasRow(value, /^Sales Outbound, .*2 mentions/u), "Sales' unread DM is missing");
+    await space.keyboard.press("Shift+Escape");
+    await space.getByRole("alertdialog").getByRole("button").last().click();
+    await until(
+      space,
+      (value) => !hasRow(value, /^(Sales Outbound|Ana|Channel general|General),/u) && !value.title.startsWith("("),
+      "a DM stays unread after the space was marked read",
+    );
+  });
+  await space.context().close();
 
   const hidden = await open(browser, "desktop", true);
   await step(hidden, "desktop", "an agent not written to lately shows its unread DM", async () => {

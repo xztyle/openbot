@@ -1,5 +1,5 @@
 import type { AppTextKey, AppTranslate } from "@openbot/i18n";
-import { Button, Check, Copy } from "@openbot/ui";
+import { Button, Check, Copy, toast } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
 import { type ShjLanguage, type ShjToken, tokenize } from "@speed-highlight/core";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, untrack } from "solid-js";
@@ -186,6 +186,7 @@ export function CodeBlock(props: {
       copiedTimer = setTimeout(() => setCopied(false), 1_500);
     } catch {
       setCopied(false);
+      toast.error(t("app.clipboard.copyFailed"));
     }
   };
 

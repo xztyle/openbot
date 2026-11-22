@@ -32,3 +32,5 @@
 - Browse channels: when joining a channel fails, the list stays open with the toast, so you can try
   again. Before, it closed as if you had joined.
 - Providers: Copy diagnostics now says "Copied", or that the copy failed. Before, it gave no sign.
+- Chat: Copy on a code block or a table now says when the copy fails. Before, the button only
+  stayed as it was.

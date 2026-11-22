@@ -1,4 +1,4 @@
-import { Button, Check, Copy } from "@openbot/ui";
+import { Button, Check, Copy, toast } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
 import { createSignal, For, onCleanup } from "solid-js";
 import { useText } from "../../text";
@@ -56,6 +56,7 @@ export function DataTable(props: { table: DataTableBlock; renderCell?: (text: st
       copiedTimer = setTimeout(() => setCopied(null), 1_500);
     } catch {
       setCopied(null);
+      toast.error(t("app.clipboard.copyFailed"));
     }
   };
 

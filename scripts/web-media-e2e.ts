@@ -170,6 +170,26 @@ async function checkDrop(browser: Browser) {
   await page.context().close();
 }
 
+/** With a thread open, a drop goes to the box of the pane it lands on. */
+async function checkDropWithThread(browser: Browser) {
+  const page = await newPage(browser, false, `${CHANNEL_PATH}/t/general-root`);
+  const panel = page.locator(".ws-layout-panel .ws-composer-frame").last();
+  await panel.waitFor({ timeout: UI_WAIT_MS });
+  await dropFile(page, ".ws-layout-panel", "en el hilo.txt");
+  await step("desktop", "a file dropped on an open thread goes to the thread's box", async () => {
+    await panel.locator(".ws-composer-file").first().waitFor({ timeout: 5_000 });
+    assert.match(await panel.locator(".ws-composer-file").first().innerText(), /en el hilo\.txt/u);
+    assert.equal(await chips(page).count(), 0, "The channel's box took the thread's file.");
+  });
+  await dropFile(page, ".ws-layout-main", "en el canal.txt");
+  await step("desktop", "with a thread open, a file dropped on the channel goes to the channel's box", async () => {
+    await chips(page).first().waitFor({ timeout: 5_000 });
+    assert.match(await chips(page).first().innerText(), /en el canal\.txt/u);
+    assert.equal(await panel.locator(".ws-composer-file").count(), 1);
+  });
+  await page.context().close();
+}
+
 /** The bytes of a 2 by 2 PNG. */
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP438AARAwQCgAt7gX9iz9uhAAAAABJRU5ErkJggg==",
@@ -267,6 +287,7 @@ try {
   });
   await checkLimit(browser);
   await checkDrop(browser);
+  await checkDropWithThread(browser);
   await checkIphonePhoto(browser);
   await checkPhoneViewer(browser);
   await checkArtifactDocument(browser);

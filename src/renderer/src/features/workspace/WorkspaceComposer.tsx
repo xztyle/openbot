@@ -26,6 +26,9 @@ const BROADCAST_CONFIRM_AUDIENCE = 5;
 /** The composer the reader used last. A file the desktop imports from a drop or a paste goes there. */
 let lastComposer: symbol | null = null;
 
+/** Whether the page took a dropped file before any message box heard the drop. */
+const dropsTakenInPage = new WeakMap<Event, boolean>();
+
 export interface WorkspaceComposerProps {
   channelId: string;
   /** Set in a thread: the reply goes to this root. */
@@ -248,7 +251,15 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
       if (event.dataTransfer && accepts(event)) event.dataTransfer.dropEffect = "copy";
     };
     const drop = (event: DragEvent) => {
+      // A drop zone in the page, such as the chat of an agent, took the files already. The first box
+      // to hear the drop notes that, since its own refusal also marks the drop as taken.
       if (!carriesFiles(event)) return;
+      let taken = dropsTakenInPage.get(event);
+      if (taken === undefined) {
+        taken = event.defaultPrevented;
+        dropsTakenInPage.set(event, taken);
+      }
+      if (taken) return;
       event.preventDefault();
       if (!accepts(event)) return;
       const files = [...(event.dataTransfer?.files ?? [])];

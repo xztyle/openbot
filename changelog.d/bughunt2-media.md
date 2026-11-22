@@ -16,5 +16,4 @@
 - Browser client: images that could not load while the connection was down load again when it is
   back. Before, they stayed file cards until the page was loaded again, as after waking a phone.
 - Browser client: a file saved from a chat leaves the page's memory a minute after the download
-  starts. Before, every file saved in a session stayed in memory, which on an iPhone could reload
-  the app after a few large downloads.
+  starts. Before, every file saved in a session stayed in memory until sign-out.

@@ -191,6 +191,7 @@ import {
   chooseTarget,
   liveSession,
 } from "./computer-use-target-window";
+import { createConnectors } from "./connector-wiring";
 import { isSupportedCuaDriverTarget, resolveCuaDriver } from "./cua-driver-artifact";
 import { CuaDriverDaemonClient } from "./cua-driver-daemon-client";
 import { CuaDriverRuntime, cuaDriverCommandAlias, resolveCuaDriverEndpoint } from "./cua-driver-runtime";
@@ -2343,6 +2344,40 @@ export async function createApplicationServices({
     webhookRelay.stop();
     await Effect.runPromise(eventsRuntime.stop());
   });
+  // The owner's MCP endpoint and the webhook inboxes, on one door that the operator opens with
+  // OPENBOT_CONNECTOR_LISTEN behind an HTTPS proxy; see `connector-gateway.ts`.
+  const connectors = createConnectors({
+    userData: app.getPath("userData"),
+    cipher: secretCipher,
+    events,
+    listAgents: () => service.listAgents(),
+    spaceOfAgent: (agentId) => service.spaces.store.agentSpace(agentId),
+    spaceOfChannel: (channelId) => {
+      try {
+        return service.spaces.store.channelSpaceId(service.channels.store.get(channelId));
+      } catch {
+        return service.spaces.store.agentSpace(null).id;
+      }
+    },
+    channelName: (channelId) => {
+      try {
+        return service.channels.store.get(channelId).name;
+      } catch {
+        return channelId;
+      }
+    },
+    threadOf: (agentId) => store.list().find((agent) => agent.id === agentId)?.threadId ?? null,
+    readPage: (agentId, threadId, limit) =>
+      store.database.readConversationPage(agentId, threadId, { type: "latest" }, limit),
+    sendMessage: (input) => service.sendMessage(input),
+    delivery: (deliveryId) => mailbox.getDelivery(deliveryId)?.delivery ?? null,
+    turnAnswer,
+    attentionItems: () => service.attentionItems(),
+    loopDecisions: () => service.loops.pendingDecisions(),
+    heldItems: () => ownerAway.state().held,
+  });
+  await connectors.gateway.start();
+  teardown.push(TEARDOWN_ORDER.hostEvents, "the connector gateway", () => connectors.gateway.stop());
   // After `teamStore.initialize()` and before `HostService`, which reads the account it activates.
   if (developmentRemoteRole) {
     await runCauseEffect(
@@ -2632,6 +2667,8 @@ export async function createApplicationServices({
     webPush,
     // The owner's quiet hours, focus and "When you're back" list (`owner-away-v1`, `fork-host-v1`).
     ownerAway,
+    // The owner's MCP tokens and the webhook inbox senders (`connector-access-v1`, `fork-host-v1`).
+    connectorAccess: connectors.access,
     // Server settings > Backups: the host's backup broker (`host-backups-v1`). Without its socket the
     // section says that backups are not set up.
     hostBackups: new HostBackups(),

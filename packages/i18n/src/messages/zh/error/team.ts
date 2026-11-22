@@ -132,4 +132,7 @@ export const messages = {
   "error.team.signInRelayUsed": "该登录已发送过。",
   "error.team.signInRelayMismatch": "该地址不属于本次登录。",
   "error.team.signInRelayLinkUnknown": "该服务器上没有任何助手展示过该登录链接。",
+  "error.team.connectorTokenLimit": "最多只能有 {limit} 个访问令牌，请先撤销一个。",
+  "error.team.webhookInboxSecretMissing": "此发送方需要密钥，请粘贴该服务显示的签名密钥。",
+  "error.team.webhookInboxGone": "此 Webhook 例程已不存在，请刷新列表。",
 } as const satisfies PartialTranslation<typeof source>;

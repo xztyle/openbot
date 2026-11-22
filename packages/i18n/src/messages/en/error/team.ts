@@ -160,4 +160,8 @@ export const messages = defineMessages("error.team", {
     "This server does not know the provider, model or effort that was picked. Pick another one, or update Atelier on the server.",
   "error.team.agentAvatarInvalid": "The face or color of the agent is not valid. Pick another one.",
   "error.team.agentSettingInvalid": "A setting of the agent is not valid. Reload and try again.",
+  "error.team.connectorTokenLimit": "At most {limit} access tokens can exist. Revoke one first.",
+  "error.team.webhookInboxSecretMissing":
+    "This sender needs its secret. Paste the signing secret that the service shows.",
+  "error.team.webhookInboxGone": "This webhook routine is gone. Reload the list.",
 });

@@ -151,4 +151,8 @@ export const messages = {
     "Ce serveur ne connaît pas le fournisseur, le modèle ou l’effort choisi. Choisissez-en un autre ou mettez à jour Atelier sur le serveur.",
   "error.team.agentAvatarInvalid": "Le visage ou la couleur de l’agent n’est pas valide. Choisissez-en un autre.",
   "error.team.agentSettingInvalid": "Un réglage de l’agent n’est pas valide. Rechargez et réessayez.",
+  "error.team.connectorTokenLimit": "Il peut y avoir au plus {limit} jetons d'accès. Révoquez-en un d'abord.",
+  "error.team.webhookInboxSecretMissing":
+    "Cet expéditeur a besoin de son secret. Collez le secret de signature affiché par le service.",
+  "error.team.webhookInboxGone": "Cette routine webhook n'existe plus. Rechargez la liste.",
 } as const satisfies PartialTranslation<typeof source>;

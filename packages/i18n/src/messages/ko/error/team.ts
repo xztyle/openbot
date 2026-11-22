@@ -134,4 +134,8 @@ export const messages = {
   "error.team.signInRelayUsed": "이 로그인은 이미 전송되었어요.",
   "error.team.signInRelayMismatch": "이 주소는 이 로그인에서 만든 주소가 아니에요.",
   "error.team.signInRelayLinkUnknown": "이 서버의 어떤 에이전트도 이 로그인 링크를 표시하지 않았어요.",
+  "error.team.connectorTokenLimit": "액세스 토큰은 최대 {limit}개까지 만들 수 있습니다. 먼저 하나를 취소하세요.",
+  "error.team.webhookInboxSecretMissing":
+    "이 발신자에는 시크릿이 필요합니다. 서비스가 보여 주는 서명 시크릿을 붙여 넣으세요.",
+  "error.team.webhookInboxGone": "이 웹훅 루틴은 더 이상 없습니다. 목록을 새로 고치세요.",
 } as const satisfies PartialTranslation<typeof source>;

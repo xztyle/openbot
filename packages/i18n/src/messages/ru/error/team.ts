@@ -133,4 +133,8 @@ export const messages = {
   "error.team.signInRelayUsed": "Этот вход уже отправлен.",
   "error.team.signInRelayMismatch": "Этот адрес не относится к этому входу.",
   "error.team.signInRelayLinkUnknown": "Ни один агент на этом сервере не показывал эту ссылку для входа.",
+  "error.team.connectorTokenLimit": "Может быть не более {limit} токенов доступа. Сначала отзовите один.",
+  "error.team.webhookInboxSecretMissing":
+    "Этому отправителю нужен секрет. Вставьте секрет подписи, который показывает сервис.",
+  "error.team.webhookInboxGone": "Этой рутины вебхука больше нет. Обновите список.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -219,6 +219,7 @@ import { routeBrowser } from "./team-api/route-browser";
 import { routeBrowserProfiles } from "./team-api/route-browser-profiles";
 import { routeChannels } from "./team-api/route-channels";
 import { routeClaudeContext } from "./team-api/route-claude-context";
+import { routeConnectorAccess } from "./team-api/route-connector-access";
 import { routeConnectors } from "./team-api/route-connectors";
 import { routeContextReset } from "./team-api/route-context-reset";
 import { routeConversationFiles } from "./team-api/route-conversation-files";
@@ -1055,6 +1056,7 @@ export class TeamApiServer {
         return;
       if ((await routeWebPush(context, this.#options.webPush)) === "handled") return;
       if ((await routeOwnerAway(context, this.#options.ownerAway)) === "handled") return;
+      if ((await routeConnectorAccess(context, this.#options.connectorAccess)) === "handled") return;
       if ((await routeHostBackups(context, this.#options.hostBackups)) === "handled") return;
       if ((await routePushNotifications(context, this.#options.pushNotifications)) === "handled") return;
       if (

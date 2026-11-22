@@ -134,4 +134,8 @@ export const messages = {
   "error.team.signInRelayUsed": "To logowanie zostało już wysłane.",
   "error.team.signInRelayMismatch": "Ten adres nie pochodzi z tego logowania.",
   "error.team.signInRelayLinkUnknown": "Żaden agent na tym serwerze nie pokazał tego linku logowania.",
+  "error.team.connectorTokenLimit": "Może istnieć najwyżej {limit} tokenów dostępu. Najpierw unieważnij jeden.",
+  "error.team.webhookInboxSecretMissing":
+    "Ten nadawca potrzebuje sekretu. Wklej sekret podpisu, który pokazuje usługa.",
+  "error.team.webhookInboxGone": "Ta rutyna webhooka już nie istnieje. Odśwież listę.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -199,6 +199,7 @@
     "./team-protocol/input-escalations-v1": "./src/team-protocol/input-escalations-v1.ts",
     "./team-protocol/attention-items-v1": "./src/team-protocol/attention-items-v1.ts",
     "./team-protocol/owner-away-v1": "./src/team-protocol/owner-away-v1.ts",
+    "./team-protocol/connector-access-v1": "./src/team-protocol/connector-access-v1.ts",
     "./team-protocol/host-backups-v1": "./src/team-protocol/host-backups-v1.ts",
     "./team-protocol/security-audit-v1": "./src/team-protocol/security-audit-v1.ts",
     "./team-protocol/web-push-v1": "./src/team-protocol/web-push-v1.ts",

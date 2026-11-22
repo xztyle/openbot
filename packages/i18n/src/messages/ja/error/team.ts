@@ -136,4 +136,8 @@ export const messages = {
   "error.team.signInRelayUsed": "このサインインはすでに送信されています。",
   "error.team.signInRelayMismatch": "このアドレスはこのサインインのものではありません。",
   "error.team.signInRelayLinkUnknown": "このサーバーのエージェントはこのサインインリンクを表示していません。",
+  "error.team.connectorTokenLimit": "アクセストークンは最大 {limit} 個です。先に1つ取り消してください。",
+  "error.team.webhookInboxSecretMissing":
+    "この送信元にはシークレットが必要です。サービスに表示される署名シークレットを貼り付けてください。",
+  "error.team.webhookInboxGone": "この Webhook ルーティンはもうありません。一覧を再読み込みしてください。",
 } as const satisfies PartialTranslation<typeof source>;

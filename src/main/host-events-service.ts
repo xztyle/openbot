@@ -287,6 +287,44 @@ export class HostEventsService implements HostEventsApi {
     return { status };
   }).bind(this);
 
+  /** The webhook routes of agent and channel routines, for the webhook inbox settings. */
+  inboxRoutes(): { routeId: string; owner: EventRoutineOwner; routineId: string; name: string }[] {
+    const routines = this.#options.routines;
+    return routines.routes.list().flatMap((route) => {
+      const { owner } = route;
+      if (owner.kind === "workflow") return [];
+      const routine = routines.get(owner, route.routineId);
+      return routine ? [{ routeId: route.routeId, owner, routineId: route.routineId, name: routine.name }] : [];
+    });
+  }
+
+  /**
+   * Starts a route's routine with an event that the webhook inbox verified with its sender's own
+   * scheme, such as Stripe's. The routine's event type, filters, receipts and hourly limit apply as
+   * for a relayed request.
+   */
+  readonly receiveVerified = Effect.fn("HostEvents.receiveVerified")(function* (
+    this: HostEventsService,
+    routeId: string,
+    input: { deliveryId: string; eventType: string; occurredAt: string | null; data: EventJsonValue },
+  ): Effect.fn.Return<{ status: WebhookDeliveryStatus }, HostEventsFailure> {
+    const route = yield* eventStep(() => this.#options.routines.routes.find(routeId));
+    if (!route || route.owner.kind === "workflow") return { status: 404 };
+    const data = input.data ?? null;
+    if (!isEventJsonValue(data) || input.eventType.length > WEBHOOK_EVENT_TYPE_MAX_LENGTH) return { status: 400 };
+    const receivedAt = new Date().toISOString();
+    const received: ReceivedDelivery = yield* toHostEventsFailure(
+      this.#options.routines.receiveWebhook(route.owner, route.routineId, {
+        deliveryId: input.deliveryId,
+        eventType: input.eventType,
+        data,
+        occurredAt: input.occurredAt ?? receivedAt,
+        receivedAt,
+      }),
+    );
+    return { status: deliveryStatus(received) };
+  }).bind(this);
+
   /**
    * Sends one test event to the routine. The host signs an event that matches the routine's event
    * type and filters, and receives it as a relayed request, so the test passes the same checks.

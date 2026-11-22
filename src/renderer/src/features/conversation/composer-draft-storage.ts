@@ -113,9 +113,15 @@ export function writeComposerDraftsOnChange(
   const flush = () => {
     if (timer !== undefined) write();
   };
+  // A phone can close a page in the background without `pagehide`: the last keys are stored as it hides.
+  const flushOnHide = () => {
+    if (document.visibilityState === "hidden") flush();
+  };
   window.addEventListener("pagehide", flush);
+  document.addEventListener("visibilitychange", flushOnHide);
   onCleanup(() => {
     window.removeEventListener("pagehide", flush);
+    document.removeEventListener("visibilitychange", flushOnHide);
     flush();
   });
   return {

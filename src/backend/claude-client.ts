@@ -613,16 +613,16 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     return [...this.#threads.ids()].every((id) => !this.#threads.get(id)?.backgroundTasks);
   }
 
+  /** A background subagent or command of this thread ends when its query closes. */
+  holdsBackgroundWork(threadId: string): Effect.Effect<boolean, ProviderClientOperationError> {
+    return Effect.sync(() => (this.#threads.get(threadId)?.backgroundTasks ?? 0) > 0);
+  }
+
   /**
    * Closes one thread runtime and keeps the rest of the client. The SDK query owns the MCP servers
    * of that thread, so the close is what ends those child processes. The caller releases an idle
    * thread: a turn that still runs would end with the query that carries it.
    */
-
-  holdsBackgroundWork(threadId: string): Effect.Effect<boolean, ProviderClientOperationError> {
-    return Effect.sync(() => (this.#threads.get(threadId)?.backgroundTasks ?? 0) > 0);
-  }
-
   readonly releaseThread = Effect.fn("ClaudeAgentClient.releaseThread")(function* (
     this: ClaudeAgentClient,
     threadId: string,

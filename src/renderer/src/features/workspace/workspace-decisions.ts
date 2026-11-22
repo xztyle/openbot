@@ -59,7 +59,7 @@ function seenStorageKey(workspaceKey: string): string {
  * Today, the top bar, the sidebar and the phone's tab count the same, and kept on this device, so a
  * dismissed one does not come back when Today opens again.
  */
-function seenInjections(workspaceKey: string): ReadonlySet<string> {
+export function seenInjections(workspaceKey: string): ReadonlySet<string> {
   seenVersion();
   let ids = seenCache.get(workspaceKey);
   if (!ids) {
@@ -74,8 +74,12 @@ function seenInjections(workspaceKey: string): ReadonlySet<string> {
   return new Set(ids);
 }
 
-function dismissInjection(workspaceKey: string, eventId: string): void {
-  const ids = [...untrack(() => seenInjections(workspaceKey)), eventId].slice(-SEEN_LIMIT);
+export function dismissInjection(workspaceKey: string, eventId: string): void {
+  // Another tab of the reader may have dismissed others since this one read the list: they stay.
+  const known = seenCache.get(workspaceKey) ?? [];
+  seenCache.delete(workspaceKey);
+  const stored = untrack(() => seenInjections(workspaceKey));
+  const ids = [...new Set([...known, ...stored, eventId])].slice(-SEEN_LIMIT);
   seenCache.set(workspaceKey, ids);
   try {
     window.localStorage.setItem(seenStorageKey(workspaceKey), JSON.stringify(ids));
@@ -84,6 +88,14 @@ function dismissInjection(workspaceKey: string, eventId: string): void {
   }
   setSeenVersion((version) => version + 1);
 }
+
+// A dismissal in another tab of the reader leaves this one's counts too.
+if (typeof window !== "undefined")
+  window.addEventListener("storage", (event) => {
+    if (!event.key?.startsWith(seenStorageKey(""))) return;
+    seenCache.delete(event.key.slice(seenStorageKey("").length));
+    setSeenVersion((version) => version + 1);
+  });
 
 /** What a learning proposal asks, by where it comes from. */
 const PROPOSAL_KEY = {

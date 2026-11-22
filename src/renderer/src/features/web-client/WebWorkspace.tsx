@@ -1859,6 +1859,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     (error) => {
       if (error)
         toast.error(sourceText(error.message), {
+          // One toast for the latest failure: a read that fails on every window focus does not stack.
+          id: "web-workspace-error",
           // The toast shows the code of the failure that `report` kept.
           error,
           report: { operation: "other", source: "system", cause_code: classifyFailure(error.message) },

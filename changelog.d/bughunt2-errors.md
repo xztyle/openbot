@@ -15,3 +15,5 @@
 - A malformed answer from the host in Learning, playbooks, reviews, memories, routine history,
   mark unread and file downloads now reads "The host returned invalid data." in your language.
   Before, it showed a fixed English sentence such as "Invalid answer.".
+- Web app: a host failure that repeats, such as a read that fails each time the page shows again,
+  now replaces its toast instead of stacking a new one each time.

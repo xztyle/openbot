@@ -78,9 +78,11 @@ export interface WorkspaceSearchDeps {
   currentSpace: () => string | null;
 }
 
-function folded(text: string): string {
+/** Lowercase without accents, so `diseno` finds `Diseño` and `jose` finds `José`. */
+export function foldedSearchText(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
 }
+const folded = foldedSearchText;
 
 /**
  * The `in:` value that names a conversation: `#name` for a channel, `@name` of one of the others for

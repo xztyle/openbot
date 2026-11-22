@@ -36,7 +36,7 @@ import {
   previewText,
   readerJoined,
 } from "./workspace-model";
-import { searchInValue } from "./workspace-search";
+import { foldedSearchText, searchInValue } from "./workspace-search";
 
 type Workspace = ReturnType<typeof useWorkspace>;
 
@@ -284,7 +284,8 @@ export function WorkspaceSearchView() {
   const [tab, setTab] = createSignal<SearchTab>("messages");
   const search = ws.search;
   const parsed = createMemo(() => parseSearchQuery(search.state.query));
-  const words = () => parsed().text.replace(/["-]/gu, " ").trim().toLocaleLowerCase();
+  // Without accents, as the host's message search: `diseno` finds #diseño and `jose` finds José.
+  const words = () => foldedSearchText(parsed().text.replace(/["-]/gu, " ").trim());
 
   const hits = createMemo((): SearchHitItem[] =>
     search.state.hits.map((hit) => ({
@@ -311,9 +312,9 @@ export function WorkspaceSearchView() {
         const joined = readerJoined(ws.directory(), channel);
         if (channelVisibility(channel) === "private" && !joined) return false;
         return (
-          channel.name.toLocaleLowerCase().includes(text) ||
-          (channel.topic ?? "").toLocaleLowerCase().includes(text) ||
-          (channel.description ?? "").toLocaleLowerCase().includes(text)
+          foldedSearchText(channel.name).includes(text) ||
+          foldedSearchText(channel.topic ?? "").includes(text) ||
+          foldedSearchText(channel.description ?? "").includes(text)
         );
       })
       .map((channel) => ({
@@ -331,11 +332,10 @@ export function WorkspaceSearchView() {
   const people = createMemo((): SearchPersonItem[] => {
     const text = words();
     if (!text) return [];
-    const matches = (name: string) =>
-      name
-        .toLocaleLowerCase()
-        .split(/\s+/u)
-        .some((word) => word.startsWith(text)) || name.toLocaleLowerCase().startsWith(text);
+    const matches = (name: string) => {
+      const value = foldedSearchText(name);
+      return value.split(/\s+/u).some((word) => word.startsWith(text)) || value.startsWith(text);
+    };
     return [
       ...ws.env
         .people()

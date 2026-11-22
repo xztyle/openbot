@@ -21,6 +21,7 @@ import { WorkspacePaneHeader } from "@openbot/ui/features/workspace/WorkspacePan
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, onSettled, Show } from "solid-js";
 import { useWorkspace } from "../workspace/workspace-context";
+import { TrustGuardrailsPanel } from "./TrustGuardrailsPanel";
 import {
   downloadText,
   effectiveTrustRules,
@@ -43,7 +44,7 @@ export const openTrustForAgent = (agentId: string | null) => setFocusAgent(agent
 const PASS_MINUTES = [0, 10, 30, 60, 120, 240];
 const AUDIT_PAGE = 200;
 
-type Tab = "rules" | "audit";
+type Tab = "rules" | "audit" | "guardrails";
 
 /**
  * The Trust view of the workspace, for the owner and the admins: what each agent may do (rules by
@@ -116,7 +117,7 @@ export function WorkspaceTrustView() {
         onBack={() => ws.back()}
       />
       <div class="trust-tabs">
-        <For each={["rules", "audit"] as const}>
+        <For each={["rules", "guardrails", "audit"] as const}>
           {(value) => (
             <Button
               type="button"
@@ -125,7 +126,11 @@ export function WorkspaceTrustView() {
               aria-pressed={tab() === value ? "true" : "false"}
               onClick={() => setTab(value)}
             >
-              {value === "rules" ? t("trust.tab.rules") : t("trust.tab.audit")}
+              {value === "rules"
+                ? t("trust.tab.rules")
+                : value === "guardrails"
+                  ? t("trust.tab.guardrails")
+                  : t("trust.tab.audit")}
             </Button>
           )}
         </For>
@@ -139,6 +144,13 @@ export function WorkspaceTrustView() {
             calls={calls}
             agents={agents()}
             agentName={agentName}
+            onOpenAgent={(agentId) => ws.openAgent(agentId)}
+          />
+        </Show>
+        <Show when={calls() && tab() === "guardrails"}>
+          <TrustGuardrailsPanel
+            calls={() => calls()?.guardrails}
+            name={(scope, id) => (scope === "agent" ? agentName(id) : spaceName(id))}
             onOpenAgent={(agentId) => ws.openAgent(agentId)}
           />
         </Show>

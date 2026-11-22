@@ -1,3 +1,5 @@
+import type { GuardrailPolicy, GuardrailsView } from "@openbot/contracts/guardrails";
+import { decodeGuardrailsViewAnswer, GUARDRAILS_ROUTES } from "@openbot/contracts/team-protocol/guardrails-v1";
 import {
   decodeTrustAuditEntries,
   decodeTrustPolicyView,
@@ -14,6 +16,14 @@ export interface TrustCalls {
   policy(): Promise<TrustPolicyView>;
   save(policy: TrustPolicy): Promise<TrustPolicyView>;
   audit(query: TrustAuditQuery): Promise<TrustAuditEntry[]>;
+  /** The guardrails of the host (`guardrails-v1`): budgets, pauses, the meter and the events. */
+  guardrails: GuardrailCalls;
+}
+
+export interface GuardrailCalls {
+  view(): Promise<GuardrailsView>;
+  save(policy: GuardrailPolicy): Promise<GuardrailsView>;
+  resume(scope: "agent" | "space", id: string): Promise<GuardrailsView>;
 }
 
 /** The routes of the connected host, for the browser client. A host that is not connected rejects. */
@@ -27,5 +37,13 @@ export function hostTrustCalls(request: () => TeamApiRequest): TrustCalls {
     audit: async (query) =>
       (await request()("POST", TRUST_CONTROL_ROUTES.audit, decodeTrustAuditEntries, JSON.parse(JSON.stringify(query))))
         .entries,
+    guardrails: {
+      view: () => request()("POST", GUARDRAILS_ROUTES.view, decodeGuardrailsViewAnswer, {}),
+      save: (policy) =>
+        request()("POST", GUARDRAILS_ROUTES.savePolicy, decodeGuardrailsViewAnswer, {
+          policy: JSON.parse(JSON.stringify(policy)),
+        }),
+      resume: (scope, id) => request()("POST", GUARDRAILS_ROUTES.resume, decodeGuardrailsViewAnswer, { scope, id }),
+    },
   };
 }

@@ -559,17 +559,19 @@ function withoutRestatedResults(entries: readonly ChannelMessage[]): readonly Ch
   return entries.filter((entry) => !isRestatedChannelResult(entry, byTurn.get(entry.message.turnId ?? "") ?? [], true));
 }
 
-/**
- * The rows of a channel transcript or a thread. The steps of each agent turn go on its answer; a
- * turn that has not answered yet is a row of its own. Messages of one author within five minutes
- * group, and a day divider and the "new" divider stand above the row they belong to.
- */
 /** The shortest run of progress lines that folds: fewer read fine as they are. */
 const PROGRESS_FOLD_MIN = 4;
 /** A progress line is short: one line of plain text. */
 const PROGRESS_LINE_MAX = 200;
 
-/** A short line of an agent, alone in its message: a step it reports, not an answer. */
+/** What a folded line could not show: a link (its card), a mention or a tag, a chat card. */
+const PROGRESS_LINE_RICH = /https?:\/\/|[@#]\[|\[card:/u;
+
+/**
+ * A short line of an agent, alone in its message: a step it reports, not an answer. A question, a
+ * line that names someone, a pinned or condensed line, one with a card or a link, or one that still
+ * streams is never a step: the fold would hide what it asks for or shows.
+ */
 function progressLine(row: WorkspaceMessageRowModel): boolean {
   const entry = row.entry;
   const text = entry.message.text.trim();
@@ -581,11 +583,19 @@ function progressLine(row: WorkspaceMessageRowModel): boolean {
     entry.author.kind === "agent" &&
     !entry.deletedAt &&
     !entry.threadSummary &&
+    !entry.pinned &&
+    !entry.condensed &&
+    !entry.message.condensed &&
+    !entry.message.questionPrompt &&
+    entry.message.status !== "streaming" &&
+    entry.audience !== "people" &&
+    !(entry.mentions?.length ?? 0) &&
     !(entry.message.attachments?.length ?? 0) &&
     !(entry.reactions?.length ?? 0) &&
     text.length > 0 &&
     text.length <= PROGRESS_LINE_MAX &&
-    !text.includes("\n")
+    !text.includes("\n") &&
+    !PROGRESS_LINE_RICH.test(text)
   );
 }
 
@@ -619,6 +629,11 @@ export function foldProgressRows(rows: readonly WorkspaceMessageRowModel[]): Wor
   return out;
 }
 
+/**
+ * The rows of a channel transcript or a thread. The steps of each agent turn go on its answer; a
+ * turn that has not answered yet is a row of its own. Messages of one author within five minutes
+ * group, and a day divider and the "new" divider stand above the row they belong to.
+ */
 export function messageRows(
   entries: readonly ChannelMessage[],
   options: {

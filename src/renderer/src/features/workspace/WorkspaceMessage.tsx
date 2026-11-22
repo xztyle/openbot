@@ -42,6 +42,7 @@ import {
   messageArtifacts,
   messageAuthor,
   plainMessageSegments,
+  previewText,
   reactionViews,
   threadSummaryView,
   type WorkspaceMessageRowModel,
@@ -513,7 +514,8 @@ function ProgressFold(props: { lines: readonly ChannelMessage[] }) {
                 <time class="ws-progress-fold-time">
                   {format.date(Date.parse(line().message.createdAt), { timeStyle: "short" })}
                 </time>
-                <span>{line().message.text}</span>
+                {/* One plain line: the Markdown marks of a step ("**Checked** `plans`") do not show. */}
+                <span>{previewText(line().message.text, 200)}</span>
               </li>
             )}
           </For>

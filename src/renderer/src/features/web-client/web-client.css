@@ -632,6 +632,29 @@ body {
     position: relative;
     z-index: 1;
   }
+
+  /* A swipe on a thread shows its conversation under it, as the list shows under a conversation. */
+  .ws-layout[data-web-swipe] {
+    position: relative;
+  }
+
+  .ws-layout[data-web-swipe][data-phone-pane="panel"] > .ws-layout-main {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    display: flex;
+    pointer-events: none;
+    transform: translateX(calc((var(--web-swipe-x, 0px) - 100%) * 0.3));
+  }
+
+  .ws-layout[data-web-swipe="release"][data-phone-pane="panel"] > .ws-layout-main {
+    transition: transform var(--openbot-duration-normal) var(--openbot-ease-out);
+  }
+
+  .ws-layout[data-web-swipe][data-phone-pane="panel"] > .ws-layout-panel {
+    position: relative;
+    z-index: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

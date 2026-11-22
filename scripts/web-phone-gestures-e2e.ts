@@ -5,7 +5,8 @@
 //    space around the messages, opens nothing (the workspace's menu is a right-click on a computer);
 //    a text field inside a message, as an agent's form, still selects text;
 // 2. a sheet follows a finger that drags it down: a short drag springs back, a long one closes it;
-//    an edge swipe over an open sheet does not slide the conversation under it;
+//    an edge swipe over an open sheet does not slide the conversation under it; an edge swipe on a
+//    thread slides the thread off its conversation, not the whole screen off the list;
 // 3. in the image viewer, a pinch that starts while the first finger drifts down leaves the image in
 //    place and the backdrop at full strength.
 // It serves the web client on a mock host (`src/renderer/stories/web-client-inbox-harness.tsx`) at
@@ -270,6 +271,34 @@ try {
     assert.ok(await app.locator(".ws-message").first().isVisible(), "The conversation left.");
   });
   await closeDialogs(app);
+
+  await step(app, "an edge swipe on a thread shows its conversation under it", async () => {
+    // A message in the middle of the screen, wherever the earlier steps left the history.
+    await touch.hold(app, { x: 300, y: 330 });
+    await sheet(app).waitFor({ timeout: 5000 });
+    await app.locator(".ui-sheet-item", { hasText: "Reply in thread" }).tap();
+    await app.locator('.ws-layout[data-phone-pane="panel"] > .ws-layout-panel').waitFor({ timeout: 5000 });
+    await app.waitForTimeout(600);
+    await touch.send("touchStart", [{ x: 4, y: 400, id: 1 }]);
+    for (const x of [30, 80, 130, 180]) {
+      await touch.send("touchMove", [{ x, y: 400, id: 1 }]);
+      await app.waitForTimeout(16);
+    }
+    const under = await app.evaluate(() => {
+      const main = document.querySelector<HTMLElement>('.ws-layout[data-phone-pane="panel"] > .ws-layout-main');
+      const panes = document.querySelector<HTMLElement>(".web-app-frame > .app-frame-panes");
+      return { main: main ? getComputedStyle(main).display : "none", panes: panes?.style.transform ?? "" };
+    });
+    for (const x of [240, 300, 340]) {
+      await touch.send("touchMove", [{ x, y: 400, id: 1 }]);
+      await app.waitForTimeout(16);
+    }
+    await touch.send("touchEnd", []);
+    await app.locator(".ws-layout-panel").waitFor({ state: "detached", timeout: 5000 });
+    assert.notEqual(under.main, "none", "The conversation does not show under the thread.");
+    assert.equal(under.panes, "", "The conversation slid with the thread, showing the list.");
+    assert.ok(await app.locator(".ws-message").first().isVisible(), "The swipe did not land on the conversation.");
+  });
 
   // 3. The image viewer.
   const viewer = await context.newPage();

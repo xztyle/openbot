@@ -2404,7 +2404,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   // A sheet, a dialog or a page over the conversation takes no swipe: the screen under it would slide.
   createWebSwipeBack({
     enabled: () => phone() && mobilePane() === "conversation" && !overlayOpen(),
-    surface: () => document.querySelector<HTMLElement>(".web-app-frame > .app-frame-panes"),
+    // A thread slides off its conversation, which `web-client.css` shows under it; a conversation slides off the list.
+    surface: () =>
+      (untrack(phoneLevel) === "panel"
+        ? document.querySelector<HTMLElement>('.web-app-frame .ws-layout[data-phone-pane="panel"] > .ws-layout-panel')
+        : null) ?? document.querySelector<HTMLElement>(".web-app-frame > .app-frame-panes"),
     onBack: () => window.history.back(),
   });
   /** The workspace on a phone: Slack's tabs over the list, and one screen at a time. */

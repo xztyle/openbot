@@ -19,3 +19,5 @@
   A pinch still zooms.
 - iPhone: a long press on a link in a message shows Safari's link menu (open, copy, share) again.
   Before, it opened neither that menu nor the message's actions.
+- Phone: an edge swipe on a thread slides the thread off its conversation, which shows under it.
+  Before, the whole screen slid away over the list, then the conversation came back.

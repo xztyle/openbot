@@ -1199,18 +1199,20 @@ export class DeliveryStartFailed extends Schema.TaggedError<DeliveryStartFailed>
 const { sync: drainStep, rewrap: toDeliveryStartFailed } = causeHelpers(DeliveryStartFailed);
 
 /**
- * The Codex service tier of a turn. Codex keeps the tier for the next turns of the thread. An agent
- * that never set fast mode sends nothing, so Codex keeps its own tier; `null` returns the thread to
- * the standard tier, also for a model with no fast tier. While the catalog does not know the model,
- * such as before Codex lists its models, the turn sends nothing and keeps the tier of the thread.
+ * The Codex service tier of a turn. Codex keeps the tier for the next turns of the thread. `null`
+ * returns the thread to the standard tier, also for a model with no fast tier. An agent that never
+ * set fast mode also sends `null` when its model has a fast tier: the picker shows Standard for it,
+ * and a `service_tier` in the Codex config must not run the turn at a faster, more expensive tier.
+ * While the catalog does not know the model, such as before Codex lists its models, the turn sends
+ * nothing and keeps the tier of the thread.
  */
 function codexServiceTier(
   agent: Pick<AgentSummary, "fastMode" | "model">,
   models: readonly AgentModelOption[],
 ): { serviceTier?: string | null } {
-  if (agent.fastMode === undefined) return {};
-  if (!agent.fastMode) return { serviceTier: null };
+  if (agent.fastMode === false) return { serviceTier: null };
   const model = models.find((candidate) => candidate.provider === "codex" && candidate.id === agent.model);
   if (!model) return {};
+  if (agent.fastMode === undefined) return model.fastServiceTier ? { serviceTier: null } : {};
   return { serviceTier: model.fastServiceTier ?? null };
 }

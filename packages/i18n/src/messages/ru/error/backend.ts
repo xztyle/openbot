@@ -218,6 +218,10 @@ export const messages = {
   "error.backend.routineFlowHandoffFailed": "Регулярной задаче не удалось передать работу этому агенту.",
   "error.backend.mcpServerLimit": "Atelier хранит не более {limit} серверов MCP.",
   "error.backend.mcpServerNameTaken": "Сервер MCP с именем {name} уже существует.",
+  "error.backend.contextCompactionIneffective":
+    "Сжатие не уменьшает этот чат: после двух сжатий он всё ещё занимает {percent}% окна контекста модели, поэтому Atelier перестаёт его сжимать. Большую часть окна занимают инструменты и инструкции. Отключите MCP-серверы или управление компьютером, которые не нужны этому агенту, или выберите модель с большим окном. Затем начните новый чат.",
+  "error.backend.contextCompactionStopped":
+    "Два сжатия этого чата подряд не удались, поэтому Atelier больше не сжимает его автоматически. Каждая попытка отправляет весь чат модели и расходует лимит тарифа. Выберите «Сжать сейчас», чтобы попробовать снова, или начните новый чат.",
   "error.backend.mcpServerInvalid": "Atelier не может сохранить эту конфигурацию сервера MCP.",
   "error.backend.mcpServerNoAnswer": "Сервер не ответил за {seconds} с.",
   "error.backend.mcpSignInNotAccepted": "Сервер не принял этот вход.",

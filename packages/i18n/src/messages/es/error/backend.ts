@@ -240,6 +240,10 @@ export const messages = {
   "error.backend.routineFlowHandoffFailed": "La rutina no pudo pasar el trabajo a este agente.",
   "error.backend.mcpServerLimit": "Atelier mantiene hasta {limit} servidores MCP.",
   "error.backend.mcpServerNameTaken": "Ya existe un servidor MCP llamado {name}.",
+  "error.backend.contextCompactionIneffective":
+    "La compactación no reduce este chat: tras dos compactaciones aún usa el {percent}% de la ventana de contexto del modelo, así que Atelier deja de compactarlo. Las herramientas y las instrucciones usan la mayor parte de la ventana. Desactiva los servidores MCP o el uso del ordenador que este agente no necesita, o elige un modelo con una ventana mayor. Después, inicia un chat nuevo.",
+  "error.backend.contextCompactionStopped":
+    "Dos compactaciones seguidas de este chat fallaron, así que Atelier deja de compactarlo automáticamente. Cada intento envía todo el chat al modelo y consume el límite de tu plan. Selecciona «Compactar ahora» para intentarlo de nuevo o inicia un chat nuevo.",
   "error.backend.mcpServerInvalid": "Atelier no puede guardar esta configuración del servidor MCP.",
   "error.backend.mcpServerNoAnswer": "El servidor no respondió en {seconds} segundos.",
   "error.backend.mcpSignInNotAccepted": "El servidor no aceptó ese inicio de sesión.",

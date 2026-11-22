@@ -10,7 +10,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { AGENT_PROVIDERS } from "@openbot/contracts/ipc";
+import { AGENT_PROVIDERS, type AgentEvent } from "@openbot/contracts/ipc";
 import { Effect } from "effect";
 import type { AgentBrowserHost } from "../src/backend/agent/turn-lifecycle";
 import { getString, isRecord } from "../src/backend/protocol";
@@ -55,6 +55,8 @@ const config = { config: { mcp_servers: {} }, layers: [{ name: { type: "user", f
 let buffer = "";
 let threads = 0;
 let turns = 0;
+/** threadId -> turns started, for \`growUsage\`. */
+const threadTurns = new Map();
 /** threadId -> { turnId, finish } of the compaction turn that runs. */
 const compacting = new Map();
 process.stdout.on("error", (error) => {
@@ -87,7 +89,11 @@ const answer = (message) => {
       const turnId = "turn-" + (++turns);
       write({ id: message.id, result: { turn: { id: turnId, status: "inProgress", items: [] } } });
       write({ method: "turn/started", params: { threadId: params.threadId, turn: { id: turnId } } });
-      write({ method: "thread/tokenUsage/updated", params: { threadId: params.threadId, turnId, tokenUsage: { total: { totalTokens: 90000 }, last: { totalTokens: 90000 }, modelContextWindow: 100000 } } });
+      // \`growUsage\`: each turn adds 6% of the window, more than the growth that allows a new compaction.
+      const count = (threadTurns.get(params.threadId) ?? 0) + 1;
+      threadTurns.set(params.threadId, count);
+      const used = control().growUsage ? 84000 + 6000 * (count - 1) : 90000;
+      write({ method: "thread/tokenUsage/updated", params: { threadId: params.threadId, turnId, tokenUsage: { total: { totalTokens: used }, last: { totalTokens: used }, modelContextWindow: 100000 } } });
       setTimeout(() => {
         const item = { type: "agentMessage", id: "message-" + turnId, text: "Done.", phase: "final_answer" };
         write({ method: "item/completed", params: { threadId: params.threadId, turnId, item } });
@@ -96,7 +102,7 @@ const answer = (message) => {
       return;
     }
     case "thread/compact/start": {
-      const { compactionMs, ignoreInterrupt } = control();
+      const { compactionMs, ignoreInterrupt, compactionStatus } = control();
       const turnId = "compact-turn-" + (++turns);
       const item = { type: "contextCompaction", id: "compact-item-" + turnId };
       write({ id: message.id, result: {} });
@@ -110,7 +116,7 @@ const answer = (message) => {
         if (status === "completed") write({ method: "item/completed", params: { threadId: params.threadId, turnId, item } });
         write({ method: "turn/completed", params: { threadId: params.threadId, turn: { id: turnId, status } } });
       };
-      const timer = setTimeout(() => finish("completed"), compactionMs);
+      const timer = setTimeout(() => finish(compactionStatus ?? "completed"), compactionMs);
       compacting.set(params.threadId, { turnId, finish, ignoreInterrupt });
       return;
     }
@@ -168,7 +174,14 @@ interface CaseReport {
   passed: boolean;
 }
 
-const report: { compactionTimeoutMs: number; cases: CaseReport[]; passed: boolean; error?: string } = {
+const errors: { code: string; agentId?: string }[] = [];
+const report: {
+  compactionTimeoutMs: number;
+  cases: CaseReport[];
+  failedCompactions?: { compactions: number; failed: number; stopNotices: number; messages: string[] };
+  passed: boolean;
+  error?: string;
+} = {
   compactionTimeoutMs: COMPACTION_TIMEOUT_MS,
   cases: [],
   passed: false,
@@ -238,6 +251,9 @@ const agents = new AgentService({
   preferredProvider: "codex",
   offProviders: AGENT_PROVIDERS.filter((provider) => provider !== "codex"),
   contextCompactionTimeoutMs: COMPACTION_TIMEOUT_MS,
+});
+agents.on("event", (event: AgentEvent) => {
+  if (event.type === "error") errors.push({ code: event.code, ...(event.agentId ? { agentId: event.agentId } : {}) });
 });
 
 try {
@@ -309,6 +325,62 @@ try {
     else assert.equal(result.refusedStarts, 0, `${entry.name}: Codex refused a start`);
     result.passed = true;
   }
+
+  // Each compaction of this chat fails, and each turn grows the chat by 6% of its window, so the
+  // growth rule allows a new compaction after each turn. Without a limit, each turn compacted again:
+  // one such chat compacted every 19 seconds for 7 hours and used up the plan limit (upstream #5302).
+  await writeFile(
+    controlPath,
+    JSON.stringify({ compactionMs: 200, ignoreInterrupt: false, compactionStatus: "failed", growUsage: true }),
+  );
+  const failing = await runCauseEffect(
+    agents.createAgent({
+      name: "Failed compactions",
+      description: "Checks that failed compactions stop.",
+      avatarSeed: "compaction-failing",
+      avatarHue: null,
+      initialMessage: "First message.",
+    }),
+  );
+  const failingIdle = () =>
+    !agents
+      .listQueue(failing.id)
+      .deliveries.some((delivery) => ["queued", "starting", "running"].includes(delivery.status));
+  const failingSession = await waitFor("the first turn of the failing chat", () => {
+    const session = store.activeProviderSession(failing.id)?.externalSessionId;
+    return session && failingIdle() ? session : null;
+  });
+  for (const text of ["Second message.", "Third message.", "Fourth message.", "Fifth message."]) {
+    await waitFor(
+      "the failing chat to settle",
+      () =>
+        failingIdle() &&
+        !agents
+          .getRuntimeSnapshot()
+          .contextStates?.some((state) => state.agentId === failing.id && state.compaction?.status === "running"),
+    );
+    await runCauseEffect(agents.sendMessage({ agentId: failing.id, text }));
+    await waitFor("the message to end", failingIdle);
+  }
+  const entries = protocol();
+  const failedCompactions = {
+    compactions: entries.filter((line) => line.method === "thread/compact/start" && line.threadId === failingSession)
+      .length,
+    failed: entries.filter(
+      (line) => line.compactionEnded && line.threadId === failingSession && line.status === "failed",
+    ).length,
+    stopNotices: errors.filter((error) => error.code === "context_compaction_stopped" && error.agentId === failing.id)
+      .length,
+    messages: agents.listQueue(failing.id).deliveries.map((delivery) => delivery.status),
+  };
+  report.failedCompactions = failedCompactions;
+  assert.equal(failedCompactions.compactions, 2, "failed compactions: OpenBot did not stop after 2 failures");
+  assert.equal(failedCompactions.failed, 2);
+  assert.equal(failedCompactions.stopNotices, 1, "failed compactions: no single stop notice");
+  assert.ok(
+    failedCompactions.messages.every((status) => status === "completed"),
+    "failed compactions: a message did not run",
+  );
   report.passed = true;
 } catch (error) {
   report.error = error instanceof Error ? (error.stack ?? error.message) : String(error);

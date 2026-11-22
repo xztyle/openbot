@@ -271,6 +271,10 @@ export const messages = defineMessages("error.backend", {
   "error.backend.routineFlowHandoffFailed": "The routine could not pass the work on to this agent.",
   "error.backend.mcpServerLimit": "Atelier keeps up to {limit} MCP servers.",
   "error.backend.mcpServerNameTaken": "An MCP server named {name} already exists.",
+  "error.backend.contextCompactionIneffective":
+    "Compaction does not make this chat smaller: after two compactions it still uses {percent}% of the model's context window, so Atelier stops compacting it. Tools and instructions use most of the window. Turn off the MCP servers or computer use that this agent does not need, or select a model with a larger window. Then start a new chat.",
+  "error.backend.contextCompactionStopped":
+    "Two compactions of this chat failed in a row, so Atelier stops compacting it automatically. Each try sends the whole chat to the model and uses your plan limit. Select Compact now to try again, or start a new chat.",
   "error.backend.mcpServerInvalid": "Atelier cannot save this MCP server configuration.",
   "error.backend.mcpServerNoAnswer": "The server did not answer in {seconds} seconds.",
   "error.backend.mcpSignInNotAccepted": "The server did not accept that sign-in.",

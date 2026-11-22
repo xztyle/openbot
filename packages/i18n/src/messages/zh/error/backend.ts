@@ -195,6 +195,10 @@ export const messages = {
   "error.backend.routineFlowHandoffFailed": "自动化任务无法把工作交给该助手。",
   "error.backend.mcpServerLimit": "Atelier 最多保留 {limit} 个 MCP 服务器。",
   "error.backend.mcpServerNameTaken": "名为 {name} 的 MCP 服务器已存在。",
+  "error.backend.contextCompactionIneffective":
+    "压缩无法缩小这个聊天：压缩两次后，它仍占用模型上下文窗口的 {percent}%，所以 Atelier 停止自动压缩。窗口的大部分被工具和指令占用。请关闭这个智能体不需要的 MCP 服务器或电脑操作，或选择窗口更大的模型。然后开始新的聊天。",
+  "error.backend.contextCompactionStopped":
+    "此对话的压缩连续失败了两次，因此 Atelier 停止自动压缩它。每次尝试都会把整个对话发送给模型，并消耗你的套餐额度。选择“立即压缩”重试，或开始新对话。",
   "error.backend.mcpServerInvalid": "Atelier 无法保存此 MCP 服务器配置。",
   "error.backend.mcpServerNoAnswer": "服务器未在 {seconds} 秒内响应。",
   "error.backend.mcpSignInNotAccepted": "服务器未接受该登录。",

@@ -705,7 +705,7 @@ export class TurnLifecycle {
       case "thread/tokenUsage/updated": {
         if (!threadId || !agentId) return;
         if (this.#conversation.loadedClientFor(threadId) !== source) return;
-        this.#compaction.updateBudget(threadId, params);
+        this.#compaction.updateBudget(threadId, params, agentId);
         const usage = getRecord(params, "tokenUsage");
         const last = getRecord(usage, "last");
         if (typeof last?.totalTokens === "number" && typeof usage?.modelContextWindow === "number")

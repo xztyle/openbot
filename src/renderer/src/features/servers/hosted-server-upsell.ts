@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/mini";
 
 /**
  * When the offer of a hosted server shows. A routine on a computer stops when the computer is off,
@@ -20,10 +20,10 @@ const NOTICE_AFTER_PLANS_MS = 3 * DAY_MS;
 type UpsellStorage = Pick<Storage, "getItem" | "setItem">;
 
 const upsellStateSchema = z.object({
-  modalCount: z.number().int().min(0).catch(0),
-  modalShownAt: z.number().nullable().catch(null),
-  noticeDismissals: z.number().int().min(0).catch(0),
-  noticeHiddenUntil: z.number().nullable().catch(null),
+  modalCount: z.catch(z.int().check(z.minimum(0)), 0),
+  modalShownAt: z.catch(z.nullable(z.number()), null),
+  noticeDismissals: z.catch(z.int().check(z.minimum(0)), 0),
+  noticeHiddenUntil: z.catch(z.nullable(z.number()), null),
 });
 
 export type HostedUpsellState = z.infer<typeof upsellStateSchema>;

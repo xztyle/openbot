@@ -1,6 +1,6 @@
 import { SERVER_NOTIFICATION_LEVELS, type ServerNotificationLevel } from "@openbot/contracts/ipc";
 import { createSignal, onCleanup } from "solid-js";
-import { z } from "zod";
+import { z } from "zod/mini";
 
 type NotificationStorage = Pick<Storage, "getItem" | "setItem">;
 
@@ -10,18 +10,18 @@ type NotificationStorage = Pick<Storage, "getItem" | "setItem">;
  */
 const storedSchema = z.record(
   z.string(),
-  z
-    .object({
-      level: z
-        .string()
-        .refine((value): value is ServerNotificationLevel =>
-          SERVER_NOTIFICATION_LEVELS.some((level) => level === value),
-        )
-        .optional()
-        .catch(undefined),
-      mutedUntil: z.number().nullable().optional().catch(undefined),
-    })
-    .catch({}),
+  z.catch(
+    z.object({
+      level: z.catch(
+        z.optional(
+          z.custom<ServerNotificationLevel>((value) => SERVER_NOTIFICATION_LEVELS.some((level) => level === value)),
+        ),
+        undefined,
+      ),
+      mutedUntil: z.catch(z.optional(z.nullable(z.number())), undefined),
+    }),
+    {},
+  ),
 );
 type Stored = z.infer<typeof storedSchema>;
 

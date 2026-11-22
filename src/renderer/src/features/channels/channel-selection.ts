@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/mini";
 
 const CHANNEL_SELECTION_STORAGE_KEY = "openbot:selected-channel:v1";
 
@@ -7,8 +7,14 @@ export type ChannelSelectionsByAccount = Record<string, Record<string, string>>;
 type ChannelSelectionStorage = Pick<Storage, "getItem" | "setItem">;
 
 const channelSelectionSchema = z.record(
-  z.string().trim().min(1),
-  z.record(z.string().trim().min(1), z.string().trim().min(1).nullable().catch(null)).catch({}),
+  z.string().check(z.trim(), z.minLength(1)),
+  z.catch(
+    z.record(
+      z.string().check(z.trim(), z.minLength(1)),
+      z.catch(z.nullable(z.string().check(z.trim(), z.minLength(1))), null),
+    ),
+    {},
+  ),
 );
 
 export function readChannelSelection(storage?: ChannelSelectionStorage): ChannelSelectionsByAccount {

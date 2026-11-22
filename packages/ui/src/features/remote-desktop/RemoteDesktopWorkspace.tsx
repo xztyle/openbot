@@ -4,7 +4,7 @@ import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
 import { useText } from "@openbot/ui/text";
 import { type JSX, Portal } from "@solidjs/web";
 import { createEffect, createMemo, createSignal, onSettled, Show } from "solid-js";
-import { z } from "zod";
+import { z } from "zod/mini";
 
 interface RemoteDesktopWorkspaceProps {
   mount?: HTMLElement | undefined;
@@ -31,10 +31,10 @@ type RemoteDisplay = RemoteDesktopSession["displays"][number];
 const viewerMessageSchema = z.object({
   source: z.literal("openbot-moonlight"),
   type: z.literal("viewer-state"),
-  sessionId: z.string().min(1),
+  sessionId: z.string().check(z.minLength(1)),
   state: z.enum(["connecting", "connected", "error"]),
-  transport: z.enum(["p2p", "relay"]).optional(),
-  message: z.string().optional(),
+  transport: z.optional(z.enum(["p2p", "relay"])),
+  message: z.optional(z.string()),
 });
 
 export function RemoteDesktopWorkspace(props: RemoteDesktopWorkspaceProps) {

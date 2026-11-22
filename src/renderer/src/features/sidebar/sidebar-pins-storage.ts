@@ -1,5 +1,5 @@
 import { normalizeSidebarPinnedItems, type SidebarPinnedItem } from "@openbot/ui/features/sidebar/sidebar-pins";
-import { z } from "zod";
+import { z } from "zod/mini";
 export type SidebarPinsByServer = Record<string, SidebarPinnedItem[]>;
 
 const SIDEBAR_PINS_STORAGE_KEY = "openbot:sidebar-pins:v1";
@@ -8,11 +8,11 @@ type SidebarPinStorage = Pick<Storage, "getItem" | "setItem">;
 
 const sidebarPinnedItemSchema = z.object({
   kind: z.enum(["agent", "channel", "person"]),
-  id: z.string().trim().min(1),
+  id: z.string().check(z.trim(), z.minLength(1)),
 });
 const sidebarPinsSchema = z.record(
-  z.string().trim().min(1),
-  z.array(sidebarPinnedItemSchema.nullable().catch(null)).catch([]),
+  z.string().check(z.trim(), z.minLength(1)),
+  z.catch(z.array(z.catch(z.nullable(sidebarPinnedItemSchema), null)), []),
 );
 
 export function readSidebarPins(storage: SidebarPinStorage = window.localStorage): SidebarPinsByServer {

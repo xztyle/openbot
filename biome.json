@@ -160,6 +160,9 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
+                "paths": {
+                  "zod": "The web app loads this code at start, and classic zod adds about 90 KB to it. Import \"zod/mini\"."
+                },
                 "patterns": [
                   {
                     "group": ["**/main/**", "**/backend/**", "**/preload/**"],

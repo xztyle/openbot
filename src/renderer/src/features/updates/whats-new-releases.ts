@@ -1,10 +1,10 @@
-import { z } from "zod";
+import { z } from "zod/mini";
 import { releaseVersion } from "./whats-new-history";
 import notesUrl from "./whats-new-releases.json?url&no-inline";
 
 const releaseSchema = z.object({
-  version: z.string().refine((value) => releaseVersion(value) !== null),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  version: z.string().check(z.refine((value) => releaseVersion(value) !== null)),
+  date: z.string().check(z.regex(/^\d{4}-\d{2}-\d{2}$/)),
   notices: z.array(z.string()),
   groups: z.array(z.object({ type: z.enum(["added", "changed", "fixed"]), items: z.array(z.string()) })),
 });

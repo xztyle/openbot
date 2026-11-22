@@ -1,11 +1,14 @@
-import { z } from "zod";
+import { z } from "zod/mini";
 
 /** The chat agent last opened on each server. */
 export const AGENT_SELECTION_STORAGE_KEY = "openbot:selected-agent:v1";
 
 type AgentSelectionStorage = Pick<Storage, "getItem" | "setItem">;
 
-const selectionSchema = z.record(z.string().min(1), z.string().min(1).nullable().catch(null));
+const selectionSchema = z.record(
+  z.string().check(z.minLength(1)),
+  z.catch(z.nullable(z.string().check(z.minLength(1))), null),
+);
 
 /** Reads the agent of each server that `key` keeps. */
 export function readAgentSelection(key: string, storage?: AgentSelectionStorage): Record<string, string> {

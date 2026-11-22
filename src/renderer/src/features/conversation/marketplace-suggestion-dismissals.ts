@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { z } from "zod";
+import { z } from "zod/mini";
 
 const MARKETPLACE_SUGGESTION_DISMISSALS_KEY = "openbot:marketplace-suggestion-dismissals:v1";
 /** The newest dismissals this computer keeps. An older card shows again, which loses nothing. */
@@ -7,7 +7,7 @@ const MAX_DISMISSALS = 200;
 
 type DismissalStorage = Pick<Storage, "getItem" | "setItem">;
 
-const dismissalsSchema = z.array(z.string().min(1)).max(MAX_DISMISSALS);
+const dismissalsSchema = z.array(z.string().check(z.minLength(1))).check(z.maxLength(MAX_DISMISSALS));
 
 function readDismissals(storage: DismissalStorage): string[] {
   try {

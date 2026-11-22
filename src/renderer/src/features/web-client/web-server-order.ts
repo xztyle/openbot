@@ -1,8 +1,8 @@
-import { z } from "zod";
+import { z } from "zod/mini";
 
 type ServerOrderStorage = Pick<Storage, "getItem" | "setItem">;
 
-const serverOrderSchema = z.array(z.string().trim().min(1));
+const serverOrderSchema = z.array(z.string().check(z.trim(), z.minLength(1)));
 
 function serverOrderKey(accountId: string): string {
   return `openbot.web.server-order:${accountId}`;

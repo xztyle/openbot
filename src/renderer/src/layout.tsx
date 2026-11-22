@@ -3,7 +3,7 @@ import type { ServerView } from "@openbot/ui/features/servers/ServerMenu";
 import type { SidebarView } from "@openbot/ui/features/sidebar/sidebar-types";
 import { PAGE_RAIL_PINNABLE_PAGES, type PageRailPinnablePage } from "@openbot/ui/features/window/PageRail";
 import { createEffect, createMemo, createSignal, onSettled } from "solid-js";
-import { z } from "zod";
+import { z } from "zod/mini";
 import { readPanelWidth } from "./components/panel-width-storage";
 import {
   CONVERSATION_MIN_WIDTH,
@@ -50,7 +50,7 @@ function shouldAutoCompactSidebar(
 const RAIL_PINNED_BY_DEFAULT: ReadonlySet<PageRailPinnablePage> = new Set(["workflows", "usage"]);
 
 // A record, not an object: a page that only another version knows keeps its choice when this version saves.
-const railPinChoicesSchema = z.record(z.string(), z.boolean().optional().catch(undefined));
+const railPinChoicesSchema = z.record(z.string(), z.catch(z.optional(z.boolean()), undefined));
 
 type RailPinChoices = z.infer<typeof railPinChoicesSchema>;
 

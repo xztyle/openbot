@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/mini";
 export type SidebarCollapsedByServer = Record<string, string[]>;
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "openbot:sidebar-collapsed:v1";
@@ -6,8 +6,8 @@ const SIDEBAR_COLLAPSED_STORAGE_KEY = "openbot:sidebar-collapsed:v1";
 type SidebarCollapsedStorage = Pick<Storage, "getItem" | "setItem">;
 
 const collapsedSchema = z.record(
-  z.string().trim().min(1),
-  z.array(z.string().trim().min(1).nullable().catch(null)).catch([]),
+  z.string().check(z.trim(), z.minLength(1)),
+  z.catch(z.array(z.catch(z.nullable(z.string().check(z.trim(), z.minLength(1))), null)), []),
 );
 
 export function readSidebarCollapsed(storage: SidebarCollapsedStorage = window.localStorage): SidebarCollapsedByServer {

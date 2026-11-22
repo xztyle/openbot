@@ -477,6 +477,28 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
     await page.keyboard.press("Backspace");
   });
 
+  // 7b. The emoji button: the picker is its own chunk, which the press loads.
+  await step(page, viewport, "The emoji button opens the picker, and a pick goes into the box", async () => {
+    const box = composerOf(page, "general");
+    await press(box, viewport);
+    const trigger = page.getByRole("button", { name: english("workspace.composer.emoji"), exact: true }).first();
+    await press(trigger, viewport);
+    const search = page.getByRole("searchbox", { name: english("workspace.emoji.search") });
+    await search.waitFor({ timeout: UI_WAIT_MS });
+    await search.fill("rocket");
+    await press(page.getByRole("option", { name: "rocket", exact: true }).first(), viewport);
+    await search.waitFor({ state: "detached", timeout: UI_WAIT_MS });
+    await page.waitForFunction(
+      (label) => document.querySelector(`[aria-label="${label}"]`)?.textContent?.includes("🚀") === true,
+      english("workspace.app.composer.messageChannel", { name: "general" }),
+      { timeout: UI_WAIT_MS },
+    );
+    await shot(page, `${viewport}-emoji-picker`);
+    await box.focus();
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+    await page.keyboard.press("Backspace");
+  });
+
   // 8. Rename, then delete with Undo: the conversations go back, then come back with Undo.
   await step(page, viewport, "Rename and delete a section, and Undo brings it back", async () => {
     await showSidebar(page, viewport);

@@ -45,7 +45,11 @@ const load = singleFlight(() => {
  */
 export function pollInsightAlerts(ws: ReturnType<typeof useWorkspace>, read: Reader): void {
   readers = [...readers, read];
-  if (readers.length === 1) timer = setInterval(load, POLL_MS);
+  // Only while the page shows; `refreshOnReturn` reads when it shows again.
+  if (readers.length === 1)
+    timer = setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, POLL_MS);
   refreshOnReturn(ws, () => Boolean(read()), load);
   if (!getOwner()) return;
   // A reader who may not see the report (another host, another role) sees none of its alerts.

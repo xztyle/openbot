@@ -68,9 +68,19 @@ export function WorkspaceInsightView() {
     }
   }
   onSettled(() => void refresh());
-  // The numbers move while agents work: read again every two minutes while the view shows.
-  const timer = setInterval(() => void refresh(), 120_000);
-  onCleanup(() => clearInterval(timer));
+  // The numbers move while agents work: read again every two minutes while the view shows, and when
+  // the page shows again after it was hidden.
+  const timer = setInterval(() => {
+    if (document.visibilityState === "visible") void refresh();
+  }, 120_000);
+  const visible = () => {
+    if (document.visibilityState === "visible") void refresh();
+  };
+  document.addEventListener("visibilitychange", visible);
+  onCleanup(() => {
+    clearInterval(timer);
+    document.removeEventListener("visibilitychange", visible);
+  });
 
   /** Sends one change; the host answers with the new report. A failure is thrown on to the form. */
   async function act(action: WorkspaceInsightAction, done?: string) {

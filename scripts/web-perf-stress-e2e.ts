@@ -13,7 +13,8 @@
 //    checks the window and document listeners, the elements and the heap after a GC.
 // 6. restart: the host is away for 40 s, with and without its restart notice; the time from its
 //    return to the workspace online.
-// 7. idle: the second minute in the foreground without an event. Counts the host calls.
+// 7. hidden: 125 s with the page hidden; no host reads.
+// 8. idle: the second minute in the foreground without an event. Counts the host calls.
 //
 // `bun scripts/web-perf-stress-e2e.ts [--only=<phase,...>] [--latency=<ms>] [--cycles=<n>] [--effects]
 //   [--snapshot=<file>] [--browser-executable=<path>] [--headed]`
@@ -546,6 +547,34 @@ async function desktop(browser: Browser, origin: string) {
       heapAfter - heapBefore < 5_000_000,
       `${Math.round(heapBefore / 1e5) / 10} MB -> ${Math.round(heapAfter / 1e5) / 10} MB`,
     );
+  }
+
+  if (runs("hidden")) {
+    // The page in the background (a phone's other app, another tab): no host reads for 125 s, the
+    // two-minute insight polls included. Today shows (it reads the insight report); the bounded
+    // retries of the load end first.
+    await page
+      .getByRole("navigation", { name: english("workspace.sidebar.label") })
+      .getByRole("button", { name: english("workspace.view.today") })
+      .first()
+      .click();
+    await page.waitForTimeout(65_000);
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page.waitForTimeout(1_000);
+    await resetCalls(page);
+    await page.waitForTimeout(125_000);
+    const hidden = await calls(page);
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+      Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    report.metrics.hiddenTwoMinutes = { calls: hidden };
+    check("a hidden page makes no host reads in 125 s", sum(Object.values(hidden)) === 0, JSON.stringify(hidden));
   }
 
   if (runs("idle")) {

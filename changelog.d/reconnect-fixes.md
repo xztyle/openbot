@@ -11,3 +11,5 @@
   few seconds: back about 2 to 3 seconds after the server.
 - A reconnect reads every agent's queue in one request instead of one request per agent (43 with
   43 agents), so devices coming back after a restart no longer flood the server.
+- Today, Money and Insights no longer read the insight report every two minutes while the page is
+  hidden; they read it when you come back.

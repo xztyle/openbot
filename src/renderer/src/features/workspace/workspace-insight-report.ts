@@ -44,7 +44,10 @@ export function useInsightReport(ws: Workspace, days: () => number) {
     () => Boolean(ws.channels.port().agent.workspaceInsight) && ws.viewAvailable("insights"),
     () => void untrack(refresh),
   );
-  const timer = setInterval(() => void refresh(), 120_000);
+  // Only while the page shows: a hidden page has nobody to read it, and coming back reads it at once.
+  const timer = setInterval(() => {
+    if (document.visibilityState === "visible") void refresh();
+  }, 120_000);
   onCleanup(() => clearInterval(timer));
   return { report, failed, refresh };
 }

@@ -120,29 +120,23 @@ describe.each(sources)("OpenBot schema %s", (source) => {
     expectHealthy(database);
   });
 
-  it("rolls back on an existing foreign-key violation and succeeds after its repair", () => {
+  it("migrates past a foreign-key violation from before the upgrade and keeps the row", () => {
     const database = sourceDatabase(source);
     database.exec("PRAGMA foreign_keys = OFF");
     insertOrphan(database, orphanGroup(source));
     database.exec("PRAGMA foreign_keys = ON");
     const before = captureRows(database);
-    const declarations = readDeclarations(database);
     const markers = readMarkers(database);
+    const violations = database.prepare("PRAGMA foreign_key_check").all().length;
+    expect(violations).toBeGreaterThan(0);
 
-    expect(() => migrateOpenBotDatabase(database, { appliedAt })).toThrow(
-      `migration to version ${firstStep(source)} failed`,
-    );
+    migrateOpenBotDatabase(database, { appliedAt });
 
     expectCapturedRows(database, before);
-    expect(readDeclarations(database)).toEqual(declarations);
-    expect(readMarkers(database)).toEqual(markers);
-    expect(database.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
-    removeOrphan(database, orphanGroup(source));
-    const repaired = captureRows(database);
-    migrateOpenBotDatabase(database, { appliedAt });
-    expectCapturedRows(database, repaired);
     expect(readMarkers(database)).toEqual([...markers, ...newMarkers(source)]);
-    expectHealthy(database);
+    expect(database.prepare("PRAGMA foreign_key_check").all()).toHaveLength(violations);
+    expect(database.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
+    expect(database.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
   });
 
   it("stops startup on corrupt saved constraints and keeps the rows for repair", () => {
@@ -377,14 +371,6 @@ function insertOrphan(database: DatabaseSync, group: TableGroup): void {
     database.exec(`INSERT INTO projection_event_check_executions (execution_id, check_id, started_at, result_json)
       VALUES ('orphan-execution', 'missing-check', '${sourceAt}', '{"status":"empty"}')`);
   else database.exec("INSERT INTO agent_memory_selections (memory_id) VALUES ('missing-memory')");
-}
-
-function removeOrphan(database: DatabaseSync, group: TableGroup): void {
-  database.exec(
-    group === "routine flows"
-      ? "DELETE FROM routine_flow_steps WHERE step_id = 'orphan-step'"
-      : "DELETE FROM projection_event_check_executions WHERE execution_id = 'orphan-execution'",
-  );
 }
 
 function setConstraintValue(database: DatabaseSync, group: TableGroup, valid: boolean): void {

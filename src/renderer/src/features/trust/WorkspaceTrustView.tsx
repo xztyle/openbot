@@ -19,7 +19,7 @@ import {
 import { Badge, Button, Input, NativeSelect, ShieldCheck, SwitchField, Text, Trash2, toast } from "@openbot/ui";
 import { WorkspacePaneHeader } from "@openbot/ui/features/workspace/WorkspacePaneHeader";
 import { useText } from "@openbot/ui/text";
-import { createMemo, createSignal, For, onSettled, Show } from "solid-js";
+import { createMemo, createSignal, For, flush, onSettled, Show } from "solid-js";
 import { useWorkspace } from "../workspace/workspace-context";
 import { TrustGuardrailsPanel } from "./TrustGuardrailsPanel";
 import {
@@ -758,8 +758,8 @@ const OUTCOME_TONE: Record<TrustAuditOutcome, "success-light" | "warning-light" 
   changed: "warning-light",
 };
 
-function TrustAuditPanel(props: {
-  calls: () => TrustCalls | undefined;
+export function TrustAuditPanel(props: {
+  calls: () => Pick<TrustCalls, "audit"> | undefined;
   agents: readonly { id: string; name: string }[];
   agentName: (id: string) => string;
   onOpenAgent: (agentId: string) => void;
@@ -785,22 +785,34 @@ function TrustAuditPanel(props: {
     ...(since() ? { since: new Date(`${since()}T00:00:00`).toISOString() } : {}),
   });
 
+  /*
+   * Each new list counts one, and only its own answers show: a slow answer of the filter before, or
+   * a "More" page of it, no longer replaces or joins the list of the filter that shows.
+   */
+  let run = 0;
   async function load(append = false) {
     const trust = props.calls();
     if (!trust) return;
+    const mine = append ? run : ++run;
     setLoading(true);
     try {
       const before = append ? entries()?.at(-1)?.at : undefined;
       const page = await trust.audit(query(before));
+      if (mine !== run) return;
       setEntries(append ? [...(entries() ?? []), ...page] : page);
       setMore(page.length === AUDIT_PAGE);
       setError(null);
     } catch (failure) {
-      setError(errorMessage(failure, t("trust.audit.loadFailed")));
+      if (mine === run) setError(errorMessage(failure, t("trust.audit.loadFailed")));
     } finally {
-      setLoading(false);
+      if (mine === run) setLoading(false);
     }
   }
+  /** Shows a new filter and reads its list. The read sees it at once: a signal shows a write after its flush. */
+  const filterBy = (change: () => void) => {
+    flush(change);
+    void load();
+  };
   onSettled(() => void load());
 
   async function exportCsv() {
@@ -822,8 +834,8 @@ function TrustAuditPanel(props: {
           aria-label={t("trust.audit.category")}
           value={category()}
           onChange={(event) => {
-            setCategory(TRUST_AUDIT_CATEGORIES.find((value) => value === event.currentTarget.value) ?? "");
-            void load();
+            const value = event.currentTarget.value;
+            filterBy(() => setCategory(TRUST_AUDIT_CATEGORIES.find((item) => item === value) ?? ""));
           }}
         >
           <option value="">{t("trust.audit.allCategories")}</option>
@@ -836,8 +848,8 @@ function TrustAuditPanel(props: {
           aria-label={t("trust.audit.outcome")}
           value={outcome()}
           onChange={(event) => {
-            setOutcome(TRUST_AUDIT_OUTCOMES.find((value) => value === event.currentTarget.value) ?? "");
-            void load();
+            const value = event.currentTarget.value;
+            filterBy(() => setOutcome(TRUST_AUDIT_OUTCOMES.find((item) => item === value) ?? ""));
           }}
         >
           <option value="">{t("trust.audit.allOutcomes")}</option>
@@ -848,8 +860,8 @@ function TrustAuditPanel(props: {
           aria-label={t("trust.audit.agent")}
           value={agentId()}
           onChange={(event) => {
-            setAgentId(event.currentTarget.value);
-            void load();
+            const value = event.currentTarget.value;
+            filterBy(() => setAgentId(value));
           }}
         >
           <option value="">{t("trust.audit.allAgents")}</option>
@@ -861,8 +873,7 @@ function TrustAuditPanel(props: {
           aria-label={t("trust.audit.since")}
           value={since()}
           onValueChange={(value) => {
-            setSince(value);
-            void load();
+            filterBy(() => setSince(value));
           }}
         />
         <form

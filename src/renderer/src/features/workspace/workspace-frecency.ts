@@ -76,13 +76,23 @@ export function createWorkspaceFrecency(input: {
   active: () => string | undefined;
 }): WorkspaceFrecency {
   const [visits, setVisits] = createSignal<Visits>({});
+  /*
+   * The visits as last written. A visit is noted from them, not from the signal: the signal shows a
+   * write only after its flush, and the first visit of a page, noted in the same flush as the read
+   * of the stored visits, replaced them all with itself.
+   */
+  let latest: Visits = {};
+  const show = (next: Visits) => {
+    latest = next;
+    setVisits(next);
+  };
   createEffect(input.storageKey, (key) => {
-    setVisits(readVisits(key));
+    show(readVisits(key));
   });
 
   function note(id: string) {
     const now = Date.now();
-    const current = visits();
+    const current = latest;
     const times = current[id] ?? [];
     if (times[0] !== undefined && now - times[0] < SAME_VISIT_MS) return;
     const next: Record<string, readonly number[]> = { ...current, [id]: [now, ...times].slice(0, VISITS_PER_TARGET) };
@@ -92,7 +102,7 @@ export function createWorkspaceFrecency(input: {
         .sort((left, right) => (next[left]?.[0] ?? 0) - (next[right]?.[0] ?? 0))
         .slice(0, ids.length - TARGET_LIMIT))
         delete next[old];
-    setVisits(next);
+    show(next);
     writeVisits(input.storageKey(), next);
   }
 

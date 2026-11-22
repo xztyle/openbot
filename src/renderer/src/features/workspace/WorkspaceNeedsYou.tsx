@@ -4,9 +4,8 @@
  * exact place where the request waits.
  */
 import { NeedsYouButton } from "@openbot/ui/features/workspace/NeedsYou";
-import { useDecisionQueue } from "./workspace-decisions";
+import type { useDecisionQueue } from "./workspace-decisions";
 
-export function WorkspaceNeedsYouButton() {
-  const needsYou = useDecisionQueue();
-  return <NeedsYouButton rows={needsYou.rows()} onOpen={needsYou.open} />;
+export function WorkspaceNeedsYouButton(props: { queue: ReturnType<typeof useDecisionQueue> }) {
+  return <NeedsYouButton rows={props.queue.rows()} onOpen={props.queue.open} />;
 }

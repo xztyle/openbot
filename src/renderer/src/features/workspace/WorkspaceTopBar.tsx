@@ -18,12 +18,15 @@ import { WorkspaceFocusButton } from "./WorkspaceOwnerAway";
 import { useJumpEntries } from "./WorkspaceSwitcher";
 import { useWorkspace } from "./workspace-context";
 import { debugMode, setDebugMode } from "./workspace-debug";
+import { useDecisionQueue } from "./workspace-decisions";
 import { shortcutKeys } from "./workspace-shortcuts";
 
 export function WorkspaceTopBar() {
   const ws = useWorkspace();
   const { t } = useText();
   const jump = useJumpEntries();
+  // The one queue of every space: a loop decision or a request of another space shows the bar too.
+  const waiting = useDecisionQueue();
   let element: HTMLDivElement | undefined;
   let api: WorkspaceSearchBarApi | undefined;
   onCleanup(
@@ -53,7 +56,7 @@ export function WorkspaceTopBar() {
       <Show
         when={
           !ws.env.phone() &&
-          (ws.search.supported() || ws.needsYou().length > 0 || Boolean(ws.env.ownerAway?.supported()) || debugMode())
+          (ws.search.supported() || waiting.queue().length > 0 || Boolean(ws.env.ownerAway?.supported()) || debugMode())
         }
       >
         <div class="ws-topbar" ref={(div) => (element = div)}>
@@ -79,7 +82,7 @@ export function WorkspaceTopBar() {
               shortcutsLabel={t("workspace.shortcuts.title")}
             />
           </Show>
-          <WorkspaceNeedsYouButton />
+          <WorkspaceNeedsYouButton queue={waiting} />
           <WorkspaceFocusButton />
           <Show when={debugMode()}>
             <WorkspaceDebugBadge />

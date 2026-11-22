@@ -95,7 +95,7 @@ export const updateProfileToolSchema = z
       .min(1)
       .max(INPUT_LIMITS.path)
       .describe(
-        "Local PNG, JPEG, or WebP file, up to 512 KB. Resize or compress a copy with your available tools first if needed. Use an absolute path or a path relative to your workspace. Do not combine with avatarSeed or avatarHue.",
+        "Local PNG, JPEG, or WebP file, up to 512 KB. Resize or compress a copy with your available tools first if needed. Use an absolute path or a path relative to your workspace. Do not combine with avatarSeed.",
       )
       .optional(),
     provider: z

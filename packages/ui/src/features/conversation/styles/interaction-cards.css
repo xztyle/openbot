@@ -8,12 +8,22 @@
   padding: var(--openbot-space-4);
 }
 
+/*
+ * The title keeps room for about 14 characters a line beside the status; a narrower card, as on a
+ * phone, puts the status under the title. It cut a site's name in the middle ("accounts.example.t
+ * est") before.
+ */
 .conversation-interaction-header {
   display: flex;
   min-width: 0;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--openbot-space-3);
+  gap: var(--openbot-space-2) var(--openbot-space-3);
+}
+
+.conversation-interaction-header > :is(strong, h2, .approval-card-heading) {
+  flex: 1 1 14em;
 }
 
 .conversation-interaction-header > :is(strong, h2),

@@ -517,6 +517,10 @@ async function phone(browser: Browser, origin: string): Promise<void> {
 
   await step(page, viewport, "Take over opens the agent's page full screen", async () => {
     await load(page, origin, DM_PATH, takeoverCard(page));
+    // The status goes under the title on a phone: beside it, the title had a third of the card and
+    // cut the site's name in the middle.
+    const title = await takeoverCard(page).getByRole("heading").first().boundingBox();
+    assert.ok(title && title.width >= 240, `The card's title is squeezed: ${JSON.stringify(title)}.`);
     await shot(page, "phone-card");
     await button(page, english("prompt.browser.takeOver")).tap();
     await viewing(page, host);

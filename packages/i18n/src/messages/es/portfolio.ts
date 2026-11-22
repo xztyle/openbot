@@ -55,7 +55,7 @@ export const messages = {
   "portfolio.suite.turns": "Mensajes de la persona",
   "portfolio.suite.turnsOption": { one: "{count} mensaje", other: "{count} mensajes" },
   "portfolio.suite.remove": "Quitar",
-  "portfolio.suite.add": "Añadir escenario",
+  "portfolio.suite.add": "Agregar escenario",
   "portfolio.suite.draft": "Escribir con IA",
   "portfolio.suite.drafting": "Escribiendo…",
   "portfolio.suite.draftEmpty": "No se pudo escribir ningún escenario. Escribe uno tú.",

@@ -6,7 +6,7 @@ export const messages = {
   "backups.sectionDescription": "Copias nocturnas de este servidor y restauración.",
   "backups.title": "Copias de seguridad de {name}",
   "backups.description":
-    "Cada copia guarda la base de datos, los ajustes, las claves, la bóveda, las cuentas de proveedores, los espacios de trabajo de los agentes, los espacios y el tablero de Motion. Los archivos sin cambios se comparten entre copias, así que una copia nocturna solo añade lo que cambió.",
+    "Cada copia guarda la base de datos, los ajustes, las claves, la bóveda, las cuentas de proveedores, los espacios de trabajo de los agentes, los espacios y el tablero de Motion. Los archivos sin cambios se comparten entre copias, así que una copia nocturna solo agrega lo que cambió.",
   "backups.backUpNow": "Hacer copia ahora",
   "backups.loadFailed": "No se pudieron leer las copias de {name}.",
   "backups.createFailed": "La copia no empezó",
@@ -26,7 +26,7 @@ export const messages = {
   "backups.lastRestoreFailed": "La restauración de {id} falló",
   "backups.safetyBackup": "El estado anterior es la copia {id}.",
   "backups.empty": "Aún no hay copias.",
-  "backups.row": "{reason} · {size} · {added} añadidos",
+  "backups.row": "{reason} · {size} · {added} agregados",
   "backups.skipped": "No incluido: {parts}.",
   "backups.reason.nightly": "Nocturna",
   "backups.reason.manual": "Manual",

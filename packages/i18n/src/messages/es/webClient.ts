@@ -67,7 +67,7 @@ export const messages = {
   "webClient.error.timeout": "El servidor no respondió a tiempo. Intenta de nuevo.",
   "webClient.error.accessEnded": "El acceso a este servidor ha finalizado.",
   "webClient.error.hostsFailed": "No se pudieron cargar tus servidores.",
-  "webClient.error.enterInvitation": "Introduce un enlace de invitación.",
+  "webClient.error.enterInvitation": "Ingresa un enlace de invitación.",
   "webClient.error.invitationOffline":
     "La invitación se aceptó, pero el servidor está sin conexión. Inténtalo de nuevo.",
   "webClient.error.otherConversation": "El servidor devolvió otra conversación.",
@@ -107,7 +107,7 @@ export const messages = {
   "webClient.error.duplication": "Este servidor no admite la duplicación de agentes.",
   "webClient.error.connectServerFirst": "Conéctate primero a este servidor.",
   "webClient.error.agentInstallNotAllowed":
-    "Solo un propietario o administrador puede añadir un agente aquí, y el servidor debe ejecutar una versión actual de Atelier.",
+    "Solo un propietario o administrador puede agregar un agente aquí, y el servidor debe ejecutar una versión actual de Atelier.",
   "webClient.error.linkDesktopOnly": "Este enlace solo se abre en la aplicación de escritorio.",
   "webClient.error.saveEndpointOffline": "Conéctate a tu servidor para guardar un endpoint.",
   "webClient.error.removeEndpointOffline": "Conéctate a tu servidor para eliminar un endpoint.",

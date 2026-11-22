@@ -82,7 +82,7 @@ export const messages = {
   "mobile.auth.error.verifyFailed": "Atelier no pudo verificar esta sesión móvil.",
   "mobile.auth.error.sessionsLoadFailed": "No se pudieron cargar las sesiones de la cuenta. Inténtalo de nuevo.",
   "mobile.auth.error.useSignOut": "Usa Cerrar sesión para desconectar este dispositivo.",
-  "mobile.auth.error.desktopSession": "Las sesiones de escritorio no se pueden desconectar desde el móvil.",
+  "mobile.auth.error.desktopSession": "Las sesiones de escritorio no se pueden desconectar desde el celular.",
   "mobile.auth.error.disconnectFailed": "No se pudo desconectar esta sesión. Actualiza e inténtalo de nuevo.",
   "mobile.auth.error.nameLength": "Escribe un nombre visible de entre 3 y 20 caracteres.",
   "mobile.auth.error.photoTooLarge": "Elige una foto de menos de 512 KB.",

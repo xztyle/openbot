@@ -46,8 +46,8 @@ export const messages = {
   "mobile.channel.records.paused": "En pausa",
   "mobile.channel.records.noMemories": "Aún no hay recuerdos.",
   "mobile.channel.records.noRoutines": "Aún no hay rutinas.",
-  "mobile.channel.records.addMemory": "Añadir recuerdo",
-  "mobile.channel.records.addRoutine": "Añadir rutina",
+  "mobile.channel.records.addMemory": "Agregar recuerdo",
+  "mobile.channel.records.addRoutine": "Agregar rutina",
   "mobile.channel.form.loading": "Cargando canal…",
   "mobile.channel.form.gone": "Este canal ya no está disponible.",
   "mobile.channel.discard.title": "¿Descartar los cambios?",
@@ -74,5 +74,5 @@ export const messages = {
     "Esto detiene el canal. Su historial permanece en Canales eliminados solo para consulta. Puedes restaurarlo desde allí. Los agentes miembros se conservan.",
   "mobile.channel.form.delete": "Eliminar canal",
   "mobile.channel.form.unavailable": "Conéctate a un servidor de escritorio que admita canales para hacer cambios.",
-  "mobile.channel.form.invalidName": "Introduce un nombre de canal válido.",
+  "mobile.channel.form.invalidName": "Ingresa un nombre de canal válido.",
 } as const satisfies PartialTranslation<typeof source>;

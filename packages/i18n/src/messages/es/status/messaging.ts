@@ -7,7 +7,7 @@ export const messages = {
   "status.messaging.busy": "Hay demasiadas solicitudes en espera. Inténtalo más tarde.",
   "status.messaging.failed": "Atelier no pudo completar esta solicitud. El host de Atelier tiene los detalles.",
   "status.messaging.noAnswer": "Atelier terminó sin una respuesta escrita.",
-  "status.messaging.noAgent": "Aún no puede responder ningún agente aquí. Añade el Orquestador de Slack en Atelier.",
+  "status.messaging.noAgent": "Aún no puede responder ningún agente aquí. Agrega el Orquestador de Slack en Atelier.",
   "status.messaging.delegated": "Un compañero está trabajando en ello. La respuesta llegará aquí.",
   "status.messaging.stopped": "Detenido.",
   "status.messaging.stop": "Detener",
@@ -27,14 +27,14 @@ export const messages = {
   "status.messaging.orchestratorName": "Orquestador de Slack",
   "status.messaging.orchestratorTitle": "Responde en Slack y consulta al equipo",
   "status.messaging.discordNoAgent":
-    "Aún no puede responder ningún agente aquí. Añade el Orquestador de Discord en Atelier.",
+    "Aún no puede responder ningún agente aquí. Agrega el Orquestador de Discord en Atelier.",
   "status.messaging.discordOrchestratorName": "Orquestador de Discord",
   "status.messaging.discordOrchestratorTitle": "Responde en Discord y consulta al equipo",
   "status.messaging.integrationsSection": "Integraciones",
   "status.messaging.signInReceived": "Atelier recibió la instalación de Slack. Puedes cerrar esta pestaña.",
   "status.messaging.signInUnknown": "Atelier no inició esta instalación de Slack. Iníciala de nuevo en Atelier.",
   "status.messaging.telegramNoAgent":
-    "Aún no hay ningún agente que pueda responder aquí. Añade el Orquestador de Telegram en Atelier.",
+    "Aún no hay ningún agente que pueda responder aquí. Agrega el Orquestador de Telegram en Atelier.",
   "status.messaging.telegramLinked":
     "Atelier está conectado a este chat. Menciona a {bot} o responde a un mensaje de Atelier para consultar a los agentes.",
   "status.messaging.telegramOrchestratorName": "Orquestador de Telegram",

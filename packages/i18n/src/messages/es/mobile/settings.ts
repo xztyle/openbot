@@ -92,15 +92,15 @@ export const messages = {
   "mobile.settings.feedback.footer": "Respuesta táctil para las acciones en la aplicación en este dispositivo.",
   "mobile.settings.feedback.haptics": "Respuesta háptica",
   "mobile.settings.feedback.retry": "Reintentar guardar el ajuste háptico",
-  "mobile.settings.liveActivities.title": "Actividades en directo",
+  "mobile.settings.liveActivities.title": "Actividades en vivo",
   "mobile.settings.liveActivities.footer":
     "Muestra el trabajo de los agentes, mensajes, preguntas y aprobaciones en la pantalla de bloqueo y en la Dynamic Island mientras Atelier está en ejecución.",
   "mobile.settings.liveActivities.toggle": "Mostrar actividad de los agentes",
-  "mobile.settings.liveActivities.retry": "Reintentar guardar el ajuste de actividades en directo",
+  "mobile.settings.liveActivities.retry": "Reintentar guardar el ajuste de actividades en vivo",
   "mobile.settings.notifications.title": "Notificaciones",
   "mobile.settings.notifications.toggle": "Permitir notificaciones",
   "mobile.settings.notifications.footer":
-    "Los agentes te avisan cuando terminan, se detienen con un error o necesitan tu respuesta, una aprobación o un paso en el navegador. No llega nada mientras usas Atelier aquí o en la app de escritorio. Mientras se muestra la actividad en directo, el evento aparece allí en su lugar.",
+    "Los agentes te avisan cuando terminan, se detienen con un error o necesitan tu respuesta, una aprobación o un paso en el navegador. No llega nada mientras usas Atelier aquí o en la app de escritorio. Mientras se muestra la actividad en vivo, el evento aparece allí en su lugar.",
   "mobile.settings.notifications.footerAndroid":
     "Los agentes te avisan cuando terminan, se detienen con un error o necesitan tu respuesta, una aprobación o un paso en el navegador. No llega nada mientras usas Atelier aquí o en la app de escritorio.",
   "mobile.settings.notifications.denied": "Las notificaciones de Atelier están desactivadas en los Ajustes de iOS.",
@@ -123,7 +123,7 @@ export const messages = {
   "mobile.settings.notifications.sound.default": "Predeterminado de iOS",
   "mobile.settings.notifications.sound.defaultAndroid": "Predeterminado de Android",
   "mobile.settings.notifications.soundFooter":
-    "Las notificaciones y la actividad en directo reproducen este sonido. La actividad en directo también enciende la pantalla. El sonido de Atelier es el que reproduce la app de escritorio cuando termina una tarea. Los cuatro sonidos siguientes son los de los temas de sonido de la app de escritorio.",
+    "Las notificaciones y la actividad en vivo reproducen este sonido. La actividad en vivo también enciende la pantalla. El sonido de Atelier es el que reproduce la app de escritorio cuando termina una tarea. Los cuatro sonidos siguientes son los de los temas de sonido de la app de escritorio.",
   "mobile.settings.notifications.soundFooterAndroid":
     "Las notificaciones reproducen este sonido. El sonido de Atelier es el que reproduce la app de escritorio cuando termina una tarea. Los cuatro sonidos siguientes son los de los temas de sonido de la app de escritorio.",
   "mobile.settings.notifications.notifyAbout": "Notificarme sobre",
@@ -137,7 +137,7 @@ export const messages = {
   "mobile.settings.notifications.mute.for3Hours": "Durante 3 horas",
   "mobile.settings.notifications.mute.for8Hours": "Durante 8 horas",
   "mobile.settings.notifications.mute.for24Hours": "Durante 24 horas",
-  "mobile.settings.notifications.mute.untilTurnedOn": "Hasta que lo vuelva a activar",
+  "mobile.settings.notifications.mute.untilTurnedOn": "Hasta que lo vuelvas a activar",
   "mobile.settings.notifications.mute.until": "Hasta las {time}",
   "mobile.settings.notifications.serverFooter":
     "Los eventos de este servidor que notifican a este teléfono. La app de escritorio tiene sus propios ajustes.",
@@ -160,9 +160,9 @@ export const messages = {
   "mobile.settings.profile.removePhoto": "Quitar foto",
   "mobile.settings.profile.saveName": "Guardar nombre",
   "mobile.settings.profile.editPhoto": "Editar foto de perfil",
-  "mobile.settings.profile.addPhoto": "Añadir foto de perfil",
+  "mobile.settings.profile.addPhoto": "Agregar foto de perfil",
   "mobile.settings.profile.name": "Nombre",
-  "mobile.settings.profile.namePlaceholder": "Añade tu nombre",
+  "mobile.settings.profile.namePlaceholder": "Agrega tu nombre",
   "mobile.settings.profile.email": "Correo electrónico",
   "mobile.settings.profile.security": "Seguridad",
   "mobile.settings.profile.accountSessions": "Sesiones de la cuenta",

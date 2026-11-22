@@ -36,7 +36,7 @@ export const messages = {
   "error.team.accountChangedDuringRequest": "La cuenta con sesión iniciada cambió mientras se procesaba la solicitud.",
   "error.team.serverFileUnreadable":
     "No se pudo leer el archivo local del servidor del equipo. Muévelo a otra ubicación antes de configurar un servidor para que no se sobrescriba.",
-  "error.team.emailInvalid": "Introduce una dirección de correo válida.",
+  "error.team.emailInvalid": "Ingresa una dirección de correo válida.",
   "error.team.accountNameTooLong": "El nombre de la cuenta es demasiado largo.",
   "error.team.avatarUrlTooLong": "La URL del avatar de la cuenta es demasiado larga.",
   "error.team.avatarUrlInvalid": "La URL del avatar de la cuenta no es válida.",
@@ -66,7 +66,7 @@ export const messages = {
   "error.team.membersCannotArchiveChannels": "Los miembros no pueden archivar canales.",
   "error.team.membersCannotRestoreChannels": "Los miembros no pueden restaurar canales.",
   "error.team.sharedDataUnsupported": "Esta conexión no admite datos compartidos.",
-  "error.team.agentInstallUnsupported": "Esta conexión no permite añadir agentes.",
+  "error.team.agentInstallUnsupported": "Esta conexión no permite agregar agentes.",
   "error.team.agentHideUnsupported": "Esta conexión no permite ocultar agentes.",
   "error.team.agentPublishUnsupported": "Esta conexión no permite publicar agentes.",
   "error.team.agentUpdateUnsupported": "Esta conexión no permite actualizar agentes.",
@@ -112,7 +112,7 @@ export const messages = {
   "error.team.attachmentNotFound": "No se encontró el archivo adjunto.",
   "error.team.sharedFileTooLarge": "El archivo compartido supera el límite de 100 MB.",
   "error.team.workspaceFileTooLarge": "El archivo del espacio de trabajo supera el límite de 100 MB.",
-  "error.team.browserViewUnavailable": "La vista del navegador en directo no está disponible.",
+  "error.team.browserViewUnavailable": "La vista del navegador en vivo no está disponible.",
   "error.team.browserSessionNotFound": "No se encontró la sesión de vista del navegador.",
   "error.team.mcpUnsupported": "Esta conexión no admite servidores MCP.",
   "error.team.mcpOAuthUnsupported":

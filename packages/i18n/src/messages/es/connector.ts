@@ -103,7 +103,7 @@ export const messages = {
   },
   "connector.slack.attentionDescription": "El estado que aparece abajo indica qué hacer.",
   "connector.slack.connect": "Conectar Slack",
-  "connector.slack.addAgent": "Añadir agente",
+  "connector.slack.addAgent": "Agregar agente",
   "connector.slack.actionFailed": "Slack no aceptó el cambio",
   "connector.slack.workspaceTitle": "Espacio de trabajo",
   "connector.slack.workspaceDescription": "Las personas mencionan a @OpenBot o le envían un mensaje directo.",
@@ -119,7 +119,7 @@ export const messages = {
   "connector.slack.orchestratorDescription":
     "Este agente recibe todas las solicitudes de Slack. Responde por sí mismo a las breves, asigna el resto del trabajo al agente adecuado y publica la respuesta en el hilo.",
   "connector.slack.orchestratorNone": "Aún no responde ningún agente",
-  "connector.slack.orchestratorNoneDescription": "Añade el Orquestador de Slack o Slack no recibirá respuesta.",
+  "connector.slack.orchestratorNoneDescription": "Agrega el Orquestador de Slack o Slack no recibirá respuesta.",
   "connector.slack.inviteNote":
     "OpenBot se une automáticamente a todos los canales públicos y a los nuevos. Para un canal privado, invítalo: /invite @OpenBot.",
   "connector.slack.stepWorkspace": "Espacio de trabajo",
@@ -133,7 +133,7 @@ export const messages = {
   "connector.slack.connectStepReturn": "Este cuadro de diálogo continúa cuando Slack termina",
   "connector.slack.connectInSlack": "Conectar en Slack",
   "connector.slack.connectWaiting": "Esperando a Slack. Termina la instalación en tu navegador.",
-  "connector.slack.agentStepTitle": "Añadir el Orquestador de Slack",
+  "connector.slack.agentStepTitle": "Agregar el Orquestador de Slack",
   "connector.slack.agentStepDescription":
     "Este nuevo agente responde a todo lo que las personas envían a @OpenBot en {workspace}.",
   "connector.slack.orchestratorName": "Orquestador de Slack",
@@ -156,7 +156,7 @@ export const messages = {
   "connector.slack.removeEffectDeleted": "El Orquestador de Slack y sus conversaciones se eliminan de Atelier.",
   "connector.slack.keep": "Mantener la conexión",
   "connector.slack.close": "Cerrar",
-  "connector.slack.addWorkspace": "Añadir espacio de trabajo",
+  "connector.slack.addWorkspace": "Agregar espacio de trabajo",
   "connector.slack.limitReached": {
     one: "Puedes conectar como máximo {count} espacio de trabajo.",
     other: "Puedes conectar como máximo {count} espacios de trabajo.",
@@ -179,7 +179,7 @@ export const messages = {
   },
   "connector.discord.attentionDescription": "El estado que aparece abajo indica qué hacer.",
   "connector.discord.connect": "Conectar Discord",
-  "connector.discord.addAgent": "Añadir agente",
+  "connector.discord.addAgent": "Agregar agente",
   "connector.discord.actionFailed": "Discord no aceptó el cambio",
   "connector.discord.workspaceTitle": "Servidor de Discord",
   "connector.discord.workspaceDescription": "Menciona a @OpenBot en un canal. Responde a OpenBot para continuar.",
@@ -195,18 +195,18 @@ export const messages = {
   "connector.discord.orchestratorDescription":
     "Este agente recibe todas las solicitudes de Discord. Responde por sí mismo a las breves, asigna el resto del trabajo al agente adecuado y responde en el canal.",
   "connector.discord.orchestratorNone": "Aún no responde ningún agente",
-  "connector.discord.orchestratorNoneDescription": "Añade el Orquestador de Discord o Discord no recibirá respuesta.",
+  "connector.discord.orchestratorNoneDescription": "Agrega el Orquestador de Discord o Discord no recibirá respuesta.",
   "connector.discord.channelsNote": "Atelier ve los canales que su rol puede ver.",
   "connector.discord.stepWorkspace": "Servidor de Discord",
   "connector.discord.stepAgent": "Agente",
   "connector.discord.connectTitle": "Conectar un servidor de Discord",
-  "connector.discord.connectDescription": "Atelier añade un bot llamado Atelier al servidor de Discord.",
+  "connector.discord.connectDescription": "Atelier agrega un bot llamado Atelier al servidor de Discord.",
   "connector.discord.connectStepBrowser": "Discord se abre en tu navegador",
   "connector.discord.connectStepAllow": "Selecciona el servidor y después Autorizar",
   "connector.discord.connectStepReturn": "Este cuadro de diálogo continúa cuando Discord termina",
   "connector.discord.connectInDiscord": "Conectar en Discord",
   "connector.discord.connectWaiting": "Esperando a Discord. Termina la autorización en tu navegador.",
-  "connector.discord.agentStepTitle": "Añadir el Orquestador de Discord",
+  "connector.discord.agentStepTitle": "Agregar el Orquestador de Discord",
   "connector.discord.agentStepDescription":
     "Este nuevo agente responde a todo lo que las personas envían a @OpenBot en {workspace}.",
   "connector.discord.orchestratorName": "Orquestador de Discord",
@@ -229,7 +229,7 @@ export const messages = {
   "connector.discord.removeEffectDeleted": "El Orquestador de Discord y sus conversaciones se eliminan de Atelier.",
   "connector.discord.keep": "Mantener la conexión",
   "connector.discord.close": "Cerrar",
-  "connector.discord.addWorkspace": "Añadir servidor de Discord",
+  "connector.discord.addWorkspace": "Agregar servidor de Discord",
   "connector.discord.limitReached": {
     one: "Puedes conectar como máximo {count} servidor de Discord.",
     other: "Puedes conectar como máximo {count} servidores de Discord.",
@@ -273,7 +273,7 @@ export const messages = {
   "connector.discord.accessHostUpdate": "Actualiza Atelier en {host} para elegir roles.",
   "connector.telegram.title": "Telegram",
   "connector.telegram.description":
-    "Añade el bot de Atelier a un grupo de Telegram o abre un chat directo con él. El Orquestador de Telegram consulta al agente adecuado y responde.",
+    "Agrega el bot de Atelier a un grupo de Telegram o abre un chat directo con él. El Orquestador de Telegram consulta al agente adecuado y responde.",
   "connector.telegram.statusNotSetUp": "Sin configurar",
   "connector.telegram.statusConnected": "Conectado",
   "connector.telegram.statusAttention": "Requiere atención",
@@ -291,13 +291,13 @@ export const messages = {
   },
   "connector.telegram.attentionDescription": "El estado que aparece abajo indica qué hacer.",
   "connector.telegram.connect": "Conectar Telegram",
-  "connector.telegram.addAgent": "Añadir agente",
+  "connector.telegram.addAgent": "Agregar agente",
   "connector.telegram.actionFailed": "Telegram no aceptó el cambio",
   "connector.telegram.chatsTitle": "Chats",
   "connector.telegram.groupDescription": "Las personas mencionan al bot o responden a sus mensajes.",
   "connector.telegram.directDescription": "Cada mensaje de este chat va al Orquestador de Telegram.",
   "connector.telegram.helpRemoved":
-    "El bot de Atelier ya no está en este chat. Desconecta el chat y vuelve a añadir el bot.",
+    "El bot de Atelier ya no está en este chat. Desconecta el chat y vuelve a agregar el bot.",
   "connector.telegram.helpRelayUnavailable":
     "Atelier no puede recibir mensajes de Telegram en este equipo. Inicia sesión, ponle un nombre a este equipo en Ajustes del servidor y mantén Atelier abierto.",
   "connector.telegram.helpRelayUnavailableHost":
@@ -312,26 +312,26 @@ export const messages = {
   "connector.telegram.linkTitle": "Vincular otro chat",
   "connector.telegram.linkDescription": "Telegram se abre en tu navegador. El chat aparece aquí cuando esté vinculado.",
   "connector.telegram.linkWaiting": "Esperando a Telegram. Selecciona el chat en Telegram.",
-  "connector.telegram.addToGroup": "Añadir a un grupo",
+  "connector.telegram.addToGroup": "Agregar a un grupo",
   "connector.telegram.openDirectChat": "Abrir un chat directo",
   "connector.telegram.orchestratorTitle": "Orquestador de Telegram",
   "connector.telegram.orchestratorDescription":
     "Este agente recibe los mensajes para Atelier de todos tus chats de Telegram. Responde él mismo a los cortos, asigna el resto del trabajo al agente adecuado y publica la respuesta en el chat.",
   "connector.telegram.orchestratorNone": "Aún no responde ningún agente",
   "connector.telegram.orchestratorNoneDescription":
-    "Añade el Orquestador de Telegram o Telegram no recibirá respuesta.",
+    "Agrega el Orquestador de Telegram o Telegram no recibirá respuesta.",
   "connector.telegram.mentionNote":
     "En un grupo, menciona al bot o responde a sus mensajes. En un chat directo, cada mensaje va al bot.",
   "connector.telegram.stepChat": "Chat",
   "connector.telegram.stepAgent": "Agente",
   "connector.telegram.connectTitle": "Vincular un chat de Telegram",
   "connector.telegram.connectDescription":
-    "Añade el bot de Atelier a un grupo o abre un chat directo con él. Un solo bot atiende todos tus chats.",
+    "Agrega el bot de Atelier a un grupo o abre un chat directo con él. Un solo bot atiende todos tus chats.",
   "connector.telegram.connectStepBrowser": "Telegram se abre en tu navegador",
-  "connector.telegram.connectStepPick": "Selecciona el grupo o pulsa Iniciar en el chat directo",
+  "connector.telegram.connectStepPick": "Selecciona el grupo o presiona Iniciar en el chat directo",
   "connector.telegram.connectStepReturn": "Este cuadro de diálogo continúa cuando el chat esté vinculado",
   "connector.telegram.connectWaiting": "Esperando a Telegram. Selecciona el chat en Telegram.",
-  "connector.telegram.agentStepTitle": "Añadir el Orquestador de Telegram",
+  "connector.telegram.agentStepTitle": "Agregar el Orquestador de Telegram",
   "connector.telegram.agentStepDescription":
     "Este nuevo agente responde a los mensajes para Atelier en {chat} y en cada chat que vincules más adelante.",
   "connector.telegram.orchestratorName": "Orquestador de Telegram",
@@ -355,7 +355,7 @@ export const messages = {
   "connector.onePassword.description":
     "Comparte con Atelier una bóveda exclusiva de 1Password mediante una cuenta de servicio para que los agentes puedan iniciar sesión en sitios desde el navegador de Atelier.",
   "connector.onePassword.howItWorks":
-    "Al conectar, se crea una bóveda «Shared with OpenBot» en tu cuenta de 1Password y una cuenta de servicio que solo puede leer esa bóveda. Atelier rellena los inicios de sesión guardados en su navegador en este equipo, por lo que solo se comparten los elementos que muevas a esa bóveda. Los agentes nunca ven contraseñas.",
+    "Al conectar, se crea una bóveda «Shared with OpenBot» en tu cuenta de 1Password y una cuenta de servicio que solo puede leer esa bóveda. Atelier llena los inicios de sesión guardados en su navegador en este equipo, por lo que solo se comparten los elementos que muevas a esa bóveda. Los agentes nunca ven contraseñas.",
   "connector.onePassword.connect": "Conectar 1Password",
   "connector.onePassword.setupTitle": "Configurar",
   "connector.onePassword.stepCliTitle": "Instalar la CLI de 1Password",
@@ -409,7 +409,7 @@ export const messages = {
   "connector.onePassword.disconnectSummaryHost":
     "{host} olvida el token. La bóveda y la cuenta de servicio permanecen en 1Password; elimínalas allí si ya no las necesitas.",
   "connector.bitwarden.title": "Bitwarden",
-  "connector.bitwarden.description": "Rellena los inicios de sesión del navegador desde Bitwarden.",
+  "connector.bitwarden.description": "Llena los inicios de sesión del navegador desde Bitwarden.",
   "connector.bitwarden.setup":
     "Instala la CLI de Bitwarden e inicia sesión con bw login. Crea una carpeta llamada Shared with OpenBot y guarda en ella solo los inicios de sesión que puedan usar los agentes. Ejecuta bw unlock --raw y pega la clave de sesión abajo. No pegues tu contraseña maestra.",
   "connector.bitwarden.scope":
@@ -426,13 +426,13 @@ export const messages = {
     "Atelier olvida la clave de sesión y deja de llenar inicios de sesión desde Bitwarden. Tu bóveda queda como está.",
   "connector.bitwarden.actionFailed": "Atelier no pudo cambiar la conexión de Bitwarden.",
   "connector.bitwarden.descriptionHost":
-    "Rellena los inicios de sesión del navegador en {host} desde Bitwarden o Vaultwarden.",
+    "Llena los inicios de sesión del navegador en {host} desde Bitwarden o Vaultwarden.",
   "connector.bitwarden.setupHost":
-    "{host} inicia sesión con su propia CLI de Bitwarden. En tu caja fuerte, crea una carpeta llamada Shared with OpenBot y pon en ella solo los inicios de sesión que los agentes pueden usar. En la caja fuerte web, abre Configuración › Seguridad › Claves y muestra tu clave de API. Introduce abajo la dirección del servidor, client_id, client_secret y tu contraseña maestra.",
+    "{host} inicia sesión con su propia CLI de Bitwarden. En tu caja fuerte, crea una carpeta llamada Shared with OpenBot y pon en ella solo los inicios de sesión que los agentes pueden usar. En la caja fuerte web, abre Configuración › Seguridad › Claves y muestra tu clave de API. Ingresa abajo la dirección del servidor, client_id, client_secret y tu contraseña maestra.",
   "connector.bitwarden.scopeHost":
     "Todos los agentes de {host} pueden usar los inicios de sesión coincidentes de Shared with OpenBot. Atelier usa orígenes HTTPS exactos. No usa elementos que piden la contraseña maestra ni los que tienen una regla de coincidencia de URI personalizada.",
   "connector.bitwarden.sessionHost":
-    "{host} guarda la clave de API y la contraseña maestra cifradas, para poder desbloquear de nuevo después de reiniciarse. Este ordenador no las guarda. Desconectar las elimina de {host}. {host} debe llegar a la dirección del servidor por HTTPS.",
+    "{host} guarda la clave de API y la contraseña maestra cifradas, para poder desbloquear de nuevo después de reiniciarse. Este computador no las guarda. Desconectar las elimina de {host}. {host} debe llegar a la dirección del servidor por HTTPS.",
   "connector.bitwarden.serverUrl": "Dirección del servidor",
   "connector.bitwarden.clientId": "client_id de la clave de API",
   "connector.bitwarden.clientSecret": "client_secret de la clave de API",

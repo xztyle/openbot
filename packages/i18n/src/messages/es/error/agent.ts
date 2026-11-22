@@ -13,7 +13,7 @@ export const messages = {
   "error.agent.toolFailed": "Falló la herramienta {tool}: {reason}",
   "error.agent.settingsLocalOnly": "Los ajustes del agente solo se pueden cambiar en el equipo que lo ejecuta.",
   "error.agent.skillsLocalOnly": "Las habilidades solo se pueden cambiar en el equipo que ejecuta el agente.",
-  "error.agent.addLocalOnly": "Los agentes solo se pueden añadir en el equipo que los ejecuta.",
+  "error.agent.addLocalOnly": "Los agentes solo se pueden agregar en el equipo que los ejecuta.",
   "error.agent.joinedServerUpdate": "No se puede actualizar desde aquí un agente de un servidor al que te has unido.",
   "error.agent.searchQueryRequired": "Se requiere una consulta de búsqueda.",
   "error.agent.messageTooLong": "El mensaje es demasiado largo.",
@@ -154,7 +154,7 @@ export const messages = {
     "Windows devolvió una imagen vacía. Pide al usuario que desbloquee el equipo y cierre el contenido protegido. Una directiva de la organización también puede impedir la captura de pantalla.",
   "error.agent.screenCaptureFailed": "La captura de pantalla falló. Inténtalo de nuevo.",
   "error.agent.compactionLoopStopped":
-    "{provider} compactó el contexto una y otra vez, y cada vez quedó demasiado lleno para continuar, así que Atelier detuvo este turno. Desactiva los servidores MCP o el uso del ordenador que este agente no necesita y luego envía un mensaje. Si tú o el agente cambiasteis cuándo compacta {provider}, deshaz ese cambio.",
+    "{provider} compactó el contexto una y otra vez, y cada vez quedó demasiado lleno para continuar, así que Atelier detuvo este turno. Desactiva los servidores MCP o el uso del computador que este agente no necesita y luego envía un mensaje. Si tú o el agente cambiasteis cuándo compacta {provider}, deshaz ese cambio.",
   "error.agent.compactionConnectionLost":
     "La conexión se detuvo mientras el agente compactaba su contexto, así que la tarea se detuvo. Comprueba tu conexión a internet y envía un mensaje para continuar.",
 } as const satisfies PartialTranslation<typeof source>;

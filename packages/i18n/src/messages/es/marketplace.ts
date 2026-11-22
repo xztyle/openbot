@@ -62,8 +62,8 @@ export const messages = {
   "marketplace.filter.all": "Todos",
   "marketplace.filter.status": "Estado",
   "marketplace.filter.category": "Categoría",
-  "marketplace.filter.added": "Añadidos",
-  "marketplace.filter.notAdded": "Sin añadir",
+  "marketplace.filter.added": "Agregados",
+  "marketplace.filter.notAdded": "Sin agregar",
   "marketplace.filter.installed": "Instalados",
   "marketplace.filter.notInstalled": "Sin instalar",
   "marketplace.filter.updates": "Con actualizaciones",
@@ -92,10 +92,10 @@ export const messages = {
   "marketplace.properties.version": "Versión",
   "marketplace.properties.updated": "Actualización",
   "marketplace.properties.installs": "Instalaciones",
-  "marketplace.agent.add": "Añadir",
-  "marketplace.agent.addNamed": "Añadir {name}",
-  "marketplace.agent.addAgent": "Añadir agente",
-  "marketplace.agent.added": "Añadido",
+  "marketplace.agent.add": "Agregar",
+  "marketplace.agent.addNamed": "Agregar {name}",
+  "marketplace.agent.addAgent": "Agregar agente",
+  "marketplace.agent.added": "Agregado",
   "marketplace.agent.updateAvailable": "Actualización disponible",
   "marketplace.agent.update": "Actualizar",
   "marketplace.agent.openChat": "Abrir chat",
@@ -213,7 +213,7 @@ export const messages = {
   "marketplace.plugin.appleApps.prompt.unread": "Resume mis correos no leídos de hoy en Apple Mail.",
   "marketplace.plugin.appleApps.prompt.today": "¿Qué hay en mi Calendario de Apple hoy y mañana?",
   "marketplace.plugin.appleApps.prompt.schedule":
-    "Busca el correo más reciente sobre la reunión del proyecto y añade la reunión a mi calendario.",
+    "Busca el correo más reciente sobre la reunión del proyecto y agrega la reunión a mi calendario.",
   "marketplace.plugin.sentry.tagline": "Triaje de errores y fallos",
   "marketplace.plugin.sentry.description":
     "Sentry permite a los agentes buscar errores recientes, inspeccionar trazas de pila y versiones afectadas, y resumir qué se rompió tras un despliegue. Cada usuario inicia sesión en su propia cuenta de Sentry desde el navegador.",
@@ -310,7 +310,7 @@ export const messages = {
   "marketplace.plugin.composio.description":
     "Composio conecta los agentes con Gmail, Slack, GitHub y cientos de aplicaciones más mediante un único servidor MCP. Conecta las aplicaciones que quieras en tu cuenta de Composio y pega aquí su URL de MCP y su clave de API.",
   "marketplace.plugin.composio.app":
-    "Las aplicaciones que añadas a tu servidor MCP de Composio, mediante el enlace de tu cuenta de Composio.",
+    "Las aplicaciones que agregues a tu servidor MCP de Composio, mediante el enlace de tu cuenta de Composio.",
   "marketplace.plugin.composio.prompt.inbox": "Resume mi correo no leído y redacta respuestas a los urgentes.",
   "marketplace.plugin.composio.prompt.handoff":
     "Publica un resumen de este pull request en el canal de nuestro equipo.",
@@ -336,7 +336,7 @@ export const messages = {
   },
   "marketplace.skill.doc": "SKILL.md",
   "marketplace.try.in": "Probar en {name}",
-  "marketplace.notice.agentAdded": "{name} añadido.",
+  "marketplace.notice.agentAdded": "{name} agregado.",
   "marketplace.notice.agentUpdated": "{name} actualizado.",
   "marketplace.notice.appConnected": "{name} conectada.",
   "marketplace.notice.appDisconnected": "{name} desconectada.",
@@ -480,7 +480,7 @@ export const messages = {
     "Instala {name} en el equipo donde se ejecutan estos agentes: su app ejecuta su servidor en ese equipo.",
   "marketplace.error.installOnHost":
     "Instala {name} en el equipo donde se ejecutan estos agentes: su app requiere iniciar sesión en un navegador.",
-  "marketplace.error.appInvalid": "No se puede añadir {name}: {reason}",
+  "marketplace.error.appInvalid": "No se puede agregar {name}: {reason}",
   "marketplace.error.uninstallNoServer": "Selecciona un servidor local para desinstalar un plugin.",
   "marketplace.error.uninstallPartial": "No se pudieron eliminar algunas partes de {name}. {failures}",
   "marketplace.error.actionFailed": "No se pudo completar la acción del marketplace. Inténtalo de nuevo.",

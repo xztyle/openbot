@@ -16,7 +16,7 @@ export const messages = {
     one: "El rol supera {count} carácter. Acórtalo.",
     other: "El rol supera los {count} caracteres. Acórtalo.",
   },
-  "error.marketplace.templateNoInstructions": "Añade instrucciones a este agente antes de publicarlo.",
+  "error.marketplace.templateNoInstructions": "Agrega instrucciones a este agente antes de publicarlo.",
   "error.marketplace.templateInstructions": {
     one: "Las instrucciones superan {count} carácter. Acórtalas.",
     other: "Las instrucciones superan los {count} caracteres. Acórtalas.",
@@ -47,7 +47,7 @@ export const messages = {
   "error.marketplace.changedSinceOpened":
     "Este agente cambió después de abrirlo. Abre el enlace de nuevo para revisar la nueva versión.",
   "error.marketplace.skillNameConflict":
-    "Ya tienes otra habilidad local llamada «{name}». Cámbiale el nombre o elimínala y vuelve a añadir este agente.",
+    "Ya tienes otra habilidad local llamada «{name}». Cámbiale el nombre o elimínala y vuelve a agregar este agente.",
   "error.marketplace.avatarInvalid": "El avatar del agente no es válido.",
   "error.marketplace.secretInName": "Elimina el secreto o la dirección de correo del nombre antes de publicar.",
   "error.marketplace.secretInTitle": "Elimina el secreto o la dirección de correo del título antes de publicar.",

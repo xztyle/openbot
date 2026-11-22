@@ -183,7 +183,7 @@ export const messages = {
   "error.remote.inviteAlreadyUsed": "Esta invitación ya se usó. Pide una nueva invitación.",
   "error.remote.inviteNotFound": "Esta invitación no existe o caducó. Pide una nueva invitación.",
   "error.remote.licenseUsersFull":
-    "La licencia del propietario del servidor no tiene usuarios libres. Pide al propietario que añada un usuario a la licencia.",
+    "La licencia del propietario del servidor no tiene usuarios libres. Pide al propietario que agregue un usuario a la licencia.",
   "error.remote.memberLimitReached": "Este host alcanzó su límite de miembros. Pide al propietario que libere espacio.",
   "error.remote.hostNotRegistered": "Este host ya no está registrado en el servicio de Atelier.",
   "error.remote.membershipEnded": "Ya no eres miembro de este host. Pide al propietario una nueva invitación.",

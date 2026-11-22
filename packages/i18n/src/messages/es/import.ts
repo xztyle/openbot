@@ -30,8 +30,8 @@ export const messages = {
   "import.guide.lede":
     "Un agente de exportación en Grok Bot reúne nombres, instrucciones, avatares, habilidades, rutinas, recuerdos y los archivos que incluyas en un solo archivo .zip.",
   "import.guide.openFailed": "No se pudo abrir la exportación",
-  "import.guide.step1": "Añade el agente de exportación a Grok Bot",
-  "import.guide.setupLabel": "Cómo añadir el agente de exportación",
+  "import.guide.step1": "Agrega el agente de exportación a Grok Bot",
+  "import.guide.setupLabel": "Cómo agregar el agente de exportación",
   "import.guide.setupAgent": "Instalar el agente",
   "import.guide.setupSkill": "Configúralo tú mismo",
   "import.guide.agentMeta": "Agente de Grok Bot · incluye la habilidad de exportación",
@@ -40,7 +40,7 @@ export const messages = {
   "import.guide.skillCopied": "Habilidad copiada",
   "import.guide.saveFile": "Guardar archivo…",
   "import.guide.skillNote":
-    "Añade esta habilidad a un nuevo agente en Grok Bot que se use solo para exportar. La exportación no lo incluye.",
+    "Agrega esta habilidad a un nuevo agente en Grok Bot que se use solo para exportar. La exportación no lo incluye.",
   "import.guide.step2": "Envíale este mensaje",
   "import.guide.copyMessage": "Copiar mensaje",
   "import.guide.messageCopied": "Mensaje copiado",
@@ -87,10 +87,10 @@ export const messages = {
   "import.review.importing": "Importando…",
   "import.review.channelNeedsMember": "Selecciona al menos uno de sus agentes para importarlo.",
   "import.review.channelWithout": "Se importa sin {names}.",
-  "import.review.nameExists": "Ya existe un agente llamado {name}. La importación añade otro.",
+  "import.review.nameExists": "Ya existe un agente llamado {name}. La importación agrega otro.",
   "import.review.duplicatesTitle": "¿Importar agentes duplicados?",
   "import.review.duplicatesDescription":
-    "Estos agentes ya existen en este servidor: {names}. La importación añade una segunda copia de cada uno. Cada copia es un agente independiente con sus propios chats, archivos y recuerdos.",
+    "Estos agentes ya existen en este servidor: {names}. La importación agrega una segunda copia de cada uno. Cada copia es un agente independiente con sus propios chats, archivos y recuerdos.",
   "import.review.duplicatesConfirm": "Importar duplicados",
   "import.result.title": "Importación completada",
   "import.result.importedAgents": "Se importaron {agents}",

@@ -42,7 +42,7 @@ export const messages = {
   "status.agent.secretKeyFill":
     "Llenar la clave guardada {name} en el campo de contraseña de {site}. Si lo apruebas, los agentes podrán llenar esta clave en este sitio sin aprobación. Quita la clave en Secretos para retirar la aprobación.",
   "status.agent.secretKeyCodeFill":
-    "Rellenar un código de verificación en dos pasos de la clave guardada {name} en el campo de código de {site}. Si lo apruebas, los agentes podrán rellenar códigos de esta clave en este sitio sin aprobación. Elimina la clave en Secretos para quitar la aprobación.",
+    "Llenar un código de verificación en dos pasos de la clave guardada {name} en el campo de código de {site}. Si lo apruebas, los agentes podrán llenar códigos de esta clave en este sitio sin aprobación. Elimina la clave en Secretos para quitar la aprobación.",
   "status.agent.screenCaptureProgress": "Pidiendo permiso para capturar la pantalla…",
   "status.agent.screenCaptureReviewing": "Revisando la captura de pantalla…",
   "status.agent.memoriesSearching": "Buscando en sus recuerdos…",

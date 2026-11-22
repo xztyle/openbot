@@ -89,7 +89,7 @@ export const messages = {
     one: "Abrir panel lateral, {count} tarea en curso",
     other: "Abrir panel lateral, {count} tareas en curso",
   },
-  "conversation.sidePanel.add": "Añadir panel",
+  "conversation.sidePanel.add": "Agregar panel",
   "conversation.sidePanel.maximize": "Maximizar panel lateral",
   "conversation.sidePanel.restore": "Restaurar panel lateral",
   "conversation.sidePanel.closePane": "Cerrar {name}",

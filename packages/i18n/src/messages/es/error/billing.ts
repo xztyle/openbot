@@ -12,7 +12,7 @@ export const messages = {
   "error.billing.licenseCurrency": "La licencia debe usar la moneda de tus otros planes.",
   "error.billing.licenseUsersInUse": "La licencia no puede tener menos usuarios que las personas que la usan ahora.",
   "error.billing.licensePaymentFailed":
-    "El pago de los usuarios añadidos falló. Actualiza el método de pago e inténtalo de nuevo.",
+    "El pago de los usuarios agregados falló. Actualiza el método de pago e inténtalo de nuevo.",
   "error.billing.licenseUnavailable": "Las licencias no están disponibles ahora.",
   "error.billing.noLicense": "Esta cuenta no tiene licencia.",
   "error.billing.invalidRequest": "La solicitud de facturación no es válida.",

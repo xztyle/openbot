@@ -36,7 +36,7 @@ export const messages = {
   "diagram.board.sample.chiefOutput":
     "Prioridades de hoy:\n1. Enviar la revisión de seguridad a Contoso.\n2. Responder a la bajada de precios de Northwind.\n3. Llamar a Fabrikam.",
   "diagram.menu.label": "Lienzo",
-  "diagram.menu.addAgent": "Añadir agente aquí",
+  "diagram.menu.addAgent": "Agregar agente aquí",
   "diagram.menu.noAgents": "Todos los agentes están en el lienzo",
   "diagram.menu.newAgent": "Nuevo agente aquí…",
   "diagram.newAgent.label": "Nuevo agente",
@@ -136,7 +136,7 @@ export const messages = {
   "diagram.flows.connectFromAgent": "Conecta desde un agente. Una rutina solo inicia su propio agente.",
   "diagram.chat.label": "Asistente de diagramas",
   "diagram.chat.title": "Editar con {name}",
-  "diagram.chat.empty": "Dile a {name} qué debe hacer este diagrama. Añadirá agentes, rutinas y conexiones por ti.",
+  "diagram.chat.empty": "Dile a {name} qué debe hacer este diagrama. Agregará agentes, rutinas y conexiones por ti.",
   "diagram.chat.placeholder": "Describe un cambio en la rutina",
   "diagram.chat.send": "Enviar",
   "diagram.chat.hide": "Ocultar asistente",

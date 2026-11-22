@@ -145,7 +145,7 @@ export const messages = {
   "sidebar.announce.movedPinned": "Se movió el chat fijado a la posición {position} de {total}.",
   "sidebar.announce.personFallback": "persona",
   "sidebar.announce.chatFallback": "chat",
-  "sidebar.mobileApp.title": "Atelier para móviles",
+  "sidebar.mobileApp.title": "Atelier para celulares",
   "sidebar.mobileApp.body": "La aplicación ya está disponible para iPhone y Android.",
   "sidebar.mobileApp.howToInstall": "Cómo instalar",
   "sidebar.mobileApp.dismiss": "Cerrar el anuncio de la aplicación móvil",

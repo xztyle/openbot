@@ -17,7 +17,7 @@ export const messages = {
   "common.next": "Siguiente",
   "common.step": "Paso {current} de {total}",
   "common.continue": "Continuar",
-  "common.add": "Añadir",
+  "common.add": "Agregar",
   "common.open": "Abrir",
   "common.search": "Buscar",
   "common.loading": "Cargando…",

@@ -10,7 +10,7 @@ export const messages = {
   "error.workflow.conditionBranch": "Cada conexión de una condición debe ser sí o no.",
   "error.workflow.duplicateEdge": "Estos dos pasos ya tienen esta conexión.",
   "error.workflow.serverTooOld":
-    "Este servidor no admite flujos de trabajo. Actualiza Atelier en el ordenador que lo ejecuta.",
+    "Este servidor no admite flujos de trabajo. Actualiza Atelier en el computador que lo ejecuta.",
   "error.workflow.nodeUnsupported":
     "Esta versión de Atelier aún no puede ejecutar pasos de imagen, archivo ni mensaje.",
   "error.workflow.interrupted": "Atelier se detuvo mientras se ejecutaba este paso. Ejecútalo de nuevo.",
@@ -36,7 +36,7 @@ export const messages = {
   "error.workflow.tooLarge":
     "Este flujo de trabajo es demasiado grande para guardarlo. Quita algunos dibujos o textos largos e inténtalo de nuevo.",
   "error.workflow.tooLargeToSend":
-    "Este flujo de trabajo es demasiado grande para enviarlo a otro ordenador. Ábrelo en el ordenador que ejecuta el servidor.",
+    "Este flujo de trabajo es demasiado grande para enviarlo a otro computador. Ábrelo en el computador que ejecuta el servidor.",
   "error.workflow.webhookMissing":
     "Este paso no es un disparador de webhook. Guarda el flujo de trabajo y vuelve a intentarlo.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -91,7 +91,7 @@ export const messages = {
   "billing.license.work.title": "Licencia de empresa",
   "billing.license.work.used": "{used} de {users} usuarios",
   "billing.license.users.label": "Usuarios",
-  "billing.license.users.add": "Añadir usuario",
+  "billing.license.users.add": "Agregar usuario",
   "billing.license.users.remove": "Quitar usuario",
   "billing.license.included": { one: "{count} usuario incluido", other: "{count} usuarios incluidos" },
   "billing.license.breakdown": "{base} + {extra} × {price}",
@@ -108,7 +108,7 @@ export const messages = {
   "billing.license.paymentFailed":
     "Un pago de la licencia falló. Actualiza el método de pago para conservar la licencia.",
   "billing.license.overLimit":
-    "{used} personas usan la licencia, pero es para {users} usuarios. Las personas nuevas no pueden unirse hasta que añadas usuarios a la licencia.",
+    "{used} personas usan la licencia, pero es para {users} usuarios. Las personas nuevas no pueden unirse hasta que agregues usuarios a la licencia.",
   "billing.license.covered.title": "Cubierto por una licencia",
   "billing.license.covered.description": "El trabajo en los servidores de {owners} está cubierto por su licencia.",
   "billing.license.change.title": "Cambiar usuarios",
@@ -120,7 +120,7 @@ export const messages = {
     one: "Para más de {count} usuario, acordamos contigo el precio y las condiciones.",
     other: "Para más de {count} usuarios, acordamos contigo el precio y las condiciones.",
   },
-  "billing.license.change.increase": "Ahora pagas los usuarios añadidos por el resto de este mes.",
+  "billing.license.change.increase": "Ahora pagas los usuarios agregados por el resto de este mes.",
   "billing.license.change.decrease": "El precio más bajo empieza en la próxima factura. No hay reembolso.",
   "billing.license.users.title": "Usuarios de la licencia",
   "billing.license.users.description":
@@ -132,9 +132,9 @@ export const messages = {
   "billing.license.cancel.descriptionNow":
     "La licencia finaliza al terminar el periodo pagado. Tus servidores no se ven afectados.",
   "billing.license.cancel.keep": "Conservar licencia",
-  "billing.license.invite.title": "¿Añadir un usuario a la licencia?",
-  "billing.license.invite.description": "Esta invitación añade 1 usuario a tu licencia: {price} más al mes.",
-  "billing.license.invite.confirm": "Añadir e invitar",
+  "billing.license.invite.title": "¿Agregar un usuario a la licencia?",
+  "billing.license.invite.description": "Esta invitación agrega 1 usuario a tu licencia: {price} más al mes.",
+  "billing.license.invite.confirm": "Agregar e invitar",
   "billing.license.invite.max": {
     one: "Tu licencia tiene {count} usuario, el máximo. Contáctanos para una licencia más grande. Las personas nuevas no pueden unirse a tus servidores.",
     other:

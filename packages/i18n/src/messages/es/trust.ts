@@ -46,7 +46,7 @@ export const messages = {
   "trust.budgetsDescription":
     "Un gasto por encima del presupuesto espera tu aprobación. Usa * como plataforma para todas.",
   "trust.budgets.empty": "Sin presupuestos.",
-  "trust.budgets.add": "Añadir presupuesto",
+  "trust.budgets.add": "Agregar presupuesto",
   "trust.budget.platformHint": "meta, google, hotmart o *",
   "trust.budget.platform": "Plataforma",
   "trust.budget.scope": "Para",
@@ -68,7 +68,7 @@ export const messages = {
   "trust.override.team": "Equipo de {name}",
   "trust.override.space": "Espacio: {name}",
   "trust.override.level": "Excepción para",
-  "trust.override.add": "Añadir excepción",
+  "trust.override.add": "Agregar excepción",
   "trust.override.remove": "Quitar excepción",
   "trust.agent.title": "Reglas de {name}",
   "trust.agent.reportsTo": "depende de {name}",

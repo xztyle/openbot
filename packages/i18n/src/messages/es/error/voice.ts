@@ -13,7 +13,7 @@ export const messages = {
   "error.voice.prepareRequired":
     "La transcripción de voz local no está disponible. Ejecuta `bun run voice:prepare` y reinicia Atelier.",
   "error.voice.transcriptionFailed": "Atelier no pudo transcribir esta grabación.",
-  "error.voice.cloud.keyRequired": "Añade tu clave de API de ElevenLabs en Ajustes → Voz.",
+  "error.voice.cloud.keyRequired": "Agrega tu clave de API de ElevenLabs en Ajustes → Voz.",
   "error.voice.cloud.keyRejected": "ElevenLabs no aceptó la clave de API. Revisa la clave en Ajustes → Voz.",
   "error.voice.cloud.quotaExceeded": "Tu cuota de ElevenLabs se ha agotado.",
   "error.voice.cloud.rateLimited": "ElevenLabs está ocupado. Inténtalo de nuevo en un momento.",

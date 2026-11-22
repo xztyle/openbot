@@ -20,7 +20,7 @@ export const messages = {
   "files.type.documents": "Documentos",
   "files.type.code": "Código",
   "files.type.spreadsheets": "Hojas de cálculo",
-  "files.type.media": "Audio y vídeo",
+  "files.type.media": "Audio y video",
   "files.type.other": "Otros",
   "files.sort.newest": "Recientes",
   "files.sort.largest": "Más grandes",

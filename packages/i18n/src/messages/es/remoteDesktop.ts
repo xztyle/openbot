@@ -52,11 +52,11 @@ export const messages = {
   "remoteDesktop.setup.restartRequired":
     "Sunshine debe reiniciarse. Finaliza las sesiones activas de escritorio remoto y vuelve a comprobarlo. Las sesiones activas no se reiniciarán.",
   "remoteDesktop.setup.showInFinder": "Mostrar Sunshine en Finder",
-  "remoteDesktop.setup.liveTest": "Prueba de conexión en directo",
-  "remoteDesktop.setup.liveTestLocal": "Prueba la imagen, el ratón y el teclado en este Mac.",
+  "remoteDesktop.setup.liveTest": "Prueba de conexión en vivo",
+  "remoteDesktop.setup.liveTestLocal": "Prueba la imagen, el mouse y el teclado en este Mac.",
   "remoteDesktop.setup.liveTestRemote":
     "La prueba abre un panel temporal en el servidor. Primero deben terminar las otras sesiones remotas. La entrada permanece dentro del panel.",
-  "remoteDesktop.setup.testSummary": "Vídeo: {video} · Imagen: {picture} · Ratón: {mouse} · Teclado: {keyboard}",
+  "remoteDesktop.setup.testSummary": "Video: {video} · Imagen: {picture} · Mouse: {mouse} · Teclado: {keyboard}",
   "remoteDesktop.setup.received": "recibido",
   "remoteDesktop.setup.notReceived": "no recibido",
   "remoteDesktop.setup.confirmed": "confirmado",
@@ -65,11 +65,11 @@ export const messages = {
   "remoteDesktop.setup.waiting": "en espera",
   "remoteDesktop.setup.testLocal": "Probar en este Mac",
   "remoteDesktop.setup.testRemote": "Probar escritorio remoto",
-  "remoteDesktop.setup.videoFailed": "La conexión de vídeo de prueba falló.",
+  "remoteDesktop.setup.videoFailed": "La conexión de video de prueba falló.",
   "remoteDesktop.setup.inputInstructions":
-    "Haz clic en el objetivo del panel de prueba y escribe {code}. Ratón: {mouse}. Teclado: {keyboard}.",
+    "Haz clic en el objetivo del panel de prueba y escribe {code}. Mouse: {mouse}. Teclado: {keyboard}.",
   "remoteDesktop.setup.videoOnly":
-    "Solo prueba de vídeo. Las pruebas de ratón y teclado necesitan el entorno de ejecución actualizado de Sunshine.",
+    "Solo prueba de video. Las pruebas de mouse y teclado necesitan el entorno de ejecución actualizado de Sunshine.",
   "remoteDesktop.setup.pictureConfirmed": "Imagen confirmada",
   "remoteDesktop.setup.seeDesktop": "Puedo ver mi escritorio",
   "remoteDesktop.setup.seeTestPanel": "Puedo ver el panel de prueba",

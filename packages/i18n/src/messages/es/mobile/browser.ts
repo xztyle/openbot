@@ -3,7 +3,7 @@ import type { messages as source } from "../../en/mobile/browser";
 
 export const messages = {
   "mobile.browser.open": "Abrir navegador",
-  "mobile.browser.liveView": "Vista en directo de {title}",
+  "mobile.browser.liveView": "Vista en vivo de {title}",
   "mobile.browser.help": "Cómo usar el navegador",
   "mobile.browser.switchAgent": "{name}. Cambiar al navegador de otro agente",
   "mobile.browser.options": "Opciones del navegador",
@@ -37,7 +37,7 @@ export const messages = {
   "mobile.browser.keyboard.field": "Escribir en la página",
   "mobile.browser.reconnect": "Reconectar",
   "mobile.browser.status.connecting": "Conectando con el navegador…",
-  "mobile.browser.status.ended": "La vista en directo terminó.",
+  "mobile.browser.status.ended": "La vista en vivo terminó.",
   "mobile.browser.status.offline": "El servidor no está conectado.",
   "mobile.browser.status.noTab": "{name} no tiene ninguna pestaña del navegador abierta.",
   "mobile.browser.status.unsupported":
@@ -60,7 +60,7 @@ export const messages = {
   "mobile.browser.help.click.title": "Hacer clic y arrastrar",
   "mobile.browser.help.click.body": "Toca para hacer clic donde tocaste. Un dedo arrastra.",
   "mobile.browser.help.rightClick.title": "Clic derecho",
-  "mobile.browser.help.rightClick.body": "Toca con dos dedos o mantén pulsado.",
+  "mobile.browser.help.rightClick.body": "Toca con dos dedos o mantén presionado.",
   "mobile.browser.help.zoom.title": "Ampliar",
   "mobile.browser.help.zoom.body":
     "Pellizca para hacer zoom. Con zoom, dos dedos mueven la vista en lugar de desplazarla.",
@@ -79,7 +79,7 @@ export const messages = {
   "mobile.browser.help.pointer": "Cuando un puntero es más fácil",
   "mobile.browser.help.trackpad.title": "Modo trackpad",
   "mobile.browser.help.trackpad.body":
-    "Está activado al abrir el navegador. Tu dedo mueve el puntero; toca para hacer clic ahí y toca dos veces y mantén pulsado para arrastrar. Elige «Centrar puntero» si se desvía. Desactívalo en el menú ··· para hacer clic donde tocas.",
+    "Está activado al abrir el navegador. Tu dedo mueve el puntero; toca para hacer clic ahí y toca dos veces y mantén presionado para arrastrar. Elige «Centrar puntero» si se desvía. Desactívalo en el menú ··· para hacer clic donde tocas.",
   "mobile.browser.help.handingBack": "Devolver el control",
   "mobile.browser.help.handBack.title": "Devolver el control",
   "mobile.browser.help.handBack.body":

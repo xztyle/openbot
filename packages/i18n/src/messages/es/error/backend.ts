@@ -65,11 +65,11 @@ export const messages = {
   "error.backend.webhookTestUnavailable":
     "El host no puede recibir el evento de prueba ahora. Revisa que tenga la sesión iniciada e intenta de nuevo.",
   "error.backend.webhookTestFailed": "El evento de prueba no llegó a la rutina. Intenta de nuevo.",
-  "error.backend.browserViewRemoteOnly": "La vista del navegador en directo solo está disponible para un host remoto.",
-  "error.backend.browserViewUnsupported": "Este host remoto no admite una vista del navegador en directo.",
+  "error.backend.browserViewRemoteOnly": "La vista del navegador en vivo solo está disponible para un host remoto.",
+  "error.backend.browserViewUnsupported": "Este host remoto no admite una vista del navegador en vivo.",
   "error.backend.browserViewLimit": "Hay demasiadas vistas del navegador abiertas en este host.",
-  "error.backend.browserViewEnded": "La vista en directo de esta página terminó.",
-  "error.backend.browserViewFailed": "La vista en directo de esta página falló.",
+  "error.backend.browserViewEnded": "La vista en vivo de esta página terminó.",
+  "error.backend.browserViewFailed": "La vista en vivo de esta página falló.",
   "error.backend.windowTemporarilyUnavailable": "La ventana de Atelier no está disponible temporalmente.",
   "error.backend.windowUnavailable": "La ventana de Atelier no está disponible.",
   "error.backend.sunshineApiHttp": "La API de Sunshine falló con HTTP {status}.",
@@ -167,7 +167,7 @@ export const messages = {
   "error.backend.channelPersonUnavailable": "Una persona que elegiste no es un miembro activo de este servidor.",
   "error.backend.channelDirectParticipants": "Un mensaje directo tiene 2 participantes, y un grupo de 3 a 9.",
   "error.backend.channelDirectFixed": "Las personas de un mensaje directo no pueden cambiar.",
-  "error.backend.channelJoinPrivate": "Pide a una persona de este canal privado que te añada.",
+  "error.backend.channelJoinPrivate": "Pide a una persona de este canal privado que te agregue.",
   "error.backend.channelManageRequired": "Solo las personas de este canal pueden cambiarlo.",
   "error.backend.channelRemovePeople":
     "Solo un propietario, un administrador o quien creó el canal puede quitar a otras personas.",
@@ -298,7 +298,7 @@ export const messages = {
   "error.backend.mcpServerLimit": "Atelier mantiene hasta {limit} servidores MCP.",
   "error.backend.mcpServerNameTaken": "Ya existe un servidor MCP llamado {name}.",
   "error.backend.contextCompactionIneffective":
-    "La compactación no reduce este chat: tras dos compactaciones aún usa el {percent}% de la ventana de contexto del modelo, así que Atelier deja de compactarlo. Las herramientas y las instrucciones usan la mayor parte de la ventana. Desactiva los servidores MCP o el uso del ordenador que este agente no necesita, o elige un modelo con una ventana mayor. Después, inicia un chat nuevo.",
+    "La compactación no reduce este chat: tras dos compactaciones aún usa el {percent}% de la ventana de contexto del modelo, así que Atelier deja de compactarlo. Las herramientas y las instrucciones usan la mayor parte de la ventana. Desactiva los servidores MCP o el uso del computador que este agente no necesita, o elige un modelo con una ventana mayor. Después, inicia un chat nuevo.",
   "error.backend.contextCompactionStopped":
     "Dos compactaciones seguidas de este chat fallaron, así que Atelier deja de compactarlo automáticamente. Cada intento envía todo el chat al modelo y consume el límite de tu plan. Selecciona «Compactar ahora» para intentarlo de nuevo o inicia un chat nuevo.",
   "error.backend.mcpServerInvalid": "Atelier no puede guardar esta configuración del servidor MCP.",
@@ -385,7 +385,7 @@ export const messages = {
   "error.backend.authSubmitting": "Ya se están enviando los datos de autenticación.",
   "error.backend.apiKeySaveFailed": "Atelier no pudo guardar la clave de API. Inténtalo de nuevo.",
   "error.backend.apiKeyNotAllowed":
-    "Solo el propietario del servidor o un administrador puede introducir una clave de API.",
+    "Solo el propietario del servidor o un administrador puede ingresar una clave de API.",
   "error.backend.apiKeySaving": "La clave de API ya se está guardando.",
   "error.backend.authRequestInactive": "Esta solicitud de autenticación segura ya no está activa.",
   "error.backend.secureAuthUnavailable": "La autenticación segura no está disponible.",
@@ -416,7 +416,7 @@ export const messages = {
   "error.backend.authHttpsRequired": "La autenticación segura requiere HTTPS.",
   "error.backend.authDigitsRange": "Los códigos de autenticación requieren entre 4 y 12 dígitos.",
   "error.backend.authExpired": "La solicitud de autenticación caducó.",
-  "error.backend.authDigitsRequired": "Introduce el número de dígitos solicitado.",
+  "error.backend.authDigitsRequired": "Ingresa el número de dígitos solicitado.",
   "error.backend.browserViewProtected": "La vista del navegador está protegida durante la autenticación.",
   "error.backend.browserPreviewPageChanged":
     "La página del navegador cambió durante la vista previa. Inténtalo de nuevo.",
@@ -426,13 +426,13 @@ export const messages = {
   "error.backend.mcpServerHttpUrl":
     "El servidor respondió {status}. Comprueba la URL. El enlace puede ser incorrecto, haber caducado o haberse eliminado.",
   "error.backend.mcpSecretMissing":
-    "Falta una clave de Secretos que usa esta conexión. Añade la clave en Secretos y vuelve a intentarlo.",
+    "Falta una clave de Secretos que usa esta conexión. Agrega la clave en Secretos y vuelve a intentarlo.",
   "error.backend.mcpSignInAppUrl": "La app de inicio de sesión necesita una URL de servidor válida.",
-  "error.backend.mcpSignInAppClientId": "Introduce el ID de cliente de la app de inicio de sesión.",
+  "error.backend.mcpSignInAppClientId": "Ingresa el ID de cliente de la app de inicio de sesión.",
   "error.backend.mcpSignInAppIssuerChanged":
-    "El servidor de inicio de sesión de este servidor MCP cambió, así que Atelier no le envió la app de inicio de sesión. Si el cambio es correcto, quita la app de inicio de sesión y añádela de nuevo.",
+    "El servidor de inicio de sesión de este servidor MCP cambió, así que Atelier no le envió la app de inicio de sesión. Si el cambio es correcto, quita la app de inicio de sesión y agrégala de nuevo.",
   "error.backend.mcpSignInAppNoServer":
-    "Guarda este servidor MCP como servidor de URL antes de añadir una app de inicio de sesión.",
+    "Guarda este servidor MCP como servidor de URL antes de agregar una app de inicio de sesión.",
   "error.backend.mcpSignInAppUnavailable": "Este equipo no puede guardar una app de inicio de sesión.",
   "error.backend.taskMoveRefused": "Solo un mensaje que enviaste únicamente a este agente puede ejecutarse como tarea.",
   "error.backend.taskNotFound": "Esta tarea no está disponible.",

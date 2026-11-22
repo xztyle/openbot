@@ -20,7 +20,7 @@ export const messages = {
   "sitePage.join.notOpened":
     "Si Atelier no se abrió, instálalo con {download} o inicia Atelier una vez para que pueda abrir enlaces de invitación. También puedes usar {browser}.",
   "sitePage.join.mobile":
-    "Si Atelier está instalado, toca {open}. También puedes pegar este enlace en Añadir servidor dentro de la app.",
+    "Si Atelier está instalado, toca {open}. También puedes pegar este enlace en Agregar servidor dentro de la app.",
   "sitePage.join.singleUse":
     "Un enlace de un solo uso funciona una vez y luego caduca. Un enlace permanente funciona hasta que el propietario lo revoca. Atelier muestra la caducidad antes de que te unas.",
   "sitePage.join.email": "Si la invitación llegó por correo, inicia sesión en Atelier con esa dirección de correo.",
@@ -32,7 +32,7 @@ export const messages = {
   "sitePage.connect.tryAgainBrowser": "Reintentar en el navegador",
   "sitePage.connect.doneInWebClient":
     "Tu pestaña de Atelier termina la conexión con {name}. Puedes cerrar esta pestaña.",
-  "sitePage.connect.doneInApp": "Atelier termina la conexión con {name} en tu ordenador.",
+  "sitePage.connect.doneInApp": "Atelier termina la conexión con {name} en tu computador.",
   "sitePage.connect.failure.cancelled": "Se canceló la conexión con {name}. No cambió nada.",
   "sitePage.connect.failure.expired": "El inicio de sesión en {name} caducó. Vuelve a iniciar la conexión.",
   "sitePage.connect.failure.exchange": "{name} no confirmó la conexión. Inténtalo de nuevo.",
@@ -48,7 +48,7 @@ export const messages = {
   "sitePage.connect.restartHint":
     "En Atelier, abre {serverSettings}, luego {connectors}, luego {name}, y selecciona {connect}.",
   "sitePage.connect.notOpened":
-    "Inicia Atelier y vuelve a intentarlo. Si Atelier no está en este ordenador, descárgalo y conecta {name} desde la app.",
+    "Inicia Atelier y vuelve a intentarlo. Si Atelier no está en este computador, descárgalo y conecta {name} desde la app.",
   "sitePage.openApp.title": "¿No se abrió nada?",
   "sitePage.openApp.dismiss": "Ahora no",
   "sitePage.billing.pageTitle": "Facturación de Atelier",
@@ -60,7 +60,7 @@ export const messages = {
   "sitePage.report.title": "Denunciar un sitio alojado",
   "sitePage.report.intro": "Envía una denuncia sobre contenido dañino o ilegal en una dirección de openbot.site.",
   "sitePage.report.hostnameLabel": "Dirección del sitio",
-  "sitePage.report.hostnameMissing": "Introduce la dirección del sitio",
+  "sitePage.report.hostnameMissing": "Ingresa la dirección del sitio",
   "sitePage.report.reasonLabel": "Motivo",
   "sitePage.report.reason.phishing": "Phishing",
   "sitePage.report.reason.malware": "Malware",

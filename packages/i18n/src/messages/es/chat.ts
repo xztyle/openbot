@@ -363,7 +363,7 @@ export const messages = {
   "chat.message.cancelled": "Cancelado. El agente no leyó este mensaje.",
   "chat.actions.userLabel": "Acciones del mensaje del usuario",
   "chat.actions.label": "Acciones del mensaje de {name}",
-  "chat.actions.addReaction": "Añadir reacción",
+  "chat.actions.addReaction": "Agregar reacción",
   "chat.actions.chooseReaction": "Elige una reacción",
   "chat.actions.react": "Reaccionar con {emoji}",
   "chat.actions.moreEmoji": "Más emojis",

@@ -70,17 +70,17 @@ export const messages = {
   "error.import.transferSettingSkipped": "{name} no se importa. {reason}",
   "error.import.transferRoutineFlowSkipped": "La importación omitió un flujo de rutina. {reason}",
   "error.import.transferCustomAgentCommand":
-    "{name}: los agentes personalizados no se importan porque ejecutan un comando. Revisa el comando «{command}» y vuelve a añadir el agente en Ajustes.",
+    "{name}: los agentes personalizados no se importan porque ejecutan un comando. Revisa el comando «{command}» y vuelve a agregar el agente en Ajustes.",
   "error.import.transferSkillLimit":
     "{name}: solo las primeras {limit} de sus {total} habilidades están en el archivo, porque un agente puede tener {limit} habilidades.",
   "error.import.transferFilesGone":
     "{number} archivos se eliminaron mientras se ejecutaba la exportación, así que no están en el archivo.",
-  "error.import.transferProviderKey": "{name}: vuelve a introducir su clave de API en Ajustes.",
-  "error.import.transferAgentEnv": "{name}: vuelve a introducir los valores de {names} en Ajustes.",
+  "error.import.transferProviderKey": "{name}: vuelve a ingresar su clave de API en Ajustes.",
+  "error.import.transferAgentEnv": "{name}: vuelve a ingresar los valores de {names} en Ajustes.",
   "error.import.transferMcpValues":
-    "{name}: el servidor MCP se añade desactivado. Revisa su comando, vuelve a introducir sus valores y su dirección completa, y actívalo en los ajustes de MCP.",
+    "{name}: el servidor MCP se agrega desactivado. Revisa su comando, vuelve a ingresar sus valores y su dirección completa, y actívalo en los ajustes de MCP.",
   "error.import.transferValuesCleared":
-    "{name}: se quitaron de sus argumentos o de su dirección los valores que pueden contener un secreto. Vuelve a introducirlos en Ajustes.",
+    "{name}: se quitaron de sus argumentos o de su dirección los valores que pueden contener un secreto. Vuelve a ingresarlos en Ajustes.",
   "error.import.transferSharedKept":
     "{number} archivos de la carpeta compartida ya están aquí, así que se conservan tal como están.",
 } as const satisfies PartialTranslation<typeof source>;

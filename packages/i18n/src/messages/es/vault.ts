@@ -49,7 +49,7 @@ export const messages = {
   "vault.field.password": "Contraseña",
   "vault.field.twoStepKey": "Clave de dos pasos",
   "vault.twoStepKeyHint":
-    "Opcional. La clave de configuración que el sitio muestra bajo su código QR para una app de autenticación. Así los agentes introducen el código actual por ti.",
+    "Opcional. La clave de configuración que el sitio muestra bajo su código QR para una app de autenticación. Así los agentes ingresan el código actual por ti.",
   "vault.removeTwoStepKey": "Quitar la clave de dos pasos",
   "vault.placeholder.twoStepKey": "Clave de configuración o enlace otpauth://",
   "vault.field.notes": "Notas",

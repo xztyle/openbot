@@ -15,12 +15,12 @@ export const messages = {
     "Ya hay un endpoint guardado con este ID de proveedor. Elimínalo primero o usa otro ID.",
   "error.provider.endpointNotSaved": "Este endpoint no está guardado. Actualiza la lista e inténtalo de nuevo.",
   "error.provider.endpointKeyForNewAddress":
-    "La dirección tiene un nuevo host o puerto. Introduce la clave de API y las cabeceras de nuevo para no enviar las guardadas a esa dirección.",
+    "La dirección tiene un nuevo host o puerto. Ingresa la clave de API y las cabeceras de nuevo para no enviar las guardadas a esa dirección.",
   "error.provider.endpointSecretUnreadable":
     "Este equipo no puede leer la clave de API ni las cabeceras guardadas. Introdúcelas de nuevo para que no se pierda ninguna.",
   "error.provider.discoveryTimeout": "{host} no respondió a tiempo.",
   "error.provider.discoveryUnreachable": "Atelier no pudo conectarse a {host}.",
-  "error.provider.discoveryRedirect": "{host} envió una redirección. Introduce la dirección final del servidor.",
+  "error.provider.discoveryRedirect": "{host} envió una redirección. Ingresa la dirección final del servidor.",
   "error.provider.discoveryRefused": "{host} rechazó la solicitud. Comprueba la clave de API y las cabeceras.",
   "error.provider.discoveryHttp": "{host} respondió con HTTP {status}.",
   "error.provider.discoveryTooLarge": "La lista de modelos de {host} es demasiado grande.",
@@ -204,7 +204,7 @@ export const messages = {
   "error.provider.opencodeRateLimited":
     "El proveedor del modelo rechazó la solicitud por su límite de frecuencia. Espera unos minutos o elige otro modelo e inténtalo de nuevo.\n{detail}",
   "error.provider.opencodeBilling":
-    "El proveedor del modelo rechazó la solicitud por la facturación de la cuenta. Esperar no lo resuelve. Añade un método de pago o saldo en la cuenta del proveedor, o elige otro modelo.\n{detail}",
+    "El proveedor del modelo rechazó la solicitud por la facturación de la cuenta. Esperar no lo resuelve. Agrega un método de pago o saldo en la cuenta del proveedor, o elige otro modelo.\n{detail}",
   "error.provider.opencodeInvalidUpload":
     "El proveedor del modelo de OpenCode informó de una solicitud de carga no válida. Elige otro modelo y continúa. Comprueba las rutinas guardadas antes de crearlas de nuevo.\n{detail}",
   "error.provider.opencodeUnreadableContent":
@@ -289,7 +289,7 @@ export const messages = {
   "error.provider.keyProviderRefused":
     "{provider} rechazó la clave de API guardada. Reemplaza o elimina la clave en Ajustes y vuelve a intentarlo.",
   "error.provider.keyProviderNoBalance":
-    "La cuenta de {provider} de la clave de API guardada no tiene saldo. Añade saldo a la cuenta y vuelve a intentarlo.",
+    "La cuenta de {provider} de la clave de API guardada no tiene saldo. Agrega saldo a la cuenta y vuelve a intentarlo.",
   "error.provider.messageTooLarge": "Atelier detuvo {provider} porque envió un mensaje de más de {limit} MB.",
   "error.provider.customAgentIdInvalid":
     "Un ID de agente debe contener letras minúsculas, dígitos o `-`, y no puede ser el ID de un proveedor integrado.",
@@ -303,7 +303,7 @@ export const messages = {
     "Un argumento no puede contener saltos de línea. Usa un máximo de 32 argumentos.",
   "error.provider.customAgentWindowsScript":
     "Un comando .cmd o .bat solo puede aceptar letras, números y - _ . , : = @ + / \\ en sus argumentos.",
-  "error.provider.customAgentNotFound": "Atelier no encuentra {command}. Introduce la ruta completa del comando.",
+  "error.provider.customAgentNotFound": "Atelier no encuentra {command}. Ingresa la ruta completa del comando.",
   "error.provider.customAgentCheckTimedOut": "El agente no respondió en 20 segundos.",
   "error.provider.customAgentCheckStopped": "El agente se detuvo antes de responder.",
   "error.provider.customAgentProtocolVersion": "El agente usa la versión {version} de ACP. Atelier usa la versión 1.",
@@ -320,7 +320,7 @@ export const messages = {
   "error.provider.customAgentNotSaved":
     "Este agente personalizado no está guardado. Actualiza la lista e inténtalo de nuevo.",
   "error.provider.customAgentTooMany": "Puedes guardar un máximo de {count} agentes personalizados.",
-  "error.provider.customAgentEnvValueMissing": "Introduce un valor para {name}.",
+  "error.provider.customAgentEnvValueMissing": "Ingresa un valor para {name}.",
   "error.provider.off": "{provider} está desactivado en Atelier. Actívalo primero en los ajustes de proveedores.",
   "error.provider.inUse": "Un agente usa {provider}. Cambia su modelo antes de desactivar este proveedor.",
   "error.provider.useBusy":
@@ -329,7 +329,7 @@ export const messages = {
     "No se pueden leer los ajustes guardados del proveedor. Actualiza Atelier antes de cambiarlos.",
   "error.provider.useChangeFailed": "Atelier no pudo cambiar el ajuste del proveedor.",
   "error.provider.accountsUnsupported": "{provider} solo admite una cuenta.",
-  "error.provider.accountNeedsConnection": "Conecta {provider} antes de añadir otra cuenta.",
+  "error.provider.accountNeedsConnection": "Conecta {provider} antes de agregar otra cuenta.",
   "error.provider.usageResetUnsupported": "{provider} no puede restablecer los límites de uso.",
   "error.provider.usageResetNotConnected":
     "Vuelve a iniciar sesión en esta cuenta de {provider} antes de restablecer su uso.",
@@ -394,9 +394,9 @@ export const messages = {
   "error.provider.museAuthUnverified":
     "La autenticación de Muse no está verificada. Conéctate en el equipo host o define una clave de API de Meta.",
   "error.provider.museSignIn": "Inicia sesión en Muse en el equipo host para continuar.",
-  "error.provider.inceptionSignIn": "Añade una clave de API de Inception para continuar.",
-  "error.provider.deepseekSignIn": "Añade una clave de API de DeepSeek para continuar.",
-  "error.provider.openrouterSignIn": "Añade una clave de API de OpenRouter para continuar.",
+  "error.provider.inceptionSignIn": "Agrega una clave de API de Inception para continuar.",
+  "error.provider.deepseekSignIn": "Agrega una clave de API de DeepSeek para continuar.",
+  "error.provider.openrouterSignIn": "Agrega una clave de API de OpenRouter para continuar.",
   "error.provider.terminalLoginFailed":
     "No se pudo abrir la terminal de inicio de sesión. Abre la CLI del proveedor en este host, inicia sesión allí y actualiza los proveedores.",
   "error.provider.nativeArchiveInvalid": "La descarga del proveedor no contiene una instalación válida.",

@@ -5,7 +5,9 @@
  * drives it through `globalThis.openbotStress`:
  * - `stream(channelId, flushes, gapMs)` streams an agent reply into a channel as the host does: each
  *   flush sends the growing message (`channel-message`) and then `channels-changed`.
- * - `drop(holdMs)` reports the host offline and holds the next connect for `holdMs`.
+ * - `drop(holdMs)` reports the host offline and holds the next connect for `holdMs`. The host's events
+ *   of that time are lost, as on a real connection.
+ * - `post(channelId, text)` and `postDm(agentId, text)` add a message on the host.
  * - `?latency=<ms>` delays each host call, as a phone's link does.
  * - `calls` counts every call of the runtime and its channel port, by name; `resetCalls()` clears it.
  */
@@ -40,6 +42,9 @@ declare global {
     openbotStress?: {
       stream(channelId: string, flushes: number, gapMs: number): Promise<void>;
       drop(holdMs: number): void;
+      /** A message from the host in a channel, or from an agent in its chat; lost while the connection is down. */
+      post(channelId: string, text: string): Promise<void>;
+      postDm(agentId: string, text: string): Promise<void>;
       calls: Record<string, number>;
       resetCalls(): void;
     };
@@ -118,7 +123,14 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     channelMemberId: WEB_PREVIEW_MEMBER_ID,
     agents: [...structuredClone(STORY_AGENT_SUMMARIES), ...extraAgents()],
   });
-  const web = mockWebRuntimeFor(mock, events);
+  // While the connection is down, the host's events are lost, as on a real connection.
+  let down = false;
+  const web = mockWebRuntimeFor(mock, {
+    ...events,
+    event: (hostId, event) => {
+      if (!down) events.event(hostId, event);
+    },
+  });
   const calls: Record<string, number> = {};
   let hold = 0;
   let revision = 1_000;
@@ -158,7 +170,35 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     stream,
     drop(holdMs) {
       hold = holdMs;
+      down = true;
       events.connection({ hostId: "preview-host", state: "offline", message: null });
+    },
+    async post(channelId, text) {
+      await mock.api.agent.channelCommand({
+        type: "send",
+        operationId: crypto.randomUUID(),
+        channelId,
+        text,
+        recipientAgentId: null,
+        replyToMessageId: null,
+        attachmentDraftIds: [],
+      });
+    },
+    async postDm(agentId, text) {
+      mock.updateConversationSnapshot(agentId, (snapshot) => {
+        snapshot.messages = [
+          ...snapshot.messages,
+          {
+            id: `dm-${crypto.randomUUID()}`,
+            turnId: `dm-turn-${crypto.randomUUID()}`,
+            author: "assistant",
+            source: "assistant",
+            text,
+            createdAt: new Date().toISOString(),
+            status: "completed",
+          },
+        ];
+      });
     },
     calls,
     resetCalls() {
@@ -172,6 +212,7 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
       const wait = hold;
       hold = 0;
       if (wait) await new Promise((done) => setTimeout(done, wait));
+      down = false;
       return web.connect(host);
     },
   };

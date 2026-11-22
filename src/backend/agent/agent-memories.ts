@@ -165,6 +165,14 @@ export class AgentMemories {
     this.stateChanged(input.agentId);
   }
 
+  /** Deletes these memories of the agent, as the forget of one chat does. Answers how many went. */
+  forgetMany(agentId: string, memoryIds: readonly string[]): number {
+    let forgotten = 0;
+    for (const memoryId of new Set(memoryIds)) if (this.#memories.delete(agentId, memoryId)) forgotten += 1;
+    if (forgotten > 0) this.stateChanged(agentId);
+    return forgotten;
+  }
+
   clear(agentId: string): void {
     this.#conversation.requireKnownAgent(agentId);
     this.#epochs.set(agentId, this.#epoch(agentId) + 1);

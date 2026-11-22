@@ -71,6 +71,8 @@ export interface MemoryReviewOptions {
   skills?(agentId: string): Effect.Effect<readonly ReviewSkill[], unknown>;
   skillLearner?: SkillLearner;
   redact(text: string): string;
+  /** The chat turns that a review that changed something read, for the forget of one chat. */
+  reviewed?(agentId: string, reviewTurnId: string, turnIds: readonly string[]): Effect.Effect<void>;
   stopping(): boolean;
   now?(): number;
   /** Replaces the provider generation, for an end-to-end script without a provider. */
@@ -142,6 +144,18 @@ export class MemoryReview {
     else if (conversation.turns >= MEMORY_REVIEW_IDLE_TURNS)
       yield* this.#startTimer(conversation, MEMORY_REVIEW_IDLE_MS);
     yield* this.#startWaiting();
+  }).bind(this);
+
+  /**
+   * The agent's own chat is compacted: the provider's summary replaces the detail it read, so a review
+   * of what came since the last one runs now, within the same gap and daily limit as any other.
+   */
+  readonly compacted = Effect.fn("MemoryReview.compacted")(function* (this: MemoryReview, agentId: string) {
+    if (this.#off()) return;
+    const conversation = this.#conversation(agentId);
+    if (conversation.personTurns === 0 || conversation.turns === 0) return;
+    yield* this.#stopTimer(conversation);
+    yield* this.#start(conversation);
   }).bind(this);
 
   readonly cancel = Effect.fn("MemoryReview.cancel")(function* (this: MemoryReview, agentId: string) {
@@ -309,6 +323,12 @@ export class MemoryReview {
           ? []
           : yield* Effect.try(() => options.memories.applyReview(agentId, base, operations, turnId));
       const learned = suggestion ? yield* this.#learn(agent, model, suggestion, excerpt, turnId) : null;
+      if ((changes.length > 0 || learned) && options.reviewed)
+        yield* options.reviewed(
+          agentId,
+          turnId,
+          excerpt.flatMap((message) => (message.turnId ? [message.turnId] : [])),
+        );
       const lines = [memoryChangesMessage(turnId, changes, options.redact), learned].filter(
         (line): line is ConversationMessage => line !== null,
       );

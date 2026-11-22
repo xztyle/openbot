@@ -58,6 +58,35 @@ function agentMemoryTables(limit: () => number): MemoryTables {
   };
 }
 
+/** How many text matches per wanted result the search ranks again with their age. */
+const RECALL_CANDIDATES = 4;
+/** The age at which a memory's recency counts half. */
+const RECALL_HALF_LIFE_DAYS = 30;
+const RECALL_RELEVANCE_WEIGHT = 0.75;
+
+/**
+ * Orders text matches by a mix of relevance and recency (the composite score of CrewAI's memory):
+ * `0.75 · relevance + 0.25 · 0.5^(age / 30 days)`, with the relevance of the best match as 1. FTS5's
+ * bm25 is lower for a better match, so the relevance is its share of the best one. The order of equal
+ * scores is the text order.
+ */
+export function rankedRecall<Candidate extends { updatedAt: string; rank: number }>(
+  candidates: readonly Candidate[],
+  now: number,
+): Candidate[] {
+  const best = Math.min(0, ...candidates.map((candidate) => candidate.rank));
+  const score = (candidate: Candidate) => {
+    const relevance = best < 0 ? candidate.rank / best : 1;
+    const ageDays = Math.max(0, now - Date.parse(candidate.updatedAt)) / 86_400_000;
+    const recency = Number.isFinite(ageDays) ? 0.5 ** (ageDays / RECALL_HALF_LIFE_DAYS) : 0;
+    return RECALL_RELEVANCE_WEIGHT * relevance + (1 - RECALL_RELEVANCE_WEIGHT) * recency;
+  };
+  return candidates
+    .map((candidate, index) => ({ candidate, index, score: score(candidate) }))
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map((entry) => entry.candidate);
+}
+
 /** Owns saved agent memories, their selection, and local recall. Channel memories remain separate. */
 export class AgentMemoryStore extends MemoryStore {
   constructor(database: OpenBotDatabase, limit: () => number = () => INPUT_LIMITS.agentMemories) {
@@ -233,15 +262,23 @@ export class AgentMemoryStore extends MemoryStore {
       throw new AgentMemorySelectionError({ code: "query", message: sourceText("error.backend.memorySearchQuery") });
     }
     const expression = [...new Set(terms)].map((term) => `"${term}"`).join(" OR ");
-    const ids = databaseRows(
+    // The best text matches, ranked again with their age: a fact that was saved or confirmed lately
+    // comes before an old one that matches about as well.
+    const candidates = databaseRows(
       this.database.connection
         .prepare(
-          `SELECT m.memory_id FROM agent_memory_search JOIN projection_agent_memories m ON m.rowid = agent_memory_search.rowid
+          `SELECT m.memory_id, m.updated_at, bm25(agent_memory_search) AS rank FROM agent_memory_search
+       JOIN projection_agent_memories m ON m.rowid = agent_memory_search.rowid
        WHERE agent_memory_search MATCH ? AND m.agent_id = ?
        ORDER BY bm25(agent_memory_search), m.updated_at DESC, m.memory_id LIMIT ?`,
         )
-        .all(expression, agentId, limit + 1),
-    ).map((row) => requiredStringColumn(row, "memory_id"));
+        .all(expression, agentId, limit * RECALL_CANDIDATES + 1),
+    ).map((row) => ({
+      id: requiredStringColumn(row, "memory_id"),
+      updatedAt: requiredStringColumn(row, "updated_at"),
+      rank: requiredNumberColumn(row, "rank"),
+    }));
+    const ids = rankedRecall(candidates, Date.now()).map((candidate) => candidate.id);
     const result: AgentMemorySearchResult = { memories: [], hasMore: ids.length > limit };
     for (const id of ids.slice(0, limit)) {
       const memory = this.#retrieved(agentId, id);

@@ -361,6 +361,8 @@ export function createWebWorkspace(
   let runtimeSnapshots = 0;
   /** The silence after which the running turn is checked next. It grows while the host confirms the silence. */
   let turnSilenceMs = TURN_SILENCE_MS;
+  /** The turn and revision that the last silent-turn checks replaced the connection for, and how often. */
+  let stallReplaces = { key: "", count: 0 };
   let turnCheck: Promise<void> | null = null;
   /** The read of the host's state after a return from the background, or after a window focus. */
   let resyncPromise: Promise<void> | null = null;
@@ -1851,6 +1853,11 @@ export function createWebWorkspace(
     const snapshotRequested = runtime.requestRuntimeSnapshot !== undefined;
     runtime.requestRuntimeSnapshot?.();
     const replace = () => {
+      // A new connection that brings no snapshot or event either does not heal by another one: the same
+      // turn at the same revision is replaced at most `TURN_STALL_REPLACES` times, then left to its events.
+      const key = `${id}\n${before.turnId}\n${state.conversations[id]?.page?.revision ?? before.revision}`;
+      stallReplaces = stallReplaces.key === key ? { key, count: stallReplaces.count + 1 } : { key, count: 1 };
+      if (stallReplaces.count > TURN_STALL_REPLACES) return;
       turnSilenceMs = TURN_SILENCE_MS;
       runtime.replaceConnection?.("event-stall");
     };
@@ -2588,6 +2595,8 @@ const PANELS_RETRIES = 3;
  */
 const TURN_SILENCE_MS = 30_000;
 const TURN_SILENCE_MAX_MS = 5 * 60_000;
+/** How many times a silent-turn check replaces the connection for one turn at one revision. */
+const TURN_STALL_REPLACES = 2;
 const TURN_SILENCE_CHECK_MS = 5_000;
 /** How long a requested runtime snapshot may take before the event stream counts as stalled. */
 const RUNTIME_SNAPSHOT_REPLY_MS = 10_000;

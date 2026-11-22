@@ -279,6 +279,7 @@ import { routeWorkspaceSaved } from "./team-api/route-workspace-saved";
 import { routeWorkspaceSearch } from "./team-api/route-workspace-search";
 import { routeWorkspaceSidebar } from "./team-api/route-workspace-sidebar";
 import { routeWorkspaceSpaces } from "./team-api/route-workspace-spaces";
+import { fitTeamRuntimeSnapshot } from "./team-api/runtime-snapshot-roster";
 import { TeamStoreError } from "./team-store";
 
 const EVENT_PAYLOAD_LIMIT = 256 * 1_024;
@@ -1238,7 +1239,9 @@ export class TeamApiServer {
     const protocol = eventProtocol(capabilities);
     const hidden = hiddenProviderAgentIds(this.#options.agents.listAgents(), protocol);
     for (const id of blocked) hidden.add(id);
-    const visible = protocol === 1 ? legacyProviderView(event, hidden) : hiddenAgentView(event, hidden, protocol);
+    const fitted =
+      event.type === "runtime-snapshot" ? { ...event, snapshot: fitTeamRuntimeSnapshot(event.snapshot) } : event;
+    const visible = protocol === 1 ? legacyProviderView(fitted, hidden) : hiddenAgentView(fitted, hidden, protocol);
     if (!isAgentEvent(visible) && !isTeamRealtimeEvent(visible)) return null;
     if (protocol !== 1)
       return (

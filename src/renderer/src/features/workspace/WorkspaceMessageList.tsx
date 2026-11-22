@@ -301,13 +301,25 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
     },
   );
 
+  /** The last row the list saw, so a message the reader sends is told from one already there. */
+  let lastRowKey: string | undefined;
   // The first rows open at the "new" divider, or at the end. Each later change follows the end
-  // while the reader is there.
+  // while the reader is there, and a message the reader sends brings them to it, as in Slack.
   createEffect(
     () => ({ count: rows().length, last: rows().at(-1)?.key, size: flow.getTotalSize() }),
     () => {
       requestAnimationFrame(() => {
         if (!scroller) return;
+        const last = untrack(rows).at(-1);
+        const sent =
+          opened &&
+          last !== undefined &&
+          last.key !== lastRowKey &&
+          !last.pending &&
+          last.entry.author.kind === "member" &&
+          ws.env.isReader(last.entry.author.id);
+        lastRowKey = last?.key;
+        if (sent) follow = true;
         if (!opened && rows().length > 0) {
           opened = true;
           // A linked message takes the place of the divider and the end.

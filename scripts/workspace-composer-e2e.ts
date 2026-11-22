@@ -4,7 +4,7 @@
 // deliver, an edit in place hides a pasted password as the message box does, and an agent DM that
 // cannot send yet leaves its draft alone. Send waits for a file that is still uploading, and many
 // waiting messages leave the header and the box on a phone's screen. Deleting a message whose
-// edit is open on a phone ends the edit.
+// edit is open on a phone ends the edit. A message the reader sends shows at the end of the list.
 //
 // `bun scripts/workspace-composer-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>]`
 // Writes report.json to .openbot-build/workspace-composer-e2e, or to --out.
@@ -244,6 +244,27 @@ async function checkManyWaitingFit(page: Page, device: string) {
   });
 }
 
+/** A message the reader sends shows: the list goes to the end, also from the "New" line. */
+async function checkSendShowsMessage(page: Page, device: string, phone: boolean) {
+  await load(page, `${CHANNEL_ORIGIN()}${CHANNEL_PATH}`);
+  if (phone) await editor(page).tap();
+  else await editor(page).click();
+  await page.keyboard.type("mi mensaje nuevo");
+  await press(page, phone, "Send");
+  const sent = page.locator(".ws-message").filter({ hasText: "mi mensaje nuevo" }).first();
+  await sent.waitFor({ timeout: 10_000 });
+  await page.waitForTimeout(600);
+  await step(device, "a sent message shows at the end of the list, in view", async () => {
+    const rect = await sent.boundingBox();
+    const list = await page.locator(".ws-message-scroll").filter({ visible: true }).first().boundingBox();
+    assert.ok(rect && list, "No message or list.");
+    assert.ok(
+      rect.y >= list.y - 1 && rect.y + rect.height <= list.y + list.height + 1,
+      `The message is at ${Math.round(rect.y)}px, the list shows ${Math.round(list.y)}-${Math.round(list.y + list.height)}px.`,
+    );
+  });
+}
+
 /** Holds a finger on an element, as a long press on a phone. */
 async function longPress(page: Page, target: Locator) {
   await target.scrollIntoViewIfNeeded();
@@ -426,6 +447,11 @@ try {
   {
     const context = await newDevice(browser, true);
     await checkManyWaitingFit(await newPage(context), "iphone");
+    await context.close();
+  }
+  for (const phone of [true, false]) {
+    const context = await newDevice(browser, phone);
+    await checkSendShowsMessage(await newPage(context), phone ? "iphone" : "desktop", phone);
     await context.close();
   }
   {

@@ -3197,10 +3197,14 @@ export class ChannelService {
     if (messages.length) {
       // A new part of a reply that streams writes its rows and sends the messages, with no commit.
       // The channel list and the routine checks hear of it at most once a second; the commit that
-      // ends the stream publishes as before.
+      // ends the stream publishes as before. A commit of one message keeps only its first and newest
+      // events, so the other changes of a long reply do not each leave a full copy in the history.
       if (this.store.updateStreaming(channelId, messages)) this.#publishStreaming(channelId);
       else {
-        this.store.update(this.store.get(channelId), { messages });
+        const channel = this.store.get(channelId);
+        const [only] = messages;
+        if (messages.length === 1 && only) this.store.captureMessage(channel, only);
+        else this.store.update(channel, { messages });
         this.publish(channelId);
       }
     }

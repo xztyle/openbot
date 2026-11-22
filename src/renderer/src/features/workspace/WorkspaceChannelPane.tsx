@@ -34,6 +34,7 @@ import {
   memberById,
   otherMembers,
   readerJoined,
+  shownMessageId,
   workingAgents,
 } from "./workspace-model";
 
@@ -213,10 +214,14 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
     const current = panel();
     return current?.kind === "thread" ? current.rootId : undefined;
   };
-  /** The message that a link named, when it is in this channel's transcript and not in a thread. */
+  /**
+   * The message that a link named, when it is in this channel's transcript and not in a thread. A step
+   * of an agent's turn, which a search finds, shows as its answer outside debug mode.
+   */
   const focusId = () => {
     const focus = ws.state.focus;
-    return focus?.channelId === props.channelId && !threadRoot() ? focus.messageId : undefined;
+    if (focus?.channelId !== props.channelId || threadRoot()) return undefined;
+    return debugMode() ? focus.messageId : shownMessageId(entries(), focus.messageId);
   };
   /** "Channel details", or "Conversation details" for a DM or a group. */
   const detailsLabel = () => t(kind() === "channel" ? "workspace.details.title" : "workspace.details.titleDirect");

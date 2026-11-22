@@ -23,6 +23,7 @@ import {
   peopleNames,
   readerJoined,
   rowMessages,
+  shownMessageId,
 } from "./workspace-model";
 import { savedScrollPlace, saveScrollPlace } from "./workspace-scroll-places";
 
@@ -68,10 +69,11 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
     return unread?.id ?? null;
   });
   const followState = () => ws.marks.thread(props.channelId, props.rootId);
-  /** A reply that a link named. */
+  /** A reply that a link named. A step of an agent's turn shows as its answer outside debug mode. */
   const focusId = () => {
     const focus = ws.state.focus;
-    return focus?.channelId === props.channelId && focus.messageId !== props.rootId ? focus.messageId : undefined;
+    if (focus?.channelId !== props.channelId || focus.messageId === props.rootId) return undefined;
+    return debugMode() ? focus.messageId : shownMessageId(entries(), focus.messageId);
   };
   const rows = createMemo(() => {
     const current = channel();

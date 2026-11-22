@@ -334,6 +334,27 @@ export function visibleEntry(entry: ChannelMessage): boolean {
   );
 }
 
+/**
+ * The message that shows for a linked one, such as a search result. A step of an agent's turn has no
+ * row outside debug mode: it shows as the answer of its turn, else as the next message drawn after it.
+ */
+export function shownMessageId(entries: readonly ChannelMessage[], id: string): string {
+  const index = entries.findIndex((entry) => entry.id === id);
+  const linked = entries[index];
+  if (!linked || !isStepEntry(linked)) return id;
+  const turnId = linked.message.turnId;
+  const answer = turnId
+    ? entries.find(
+        (entry) =>
+          entry.author.id === linked.author.id &&
+          entry.message.turnId === turnId &&
+          !isStepEntry(entry) &&
+          visibleEntry(entry),
+      )
+    : undefined;
+  return (answer ?? entries.slice(index + 1).find(visibleEntry))?.id ?? id;
+}
+
 /** In debug mode, a routing receipt of a lead shows too. */
 function debugVisibleEntry(entry: ChannelMessage): boolean {
   return Boolean(parseChannelRoutingConversationEventItemType(entry.message.itemType) && entry.message.text.trim());

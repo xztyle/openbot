@@ -1,6 +1,6 @@
 import type { ChannelMessage } from "@openbot/contracts/ipc";
 import { describe, expect, it } from "vitest";
-import { foldProgressRows, messageRows, rowMessages } from "./workspace-model";
+import { foldProgressRows, messageRows, rowMessages, shownMessageId } from "./workspace-model";
 
 // Failure mode: a run of an agent's short lines folds away a line the reader has to see (a question,
 // a chat card, a link, a mention), a link to a folded line finds nothing to scroll to, or the counts
@@ -56,5 +56,27 @@ describe("progress fold", () => {
   it("counts each folded line", () => {
     const rows = fold(run(line("c", 2)));
     expect(rows.flatMap(rowMessages).map((entry) => entry.id)).toEqual(["a", "b", "c", "d", "e"]);
+  });
+});
+
+// Failure mode: a search result on a step of an agent's turn opens the channel at no message: the
+// step has no row outside debug mode, so nothing scrolls or lights up.
+describe("shown message of a link", () => {
+  const step = (id: string, minute: number, turnId?: string) =>
+    line(id, minute, `Reading ${id}.`, { author: "assistant", itemType: "commentary", ...(turnId ? { turnId } : {}) });
+  const answer = line("answer", 5, "Here is the checklist.", { author: "assistant", turnId: "t1" });
+
+  it("shows a step as the answer of its turn", () => {
+    const entries = [line("ask", 0), step("s1", 1, "t1"), step("s2", 2, "t1"), answer];
+    expect(shownMessageId(entries, "s1")).toBe("answer");
+  });
+
+  it("shows a step without an answer as the next message drawn", () => {
+    expect(shownMessageId([step("s1", 1, "t2"), step("s2", 2), line("next", 3)], "s1")).toBe("next");
+  });
+
+  it("keeps a message that has a row", () => {
+    expect(shownMessageId([line("ask", 0), answer], "ask")).toBe("ask");
+    expect(shownMessageId([line("ask", 0)], "missing")).toBe("missing");
   });
 });

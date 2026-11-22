@@ -12,3 +12,6 @@
 - Recent searches: a tap on the words of a recent search runs it (before, only the small search
   icon did). On a phone, emptying the search field and pressing Search shows the recent searches
   again.
+- A search result on one of an agent's working steps ("Checking the release branch…") opens the
+  channel at that turn's answer, lit. Before, the step has no row of its own, so the channel opened
+  with nothing lit, and in a long channel it loaded older pages looking for it.

@@ -919,7 +919,13 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     description:
       "Stage one short, durable memory for this agent. Use memoryId to correct or consolidate an existing memory. New entries are searchable unless inclusion is essential. Essential requests that do not fit stay searchable. At the storage limit, consolidate related entries or forget facts that are no longer true first; if the user lowered the limit below the saved count, keep all entries and report that the new one could not be saved. The change commits only if the current turn completes.",
     shape: {
-      text: z.string().min(1).max(INPUT_LIMITS.agentMemoryText),
+      text: z
+        .string()
+        .min(1)
+        .max(INPUT_LIMITS.agentMemoryText)
+        .describe(
+          `The memory, at most ${INPUT_LIMITS.agentMemoryText} characters: one fact or rule. Longer notes go in a file in your workspace.`,
+        ),
       memoryId: z.string().optional(),
       inclusion: z.enum(["essential", "searchable"]).optional(),
     },

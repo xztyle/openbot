@@ -414,4 +414,5 @@ export const messages = {
   "chat.compaction.continues": "Kuyruktaki mesajlar devam ediyor.",
   "chat.marker.notice.inboundMail": "{agent} bir e-posta aldı",
   "chat.marker.notice.inboundMailUnnamed": "Ajan bir e-posta aldı",
+  "chat.send.waitingForConnection": "Bağlantı bekleniyor. Ajan hazır olunca gönderilecek.",
 } as const satisfies PartialTranslation<typeof source>;

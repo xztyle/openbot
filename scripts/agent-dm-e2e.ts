@@ -6,7 +6,8 @@
 // original text and closes it again. On a phone: the header keeps one row
 // with Back and More at a finger's size, More opens the chat's controls in a sheet, a long press
 // opens the actions in a sheet with the quick reactions, and the formatting toolbar shows only
-// after "Aa". It serves the web client on a mock host
+// after "Aa", and a message sent while the host reconnects or the agent restarts waits and goes once,
+// while a stopped provider keeps Send off. It serves the web client on a mock host
 // (`src/renderer/stories/web-client-inbox-harness.tsx`) and drives it in Chromium. No account
 // service, host or provider is needed.
 //
@@ -21,6 +22,17 @@ import solidPlugin from "@solidjs/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { type Browser, type BrowserContext, chromium, type Locator, type Page } from "playwright-core";
 import { createServer, type Plugin } from "vite";
+
+/** The harness's lost connection and agent phase on demand (`web-client-inbox-harness.tsx`). */
+declare global {
+  interface Window {
+    harnessConnection?: {
+      drop(holdMs: number): void;
+      phase(phase: "idle" | "starting" | "ready" | "restarting" | "blocked" | "stopped"): void;
+      sent: { operationId: string; text: string }[];
+    };
+  }
+}
 
 const logger = createOpenBotLogger("agent-dm-e2e");
 const ROOT = resolve(import.meta.dirname, "..");
@@ -131,6 +143,10 @@ const header = (page: Page) =>
   page.locator("header").filter({ has: button(page, english("workspace.header.openDetails", { name: "Chief" })) });
 const box = (page: Page) =>
   page.getByRole("textbox", { name: english("composer.placeholder.message", { name: "Chief" }) });
+
+/** How many times the host took a message with this text. */
+const sentCount = (page: Page, text: string) =>
+  page.evaluate((body) => window.harnessConnection?.sent.filter((item) => item.text === body).length ?? 0, text);
 
 /** The quote of the reply in the box names the message. */
 async function quoted(page: Page): Promise<void> {
@@ -297,6 +313,81 @@ async function phone(browser: Browser, origin: string): Promise<void> {
     await shot(page, "phone-sheet");
     await button(sheet, english("chat.menu.reply")).tap();
     await quoted(page);
+  });
+
+  await step(
+    page,
+    viewport,
+    "Send while the host reconnects: the message waits and goes once, when it is back",
+    async () => {
+      const text = "Sent while the host reconnects";
+      const sendButton = button(page, english("composer.send.message")).filter({ visible: true }).last();
+      const waiting = page.getByText(english("chat.send.waitingForConnection"));
+      await box(page).tap();
+      await page.evaluate(() => window.harnessConnection?.drop(3_000));
+      await page.keyboard.type(text);
+      // Send stays on while the connection is away.
+      await page.waitForFunction(
+        (name) =>
+          [...document.querySelectorAll(`button[aria-label="${name}"]`)].some(
+            (node) => node instanceof HTMLButtonElement && node.offsetParent !== null && !node.disabled,
+          ),
+        english("composer.send.message"),
+        { timeout: 2_000 },
+      );
+      await sendButton.tap();
+      await waiting.waitFor({ timeout: UI_WAIT_MS });
+      assert.equal((await box(page).innerText()).trim(), "", "The box kept the text that was sent.");
+      assert.equal(await sentCount(page, text), 0, "The host took the message while it was away.");
+      await shot(page, "phone-sent-while-reconnecting");
+      await page.waitForFunction(
+        (body) => (window.harnessConnection?.sent.filter((item) => item.text === body).length ?? 0) > 0,
+        text,
+        {
+          timeout: UI_WAIT_MS,
+        },
+      );
+      await waiting.waitFor({ state: "detached", timeout: UI_WAIT_MS });
+      await messages(page, "Preview User").filter({ hasText: text }).first().waitFor({ timeout: UI_WAIT_MS });
+      assert.equal(await sentCount(page, text), 1, "The message went more than once.");
+    },
+  );
+
+  await step(page, viewport, "a provider that stops keeps Send off; a restart lets a message wait", async () => {
+    const text = "Sent while the agent restarts";
+    const sendButton = button(page, english("composer.send.message")).filter({ visible: true }).last();
+    await box(page).tap();
+    await page.keyboard.type(text);
+    await page.evaluate(() => window.harnessConnection?.phase("blocked"));
+    await page.waitForFunction(
+      (name) =>
+        [...document.querySelectorAll(`button[aria-label="${name}"]`)].some(
+          (node) => node instanceof HTMLButtonElement && node.offsetParent !== null && node.disabled,
+        ),
+      english("composer.send.message"),
+      { timeout: UI_WAIT_MS },
+    );
+    await page.evaluate(() => window.harnessConnection?.phase("restarting"));
+    await page.waitForFunction(
+      (name) =>
+        [...document.querySelectorAll(`button[aria-label="${name}"]`)].some(
+          (node) => node instanceof HTMLButtonElement && node.offsetParent !== null && !node.disabled,
+        ),
+      english("composer.send.message"),
+      { timeout: UI_WAIT_MS },
+    );
+    await sendButton.tap();
+    await page.getByText(english("chat.send.waitingForConnection")).waitFor({ timeout: UI_WAIT_MS });
+    assert.equal(await sentCount(page, text), 0, "The message went before the agent was ready.");
+    await page.evaluate(() => window.harnessConnection?.phase("ready"));
+    await page.waitForFunction(
+      (body) => (window.harnessConnection?.sent.filter((item) => item.text === body).length ?? 0) > 0,
+      text,
+      {
+        timeout: UI_WAIT_MS,
+      },
+    );
+    assert.equal(await sentCount(page, text), 1, "The message went more than once.");
   });
 
   await step(page, viewport, "the formatting toolbar shows after Aa", async () => {

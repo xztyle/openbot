@@ -404,4 +404,5 @@ export const messages = {
   "chat.compaction.continues": "대기 중인 메시지는 계속 처리돼요.",
   "chat.marker.notice.inboundMail": "{agent}에게 메일이 왔습니다",
   "chat.marker.notice.inboundMailUnnamed": "에이전트에게 메일이 왔습니다",
+  "chat.send.waitingForConnection": "연결을 기다리고 있어요. 에이전트가 준비되면 보내요.",
 } as const satisfies PartialTranslation<typeof source>;

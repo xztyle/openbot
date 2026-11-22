@@ -90,6 +90,7 @@ const [dismissedUsageLimits, setDismissedUsageLimits] = createStore<Record<strin
 export function ConversationComposer() {
   const {
     agentReady,
+    acceptsSend,
     providerUpdateRequired,
     attachmentAction,
     attachmentBusy,
@@ -399,9 +400,12 @@ export function ConversationComposer() {
       .map((extension) => `.${extension}`)
       .join(",");
   };
-  /** Why the message box is off while the agent is not ready. The same words show as its placeholder. */
+  /**
+   * Why the message box is off while the agent is not ready. The same words show as its placeholder.
+   * None while a send only waits for a reconnect or a start: the box and Send work then.
+   */
   const notReadyReason = () => {
-    if (agentReady()) return undefined;
+    if (agentReady() || acceptsSend()) return undefined;
     if (props.agentsConnecting) return t("common.connecting");
     if (!props.runtime) return t("composer.placeholder.cliSetup");
     if (props.server?.state === "online") return t("composer.placeholder.hostSetup");
@@ -439,8 +443,7 @@ export function ConversationComposer() {
           disabled={
             attachmentBusy() ||
             submitting() ||
-            !agentReady() ||
-            Boolean(providerUpdateRequired()) ||
+            !acceptsSend() ||
             voicePhase() === "preparing" ||
             voicePhase() === "requesting" ||
             voicePhase() === "transcribing"

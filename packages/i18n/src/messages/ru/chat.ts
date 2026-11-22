@@ -511,4 +511,5 @@ export const messages = {
   "chat.compaction.continues": "Сообщения в очереди продолжат отправляться.",
   "chat.marker.notice.inboundMail": "{agent} получил письмо",
   "chat.marker.notice.inboundMailUnnamed": "Агент получил письмо",
+  "chat.send.waitingForConnection": "Ждёт подключения. Отправится, когда агент будет готов.",
 } as const satisfies PartialTranslation<typeof source>;

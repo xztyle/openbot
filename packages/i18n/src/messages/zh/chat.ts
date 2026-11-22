@@ -405,4 +405,5 @@ export const messages = {
   "chat.compaction.continues": "排队中的消息会继续执行。",
   "chat.marker.notice.inboundMail": "{agent} 收到一封邮件",
   "chat.marker.notice.inboundMailUnnamed": "智能体收到一封邮件",
+  "chat.send.waitingForConnection": "正在等待连接，助手就绪后发送。",
 } as const satisfies PartialTranslation<typeof source>;

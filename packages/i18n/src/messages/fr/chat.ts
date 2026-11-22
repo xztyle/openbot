@@ -409,4 +409,5 @@ export const messages = {
   "chat.compaction.continues": "Les messages en file d’attente continuent.",
   "chat.marker.notice.inboundMail": "{agent} a reçu un e-mail",
   "chat.marker.notice.inboundMailUnnamed": "L'agent a reçu un e-mail",
+  "chat.send.waitingForConnection": "En attente de connexion. Il partira dès que l’agent sera prêt.",
 } as const satisfies PartialTranslation<typeof source>;

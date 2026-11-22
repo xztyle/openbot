@@ -1293,6 +1293,7 @@ export function ConversationTimeline() {
                         updateRequired={Boolean(providerUpdateRequired())}
                         error={pendingSend()?.error ?? null}
                         waitingBehindFailure={pendingSend()?.waitingBehindFailure === true}
+                        waitingForConnection={pendingSend()?.waitingForConnection === true}
                         retrySafe={pendingRetrySafe()}
                         canEdit={!editingDeliveryId()}
                         editBlockedReason={editingDeliveryId() ? t("chat.send.editBlocked") : null}

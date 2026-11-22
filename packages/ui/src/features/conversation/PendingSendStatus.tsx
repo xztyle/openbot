@@ -13,6 +13,8 @@ export interface PendingSendStatusProps {
   error?: string | null;
   /** A waiting send stands behind an earlier send that failed, and goes only after that one is retried or dismissed. */
   waitingBehindFailure?: boolean;
+  /** A waiting send waits for the connection or the agent, and goes by itself; Edit and Dismiss take it back. */
+  waitingForConnection?: boolean;
   /** The composer shows the update notice; keep recovery actions without a second error. */
   updateRequired?: boolean;
   /** The host drops a repeated send of this message, so Retry cannot store it twice. */
@@ -33,8 +35,8 @@ export interface PendingSendStatusProps {
 
 /**
  * The delivery status beside the time of a message the host has not stored yet. A send in flight
- * shows nothing; only a held message (with Undo and Edit), a failure, and a send that waits behind a
- * failure show. The status text is a polite live region that stays while the
+ * shows nothing; only a held message (with Undo and Edit), a failure, a send that waits behind a
+ * failure, and a send that waits for the connection (with Edit and Dismiss) show. The status text is a polite live region that stays while the
  * send runs, so a reader hears the failure without moving focus. A message whose repeat the host
  * cannot detect offers no Retry: the first send may have arrived.
  */
@@ -43,19 +45,21 @@ export function PendingSendStatus(props: PendingSendStatusProps): JSX.Element {
   const noteId = `pending-send-note-${createUniqueId()}`;
   const failed = () => props.state === "failed";
   const held = () => props.state === "held";
+  const offline = () => props.state === "waiting" && props.waitingForConnection === true;
   const blocked = () => !props.canEdit && Boolean(props.editBlockedReason);
   return (
     <div class="pending-send-status" data-state={props.state}>
       <span role="status" class="pending-send-label">
         <Show when={held()}>{t("chat.send.held")}</Show>
         <Show when={props.state === "waiting" && props.waitingBehindFailure}>{t("chat.send.waitingBehindFailed")}</Show>
+        <Show when={offline()}>{t("chat.send.waitingForConnection")}</Show>
         <Show when={failed() && !props.updateRequired}>
           <TriangleAlert aria-hidden="true" />
           {props.retrySafe ? t("chat.send.failed") : t("chat.send.unconfirmed")}
           <Show when={props.error}>{(error) => <span class="pending-send-error">{error()}</span>}</Show>
         </Show>
       </span>
-      <Show when={blocked() && (held() || failed())}>
+      <Show when={blocked() && (held() || failed() || offline())}>
         <span class="pending-send-note" id={noteId}>
           {props.editBlockedReason}
         </span>
@@ -80,6 +84,21 @@ export function PendingSendStatus(props: PendingSendStatusProps): JSX.Element {
           onClick={() => props.onEdit()}
         >
           <Pencil aria-hidden="true" />
+        </IconButton>
+      </Show>
+      <Show when={offline()}>
+        <IconButton
+          variant="ghost"
+          size="icon-xs"
+          label={t("chat.send.edit")}
+          disabled={!props.canEdit}
+          aria-describedby={blocked() ? noteId : undefined}
+          onClick={() => props.onEdit()}
+        >
+          <Pencil aria-hidden="true" />
+        </IconButton>
+        <IconButton variant="ghost" size="icon-xs" label={t("chat.send.dismiss")} onClick={() => props.onDismiss()}>
+          <X aria-hidden="true" />
         </IconButton>
       </Show>
       <Show when={failed()}>

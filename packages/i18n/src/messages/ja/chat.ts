@@ -390,4 +390,5 @@ export const messages = {
   "chat.compaction.continues": "キュー内のメッセージは続行されます。",
   "chat.marker.notice.inboundMail": "{agent} にメールが届きました",
   "chat.marker.notice.inboundMailUnnamed": "エージェントにメールが届きました",
+  "chat.send.waitingForConnection": "接続を待っています。エージェントの準備ができると送信されます。",
 } as const satisfies PartialTranslation<typeof source>;

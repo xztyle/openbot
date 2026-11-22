@@ -415,4 +415,5 @@ export const messages = {
   "chat.compaction.continues": "I messaggi in coda proseguono.",
   "chat.marker.notice.inboundMail": "{agent} ha ricevuto un'email",
   "chat.marker.notice.inboundMailUnnamed": "L'agente ha ricevuto un'email",
+  "chat.send.waitingForConnection": "In attesa della connessione. Partirà quando l’agente è pronto.",
 } as const satisfies PartialTranslation<typeof source>;

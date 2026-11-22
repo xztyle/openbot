@@ -380,7 +380,11 @@ async function checkAttachOpensChooser(page: Page, phone: Phone, name: string, o
 declare global {
   interface Window {
     /** The harness's connection, from `web-client-inbox-harness.tsx`. */
-    harnessConnection?: { drop(holdMs: number): void; sent: { operationId: string; text: string }[] };
+    harnessConnection?: {
+      drop(holdMs: number): void;
+      phase(phase: "idle" | "starting" | "ready" | "restarting" | "blocked" | "stopped"): void;
+      sent: { operationId: string; text: string }[];
+    };
     /** File choosers that Safari would not open, from `installFileChooserGestureModel`. */
     blockedFileChoosers?: number;
     /** The editor this check watches, and how often it stopped taking text. */

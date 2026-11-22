@@ -52,7 +52,8 @@ export interface VoiceSend {
 
 export interface ComposerActionsDeps {
   props: ConversationProps;
-  agentReady: () => boolean;
+  /** The agent takes a message now, or once its server reconnects or it has started. */
+  acceptsSend: () => boolean;
   attachmentBusy: () => boolean;
   setAttachmentBusy: (busy: boolean) => void;
   attachmentImports: Map<string, ConversationTarget>;
@@ -855,8 +856,8 @@ export function createComposerActions(deps: ComposerActionsDeps) {
   }
 
   /**
-   * Puts a held or failed message back in the composer, ahead of what is written there, and keeps its
-   * files. Nothing the person wrote is replaced or cut: when the two together would pass a limit, the
+   * Puts a held, failed or waiting message back in the composer, ahead of what is written there, and
+   * keeps its files. Nothing the person wrote is replaced or cut: when the two together would pass a limit, the
    * message stays where it is and the composer says why.
    */
   function editPendingSend(clientMessageId: string): void {
@@ -865,7 +866,11 @@ export function createComposerActions(deps: ComposerActionsDeps) {
     if (!target || deps.currentEditingDeliveryId()) return;
     const pending = deps.pendingSends
       .list(target)
-      .find((send) => send.clientMessageId === clientMessageId && (send.state === "held" || send.state === "failed"));
+      .find(
+        (send) =>
+          send.clientMessageId === clientMessageId &&
+          (send.state === "held" || send.state === "failed" || send.waitingForConnection),
+      );
     if (!pending) return;
     const current = deps.currentDraft();
     const text = [pending.draft.text, current.text].filter((part) => part.trim()).join("\n\n");
@@ -946,8 +951,8 @@ export function createComposerActions(deps: ComposerActionsDeps) {
       deps.stopVoiceRecording();
       return;
     }
-    // The editor stays open while the agent starts, but a send waits until it is ready.
-    if (phase !== "idle" || !deps.agentReady()) return;
+    // While the agent starts or its server reconnects, a send waits with the client until it is ready.
+    if (phase !== "idle" || !deps.acceptsSend()) return;
     void submitMessage();
   }
 
@@ -964,7 +969,7 @@ export function createComposerActions(deps: ComposerActionsDeps) {
   /** An instruction about selected text is a reply to that message. A failure shows on its row. */
   async function sendSelectionInstruction(messageId: string, body: string): Promise<boolean> {
     const target = deps.currentTarget();
-    if (!target || deps.submitting() || !deps.agentReady()) return false;
+    if (!target || deps.submitting() || !deps.acceptsSend()) return false;
     // A file passage is in the body as a quote tag; only a message passage makes a reply.
     const replyToMessageId = fileQuoteTarget(messageId) ? null : messageId;
     queueSend(target, { text: body, attachments: [], replyToMessageId }, body);
@@ -974,7 +979,7 @@ export function createComposerActions(deps: ComposerActionsDeps) {
   /** A message that a card in the chat sends for the user, such as Continue after a sign-in. */
   function sendCardMessage(body: string): boolean {
     const target = deps.currentTarget();
-    if (!target || deps.submitting() || !deps.agentReady()) return false;
+    if (!target || deps.submitting() || !deps.acceptsSend()) return false;
     queueSend(target, { text: body, attachments: [], replyToMessageId: null }, body);
     return true;
   }

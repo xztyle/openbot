@@ -92,6 +92,17 @@ export function createConversationViewScope(props: ConversationProps) {
     props.agentStatus.providers?.find(
       (provider) => provider.id === props.agent?.provider && provider.state === "outdated",
     );
+  /**
+   * A server that reconnects or an agent that starts is a short wait, so Send stays on: the message
+   * waits with this client and goes once the agent is ready. A provider that is not set up, or needs
+   * an update, keeps Send off.
+   */
+  const acceptsSend = () =>
+    !providerUpdateRequired() &&
+    (agentReady() ||
+      (Boolean(props.agent) &&
+        !channel &&
+        (props.agentStatus.phase === "starting" || props.agentStatus.phase === "restarting")));
   const {
     drafts: agentDrafts,
     setDrafts: setAgentDrafts,
@@ -469,6 +480,15 @@ export function createConversationViewScope(props: ConversationProps) {
   }
   const viewIsMounted = createScopeGuard();
   let attachmentPicker: HTMLInputElement | undefined;
+  // While this agent's server reconnects or the agent starts, the sends to that server wait with the client.
+  if (!channel) {
+    const sendGate = Symbol("send gate");
+    createEffect(
+      () => (props.agent && !agentReady() ? (props.server?.id ?? "local") : null),
+      (serverId) => pendingSends.setOffline(sendGate, serverId),
+    );
+    onCleanup(() => pendingSends.setOffline(sendGate, null));
+  }
   const currentPendingSends = createMemo(() => pendingSends.list(currentTarget()));
   // The host rows on screen: a sent message hands over to its row in the transcript or the queue.
   // Built only while a send waits for its row, so a streaming reply does not rebuild it for nothing.
@@ -631,7 +651,7 @@ export function createConversationViewScope(props: ConversationProps) {
     attachmentBusy,
     setAttachmentBusy,
     attachmentImports: resources.importTargetAgents,
-    agentReady: () => agentReady() && !providerUpdateRequired(),
+    acceptsSend,
     drafts,
     setDrafts,
     editingAgentId,
@@ -1760,6 +1780,7 @@ export function createConversationViewScope(props: ConversationProps) {
     agentActivity,
     runningTurnRuntime,
     agentReady,
+    acceptsSend,
     providerUpdateRequired,
     agentActivitySpaceReserved,
     activateBrowserTab,

@@ -39,6 +39,11 @@ export interface PendingSend {
    * goes only after the person retries or dismisses that one.
    */
   waitingBehindFailure?: boolean;
+  /**
+   * Set on the drawn copy only: the send waits for its server's connection or its agent to be ready,
+   * and goes by itself then. Until it leaves, Edit and Dismiss can still take it back.
+   */
+  waitingForConnection?: boolean;
 }
 
 export type DeliverPendingSend = (send: PendingSend) => Promise<SendMessageResult>;
@@ -67,11 +72,24 @@ export function createPendingSendStore() {
   const [sends, setSends] = createStore<Record<string, PendingSend[]>>({});
   // The send function of each pending message, kept for Retry.
   const deliverers = new Map<string, DeliverPendingSend>();
+  // The server of each chat, and the views that say a server cannot take a message now: it is
+  // reconnecting or its agent is starting. A send to such a server waits with the client.
+  const serverOf = new Map<string, string>();
+  const offline = new Map<string, Set<symbol>>();
+  const connected = (key: string) => {
+    const serverId = serverOf.get(key);
+    return serverId === undefined || !offline.get(serverId)?.size;
+  };
 
   function publish(key: string): void {
     let failedBefore = false;
+    const online = connected(key);
     const queue = (queues.get(key) ?? []).map((send) => {
-      const copy = { ...send, waitingBehindFailure: send.state === "waiting" && failedBefore };
+      const copy = {
+        ...send,
+        waitingBehindFailure: send.state === "waiting" && failedBefore,
+        waitingForConnection: send.state === "waiting" && !failedBefore && !online,
+      };
       if (send.state === "failed") failedBefore = true;
       return copy;
     });
@@ -89,7 +107,7 @@ export function createPendingSendStore() {
     if (queue.some((send) => send.state === "sending")) return;
     const next = queue.find((send) => send.state !== "sent");
     const deliver = next ? deliverers.get(next.clientMessageId) : undefined;
-    if (next?.state !== "waiting" || !deliver) return;
+    if (next?.state !== "waiting" || !deliver || !connected(key)) return;
     next.state = "sending";
     next.error = null;
     publish(key);
@@ -137,6 +155,7 @@ export function createPendingSendStore() {
     holdMs = 0,
   ): void {
     const key = composerDraftKey(target);
+    serverOf.set(key, target.serverId);
     const send: PendingSend = {
       voiceRecordingDraftId: null,
       ...input,
@@ -175,11 +194,40 @@ export function createPendingSendStore() {
     pump(key);
   }
 
-  /** Drops a failed or held send, for Edit, Undo or Dismiss, and lets the sends behind it go. */
+  /**
+   * Whether the send has not left and can still be taken back: held, failed, or waiting for the
+   * connection. A send that waits behind an earlier one in flight is about to leave.
+   */
+  function takeable(key: string, send: PendingSend | undefined): send is PendingSend {
+    return send?.state === "failed" || send?.state === "held" || (send?.state === "waiting" && !connected(key));
+  }
+
+  /**
+   * Marks the server of `serverId` as unable to take a message for the view `owner`, or able again
+   * with `null`. Each view holds one mark at a time; the sends to a server wait while any view marks it.
+   */
+  function setOffline(owner: symbol, serverId: string | null): void {
+    const changed = new Set<string>();
+    for (const [id, owners] of offline) {
+      if (id !== serverId && owners.delete(owner)) changed.add(id);
+      if (!owners.size) offline.delete(id);
+    }
+    if (serverId !== null && !offline.get(serverId)?.has(owner)) {
+      offline.set(serverId, (offline.get(serverId) ?? new Set()).add(owner));
+      changed.add(serverId);
+    }
+    for (const [key, id] of serverOf) {
+      if (!changed.has(id)) continue;
+      publish(key);
+      pump(key);
+    }
+  }
+
+  /** Drops a send that has not left, for Edit, Undo or Dismiss, and lets the sends behind it go. */
   function remove(target: ConversationTarget, clientMessageId: string): PendingSend | undefined {
     const key = composerDraftKey(target);
     const send = find(key, clientMessageId);
-    if (send?.state !== "failed" && send?.state !== "held") return undefined;
+    if (!takeable(key, send)) return undefined;
     const timer = holds.get(clientMessageId);
     if (timer !== undefined) clearTimeout(timer);
     holds.delete(clientMessageId);
@@ -235,6 +283,7 @@ export function createPendingSendStore() {
     retry,
     remove,
     settle,
+    setOffline,
   };
 }
 

@@ -427,4 +427,5 @@ export const messages = {
   "chat.compaction.continues": "Nachrichten in der Warteschlange werden weiter verarbeitet.",
   "chat.marker.notice.inboundMail": "{agent} hat eine Mail bekommen",
   "chat.marker.notice.inboundMailUnnamed": "Der Agent hat eine Mail bekommen",
+  "chat.send.waitingForConnection": "Wartet auf die Verbindung. Wird gesendet, sobald der Agent bereit ist.",
 } as const satisfies PartialTranslation<typeof source>;

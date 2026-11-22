@@ -404,4 +404,5 @@ export const messages = {
   "chat.compaction.continues": "As mensagens na fila continuam.",
   "chat.marker.notice.inboundMail": "{agent} recebeu um e-mail",
   "chat.marker.notice.inboundMailUnnamed": "O agente recebeu um e-mail",
+  "chat.send.waitingForConnection": "Aguardando a conexão. Será enviada quando o agente estiver pronto.",
 } as const satisfies PartialTranslation<typeof source>;

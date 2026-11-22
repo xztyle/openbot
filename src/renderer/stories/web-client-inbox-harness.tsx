@@ -4,6 +4,7 @@
  * sidebar have something unread, and Later has saved messages. Trading (slug `market-trading`) holds
  * Research and #cakemaker.
  */
+import type { AgentPhase } from "@openbot/contracts/ipc";
 import { Toaster } from "@openbot/ui";
 import { render } from "@solidjs/web";
 import { WebWorkspace } from "../src/features/web-client/WebWorkspace";
@@ -23,14 +24,20 @@ const SAVED = [
 ] as const;
 
 /**
- * A lost connection on demand, for `scripts/web-phone-keyboard-e2e.ts`: `drop(ms)` reports the host
- * offline, as a dropped or replaced connection does, and holds the next connect for `ms`, so the
- * workspace stays "connecting" that long. Until the connection is back, a channel command fails as
- * on a dead connection. `sent` lists every send the host took, so a test sees a message that went twice.
+ * A lost connection on demand, for `scripts/web-phone-keyboard-e2e.ts` and `scripts/agent-dm-e2e.ts`:
+ * `drop(ms)` reports the host offline, as a dropped or replaced connection does, and holds the next
+ * connect for `ms`, so the workspace stays "connecting" that long. Until the connection is back, a channel command or a
+ * message to an agent fails as on a dead connection. `sent` lists every send the host took, so a test
+ * sees a message that went twice.
  */
 declare global {
   interface Window {
-    harnessConnection?: { drop(holdMs: number): void; sent: { operationId: string; text: string }[] };
+    harnessConnection?: {
+      drop(holdMs: number): void;
+      /** Reports the host's agents in `phase`, as a provider that restarts or stops does. */
+      phase(phase: AgentPhase): void;
+      sent: { operationId: string; text: string }[];
+    };
   }
 }
 
@@ -59,6 +66,11 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
       down = true;
       events.connection({ hostId: "preview-host", state: "offline", message: null });
     },
+    phase(phase) {
+      void mock.api.agent
+        .getStatus()
+        .then((status) => mock.emitAgentEvent({ type: "status", status: { ...status, phase } }));
+    },
     sent,
   };
   const agent = web.channels;
@@ -71,8 +83,16 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
       return result;
     };
   }
+  // A message to an agent fails on a dead connection, as a channel command does.
+  const send: typeof web.send = async (agentId, text, attachmentDraftIds, replyToMessageId, clientMessageId) => {
+    if (down) throw new Error("The connection was lost.");
+    const result = await web.send(agentId, text, attachmentDraftIds, replyToMessageId, clientMessageId);
+    sent.push({ operationId: clientMessageId ?? "", text });
+    return result;
+  };
   return {
     ...web,
+    send,
     connect: async (host) => {
       const wait = hold;
       hold = 0;

@@ -440,4 +440,5 @@ export const messages = defineMessages("chat", {
   "chat.compaction.continues": "Queued messages continue.",
   "chat.marker.notice.inboundMail": "{agent} got a mail",
   "chat.marker.notice.inboundMailUnnamed": "The agent got a mail",
+  "chat.send.waitingForConnection": "Waiting to connect. It sends when the agent is ready.",
 });

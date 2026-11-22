@@ -222,9 +222,15 @@ def main():
     current = database_state(BASE / "data/.config/OpenBot/openbot.db")
     if (current["active"] or current["pending"]) and not interrupt:
         raise RuntimeError("A bot started working while artifacts uploaded. Host restart deferred.")
+    drained = drain_host() if interrupt else None
     if interrupt:
         (RELEASE / "interrupted-agents.json").write_text(json.dumps(working_agents(), indent=2))
-    deploy_host(IMAGE)
+    try:
+        deploy_host(IMAGE)
+    except Exception:
+        if drained is not None:
+            control("POST", "/v1/drain/cancel", "drain-cancel")
+        raise
     after = validate_after(before, expected_schema, environment_hash)
     report = dict(revision=REVISION, image=IMAGE, worker=worker, before=before, after=after,
                   phases_seconds=TIMES, deploy_seconds=round(time.monotonic() - started, 3), compiled_during_deployment=False)
@@ -232,6 +238,24 @@ def main():
     resumed = resume_interrupted() if interrupt else None
     print(json.dumps(dict(image=IMAGE, worker=worker, schema=after["schema"],
                           deploy_seconds=report["deploy_seconds"], saved_data_verified=True, resumed=resumed)))
+
+
+def control(method, path, name, max_time=10):
+    """One call to the running host's control socket; None when the call fails."""
+    result = subprocess.run(["sudo", "docker", "exec", "openbot", "curl", "-s", "--fail", "-X", method,
+                             "--max-time", str(max_time), "--unix-socket", "/run/openbot/control.sock",
+                             f"http://openbot{path}"], env=ENV, capture_output=True)
+    (RELEASE / f"{name}.log").write_bytes(result.stdout + result.stderr)
+    return result.stdout.decode() if result.returncode == 0 else None
+
+
+def drain_host():
+    """Holds new turns and waits up to 10 minutes for running ones to end, so the restart cuts as few
+    as it can. A host without the drain route (older images) answers None and the deploy goes on."""
+    start = time.monotonic()
+    answer = control("POST", "/v1/drain?timeout=600", "drain", max_time=660)
+    TIMES["drain"] = round(time.monotonic() - start, 3)
+    return answer
 
 
 def resume_interrupted():

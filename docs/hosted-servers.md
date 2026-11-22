@@ -675,7 +675,7 @@ When the level is `ok` again, each held message starts. If a file cannot be read
 `ok` and main logs one warning.
 
 Only a fixed number of turns run at the same time, from the memory of the server: 2 up to 5 GiB,
-8 up to 10 GiB, and 16 above. A turn that starts, runs, or compacts the context uses a slot. When
+8 up to 10 GiB, 12 up to 40 GiB, and 24 above. A turn that starts, runs, or compacts the context uses a slot. When
 the slots are full, the messages wait in the queue: a message from a person starts first, then
 routine runs and teammate messages, and the oldest first in each group. No turn waits for a slot
 that another turn holds, because a message to a teammate ends the turn that sends it. A queued

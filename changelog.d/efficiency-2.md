@@ -16,3 +16,5 @@
   about 100 times a second while agents worked, and the trace log filled up every few minutes.
 - `send_message` accepts `message` for `text` and `to` for `recipientAgentIds`, the names agents
   guessed most often, and its errors show a complete call. About one call in seven failed before.
+- A server with 10 to 40 GiB of memory runs at most 12 turns at the same time, not 16, and keeps
+  at most 12 agent browser tabs loaded, not 24. A 24 GiB server ran out of memory with 13 turns.

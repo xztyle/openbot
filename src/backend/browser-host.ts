@@ -288,7 +288,8 @@ const TAB_SLEEP_LIMITS: BrowserTabSleepLimits = {
   idleMs: 15 * 60_000,
   sweepMs: 60_000,
   perOwner: 4,
-  total: 24,
+  // Each loaded tab held about 470 MB on the agents' sites, so 24 live tabs alone would fill 11 GB.
+  total: 12,
   limitIdleMs: 2 * 60_000,
   idleAwake: 3,
 };

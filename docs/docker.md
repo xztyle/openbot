@@ -402,7 +402,8 @@ message from a person starts first. The browser opens no new tab and unloads idl
 
 The memory ceiling is the smaller of the memory of the host and the memory limit of the container
 (`--memory`, or `mem_limit` in Compose). Without a limit, the ceiling is the memory of the host. A
-fixed number of turns run at the same time: 2 up to 5 GiB of ceiling, 8 up to 10 GiB, and 16 above.
+fixed number of turns run at the same time: 2 up to 5 GiB of ceiling, 8 up to 10 GiB, 12 up to 40 GiB,
+and 24 above.
 `/dev/shm` and the `tmpfs` folders count toward the limit too. `docker exec openbot openbot status`
 shows the ceiling, the free memory, the level (`ok`, `low` or `critical`) and the turn limit.
 

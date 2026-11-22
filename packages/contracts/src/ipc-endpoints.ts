@@ -604,6 +604,7 @@ import type {
 import type { LicenseCheckoutRequest, LicenseRenewalRequest, LicenseState, LicenseUsersRequest } from "./license";
 import type { AccountSession, MobileConnectedDevice, MobileConnectLink, MobileConnectTicket } from "./mobile-connect";
 import type { ChatCard } from "./portfolio";
+import type { ForkRouteRequest } from "./team-protocol/fork-routes";
 
 declare const payloadType: unique symbol;
 declare const resultType: unique symbol;
@@ -1896,6 +1897,11 @@ export const IPC_ENDPOINTS = {
     // The service checks the answer against the card's own fields.
     answer: scopedRequest<{ cardId: string; answer: unknown }, ChatCard, "required">()("chat-cards:answer"),
   },
+  // The owner routes of a joined fork host (`FORK_OWNER_ROUTES`): main sends the request on, and
+  // the window decodes the answer with the route's own codec, as the browser client does.
+  forkRoutes: {
+    request: scopedRequest<ForkRouteRequest, unknown, "required">()("fork-routes:request"),
+  },
   // Bound against the agent import service, which holds the staged archives. A remote server is
   // reached with `agent-import-v1`; main still opens the file dialog and sends the file.
   agentImport: {
@@ -2051,6 +2057,7 @@ export const IPC_GROUP_PATHS = {
   storage: "storage",
   storageHygiene: "storageHygiene",
   chatCards: "chatCards",
+  forkRoutes: "forkRoutes",
   agentImport: "agentImport",
   instanceTransfer: "instanceTransfer",
   plugins: "plugins",

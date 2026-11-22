@@ -71,6 +71,7 @@ import { registerIpcGroups } from "./ipc/define-ipc-group";
 import { dynamicIslandIpcHandlers } from "./ipc/dynamic-island-handlers";
 import { eventCheckIpcHandlers } from "./ipc/event-check-handlers";
 import { eventsIpcHandlers } from "./ipc/events-handlers";
+import { forkRouteIpcHandlers } from "./ipc/fork-route-handlers";
 import { githubConnectorIpcHandlers } from "./ipc/github-connector-handlers";
 import { hostAdminIpcHandlers } from "./ipc/host-admin-handlers";
 import { hostedServerIpcHandlers } from "./ipc/hosted-server-handlers";
@@ -812,6 +813,7 @@ function registerIpcHandlers({
         return { id: actor.id, name: actor.name };
       },
     }),
+    ...forkRouteIpcHandlers({ remoteServers }),
     ...storageHygieneIpcHandlers({
       storageHygiene,
       settings: storageHygieneSettings,

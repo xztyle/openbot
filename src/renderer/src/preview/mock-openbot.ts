@@ -3216,6 +3216,12 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         throw new Error("The preview has no cards.");
       },
     },
+    // The preview's host is this computer, which has no fork owner routes.
+    forkRoutes: {
+      request: async () => {
+        throw new Error("The preview has no fork host.");
+      },
+    },
     agentImport: {
       choose: async () => clone(AGENT_IMPORT_PREVIEW),
       apply: async ({ token, keys, channelKeys }) => {

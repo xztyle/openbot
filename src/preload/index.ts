@@ -1378,6 +1378,8 @@ const openbotApi: OpenBotDesktopApi = {
     get: decodeChatCardsFromMain,
     answer: decodeChatCardFromMain,
   }),
+  // The answer is the joined host's own; the window decodes it with the route's codec.
+  forkRoutes: bridgeGroup(IPC_ENDPOINTS.forkRoutes, { request: (value: unknown) => value }),
   remoteDesktop: bridgeGroup(IPC_ENDPOINTS.remoteDesktop, {
     checkSetup: decodeRemoteDesktopSetupFromMain,
     openSetup: decodeVoid,

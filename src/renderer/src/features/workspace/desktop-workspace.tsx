@@ -21,8 +21,11 @@ import { useChannels } from "../channels/channels-context";
 import { hostMessagingApi } from "../connectors/host-messaging-port";
 import { localMessagingApi } from "../connectors/messaging-connector";
 import { useConversation } from "../conversation/conversation-context";
+import { hostEfficiencyCalls } from "../efficiency/efficiency-port";
+import { hostPortfolioCalls } from "../portfolio/portfolio-port";
 import { desktopChatCardCalls } from "../portfolio/WorkspaceChatCard";
 import { WorkspaceRoutineFlows } from "../routine-flows/WorkspaceRoutineFlows";
+import { desktopForkRequest, serverHasForkOwnerRoutes } from "../servers/desktop-fork-request";
 import { serverRoleCanAdminister } from "../servers/server-capabilities";
 import { useServerScope } from "../servers/server-scope";
 import { useServerSettings } from "../servers/server-settings";
@@ -32,6 +35,8 @@ import { useSettings } from "../settings/settings-context";
 import { desktopStorageHygieneCalls, serverHasStorageHygiene } from "../storage-hygiene/storage-hygiene-port";
 import { isReaderAuthor } from "../team/reader-identity";
 import { usePresence } from "../team/team-context";
+import { hostTrustCalls } from "../trust/trust-port";
+import { useUsage } from "../usage/usage-context";
 import { workspaceAttention } from "./workspace-attention";
 import { WorkspaceProvider } from "./workspace-context";
 import { createWorkspaceController, desktopMessageLink } from "./workspace-controller";
@@ -79,7 +84,8 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
   const { setSkillsMarketplaceOpen } = useSettings();
   const { teamPresence, currentTeamMember } = usePresence();
   const { centralAuth } = useAuth();
-  const { unreadReplies, recentReplies, markAllAgentMessagesRead } = useConversation();
+  const { unreadReplies, recentReplies, markAllAgentMessagesRead, sendMessage } = useConversation();
+  const usage = useUsage();
   const { activeTurns, queues, failedTurns, usageLimits, pendingPrompts, approvals, attentionItems } = useTurns();
   const accountId = () => {
     const state = centralAuth();
@@ -181,6 +187,13 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     return items;
   });
   const chatCardCalls = desktopChatCardCalls(() => activeServerId());
+  // The owner views of a joined fork host (Today's decisions and guardrails, Money's budgets, Reviews,
+  // Knowledge, Portfolio and Trust) send the browser client's routes through main.
+  const forkRequest = desktopForkRequest(() => activeServerId());
+  const efficiencyCalls = hostEfficiencyCalls(() => forkRequest);
+  const portfolioCalls = hostPortfolioCalls(() => forkRequest);
+  const trustCalls = hostTrustCalls(() => forkRequest);
+  const forkOwner = () => serverHasForkOwnerRoutes(activeServer());
   const controller = createWorkspaceController({
     channels,
     agents: agentList,
@@ -266,6 +279,15 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     openStorageRules: () => {
       const server = activeServer();
       if (server) openServerSettings(server.id, null, "storage");
+    },
+    efficiency: () => (forkOwner() ? efficiencyCalls : undefined),
+    portfolio: () => (forkOwner() ? portfolioCalls : undefined),
+    trust: () => (forkOwner() ? trustCalls : undefined),
+    openUsage: () => usage.openUsage(activeServerId(), null),
+    // The command bar's "Ask Chief…": the owner's message in the agent's main chat, as its composer sends it.
+    sendToAgent: async (agentId, text) => {
+      const result = await sendMessage(text, [], null, { agentId, serverId: activeServerId() }, crypto.randomUUID());
+      if ("error" in result) throw new Error(result.error);
     },
     storageKey: () => `${accountId() ?? "local"}:${activeServerId()}`,
     phone: () => false,

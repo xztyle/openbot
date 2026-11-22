@@ -22,9 +22,10 @@ import { toAgentMessages } from "../../app-message-projection";
 import { agentTemplatesPort } from "../agent-templates/agent-templates-port";
 import { createPublishAgent } from "../agent-templates/PublishAgent";
 import { desktopBrowserProfileCalls } from "../browser/browser-profiles-port";
-import type { EfficiencyCalls } from "../efficiency/efficiency-port";
+import { type EfficiencyCalls, hostEfficiencyCalls } from "../efficiency/efficiency-port";
 import type { AgentFilesOptions } from "../files/AgentFilesSettings";
 import { canManageStorage, serverHasStorage } from "../files/storage-usage";
+import { desktopForkRequest, serverHasForkOwnerRoutes } from "../servers/desktop-fork-request";
 import { serverCanAdminister, serverSupportsCapability } from "../servers/server-capabilities";
 import type { AgentChannelDefaultsApi } from "./AgentChannelDefaults";
 import { htmlAttachmentPageHtml, htmlAttachmentPageUrl } from "./chat-visual-url";
@@ -172,10 +173,17 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
       write: (settings) => window.openbot.hostAdmin.setWorkspaceSettings(settings, serverId),
     };
   });
-  /** The sleep and review calls of the host. The web client asks the host; desktop shows the policy only. */
+  /**
+   * The sleep and review calls of the host. The web client asks the host; desktop sends them through
+   * main to a joined fork host, and shows the policy only for this computer's own host.
+   */
   const efficiency = createMemo((): EfficiencyCalls | undefined => {
     if (!serverCanAdminister(props.server, FORK_HOST_CAPABILITY)) return undefined;
-    return props.runtime?.admin?.efficiency;
+    if (props.runtime) return props.runtime.admin?.efficiency;
+    const server = props.server;
+    if (!serverHasForkOwnerRoutes(server)) return undefined;
+    const serverId = server.id;
+    return hostEfficiencyCalls(() => desktopForkRequest(() => serverId));
   });
   let browserPreviewTrigger: HTMLButtonElement | undefined;
   /** The panes this chat can open. The web client has no Files pane, and a chat without a thread has no files. */

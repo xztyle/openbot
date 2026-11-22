@@ -5,3 +5,5 @@
   the meantime.
 - An admin who has the app open no longer counts as the owner coming back: the owner's held
   requests stay in the "When you're back" bundle and the summary of their quiet hours still comes.
+- The "While you were away" note names only what waited, in the right number: "1 held request,
+  3 notifications" instead of "1 held requests, 3 notifications" or "0 held requests".

@@ -16,6 +16,7 @@ import {
 } from "@openbot/contracts/team-protocol/owner-away-v1";
 import type { TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import type { TeamApiRequest } from "@openbot/team-client/team-api-requests";
+import type { TextValue } from "@openbot/ui/text";
 import { createEffect, createSignal, onCleanup } from "solid-js";
 
 const READ_MS = 60_000;
@@ -41,6 +42,16 @@ export interface OwnerAwayStoreInput {
   hostId: () => string;
   /** Called once after the owner came back while something waited. */
   onWelcome?: (welcome: NonNullable<OwnerAwayState["welcome"]>) => void;
+}
+
+/** What waited, for the welcome: "1 held request, 3 notifications". A count of zero is left out. */
+export function ownerAwayWelcomeParts(welcome: NonNullable<OwnerAwayState["welcome"]>, t: TextValue["t"]): string {
+  return [
+    welcome.held > 0 ? t("workspace.away.welcomeHeld", { count: welcome.held }) : "",
+    welcome.suppressed > 0 ? t("workspace.away.welcomeSuppressed", { count: welcome.suppressed }) : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
 function inFront(): boolean {

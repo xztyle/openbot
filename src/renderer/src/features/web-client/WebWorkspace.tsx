@@ -269,7 +269,7 @@ import { ServerSettingsPageTitle, SettingsPageFrame } from "../window/SettingsPa
 import type { SettingsKind, WindowPage } from "../window/window-page-context";
 import { createAgentMailboxesStore } from "../workspace/agent-mailboxes-store";
 import { createConnectorAccessStore } from "../workspace/connector-access-store";
-import { createOwnerAwayStore } from "../workspace/owner-away-store";
+import { createOwnerAwayStore, ownerAwayWelcomeParts } from "../workspace/owner-away-store";
 import { QuietHoursSettingsDialog } from "../workspace/WorkspaceOwnerAway";
 import { WorkspaceSidebarPane } from "../workspace/WorkspaceSidebarPane";
 import { WorkspaceAgentFrame, WorkspaceChrome, WorkspaceMain } from "../workspace/WorkspaceView";
@@ -2011,7 +2011,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       canAdministerServer(workspace.state.host?.role),
     hostId: () => workspace.state.host?.hostId ?? "",
     onWelcome: (welcome) =>
-      toast(t("workspace.away.welcome", welcome), {
+      toast(t("workspace.away.welcome", { what: ownerAwayWelcomeParts(welcome, t) }), {
         action: { label: t("workspace.away.welcomeShow"), onClick: () => ws.openView("activity") },
       }),
   });

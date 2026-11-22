@@ -866,7 +866,9 @@ export const messages = {
   "workspace.away.focusFailed": "No se pudo cambiar la concentración.",
   "workspace.away.quietNote":
     "Los avisos esperan, salvo las alertas urgentes. Los agentes agrupan lo que puede esperar.",
-  "workspace.away.welcome": "Mientras no estabas: {held} solicitudes en espera, {suppressed} notificaciones.",
+  "workspace.away.welcome": "Mientras no estabas: {what}.",
+  "workspace.away.welcomeHeld": { one: "{count} solicitud en espera", other: "{count} solicitudes en espera" },
+  "workspace.away.welcomeSuppressed": { one: "{count} notificación", other: "{count} notificaciones" },
   "workspace.away.welcomeShow": "Ver",
   "workspace.away.settingsTitle": "Horas de descanso y concentración",
   "workspace.away.settingsDescription":

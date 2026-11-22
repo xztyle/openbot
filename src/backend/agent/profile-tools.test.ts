@@ -1,7 +1,8 @@
 // @vitest-environment node
 import type { AgentSummary } from "@openbot/contracts/ipc";
 import { describe, expect, it } from "vitest";
-import { newAgentLimits } from "./profile-tools";
+import { z } from "zod";
+import { newAgentLimits, profileToolErrorMessage } from "./profile-tools";
 
 const caller: AgentSummary = {
   id: "chief",
@@ -35,5 +36,17 @@ describe("newAgentLimits", () => {
     expect(newAgentLimits(limited, {})).toEqual({ access: "workspace", computerUse: false });
     expect(newAgentLimits(limited, { computerUse: true })).toMatch(/do not have Computer Use/);
     expect(newAgentLimits(limited, { access: "full" })).toMatch(/cannot get full access/);
+  });
+});
+
+// Failure mode: a schema failure of a tool such as install_local_skill reached the agent as raw Zod JSON,
+// and the owner as a server error.
+describe("profileToolErrorMessage", () => {
+  it("names the field and the tool to describe", () => {
+    const failure = z.strictObject({ revision: z.number() }).safeParse({ extra: 1 });
+    expect(failure.success).toBe(false);
+    expect(profileToolErrorMessage(failure.error, "openbot.install_local_skill")).toBe(
+      'revision: Invalid input: expected number, received undefined Remove the fields that this tool does not have. Correct the arguments and retry. openbot.tool_describe with "openbot.install_local_skill" shows its schema.',
+    );
   });
 });

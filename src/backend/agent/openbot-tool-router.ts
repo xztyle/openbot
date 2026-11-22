@@ -751,14 +751,21 @@ export class OpenBotToolRouter {
             // failed tool result. Codex replaces a JSON-RPC error with "dynamic tool request failed" (#1728).
             const correctableFailure = (error: unknown) =>
               Effect.sync(() => {
-                const message = this.#hooks.redactMcp(profileToolErrorMessage(error));
+                const message = this.#hooks.redactMcp(
+                  profileToolErrorMessage(error, PROFILE_TOOL_NAMES.has(tool) ? undefined : `openbot.${tool}`),
+                );
                 if (!(error instanceof z.ZodError)) logger.warn("An OpenBot tool failed.", { tool, error: message });
                 return openBotToolFailure(message);
               });
-            const correctable = PROFILE_TOOL_NAMES.has(tool) || tool === "attach_files_to_response";
+            // Arguments that fail a tool's schema are correctable for every tool: the agent gets the fields
+            // to fix, and the owner sees no server error for them.
+            const correctable = (cause: unknown) =>
+              PROFILE_TOOL_NAMES.has(tool) || tool === "attach_files_to_response" || cause instanceof z.ZodError;
             const response = this.#handleOpenBotTool(toolRequest.params).pipe(
-              Effect.catch((failure) => (correctable ? correctableFailure(failure.cause) : Effect.fail(failure))),
-              Effect.catchDefect((defect) => (correctable ? correctableFailure(defect) : Effect.die(defect))),
+              Effect.catch((failure) =>
+                correctable(failure.cause) ? correctableFailure(failure.cause) : Effect.fail(failure),
+              ),
+              Effect.catchDefect((defect) => (correctable(defect) ? correctableFailure(defect) : Effect.die(defect))),
               Effect.tap((result) => Effect.sync(() => client.respond(toolRequest.id, result))),
             );
             // Both store a file and then add the message that names it.

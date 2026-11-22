@@ -876,7 +876,7 @@ export const messages = {
   "workspace.mailboxes.displayName": "Имя отправителя",
   "workspace.mailboxes.displayNamePlaceholder": "Лусия из Aprendivo",
   "workspace.mailboxes.line": "{agent} · {mode}",
-  "workspace.mailboxes.stats": "Получено: {received} · Отправлено сегодня: {sent}",
+  "workspace.mailboxes.stats": "Получено: {received} · Отправлено за 24 ч: {sent}",
   "workspace.mailboxes.save": "Сохранить",
   "workspace.mailboxes.saved": "{address} сохранён",
   "workspace.mailboxes.failed": "Изменение не сохранено.",

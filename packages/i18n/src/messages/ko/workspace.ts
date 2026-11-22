@@ -687,7 +687,7 @@ export const messages = {
   "workspace.mailboxes.displayName": "보낸 사람 이름",
   "workspace.mailboxes.displayNamePlaceholder": "Aprendivo의 Lucía",
   "workspace.mailboxes.line": "{agent} · {mode}",
-  "workspace.mailboxes.stats": "받음: {received} · 오늘 보냄: {sent}",
+  "workspace.mailboxes.stats": "받음: {received} · 24시간 내 보냄: {sent}",
   "workspace.mailboxes.save": "저장",
   "workspace.mailboxes.saved": "{address} 저장됨",
   "workspace.mailboxes.failed": "변경 사항이 저장되지 않았습니다.",

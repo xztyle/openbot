@@ -692,7 +692,7 @@ export const messages = {
   "workspace.mailboxes.displayName": "送信者名",
   "workspace.mailboxes.displayNamePlaceholder": "Aprendivo の Lucía",
   "workspace.mailboxes.line": "{agent} · {mode}",
-  "workspace.mailboxes.stats": "受信: {received} · 今日の送信: {sent}",
+  "workspace.mailboxes.stats": "受信: {received} · 24 時間の送信: {sent}",
   "workspace.mailboxes.save": "保存",
   "workspace.mailboxes.saved": "{address} を保存しました",
   "workspace.mailboxes.failed": "変更は保存されませんでした。",

@@ -197,8 +197,8 @@ export function MailboxesSection(props: MailboxesSectionProps): JSX.Element {
                   </span>
                   <span class="ws-muted">
                     {t("workspace.mailboxes.stats", {
-                      received: String(mailbox().received),
-                      sent: String(mailbox().sentToday),
+                      received: format.number(mailbox().received),
+                      sent: format.number(mailbox().sentToday),
                     })}
                   </span>
                 </WorkspaceListRow>

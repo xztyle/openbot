@@ -701,7 +701,7 @@ export const messages = {
   "workspace.mailboxes.displayName": "Gönderen adı",
   "workspace.mailboxes.displayNamePlaceholder": "Aprendivo'dan Lucía",
   "workspace.mailboxes.line": "{agent} · {mode}",
-  "workspace.mailboxes.stats": "Alınan: {received} · Bugün gönderilen: {sent}",
+  "workspace.mailboxes.stats": "Alınan: {received} · 24 saatte gönderilen: {sent}",
   "workspace.mailboxes.save": "Kaydet",
   "workspace.mailboxes.saved": "{address} kaydedildi",
   "workspace.mailboxes.failed": "Değişiklik kaydedilmedi.",

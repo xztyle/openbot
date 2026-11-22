@@ -67,7 +67,7 @@ describe("MailboxesSection", () => {
     setup();
     expect(screen.getByText("ventas@aprendivo.com")).toBeTruthy();
     expect(screen.getByText("Lucía · Reply only")).toBeTruthy();
-    expect(screen.getByText("Received: 3 · Sent today: 1")).toBeTruthy();
+    expect(screen.getByText("Received: 3 · Sent in 24 h: 1")).toBeTruthy();
     expect(screen.queryByText("otro@delynith.com")).toBeNull();
   });
 

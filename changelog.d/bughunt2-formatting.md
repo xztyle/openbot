@@ -23,3 +23,4 @@
 - Insights and Reviews group the turn counts of an agent, such as 12,480 turns instead of 12480.
 - The Spanish morning briefing and insight alerts write numbers the Spanish way ("1.250.000 COP")
   and say "1 tarea terminada", "1 venta", "1 cosa espera por ti" and "en 1 día" in the singular.
+- A mailbox says how many mails it sent in the last 24 hours, which is what it counts, not "today".

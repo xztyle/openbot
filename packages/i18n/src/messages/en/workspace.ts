@@ -1236,7 +1236,7 @@ export const messages = defineMessages("workspace", {
   "workspace.mailboxes.displayName": "Sender name",
   "workspace.mailboxes.displayNamePlaceholder": "Lucía from Aprendivo",
   "workspace.mailboxes.line": "{agent} · {mode}",
-  "workspace.mailboxes.stats": "Received: {received} · Sent today: {sent}",
+  "workspace.mailboxes.stats": "Received: {received} · Sent in 24 h: {sent}",
   "workspace.mailboxes.save": "Save",
   "workspace.mailboxes.saved": "{address} saved",
   "workspace.mailboxes.failed": "The change was not saved.",

@@ -683,7 +683,7 @@ export const messages = {
   "workspace.mailboxes.displayName": "Nome del mittente",
   "workspace.mailboxes.displayNamePlaceholder": "Lucía di Aprendivo",
   "workspace.mailboxes.line": "{agent} · {mode}",
-  "workspace.mailboxes.stats": "Ricevute: {received} · Inviate oggi: {sent}",
+  "workspace.mailboxes.stats": "Ricevute: {received} · Inviate in 24 h: {sent}",
   "workspace.mailboxes.save": "Salva",
   "workspace.mailboxes.saved": "{address} salvato",
   "workspace.mailboxes.failed": "La modifica non è stata salvata.",

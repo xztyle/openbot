@@ -689,7 +689,7 @@ export const messages = {
   "workspace.mailboxes.displayName": "Absendername",
   "workspace.mailboxes.displayNamePlaceholder": "Lucía von Aprendivo",
   "workspace.mailboxes.line": "{agent} · {mode}",
-  "workspace.mailboxes.stats": "Empfangen: {received} · Heute gesendet: {sent}",
+  "workspace.mailboxes.stats": "Empfangen: {received} · In 24 h gesendet: {sent}",
   "workspace.mailboxes.save": "Speichern",
   "workspace.mailboxes.saved": "{address} gespeichert",
   "workspace.mailboxes.failed": "Die Änderung wurde nicht gespeichert.",

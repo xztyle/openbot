@@ -674,7 +674,7 @@ export const messages = {
   "workspace.mailboxes.displayName": "发件人名称",
   "workspace.mailboxes.displayNamePlaceholder": "Aprendivo 的 Lucía",
   "workspace.mailboxes.line": "{agent} · {mode}",
-  "workspace.mailboxes.stats": "已收到：{received} · 今日已发：{sent}",
+  "workspace.mailboxes.stats": "已收到：{received} · 24 小时内已发：{sent}",
   "workspace.mailboxes.save": "保存",
   "workspace.mailboxes.saved": "已保存 {address}",
   "workspace.mailboxes.failed": "更改未保存。",

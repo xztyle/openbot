@@ -640,7 +640,9 @@ async function phone(browser: Browser, origin: string): Promise<void> {
     await popup.close();
     host.pages.delete(POPUP_ID);
     await waitUntil(() => host.current === TAB_ID, "The view goes back to the page that opened the popup");
-    await page.keyboard.press("Escape");
+    assert.ok(await page.locator("#browser-expanded-panel").isVisible(), "The full view stays open.");
+    // The list stays open for more closes; a tap on the page's row closes it.
+    await page.locator(".browser-full-switch-select").first().tap();
     await viewing(page, host);
     await shot(page, "phone-popup-closed");
   });

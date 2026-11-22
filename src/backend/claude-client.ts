@@ -441,6 +441,11 @@ interface ThreadRuntime {
   subagents: ClaudeSubagentState;
   /** Background subagents and commands that outlive their turn. Stopping the process ends them (#1870). */
   backgroundTasks: number;
+  /**
+   * The background work ended while no turn ran, and the CLI starts a turn of its own to answer its
+   * result. Until that turn begins, closing the query loses the result (upstream da1ebe63f).
+   */
+  awaitsResultTurn: boolean;
   /** The cgroup task limit when the process started, to tell whether a crash came from that limit. */
   taskLimit: TaskLimitState | null;
   /** The MCP config file of this start, removed once the CLI has read it (`writeClaudeMcpConfig`). */
@@ -685,9 +690,15 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     return [...this.#threads.ids()].every((id) => !this.#threads.get(id)?.backgroundTasks);
   }
 
-  /** A background subagent or command of this thread ends when its query closes. */
+  /**
+   * A background subagent or command of this thread ends when its query closes, and so does the turn
+   * that the CLI starts by itself to answer the result of work that ended.
+   */
   holdsBackgroundWork(threadId: string): Effect.Effect<boolean, ProviderClientOperationError> {
-    return Effect.sync(() => (this.#threads.get(threadId)?.backgroundTasks ?? 0) > 0);
+    return Effect.sync(() => {
+      const thread = this.#threads.get(threadId);
+      return thread !== undefined && (thread.backgroundTasks > 0 || thread.awaitsResultTurn);
+    });
   }
 
   /**
@@ -1433,6 +1444,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       plan: newClaudePlanState(),
       subagents: newClaudeSubagentState(),
       backgroundTasks: 0,
+      awaitsResultTurn: false,
       taskLimit,
       mcpConfigFile,
     };
@@ -1657,6 +1669,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       stopRequested: false,
     };
     runtime.activeTurn = turn;
+    runtime.awaitsResultTurn = false;
     startClaudePlanTurn(runtime.plan);
     this.#threads.holdForTurn(runtime);
     this.emit("notification", {
@@ -1803,7 +1816,10 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       // The level can arrive after the turn that started the work ended, so it holds or frees the idle timer.
       if (!runtime.activeTurn) {
         if (before === 0 && runtime.backgroundTasks > 0) this.#threads.holdForTurn(runtime);
-        else if (before > 0 && runtime.backgroundTasks === 0) yield* this.#threads.markIdle(runtime);
+        else if (before > 0 && runtime.backgroundTasks === 0) {
+          runtime.awaitsResultTurn = true;
+          yield* this.#threads.markIdle(runtime);
+        }
       }
       return;
     }

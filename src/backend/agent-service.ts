@@ -5001,6 +5001,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
    * own chat has nothing to start. A turn of a task or a compaction can still run; the request then
    * waits for the next drain, unless a turn in the agent's own chat starts first. The user can turn
    * the setting off while the request waits.
+   *
+   * The new chat closes the Claude session, and the background subagents and commands of that session
+   * end with it (upstream da1ebe63f). So the request also waits for them: when the work ends, Claude
+   * answers its result in a turn of its own, and the drain after that turn starts the new chat. "New
+   * chat" from the user does not wait: a background command such as a dev server can run without end.
    */
   #startRequestedNewChat(agentId: string): Effect.Effect<void> {
     if (!this.#requestedNewChats.has(agentId)) return Effect.void;
@@ -5009,7 +5014,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       this.#requestedNewChats.delete(agentId);
       return Effect.void;
     }
-    return this.clearAgentContext(agentId).pipe(
+    const startNewChat = this.clearAgentContext(agentId).pipe(
       Effect.tap(() =>
         Effect.sync(() => {
           this.#requestedNewChats.delete(agentId);
@@ -5024,6 +5029,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         }),
       ),
     );
+    return this.#threads
+      .mainRunsBackgroundWork(agent)
+      .pipe(Effect.flatMap((background) => (background ? Effect.void : startNewChat)));
   }
 
   resolveAvatar(agentId: string): { path: string; mimeType: AvatarImageInput["mimeType"]; version: string } | null {

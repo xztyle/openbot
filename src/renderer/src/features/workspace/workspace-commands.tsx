@@ -8,6 +8,7 @@ import { toast } from "@openbot/ui";
 import type { TodayDecision } from "@openbot/ui/features/workspace/TodayView";
 import { useText } from "@openbot/ui/text";
 import { useWorkingAgents } from "./WorkspaceToday";
+import { APPROVE, askTarget, fold, GOAL, STOP } from "./workspace-command-text";
 import { useWorkspace } from "./workspace-context";
 import { useDecisionQueue } from "./workspace-decisions";
 import { openInsightTab } from "./workspace-insight-report";
@@ -22,15 +23,6 @@ export interface CommandAction {
   kind: "ask" | "approve" | "decline" | "stop" | "goal" | "today";
   agentId?: string | undefined;
   run: () => void;
-}
-
-const ASK = /^(?:ask|assign|tell|@)\s*/iu;
-const APPROVE = /^(?:approve|ok|decide|decisions?|waiting)\b/iu;
-const STOP = /^(?:stop|halt|pause)\b/iu;
-const GOAL = /^(?:goal|set (?:a )?goal|new goal)\b/iu;
-
-function fold(text: string): string {
-  return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
 }
 
 /** The actions of the command bar for what the reader typed. */
@@ -136,29 +128,18 @@ export function useCommandActions() {
     if (STOP.test(lower)) return stops(fold(text.replace(STOP, "").trim()));
     if (GOAL.test(lower) && ws.viewAvailable("insights")) return [goal];
     const agents = askable();
-    if (ASK.test(text)) {
-      const rest = text.replace(ASK, "");
-      // "ask Research: compare the prices" or "@research compare the prices".
-      const named = agents.find((agent) => fold(rest).startsWith(fold(agent.name)));
-      if (named) {
-        const message = rest
-          .slice(named.name.length)
-          .replace(/^[\s:,-]+/u, "")
-          .trim();
-        return message ? [ask(named.id, named.name, message)] : [];
-      }
-      const partial = fold(rest.split(/\s+/u)[0] ?? "");
-      return agents
-        .filter((agent) => !partial || fold(agent.name).startsWith(partial))
-        .slice(0, 5)
-        .map((agent) => ({
-          id: `pick:${agent.id}`,
-          label: t("workspace.command.askPick", { name: agent.name }),
-          hint: t("workspace.command.hint.pick"),
-          kind: "ask",
-          agentId: agent.id,
-          run: () => ws.openAgent(agent.id),
-        }));
+    const target = askTarget(text, agents);
+    if (target?.kind === "named" && target.message) return [ask(target.agent.id, target.agent.name, target.message)];
+    if (target) {
+      const picks = target.kind === "named" ? [target.agent] : target.agents;
+      return picks.map((agent) => ({
+        id: `pick:${agent.id}`,
+        label: t("workspace.command.askPick", { name: agent.name }),
+        hint: t("workspace.command.hint.pick"),
+        kind: "ask",
+        agentId: agent.id,
+        run: () => ws.openAgent(agent.id),
+      }));
     }
     // A sentence that is no name: offer it to the space's lead as a task, as quick capture.
     const lead = agents[0];

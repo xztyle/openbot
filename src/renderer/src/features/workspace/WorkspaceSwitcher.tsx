@@ -50,6 +50,7 @@ import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-t
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, createUniqueId, For, Show } from "solid-js";
+import { isCommandText } from "./workspace-command-text";
 import { type CommandAction, useCommandActions } from "./workspace-commands";
 import { useWorkspace } from "./workspace-context";
 import {
@@ -326,8 +327,10 @@ export function QuickSwitcher(props: { onClose: () => void }) {
   };
   const entries = createMemo((): JumpEntry[] => {
     const actions = commands.actions(query());
-    // A command does something: the "Create #channel" that its words would make is only noise.
-    const names = jump.entries(query()).filter((entry) => !(actions.length > 0 && entry.kind === "create"));
+    // A command does something: the "Create #channel" that its words would make is only noise, also
+    // when nothing waits for "approve" or works for "stop".
+    const command = actions.length > 0 || isCommandText(query());
+    const names = jump.entries(query()).filter((entry) => !(command && entry.kind === "create"));
     return [
       ...actions.map(
         (action): JumpEntry => ({

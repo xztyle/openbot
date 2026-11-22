@@ -4,7 +4,8 @@
 // `turn/start` with `ActiveTurnNotSteerable { turn_kind: Compact }` while a compaction turn runs.
 // Four cases: a compaction that ends by itself, one that runs past the start deadline and ends by
 // itself, one that the run deadline stops, and one that does not stop, so that OpenBot sends a turn
-// that Codex refuses.
+// that Codex refuses. Then a chat whose compactions fail, and one that each compaction leaves full
+// while Codex reports a small estimate during each compaction: both stop after 2.
 // `bun scripts/codex-compaction-queue-e2e.ts`. Writes .openbot-build/codex-compaction-queue-e2e/report.json.
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -104,7 +105,7 @@ const answer = (message) => {
       return;
     }
     case "thread/compact/start": {
-      const { compactionMs, ignoreInterrupt, compactionStatus } = control();
+      const { compactionMs, ignoreInterrupt, compactionStatus, estimate } = control();
       const turnId = "compact-turn-" + (++turns);
       const item = { type: "contextCompaction", id: "compact-item-" + turnId };
       write({ id: message.id, result: {} });
@@ -115,6 +116,11 @@ const answer = (message) => {
         compacting.delete(params.threadId);
         clearTimeout(timer);
         log({ compactionEnded: turnId, threadId: params.threadId, status });
+        // Like Codex 0.167.0: an estimate of the compacted session, with no request behind it.
+        if (status === "completed" && estimate) {
+          const tokenUsage = { total: { totalTokens: 90000 }, last: { totalTokens: 6000 }, modelContextWindow: 100000 };
+          write({ method: "thread/tokenUsage/updated", params: { threadId: params.threadId, turnId, tokenUsage } });
+        }
         if (status === "completed") write({ method: "item/completed", params: { threadId: params.threadId, turnId, item } });
         write({ method: "turn/completed", params: { threadId: params.threadId, turn: { id: turnId, status } } });
       };
@@ -181,6 +187,7 @@ const report: {
   compactionTimeoutMs: number;
   cases: CaseReport[];
   failedCompactions?: { compactions: number; failed: number; stopNotices: number; messages: string[] };
+  ineffectiveCompactions?: { compactions: number; turns: number; notices: number; messages: string[] };
   passed: boolean;
   error?: string;
 } = {
@@ -408,6 +415,56 @@ try {
     failedCompactions.messages.every((status) => status === "completed"),
     "failed compactions: a message did not run",
   );
+
+  // Each compaction completes, but the chat stays full: each turn grows it by 6% of its window. Codex
+  // reports a small estimate before the compaction ends. The estimate reset the count of compactions
+  // that left the chat almost full, so each turn compacted again, without a notice (upstream c858f0a42).
+  await writeFile(
+    controlPath,
+    JSON.stringify({ compactionMs: 200, ignoreInterrupt: false, growUsage: true, estimate: true }),
+  );
+  const full = await runCauseEffect(
+    agents.createAgent({
+      name: "Full after compaction",
+      description: "Checks that compactions that free no space stop.",
+      avatarSeed: "compaction-full",
+      avatarHue: null,
+      initialMessage: "First message.",
+    }),
+  );
+  const fullIdle = () =>
+    !agents
+      .listQueue(full.id)
+      .deliveries.some((delivery) => ["queued", "starting", "running"].includes(delivery.status));
+  const fullSession = await waitFor("the first turn of the full chat", () => {
+    const session = store.activeProviderSession(full.id)?.externalSessionId;
+    return session && fullIdle() ? session : null;
+  });
+  for (const text of ["Second message.", "Third message.", "Fourth message."]) {
+    await waitFor(
+      "the full chat to settle",
+      () =>
+        fullIdle() &&
+        !agents
+          .getRuntimeSnapshot()
+          .contextStates?.some((state) => state.agentId === full.id && state.compaction?.status === "running"),
+    );
+    await runCauseEffect(agents.sendMessage({ agentId: full.id, text }));
+    await waitFor("the message to end", fullIdle);
+  }
+  const fullEntries = protocol();
+  const ineffectiveCompactions = {
+    compactions: fullEntries.filter((line) => line.method === "thread/compact/start" && line.threadId === fullSession)
+      .length,
+    turns: fullEntries.filter((line) => line.method === "turn/start" && line.threadId === fullSession).length,
+    notices: errors.filter((error) => error.code === "context_compaction_ineffective" && error.agentId === full.id)
+      .length,
+    messages: agents.listQueue(full.id).deliveries.map((delivery) => delivery.status),
+  };
+  report.ineffectiveCompactions = ineffectiveCompactions;
+  assert.equal(ineffectiveCompactions.turns, 4, "ineffective compactions: not every message ran");
+  assert.equal(ineffectiveCompactions.compactions, 2, "ineffective compactions: OpenBot did not stop after 2");
+  assert.equal(ineffectiveCompactions.notices, 1, "ineffective compactions: one notice");
   report.passed = true;
 } catch (error) {
   report.error = error instanceof Error ? (error.stack ?? error.message) : String(error);

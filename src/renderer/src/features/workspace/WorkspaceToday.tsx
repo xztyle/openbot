@@ -117,8 +117,9 @@ export function WorkspaceTodayView(props: { actions?: JSX.Element; onBack?: (() 
   const todayCost = createMemo(() => ws.fleet.agents().reduce((sum, agent) => sum + (agent.todayCostUsd ?? 0), 0));
   const insights = () => ws.viewAvailable("insights");
 
-  // The first-run guide, for the owner and the admins until each step is done or they hide it.
-  const [hidden, setHidden] = createSignal(readFlag(guideKey(ws, "hidden")));
+  // The first-run guide, for the owner and the admins until each step is done or they hide it. The
+  // flags are read in the memo: the storage key names the host, which can arrive after Today mounts.
+  const [hiddenNow, setHiddenNow] = createSignal(false);
   const [visits, setVisits] = createSignal(0);
   const visit = (name: string, open: () => void) => {
     writeFlag(guideKey(ws, name));
@@ -128,7 +129,7 @@ export function WorkspaceTodayView(props: { actions?: JSX.Element; onBack?: (() 
   const steps = createMemo((): TodayStep[] => {
     visits();
     // Until the host lists its channels the steps would read as undone, as on a host that did not answer.
-    if (hidden() || !ws.isAdmin() || !ws.channels.state.listed) return [];
+    if (hiddenNow() || readFlag(guideKey(ws, "hidden")) || !ws.isAdmin() || !ws.channels.state.listed) return [];
     const report = insight.report();
     const chief = ws.spaceAgents()[0] ?? ws.env.agents()[0];
     const createAgent = ws.env.createAgent;
@@ -216,7 +217,7 @@ export function WorkspaceTodayView(props: { actions?: JSX.Element; onBack?: (() 
         steps={steps()}
         onHideSteps={() => {
           writeFlag(guideKey(ws, "hidden"));
-          setHidden(true);
+          setHiddenNow(true);
         }}
         onOpenMoney={ws.viewAvailable("money") ? () => ws.openView("money") : undefined}
         onOpenGoals={insights() ? () => openInsightTab(ws, "goals") : undefined}

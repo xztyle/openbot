@@ -250,18 +250,23 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     deleteAgent: (agentId) => deleteAgent(agentId),
     agentRuntime: () => ({ queues: queues(), failedTurns: failedTurns() }),
     setAgentManager: (agentId, managerId) => updateAgent(agentId, { reportsToAgentId: managerId }),
-    inviteTeammates: serverRoleCanAdminister(activeServer())
-      ? () => {
-          const server = activeServer();
-          if (server) openServerSettings(server.id, null, "members");
-        }
-      : undefined,
-    openApps: serverRoleCanAdminister(activeServer())
-      ? () => {
-          const server = activeServer();
-          if (server) openServerSettings(server.id, null, "connectors");
-        }
-      : undefined,
+    // Getters, so a role that loads or changes after the mount shows or hides the actions.
+    get inviteTeammates() {
+      return serverRoleCanAdminister(activeServer())
+        ? () => {
+            const server = activeServer();
+            if (server) openServerSettings(server.id, null, "members");
+          }
+        : undefined;
+    },
+    get openApps() {
+      return serverRoleCanAdminister(activeServer())
+        ? () => {
+            const server = activeServer();
+            if (server) openServerSettings(server.id, null, "connectors");
+          }
+        : undefined;
+    },
     serverName: () => activeServer()?.name ?? t("sidebar.topbar.localServer"),
     connectionReady: () => scope.loaded(),
     menu,

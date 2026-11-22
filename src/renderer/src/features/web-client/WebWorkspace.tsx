@@ -571,7 +571,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   // A solid effect runs its body for each new compute result, and the compute result is a new object each
   // time. The body compares with the last values itself: a retry that replaces the host object, or a
   // window focus that reads the host list again, must not clear what the user typed.
-  let resetRevocation = workspace.state.revocationRevision;
+  let resetRevocation = untrack(() => workspace.state.revocationRevision);
   /** Undefined until the effect ran once; null while no host is open. */
   let resetHostId: string | null | undefined;
   createEffect(
@@ -632,7 +632,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
    */
   const [creatingFirst, setCreatingFirst] = createSignal(true);
   /** The new agent form's avatar. The first-agent row in an empty sidebar shows it. */
-  const [agentAvatar, setAgentAvatar] = createSignal(newAgentAvatar());
+  const [agentAvatar, setAgentAvatar] = createSignal(untrack(newAgentAvatar));
   const [mobilePane, setMobilePane] = createSignal<WebMobilePane>("conversation");
   /**
    * The tab of the phone's bottom bar. The history entry holds it, so a reload shows the tab that the
@@ -2085,12 +2085,16 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     deleteAgent: (agentId) => workspace.deleteAgent(agentId),
     agentRuntime: () => ({ queues: workspace.state.queues, failedTurns: workspace.state.failedTurns }),
     setAgentManager: (agentId, managerId) => workspace.setAgentManager(agentId, managerId),
-    inviteTeammates: canAdministerServer(workspace.state.host?.role)
-      ? () => {
-          const id = server()?.id;
-          if (id) void openServerSettings(id, null, "members");
-        }
-      : undefined,
+    // Getters: the host and its role arrive after the frame mounts, so a value read here once would
+    // keep the actions off for the owner.
+    get inviteTeammates() {
+      return canAdministerServer(workspace.state.host?.role)
+        ? () => {
+            const id = server()?.id;
+            if (id) void openServerSettings(id, null, "members");
+          }
+        : undefined;
+    },
     routines: {
       available: routinesSupported,
       agentId: () => workspace.state.selectedId ?? null,
@@ -2120,12 +2124,14 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         </Show>
       ),
     },
-    openApps: canAdministerServer(workspace.state.host?.role)
-      ? () => {
-          const id = server()?.id;
-          if (id) void openServerSettings(id, null, "connectors");
-        }
-      : undefined,
+    get openApps() {
+      return canAdministerServer(workspace.state.host?.role)
+        ? () => {
+            const id = server()?.id;
+            if (id) void openServerSettings(id, null, "connectors");
+          }
+        : undefined;
+    },
     serverName: () => workspace.state.host?.name ?? "Atelier",
     connectionReady: () => workspace.state.status === "online",
     menu: () => {

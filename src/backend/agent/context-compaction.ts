@@ -222,6 +222,13 @@ export class ContextCompaction {
     this.#awaitingPostCompaction.delete(threadId);
   }
 
+  /** The context of a provider thread and when its last model step was, or null before its first one here. */
+  cacheState(threadId: string): { usedTokens: number; lastStepAt: number } | null {
+    const usage = this.#display.get(threadId)?.usage;
+    const at = this.#activity.get(threadId);
+    return usage && at !== undefined ? { usedTokens: usage.usedTokens, lastStepAt: at } : null;
+  }
+
   /**
    * Reserves a handoff of a session that compacts by itself (Claude) before the delivery that
    * wakes it: its last model step is older than the prompt cache and its context holds at least

@@ -11,7 +11,14 @@ afterEach(() => {
   for (const db of databases.splice(0)) db.close();
 });
 
-const LOOP_TABLES = { loops: [], loop_items: [], loop_events: [], loop_experiments: [], loop_decisions: [] };
+const LOOP_TABLES = {
+  loops: [],
+  loop_items: [],
+  loop_events: [],
+  loop_experiments: [],
+  loop_decisions: [],
+  agent_usage_turn_notes: [],
+};
 
 function databaseAt(version: number): DatabaseSync {
   const db = new DatabaseSync(":memory:");
@@ -56,7 +63,7 @@ describe("loop migration", () => {
     migrateOpenBotDatabase(db);
     expect(contents(db)).toEqual({ ...before, ...LOOP_TABLES });
     expect(loopObjects(db)).toHaveLength(12);
-    expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 55 });
+    expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 56 });
     expect(db.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
   });
 
@@ -76,7 +83,7 @@ describe("loop migration", () => {
 
   it("rejects a newer history before it creates a table", () => {
     const db = databaseAt(54);
-    db.exec("INSERT INTO schema_migrations VALUES(56,'now')");
+    db.exec("INSERT INTO schema_migrations VALUES(57,'now')");
     expect(() => migrateOpenBotDatabase(db)).toThrow("newer than this application supports");
     expect(loopObjects(db)).toEqual([]);
   });

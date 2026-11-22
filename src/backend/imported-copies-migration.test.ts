@@ -254,7 +254,7 @@ describe("imported copies migration 49", () => {
 
     migrateOpenBotDatabase(db);
 
-    expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 55 });
+    expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 56 });
     expect(messageIds(db)).toEqual(before.filter((id) => !REMOVED.includes(id)));
     expect(messageIds(db, CODEX_THREAD)).toEqual(["codex-answer"]);
     // The reader had read through the removed answer: the cursor stays on the last row shown before it

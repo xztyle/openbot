@@ -46,6 +46,26 @@ export interface UsageSample {
    */
   costCounterId?: string;
 }
+/** One row of `agent_usage_turn_notes`. */
+export interface TurnNote {
+  agentId: string;
+  turnId: string;
+  /** What started the turn, such as `owner`, `agent`, `agent-reply`, `routine`, `channel` or `motion`. */
+  turnKind: string;
+  /** `new-session`, `cache-expired`, `model-switch`, `warm` or `unknown`. */
+  cacheWriteReason: string;
+  /** The context of the session before the turn, when the provider reported it. */
+  contextTokens: number | null;
+  occurredAt?: string;
+}
+
+export interface TurnNoteCost {
+  turnKind: string;
+  cacheWriteReason: string;
+  turns: number;
+  costUsd: number;
+  cacheWriteTokens: number;
+}
 const TOKEN_KEYS = ["uncachedInput", "cachedInput", "cacheCreation", "output"] as const;
 
 /** The tokens one model used in a turn. */
@@ -203,6 +223,49 @@ export class AgentUsage {
         return null;
       },
     );
+  }
+
+  /** What started a turn and why it wrote the prompt cache. See `agent_usage_turn_notes`. */
+  noteTurn(note: TurnNote): void {
+    this.#core.connection
+      .prepare("INSERT OR REPLACE INTO agent_usage_turn_notes VALUES (?, ?, ?, ?, ?, ?)")
+      .run(
+        note.agentId,
+        note.turnId,
+        note.turnKind,
+        note.cacheWriteReason,
+        note.contextTokens,
+        note.occurredAt ?? new Date().toISOString(),
+      );
+  }
+
+  /**
+   * The cost and the cache writes of the noted turns since `since`, by what started them and why
+   * they wrote the cache. A turn with no note is left out.
+   */
+  turnNoteCosts(since: string): TurnNoteCost[] {
+    const rows = databaseRows(
+      this.#core.connection
+        .prepare(
+          `SELECT n.turn_kind, n.cache_write_reason, COUNT(DISTINCT n.agent_id || ':' || n.turn_id) AS turns,
+             COALESCE(SUM(r.estimated_cost_usd), 0) AS cost_usd,
+             COALESCE(SUM(json_extract(r.tokens_json, '$.cacheCreation')), 0) AS cache_write_tokens
+           FROM agent_usage_turn_notes n
+           LEFT JOIN agent_usage_records r
+             ON r.agent_id = n.agent_id AND r.occurred_at >= ? AND r.turn_id = n.turn_id
+           WHERE n.occurred_at >= ?
+           GROUP BY n.turn_kind, n.cache_write_reason
+           ORDER BY cost_usd DESC`,
+        )
+        .all(since, since),
+    );
+    return rows.map((row) => ({
+      turnKind: requiredStringColumn(row, "turn_kind"),
+      cacheWriteReason: requiredStringColumn(row, "cache_write_reason"),
+      turns: optionalNumberColumn(row, "turns") ?? 0,
+      costUsd: optionalNumberColumn(row, "cost_usd") ?? 0,
+      cacheWriteTokens: optionalNumberColumn(row, "cache_write_tokens") ?? 0,
+    }));
   }
 
   startTurn(agentId: string, sessionId: string, turnId: string, provider: string, model: string): void {

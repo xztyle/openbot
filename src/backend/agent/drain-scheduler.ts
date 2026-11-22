@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { AGENT_PROVIDERS, type AgentModelOption, type AgentSummary } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
-import { createOpenBotLogger } from "@openbot/logging";
+import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { Deferred, Effect, Result, Schema } from "effect";
 import { type AgentProvider, ProviderTurnActiveError } from "../agent-client";
 import type { AgentStore } from "../agent-store";
@@ -10,7 +10,7 @@ import { causeHelpers } from "../effect-boundary";
 import type { DeliveryContext, MailboxStore } from "../mailbox-store";
 import type { MessagingThreads } from "../messaging/messaging-threads";
 import { decodeTurnResponse } from "../protocol";
-import type { ContextCompaction } from "./context-compaction";
+import { type ContextCompaction, IDLE_HANDOFF_AFTER_MS } from "./context-compaction";
 import type { ConversationRuntime } from "./conversation-runtime";
 import type { DelegationFollowUp } from "./delegation-follow-up";
 import {
@@ -44,6 +44,18 @@ import { codexSandboxPolicy, workspaceWritableRoots } from "./workspace-sandbox"
 export const REMOVED_ENDPOINT_MESSAGE = sourceText("error.agent.endpointRemoved");
 
 const logger = createOpenBotLogger("drain-scheduler");
+
+/** What started a turn, from the delivery that leads it, as the cost views group turns. */
+function turnKind(context: DeliveryContext, channel: boolean, messaging: boolean): string {
+  if (channel) return "channel";
+  if (messaging) return "messaging";
+  if (context.eventCheck) return "event-check";
+  if (context.notice) return context.notice;
+  const { sender, replyToMessageId } = context.delivery;
+  if (sender.kind === "agent") return replyToMessageId ? "agent-reply" : "agent";
+  if (sender.kind === "user") return "owner";
+  return sender.kind;
+}
 const CHANNEL_START_FAILED = sourceText("error.backend.channelStartFailed");
 /** How long messages wait for their turn after the provider did not confirm `turn/start` in time. */
 const TURN_START_GRACE_MS = 5 * 60_000;
@@ -875,6 +887,21 @@ export class DrainScheduler {
       // Claude, ACP and Pi take the delivery id as the turn id. A delivery that a refused turn put back
       // in the queue keeps its id, and the end of that turn must not end this new run (#2468).
       this.#hooks.turnRestarting(delivery.id);
+      // Why this turn's first request writes the prompt cache, read before the turn changes it.
+      const lane = laneKey({ agentId: agent.id, taskId });
+      const cacheWriteReason = (providerThreadId: string) => {
+        if (routineThreadId || this.#threads.consumePendingHandoff(providerThreadId) !== undefined)
+          return "new-session";
+        const state = this.#compaction.cacheState(providerThreadId);
+        if (!state) return "unknown";
+        if (Date.now() - state.lastStepAt >= IDLE_HANDOFF_AFTER_MS) return "cache-expired";
+        const previous = this.#turnModels.get(lane)?.model;
+        return previous !== undefined && previous !== turnModel ? "model-switch" : "warm";
+      };
+      const cacheNote = {
+        reason: cacheWriteReason(threadId),
+        context: this.#compaction.cacheState(threadId)?.usedTokens ?? null,
+      };
       const threadReadyAt = Date.now();
       const firstStart = yield* Effect.result(startTurn(threadId));
       // Where the wait before a turn goes: the provider process, the channel or messaging context,
@@ -919,6 +946,18 @@ export class DrainScheduler {
       // event would end it, and it would hold every message of this agent.
       if (!this.#hooks.turnEnded(response.turn.id)) snapshot.activeTurnId = response.turn.id;
       confirmedTurnId = response.turn.id;
+      // A note for the cost views. It never stops a turn that the provider accepted.
+      try {
+        this.#store.database.usage.noteTurn({
+          agentId: agent.id,
+          turnId: response.turn.id,
+          turnKind: turnKind(context, channelDelivery, messagingDelivery),
+          cacheWriteReason: cacheNote.reason,
+          contextTokens: cacheNote.context,
+        });
+      } catch (error) {
+        logger.warn("Could not note the turn for the cost views.", { error: toLogValue(error) });
+      }
       this.#turnModels.set(laneKey({ agentId: agent.id, taskId }), { turnId: response.turn.id, model: turnModel });
       if (chosen && agent.modelPolicy === "auto") {
         this.#modelPolicy?.started(agent.id, response.turn.id, { ...chosen, model: turnModel }, place);

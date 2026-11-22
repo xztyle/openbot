@@ -65,8 +65,8 @@ function range(from: number, to: number): number[] {
 }
 
 describe("migration guards", () => {
-  // Migration 28 turns foreign keys off for its rebuild, and migrations 43 to 55 do not.
-  it.each([28, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55])(
+  // Migration 28 turns foreign keys off for its rebuild, and migrations 43 to 56 do not.
+  it.each([28, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56])(
     "rolls back migration %i when the database has a broken foreign key",
     (version) => {
       const db = databaseAt(version - 1);
@@ -93,7 +93,7 @@ describe("migration guards", () => {
 
       db.exec("DELETE FROM projection_thread_messages; DELETE FROM projection_turns");
       migrateOpenBotDatabase(db);
-      expect(versions(db)).toEqual(range(8, 55));
+      expect(versions(db)).toEqual(range(8, 56));
       expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
       expect(db.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
     },
@@ -107,7 +107,7 @@ describe("migration guards", () => {
     expect(() => migrateOpenBotDatabase(db)).toThrow(
       `OpenBot database migration history is missing version ${missing}.`,
     );
-    expect(versions(db)).toEqual(range(8, 55).filter((version) => version !== missing));
+    expect(versions(db)).toEqual(range(8, 56).filter((version) => version !== missing));
     expect(db.prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").all()).toEqual(schemaBefore);
   });
 });

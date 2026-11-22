@@ -747,6 +747,24 @@ const ANALYTICS_DATE_INDEX_SQL = `
   CREATE INDEX IF NOT EXISTS agent_usage_activity_occurred ON agent_usage_activity(occurred_at);
 `;
 
+/**
+ * What each turn was, for the cost views: what started it, why its first request wrote the prompt
+ * cache (`new-session`, `cache-expired`, `model-switch`, `warm`, or `unknown` when this process has
+ * not seen the session yet), and the context it started with. One row for each turn, by its agent.
+ */
+export const USAGE_TURN_NOTES_SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS agent_usage_turn_notes (
+    agent_id TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
+    turn_kind TEXT NOT NULL,
+    cache_write_reason TEXT NOT NULL,
+    context_tokens INTEGER,
+    occurred_at TEXT NOT NULL,
+    PRIMARY KEY(agent_id, turn_id)
+  );
+  CREATE INDEX IF NOT EXISTS agent_usage_turn_notes_date ON agent_usage_turn_notes(occurred_at);
+`;
+
 const LATEST_SCHEMA_SQL =
   substituteOnce(
     substituteOnce(
@@ -799,7 +817,8 @@ const LATEST_SCHEMA_SQL =
   CHANNEL_THREAD_STATE_SCHEMA_SQL +
   CHANNEL_SEARCH_SCHEMA_SQL +
   CHANNEL_SAVED_SCHEMA_SQL +
-  LOOP_SCHEMA_SQL;
+  LOOP_SCHEMA_SQL +
+  USAGE_TURN_NOTES_SCHEMA_SQL;
 
 /** The end of the thread message table with the migration 40 columns before its PRIMARY KEY constraint. */
 function withThreadMessageOrderColumns(tableEnd: string): string {
@@ -1132,6 +1151,12 @@ const MIGRATIONS: readonly OpenBotMigration[] = [
     // Only creates the loop tables and indexes, so no foreign-key pause and no vacuum. No loop exists
     // yet, so they start empty, and no row of another table changes.
     up: (db) => db.exec(LOOP_SCHEMA_SQL),
+  },
+  {
+    version: 56,
+    // Only creates the turn notes table and its index, so no foreign-key pause and no vacuum. Turns
+    // from before it have no note.
+    up: (db) => db.exec(USAGE_TURN_NOTES_SCHEMA_SQL),
   },
 ];
 

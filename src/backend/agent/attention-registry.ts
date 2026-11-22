@@ -41,7 +41,7 @@ import {
   validateUiBlockResponse,
 } from "@openbot/contracts/ui-blocks";
 import { sourceText } from "@openbot/i18n/source";
-import { createOpenBotLogger, redactText, toLogValue } from "@openbot/logging";
+import { createOpenBotLogger, redactSecrets, redactText, toLogValue } from "@openbot/logging";
 import { Deferred, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
 import { type AgentApiKeys, SHARED_API_KEY_SCOPE } from "../agent-api-keys";
 import type { AgentClient } from "../agent-client";
@@ -1140,9 +1140,9 @@ export class AttentionRegistry {
       threadId: this.#conversation.publicThreadId(agentId, threadId),
       turnId,
       kind,
-      command: commandText(request.params),
+      command: shownText(commandText(request.params)),
       cwd: getString(request.params, "cwd"),
-      reason: getString(request.params, "reason"),
+      reason: shownText(getString(request.params, "reason")),
       grantRoot: getString(request.params, "grantRoot"),
       permissions: kind === "permissions" ? approvalPermissions(request.params) : null,
     };
@@ -1234,9 +1234,9 @@ export class AttentionRegistry {
       threadId: this.#conversation.publicThreadId(agentId, threadId),
       turnId: getString(request.params, "turnId") ?? String(request.id),
       kind,
-      command: commandText(request.params),
+      command: shownText(commandText(request.params)),
       cwd: getString(request.params, "cwd"),
-      reason: getString(request.params, "reason"),
+      reason: shownText(getString(request.params, "reason")),
       grantRoot: getString(request.params, "grantRoot"),
       permissions: null,
     };
@@ -2367,6 +2367,15 @@ function localQuestionNeedsOpenBot(question: AgentPromptQuestion): boolean {
 }
 
 const { sync: attentionStep, rewrap: toAttentionOperationFailed } = causeHelpers(AttentionOperationFailed);
+
+/**
+ * An approval's command or reason as its card shows it: a token in a `curl -H "Authorization: …"` goes,
+ * on every screen and in the briefing. Only the card reads it; the answer goes back with the
+ * provider's own request, so the command that runs is unchanged.
+ */
+function shownText(value: string | null): string | null {
+  return value === null ? null : redactSecrets(value);
+}
 
 /** One line of text of an attention item, redacted and cut to its bound, or undefined. */
 function attentionLine(value: string | undefined): string | undefined {

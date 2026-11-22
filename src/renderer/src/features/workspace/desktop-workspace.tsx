@@ -2,6 +2,7 @@ import { type BrowserTakeoverRequest, CHANNEL_CHATS_CAPABILITY } from "@openbot/
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import { createWorkspaceLinkUrl } from "@openbot/contracts/workspace-links";
 import { Bot, CheckCheck, Search, Settings, Store } from "@openbot/ui";
+import { modelNameOf } from "@openbot/ui/components/model-name";
 import { computeSidebarAgentStates } from "@openbot/ui/features/sidebar/sidebar-agent-states";
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
@@ -70,7 +71,7 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
   const layout = useLayout();
   const scope = useServerScope();
   const { activeServer, activeServerId, activeServerSupportsCapability } = useServers();
-  const { agentList, activeAgent, userHiddenAgentIds, openAgentSetup, updateAgent } = useAgents();
+  const { agentList, activeAgent, userHiddenAgentIds, openAgentSetup, updateAgent, modelOptions } = useAgents();
   const { editAgent, deleteAgent } = useAgentActions();
   const { selectAgent, setGlobalSearchVisibility } = useNavigation();
   const { openServerSettings } = useServerSettings();
@@ -181,6 +182,7 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
   const controller = createWorkspaceController({
     channels,
     agents: agentList,
+    modelName: (provider, model) => modelNameOf(modelOptions(), provider, model),
     hiddenAgentIds: userHiddenAgentIds,
     agentStates,
     people: () =>

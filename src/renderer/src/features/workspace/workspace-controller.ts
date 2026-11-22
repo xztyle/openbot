@@ -284,6 +284,11 @@ export interface WorkspaceEnvironment {
         failedTurns: Readonly<Record<string, string | undefined>>;
       })
     | undefined;
+  /**
+   * The name that the model picker shows for a model, such as "GPT-5.6 Luna" for `gpt-5.6-luna`, so
+   * the org chart and the fleet name a model as the chat header does. Absent, they show the id.
+   */
+  modelName?: ((provider: string, model: string) => string | undefined) | undefined;
   /** Sets an agent's manager in the org chart; `null` is the top level. Absent, the chart is read-only. */
   setAgentManager?: ((agentId: string, managerId: string | null) => Promise<void>) | undefined;
   /** Opens the form of a new agent. */

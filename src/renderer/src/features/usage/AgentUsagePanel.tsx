@@ -7,8 +7,8 @@ import {
 } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
 import {
-  ArrowLeft,
   Button,
+  ChevronLeft,
   ErrorReference,
   IconButton,
   RefreshCw,
@@ -198,7 +198,7 @@ export function AgentUsagePanel(props: AgentUsagePanelProps) {
       <header class="agent-usage-header">
         <div class="agent-usage-identity">
           <IconButton variant="ghost" label={t("common.back")} onClick={props.onBack}>
-            <ArrowLeft />
+            <ChevronLeft />
           </IconButton>
           <h2 ref={heading} tabindex={-1}>
             {t("usage.panel.title")} <span aria-hidden="true">/</span> <span>{props.hostName}</span>

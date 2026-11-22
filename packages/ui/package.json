@@ -50,6 +50,7 @@
     "./avatar-image": "./src/avatar-image.ts",
     "./bloub-avatar": "./src/bloub-avatar.tsx",
     "./components/ProviderModelPicker": "./src/components/ProviderModelPicker.tsx",
+    "./components/model-name": "./src/components/model-name.ts",
     "./components/provider-accounts": "./src/components/provider-accounts.ts",
     "./components/provider-row": "./src/components/provider-row.ts",
     "./components/StandingApprovalConfirmation": "./src/components/StandingApprovalConfirmation.tsx",

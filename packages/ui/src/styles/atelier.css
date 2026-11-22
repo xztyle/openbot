@@ -13,7 +13,10 @@
   .ws-sidebar-workspace .ws-truncate,
   .conversation-title,
   .account-login-wordmark,
-  .ws-pane-header-title
+  .ws-pane-header-title,
+  .ws-phone-screen-title,
+  .settings-page-title,
+  .agent-usage-header h2
 ) {
   font-family: var(--openbot-font-display);
   font-variation-settings: var(--atelier-font-display-variation);

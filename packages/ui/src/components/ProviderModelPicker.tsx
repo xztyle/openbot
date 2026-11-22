@@ -59,6 +59,7 @@ import {
 } from "solid-js";
 import { currentText, type TextValue, useText } from "../text";
 import { createScrollFades } from "./createScrollFades";
+import { displayModelName } from "./model-name";
 import { isApiKeyAccount, providerAccountName } from "./provider-accounts";
 import {
   customProviderIds,
@@ -1118,10 +1119,6 @@ function providerStatusLabel(state: AgentProviderStatus["state"], t: AppTranslat
   if (state === "outdated") return t("provider.status.updateRequired");
   if (state === "error") return t("provider.status.unavailable");
   return t("provider.status.checking");
-}
-
-function displayModelName(name: string | undefined, fallback: string): string {
-  return name?.replace(/^[\s:–—-]+/, "") || fallback;
 }
 
 export function reasoningLabel(effort: AgentReasoningEffort, t: AppTranslate = currentText().t): string {

@@ -47,7 +47,7 @@ export function WorkspaceOrgChart() {
         member: agentMember(profile, status.state === "working"),
         title: profile.title || undefined,
         managerId: managers.get(profile.id) ?? null,
-        model: profile.model,
+        model: ws.env.modelName?.(profile.provider, profile.model) || profile.model,
         effort: t(EFFORT_LABEL[profile.reasoningEffort]),
         state: failed ? "failed" : status.state,
         status,

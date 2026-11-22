@@ -2,7 +2,7 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/usage";
 
 export const messages = {
-  "usage.metric.cost": "Coste",
+  "usage.metric.cost": "Costo",
   "usage.metric.tokens": "Tokens",
   "usage.period.days7": "7 días",
   "usage.period.days30": "30 días",
@@ -12,19 +12,19 @@ export const messages = {
   "usage.exactCost": "{amount} USD",
   "usage.tokensAmount": "{tokens} tokens",
   "usage.chart.costDescription":
-    "Coste diario estimado en USD por proveedor. Los valores exactos están disponibles en Ver datos diarios.",
+    "Costo diario estimado en USD por proveedor. Los valores exactos están disponibles en Ver datos diarios.",
   "usage.chart.tokensDescription":
     "Tokens sin lecturas de caché al día por proveedor. Los valores exactos están disponibles en Ver datos diarios.",
-  "usage.chart.costLabel": "Coste diario estimado en USD por proveedor",
+  "usage.chart.costLabel": "Costo diario estimado en USD por proveedor",
   "usage.chart.tokensLabel": "Tokens sin lecturas de caché al día por proveedor",
-  "usage.column.cost": "Coste",
+  "usage.column.cost": "Costo",
   "usage.column.share": "Proporción",
   "usage.column.tokens": "Tokens",
   "usage.column.date": "Fecha",
-  "usage.column.costUsd": "Coste · USD",
+  "usage.column.costUsd": "Costo · USD",
   "usage.empty": "No se registró uso en este período.",
   "usage.partial":
-    "Datos parciales · {turns} turnos sin datos de uso; {unpriced} registros sin estimación de coste; {incomplete} registros con datos de tokens incompletos.",
+    "Datos parciales · {turns} turnos sin datos de uso; {unpriced} registros sin estimación de costo; {incomplete} registros con datos de tokens incompletos.",
   "usage.summary": "Resumen de uso",
   "usage.sessions": {
     one: "{sessions} sesión",
@@ -32,10 +32,10 @@ export const messages = {
   },
   "usage.costEstimate": "Estimación de API · USD",
   "usage.knownTokens": "Tokens conocidos sin lecturas de caché",
-  "usage.provider.shareOfCost": "{share} del coste conocido",
+  "usage.provider.shareOfCost": "{share} del costo conocido",
   "usage.provider.shareOfTokens": "{share} de los tokens conocidos",
   "usage.dailyTrend": "Tendencia diaria",
-  "usage.dailyCost": "Coste diario",
+  "usage.dailyCost": "Costo diario",
   "usage.dailyTokens": "Tokens diarios",
   "usage.viewDailyData": "Ver datos diarios",
   "usage.totals.title": "Totales",
@@ -54,7 +54,7 @@ export const messages = {
   "usage.breakdown.day": "Día",
   "usage.breakdown.byModel": "Uso por modelo",
   "usage.breakdown.byAgent": "Uso por agente",
-  "usage.breakdown.byDay": "Uso y coste diarios",
+  "usage.breakdown.byDay": "Uso y costo diarios",
   "usage.unknownModel": "Modelo desconocido",
   "usage.deletedAgent": "Agente borrado",
   "usage.deletedAgentNumbered": "Agente borrado {number}",
@@ -62,7 +62,7 @@ export const messages = {
   "usage.updatedNever": "nunca",
   "usage.about.title": "Acerca de estas estimaciones",
   "usage.about.body":
-    "Coste de tokens equivalente al de la API en USD. Es una estimación, no un cargo de suscripción. No se calculan las tarifas adicionales de herramientas y contenido multimedia. Los precios desconocidos y el uso incompleto permanecen no disponibles. Las proporciones solo usan importes conocidos; los datos parciales pueden subestimar los totales.",
+    "Costo de tokens equivalente al de la API en USD. Es una estimación, no un cargo de suscripción. No se calculan las tarifas adicionales de herramientas y contenido multimedia. Los precios desconocidos y el uso incompleto permanecen no disponibles. Las proporciones solo usan importes conocidos; los datos parciales pueden subestimar los totales.",
   "usage.about.tokens":
     "Los recuentos de tokens no incluyen las lecturas de caché. Cada solicitud al modelo en un turno vuelve a leer la conversación en caché, así que las lecturas de caché pueden ser muchas veces mayores que el resto de tokens. Los totales las muestran como Entrada en caché.",
   "usage.panel.label": "Uso del agente",

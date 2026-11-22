@@ -148,7 +148,7 @@ export const messages = {
   "trust.guardrails.spaceDefaults": "Cada espacio, por día",
   "trust.guardrails.limit.turns": "Turnos",
   "trust.guardrails.limit.tokens": "Tokens (millones)",
-  "trust.guardrails.limit.cost": "Coste est. (USD)",
+  "trust.guardrails.limit.cost": "Costo est. (USD)",
   "trust.guardrails.limit.share": "Parte de la ventana (%)",
   "trust.guardrails.turnBreaker": "Cada turno",
   "trust.guardrails.routineBreaker": "Cada ejecución de rutina",

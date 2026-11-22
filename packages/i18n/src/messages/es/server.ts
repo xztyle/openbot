@@ -255,7 +255,7 @@ export const messages = {
   "server.settings.workspaceGateDescription":
     "Para los agentes que leen cada mensaje, un modelo rápido decide si el agente responde.",
   "server.settings.workspaceGateModel": "Modelo",
-  "server.settings.workspaceGateModelDescription": "Usa un modelo rápido y de bajo coste.",
+  "server.settings.workspaceGateModelDescription": "Usa un modelo rápido y de bajo costo.",
   "server.settings.workspaceGateTimeout": "Límite de tiempo",
   "server.settings.workspaceGateTimeoutDescription":
     "Si la comprobación tarda más, el agente solo responde cuando lo mencionan.",

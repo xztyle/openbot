@@ -2,7 +2,7 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/efficiency";
 
 export const messages = {
-  "efficiency.settings.title": "Coste y rendimiento",
+  "efficiency.settings.title": "Costo y rendimiento",
   "efficiency.policy.label": "Política de modelo",
   "efficiency.policy.fixed": "Fija: siempre su modelo",
   "efficiency.policy.auto": "Automática: Haiku para las rutinas",
@@ -47,7 +47,7 @@ export const messages = {
   "efficiency.view.tab.learning": "Aprendizaje",
   "efficiency.learning.title": "Lo que aprenden los agentes",
   "efficiency.learning.hint":
-    "Cada noche una pasada corta de Haiku ordena las memorias de cada agente. Las fusiones de duplicados se aplican solas y se pueden deshacer; lo demás te espera aquí, igual que las lecciones que proponen los agentes al terminar una tarjeta de Motion o un elemento de un loop.",
+    "Cada noche una pasada corta de Haiku ordena las memorias de cada agente. Las fusiones de duplicados se aplican solas y se pueden deshacer; lo demás te espera aquí, igual que las lecciones que proponen los agentes al terminar una tarjeta de Motion o un elemento de un ciclo.",
   "efficiency.learning.dreaming": "Limpieza nocturna de memoria",
   "efficiency.learning.taskLearning": "Lecciones tras tareas terminadas",
   "efficiency.learning.pending": { one: "{count} cambio te espera", other: "{count} cambios te esperan" },
@@ -63,7 +63,7 @@ export const messages = {
   "efficiency.learning.state.stale": "Cambió entretanto, no aplicado",
   "efficiency.learning.source.dreaming": "Limpieza nocturna",
   "efficiency.learning.source.task": "Tras una tarjeta de Motion",
-  "efficiency.learning.source.loop": "Tras un elemento de loop",
+  "efficiency.learning.source.loop": "Tras un elemento de ciclo",
   "efficiency.learning.decideFailed": "No se pudo guardar la decisión",
   "efficiency.learning.change.memoryUpdate": "Memoria: {before} → {after}",
   "efficiency.learning.change.memoryForget": "Olvidar: {before}",

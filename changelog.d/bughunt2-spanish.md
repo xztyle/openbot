@@ -6,3 +6,8 @@
 - Spanish reads like Latin American Spanish: "computador", "video", "mouse", "agregar",
   "ingresar", "presionar", "en vivo" and "celular" replace the Spain-only "ordenador", "vídeo",
   "ratón", "añadir", "introducir", "pulsar", "en directo" and "móvil".
+- The command bar (Ctrl+K, and the phone's Jump to) understands Spanish: "pídele a Research …",
+  "aprobar", "detener" and "objetivo" do what "ask", "approve", "stop" and "goal" do. Its hint in
+  Spanish names those words.
+- Spanish calls Loops "ciclos" everywhere (Today's guide and the learning view said "loop"), says
+  "costo" instead of "coste", and greets with "Buenas noches" in the evening.

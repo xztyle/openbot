@@ -2,11 +2,24 @@
  * The words of the command bar (`workspace-commands.tsx`): its verbs, and the agent that an "ask"
  * names. No DOM and no state.
  */
-// Whole words: "Tell me the costs" is a sentence for the lead, and "assignment" is no verb.
-const ASK = /^(?:(?:ask|assign|tell)\b|@)\s*/iu;
-export const APPROVE = /^(?:approve|ok|decide|decisions?|waiting)\b/iu;
-export const STOP = /^(?:stop|halt|pause)\b/iu;
-export const GOAL = /^(?:goal|set (?:a )?goal|new goal)\b/iu;
+// Whole words: "Tell me the costs" is a sentence for the lead, and "assignment" is no verb. Each
+// verb also has its Spanish words ("pídele a Research …", "aprobar", "detener", "objetivo"). `\b`
+// is ASCII only, so a word ends where no letter or digit follows. APPROVE, STOP and GOAL test the
+// folded text, and the raw text when they cut the verb off, so they take both spellings.
+const END = String.raw`(?![\p{L}\p{N}])`;
+const ASK = new RegExp(
+  String.raw`^(?:(?:ask|assign|tell)\b|(?:p[ií]dele|pide|preg[uú]ntale|pregunta|as[ií]gnale|asigna|dile)(?:\s+a)?${END}|@)\s*`,
+  "iu",
+);
+export const APPROVE = new RegExp(
+  String.raw`^(?:approve|ok|decide|decisions?|waiting|aprobar|aprueba|decidir|decisi[oó]n|decisiones|pendientes?)${END}`,
+  "iu",
+);
+export const STOP = new RegExp(String.raw`^(?:stop|halt|pause|detener|det[eé]n|pausar?)${END}`, "iu");
+export const GOAL = new RegExp(
+  String.raw`^(?:goal|set (?:a )?goal|new goal|objetivo|nuevo objetivo|fijar (?:un )?objetivo)${END}`,
+  "iu",
+);
 
 export function fold(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();

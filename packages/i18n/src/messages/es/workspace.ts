@@ -342,7 +342,7 @@ export const messages = {
   "workspace.fleet.noAgents": "Aún no hay agentes en este espacio",
   "workspace.fleet.noAgentsHint":
     "Los agentes responden en canales y mensajes directos, y trabajan mientras no estás. Crea uno para empezar.",
-  "workspace.fleet.costToday": "Coste de hoy",
+  "workspace.fleet.costToday": "Costo de hoy",
   "workspace.fleet.timeToday": "Tiempo de hoy",
   "workspace.fleet.message": "Mensaje",
   "workspace.fleet.settings": "Ajustes de {name}",
@@ -1067,7 +1067,7 @@ export const messages = {
   "workspace.today.greeting.night": "Buenas noches, {name}",
   "workspace.today.greeting.morning": "Buenos días, {name}",
   "workspace.today.greeting.afternoon": "Buenas tardes, {name}",
-  "workspace.today.greeting.evening": "Buenas tardes, {name}",
+  "workspace.today.greeting.evening": "Buenas noches, {name}",
   "workspace.today.waiting": { one: "Te espera ({count})", other: "Te esperan ({count})" },
   "workspace.today.nothingWaits": "Nada te espera. Tus agentes tienen lo que necesitan.",
   "workspace.today.working": { one: "Trabajando ahora ({count})", other: "Trabajando ahora ({count})" },
@@ -1102,7 +1102,7 @@ export const messages = {
   "workspace.today.guide.progress": "{done} de {total}",
   "workspace.today.guide.hide": "Ocultar",
   "workspace.today.guide.intro":
-    "Atelier es más que un chat: tus agentes trabajan hacia objetivos, mueven el trabajo por loops, te resumen el día cada mañana y te piden permiso antes de gastar.",
+    "Atelier es más que un chat: tus agentes trabajan hacia objetivos, mueven el trabajo por ciclos, te resumen el día cada mañana y te piden permiso antes de gastar.",
   "workspace.today.guide.goal": "Dale un objetivo a tu equipo",
   "workspace.today.guide.goalHint": "Tu jefe planifica el trabajo en torno a él y te avisa si se retrasa.",
   "workspace.today.guide.channel": "Crea #general",
@@ -1110,7 +1110,7 @@ export const messages = {
   "workspace.today.guide.briefing": "Activa el resumen de la mañana",
   "workspace.today.guide.briefingHint":
     "Un mensaje cada mañana: qué se terminó, cómo van los objetivos y cuánto costó.",
-  "workspace.today.guide.loop": "Crea un loop",
+  "workspace.today.guide.loop": "Crea un ciclo",
   "workspace.today.guide.loopHint":
     "Etapas por las que pasa el trabajo, como idea → guion → publicar, con tu OK donde importa.",
   "workspace.today.guide.money": "Mira cuánto cuestan los agentes",
@@ -1123,7 +1123,7 @@ export const messages = {
   "workspace.money.waiting": { one: "Espera tu OK ({count})", other: "Esperan tu OK ({count})" },
   "workspace.money.noSpendWaiting": "Ningún gasto espera tu OK.",
   "workspace.money.byAgent": "Por agente",
-  "workspace.money.details": "Detalle de costes",
+  "workspace.money.details": "Detalle de costos",
   "workspace.money.plan": "Límites del plan",
   "workspace.money.planHint": "Cuánto de cada plan de proveedor usaron los agentes y cuándo se reinicia.",
   "workspace.money.openPlan": "Abrir uso del plan",
@@ -1140,9 +1140,9 @@ export const messages = {
   "workspace.phone.newGoal": "Nuevo objetivo",
   "workspace.phone.agentViews": "Vistas de agentes",
   "workspace.loops.noTemplates":
-    "No se cargaron plantillas. Empieza en blanco o describe el loop a tu agente principal y lo crea por ti.",
+    "No se cargaron plantillas. Empieza en blanco o describe el ciclo a tu agente principal y lo crea por ti.",
   "workspace.loops.askLead": "Descríbelo a tu agente principal",
-  "workspace.command.help": "Escribe un nombre o: ask Chief …, approve, stop, goal.",
+  "workspace.command.help": "Escribe un nombre para ir, o: pídele a Chief …, aprobar, detener, objetivo.",
   "workspace.command.ask": "Enviar a {name}: «{text}»",
   "workspace.command.askPick": "Pedir a {name} …",
   "workspace.command.approve": "Aprobar: {action} ({name})",

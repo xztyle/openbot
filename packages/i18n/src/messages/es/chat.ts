@@ -58,7 +58,7 @@ export const messages = {
   "chat.trace.search": "Buscar pasos",
   "chat.trace.steps": "Pasos",
   "chat.trace.duration": "Duración",
-  "chat.trace.cost": "Coste",
+  "chat.trace.cost": "Costo",
   "chat.trace.tokens": "Tokens",
   "chat.trace.llmCalls": "Llamadas al LLM",
   "chat.trace.toolCalls": "Llamadas a herramientas",

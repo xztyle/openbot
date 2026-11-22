@@ -350,7 +350,7 @@ export const messages = {
   "settings.profile.insights.provider": "Proveedor más usado",
   "settings.profile.insights.model": "Modelo principal",
   "settings.profile.insights.weekday": "Día más activo",
-  "settings.profile.insights.cost": "Coste estimado",
+  "settings.profile.insights.cost": "Costo estimado",
   "settings.profile.teammates.title": "Compañeros más activos",
   "settings.profile.models.title": "Uso de modelos",
   "settings.profile.account.title": "Cuenta",

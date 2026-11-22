@@ -39,3 +39,22 @@ export function useCost(): (usd: number) => string {
   const { format } = useText();
   return (usd) => format.currencyUsd(usd, { maximumFractionDigits: usd > 0 && usd < 0.01 ? 3 : 2 });
 }
+
+/**
+ * The day of `at` in `timeZone` (the reader's own zone without one), `YYYY-MM-DD`, as the host dates
+ * its rows. The UTC day would be tomorrow for an evening in the Americas.
+ */
+export function zoneDay(at: number, timeZone?: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timeZone || undefined,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(at);
+    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)?.value ?? "";
+    return `${part("year")}-${part("month")}-${part("day")}`;
+  } catch {
+    return new Date(at).toISOString().slice(0, 10);
+  }
+}

@@ -30,7 +30,7 @@ import { cx } from "../../utils";
 import type { NeedsYouKind } from "./NeedsYou";
 import { MemberAvatar } from "./WorkspaceAvatar";
 import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
-import { useCost, useRecentTime, useWorkspaceDuration } from "./workspace-format";
+import { useCost, useRecentTime, useWorkspaceDuration, zoneDay } from "./workspace-format";
 import type { WorkspaceMember } from "./workspace-types";
 
 /**
@@ -586,11 +586,19 @@ function TodaySpendCard(props: {
   );
 }
 
-/** "21 more in 12 days": what a goal still needs, so "Behind" says why. Null when there is no gap to show. */
-export function goalGap(goal: Pick<InsightGoal, "target" | "current" | "deadline">, now: number) {
+/**
+ * "21 more in 12 days": what a goal still needs, so "Behind" says why. Null when there is no gap to
+ * show. The deadline is a calendar day: the days count from the reader's own day (or `timeZone`'s),
+ * not from the UTC hour, which is tomorrow already in an evening in the Americas.
+ */
+export function goalGap(goal: Pick<InsightGoal, "target" | "current" | "deadline">, now: number, timeZone?: string) {
   const needed = goal.target - goal.current;
   if (needed <= 0) return null;
-  const days = goal.deadline ? Math.ceil((Date.parse(goal.deadline) - now) / 86_400_000) : null;
+  const days = goal.deadline
+    ? Math.round(
+        (Date.parse(`${goal.deadline}T00:00:00Z`) - Date.parse(`${zoneDay(now, timeZone)}T00:00:00Z`)) / 86_400_000,
+      )
+    : null;
   return { needed, days: days !== null && Number.isFinite(days) ? Math.max(0, days) : null };
 }
 

@@ -28,6 +28,7 @@ import { MemberAvatar } from "./WorkspaceAvatar";
 import { WorkspaceList, WorkspaceListRow } from "./WorkspaceList";
 import { PaneHeaderAction, WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { WorkspaceSelect } from "./WorkspaceSelect";
+import { zoneDay } from "./workspace-format";
 import type { WorkspaceMember } from "./workspace-types";
 
 export type InsightTab = "goals" | "money" | "costs" | "briefing";
@@ -322,7 +323,11 @@ function InsightGoals(props: SectionProps): JSX.Element {
                           <span class="ws-insight-pace" data-pace={pace()}>
                             {t(PACE_KEY[pace()])}
                             {/* "Behind" says why: what the goal still needs, and by when. */}
-                            <Show when={pace() === "behind" ? goalGap(goal(), props.report.at) : null}>
+                            <Show
+                              when={
+                                pace() === "behind" ? goalGap(goal(), props.report.at, props.report.timeZone) : null
+                              }
+                            >
                               {(missing) => (
                                 <>
                                   {" · "}
@@ -563,25 +568,6 @@ function useCalendarDay(): (day: string) => string {
   };
 }
 
-/**
- * The day of `at` in the report's zone, `YYYY-MM-DD`, as the host dates its rows. The UTC day would
- * be tomorrow for an evening in the Americas, and an entry on it would fall outside the report.
- */
-function reportDay(at: number, timeZone: string): string {
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(at);
-    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)?.value ?? "";
-    return `${part("year")}-${part("month")}-${part("day")}`;
-  } catch {
-    return new Date(at).toISOString().slice(0, 10);
-  }
-}
-
 function InsightMoney(props: SectionProps): JSX.Element {
   const { t, format, errorMessage } = useText();
   const calendarDay = useCalendarDay();
@@ -629,7 +615,7 @@ function InsightMoney(props: SectionProps): JSX.Element {
       setBusy(false);
     }
   }
-  const today = () => reportDay(props.report.at, props.report.timeZone);
+  const today = () => zoneDay(props.report.at, props.report.timeZone);
   return (
     <>
       <div class="ws-insight-actions">

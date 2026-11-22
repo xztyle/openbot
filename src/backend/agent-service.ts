@@ -386,7 +386,10 @@ export interface AgentServiceOptions {
   mailbox: MailboxStore;
   browser: AgentBrowserHost;
   requestTimeoutMs?: number;
-  /** How long a Codex context compaction runs before OpenBot stops it. Tests make it short. */
+  /**
+   * How long a provider takes to start a context compaction before OpenBot stops it. A started
+   * compaction runs ten times as long. Tests make it short.
+   */
   contextCompactionTimeoutMs?: number;
   preferredProvider?: AgentProvider;
   /** The model chosen beside `preferredProvider`, or `null` for that provider's own default. */

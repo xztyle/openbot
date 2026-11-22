@@ -2086,8 +2086,19 @@ export class BrowserHost {
           ...(args.url === undefined ? {} : { url: args.url }),
           ...(args.state === undefined ? {} : { state: args.state }),
         };
-        if (!condition.target && !condition.text && !condition.url && !condition.state)
-          return yield* browserFailure(new Error("wait_for requires a condition."));
+        const waits = Boolean(condition.target || condition.text || condition.url || condition.state);
+        if (!waits && args.delayMs === undefined)
+          return yield* browserFailure(new Error("wait_for requires a condition, or delayMs for a pause."));
+        // Outside the tab's queue, so a pause holds no other call of this tab.
+        if (args.delayMs !== undefined) yield* Effect.sleep(args.delayMs);
+        if (!waits)
+          return textResult(
+            yield* this.#enqueue(tabId, (tab, keepQueueBlocked) =>
+              Effect.gen(function* () {
+                return (yield* readTabSnapshot(tab, tab.revision + 1, keepQueueBlocked)).snapshot;
+              }),
+            ),
+          );
         const timeoutMs = browserToolTimeout(args.timeoutMs);
         return textResult(
           yield* this.#enqueue(tabId, (tab, keepQueueBlocked) =>
@@ -2118,14 +2129,32 @@ export class BrowserHost {
     evaluate: ({ args }, params) =>
       Effect.gen({ self: this }, function* () {
         yield* browserSync(() => this.#requireToolTab(params, args.tabId));
-        return valueTextResult(
-          yield* this.#runEvaluation(
+        const run = () =>
+          this.#runEvaluation(
             args.tabId,
             args.expression,
             args.awaitPromise ?? true,
             browserToolTimeout(args.timeoutMs),
-          ),
-        );
+          );
+        if (args.repeat === undefined) return valueTextResult(yield* run());
+        // One call for a loop that took a model step per page: the script runs again after each
+        // pause, until it returns null or false, fails, or ran `repeat` times.
+        const results: BrowserJsonValue[] = [];
+        for (let index = 0; index < args.repeat; index += 1) {
+          if (index > 0) {
+            if (args.intervalMs) yield* Effect.sleep(args.intervalMs);
+            yield* browserSync(() => this.#requireToolTab(params, args.tabId));
+          }
+          const outcome = yield* Effect.result(run());
+          if (Result.isFailure(outcome)) {
+            if (results.length === 0) return yield* Effect.fail(outcome.failure);
+            return valueTextResult({ runs: index, results, error: redactText(String(outcome.failure.cause)) });
+          }
+          if (outcome.success === null || outcome.success === false)
+            return valueTextResult({ runs: index + 1, results, stopped: true });
+          results.push(outcome.success);
+        }
+        return valueTextResult({ runs: args.repeat, results });
       }),
     set_environment: ({ args }, params) =>
       Effect.gen({ self: this }, function* () {
@@ -2387,9 +2416,12 @@ export class BrowserHost {
         : { closed: false as const };
     switch (step.action) {
       case "wait_for": {
-        const { action: _action, ...condition } = step;
-        if (!condition.target && !condition.text && !condition.url && !condition.state)
-          return yield* browserFailure(new Error("wait_for requires a condition."));
+        const { action: _action, delayMs, ...condition } = step;
+        const waits = Boolean(condition.target || condition.text || condition.url || condition.state);
+        if (!waits && delayMs === undefined)
+          return yield* browserFailure(new Error("wait_for requires a condition, or delayMs for a pause."));
+        if (delayMs !== undefined) yield* Effect.sleep(delayMs);
+        if (!waits) return { closed: false as const };
         yield* this.#enqueue(tabId, (current, keepQueueBlocked) =>
           Effect.gen(function* () {
             const timeoutMessage = "Browser wait condition timed out.";

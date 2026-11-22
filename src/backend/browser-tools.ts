@@ -21,6 +21,17 @@ const requiredString = (max: number) =>
 const tabId = requiredString(INPUT_LIMITS.identifier);
 const revision = z.number().int().nonnegative();
 const timeout = z.number().int().min(0).max(30_000).optional();
+/** The longest pause of `wait_for`: one call, instead of a model step for each wait. */
+export const BROWSER_DELAY_LIMIT_MS = 60_000;
+const delay = z
+  .number()
+  .int()
+  .min(1)
+  .max(BROWSER_DELAY_LIMIT_MS)
+  .optional()
+  .describe(
+    "Pause this many milliseconds first, up to 60000. Alone, with no other condition, wait_for is a plain pause: use it to wait, never a text that does not appear.",
+  );
 const image = z.enum(["auto", "always", "never"]).optional();
 const nonBlankString = (max: number) => z.string().max(max).trim().min(1);
 const modifiers = z
@@ -106,6 +117,9 @@ const legacyActionSchema = z.discriminatedUnion("type", [
 
 const targetAction = { tabId, target: browserTargetSchema, timeoutMs: timeout };
 
+/** The most runs of one `evaluate` call with `repeat`. */
+export const BROWSER_EVALUATE_REPEAT_LIMIT = 50;
+
 /** The most steps that one `run_steps` call runs. */
 export const BROWSER_RUN_STEPS_LIMIT = 20;
 
@@ -148,6 +162,7 @@ const browserStepSchema = z.discriminatedUnion("action", [
     text: requiredString(2_000).optional(),
     url: requiredString(INPUT_LIMITS.browserUrl).optional(),
     state: z.enum(["load", "domcontentloaded", "dom-quiet"]).optional(),
+    delayMs: delay,
   }),
   z.strictObject({
     action: z.literal("navigate"),
@@ -458,20 +473,21 @@ const BROWSER_TOOL_DEFINITIONS = [
   browserTool({
     name: "wait_for",
     description:
-      "Wait for a URL, text, semantic target, load state, or DOM quiet condition, then return a fresh snapshot.",
+      "Wait for a URL, text, semantic target, load state, or DOM quiet condition, then return a fresh snapshot. To pause, pass delayMs alone.",
     shape: {
       tabId,
       target: browserTargetSchema.optional(),
       text: requiredString(2_000).optional(),
       url: requiredString(INPUT_LIMITS.browserUrl).optional(),
       state: z.enum(["load", "domcontentloaded", "dom-quiet"]).optional(),
+      delayMs: delay,
       timeoutMs: timeout,
     },
   }),
   browserTool({
     name: "evaluate",
     description:
-      "Evaluate JavaScript in the main frame's own page context, with the same access to page scripts, DOM and cookies as the page itself. Prefer snapshots and semantic actions; use this for inspection or unsupported interactions. Returns only a JSON-serializable value up to 64 KB.",
+      "Evaluate JavaScript in the main frame's own page context, with the same access to page scripts, DOM and cookies as the page itself. Prefer snapshots and semantic actions; use this for inspection or unsupported interactions. Returns only a JSON-serializable value up to 64 KB. To collect across pages, pass repeat: the script runs up to that many times in one call, intervalMs apart, and the call returns the list of results; it stops early when the script returns null or false. Use this rather than one call per page.",
     shape: {
       tabId,
       expression: z
@@ -482,7 +498,9 @@ const BROWSER_TOOL_DEFINITIONS = [
           message: "expression must not be blank",
         }),
       awaitPromise: z.boolean().optional(),
-      timeoutMs: timeout,
+      timeoutMs: timeout.describe("The limit of each run."),
+      repeat: z.number().int().min(1).max(BROWSER_EVALUATE_REPEAT_LIMIT).optional(),
+      intervalMs: z.number().int().min(0).max(30_000).optional().describe("The pause between runs. Default 0."),
     },
   }),
   browserTool({

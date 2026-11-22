@@ -6,7 +6,9 @@
   → Claude → Context.
 - A Claude agent that was idle for more than an hour, with a chat above 120,000 tokens, starts a
   new session from its chat history before it reads the message that wakes it. Its prompt cache had
-  expired, so the old session would have been written to the cache again in full.
+  expired, so the old session would have been written to the cache again in full.- Agents can pause in the browser with `wait_for` and `delayMs`, alone or as a `run_steps` step,
+  and run one `evaluate` script up to 50 times in one call with `repeat`, to collect a list across
+  pages without a model step for each page.
 
 ### Fixed
 

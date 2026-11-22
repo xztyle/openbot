@@ -1,5 +1,6 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { BROWSER_TAKEOVER_REASONS, VAULT_TEXT_LIMIT, type VaultContactFields } from "@openbot/contracts/ipc";
+import { type DynamicRecord, isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { z } from "zod";
 import { advertisedJsonSchema } from "./agent/advertised-json-schema";
 import { API_KEY_NAME_PATTERN } from "./agent-api-keys";
@@ -86,10 +87,35 @@ function browserTool<const Name extends string, Shape extends z.ZodRawShape>(def
     schema,
     parse(value: unknown) {
       const result = schema.safeParse(value);
-      if (!result.success) throw new Error(`Invalid browser tool arguments: ${z.prettifyError(result.error)}`);
-      return { tool: definition.name, args: result.data };
+      if (result.success) return { tool: definition.name, args: result.data };
+      // A timeout above the limit waits the longest time the tool allows, instead of failing the step.
+      const clamped = clampedTimeouts(value, result.error);
+      const retried = clamped ? schema.safeParse(clamped) : undefined;
+      if (retried?.success) return { tool: definition.name, args: retried.data };
+      throw new Error(`Invalid browser tool arguments: ${z.prettifyError(result.error)}${targetHint(result.error)}`);
     },
   };
+}
+
+/** The arguments with each top-level timeoutMs above its maximum set to it, when that is every issue. */
+function clampedTimeouts(value: unknown, error: z.ZodError): DynamicRecord | undefined {
+  if (!isDynamicRecord(value)) return undefined;
+  let timeoutMs: number | undefined;
+  for (const issue of error.issues) {
+    if (issue.code !== "too_big" || issue.path.length !== 1 || issue.path[0] !== "timeoutMs") return undefined;
+    timeoutMs = Number(issue.maximum);
+  }
+  return timeoutMs === undefined ? undefined : { ...value, timeoutMs };
+}
+
+const TARGET_HINT =
+  '\nA target is an object, such as {"kind":"ref","ref":"e12","revision":3} with the ref and revision of your latest snapshot, {"kind":"text","text":"Sign in"}, {"kind":"role","role":"button","name":"Save"}, {"kind":"css","selector":"#email"}, or {"kind":"point","x":100,"y":200}.';
+
+/** Models often send a target as a bare string or without the snapshot revision. */
+function targetHint(error: z.ZodError) {
+  return error.issues.some((issue) => issue.path.some((key) => key === "target" || key === "source"))
+    ? TARGET_HINT
+    : "";
 }
 
 // Keep unused legacy fields accepted, but require the fields each action reads.

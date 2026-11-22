@@ -12,6 +12,8 @@
 - `channel_assign` and `channel_transfer` errors name the fields to fix, and a recipient that is not
   a member lists the members' ids. A routine tool given a field it does not take lists the fields it
   takes.
+- A browser tool given a `timeoutMs` above its limit waits the longest time it allows instead of
+  failing, and a wrong click or drag target gets an error that shows the target forms.
 
 ### Changed
 

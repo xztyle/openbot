@@ -51,13 +51,19 @@ export function createLongPress(options: LongPressOptions): LongPressHandlers {
     start = null;
   };
 
-  /** The click that ends a long press, and only that one, does nothing. */
-  const swallowNextClick = () => {
+  /**
+   * The click that ends a long press, and only that one, does nothing. iOS and Android often send no
+   * click after a long press, so a click elsewhere, such as a quick tap on the sheet that opened, is
+   * the person's next tap and goes through.
+   */
+  const swallowNextClick = (at: { x: number; y: number }) => {
     const swallow = (event: MouseEvent) => {
+      if (Math.hypot(event.clientX - at.x, event.clientY - at.y) > LONG_PRESS_SLOP * 2) return;
+      document.removeEventListener("click", swallow, { capture: true });
       event.preventDefault();
       event.stopPropagation();
     };
-    document.addEventListener("click", swallow, { capture: true, once: true });
+    document.addEventListener("click", swallow, { capture: true });
     setTimeout(() => document.removeEventListener("click", swallow, { capture: true }), 600);
   };
 
@@ -82,9 +88,9 @@ export function createLongPress(options: LongPressOptions): LongPressHandlers {
       if (!start || start.pointerId !== event.pointerId) return;
       if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > LONG_PRESS_SLOP) clear();
     },
-    onPointerUp: () => {
+    onPointerUp: (event) => {
       clear();
-      if (fired) swallowNextClick();
+      if (fired) swallowNextClick({ x: event.clientX, y: event.clientY });
       fired = false;
     },
     onPointerCancel: () => {

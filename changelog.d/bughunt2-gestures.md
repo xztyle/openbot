@@ -13,3 +13,5 @@
   it and back. The swipe goes back once nothing covers the conversation.
 - Phone: holding a "Hold to confirm" button in a chat card no longer opens the message's actions
   halfway through the hold.
+- Phone: a quick tap on a message's actions right after the long press that opened them, such as a
+  quick reaction, is no longer lost.

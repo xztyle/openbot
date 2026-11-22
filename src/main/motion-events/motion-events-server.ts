@@ -2,7 +2,7 @@
  * The host route that the Motion board posts its ticket events to: `POST /v1/motion/events` on the
  * address of `OPENBOT_MOTION_EVENTS_LISTEN` (`host:port`, for example the host's address on the
  * private network that Motion shares with it). It answers only a request that Motion signed with the
- * shared secret (Secrets key `MOTION_EVENTS_SECRET`, or `OPENBOT_MOTION_EVENTS_SECRET`), within five
+ * shared secret (`OPENBOT_MOTION_EVENTS_SECRET` in the host environment, never an agent key), within five
  * minutes of its timestamp. Without a secret it refuses every request. A request reaches the service
  * only after the check, so a stranger on the network can neither wake an agent nor learn anything
  * but the status code.

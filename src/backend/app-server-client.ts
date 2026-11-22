@@ -5,6 +5,7 @@ import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger } from "@openbot/logging";
 import { Effect, Fiber } from "effect";
 import { type AgentProvider, RequestTimeoutError } from "./agent-client";
+import { agentInheritedEnvironment } from "./agent-inherited-environment";
 import { cliSpawnTarget } from "./cli";
 import { JsonLineDecoder, LineTooLongError } from "./jsonl";
 import {
@@ -142,7 +143,7 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
     ]);
     const child = spawn(target.command, target.args, {
       stdio: ["pipe", "pipe", "pipe"],
-      env: this.#extraEnv ? { ...process.env, ...this.#extraEnv } : process.env,
+      env: { ...agentInheritedEnvironment(), ...this.#extraEnv },
       windowsVerbatimArguments: target.windowsVerbatimArguments,
       windowsHide: true,
     });

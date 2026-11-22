@@ -13,6 +13,7 @@ import { redactText } from "@openbot/logging";
 import { Effect, Exit, Fiber, Option, Schema, Scope } from "effect";
 import { secretElicitationField } from "./agent/prompts";
 import { type AgentClient, type AgentProvider, type DiagnosticOrigin, RequestTimeoutError } from "./agent-client";
+import { agentInheritedEnvironment } from "./agent-inherited-environment";
 import { type AgentCliInfo, cliPathEnvironment, cliSpawnTarget } from "./cli";
 import { runCauseEffect } from "./effect-boundary";
 import { type DynamicToolNamespace, LocalMcpBridge, type LocalMcpSession } from "./local-mcp-bridge";
@@ -349,7 +350,7 @@ export class MuseAgentClient extends EventEmitter<ClientEvents> implements Agent
       const target = this.#options.confine?.(base) ?? base;
       if (target.windowsVerbatimArguments) throw new Error(sourceText("error.provider.museNativeWindows"));
       const environment: NodeJS.ProcessEnv = {
-        ...(this.#options.env ?? process.env),
+        ...(this.#options.env ?? agentInheritedEnvironment()),
         ...cliPathEnvironment(this.#cli),
         ...this.#options.extraEnv?.(),
         MUSE_NO_AUTO_UPDATE: "1",

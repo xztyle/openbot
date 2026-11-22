@@ -221,6 +221,7 @@ import { HermesImportService } from "./hermes-import-service";
 import { HostBackups } from "./host-backups";
 import { HostEventsRuntime } from "./host-events-runtime";
 import { agentWebhookRoutineWriter, HostEventsService } from "./host-events-service";
+import { hostSecret } from "./host-secret-environment";
 import { HostService } from "./host-service";
 import { HostTurnLimitsPreferenceStore } from "./host-turn-limits-preference-store";
 import { HostUpdateCoordinator } from "./host-update-coordinator";
@@ -2530,7 +2531,7 @@ export async function createApplicationServices({
     environment: process.env,
     settings: () => workspaceSettings.get().motionEvents,
     agents: () => service.listAgents(),
-    sharedSecret: (name) => agentApiKeys.readNow("shared", null, name),
+    secret: () => hostSecret("OPENBOT_MOTION_EVENTS_SECRET"),
     send: (input, fyi) => service.sendMessage(input, undefined, undefined, "motion-event", fyi),
     showWaiting: (tickets) => service.setWaitingTickets(tickets),
     notifyOwner: (input) => webPush.notifyTicket(input),

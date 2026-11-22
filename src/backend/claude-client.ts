@@ -2,7 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { randomUUID, type UUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -65,6 +65,7 @@ import {
   ProviderTurnActiveError,
   RequestTimeoutError,
 } from "./agent-client";
+import { agentInheritedEnvironment } from "./agent-inherited-environment";
 import { claudeContextCategories } from "./claude-context-categories";
 import {
   type ClaudeHistoryOptions,
@@ -98,6 +99,7 @@ import { skillFolderNames } from "./home-skills";
 import { IdleThreadPool } from "./idle-thread-pool";
 import {
   agentMcpServers,
+  type ClaudeMcpServer,
   claudeMcpServers,
   computerUseParam,
   type McpDropReporter,
@@ -413,6 +415,8 @@ interface ThreadRuntime {
   backgroundTasks: number;
   /** The cgroup task limit when the process started, to tell whether a crash came from that limit. */
   taskLimit: TaskLimitState | null;
+  /** The MCP config file of this start, removed once the CLI has read it (`writeClaudeMcpConfig`). */
+  mcpConfigFile: string | null;
 }
 
 /**
@@ -1172,7 +1176,25 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     // `stop()` may have run during the await: a query created now would outlive the client.
     if (!this.#running) return yield* providerFailure(new Error("Claude Agent SDK is not running."));
     if (handoff) this.#reportMcpDrops?.(this.provider, handoff.dropped);
-    const mcpServers = handoff ? { ...handoff.servers, ...this.#createOpenBotServers(threadId) } : {};
+    // The user's servers can carry tokens in headers and env. The SDK would put them in `--mcp-config`
+    // on the command line, which every process of this user reads in /proc; a 0600 file that goes
+    // away once the CLI has read it leaves them only in the CLI's memory.
+    const mcpConfigFile =
+      handoff && stateDirectory && Object.keys(handoff.servers).length > 0
+        ? yield* writeClaudeMcpConfig(stateDirectory, threadId, handoff.servers).pipe(
+            Effect.catch((error) =>
+              Effect.sync(() => {
+                queryLogger.warn("Claude gets its MCP servers on the command line: the config file failed.", {
+                  error: error.cause,
+                });
+                return null;
+              }),
+            ),
+          )
+        : null;
+    const mcpServers = handoff
+      ? { ...(mcpConfigFile ? {} : handoff.servers), ...this.#createOpenBotServers(threadId) }
+      : {};
     const nodeOptions = this.#agentEnvironment?.().NODE_OPTIONS;
     // The SDK deletes NODE_OPTIONS from the environment of the CLI. On a server the agent environment
     // has the CPU limit module there (`agentProcessEnvironment`), so it goes into the flag settings,
@@ -1224,9 +1246,11 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           // every later request and resume, so the agent kept an edited profile's old text. The CLI
           // flag, not the SDK's `systemPromptSnapshot` option: the CLI records by default and ignores
           // that option.
-          ...(claudeTakesPromptSnapshotFlag(this.#cli.version)
-            ? { extraArgs: { "system-prompt-snapshot": "off" } }
-            : {}),
+          extraArgs: {
+            ...(claudeTakesPromptSnapshotFlag(this.#cli.version) ? { "system-prompt-snapshot": "off" } : {}),
+            // The CLI merges this file with the SDK's own `--mcp-config` of the in-process server.
+            ...(mcpConfigFile ? { "mcp-config": mcpConfigFile } : {}),
+          },
           // The MCP panel is the only door. Without this, Claude merges project `.mcp.json`, user
           // settings, plugin and agent-frontmatter servers into the record above, so two computers
           // with the same OpenBot settings give their agents different tools and "which servers does
@@ -1289,6 +1313,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       subagents: newClaudeSubagentState(),
       backgroundTasks: 0,
       taskLimit,
+      mcpConfigFile,
     };
     runtime.consume = yield* Effect.forkIn(this.#consume(runtime), this.#scope, { startImmediately: true });
     this.#threads.add(runtime);
@@ -1568,6 +1593,8 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
               Effect.gen({ self: this }, function* () {
                 for (;;) {
                   const next = yield* providerCall(() => iterator.next());
+                  // The CLI read its MCP config before it said anything.
+                  removeMcpConfigFile(runtime);
                   if (next.done) {
                     complete = true;
                     break;
@@ -1579,6 +1606,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           ),
         ),
       );
+      removeMcpConfigFile(runtime);
       if (this.#running && this.#threads.get(runtime.id) === runtime) {
         const error = new Error("Claude session stream ended unexpectedly.");
         if (runtime.activeTurn) yield* this.#completeTurn(runtime, "failed", error);
@@ -1600,6 +1628,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
    * The thread's next turn opens it again from its session.
    */
   #loseThread(runtime: ThreadRuntime, error: Error): void {
+    removeMcpConfigFile(runtime);
     this.#threads.lose(runtime, runtime.config.persistSession);
     runtime.input.close();
     try {
@@ -2483,6 +2512,26 @@ const readClaudeSettingsFile = Effect.fn("ClaudeAgentClient.readSettingsFile")(f
   }
 });
 
+/** One file for each thread and start, readable by this user only, removed when the CLI answers. */
+const writeClaudeMcpConfig = Effect.fn("ClaudeAgentClient.writeMcpConfig")(function* (
+  stateDirectory: string,
+  threadId: string,
+  servers: Record<string, ClaudeMcpServer>,
+) {
+  const directory = join(stateDirectory, "claude-mcp");
+  const file = join(directory, `${threadId}-${randomUUID()}.json`);
+  yield* providerCall(() => mkdir(directory, { recursive: true, mode: 0o700 }));
+  yield* providerCall(() => writeFile(file, JSON.stringify({ mcpServers: servers }), { mode: 0o600, flag: "wx" }));
+  return file;
+});
+
+function removeMcpConfigFile(runtime: ThreadRuntime): void {
+  const file = runtime.mcpConfigFile;
+  if (!file) return;
+  runtime.mcpConfigFile = null;
+  void rm(file, { force: true }).catch(() => undefined);
+}
+
 /** One file for each thread, rewritten at each start, readable by this user only. */
 const writeClaudeFlagSettings = Effect.fn("ClaudeAgentClient.writeFlagSettings")(function* (
   stateDirectory: string,
@@ -2563,7 +2612,7 @@ const CLAUDE_SUBAGENT_MODEL = "sonnet";
 
 function claudeEnvironment(cli: ClaudeCliInfo): NodeJS.ProcessEnv {
   return {
-    ...process.env,
+    ...agentInheritedEnvironment(),
     ...cliPathEnvironment(cli),
     ...(cli.source === "managed" ? { DISABLE_AUTOUPDATER: "1" } : {}),
   };

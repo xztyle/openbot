@@ -5,6 +5,7 @@ import { type Client, ClientSideConnection, ndJsonStream } from "@agentclientpro
 import { createOpenBotLogger } from "@openbot/logging";
 import { Deferred, Effect } from "effect";
 import { AgentProcessExitError, type DiagnosticOrigin } from "./agent-client";
+import { agentInheritedEnvironment } from "./agent-inherited-environment";
 import { type AgentCliInfo, cliPathEnvironment, cliSpawnTarget } from "./cli";
 import { LineTooLongError, limitLineLength } from "./jsonl";
 import type { SpawnTarget } from "./process-confinement";
@@ -75,7 +76,7 @@ export class AcpConnection {
       spawn(target.command, target.args, {
         stdio: ["pipe", "pipe", "pipe"],
         env: {
-          ...process.env,
+          ...agentInheritedEnvironment(),
           ...cliPathEnvironment(this.options.cli),
           ...this.options.env,
           ...this.options.extraEnv?.(),

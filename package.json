@@ -220,6 +220,7 @@
     "test:custom-agents": "bun scripts/custom-acp-agent-e2e.ts",
     "test:custom-agents:login-path": "bun scripts/custom-acp-agent-login-path-e2e.ts",
     "test:claude:login-path": "bun scripts/claude-session-login-path-e2e.ts",
+    "test:claude:mcp-config-secrecy": "bun scripts/claude-mcp-config-secrecy-e2e.ts",
     "test:claude:windows-cmd": "bun scripts/claude-windows-cmd-e2e.ts",
     "test:home-skills": "bun scripts/home-agent-skills-e2e.ts",
     "test:meta-ads": "bun scripts/meta-ads-e2e.ts",

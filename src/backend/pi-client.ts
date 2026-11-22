@@ -9,6 +9,7 @@ import { redactText } from "@openbot/logging";
 import { Effect, Exit, Schema, Scope, Semaphore } from "effect";
 import { secretElicitationField } from "./agent/prompts";
 import { type AgentClient, type DiagnosticOrigin, RequestTimeoutError } from "./agent-client";
+import { agentInheritedEnvironment } from "./agent-inherited-environment";
 import { type AgentCliInfo, cliPathEnvironment, cliSpawnTarget } from "./cli";
 import { runCauseEffect } from "./effect-boundary";
 import { type DynamicToolNamespace, LocalMcpBridge, type LocalMcpSession } from "./local-mcp-bridge";
@@ -390,7 +391,7 @@ export class PiAgentClient extends EventEmitter<ClientEvents> implements AgentCl
     for (const value of Object.values(extra)) this.#secrets.add(value);
     const target = cliSpawnTarget(this.cli.executable, ["--mode", "rpc", ...args]);
     rpc.start(this.options.confine?.(target) ?? target, cwd, {
-      ...process.env,
+      ...agentInheritedEnvironment(),
       ...cliPathEnvironment(this.cli),
       ...extra,
       ...environment,

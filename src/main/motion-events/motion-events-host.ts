@@ -20,7 +20,6 @@ import { type MotionEventsAgent, MotionEventsService, type WaitingTicket } from 
 import { type MotionStartInput, MotionTickets } from "./motion-tickets";
 
 const logger = createOpenBotLogger("motion-events");
-const SECRET_KEY = "MOTION_EVENTS_SECRET";
 const CALL_TIMEOUT_MS = 15_000;
 
 export interface MotionEventsHostOptions {
@@ -28,7 +27,12 @@ export interface MotionEventsHostOptions {
   environment: NodeJS.ProcessEnv;
   settings: () => WorkspaceMotionEventsSettings | undefined;
   agents: () => readonly MotionEventsAgent[];
-  sharedSecret: (name: string) => string | null;
+  /**
+   * The signing secret of the events route. It comes from the host's environment, which main takes
+   * before agents start (`host-secret-environment.ts`). The shared Secrets scope is no place for it:
+   * every agent reads that scope, and could sign an event that wakes or steers any agent.
+   */
+  secret: () => string | null;
   send: (
     input: { agentId: string; text: string; clientMessageId: string },
     fyi: boolean,
@@ -118,8 +122,7 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
   const listen = options.environment.OPENBOT_MOTION_EVENTS_LISTEN?.trim();
   if (listen) {
     const secret = () => {
-      const value =
-        options.sharedSecret(SECRET_KEY) ?? options.environment.OPENBOT_MOTION_EVENTS_SECRET?.trim() ?? null;
+      const value = options.secret();
       if (value) registerSecretValue(value);
       return value || null;
     };

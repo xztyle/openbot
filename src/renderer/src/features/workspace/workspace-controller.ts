@@ -2228,10 +2228,13 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   }
 
   async function deleteMessage(channelId: string, messageId: string): Promise<boolean> {
-    return run(
+    const deleted = await run(
       { type: "delete", operationId: crypto.randomUUID(), channelId, messageId },
       "workspace.app.error.delete",
     );
+    // An edit of the message that is gone has nothing to save: the box takes its draft back.
+    if (deleted && state.editing?.messageId === messageId) stopEditing();
+    return deleted;
   }
 
   /** Puts a channel that the reader creates next in the space that shows, before it exists. */

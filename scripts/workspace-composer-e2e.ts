@@ -3,7 +3,8 @@
 // that waits in the outbox keeps its files through Edit, two tabs that send while offline both
 // deliver, an edit in place hides a pasted password as the message box does, and an agent DM that
 // cannot send yet leaves its draft alone. Send waits for a file that is still uploading, and many
-// waiting messages leave the header and the box on a phone's screen.
+// waiting messages leave the header and the box on a phone's screen. Deleting a message whose
+// edit is open on a phone ends the edit.
 //
 // `bun scripts/workspace-composer-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>]`
 // Writes report.json to .openbot-build/workspace-composer-e2e, or to --out.
@@ -13,7 +14,7 @@ import { resolve } from "node:path";
 import { createOpenBotLogger } from "@openbot/logging";
 import solidPlugin from "@solidjs/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
-import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core";
+import { type Browser, type BrowserContext, chromium, type Locator, type Page } from "playwright-core";
 import { createServer, type Plugin } from "vite";
 
 const logger = createOpenBotLogger("workspace-composer-e2e");
@@ -243,6 +244,44 @@ async function checkManyWaitingFit(page: Page, device: string) {
   });
 }
 
+/** Holds a finger on an element, as a long press on a phone. */
+async function longPress(page: Page, target: Locator) {
+  await target.scrollIntoViewIfNeeded();
+  const rect = await target.boundingBox();
+  assert.ok(rect, "Nothing to press.");
+  const point = { x: rect.x + 30, y: rect.y + rect.height / 2 };
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+  await page.waitForTimeout(800);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await cdp.detach();
+  await settle(page);
+}
+
+/** On a phone, a message deleted while its edit is open in the box ends the edit. */
+async function checkDeleteEndsEdit(page: Page, device: string) {
+  await load(page, `${CHANNEL_ORIGIN()}${CHANNEL_PATH}`);
+  await editor(page).tap();
+  await page.keyboard.type("mensaje para borrar");
+  await press(page, true, "Send");
+  const sent = page.locator(".ws-message").filter({ hasText: "mensaje para borrar" }).first();
+  await sent.waitFor({ timeout: 10_000 });
+  const text = sent.getByText("mensaje para borrar").first();
+  await longPress(page, text);
+  await page.getByText("Edit message", { exact: true }).first().tap();
+  await settle(page);
+  await page.locator(".ws-composer-editing").waitFor({ timeout: 5_000 });
+  await longPress(page, text);
+  await page.getByText("Delete message", { exact: true }).first().tap();
+  await settle(page);
+  await page.getByRole("button", { name: "Delete message" }).last().tap();
+  await settle(page);
+  await step(device, "deleting the message whose edit is open ends the edit, and the box takes its draft", async () => {
+    await page.locator(".ws-composer-editing").waitFor({ state: "detached", timeout: 3_000 });
+    assert.equal((await editor(page).innerText()).trim(), "");
+  });
+}
+
 /** Two tabs of the reader, both offline, each send one: both messages go, once each. */
 async function checkTwoTabsOffline(context: BrowserContext, device: string) {
   const first = await newPage(context);
@@ -387,6 +426,11 @@ try {
   {
     const context = await newDevice(browser, true);
     await checkManyWaitingFit(await newPage(context), "iphone");
+    await context.close();
+  }
+  {
+    const context = await newDevice(browser, true);
+    await checkDeleteEndsEdit(await newPage(context), "iphone");
     await context.close();
   }
   {

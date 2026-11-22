@@ -5,8 +5,9 @@
 import type { WorkspaceInsight } from "@openbot/contracts/ipc";
 import type { InsightTab } from "@openbot/ui/features/workspace/InsightView";
 import { useText } from "@openbot/ui/text";
-import { createSignal, onCleanup, onSettled } from "solid-js";
+import { createSignal, onCleanup, untrack } from "solid-js";
 import type { useWorkspace } from "./workspace-context";
+import { refreshOnReturn } from "./workspace-host-feeds";
 
 type Workspace = ReturnType<typeof useWorkspace>;
 
@@ -20,8 +21,8 @@ function readerZone(): string {
 }
 
 /**
- * The insight report of the last `days` days while the caller lives, read again every two minutes;
- * null for a reader who may not see it or a host without it.
+ * The insight report of the last `days` days while the caller lives, read again every two minutes and
+ * when the reader comes back to the host; null for a reader who may not see it or a host without it.
  */
 export function useInsightReport(ws: Workspace, days: () => number) {
   const { format } = useText();
@@ -37,7 +38,12 @@ export function useInsightReport(ws: Workspace, days: () => number) {
       setFailed(true);
     }
   }
-  onSettled(() => void refresh());
+  // The host says the reader's role only after it connects: the first read waits for it.
+  refreshOnReturn(
+    ws,
+    () => Boolean(ws.channels.port().agent.workspaceInsight) && ws.viewAvailable("insights"),
+    () => void untrack(refresh),
+  );
   const timer = setInterval(() => void refresh(), 120_000);
   onCleanup(() => clearInterval(timer));
   return { report, failed, refresh };

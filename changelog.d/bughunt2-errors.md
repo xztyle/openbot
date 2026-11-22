@@ -25,3 +25,6 @@
 - Quiet hours, focus and the "When you're back" answers no longer say they worked while the host is
   away. Before, Save closed the dialog and an answer said "answered" although nothing reached the
   host; now they say the change failed, and you can try again.
+- Connections and Mailboxes: revoking an access link, changing a sender, or changing, removing or
+  adding a mailbox while the host is away now says it failed. Before, the dialog closed and
+  "revoked" or "saved" showed, although the host never got the change and the link still worked.

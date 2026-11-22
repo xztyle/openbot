@@ -11,6 +11,7 @@ import {
   decodeAgentMailSecret,
 } from "@openbot/contracts/team-protocol/agent-mailboxes-v1";
 import type { TeamApiRequest } from "@openbot/team-client/team-api-requests";
+import { currentText } from "@openbot/ui/text";
 import { createSignal } from "solid-js";
 
 export interface AgentMailboxesStore {
@@ -51,9 +52,10 @@ export function createAgentMailboxesStore(input: AgentMailboxesStoreInput): Agen
     setState(next);
   };
 
+  /** A host that is away throws, so a dialog does not close or say "saved" for a change it never got. */
   async function call(path: string, body: Record<string, string> = {}): Promise<void> {
     const request = available();
-    if (!request) return;
+    if (!request) throw new Error(currentText().t("webClient.error.connectionUnavailable"));
     const mine = ++calls;
     try {
       show(mine, await request("POST", path, decodeAgentMailboxesState, body));
@@ -79,7 +81,7 @@ export function createAgentMailboxesStore(input: AgentMailboxesStoreInput): Agen
     setWorker: (workerUrl) => call(AGENT_MAILBOXES_ROUTES.worker, { workerUrl }),
     newSecret: async () => {
       const request = available();
-      if (!request) throw new Error("unsupported");
+      if (!request) throw new Error(currentText().t("webClient.error.connectionUnavailable"));
       const mine = ++calls;
       const created = await request("POST", AGENT_MAILBOXES_ROUTES.secret, decodeAgentMailSecret, {});
       show(mine, created.state);

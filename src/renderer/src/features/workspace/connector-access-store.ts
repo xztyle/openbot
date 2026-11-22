@@ -11,6 +11,7 @@ import {
   decodeCreatedConnectorToken,
 } from "@openbot/contracts/team-protocol/connector-access-v1";
 import type { TeamApiRequest } from "@openbot/team-client/team-api-requests";
+import { currentText } from "@openbot/ui/text";
 import { createSignal } from "solid-js";
 
 export interface ConnectorAccessStore {
@@ -49,9 +50,10 @@ export function createConnectorAccessStore(input: ConnectorAccessStoreInput): Co
     setState(next);
   };
 
+  /** A host that is away throws, so a dialog does not close or say "saved" for a change it never got. */
   async function call(path: string, body: Record<string, string> = {}): Promise<void> {
     const request = available();
-    if (!request) return;
+    if (!request) throw new Error(currentText().t("webClient.error.connectionUnavailable"));
     const mine = ++calls;
     try {
       show(mine, await request("POST", path, decodeConnectorAccessState, body));
@@ -67,7 +69,7 @@ export function createConnectorAccessStore(input: ConnectorAccessStoreInput): Co
     refresh: () => call(CONNECTOR_ACCESS_ROUTES.state).catch(() => undefined),
     createToken: async (label) => {
       const request = available();
-      if (!request) throw new Error("unsupported");
+      if (!request) throw new Error(currentText().t("webClient.error.connectionUnavailable"));
       const mine = ++calls;
       const created = await request("POST", CONNECTOR_ACCESS_ROUTES.createToken, decodeCreatedConnectorToken, {
         label,

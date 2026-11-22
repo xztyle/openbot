@@ -180,7 +180,7 @@ try {
     await page.getByRole("button", { name: /^Research, AI agent/u }).waitFor({ timeout: UI_WAIT_MS });
   });
 
-  // 4. Mark all as read in Trading's menu: Trading is read, General keeps its mentions on the rail.
+  // 4. Mark all as read in Trading's menu: Trading is read, General's Unreads still lists #general.
   await step(page, "a space's Mark all as read leaves the other spaces unread", async () => {
     await start(page, "market-trading");
     await spacesRail(page)
@@ -191,10 +191,14 @@ try {
     await spacesRail(page).getByRole("button", { name: "Trading", exact: true }).waitFor({ timeout: UI_WAIT_MS });
     // Give a mark of every space time to land before the check.
     await page.waitForTimeout(1500);
-    const general = await spacesRail(page)
+    await spacesRail(page)
       .getByRole("button", { name: /^General/u })
-      .getAttribute("aria-label");
-    assert.match(general ?? "", /mention/u);
+      .click();
+    await page.getByRole("button", { name: new RegExp(`^${english("workspace.view.unreads")}`, "u") }).click();
+    await page
+      .getByRole("region", { name: english("workspace.view.unreads") })
+      .getByRole("button", { name: /^general \d+ new/u })
+      .waitFor({ timeout: UI_WAIT_MS });
   });
   await desk.close();
 

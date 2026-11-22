@@ -895,6 +895,7 @@ export const messages = defineMessages("workspace", {
   "workspace.away.zone": "Time zone",
   "workspace.away.zoneServer": "Server time zone ({zone})",
   "workspace.away.money": "Urgent money alerts from (USD)",
+  "workspace.away.moneyInvalid": "Enter whole dollars, from 0 to 1,000,000.",
   "workspace.away.deliverAt": "Push the held requests at",
   "workspace.away.deliverAtDescription": "Empty: only when you open the app.",
   "workspace.away.save": "Save",

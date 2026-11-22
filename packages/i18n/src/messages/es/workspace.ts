@@ -881,6 +881,7 @@ export const messages = {
   "workspace.away.zone": "Zona horaria",
   "workspace.away.zoneServer": "Zona del servidor ({zone})",
   "workspace.away.money": "Alertas urgentes de dinero desde (USD)",
+  "workspace.away.moneyInvalid": "Escribe dólares enteros, de 0 a 1.000.000.",
   "workspace.away.deliverAt": "Enviar las solicitudes en espera a las",
   "workspace.away.deliverAtDescription": "Vacío: solo cuando abras la app.",
   "workspace.away.save": "Guardar",

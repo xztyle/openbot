@@ -4,7 +4,7 @@
  * hours settings. Everything comes from `ws.env.ownerAway`, which only the web client of the owner or
  * an admin has.
  */
-import type { OwnerAwaySettings } from "@openbot/contracts/team-protocol/owner-away-v1";
+import { OWNER_AWAY_MONEY_LIMIT, type OwnerAwaySettings } from "@openbot/contracts/team-protocol/owner-away-v1";
 import { Field, FormDialog, Input, NativeSelect, SwitchField, toast } from "@openbot/ui";
 import {
   type AwayQuiet,
@@ -184,11 +184,13 @@ function OwnerAwaySettingsDialog(props: {
   const [deliverAt, setDeliverAt] = createSignal(props.settings.heldDeliverAt ?? "");
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  // The host refuses an amount above its limit, and the dialog would only say that the save failed.
+  const moneyValid = () => /^\d{1,7}$/u.test(money().trim()) && Number(money().trim()) <= OWNER_AWAY_MONEY_LIMIT;
   const valid = () =>
     /^\d{2}:\d{2}$/u.test(start()) &&
     /^\d{2}:\d{2}$/u.test(end()) &&
     (deliverAt() === "" || /^\d{2}:\d{2}$/u.test(deliverAt())) &&
-    /^\d{1,7}$/u.test(money().trim());
+    moneyValid();
   const submit = () => {
     const away = props.away;
     if (!away || !valid() || busy()) return;
@@ -253,7 +255,7 @@ function OwnerAwaySettingsDialog(props: {
           ))}
         </NativeSelect>
       </Field>
-      <Field label={t("workspace.away.money")}>
+      <Field label={t("workspace.away.money")} error={moneyValid() ? undefined : t("workspace.away.moneyInvalid")}>
         <Input
           type="number"
           inputmode="numeric"

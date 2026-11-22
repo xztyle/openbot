@@ -16,7 +16,7 @@ import {
 } from "@openbot/contracts/team-protocol/owner-away-v1";
 import type { TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import type { TeamApiRequest } from "@openbot/team-client/team-api-requests";
-import type { TextValue } from "@openbot/ui/text";
+import { currentText, type TextValue } from "@openbot/ui/text";
 import { createEffect, createSignal, onCleanup } from "solid-js";
 
 const READ_MS = 60_000;
@@ -110,6 +110,15 @@ export function createOwnerAwayStore(input: OwnerAwayStoreInput): OwnerAwayStore
     }
   }
   const quiet = (path: string, body?: TeamProtocolV2Json) => void call(path, body).catch(() => undefined);
+  /**
+   * A change the reader made. While the host is away `call` sends nothing, so this throws: the screen
+   * must not close the dialog or say "answered" for a change the host never got.
+   */
+  async function change(path: string, body: TeamProtocolV2Json): Promise<void> {
+    if (!input.request() || !input.enabled() || unsupported())
+      throw new Error(currentText().t("webClient.error.connectionUnavailable"));
+    await call(path, body);
+  }
 
   /** Tells the host that the owner is here, unless it was told within `ACTIVE_MS`. Answers whether it asked. */
   function noteActive(): boolean {
@@ -162,10 +171,10 @@ export function createOwnerAwayStore(input: OwnerAwayStoreInput): OwnerAwayStore
     state,
     supported: () => input.enabled() && !unsupported() && state() !== null,
     setFocus: async (until) => {
-      await call(OWNER_AWAY_ROUTES.focus, { until });
+      await change(OWNER_AWAY_ROUTES.focus, { until });
     },
     saveSettings: async (settings) => {
-      await call(OWNER_AWAY_ROUTES.settings, {
+      await change(OWNER_AWAY_ROUTES.settings, {
         settings: {
           quietHours: { ...settings.quietHours },
           urgentMoneyUsd: settings.urgentMoneyUsd,
@@ -174,7 +183,7 @@ export function createOwnerAwayStore(input: OwnerAwayStoreInput): OwnerAwayStore
       });
     },
     answer: async (answer) => {
-      await call(OWNER_AWAY_ROUTES.answer, {
+      await change(OWNER_AWAY_ROUTES.answer, {
         id: answer.id,
         ...(answer.choice === undefined ? {} : { choice: answer.choice }),
         ...(answer.text === undefined ? {} : { text: answer.text }),

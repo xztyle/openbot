@@ -63,3 +63,32 @@ describe("createOwnerAwayStore", () => {
     dispose();
   });
 });
+
+function store(online: boolean) {
+  const sent: string[] = [];
+  const request: TeamApiRequest = async (_method, path) => {
+    sent.push(path);
+    throw new Error("not reached");
+  };
+  return createRoot((dispose) => ({
+    away: createOwnerAwayStore({ request: () => request, enabled: () => online, hostId: () => "host-1" }),
+    sent,
+    dispose,
+  }));
+}
+
+describe("createOwnerAwayStore while the host is away", () => {
+  it("refuses a change while the host is away, so the screen does not say it was saved", async () => {
+    const { away, sent, dispose } = store(false);
+    const settings = {
+      quietHours: { enabled: true, start: "22:00", end: "08:00", timeZone: null },
+      urgentMoneyUsd: 100,
+      heldDeliverAt: null,
+    };
+    await expect(away.saveSettings(settings)).rejects.toThrow("The server connection is not available.");
+    await expect(away.answer({ id: "held-1", decision: "approve" })).rejects.toThrow();
+    await expect(away.setFocus(null)).rejects.toThrow();
+    expect(sent).toEqual([]);
+    dispose();
+  });
+});

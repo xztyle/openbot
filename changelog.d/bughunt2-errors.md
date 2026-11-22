@@ -22,3 +22,6 @@
 - Mark all read in Unreads, Activity, a sidebar row's menu and the Mark all read shortcut now says
   when the host refuses. Before, nothing was said, Unreads emptied as if everything was read, and
   the shortcut's dialog closed as if it worked.
+- Quiet hours, focus and the "When you're back" answers no longer say they worked while the host is
+  away. Before, Save closed the dialog and an answer said "answered" although nothing reached the
+  host; now they say the change failed, and you can try again.

@@ -454,6 +454,13 @@ const CLAUDE_TOOL_STALL_MS = 60 * 60_000;
 /** How often a thread checks its turn against the stall limits. */
 const CLAUDE_STALL_CHECK_MS = 60_000;
 
+/**
+ * How long a stopped turn can run on before its query closes. The stall limit skips a stopped turn,
+ * so a CLI that does not end the turn after the stop otherwise held the agent's queue until a restart,
+ * while Stop and `interrupt_agent` reported success.
+ */
+const CLAUDE_STOP_CONFIRM_MS = 10_000;
+
 interface ClaudeStreamMessage {
   type: string;
   parent_tool_use_id?: string | null;
@@ -752,8 +759,18 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
         // A released thread has no turn to stop.
         if (this.#threads.isReleased(threadId)) return yield* providerSync(() => decoder({}));
         const runtime = yield* providerSync(() => this.#requireThread(threadId));
-        if (runtime.activeTurn) runtime.activeTurn.stopRequested = true;
-        yield* providerCall(() => runtime.query.interrupt());
+        const turn = runtime.activeTurn;
+        if (turn) turn.stopRequested = true;
+        const stopped = turn && turn.id === getString(params, "turnId") ? turn : null;
+        if (stopped) yield* Effect.forkIn(this.#closeIfStopIgnored(runtime, stopped), this.#scope);
+        yield* providerCall(() => runtime.query.interrupt()).pipe(
+          // The close of a CLI that did not answer the stop rejects the stop request, but the close ends the turn.
+          Effect.catch((failure) =>
+            stopped && (this.#threads.get(runtime.id) !== runtime || runtime.activeTurn !== stopped)
+              ? Effect.void
+              : Effect.fail(failure),
+          ),
+        );
         return yield* providerSync(() => decoder({}));
       }
       case "thread/compact/start":
@@ -1299,21 +1316,58 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
         silentForMinutes: Math.floor(silentFor / 60_000),
         openToolCalls: turn.toolCalls.size,
       });
-      for (const [toolCallId, name] of turn.toolCalls) this.#emitToolCall(runtime, toolCallId, name, true);
-      turn.toolCalls.clear();
-      yield* this.#completeTurn(runtime, "failed", sourceText("error.agent.turnStalled", { provider: "Claude" }));
-      // A session that is not saved cannot open again, so its thread goes with the process.
-      this.#threads.lose(runtime, runtime.config.persistSession);
-      runtime.input.close();
-      try {
-        runtime.query.close();
-      } catch {
-        // The process is already gone.
-      }
-      for (const change of stopClaudeSubagents(runtime.subagents, new Date().toISOString()))
-        this.#emitSubagents(runtime, change);
+      yield* this.#endTurnAndClose(
+        runtime,
+        turn,
+        "failed",
+        sourceText("error.agent.turnStalled", { provider: "Claude" }),
+      );
       return;
     }
+  });
+
+  /**
+   * Closes the query of a stopped turn that still runs after `CLAUDE_STOP_CONFIRM_MS`, and ends the
+   * turn as interrupted. The next turn opens the same session again.
+   */
+  readonly #closeIfStopIgnored = Effect.fn("ClaudeAgentClient.closeIfStopIgnored")(function* (
+    this: ClaudeAgentClient,
+    runtime: ThreadRuntime,
+    turn: ActiveTurn,
+  ) {
+    yield* Effect.sleep(CLAUDE_STOP_CONFIRM_MS);
+    if (runtime.activeTurn !== turn || this.#threads.get(runtime.id) !== runtime) return;
+    queryLogger.warn("Closed a Claude query that did not end its turn after a stop.", {
+      threadId: runtime.id,
+      waitedMs: CLAUDE_STOP_CONFIRM_MS,
+    });
+    yield* this.#endTurnAndClose(runtime, turn, "interrupted", null);
+  });
+
+  /**
+   * Ends a turn that the CLI does not end, and closes the process as after a crash: the next turn
+   * opens the same session again.
+   */
+  readonly #endTurnAndClose = Effect.fn("ClaudeAgentClient.endTurnAndClose")(function* (
+    this: ClaudeAgentClient,
+    runtime: ThreadRuntime,
+    turn: ActiveTurn,
+    status: "failed" | "interrupted",
+    message: string | null,
+  ) {
+    for (const [toolCallId, name] of turn.toolCalls) this.#emitToolCall(runtime, toolCallId, name, true);
+    turn.toolCalls.clear();
+    yield* this.#completeTurn(runtime, status, message);
+    // A session that is not saved cannot open again, so its thread goes with the process.
+    this.#threads.lose(runtime, runtime.config.persistSession);
+    runtime.input.close();
+    try {
+      runtime.query.close();
+    } catch {
+      // The process is already gone.
+    }
+    for (const change of stopClaudeSubagents(runtime.subagents, new Date().toISOString()))
+      this.#emitSubagents(runtime, change);
   });
 
   /** Runs a request that OpenBot answers. The stall limit waits for it and counts again from its answer. */

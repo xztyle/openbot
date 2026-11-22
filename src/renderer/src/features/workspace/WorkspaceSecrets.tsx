@@ -150,7 +150,7 @@ export function WorkspaceSecretsView() {
                 }}
                 onRevokeToken={async (id) => {
                   await ws.env.connectorAccess?.revokeToken(id);
-                  toast.success(t("workspace.connections.revoke"));
+                  toast.success(t("workspace.connections.revoked"));
                 }}
                 onSetSender={async (input) => {
                   await ws.env.connectorAccess?.setSender(input);

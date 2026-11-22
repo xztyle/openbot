@@ -497,6 +497,7 @@ export const messages = {
   "workspace.connections.link": "URL du connecteur",
   "workspace.connections.token": "Jeton d'accès",
   "workspace.connections.revoke": "Révoquer",
+  "workspace.connections.revoked": "Lien révoqué",
   "workspace.connections.revokeTitle": "Révoquer ce lien ?",
   "workspace.connections.revokeDescription": "L'appli qui l'utilise perd l'accès immédiatement.",
   "workspace.connections.neverUsed": "Créé {time} · pas encore utilisé",

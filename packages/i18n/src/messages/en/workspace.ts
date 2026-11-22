@@ -1043,6 +1043,7 @@ export const messages = defineMessages("workspace", {
   "workspace.connections.link": "Connector URL",
   "workspace.connections.token": "Access token",
   "workspace.connections.revoke": "Revoke",
+  "workspace.connections.revoked": "Link revoked",
   "workspace.connections.revokeTitle": "Revoke this link?",
   "workspace.connections.revokeDescription": "The app that uses it loses access at once.",
   "workspace.connections.neverUsed": "Made {time} · not used yet",

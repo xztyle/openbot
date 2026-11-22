@@ -503,6 +503,7 @@ export const messages = {
   "workspace.connections.link": "커넥터 URL",
   "workspace.connections.token": "액세스 토큰",
   "workspace.connections.revoke": "취소",
+  "workspace.connections.revoked": "링크를 취소했습니다",
   "workspace.connections.revokeTitle": "이 링크를 취소할까요?",
   "workspace.connections.revokeDescription": "이 링크를 쓰는 앱은 즉시 접근 권한을 잃습니다.",
   "workspace.connections.neverUsed": "{time}에 생성 · 아직 사용 안 함",

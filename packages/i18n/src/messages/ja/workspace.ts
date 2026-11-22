@@ -507,6 +507,7 @@ export const messages = {
   "workspace.connections.link": "コネクタ URL",
   "workspace.connections.token": "アクセストークン",
   "workspace.connections.revoke": "取り消す",
+  "workspace.connections.revoked": "リンクを無効にしました",
   "workspace.connections.revokeTitle": "このリンクを取り消しますか？",
   "workspace.connections.revokeDescription": "使っているアプリはすぐにアクセスできなくなります。",
   "workspace.connections.neverUsed": "{time} に作成 · 未使用",

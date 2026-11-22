@@ -512,6 +512,7 @@ export const messages = {
   "workspace.connections.link": "Bağlayıcı URL'si",
   "workspace.connections.token": "Erişim belirteci",
   "workspace.connections.revoke": "İptal et",
+  "workspace.connections.revoked": "Bağlantı iptal edildi",
   "workspace.connections.revokeTitle": "Bu bağlantı iptal edilsin mi?",
   "workspace.connections.revokeDescription": "Onu kullanan uygulama erişimi hemen kaybeder.",
   "workspace.connections.neverUsed": "{time} oluşturuldu · henüz kullanılmadı",

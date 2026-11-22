@@ -634,6 +634,7 @@ export const messages = {
   "workspace.connections.link": "URL коннектора",
   "workspace.connections.token": "Токен доступа",
   "workspace.connections.revoke": "Отозвать",
+  "workspace.connections.revoked": "Ссылка отозвана",
   "workspace.connections.revokeTitle": "Отозвать эту ссылку?",
   "workspace.connections.revokeDescription": "Приложение, которое её использует, сразу потеряет доступ.",
   "workspace.connections.neverUsed": "Создана {time} · ещё не использовалась",

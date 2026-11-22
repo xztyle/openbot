@@ -632,6 +632,7 @@ export const messages = {
   "workspace.connections.link": "Adres URL konektora",
   "workspace.connections.token": "Token dostępu",
   "workspace.connections.revoke": "Unieważnij",
+  "workspace.connections.revoked": "Link unieważniony",
   "workspace.connections.revokeTitle": "Unieważnić ten link?",
   "workspace.connections.revokeDescription": "Aplikacja, która go używa, natychmiast traci dostęp.",
   "workspace.connections.neverUsed": "Utworzono {time} · jeszcze nieużywany",

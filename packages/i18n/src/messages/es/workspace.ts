@@ -1032,6 +1032,7 @@ export const messages = {
   "workspace.connections.link": "URL del conector",
   "workspace.connections.token": "Token de acceso",
   "workspace.connections.revoke": "Revocar",
+  "workspace.connections.revoked": "Enlace revocado",
   "workspace.connections.revokeTitle": "¿Revocar este enlace?",
   "workspace.connections.revokeDescription": "La app que lo usa pierde el acceso al instante.",
   "workspace.connections.neverUsed": "Creado {time} · aún sin usar",

@@ -494,6 +494,7 @@ export const messages = {
   "workspace.connections.link": "连接器 URL",
   "workspace.connections.token": "访问令牌",
   "workspace.connections.revoke": "撤销",
+  "workspace.connections.revoked": "链接已撤销",
   "workspace.connections.revokeTitle": "撤销此链接？",
   "workspace.connections.revokeDescription": "使用它的应用会立即失去访问权限。",
   "workspace.connections.neverUsed": "创建于 {time} · 尚未使用",

@@ -28,3 +28,4 @@
 - Connections and Mailboxes: revoking an access link, changing a sender, or changing, removing or
   adding a mailbox while the host is away now says it failed. Before, the dialog closed and
   "revoked" or "saved" showed, although the host never got the change and the link still worked.
+- Connections: after you revoke an access link, the toast says "Link revoked" instead of "Revoke".

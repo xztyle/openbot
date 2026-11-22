@@ -1,3 +1,4 @@
+import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { channelKind, type DraftAttachment } from "@openbot/contracts/ipc";
 import { Button, ConfirmDialog, IconButton, X } from "@openbot/ui";
 import { AttachmentReferenceVisual } from "@openbot/ui/features/conversation/AttachmentReference";
@@ -151,18 +152,35 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
   const { people, mentionAgents, channelLinks, isChannel, emojiSearch } = useComposerSources(() => props.channelId);
   const toolbar = composerToolbar(props.threadRootId ? "thread" : "main");
 
-  /** `target` is the draft that asked for the files: a picker can close after the reader moved on. */
+  /** How many more files the draft takes: the host refuses a message with more than the limit. */
+  const room = (target = key()) => Math.max(0, INPUT_LIMITS.attachments - ws.draftFiles(target).length);
+
+  /**
+   * `target` is the draft that asked for the files: a picker can close after the reader moved on.
+   * Files over the limit go back to the host, and the box says why: a second pick, or one that
+   * ends after another, would otherwise make a message that the host refuses at Send.
+   */
   function addFiles(files: readonly DraftAttachment[], target = key()) {
-    if (!files.length) return;
-    setAttachments(
-      (current) => [...current, ...files.filter((file) => !current.some((item) => item.id === file.id))],
-      target,
-    );
+    const current = ws.draftFiles(target);
+    const fresh = files.filter((file) => !current.some((item) => item.id === file.id));
+    if (!fresh.length) return;
+    const kept = fresh.slice(0, room(target));
+    for (const file of fresh.slice(kept.length))
+      void ws.channels
+        .port()
+        .agent.discardDraftAttachment?.(file.id)
+        ?.catch(() => undefined);
+    if (kept.length < fresh.length) setError(t("composer.error.attachmentLimit", { limit: INPUT_LIMITS.attachments }));
+    if (kept.length) setAttachments([...current, ...kept], target);
   }
 
   async function attach() {
     lastComposer = id;
     setError(null);
+    if (room() === 0) {
+      setError(t("composer.error.attachmentLimit", { limit: INPUT_LIMITS.attachments }));
+      return;
+    }
     // The chooser opens in this call, inside the tap: nothing is awaited before it.
     const chosen = ws.channels.port().agent.chooseAttachments({ filter: "all" });
     await upload(key(), () => chosen);
@@ -193,7 +211,8 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     const importer = ws.channels.port().importAttachments;
     if (!importer) return undefined;
     return (files: File[]) => {
-      void upload(key(), () => importer(files));
+      const target = key();
+      void upload(target, () => importer(files, room(target)));
       return undefined;
     };
   };

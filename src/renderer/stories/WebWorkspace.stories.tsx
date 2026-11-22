@@ -169,6 +169,18 @@ async function mediaFile(id: string, variant: "inline" | "full") {
           mimeType: "image/png",
           base64: base64(await drawImage(1170, 2532, 280, "Landing", "image/png")),
         };
+  if (id === MEDIA_FILES.photo.id)
+    return inline
+      ? {
+          name: "preview.jpg",
+          mimeType: "image/jpeg",
+          base64: base64(await drawImage(768, 1024, 30, "Menú", "image/jpeg")),
+        }
+      : {
+          name: MEDIA_FILES.photo.name,
+          mimeType: "image/jpeg",
+          base64: base64(await drawImage(3024, 4032, 30, "Menú", "image/jpeg")),
+        };
   if (id === MEDIA_FILES.brief.id)
     return { name: MEDIA_FILES.brief.name, mimeType: "application/pdf", base64: btoa(SAMPLE_PDF) };
   return {

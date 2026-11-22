@@ -107,6 +107,7 @@ export const MEDIA_FILES = {
   phone: file("media-phone", "landing-mobile.png", "image/png", 2_310_000),
   brief: file("media-brief", "brief-campana.pdf", "application/pdf", 182_000),
   budget: file("media-budget", "presupuesto.csv", "text/csv", 1_200),
+  photo: file("media-photo", "foto del menú.jpeg", "image/jpeg", 5_400_000),
 } as const;
 
 /**
@@ -186,6 +187,7 @@ export function seeds(
         MEDIA_FILES.brief,
         MEDIA_FILES.budget,
       ]),
+      withFiles(message("general", 60 * 26 + 5, you, "Así quedó el menú:"), [MEDIA_FILES.photo]),
     );
   }
   const replies: ChannelMessage[] = [

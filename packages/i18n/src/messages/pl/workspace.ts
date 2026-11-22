@@ -852,6 +852,10 @@ export const messages = {
   "workspace.mailboxes.removeTitle": "Usunąć ten adres?",
   "workspace.mailboxes.removeDescription":
     "Poczta na {address} będzie od teraz odrzucana. Czat agenta zachowa otrzymane wiadomości.",
+  "workspace.mailboxes.replaceSecretTitle": "Zastąpić sekret poczty?",
+  "workspace.mailboxes.replaceSecretDescription":
+    "Sekret w Workerze przestaje działać od razu. Poczta jest odrzucana, dopóki nie wstawisz nowego do Workera.",
+  "workspace.mailboxes.replaceSecret": "Zastąp",
   "workspace.mailboxes.address": "Adres",
   "workspace.mailboxes.addressPlaceholder": "ventas@aprendivo.com",
   "workspace.mailboxes.agent": "Agent",

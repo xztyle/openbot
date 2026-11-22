@@ -658,6 +658,10 @@ export const messages = {
   "workspace.mailboxes.remove": "删除地址",
   "workspace.mailboxes.removeTitle": "删除此地址？",
   "workspace.mailboxes.removeDescription": "从现在起发到 {address} 的邮件会被退回。智能体聊天中保留已收到的邮件。",
+  "workspace.mailboxes.replaceSecretTitle": "替换邮件密钥？",
+  "workspace.mailboxes.replaceSecretDescription":
+    "Worker 中的密钥会立即失效。在你把新密钥放进 Worker 之前，邮件会被拒收。",
+  "workspace.mailboxes.replaceSecret": "替换",
   "workspace.mailboxes.address": "地址",
   "workspace.mailboxes.addressPlaceholder": "ventas@aprendivo.com",
   "workspace.mailboxes.agent": "智能体",

@@ -669,6 +669,10 @@ export const messages = {
   "workspace.mailboxes.removeTitle": "Diese Adresse entfernen?",
   "workspace.mailboxes.removeDescription":
     "Mails an {address} werden ab jetzt abgewiesen. Der Chat des Agenten behält die erhaltenen Mails.",
+  "workspace.mailboxes.replaceSecretTitle": "Mail-Secret ersetzen?",
+  "workspace.mailboxes.replaceSecretDescription":
+    "Das Secret im Worker funktioniert ab sofort nicht mehr. Mails werden abgelehnt, bis das neue im Worker steht.",
+  "workspace.mailboxes.replaceSecret": "Ersetzen",
   "workspace.mailboxes.address": "Adresse",
   "workspace.mailboxes.addressPlaceholder": "ventas@aprendivo.com",
   "workspace.mailboxes.agent": "Agent",

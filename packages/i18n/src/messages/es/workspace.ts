@@ -1203,6 +1203,10 @@ export const messages = {
   "workspace.mailboxes.removeTitle": "¿Quitar esta dirección?",
   "workspace.mailboxes.removeDescription":
     "El correo a {address} rebotará desde ahora. El chat del agente conserva el correo recibido.",
+  "workspace.mailboxes.replaceSecretTitle": "¿Reemplazar el secreto de correo?",
+  "workspace.mailboxes.replaceSecretDescription":
+    "El secreto del Worker deja de funcionar ya. El correo se rechaza hasta que pongas el nuevo en el Worker.",
+  "workspace.mailboxes.replaceSecret": "Reemplazar",
   "workspace.mailboxes.address": "Dirección",
   "workspace.mailboxes.addressPlaceholder": "ventas@aprendivo.com",
   "workspace.mailboxes.agent": "Agente",

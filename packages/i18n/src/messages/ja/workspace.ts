@@ -507,7 +507,7 @@ export const messages = {
   "workspace.connections.link": "コネクタ URL",
   "workspace.connections.token": "アクセストークン",
   "workspace.connections.revoke": "取り消す",
-  "workspace.connections.revoked": "リンクを無効にしました",
+  "workspace.connections.revoked": "リンクを取り消しました",
   "workspace.connections.revokeTitle": "このリンクを取り消しますか？",
   "workspace.connections.revokeDescription": "使っているアプリはすぐにアクセスできなくなります。",
   "workspace.connections.neverUsed": "{time} に作成 · 未使用",
@@ -676,6 +676,10 @@ export const messages = {
   "workspace.mailboxes.removeTitle": "このアドレスを削除しますか？",
   "workspace.mailboxes.removeDescription":
     "今後 {address} へのメールは差し戻されます。エージェントのチャットには受け取ったメールが残ります。",
+  "workspace.mailboxes.replaceSecretTitle": "メールシークレットを置き換えますか？",
+  "workspace.mailboxes.replaceSecretDescription":
+    "Worker のシークレットはすぐに使えなくなります。新しいものを Worker に設定するまでメールは拒否されます。",
+  "workspace.mailboxes.replaceSecret": "置き換える",
   "workspace.mailboxes.address": "アドレス",
   "workspace.mailboxes.addressPlaceholder": "ventas@aprendivo.com",
   "workspace.mailboxes.agent": "エージェント",

@@ -854,6 +854,10 @@ export const messages = {
   "workspace.mailboxes.removeTitle": "Удалить этот адрес?",
   "workspace.mailboxes.removeDescription":
     "Письма на {address} теперь будут возвращаться. В чате агента останутся полученные письма.",
+  "workspace.mailboxes.replaceSecretTitle": "Заменить секрет почты?",
+  "workspace.mailboxes.replaceSecretDescription":
+    "Секрет в Worker сразу перестаёт работать. Почта отклоняется, пока вы не добавите новый в Worker.",
+  "workspace.mailboxes.replaceSecret": "Заменить",
   "workspace.mailboxes.address": "Адрес",
   "workspace.mailboxes.addressPlaceholder": "ventas@aprendivo.com",
   "workspace.mailboxes.agent": "Агент",

@@ -59,6 +59,8 @@ export function MailboxesSection(props: MailboxesSectionProps): JSX.Element {
   const [draft, setDraft] = createSignal<Draft | null>(null);
   const [removing, setRemoving] = createSignal<AgentMailbox | null>(null);
   const [removeError, setRemoveError] = createSignal<string | null>(null);
+  /** Set while the owner confirms a new mail secret: the one the Worker holds stops working at once. */
+  const [replacingSecret, setReplacingSecret] = createSignal(false);
   const [workerOpen, setWorkerOpen] = createSignal(false);
   const [workerUrl, setWorkerUrl] = createSignal("");
   const [secret, setSecret] = createSignal<string | null>(null);
@@ -79,6 +81,11 @@ export function MailboxesSection(props: MailboxesSectionProps): JSX.Element {
       setBusy(false);
     }
   }
+
+  const newSecret = () =>
+    run(async () => {
+      setSecret(await props.onNewSecret());
+    });
 
   return (
     <>
@@ -138,11 +145,10 @@ export function MailboxesSection(props: MailboxesSectionProps): JSX.Element {
         </WorkspaceList>
         <PaneHeaderAction
           label={t("workspace.mailboxes.newSecret")}
-          onClick={() =>
-            void run(async () => {
-              setSecret(await props.onNewSecret());
-            })
-          }
+          onClick={() => {
+            if (props.state.hasSecret) setReplacingSecret(true);
+            else void newSecret();
+          }}
         />
         <Show when={mailboxes().length > 0} fallback={<p class="ws-muted">{t("workspace.mailboxes.empty")}</p>}>
           <WorkspaceList>
@@ -333,13 +339,25 @@ export function MailboxesSection(props: MailboxesSectionProps): JSX.Element {
         onCancel={() => setRemoving(null)}
         onConfirm={async () => {
           const mailbox = removing();
-          // A refused removal keeps the question open with the reason: the address still gets mail.
+          // A refused remove keeps the dialog open with the reason: mail to the address still arrives.
           try {
             if (mailbox) await props.onRemove(mailbox.id);
             setRemoving(null);
           } catch (cause) {
             setRemoveError(errorMessage(cause, t("workspace.mailboxes.failed")));
           }
+        }}
+      />
+      <ConfirmDialog
+        open={replacingSecret()}
+        tone="destructive"
+        title={t("workspace.mailboxes.replaceSecretTitle")}
+        description={t("workspace.mailboxes.replaceSecretDescription")}
+        confirmLabel={t("workspace.mailboxes.replaceSecret")}
+        onCancel={() => setReplacingSecret(false)}
+        onConfirm={async () => {
+          setReplacingSecret(false);
+          await newSecret();
         }}
       />
     </>

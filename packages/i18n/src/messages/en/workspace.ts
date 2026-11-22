@@ -1216,6 +1216,10 @@ export const messages = defineMessages("workspace", {
   "workspace.mailboxes.removeTitle": "Remove this address?",
   "workspace.mailboxes.removeDescription":
     "Mail to {address} bounces from now on. The agent's chat keeps the mail it got.",
+  "workspace.mailboxes.replaceSecretTitle": "Replace the mail secret?",
+  "workspace.mailboxes.replaceSecretDescription":
+    "The Worker's secret stops working now. Mail is refused until you put the new one in the Worker.",
+  "workspace.mailboxes.replaceSecret": "Replace",
   "workspace.mailboxes.address": "Address",
   "workspace.mailboxes.addressPlaceholder": "ventas@aprendivo.com",
   "workspace.mailboxes.agent": "Agent",

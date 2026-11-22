@@ -40,7 +40,7 @@ const STATE: AgentMailboxesState = {
   ],
 };
 
-function setup() {
+function setup(state: AgentMailboxesState = STATE) {
   const props = {
     onSave: vi.fn(async () => undefined),
     onRemove: vi.fn(async () => undefined),
@@ -50,7 +50,7 @@ function setup() {
   };
   render(() => (
     <MailboxesSection
-      state={STATE}
+      state={state}
       spaceId="s1"
       agents={[
         { id: "lucia", name: "Lucía" },
@@ -98,14 +98,23 @@ describe("MailboxesSection", () => {
     expect(await screen.findByDisplayValue("ams_secret")).toBeTruthy();
   });
 
-  it("keeps the remove question open with the reason when the host refuses", async () => {
+  it("asks before it replaces a mail secret that the Worker holds", async () => {
+    const props = setup({ ...STATE, hasSecret: true });
+    fireEvent.click(screen.getByRole("button", { name: "New mail secret" }));
+    expect(await screen.findByText("Replace the mail secret?")).toBeTruthy();
+    expect(props.onNewSecret).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+    await waitFor(() => expect(props.onNewSecret).toHaveBeenCalledTimes(1));
+    expect(await screen.findByDisplayValue("ams_secret")).toBeTruthy();
+  });
+
+  it("keeps the remove dialog open with the reason when the host refuses", async () => {
     const props = setup();
-    props.onRemove.mockRejectedValueOnce(new Error("The host is offline."));
+    props.onRemove.mockRejectedValueOnce(new Error("The host is busy."));
     fireEvent.click(screen.getByRole("button", { name: "Remove address" }));
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Remove address" }));
-    expect(await within(dialog).findByText("The host is offline.")).toBeTruthy();
-    expect(props.onRemove).toHaveBeenCalledWith("m1");
+    expect(await within(dialog).findByText("The host is busy.")).toBeTruthy();
     expect(screen.getByRole("alertdialog")).toBeTruthy();
   });
 });

@@ -681,6 +681,10 @@ export const messages = {
   "workspace.mailboxes.removeTitle": "Bu adres kaldırılsın mı?",
   "workspace.mailboxes.removeDescription":
     "{address} adresine gelen e-postalar artık geri döner. Ajanın sohbeti aldığı e-postaları tutar.",
+  "workspace.mailboxes.replaceSecretTitle": "Posta sırrı değiştirilsin mi?",
+  "workspace.mailboxes.replaceSecretDescription":
+    "Worker'daki sır hemen çalışmayı bırakır. Yenisini Worker'a koyana kadar postalar reddedilir.",
+  "workspace.mailboxes.replaceSecret": "Değiştir",
   "workspace.mailboxes.address": "Adres",
   "workspace.mailboxes.addressPlaceholder": "ventas@aprendivo.com",
   "workspace.mailboxes.agent": "Ajan",

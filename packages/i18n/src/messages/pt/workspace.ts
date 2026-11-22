@@ -681,6 +681,10 @@ export const messages = {
   "workspace.mailboxes.removeTitle": "Remover este endereço?",
   "workspace.mailboxes.removeDescription":
     "Os e-mails para {address} serão devolvidos a partir de agora. O chat do agente mantém os e-mails recebidos.",
+  "workspace.mailboxes.replaceSecretTitle": "Substituir o segredo de e-mail?",
+  "workspace.mailboxes.replaceSecretDescription":
+    "O segredo do Worker deixa de funcionar agora. Os e-mails são recusados até você colocar o novo no Worker.",
+  "workspace.mailboxes.replaceSecret": "Substituir",
   "workspace.mailboxes.address": "Endereço",
   "workspace.mailboxes.addressPlaceholder": "ventas@aprendivo.com",
   "workspace.mailboxes.agent": "Agente",

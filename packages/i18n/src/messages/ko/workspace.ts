@@ -671,6 +671,10 @@ export const messages = {
   "workspace.mailboxes.removeTitle": "이 주소를 삭제할까요?",
   "workspace.mailboxes.removeDescription":
     "이제부터 {address}로 온 메일은 반송됩니다. 에이전트 채팅에는 받은 메일이 남습니다.",
+  "workspace.mailboxes.replaceSecretTitle": "메일 시크릿을 바꿀까요?",
+  "workspace.mailboxes.replaceSecretDescription":
+    "Worker의 시크릿은 지금 바로 작동하지 않습니다. 새 시크릿을 Worker에 넣을 때까지 메일이 거부됩니다.",
+  "workspace.mailboxes.replaceSecret": "바꾸기",
   "workspace.mailboxes.address": "주소",
   "workspace.mailboxes.addressPlaceholder": "ventas@aprendivo.com",
   "workspace.mailboxes.agent": "에이전트",

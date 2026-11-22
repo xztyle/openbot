@@ -1,5 +1,6 @@
 import type { EfficiencyCalls } from "../efficiency/efficiency-port";
 import type { PortfolioCalls } from "../portfolio/portfolio-port";
+import type { ChatCardCalls } from "../portfolio/WorkspaceChatCard";
 /*
  * The workspace controller: which conversation or view is open, which right panel shows, the open
  * thread, the drafts, the activity feed, and every workspace command. The desktop and the browser
@@ -262,6 +263,11 @@ export interface WorkspaceEnvironment {
   efficiency?: (() => EfficiencyCalls | undefined) | undefined;
   /** Test suites, templates, value, the reality check and chat cards of a fork host, for an owner or admin. */
   portfolio?: (() => PortfolioCalls | undefined) | undefined;
+  /**
+   * The chat cards of the host where the shell has no portfolio calls: the desktop reads them through
+   * its main process. Absent, a card shows from `portfolio`, or as the message's text.
+   */
+  chatCards?: (() => ChatCardCalls | undefined) | undefined;
   /** The trust and control calls of the host, for an owner or admin. Absent, there is no Trust view. */
   trust?: (() => TrustCalls | undefined) | undefined;
   /** Opens Server settings > Storage, where the cleanup rules are. */

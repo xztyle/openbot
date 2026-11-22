@@ -21,6 +21,7 @@ import { useChannels } from "../channels/channels-context";
 import { hostMessagingApi } from "../connectors/host-messaging-port";
 import { localMessagingApi } from "../connectors/messaging-connector";
 import { useConversation } from "../conversation/conversation-context";
+import { desktopChatCardCalls } from "../portfolio/WorkspaceChatCard";
 import { WorkspaceRoutineFlows } from "../routine-flows/WorkspaceRoutineFlows";
 import { serverRoleCanAdminister } from "../servers/server-capabilities";
 import { useServerScope } from "../servers/server-scope";
@@ -179,6 +180,7 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
       });
     return items;
   });
+  const chatCardCalls = desktopChatCardCalls(() => activeServerId());
   const controller = createWorkspaceController({
     channels,
     agents: agentList,
@@ -255,6 +257,8 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     localHost: local,
     openBrowserTab: (tabId) => activateBrowserTab(tabId),
     secrets: () => local() || serverRoleCanAdminister(activeServer()),
+    // Owners and admins answer cards, as on the host; a joined server without the routes has none.
+    chatCards: () => (local() || serverRoleCanAdminister(activeServer()) ? chatCardCalls : undefined),
     storageHygiene: () => {
       const server = activeServer();
       return serverHasStorageHygiene(server) ? desktopStorageHygieneCalls(() => server.id) : undefined;

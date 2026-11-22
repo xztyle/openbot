@@ -14,6 +14,7 @@ import type { AgentSkillCalls } from "../../skills-port";
 import type { AgentTemplatePublishCalls } from "../agent-templates/agent-templates-port";
 import type { BrowserProfileCalls } from "../browser/browser-profiles-port";
 import type { EfficiencyCalls } from "../efficiency/efficiency-port";
+import type { ChatCardCalls } from "../portfolio/WorkspaceChatCard";
 import type { AgentChannelDefaultsApi } from "./AgentChannelDefaults";
 import type { SharedTableCalls } from "./conversation-port";
 import type { ConversationProps } from "./conversation-types";
@@ -110,6 +111,8 @@ export interface ConversationRuntime {
         workspaceSettings?: AgentChannelDefaultsApi | undefined;
         /** The sleep, review and playbook calls of the host (`fork-host-v1`). */
         efficiency?: EfficiencyCalls | undefined;
+        /** The chat cards of the host (`fork-host-v1`), which an agent posts in its own chat. */
+        chatCards?: ChatCardCalls | undefined;
         sessionSettings?:
           | {
               read(agentId: string): Promise<AgentSessionSettings>;

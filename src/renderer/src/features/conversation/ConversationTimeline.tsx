@@ -64,6 +64,7 @@ import {
 import { useShowAgentSteps } from "../../agent-steps-preference";
 import { planItems, planTitle } from "../../app-message-projection";
 import { currentDevicePlatform, deviceSendShortcut } from "../../send-shortcut-preference";
+import { type ChatCardCalls, chatCardOf, desktopChatCardCalls, HostChatCard } from "../portfolio/WorkspaceChatCard";
 import { remoteRoutineRecovery, serverSupportsCapability } from "../servers/server-capabilities";
 import { speechModelReady } from "../speech/speech-model";
 import { recordingGone, speechReading, spokenReply } from "../speech/speech-playback";
@@ -378,6 +379,10 @@ export function ConversationTimeline() {
   );
 
   const runtime = conversationRuntime(props);
+  /** The cards of the chat's host (`[card:<id>]`): the client's own calls, or the desktop's main process. */
+  const chatCardCalls: ChatCardCalls | undefined = props.runtime
+    ? props.runtime.admin?.chatCards
+    : desktopChatCardCalls(() => props.server?.id ?? "local");
   /** The agent that asks in a card: in a channel, the working agent whose card shows. */
   const interactionAgentName = () => (channel ? channel.interactionAgentName() : props.agent?.name);
   /**
@@ -1524,7 +1529,7 @@ export function ConversationTimeline() {
                             workspaceRow(rowLayout)
                           ) : (
                             <ChatMessageRow
-                              message={message() ?? initialMessage}
+                              message={withoutCardMarker(message() ?? initialMessage)}
                               author={author()}
                               showAuthor={
                                 author().kind === "member" || (channel && author().kind === "agent")
@@ -1608,6 +1613,9 @@ export function ConversationTimeline() {
                                     )
                               }
                             >
+                              <Show when={chatCardOf((message() ?? initialMessage).body)}>
+                                {(card) => <HostChatCard cardId={card().cardId} calls={chatCardCalls} />}
+                              </Show>
                               {voice()}
                             </ChatMessageRow>
                           )
@@ -1891,3 +1899,9 @@ const QuestionPromptBubble = lazy(() =>
   import("@openbot/ui/components/QuestionPromptBubble").then((module) => ({ default: module.QuestionPromptBubble })),
 );
 const UiBlockPrompt = lazy(() => import("./UiBlockPrompt").then((module) => ({ default: module.UiBlockPrompt })));
+
+/** A message whose text carries a card's marker shows the card under the text, not the marker. */
+function withoutCardMarker<T extends { body: string }>(message: T): T {
+  const card = chatCardOf(message.body);
+  return card ? { ...message, body: card.text } : message;
+}

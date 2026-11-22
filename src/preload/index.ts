@@ -108,6 +108,7 @@ import {
   decodeWebhookSecret,
   decodeWebhookTestResult,
 } from "@openbot/contracts/ipc-events";
+import { decodeChatCardFromMain, decodeChatCardsFromMain } from "@openbot/contracts/portfolio";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import {
   decodeAccountUsageFromMain,
@@ -1371,6 +1372,11 @@ const openbotApi: OpenBotDesktopApi = {
     apply: decodeStorageHygieneState,
     getSettings: decodeStorageHygieneSettings,
     setSettings: decodeStorageHygieneSettings,
+  }),
+  // The cards were checked in main, from the local service or a joined server.
+  chatCards: bridgeGroup(IPC_ENDPOINTS.chatCards, {
+    get: decodeChatCardsFromMain,
+    answer: decodeChatCardFromMain,
   }),
   remoteDesktop: bridgeGroup(IPC_ENDPOINTS.remoteDesktop, {
     checkSetup: decodeRemoteDesktopSetupFromMain,

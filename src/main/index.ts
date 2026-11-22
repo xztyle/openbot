@@ -63,6 +63,7 @@ import { browserDockIpcHandlers } from "./ipc/browser-dock-handlers";
 import { browserIpcHandlers } from "./ipc/browser-handlers";
 import { channelMemoryIpcHandlers } from "./ipc/channel-memory-handlers";
 import { channelRoutineIpcHandlers } from "./ipc/channel-routine-handlers";
+import { chatCardIpcHandlers } from "./ipc/chat-card-handlers";
 import { computerUseIpcHandlers } from "./ipc/computer-use-handlers";
 import { customAgentIpcHandlers } from "./ipc/custom-agent-handlers";
 import { customProviderIpcHandlers } from "./ipc/custom-provider-handlers";
@@ -802,6 +803,14 @@ function registerIpcHandlers({
       translate: language.translate,
       agents: () => service.listAgents(),
       openPath: (path) => shell.openPath(path),
+    }),
+    ...chatCardIpcHandlers({
+      portfolio: () => service.portfolio ?? undefined,
+      remoteServers,
+      localPerson: () => {
+        const actor = host.channelActor();
+        return { id: actor.id, name: actor.name };
+      },
     }),
     ...storageHygieneIpcHandlers({
       storageHygiene,

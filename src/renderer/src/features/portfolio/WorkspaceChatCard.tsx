@@ -1,4 +1,4 @@
-import type { ChatCard, ChatCardAnswer } from "@openbot/contracts/portfolio";
+import { CHAT_CARD_MARKER, type ChatCard, type ChatCardAnswer } from "@openbot/contracts/portfolio";
 import { ChatCardBlock } from "@openbot/ui/features/conversation/ui-blocks/ChatCardBlock";
 import { useText } from "@openbot/ui/text";
 import { createSignal, onSettled, Show } from "solid-js";
@@ -9,9 +9,26 @@ import type { PortfolioCalls } from "./portfolio-port";
  * The reads of the cards that the open transcript shows, by host: the ids that rows ask for in one
  * task go to the host in one call.
  */
-const pending = new WeakMap<PortfolioCalls, { ids: Set<string>; answer: Promise<Map<string, ChatCard>> }>();
+const pending = new WeakMap<ChatCardCalls, { ids: Set<string>; answer: Promise<Map<string, ChatCard>> }>();
 
-function readCard(calls: PortfolioCalls, cardId: string): Promise<ChatCard | null> {
+/** What a card needs of its host: read the cards and answer one. */
+export type ChatCardCalls = Pick<PortfolioCalls, "cards" | "answerCard">;
+
+/** The cards of a server through the desktop's main process: the local host or a joined server. */
+export function desktopChatCardCalls(serverId: () => string): ChatCardCalls {
+  return {
+    cards: (cardIds) => window.openbot.chatCards.get({ cardIds: [...cardIds] }, serverId()),
+    answerCard: (cardId, answer) => window.openbot.chatCards.answer({ cardId, answer }, serverId()),
+  };
+}
+
+/** The card's id in a message's text, and the text without the marker, which the card replaces. */
+export function chatCardOf(text: string): { cardId: string; text: string } | null {
+  const match = CHAT_CARD_MARKER.exec(text);
+  return match?.[1] ? { cardId: match[1], text: text.replace(CHAT_CARD_MARKER, "").trimEnd() } : null;
+}
+
+function readCard(calls: ChatCardCalls, cardId: string): Promise<ChatCard | null> {
   let batch = pending.get(calls);
   if (!batch) {
     const ids = new Set<string>();
@@ -34,11 +51,16 @@ function readCard(calls: PortfolioCalls, cardId: string): Promise<ChatCard | nul
  */
 export function WorkspaceChatCard(props: { cardId: string }) {
   const ws = useWorkspace();
+  return <HostChatCard cardId={props.cardId} calls={ws.env.chatCards?.() ?? ws.env.portfolio?.()} />;
+}
+
+/** The card of a chat message from the calls of its host, in a channel or an agent's own chat. */
+export function HostChatCard(props: { cardId: string; calls: ChatCardCalls | undefined }) {
   const { t, errorMessage } = useText();
   const [card, setCard] = createSignal<ChatCard | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | undefined>();
-  const calls = () => ws.env.portfolio?.();
+  const calls = () => props.calls;
 
   onSettled(() => {
     const api = calls();

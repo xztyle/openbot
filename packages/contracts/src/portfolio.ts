@@ -934,6 +934,32 @@ export function parseChatCardIds(value: unknown): { cardIds: string[] } {
   return { cardIds };
 }
 
+/** A card that main read from the host or the local service, checked again on its way to the window. */
+export function decodeChatCardFromMain(value: unknown): ChatCard {
+  if (!isDynamicRecord(value) || !isString(value.id) || !isString(value.agentId) || !isString(value.createdAt))
+    fail("card");
+  if (!isOneOf(["open", "answered", "closed"] as const, value.status)) fail("card");
+  const spec = parseChatCardSpec(value.spec);
+  return {
+    id: value.id,
+    agentId: value.agentId,
+    channelId: isString(value.channelId) ? value.channelId : null,
+    spec,
+    status: value.status,
+    ...(isDynamicRecord(value.answer) ? { answer: parseChatCardAnswer(spec, value.answer) } : {}),
+    ...(isDynamicRecord(value.answeredBy) && isString(value.answeredBy.id) && isString(value.answeredBy.name)
+      ? { answeredBy: { id: value.answeredBy.id, name: value.answeredBy.name } }
+      : {}),
+    ...(isString(value.answeredAt) ? { answeredAt: value.answeredAt } : {}),
+    createdAt: value.createdAt,
+  };
+}
+
+export function decodeChatCardsFromMain(value: unknown): ChatCard[] {
+  if (!Array.isArray(value)) fail("cards");
+  return value.map(decodeChatCardFromMain);
+}
+
 export function parseAnswerChatCardInput(value: unknown): { cardId: string; answer: unknown } {
   if (!isDynamicRecord(value) || !isString(value.cardId) || !/^[0-9a-f-]{36}$/u.test(value.cardId)) fail("card");
   if (!isDynamicRecord(value.answer)) fail("card answer");

@@ -11,6 +11,11 @@
   Notifications, and Notifications opens the quiet hours. An address can name a group, such as
   `?page=server-settings&section=connections`.
 
+- The desktop app draws an agent's interactive cards (choices, approvals, forms and tables) in
+  channels and in the agent's own chat, and the owner answers them with taps there, on this
+  computer and on a joined server. The web client now draws a card in the agent's own chat too,
+  where it showed the card's text and its `[card:…]` marker.
+
 ### Fixed
 
 - An agent DM's header stays on one row on a computer. "Why is this slow?" sat on a row of its own

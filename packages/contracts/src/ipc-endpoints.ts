@@ -603,6 +603,7 @@ import type {
 } from "./ipc-workspace-threads";
 import type { LicenseCheckoutRequest, LicenseRenewalRequest, LicenseState, LicenseUsersRequest } from "./license";
 import type { AccountSession, MobileConnectedDevice, MobileConnectLink, MobileConnectTicket } from "./mobile-connect";
+import type { ChatCard } from "./portfolio";
 
 declare const payloadType: unique symbol;
 declare const resultType: unique symbol;
@@ -1888,6 +1889,13 @@ export const IPC_ENDPOINTS = {
       "storage-hygiene:set-settings",
     ),
   },
+  // The interactive cards that agents post in a chat (`[card:<id>]`), from the local portfolio
+  // service or a joined server's portfolio-v1. Owners and admins only, as on the host.
+  chatCards: {
+    get: scopedRequest<{ cardIds: string[] }, ChatCard[], "required">()("chat-cards:get"),
+    // The service checks the answer against the card's own fields.
+    answer: scopedRequest<{ cardId: string; answer: unknown }, ChatCard, "required">()("chat-cards:answer"),
+  },
   // Bound against the agent import service, which holds the staged archives. A remote server is
   // reached with `agent-import-v1`; main still opens the file dialog and sends the file.
   agentImport: {
@@ -2042,6 +2050,7 @@ export const IPC_GROUP_PATHS = {
   mcpServers: "agent",
   storage: "storage",
   storageHygiene: "storageHygiene",
+  chatCards: "chatCards",
   agentImport: "agentImport",
   instanceTransfer: "instanceTransfer",
   plugins: "plugins",

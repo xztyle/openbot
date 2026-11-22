@@ -3209,6 +3209,13 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     },
     storage: createMockStorage(),
     storageHygiene: createMockStorageHygiene(),
+    // The preview has no agents that post cards: a card stays its message's text.
+    chatCards: {
+      get: async () => [],
+      answer: async () => {
+        throw new Error("The preview has no cards.");
+      },
+    },
     agentImport: {
       choose: async () => clone(AGENT_IMPORT_PREVIEW),
       apply: async ({ token, keys, channelKeys }) => {

@@ -166,6 +166,7 @@ export function ConversationTimeline() {
     browserTakeoverPreview,
     browserTakeoverResolution,
     browserTakeoverTab,
+    browserTakeoverLiveTab,
     channel,
     chatSearchMatches,
     chatSearchOpen,
@@ -1801,6 +1802,7 @@ export function ConversationTimeline() {
                     serverSupportsCapability(props.server, "browser-view")
                       ? {
                           runtime: props.browserRuntime ?? conversationPort().browser,
+                          tabId: browserTakeoverLiveTab()?.id,
                           clipboard: serverSupportsCapability(props.server, "browser-view-clipboard"),
                           online: props.server.state === "online" && props.browserEnabled !== false,
                         }

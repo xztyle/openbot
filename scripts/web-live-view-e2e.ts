@@ -608,6 +608,45 @@ async function phone(browser: Browser, origin: string): Promise<void> {
   await tabContext.close();
 }
 
+/**
+ * A click through the live view opens a sign-in popup on the host: the view shows the popup, a click
+ * in it answers the opener and closes it, and the view goes back to the opener.
+ */
+async function signInThroughPopup(page: Page, host: TabHost, tab: Page): Promise<void> {
+  const opened = tab.context().waitForEvent("page");
+  await tab.evaluate(() => window.scrollTo(0, 0));
+  const before = host.starts;
+  await waitUntil(() => host.inputs.filter((input) => input.type === "ack").length > 0, "Frames are drawn");
+  // The click goes through the live view, as the person's click on "Continue with Facebook" did.
+  const oauth = await onScreen(page, tab, "#oauth");
+  await page.mouse.click(oauth.x, oauth.y);
+  const popup = await opened;
+  await popup.waitForLoadState();
+  host.pages.set(POPUP_ID, popup);
+  const closed = popup.waitForEvent("close");
+  // The host lists the new tab and keeps its own active tab on the opener: the view follows the
+  // popup by itself, as main's active tab can belong to another agent's work.
+  await page.evaluate((id) => window.liveViewBridge?.addTab(id, "Sign in to Example"), POPUP_ID);
+  await waitUntil(() => host.current === POPUP_ID && host.starts > before, "The view shows the popup");
+  await viewing(page, host);
+  await page.waitForTimeout(300);
+  await shot(page, "desktop-popup");
+  const authorize = await onScreen(page, popup, "#authorize");
+  await page.mouse.click(authorize.x, authorize.y);
+  await closed;
+  await page.evaluate((id) => window.liveViewBridge?.removeTab(id), POPUP_ID);
+  host.pages.delete(POPUP_ID);
+  await waitUntil(() => host.current === TAB_ID, "The view goes back to the opener");
+  await waitForTab(
+    tab,
+    (expected) => document.body.dataset.auth === expected,
+    () => document.body.dataset.auth,
+    "ok",
+    "The popup answered its opener",
+  );
+  await viewing(page, host);
+}
+
 async function desktop(browser: Browser, origin: string): Promise<void> {
   const viewport = "desktop";
   const { page, host, tab, context, tabContext } = await open(browser, origin, viewport);
@@ -636,6 +675,24 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
     await card().scrollIntoViewIfNeeded();
     await shot(page, "desktop-live");
   });
+
+  await step(
+    page,
+    viewport,
+    "a sign-in popup opens in the card's view, and the card goes back when it closes",
+    async () => {
+      await signInThroughPopup(page, host, tab);
+      assert.equal(
+        await card()
+          .getByRole("img", { name: english("browser.liveView.label") })
+          .count(),
+        1,
+        "The card still shows the page live.",
+      );
+      // The full view's popup step below checks the answer again.
+      await tab.evaluate(() => delete document.body.dataset.auth);
+    },
+  );
 
   await step(page, viewport, "a click on a field and the keys type into the page", async () => {
     const field = await onScreen(page, tab, "#name");
@@ -689,40 +746,9 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
     await shot(page, "desktop-expanded");
   });
 
-  await step(page, viewport, "a sign-in popup opens in the view, and the view goes back when it closes", async () => {
-    const opened = tab.context().waitForEvent("page");
-    await tab.evaluate(() => window.scrollTo(0, 0));
-    const before = host.starts;
-    await waitUntil(() => host.inputs.filter((input) => input.type === "ack").length > 0, "Frames are drawn");
-    // The click goes through the live view, as the person's click on "Continue with Facebook" did.
-    const oauth = await onScreen(page, tab, "#oauth");
-    await page.mouse.click(oauth.x, oauth.y);
-    const popup = await opened;
-    await popup.waitForLoadState();
-    host.pages.set(POPUP_ID, popup);
-    const closed = popup.waitForEvent("close");
-    // The host lists the new tab and keeps its own active tab on the opener: the view follows the
-    // popup by itself, as main's active tab can belong to another agent's work.
-    await page.evaluate((id) => window.liveViewBridge?.addTab(id, "Sign in to Example"), POPUP_ID);
-    await waitUntil(() => host.current === POPUP_ID && host.starts > before, "The view shows the popup");
-    await viewing(page, host);
-    await page.waitForTimeout(300);
-    await shot(page, "desktop-popup");
-    const authorize = await onScreen(page, popup, "#authorize");
-    await page.mouse.click(authorize.x, authorize.y);
-    await closed;
-    await page.evaluate((id) => window.liveViewBridge?.removeTab(id), POPUP_ID);
-    host.pages.delete(POPUP_ID);
-    await waitUntil(() => host.current === TAB_ID, "The view goes back to the opener");
-    await waitForTab(
-      tab,
-      (expected) => document.body.dataset.auth === expected,
-      () => document.body.dataset.auth,
-      "ok",
-      "The popup answered its opener",
-    );
-    await viewing(page, host);
-  });
+  await step(page, viewport, "a sign-in popup opens in the view, and the view goes back when it closes", () =>
+    signInThroughPopup(page, host, tab),
+  );
 
   await step(page, viewport, "Hand back ends the takeover once", async () => {
     await page.keyboard.press("Escape");

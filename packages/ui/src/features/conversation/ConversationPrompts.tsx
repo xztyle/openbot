@@ -358,7 +358,15 @@ interface BrowserTakeoverCardProps {
    * where the person types and clicks, and Expand opens it in the full view (`onOpen`). A phone
    * opens the full view, which fills the screen.
    */
-  liveView?: { runtime: BrowserViewRuntime; clipboard: boolean; online: boolean } | undefined;
+  liveView?:
+    | {
+        runtime: BrowserViewRuntime;
+        /** The tab to show live, when it is not `tab`: a popup that the takeover tab opened. */
+        tabId?: string | undefined;
+        clipboard: boolean;
+        online: boolean;
+      }
+    | undefined;
   onComplete: () => Promise<boolean>;
   onCancel: () => Promise<boolean>;
   /** A sign-in on this computer for the tab, when the page refuses a sign-in from the server. */
@@ -545,7 +553,7 @@ function BrowserManualTakeoverCard(props: BrowserTakeoverCardProps) {
             >
               <BrowserLiveView
                 runtime={view().runtime}
-                tabId={props.tab?.id ?? ""}
+                tabId={view().tabId ?? props.tab?.id ?? ""}
                 active
                 online={view().online}
                 clipboard={view().clipboard}

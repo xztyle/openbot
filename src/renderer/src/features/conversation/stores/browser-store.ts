@@ -232,6 +232,22 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     // agent of the request owns it.
     return tabId ? allBrowserTabs().find((tab) => tab.id === tabId) : undefined;
   });
+  /**
+   * The tab that the takeover card shows live: the takeover tab, or a popup that it opened, which
+   * the view follows as the full view does. The card used to show the takeover tab only, so a click
+   * on "Continue with Google" in the card seemed to do nothing while the popup waited on the host.
+   */
+  const browserTakeoverLiveTab = createMemo(() => {
+    const takeover = browserTakeoverTab();
+    const active = activeBrowserTab();
+    if (!takeover || !active || active.id === takeover.id) return takeover;
+    const visited = new Set<string>();
+    for (let tabId: string | undefined = active.id; tabId && !visited.has(tabId); tabId = openerOf(tabId)) {
+      if (tabId === takeover.id) return active;
+      visited.add(tabId);
+    }
+    return takeover;
+  });
   const [browserTakeoverPreview, setBrowserTakeoverPreview] = createSignal<BrowserTakeoverPreviewState>({
     status: "idle",
     preview: null,
@@ -752,6 +768,7 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     browserTabs,
     activeBrowserTab,
     browserTakeoverTab,
+    browserTakeoverLiveTab,
     browserTakeoverPreview,
     browserTakeoverResolution,
     respondToBrowserTakeover,

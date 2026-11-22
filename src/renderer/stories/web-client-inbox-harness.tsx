@@ -29,6 +29,8 @@ const SAVED = [
  * connect for `ms`, so the workspace stays "connecting" that long. Until the connection is back, a channel command or a
  * message to an agent fails as on a dead connection. `sent` lists every send the host took, so a test
  * sees a message that went twice.
+ * A file the reader attaches uploads as a draft at once, so `scripts/workspace-composer-e2e.ts` can
+ * send a message with files.
  */
 declare global {
   interface Window {
@@ -93,6 +95,16 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
   return {
     ...web,
     send,
+    upload: async (file: File) => ({
+      id: crypto.randomUUID(),
+      name: file.name,
+      size: file.size,
+      kind: file.type.startsWith("image/") ? "image" : "file",
+      mimeType: file.type || "application/octet-stream",
+      previewKind: "none",
+      previewUrl: null,
+    }),
+    discard: async () => {},
     connect: async (host) => {
       const wait = hold;
       hold = 0;

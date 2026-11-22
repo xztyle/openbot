@@ -7,6 +7,7 @@
  * Each message keeps the operation id it got when the reader sent it, so a send whose answer was
  * lost and that goes again is stored once: the host answers the second one with the first receipt.
  */
+import { type DraftAttachment, isAttachmentSummary } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { createSignal } from "solid-js";
 
@@ -23,6 +24,8 @@ export interface OutboxMessage {
   threadRootId: string | null;
   text: string;
   attachmentDraftIds: string[];
+  /** The files themselves, so Edit puts them back in the box. Absent in a message stored before. */
+  attachments?: DraftAttachment[] | undefined;
   alsoToChannel: boolean;
   createdAt: number;
   /** `waiting` for the connection, `sending` to the host, `failed` with the host's answer. */
@@ -53,6 +56,8 @@ function isOutboxMessage(value: unknown): value is OutboxMessage {
     typeof value.text === "string" &&
     Array.isArray(value.attachmentDraftIds) &&
     value.attachmentDraftIds.every((id) => typeof id === "string") &&
+    (value.attachments === undefined ||
+      (Array.isArray(value.attachments) && value.attachments.every(isAttachmentSummary))) &&
     typeof value.alsoToChannel === "boolean" &&
     typeof value.createdAt === "number"
   );
@@ -80,7 +85,8 @@ function writeOutbox(storageKey: string, messages: readonly OutboxMessage[], kno
   try {
     const key = `${OUTBOX_KEY}:${storageKey}`;
     const others = readOutbox(storageKey).filter((message) => !known.has(message.id));
-    if (others.length) messages = [...messages, ...others].sort((left, right) => left.createdAt - right.createdAt);
+    if (others.length)
+      messages = [...messages, ...others].sort((left, right) => left.createdAt - right.createdAt);
     if (messages.length === 0) window.localStorage.removeItem(key);
     else window.localStorage.setItem(key, JSON.stringify(messages.slice(-OUTBOX_LIMIT)));
     return true;

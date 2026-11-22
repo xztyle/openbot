@@ -2141,7 +2141,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   function send(input: {
     channelId: string;
     text: string;
-    attachmentDraftIds: string[];
+    attachments: readonly DraftAttachment[];
     threadRootId?: string | null;
     alsoToChannel?: boolean;
   }): OutboxMessage {
@@ -2150,7 +2150,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       channelId: input.channelId,
       threadRootId: input.threadRootId ?? null,
       text: input.text,
-      attachmentDraftIds: input.attachmentDraftIds,
+      attachmentDraftIds: input.attachments.map((file) => file.id),
+      attachments: [...input.attachments],
       alsoToChannel: input.threadRootId ? input.alsoToChannel === true : false,
     });
   }

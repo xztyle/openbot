@@ -242,7 +242,7 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     ws.send({
       channelId: props.channelId,
       text: body,
-      attachmentDraftIds: files.map((file) => file.id),
+      attachments: files,
       threadRootId: props.threadRootId ?? null,
       alsoToChannel: alsoSend(),
     });
@@ -301,13 +301,24 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
           messages={ws.outbox.of(key())}
           online={ws.env.connectionReady()}
           onRetry={(message) => ws.outbox.retry(message.id)}
-          onDiscard={(message) => ws.outbox.discard(message.id)}
+          onDiscard={(message) => {
+            ws.outbox.discard(message.id);
+            // Its files were uploads for this message only.
+            for (const fileId of message.attachmentDraftIds)
+              void ws.channels
+                .port()
+                .agent.discardDraftAttachment?.(fileId)
+                ?.catch(() => undefined);
+          }}
           onEdit={
             value().trim()
               ? undefined
               : (message) => {
                   ws.outbox.discard(message.id);
                   setValue(message.text);
+                  // The files go back with the text, and "Also send to" as it was.
+                  addFiles(message.attachments ?? []);
+                  if (message.alsoToChannel) setAlsoSend(true);
                   setFocus((request) => request + 1);
                 }
           }

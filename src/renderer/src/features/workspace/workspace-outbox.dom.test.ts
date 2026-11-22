@@ -104,6 +104,21 @@ describe("workspace outbox", () => {
     expect(readOutbox("reader:host").map((message) => message.text)).toEqual(["from the second tab", "later"]);
   });
 
+  it("keeps the files of a message, so Edit can put them back", () => {
+    const { outbox } = setup({ ready: false });
+    const file = {
+      id: "file-1",
+      name: "plan.pdf",
+      size: 10,
+      kind: "file" as const,
+      mimeType: "application/pdf",
+      previewKind: "pdf" as const,
+      previewUrl: null,
+    };
+    outbox.add({ ...input("general", "with a file"), attachmentDraftIds: [file.id], attachments: [file] });
+    expect(readOutbox("reader:host")[0]?.attachments).toEqual([file]);
+  });
+
   it("waits again when the send failed because the connection went", async () => {
     const harness = setup({ ready: true, fail: () => true });
     harness.outbox.add(input("general", "lost"));

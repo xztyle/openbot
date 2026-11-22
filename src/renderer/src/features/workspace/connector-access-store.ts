@@ -37,11 +37,24 @@ export function createConnectorAccessStore(input: ConnectorAccessStoreInput): Co
     return request && input.enabled() && !unsupported() ? request : null;
   }
 
+  /*
+   * Each call counts one, and the state of an older call does not replace a newer one's: the read of
+   * an opening view that answered after a save showed the list from before it.
+   */
+  let calls = 0;
+  let shown = 0;
+  const show = (mine: number, next: ConnectorAccessState) => {
+    if (mine <= shown) return;
+    shown = mine;
+    setState(next);
+  };
+
   async function call(path: string, body: Record<string, string> = {}): Promise<void> {
     const request = available();
     if (!request) return;
+    const mine = ++calls;
     try {
-      setState(await request("POST", path, decodeConnectorAccessState, body));
+      show(mine, await request("POST", path, decodeConnectorAccessState, body));
     } catch (error) {
       // A host without the routes answers 404: it has none of this, and the client asks no more.
       if (error instanceof Error && "reference" in error && error.reference === "http/404") setUnsupported(true);
@@ -55,10 +68,11 @@ export function createConnectorAccessStore(input: ConnectorAccessStoreInput): Co
     createToken: async (label) => {
       const request = available();
       if (!request) throw new Error("unsupported");
+      const mine = ++calls;
       const created = await request("POST", CONNECTOR_ACCESS_ROUTES.createToken, decodeCreatedConnectorToken, {
         label,
       });
-      setState(created.state);
+      show(mine, created.state);
       return { token: created.token, url: created.url };
     },
     revokeToken: (id) => call(CONNECTOR_ACCESS_ROUTES.revokeToken, { id }),

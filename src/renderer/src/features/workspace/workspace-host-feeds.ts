@@ -9,12 +9,22 @@
 import type { DecisionQueueEntry } from "@openbot/contracts/agent-learning";
 import type { GuardrailsView } from "@openbot/contracts/guardrails";
 import { createEffect, createSignal, getOwner, onCleanup, untrack } from "solid-js";
-import type { useWorkspace } from "./workspace-context";
+import type { EfficiencyCalls } from "../efficiency/efficiency-port";
+import type { TrustCalls } from "../trust/trust-port";
 
 /** How often a feed reads its list again, while the window is visible. */
 const POLL_MS = 60_000;
 
-type Workspace = ReturnType<typeof useWorkspace>;
+/** What the feeds read of a workspace: its connection and the host calls of the lists. */
+export interface FeedWorkspace {
+  env: {
+    connectionReady: () => boolean;
+    efficiency?: (() => Pick<EfficiencyCalls, "decisionQueue"> | undefined) | undefined;
+    trust?: (() => { guardrails: Pick<TrustCalls["guardrails"], "view"> } | undefined) | undefined;
+  };
+}
+
+type Workspace = FeedWorkspace;
 
 /**
  * Calls `refresh` when the reader comes back to the host: the read becomes possible (the connection is
@@ -22,7 +32,11 @@ type Workspace = ReturnType<typeof useWorkspace>;
  * returns, or the window shows again. A feed's timer reads a minute or more later, and a phone stops
  * the timers while the app is in the background: without this, a decision that waits shows late.
  */
-export function refreshOnReturn(ws: Workspace, available: () => boolean, refresh: () => void): void {
+export function refreshOnReturn(
+  ws: { env: Pick<FeedWorkspace["env"], "connectionReady"> },
+  available: () => boolean,
+  refresh: () => void,
+): void {
   if (!getOwner()) {
     refresh();
     return;
@@ -78,6 +92,8 @@ interface Feed<T> {
   refresh: () => void;
   /** Puts an answer of an action in place, as the host sends the new list back. */
   set: (value: T) => void;
+  /** Changes the list now, from the value last put in place (a signal shows a write only after its flush). */
+  update: (change: (current: T) => T) => void;
   users: number;
   stop: () => void;
 }
@@ -95,21 +111,38 @@ function sharedFeed<T>(
     // In a box: a list or a view of the host, never read as a signal's compute function.
     const [box, setBox] = createSignal<{ value: T }>({ value: empty }, { ownedWrite: true });
     const value = () => box().value;
-    const setValue = (next: T) => setBox({ value: next });
-    const refresh = singleFlight(() =>
-      read()?.then(
-        (next) => setValue(next),
+    let latest = empty;
+    const setValue = (next: T) => {
+      latest = next;
+      setBox({ value: next });
+    };
+    /*
+     * Each answer of an action counts one. A read that began before an action answers the list from
+     * before it: an applied proposal or a resumed agent would show again until the next read.
+     */
+    let changes = 0;
+    const refresh = singleFlight(() => {
+      const asked = changes;
+      return read()?.then(
+        (next) => {
+          if (asked === changes) setValue(next);
+        },
         // A failed read keeps what showed; a host without the route keeps the list empty.
         () => undefined,
-      ),
-    );
+      );
+    });
+    const put = (next: T) => {
+      changes += 1;
+      setValue(next);
+    };
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") refresh();
     }, POLL_MS);
     const created: Feed<T> = {
       value,
       refresh,
-      set: setValue,
+      set: put,
+      update: (change) => put(change(latest)),
       users: 0,
       stop: () => window.clearInterval(timer),
     };

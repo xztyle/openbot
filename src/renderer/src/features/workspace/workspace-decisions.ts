@@ -235,7 +235,7 @@ export function useDecisionQueue() {
         const calls = ws.env.efficiency?.();
         if (!calls) throw new Error(t("workspace.today.answerFailed"));
         await calls.decideQueue(entry.id, decision);
-        learning.set(learning.value().filter((candidate) => candidate.id !== entry.id));
+        learning.update((list) => list.filter((candidate) => candidate.id !== entry.id));
       };
       return {
         key: `${LEARNING_KEY}${entry.id}`,

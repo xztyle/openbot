@@ -6,14 +6,21 @@
  */
 import type { InsightAlert } from "@openbot/contracts/ipc";
 import { createEffect, createSignal, getOwner, onCleanup } from "solid-js";
-import type { useWorkspace } from "./workspace-context";
-import { refreshOnReturn, singleFlight } from "./workspace-host-feeds";
+import { type FeedWorkspace, refreshOnReturn, singleFlight } from "./workspace-host-feeds";
 
 const POLL_MS = 10 * 60_000;
 // The first read starts in the component that polls, so it may write there.
 const [alerts, setAlerts] = createSignal<readonly InsightAlert[]>([], { ownedWrite: true });
 
+/*
+ * The answers that came since a read began: a dismissal, or the report of the Insights view. A read
+ * that began before one answers the alerts from before it, and a dismissed alert would come back.
+ */
+let answers = 0;
+
+/** Puts the alerts of a newer answer in place: a read that is on its way now does not replace them. */
 export function setInsightAlerts(next: readonly InsightAlert[]): void {
+  answers += 1;
   setAlerts(next);
 }
 
@@ -32,8 +39,11 @@ const load = singleFlight(() => {
     setAlerts([]);
     return undefined;
   }
+  const asked = answers;
   return get().then(
-    (next) => setAlerts(next),
+    (next) => {
+      if (asked === answers) setAlerts(next);
+    },
     () => undefined,
   );
 });
@@ -43,7 +53,7 @@ const load = singleFlight(() => {
  * `read` is absent for a reader who may not see the report: the list then stays empty. The host says
  * the reader's role only after it connects, so the first read waits for that, not for the timer.
  */
-export function pollInsightAlerts(ws: ReturnType<typeof useWorkspace>, read: Reader): void {
+export function pollInsightAlerts(ws: { env: Pick<FeedWorkspace["env"], "connectionReady"> }, read: Reader): void {
   readers = [...readers, read];
   // Only while the page shows; `refreshOnReturn` reads when it shows again.
   if (readers.length === 1)

@@ -82,15 +82,25 @@ export function createOwnerAwayStore(input: OwnerAwayStoreInput): OwnerAwayStore
   const [unsupported, setUnsupported] = createSignal(false);
   let lastActive = 0;
   let host = "";
+  /*
+   * Each call counts one, and the state of an older call does not replace a newer one's: the minute's
+   * read that began before a Focus or a save answered after it and showed the state from before.
+   */
+  let calls = 0;
+  let shown = 0;
 
   async function call(path: string, body: TeamProtocolV2Json = {}): Promise<OwnerAwayState | null> {
     const request = input.request();
     if (!request || !input.enabled() || unsupported()) return null;
     const asked = input.hostId();
+    const mine = ++calls;
     try {
       const next = await request("POST", path, decodeOwnerAwayState, body);
       if (asked !== input.hostId()) return null;
-      setState(next);
+      if (mine > shown) {
+        shown = mine;
+        setState(next);
+      }
       if (next.welcome) input.onWelcome?.(next.welcome);
       return next;
     } catch (error) {

@@ -53,6 +53,7 @@ interface ExpectedMethod {
 interface PreloadRun {
   readonly worlds: ReadonlyMap<string, unknown>;
   readonly calls: IpcCall[];
+  readonly mainWorldScripts: unknown[];
 }
 
 const logger = createOpenBotLogger("verify-preload-bundle");
@@ -87,6 +88,25 @@ if (teamWebrtc.worlds.size > 0) {
   failures.push(`teamWebrtc.cjs must expose no world; it exposes: ${[...teamWebrtc.worlds.keys()].join(", ")}.`);
 }
 
+// The agent tab preload runs in untrusted pages: no world, no IPC, one function in the page world.
+const browserPage = runPreload("browserPage.cjs");
+if (browserPage.worlds.size > 0) {
+  failures.push(`browserPage.cjs must expose no world; it exposes: ${[...browserPage.worlds.keys()].join(", ")}.`);
+}
+if (browserPage.calls.length > 0) {
+  const used = browserPage.calls.map((c) => `${c.method} ${c.channel}`).join(", ");
+  failures.push(`browserPage.cjs must use no IPC; it used: ${used}.`);
+}
+const [pageScript, ...otherPageScripts] = browserPage.mainWorldScripts;
+if (
+  otherPageScripts.length > 0 ||
+  !isPlainObject(pageScript) ||
+  !("func" in pageScript) ||
+  typeof pageScript.func !== "function"
+) {
+  failures.push("browserPage.cjs must run exactly one function in the page world.");
+}
+
 if (failures.length > 0) {
   logger.error(["The built preload does not match the IPC contract:", ...failures.map((f) => `  ${f}`)].join("\n"));
   process.exit(1);
@@ -105,11 +125,13 @@ function runPreload(fileName: string): PreloadRun {
 
   const worlds = new Map<string, unknown>();
   const calls: IpcCall[] = [];
+  const mainWorldScripts: unknown[] = [];
   // Never settles, so a method's decoder never runs on a value that main did not send.
   const pending = () => new Promise<never>(() => undefined);
   const electron = {
     contextBridge: {
       exposeInMainWorld: (name: string, api: unknown) => worlds.set(name, api),
+      executeInMainWorld: (script: unknown) => mainWorldScripts.push(script),
     },
     ipcRenderer: {
       invoke: (channel: string) => {
@@ -145,7 +167,7 @@ function runPreload(fileName: string): PreloadRun {
   } catch (error) {
     failures.push(`${fileName} failed to load: ${error instanceof Error ? error.message : String(error)}`);
   }
-  return { worlds, calls };
+  return { worlds, calls, mainWorldScripts };
 }
 
 // Each method path, such as `agent.listAgents`, with the channel and kind of its endpoint.

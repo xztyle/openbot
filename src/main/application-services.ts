@@ -1184,6 +1184,7 @@ export async function createApplicationServices({
     },
     profileExists: (profileId) => browserProfileStore.get(profileId) !== undefined,
     apiKeys: agentApiKeys,
+    pagePreload: join(__dirname, "../preload/browserPage.cjs"),
   });
   teardown.push(TEARDOWN_ORDER.browser, "the browser", () => runCauseEffect(browser.destroy()));
   await runCauseEffect(browser.restore(store.list().map((agent) => ({ id: agent.id, threadId: agent.threadId }))));

@@ -99,6 +99,14 @@ loopback HTTP, the host supplies the basic Chromium brand/version, desktop flag,
 It preserves hints supplied by Chromium and does not add high-entropy hints. The focused check is
 `bun run test:browser --scenario=identity`; add `--google-live` for the Google identifier check.
 The local identity report is `.openbot-build/browser-identity.json`.
+The tab preload (`src/preload/browser-page.ts`) makes page values agree with Chrome: the outer size,
+the screen position, `window.chrome` and, on macOS, the passkey dialog. It has no IPC and exposes no
+world; `verify:preload` checks that. Each replaced function is a Proxy that reads as native code,
+and its `setPrototypeOf` trap throws `Cyclic __proto__ value` as a native function does. On a Linux
+server with no GPU, WebGL runs on SwiftShader, which bot checks read as headless Chrome. There, the
+WebGL vendor and renderer names in each tab are those of a common Intel laptop GPU; the rendering,
+the limits and the extensions stay those of SwiftShader. The preload does not run in a worker, so
+WebGL on an `OffscreenCanvas` in a worker still names SwiftShader.
 Website popups are adopted into managed `WebContentsView` tabs through Electron's window creation
 hook. Native guests retain their opener, request body, and the browser session of the opener. Local tab and
 agent tool results expose `openerTabId` while that relationship is live. Independent `noopener`

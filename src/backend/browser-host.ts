@@ -320,6 +320,16 @@ const BROWSER_WEB_PREFERENCES = {
   allowRunningInsecureContent: false,
 };
 
+/**
+ * The tab preload also runs in frames, because a bot check reads `window.chrome` in a new frame.
+ * The sandbox keeps Node out of each frame; the preload has no IPC.
+ */
+function browserWebPreferences(preload: string | undefined) {
+  return preload === undefined
+    ? BROWSER_WEB_PREFERENCES
+    : { ...BROWSER_WEB_PREFERENCES, preload, nodeIntegrationInSubFrames: true };
+}
+
 export interface PreparedBrowserSecret {
   request: BrowserSecretRequest;
   /**
@@ -461,6 +471,7 @@ export class BrowserHost {
    * without its page keeps a blank page, which answers.
    */
   readonly #blankPageForDebugger = app.commandLine.hasSwitch("remote-debugging-port");
+  readonly #webPreferences: ReturnType<typeof browserWebPreferences>;
 
   constructor(
     window: BrowserWindow,
@@ -481,9 +492,12 @@ export class BrowserHost {
       apiKeys?: AgentApiKeys | null;
       /** When idle agent tabs sleep. A test sets short times. */
       tabSleep?: Partial<BrowserTabSleepLimits>;
+      /** The tab preload, which makes the page values that bot checks read agree with Chrome. */
+      pagePreload?: string;
     } = {},
   ) {
     this.#window = window;
+    this.#webPreferences = browserWebPreferences(options.pagePreload);
     this.#sleepLimits = { ...TAB_SLEEP_LIMITS, ...options.tabSleep };
     this.#memoryLow = options.memoryLow ?? (() => false);
     this.#tabLimit = options.tabLimit ?? (() => INPUT_LIMITS.browserTabs);
@@ -2813,7 +2827,7 @@ export class BrowserHost {
         ...popupOptions?.webPreferences,
 
         session: tabSession,
-        ...BROWSER_WEB_PREFERENCES,
+        ...this.#webPreferences,
       },
     });
     view.webContents.setAudioMuted(true);
@@ -3137,7 +3151,7 @@ export class BrowserHost {
         // The host owns cleanup. Electron otherwise destroys children on opener reload too.
         outlivesOpener: true,
         overrideBrowserWindowOptions: {
-          webPreferences: { ...BROWSER_WEB_PREFERENCES, session: this.#tabSession(tab) },
+          webPreferences: { ...this.#webPreferences, session: this.#tabSession(tab) },
         },
         createWindow: (options) => {
           if (popup) return popup.contents;

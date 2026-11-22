@@ -302,6 +302,9 @@ export class QueueControls {
     }
     const executionText = this.#hooks.steerText?.(input.deliveryId);
     const steerText = executionText === undefined ? {} : { executionText };
+    // The turn can end while the provider answers the steer: each step after the request reads the
+    // live chat state, so a copy from before the request does not bring the ended turn back.
+    const liveSnapshot = () => this.#conversation.ensureSnapshot(agent.id, taskThreadId ?? agent.threadId);
     yield* this.#mailbox.markSteering(input.deliveryId, turnId).pipe(toQueueOperationFailed);
     this.#mailboxSync.emitQueue(agent.id);
     yield* client
@@ -331,7 +334,7 @@ export class QueueControls {
             toQueueOperationFailed,
             Effect.andThen(
               queueStep(() => {
-                this.#mailboxSync.syncMailboxMessages(snapshot);
+                this.#mailboxSync.syncMailboxMessages(liveSnapshot());
                 this.#mailboxSync.emitQueue(agent.id);
                 this.#drain.scheduleDrain(agent.id);
               }),
@@ -341,9 +344,10 @@ export class QueueControls {
       );
     yield* this.#mailbox.markRunning(input.deliveryId, turnId).pipe(toQueueOperationFailed);
     yield* queueStep(() => {
-      this.#mailboxSync.syncMailboxMessages(snapshot);
+      const current = liveSnapshot();
+      this.#mailboxSync.syncMailboxMessages(current);
       this.#mailboxSync.emitQueue(agent.id);
-      this.#conversation.emitConversation(snapshot, "queue.message-steered", { deliveryId: input.deliveryId });
+      this.#conversation.emitConversation(current, "queue.message-steered", { deliveryId: input.deliveryId });
       // The user who writes to an agent that waits for them is done with the tab, or has something to
       // say instead: "account created", "use the other account". A card they cannot see or did not
       // press would otherwise keep the agent from reading it.

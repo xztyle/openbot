@@ -159,6 +159,7 @@ export function AgentEfficiencySettings(props: {
         else draft.note = t("efficiency.review.nothing");
       });
     } catch (error) {
+      if (props.agent.id !== agentId) return;
       setState((draft) => {
         draft.error = errorMessage(error, t("efficiency.review.failed"));
       });

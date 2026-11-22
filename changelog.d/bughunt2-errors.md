@@ -8,3 +8,5 @@
 - Copy text and Copy link in a message's or a channel's menu now say when the copy fails, and fall
   back to the browser's copy command when the clipboard refuses. Before, nothing was copied and
   nothing was said.
+- Insights: while the host does not answer, a failed refresh shows one toast. Before, a new one
+  stacked every two minutes and each time the page showed again.

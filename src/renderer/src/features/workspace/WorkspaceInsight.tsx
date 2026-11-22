@@ -74,7 +74,8 @@ export function WorkspaceInsightView() {
     } catch (error) {
       if (mine !== asked) return;
       if (report() === null) setLoadError(errorMessage(error, t("insight.loadFailed")));
-      else toast.error(t("insight.loadFailed"));
+      // The read runs again every two minutes and when the page shows: one toast, not one per try.
+      else toast.error(t("insight.loadFailed"), { id: "insight-refresh-failed" });
     }
   }
   onSettled(() => void refresh());

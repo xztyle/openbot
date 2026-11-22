@@ -126,7 +126,7 @@ export function useConversationMenu(): (id: string, extra?: readonly WorkspaceMe
               id: "agent-settings",
               label: t("workspace.profile.settings"),
               icon: <Settings aria-hidden="true" />,
-              onSelect: () => ws.env.openAgentSettings(agentId),
+              onSelect: () => ws.openAgentSettings(agentId),
             },
             {
               id: "agent-talk",

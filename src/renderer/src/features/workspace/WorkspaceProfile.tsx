@@ -46,7 +46,7 @@ export function MemberProfile(props: { member: WorkspaceMember }) {
           status={status()}
           computer={AGENT_COMPUTER}
           onMessage={() => ws.openAgent(profile().id)}
-          onSettings={() => ws.env.openAgentSettings(profile().id)}
+          onSettings={() => ws.openAgentSettings(profile().id)}
         />
       )}
     </Show>

@@ -179,7 +179,7 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
                 ticket={ws.fleet.agents().find((entry) => entry.member.id === current().id)?.currentTicket}
                 members={[]}
                 memberCount={1}
-                onShowDetails={() => ws.env.openAgentSettings(current().id)}
+                onShowDetails={() => ws.openAgentSettings(current().id)}
                 onBack={() => {
                   const close = panelBack();
                   if (close) close();

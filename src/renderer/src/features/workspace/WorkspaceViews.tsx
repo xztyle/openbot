@@ -286,7 +286,7 @@ function WorkspaceFleetView() {
     <FleetView
       agents={ws.fleet.agents().filter((agent) => ws.spaces.agentInCurrent(agent.member.id))}
       onMessage={(agentId) => ws.openAgent(agentId)}
-      onSettings={(agentId) => ws.env.openAgentSettings(agentId)}
+      onSettings={(agentId) => ws.openAgentSettings(agentId)}
       onAddAgent={ws.env.createAgent}
       onOpenMoney={ws.viewAvailable("money") ? () => ws.openView("money") : undefined}
       onBack={() => ws.back()}

@@ -1900,6 +1900,26 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   }
 
   /**
+   * Opens an agent's settings over its chat. A view or panel that is open gives way first: the shell
+   * clears the view only when the selected agent changes, so the settings of the agent whose chat was
+   * already open stayed behind Fleet, the org chart or a profile card.
+   */
+  function openAgentSettings(agentId: string) {
+    followConversation(`${AGENT_DM_PREFIX}${agentId}`);
+    reopenConversation(`${AGENT_DM_PREFIX}${agentId}`);
+    channels.close();
+    setState((draft) => {
+      draft.agentChosen = true;
+      draft.view = null;
+      draft.panel = null;
+      draft.thread = null;
+      draft.editing = null;
+    });
+    setPhonePane("main");
+    env.openAgentSettings(agentId);
+  }
+
+  /**
    * Opens a link to a message of this host in place: its channel, and its thread. A link to another
    * host, or to a channel the reader cannot see, is not handled and opens as a plain link.
    */
@@ -2787,6 +2807,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     setPhonePane,
     openChannel,
     openAgent,
+    openAgentSettings,
     openConversation,
     openLink,
     openView,

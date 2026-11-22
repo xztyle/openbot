@@ -1000,6 +1000,10 @@ export const messages = defineMessages("workspace", {
   "workspace.loops.editor.oneLine": "One entry per line.",
   "workspace.loops.editor.metrics": "Metrics to leave",
   "workspace.loops.editor.metricsHint": "One per line, such as roas >= 1.5 or sales >= 3.",
+  "workspace.loops.editor.startStage": "Start",
+  "workspace.loops.editor.doneStage": "Done",
+  "workspace.loops.editor.wrongMetrics":
+    "Not a rule on a field of this loop: {lines}. Write field >= number, such as sales >= 3.",
   "workspace.loops.editor.next": "Can go to",
   "workspace.loops.editor.nextHint": "None checked: the next stage and every end.",
   "workspace.loops.editor.onEnter": "When an item enters",

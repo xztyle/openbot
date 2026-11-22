@@ -989,6 +989,10 @@ export const messages = {
   "workspace.loops.editor.oneLine": "Una entrada por línea.",
   "workspace.loops.editor.metrics": "Métricas para salir",
   "workspace.loops.editor.metricsHint": "Una por línea, como roas >= 1.5 o sales >= 3.",
+  "workspace.loops.editor.startStage": "Inicio",
+  "workspace.loops.editor.doneStage": "Hecho",
+  "workspace.loops.editor.wrongMetrics":
+    "No es una regla sobre un campo de este ciclo: {lines}. Escribe campo >= número, como sales >= 3.",
   "workspace.loops.editor.next": "Puede ir a",
   "workspace.loops.editor.nextHint": "Sin marcar: la etapa siguiente y todos los fines.",
   "workspace.loops.editor.onEnter": "Cuando entra un elemento",

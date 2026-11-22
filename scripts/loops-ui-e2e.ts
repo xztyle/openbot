@@ -213,6 +213,51 @@ try {
     check("the refusal goes once the values are numbers", !(await panel.getByText("type a number").isVisible()));
     await page.context().close();
   }
+
+  // The loop editor: a checklist takes new lines and spaces as typed, a metric that is not a rule
+  // stays to be fixed with the reason, and Escape asks before it throws the changes away.
+  {
+    const page = await open("desktop");
+    await page.getByRole("button", { name: "Edit loop" }).click();
+    const editor = page.getByRole("dialog", { name: "Edit loop" });
+    const checklist = editor.getByRole("textbox", { name: "Checklist to leave" });
+    const metrics = editor.getByRole("textbox", { name: "Metrics to leave" });
+    await checklist.click();
+    await page.keyboard.press("Control+End");
+    await page.keyboard.type("\nPixel installed ok", { delay: 5 });
+    check(
+      "the checklist keeps typed lines and spaces",
+      (await checklist.inputValue()).endsWith("Producer rules read\nPixel installed ok"),
+      await checklist.inputValue(),
+    );
+    await metrics.fill("sales >= one");
+    await editor.getByText("Not a rule on a field of this loop: sales >= one").waitFor({ timeout: UI_WAIT_MS });
+    check("a wrong metric blocks Save", await editor.getByRole("button", { name: "Save" }).isDisabled());
+    await editor.getByRole("button", { name: /^Validate/u }).click();
+    check("another stage has its own metrics", (await metrics.inputValue()) === "");
+    await editor.getByRole("button", { name: /^Scout/u }).click();
+    check("a wrong metric stays to be fixed", (await metrics.inputValue()) === "sales >= one");
+    await metrics.fill("sales >= 1");
+    await page.keyboard.press("Escape");
+    const discard = page.getByRole("alertdialog", { name: "Discard changes?" });
+    await discard.waitFor({ timeout: UI_WAIT_MS });
+    await discard.getByRole("button", { name: "Keep editing" }).click();
+    check("Keep editing keeps the editor", (await checklist.inputValue()).endsWith("Pixel installed ok"));
+    await editor.getByRole("button", { name: "Save" }).click();
+    await editor.waitFor({ state: "hidden", timeout: UI_WAIT_MS });
+    const scout = loops.board("uo").loops[0]?.stages.find((stage) => stage.id === "scout");
+    check("the checklist is stored line by line", scout?.checklist?.at(-1) === "Pixel installed ok", scout?.checklist);
+    check(
+      "the metric is stored",
+      JSON.stringify(scout?.exitMetrics) === JSON.stringify([{ field: "sales", op: ">=", value: 1 }]),
+      scout?.exitMetrics,
+    );
+    await page.getByRole("button", { name: "Edit loop" }).click();
+    await page.keyboard.press("Escape");
+    await editor.waitFor({ state: "hidden", timeout: UI_WAIT_MS });
+    check("Escape closes an unchanged editor at once", (await page.getByRole("alertdialog").count()) === 0);
+    await page.context().close();
+  }
 } finally {
   await browser?.close();
   await server.close();

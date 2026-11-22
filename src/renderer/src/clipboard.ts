@@ -31,3 +31,23 @@ export async function writeClipboardText(text: string): Promise<void> {
     previous?.focus({ preventScroll: true });
   }
 }
+
+/**
+ * Writes text that is still on its way, such as a secret the host reads first. Safari lets a page
+ * write the clipboard only in the tap that asked for it, and a network read in between ends that
+ * tap: a `ClipboardItem` made in the tap with the pending text keeps it. Without one, the text is
+ * awaited and written as {@link writeClipboardText} does. A failure of `text` is thrown as it is.
+ */
+export async function writeClipboardTextLater(text: Promise<string>): Promise<void> {
+  if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({ "text/plain": text.then((value) => new Blob([value], { type: "text/plain" })) }),
+      ]);
+      return;
+    } catch {
+      // A refused write falls back below; a failed read is thrown again there.
+    }
+  }
+  await writeClipboardText(await text);
+}

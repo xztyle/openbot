@@ -9,6 +9,7 @@ import { MailboxesSection } from "@openbot/ui/features/workspace/MailboxesSectio
 import { type SecretsGroup, SecretsView } from "@openbot/ui/features/workspace/SecretsView";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, onSettled, Show } from "solid-js";
+import { writeClipboardText, writeClipboardTextLater } from "../../clipboard";
 import { useWorkspace } from "./workspace-context";
 import { memberById } from "./workspace-model";
 
@@ -62,6 +63,29 @@ export function WorkspaceSecretsView() {
     }
   }
 
+  /**
+   * Copies a link, a token or a secret. A refused write is a toast: the button gives no other sign,
+   * and a token that shows once must not look copied when it is not.
+   */
+  async function copy(text: string | Promise<string>, done: string) {
+    let read = true;
+    try {
+      if (typeof text === "string") await writeClipboardText(text);
+      else
+        await writeClipboardTextLater(
+          text.catch((error: unknown) => {
+            read = false;
+            throw error;
+          }),
+        );
+    } catch {
+      // A failed read has its own toast.
+      if (read) toast.error(t("app.clipboard.copyFailed"));
+      return;
+    }
+    toast.success(done);
+  }
+
   const agents = createMemo(() => ws.env.agents());
   const groups = createMemo((): SecretsGroup[] | null => {
     const list = secrets();
@@ -89,11 +113,8 @@ export function WorkspaceSecretsView() {
       scopes={scopes()}
       namePattern={WORKSPACE_SECRET_NAME_PATTERN}
       onReveal={reveal}
-      onCopy={async (scope, name) => {
-        const value = await reveal(scope, name);
-        await navigator.clipboard.writeText(value);
-        toast.success(t("workspace.secrets.copied", { name }));
-      }}
+      // The read starts in the tap, so Safari still lets the copy write the clipboard after it.
+      onCopy={(scope, name) => copy(reveal(scope, name), t("workspace.secrets.copied", { name }))}
       onSave={(input) => {
         const save = agent().workspaceSecretSave;
         return change(
@@ -134,10 +155,7 @@ export function WorkspaceSecretsView() {
                 onSetSender={async (input) => {
                   await ws.env.connectorAccess?.setSender(input);
                 }}
-                onCopy={async (text) => {
-                  await navigator.clipboard.writeText(text);
-                  toast.success(t("workspace.connections.copied"));
-                }}
+                onCopy={(text) => copy(text, t("workspace.connections.copied"))}
               />
             )}
           </Show>
@@ -169,10 +187,7 @@ export function WorkspaceSecretsView() {
                     throw error;
                   }
                 }}
-                onCopy={async (text) => {
-                  await navigator.clipboard.writeText(text);
-                  toast.success(t("workspace.connections.copied"));
-                }}
+                onCopy={(text) => copy(text, t("workspace.connections.copied"))}
               />
             )}
           </Show>

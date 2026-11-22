@@ -499,6 +499,22 @@ try {
     return summary(push);
   });
 
+  await step("A digest that waits sends nothing to a browser set to Nothing meanwhile", async () => {
+    await bell(member, { agentNoiseDigest: [fixtureAgentId] });
+    const rootMessage = await e2e.send(member, threadChannel, "member's root for a dropped digest");
+    const rootId = messageId(rootMessage);
+    await e2e.send(owner, threadChannel, "a reply that starts the thread", rootId);
+    assert.equal((await nextPush(memberBrowser)).message.kind, "reply");
+    await new Promise((done) => setTimeout(done, BURST_MS * 2));
+    await agentReply(rootId, "progress 5");
+    await register(member, memberBrowser, "nothing");
+    await new Promise((done) => setTimeout(done, DIGEST_MS + 500));
+    await register(member, memberBrowser, "all");
+    await bell(member, {});
+    await nextMarker("after a digest of a browser that chose Nothing");
+    return { dropped: true };
+  });
+
   await step("The decision function sorts the host's own channels as the Activity view does", async () => {
     const store = agents.channels.store;
     const channel = store.get(threadChannel);

@@ -311,6 +311,18 @@ export class WebPushService {
     );
   }
 
+  /**
+   * The browser of a notice that waited (a burst's end, a digest) as the store has it now, or null when it
+   * may no longer get one: the member set it to Nothing, muted it, turned push off, or left.
+   */
+  #current(subscription: WebPushSubscription): WebPushSubscription | null {
+    return (
+      this.#readers(this.#now()).find(
+        (item) => item.endpoint === subscription.endpoint && item.memberId === subscription.memberId,
+      ) ?? null
+    );
+  }
+
   #onEvent(event: AgentEvent): void {
     if (event.type === "agent-input-escalations-changed") {
       this.#escalations = event.escalations;
@@ -511,9 +523,11 @@ export class WebPushService {
     burst.pending = null;
     // The next notice within the time is one more burst of the same count.
     burst.until = this.#now() + this.#burstMs();
-    const translate = this.#translator(burst.subscription);
+    const subscription = this.#current(burst.subscription);
+    if (!subscription) return;
+    const translate = this.#translator(subscription);
     this.#send(
-      burst.subscription,
+      subscription,
       burstTag(conversation),
       { ...notice, title: notice.burstTitle, body: translate("notification.newMessages", { count: burst.count }) },
       true,
@@ -538,7 +552,9 @@ export class WebPushService {
     const digest = this.#digests.get(key);
     this.#digests.delete(key);
     if (!digest || this.#disposed) return;
-    const translate = this.#translator(digest.subscription);
+    const subscription = this.#current(digest.subscription);
+    if (!subscription) return;
+    const translate = this.#translator(subscription);
     const [first, ...others] = digest.agents;
     const title = translate("notification.digest.title", { count: digest.count });
     const body =
@@ -546,7 +562,7 @@ export class WebPushService {
         ? translate("notification.digest.fromOne", { agent: first ?? "" })
         : translate("notification.digest.fromMany", { agent: first ?? "", count: others.length });
     this.#send(
-      digest.subscription,
+      subscription,
       "digest",
       {
         kind: "summary",

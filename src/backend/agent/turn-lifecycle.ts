@@ -255,10 +255,13 @@ export class TurnLifecycle {
    */
   readonly #turnErrors = new Map<string, string>();
   /**
-   * Running turns that OpenBot stopped because their provider compacted again and again with no use
-   * (upstream 63b51fa40). Their `interrupted` end is a failure with the reason that the error gave.
+   * Running turns that OpenBot stopped for their own compaction: the provider compacted again and
+   * again with no use (upstream 63b51fa40), or a compaction ran past the run deadline (upstream
+   * 3d2f2f188). Their `interrupted` end is a failure with the reason that the error gave.
    */
-  readonly #compactionLoops = new Set<string>();
+  readonly #compactionStops = new Set<string>();
+  /** The deadline of the compaction that runs inside a turn, by provider thread. */
+  readonly #compactionDeadlines = new Map<string, NodeJS.Timeout>();
   /**
    * The client, provider thread and start time of each running turn, from its `turn/started`.
    * `produced` is set by the first item or delta: a refused turn is run again only without one.
@@ -393,7 +396,9 @@ export class TurnLifecycle {
     this.#failedTurns.clear();
     this.#turnAssociations.clear();
     this.#turnErrors.clear();
-    this.#compactionLoops.clear();
+    this.#compactionStops.clear();
+    for (const timer of this.#compactionDeadlines.values()) clearTimeout(timer);
+    this.#compactionDeadlines.clear();
     this.#limitedTurns.clear();
     this.#failoverTurns.clear();
     this.#failoverRetries.clear();
@@ -446,7 +451,10 @@ export class TurnLifecycle {
         continue;
       }
       this.#attention.clearForTurn(turn.threadId, turnId);
-      if (this.#observedCompactions.get(turn.threadId) === turnId) this.#observedCompactions.delete(turn.threadId);
+      if (this.#observedCompactions.get(turn.threadId) === turnId) {
+        this.#observedCompactions.delete(turn.threadId);
+        this.#clearCompactionDeadline(turn.threadId);
+      }
       this.#compaction.abandonCompaction(turn.threadId);
       yield* this.#completeTurn(turn.agentId, turn.threadId, turnId, "interrupted").pipe(
         Effect.catchCause((cause) =>
@@ -591,10 +599,19 @@ export class TurnLifecycle {
             notification.method === "item/started" &&
             source.contextCompaction === "events" &&
             this.#runningTurns.has(turnId) &&
-            !this.#compaction.isCompactionTurn(threadId, turnId) &&
-            this.#compaction.repeatsCompaction(threadId)
-          )
-            this.#stopCompactionLoop(source, agentId, threadId, turnId);
+            !this.#compaction.isCompactionTurn(threadId, turnId)
+          ) {
+            if (this.#compaction.repeatsCompaction(threadId)) {
+              this.#clearCompactionDeadline(threadId);
+              this.#stopCompactionTurn(
+                source,
+                agentId,
+                threadId,
+                turnId,
+                sourceText("error.agent.compactionLoopStopped", { provider: agentProviderName(source.provider) }),
+              );
+            } else this.#armCompactionDeadline(agentId, threadId, turnId, source);
+          } else this.#clearCompactionDeadline(threadId);
           if (!this.#compaction.isCompactionTurn(threadId, turnId))
             this.#compaction.observeCompaction(
               threadId,
@@ -692,8 +709,8 @@ export class TurnLifecycle {
         const turnId = getString(turn, "id");
         if (!turnId) return;
         const reported = getString(turn, "status") ?? "completed";
-        // OpenBot stopped this turn for a compaction loop: its end is a failure, with the loop's reason.
-        const status = this.#compactionLoops.delete(turnId) && reported === "interrupted" ? "failed" : reported;
+        // OpenBot stopped this turn for its compaction: its end is a failure, with that reason.
+        const status = this.#compactionStops.delete(turnId) && reported === "interrupted" ? "failed" : reported;
         if (status === "failed" && !this.#turnErrors.has(turnId)) {
           this.#hooks.emitFailure?.({
             code: "agent_error",
@@ -707,6 +724,7 @@ export class TurnLifecycle {
         this.#attention.clearForTurn(threadId, turnId);
         if (this.#observedCompactions.get(threadId) === turnId) {
           this.#observedCompactions.delete(threadId);
+          this.#clearCompactionDeadline(threadId);
           this.#compaction.observeCompaction(threadId, status === "completed" ? "completed" : "failed");
         }
         this.#compaction.threadTurnEnded(threadId);
@@ -865,12 +883,40 @@ export class TurnLifecycle {
    * session above the provider's own limit, so the turn makes no progress. The error says what to
    * change, and the turn ends as failed; it does not continue, because it would compact again.
    */
-  #stopCompactionLoop(source: AgentClient, agentId: string, threadId: string, turnId: string): void {
+  /**
+   * Stops a turn whose own compaction runs longer than the compaction run deadline. Codex waits with
+   * no end for a connection that stops answering during a compaction, and its turn showed
+   * "Compacting context" until the stall limit. Upstream also continues the turn once; the fork has
+   * no continuation for it, so the message fails with the reason, and the next one runs.
+   */
+  #armCompactionDeadline(agentId: string, threadId: string, turnId: string, client: AgentClient): void {
+    this.#clearCompactionDeadline(threadId);
+    const runMs = this.#compaction.runTimeoutMs;
+    const timer = setTimeout(() => {
+      this.#compactionDeadlines.delete(threadId);
+      if (this.#observedCompactions.get(threadId) !== turnId || !this.#runningTurns.has(turnId)) return;
+      logger.warn("A provider compaction did not end; OpenBot stops its turn.", { provider: client.provider, runMs });
+      this.#stopCompactionTurn(client, agentId, threadId, turnId, sourceText("error.agent.compactionConnectionLost"));
+    }, runMs);
+    timer.unref?.();
+    this.#compactionDeadlines.set(threadId, timer);
+  }
+
+  #clearCompactionDeadline(threadId: string): void {
+    const timer = this.#compactionDeadlines.get(threadId);
+    if (timer) clearTimeout(timer);
+    this.#compactionDeadlines.delete(threadId);
+  }
+
+  /**
+   * Stops a turn for its own compaction, with the error that says what to do. The turn ends as
+   * failed; it does not continue, because it would compact again.
+   */
+  #stopCompactionTurn(source: AgentClient, agentId: string, threadId: string, turnId: string, message: string): void {
     // Codex can start one more compaction before it handles the stop.
-    if (this.#compactionLoops.has(turnId)) return;
-    this.#compactionLoops.add(turnId);
-    logger.warn("A provider compacted again and again; OpenBot stops its turn.", { provider: source.provider });
-    const message = sourceText("error.agent.compactionLoopStopped", { provider: agentProviderName(source.provider) });
+    if (this.#compactionStops.has(turnId)) return;
+    this.#compactionStops.add(turnId);
+    logger.warn("OpenBot stops a turn for its compaction.", { provider: source.provider });
     // The failed delivery keeps this reason, not the provider's text.
     this.#turnErrors.set(turnId, message);
     const context = {
@@ -885,6 +931,8 @@ export class TurnLifecycle {
       this.#hooks.emitFailure?.({ code: "agent_error", agentId, ...context });
       this.#hooks.taskFailed(taskId, message);
     } else this.#hooks.emitError("agent_error", message, agentId, context);
+    // As a Stop does, the turn ends with Codex's `turn/completed`. A request that times out starts the
+    // probe that ends a process that does not answer.
     Effect.runFork(source.request("turn/interrupt", { threadId, turnId }, decodeRecordResponse).pipe(Effect.ignore));
   }
 

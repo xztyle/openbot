@@ -137,4 +137,6 @@ export const messages = {
   "error.agent.screenCaptureFailed": "A captura de tela falhou. Tente de novo.",
   "error.agent.compactionLoopStopped":
     "{provider} compactou o contexto várias vezes, e em cada vez ele continuou cheio demais para continuar, então o Atelier parou este turno. Desative os servidores MCP ou o uso do computador de que este agente não precisa e envie uma mensagem. Se você ou o agente mudaram quando o {provider} compacta, desfaça essa mudança.",
+  "error.agent.compactionConnectionLost":
+    "A conexão parou enquanto o agente compactava o contexto, então a tarefa parou. Verifique sua conexão com a internet e envie uma mensagem para continuar.",
 } as const satisfies PartialTranslation<typeof source>;

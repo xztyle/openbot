@@ -119,4 +119,6 @@ export const messages = {
   "error.agent.screenCaptureFailed": "截屏失败，请重试。",
   "error.agent.compactionLoopStopped":
     "{provider} 反复压缩上下文，但每次压缩后仍然太满，无法继续，因此 Atelier 停止了这一轮。请关闭此智能体不需要的 MCP 服务器或电脑操控，然后发送一条消息。如果你或智能体更改过 {provider} 的压缩时机，请撤销该更改。",
+  "error.agent.compactionConnectionLost":
+    "助手压缩上下文时连接中断，因此任务已停止。请检查网络连接，然后发送消息以继续。",
 } as const satisfies PartialTranslation<typeof source>;

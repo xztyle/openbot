@@ -146,4 +146,6 @@ export const messages = {
   "error.agent.screenCaptureFailed": "画面キャプチャに失敗しました。もう一度お試しください。",
   "error.agent.compactionLoopStopped":
     "{provider} がコンテキストを何度も圧縮しましたが、毎回いっぱいのままで続行できなかったため、Atelier はこのターンを停止しました。このエージェントに不要な MCP サーバーやコンピューター操作をオフにしてから、メッセージを送信してください。{provider} が圧縮するタイミングをあなたかエージェントが変更した場合は、その変更を元に戻してください。",
+  "error.agent.compactionConnectionLost":
+    "エージェントがコンテキストを圧縮している間に接続が切れたため、タスクが停止しました。インターネット接続を確認してから、メッセージを送って続けてください。",
 } as const satisfies PartialTranslation<typeof source>;

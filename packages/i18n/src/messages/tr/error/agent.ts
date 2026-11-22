@@ -134,4 +134,6 @@ export const messages = {
   "error.agent.screenCaptureFailed": "Ekran yakalama başarısız oldu. Tekrar deneyin.",
   "error.agent.compactionLoopStopped":
     "{provider} bağlamı tekrar tekrar sıkıştırdı ve her seferinde devam edemeyecek kadar dolu kaldı, bu yüzden Atelier bu turu durdurdu. Bu ajanın gerek duymadığı MCP sunucularını veya bilgisayar kullanımını kapatın, ardından bir mesaj gönderin. Siz veya ajan {provider} uygulamasının ne zaman sıkıştırdığını değiştirdiyseniz, bu değişikliği geri alın.",
+  "error.agent.compactionConnectionLost":
+    "Ajan bağlamını sıkıştırırken bağlantı kesildi, bu yüzden görev durdu. İnternet bağlantınızı kontrol edin, ardından devam etmek için bir mesaj gönderin.",
 } as const satisfies PartialTranslation<typeof source>;

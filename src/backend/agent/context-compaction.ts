@@ -163,6 +163,11 @@ export class ContextCompaction {
   readonly #timeoutMs: number;
   /** How long a started compaction runs before OpenBot stops it. */
   readonly #runTimeoutMs: number;
+
+  /** How long a started compaction runs before OpenBot stops it, also one that a provider starts in a turn. */
+  get runTimeoutMs(): number {
+    return this.#runTimeoutMs;
+  }
   /** How long a stopped compaction, or a refused queue, waits for the turn to end. */
   readonly #graceMs: number;
   readonly #display = new Map<string, Omit<AgentContextState, "agentId" | "threadId">>();

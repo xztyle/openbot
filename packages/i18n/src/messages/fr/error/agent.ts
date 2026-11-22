@@ -147,4 +147,6 @@ export const messages = {
   "error.agent.screenCaptureFailed": "La capture d’écran a échoué. Réessayez.",
   "error.agent.compactionLoopStopped":
     "{provider} a compacté le contexte encore et encore, et il restait chaque fois trop plein pour continuer : Atelier a donc arrêté ce tour. Désactivez les serveurs MCP ou l'utilisation de l'ordinateur dont cet agent n'a pas besoin, puis envoyez un message. Si vous ou l'agent avez changé le moment où {provider} compacte, annulez ce changement.",
+  "error.agent.compactionConnectionLost":
+    "La connexion s’est interrompue pendant que l’agent compactait son contexte, la tâche s’est donc arrêtée. Vérifiez votre connexion internet, puis envoyez un message pour continuer.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -6,7 +6,8 @@
 // itself, one that the run deadline stops, and one that does not stop, so that OpenBot sends a turn
 // that Codex refuses. Then a chat whose compactions fail, and one that each compaction leaves full
 // while Codex reports a small estimate during each compaction: both stop after 2. Last, a turn in
-// which Codex compacts again after each step stops at its third compaction.
+// which Codex compacts again after each step stops at its third compaction, and one whose compaction
+// hangs stops at the run deadline.
 // `bun scripts/codex-compaction-queue-e2e.ts`. Writes .openbot-build/codex-compaction-queue-e2e/report.json.
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -103,6 +104,15 @@ const answer = (message) => {
       write({ method: "thread/tokenUsage/updated", params: { threadId: params.threadId, turnId, tokenUsage: { total: { totalTokens: used }, last: { totalTokens: used }, modelContextWindow: 100000 } } });
       // \`loop\`: Codex compacts after each step, and each compaction leaves 60% of the window, still
       // above its own limit.
+      // \`stallInTurn\`: Codex starts a compaction in the turn and then sends nothing, as Codex 0.167.0
+      // did when the connection stopped answering.
+      if (control().stallInTurn) {
+        looping.add(turnId);
+        const item = { type: "contextCompaction", id: "self-compact-" + turnId };
+        write({ method: "item/started", params: { threadId: params.threadId, turnId, item } });
+        log({ method: "selfCompaction", threadId: params.threadId });
+        return;
+      }
       if (control().loop) {
         let left = 20;
         looping.add(turnId);
@@ -218,6 +228,7 @@ const report: {
   failedCompactions?: { compactions: number; failed: number; stopNotices: number; messages: string[] };
   ineffectiveCompactions?: { compactions: number; turns: number; notices: number; messages: string[] };
   compactionLoop?: { compactions: number; interrupts: number; status: string | null; error: string | null };
+  compactionDeadline?: { interrupts: number; status: string | null; error: string | null; elapsedMs: number };
   passed: boolean;
   error?: string;
 } = {
@@ -530,6 +541,39 @@ try {
     sourceText("error.agent.compactionLoopStopped", { provider: "ChatGPT" }),
     "compaction loop: the error does not say what to change",
   );
+
+  // Codex starts a compaction inside the turn and then sends nothing. The run deadline (10 s here)
+  // stops the turn, and the message fails with the plain reason (upstream 3d2f2f188).
+  await writeFile(controlPath, JSON.stringify({ compactionMs: 200, ignoreInterrupt: false, stallInTurn: true }));
+  const stallStarted = Date.now();
+  const staller = await runCauseEffect(
+    agents.createAgent({
+      name: "Compaction stall",
+      description: "Checks that a compaction inside a turn that hangs stops.",
+      avatarSeed: "compaction-stall",
+      avatarHue: null,
+      initialMessage: "Stall.",
+    }),
+  );
+  const stallDelivery = await waitFor(
+    "the stalled turn to end",
+    () => {
+      const delivery = agents.listQueue(staller.id).deliveries[0];
+      return delivery && ["failed", "completed"].includes(delivery.status) ? delivery : null;
+    },
+    30_000,
+  );
+  const stallSession = store.activeProviderSession(staller.id)?.externalSessionId;
+  const compactionDeadline = {
+    interrupts: protocol().filter((line) => line.threadId === stallSession && line.method === "turn/interrupt").length,
+    status: stallDelivery.status,
+    error: stallDelivery.error ?? null,
+    elapsedMs: Date.now() - stallStarted,
+  };
+  report.compactionDeadline = compactionDeadline;
+  assert.equal(compactionDeadline.interrupts, 1, "compaction deadline: one stop");
+  assert.equal(compactionDeadline.status, "failed", "compaction deadline: the message did not fail");
+  assert.equal(compactionDeadline.error, sourceText("error.agent.compactionConnectionLost"));
   report.passed = true;
 } catch (error) {
   report.error = error instanceof Error ? (error.stack ?? error.message) : String(error);

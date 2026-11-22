@@ -156,4 +156,6 @@ export const messages = {
   "error.agent.screenCaptureFailed": "Die Bildschirmaufnahme ist fehlgeschlagen. Versuche es erneut.",
   "error.agent.compactionLoopStopped":
     "{provider} hat den Kontext immer wieder komprimiert, und jedes Mal blieb er zu voll, um weiterzumachen. Daher hat Atelier diesen Durchlauf angehalten. Schalte die MCP-Server oder die Computersteuerung aus, die dieser Agent nicht braucht, und sende dann eine Nachricht. Wenn du oder der Agent geändert habt, wann {provider} komprimiert, mach diese Änderung rückgängig.",
+  "error.agent.compactionConnectionLost":
+    "Die Verbindung brach ab, während der Agent seinen Kontext komprimierte. Daher wurde die Aufgabe angehalten. Prüfe deine Internetverbindung und sende dann eine Nachricht, um fortzufahren.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -236,11 +236,7 @@ import {
 import type { HostBackupsCalls } from "../servers/ServerBackupsPanel";
 import type { HostMemoryLimitCalls } from "../servers/ServerMemoryLimitSetting";
 import type { HostAgentAccessCalls } from "../servers/ServerRolesSection";
-import {
-  type ServerHostedSitesOptions,
-  type ServerSettingsTarget,
-  serverSettingsTargetOf,
-} from "../servers/ServerSettingsModal";
+import type { ServerHostedSitesOptions } from "../servers/ServerSettingsModal";
 import type { HostTimezoneCalls } from "../servers/ServerTimezoneSetting";
 import type { HostTurnLimitsCalls } from "../servers/ServerTurnLimitsSetting";
 import type { HostUpdateCalls } from "../servers/ServerUpdatePanel";
@@ -251,6 +247,7 @@ import {
   serverRoleCanAdminister,
 } from "../servers/server-capabilities";
 import { createServerConnectionToast } from "../servers/server-connection-toast";
+import { type ServerSettingsTarget, serverSettingsTargetOf } from "../servers/server-settings-target";
 import {
   offerServerUpdate,
   ServerUpdateDialogHost,

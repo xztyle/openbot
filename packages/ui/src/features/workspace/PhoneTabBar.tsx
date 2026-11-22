@@ -42,14 +42,11 @@ const MAX_COUNT = 99;
  */
 export function PhoneTabBar(props: PhoneTabBarProps): JSX.Element {
   const half = () => (props.center ? Math.ceil(props.tabs.length / 2) : props.tabs.length);
-  const tab = (item: PhoneTab) => (
-    <PhoneTabButton tab={item} active={props.active === item.id} onSelect={props.onSelect} />
-  );
   return (
     <nav class={cx("ws-phone-tabs", props.class)} aria-label={props.label} hidden={props.hidden}>
       <div class="ws-phone-tabs-list" data-center={props.center ? "" : undefined}>
         <For each={props.tabs.slice(0, half())} keyed={(item) => item.id}>
-          {(item) => tab(item())}
+          {(item) => <PhoneTabButton tab={item()} active={props.active === item().id} onSelect={props.onSelect} />}
         </For>
         <Show when={props.center}>
           {(center) => (
@@ -65,7 +62,7 @@ export function PhoneTabBar(props: PhoneTabBarProps): JSX.Element {
           )}
         </Show>
         <For each={props.tabs.slice(half())} keyed={(item) => item.id}>
-          {(item) => tab(item())}
+          {(item) => <PhoneTabButton tab={item()} active={props.active === item().id} onSelect={props.onSelect} />}
         </For>
       </div>
     </nav>

@@ -1,6 +1,6 @@
 import { type InsightGoal, insightGoalPace, type WorkspaceInsight } from "@openbot/contracts/ipc";
 import { Dynamic, type JSX } from "@solidjs/web";
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, createUniqueId, For, Show } from "solid-js";
 import { Button } from "../../button";
 import { Input } from "../../form";
 import {
@@ -150,6 +150,8 @@ function greetingKey(hour: number) {
  */
 export function TodayView(props: TodayViewProps): JSX.Element {
   const { t, format } = useText();
+  // A phone mounts Today twice (its tab, and the pane behind it): the heading ids must not clash.
+  const uid = createUniqueId();
   const cost = useCost();
   const now = new Date();
   const title = () => t(greetingKey(now.getHours()), { name: props.name });
@@ -163,8 +165,12 @@ export function TodayView(props: TodayViewProps): JSX.Element {
         actions={props.actions}
       />
       <div class="ws-view-scroll ws-today-scroll">
-        <section class="ws-today-section" aria-labelledby="ws-today-waiting">
-          <h3 id="ws-today-waiting" class="ws-today-heading" data-tone={props.decisions.length ? "warn" : undefined}>
+        <section class="ws-today-section" aria-labelledby={`ws-today-waiting-${uid}`}>
+          <h3
+            id={`ws-today-waiting-${uid}`}
+            class="ws-today-heading"
+            data-tone={props.decisions.length ? "warn" : undefined}
+          >
             <Hand aria-hidden="true" />
             <span>{t("workspace.today.waiting", { count: props.decisions.length })}</span>
           </h3>
@@ -192,8 +198,8 @@ export function TodayView(props: TodayViewProps): JSX.Element {
         <Show when={props.steps?.length}>
           <TodayGuide steps={props.steps ?? []} onHide={props.onHideSteps} />
         </Show>
-        <section class="ws-today-section" aria-labelledby="ws-today-working">
-          <h3 id="ws-today-working" class="ws-today-heading">
+        <section class="ws-today-section" aria-labelledby={`ws-today-working-${uid}`}>
+          <h3 id={`ws-today-working-${uid}`} class="ws-today-heading">
             <Zap aria-hidden="true" />
             <span>{t("workspace.today.working", { count: props.working.length })}</span>
             <Show when={props.onAsk}>
@@ -220,8 +226,8 @@ export function TodayView(props: TodayViewProps): JSX.Element {
             </ul>
           </Show>
         </section>
-        <section class="ws-today-section" aria-labelledby="ws-today-briefing">
-          <h3 id="ws-today-briefing" class="ws-today-heading">
+        <section class="ws-today-section" aria-labelledby={`ws-today-briefing-${uid}`}>
+          <h3 id={`ws-today-briefing-${uid}`} class="ws-today-heading">
             <Sunrise aria-hidden="true" />
             <span>{t("workspace.today.briefing")}</span>
             <Show when={props.onOpenBriefing}>
@@ -597,11 +603,12 @@ function TodayShippedCard(props: { shipped: readonly TodayShipped[]; onOpen: (()
 /** The first-run guide: what makes the workspace more than a chat, one step at a time. */
 function TodayGuide(props: { steps: readonly TodayStep[]; onHide: (() => void) | undefined }): JSX.Element {
   const { t } = useText();
+  const uid = createUniqueId();
   const done = () => props.steps.filter((step) => step.done).length;
   return (
-    <section class="ws-today-guide" aria-labelledby="ws-today-guide-title">
+    <section class="ws-today-guide" aria-labelledby={`ws-today-guide-title-${uid}`}>
       <div class="ws-today-guide-head">
-        <h3 id="ws-today-guide-title" class="ws-today-guide-title">
+        <h3 id={`ws-today-guide-title-${uid}`} class="ws-today-guide-title">
           {t("workspace.today.guide.title")}
         </h3>
         <span class="ws-today-card-meta">

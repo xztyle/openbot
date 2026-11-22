@@ -1,6 +1,6 @@
 import type { WorkspaceInsight } from "@openbot/contracts/ipc";
 import type { JSX } from "@solidjs/web";
-import { createMemo, For, Show } from "solid-js";
+import { createMemo, createUniqueId, For, Show } from "solid-js";
 import { Button } from "../../button";
 import { ArrowRight, Coins, Gauge, Hand, TriangleAlert } from "../../icons";
 import { useText } from "../../text";
@@ -47,6 +47,7 @@ export interface MoneyViewProps {
  */
 export function MoneyView(props: MoneyViewProps): JSX.Element {
   const { t, format } = useText();
+  const uid = createUniqueId();
   const cost = useCost();
   const costs = () => props.report?.costs;
   const change = () => {
@@ -156,8 +157,12 @@ export function MoneyView(props: MoneyViewProps): JSX.Element {
             </ol>
           </figure>
         </Show>
-        <section class="ws-today-section" aria-labelledby="ws-money-waiting">
-          <h3 id="ws-money-waiting" class="ws-today-heading" data-tone={props.spend.length ? "warn" : undefined}>
+        <section class="ws-today-section" aria-labelledby={`ws-money-waiting-${uid}`}>
+          <h3
+            id={`ws-money-waiting-${uid}`}
+            class="ws-today-heading"
+            data-tone={props.spend.length ? "warn" : undefined}
+          >
             <Hand aria-hidden="true" />
             <span>{t("workspace.money.waiting", { count: props.spend.length })}</span>
           </h3>
@@ -176,8 +181,8 @@ export function MoneyView(props: MoneyViewProps): JSX.Element {
             </ul>
           </Show>
         </section>
-        <section class="ws-today-section" aria-labelledby="ws-money-agents">
-          <h3 id="ws-money-agents" class="ws-today-heading">
+        <section class="ws-today-section" aria-labelledby={`ws-money-agents-${uid}`}>
+          <h3 id={`ws-money-agents-${uid}`} class="ws-today-heading">
             <Coins aria-hidden="true" />
             <span>{t("workspace.money.byAgent")}</span>
             <Show when={props.onOpenDetails}>

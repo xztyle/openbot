@@ -1,6 +1,7 @@
-// Checks the web client on an iPhone, as Slack's mobile app works: the bottom tabs (Home, DMs,
-// Activity, More), Home without the sidebar's view rows, the space switcher, a conversation and a
-// thread that push over the list, Back that pops one screen at a time, and the tab title count. It
+// Checks the web client on an iPhone: the bottom tabs (Today, Chat, Agents, Inbox, with the "+" in the
+// middle), Chat without the sidebar's view rows, More from Today's header, the space switcher, a
+// conversation and a thread that push over the list, Back that pops one screen at a time, and the
+// tab title count. It
 // serves the web client on a mock host (`src/renderer/stories/web-client-harness.tsx`, the "Spaces
 // workspace" story) at every address under `/app`, as the site does, and drives it in Chromium with
 // an iPhone viewport and touch. No account service, host or provider is needed.
@@ -97,7 +98,7 @@ async function waitForPath(page: Page, expected: string): Promise<void> {
 /** The pane of the open channel, DM or group. */
 const channelPane = (page: Page, name: string) => page.getByRole("region", { name, exact: true }).first();
 const tabBar = (page: Page) => page.getByRole("navigation", { name: english("workspace.phone.tabs") });
-type TabKey = "workspace.phone.home" | "workspace.phone.dms" | "workspace.phone.activity" | "workspace.phone.more";
+type TabKey = "workspace.view.today" | "workspace.phone.chat" | "workspace.phone.agents" | "workspace.phone.inbox";
 const tab = (page: Page, key: TabKey) =>
   tabBar(page).getByRole("button", { name: new RegExp(`^${english(key)}`, "u") });
 
@@ -172,11 +173,20 @@ try {
       report.consoleErrors.push(message.text().slice(0, 1_000));
   });
 
-  // 1. A bare address opens Home: the tab bar, the space's channels and DMs, and no view rows.
-  await step(page, "a bare address opens Home with the tab bar", async () => {
+  // 1. A bare address opens Today; Chat has the space's channels and DMs, and no view rows.
+  await step(page, "a bare address opens Today with the tab bar", async () => {
     await page.goto(`${origin}/app/general`, COMMIT);
-    await tab(page, "workspace.phone.home").waitFor({ timeout: UI_WAIT_MS });
-    assert.equal(await tab(page, "workspace.phone.home").getAttribute("aria-current"), "page");
+    await tab(page, "workspace.view.today").waitFor({ timeout: UI_WAIT_MS });
+    assert.equal(await tab(page, "workspace.view.today").getAttribute("aria-current"), "page");
+    await page
+      .getByRole("heading", { name: english("workspace.today.waiting", { count: 0 }) })
+      .first()
+      .waitFor({ timeout: UI_WAIT_MS });
+  });
+  await shot(page, "01-today");
+  await step(page, "Chat lists the channels and DMs", async () => {
+    await tab(page, "workspace.phone.chat").tap();
+    assert.equal(await tab(page, "workspace.phone.chat").getAttribute("aria-current"), "page");
     await page
       .getByRole("button", { name: /general/u })
       .first()
@@ -191,18 +201,22 @@ try {
       .first()
       .waitFor();
   });
-  await shot(page, "01-home");
+  await shot(page, "01b-chat");
 
-  // 2. The title and the DMs tab count the unread replies of Chief.
-  await step(page, "the tab title and the DMs tab count unread messages", async () => {
+  // 2. The title counts the unread messages; Chat has a dot, not a count.
+  await step(page, "the tab title counts unread messages and Chat has a dot", async () => {
     await page.waitForFunction(() => /^\(\d+\) /u.test(document.title), undefined, { timeout: UI_WAIT_MS });
     report.title = await page.title();
-    const label = (await tab(page, "workspace.phone.dms").getAttribute("aria-label")) ?? "";
-    assert.match(label, /unread conversation/u);
+    // The unread state comes with the channel list, after the tabs show.
+    await tabBar(page)
+      .getByRole("button", {
+        name: `${english("workspace.phone.chat")}, ${english("workspace.sidebar.unread")}`,
+      })
+      .waitFor({ timeout: UI_WAIT_MS });
   });
 
-  // 3. A channel pushes over Home; the tab bar steps aside; Back pops to Home.
-  await step(page, "a channel pushes over Home", async () => {
+  // 3. A channel pushes over Chat; the tab bar steps aside; Back pops to Chat.
+  await step(page, "a channel pushes over Chat", async () => {
     await page
       .getByRole("button", { name: /general/u })
       .first()
@@ -214,9 +228,10 @@ try {
     assert.equal(screen, "conversation");
   });
   await shot(page, "02-channel");
-  await step(page, "Back pops the channel to Home", async () => {
+  await step(page, "Back pops the channel to Chat", async () => {
     await back(page);
-    await tab(page, "workspace.phone.home").waitFor({ timeout: UI_WAIT_MS });
+    await tab(page, "workspace.phone.chat").waitFor({ timeout: UI_WAIT_MS });
+    assert.equal(await tab(page, "workspace.phone.chat").getAttribute("aria-current"), "page");
     assert.equal(await channelPane(page, "general").isVisible(), false);
   });
 
@@ -232,27 +247,32 @@ try {
     await channelPane(page, "general").waitFor({ timeout: UI_WAIT_MS });
     await page.waitForFunction(() => !location.pathname.includes("/t/"), undefined, { timeout: UI_WAIT_MS });
   });
-  await step(page, "Back from the channel shows the list", async () => {
+  await step(page, "Back from the channel shows the tabs", async () => {
     await back(page);
-    await tab(page, "workspace.phone.home").waitFor({ timeout: UI_WAIT_MS });
+    await tab(page, "workspace.phone.chat").waitFor({ timeout: UI_WAIT_MS });
   });
 
-  // 5. DMs: the list with the last message; a DM pushes; Back returns to the DMs tab.
-  await step(page, "the DMs tab lists DMs with their last message", async () => {
-    await tab(page, "workspace.phone.dms").tap();
+  // 5. DMs: Chat's DMs chip lists them with the last message; a DM pushes; Back returns to the list.
+  await step(page, "Chat's DMs chip lists DMs with their last message", async () => {
+    await tab(page, "workspace.phone.chat").tap();
+    await page
+      .getByRole("button", { name: new RegExp(`^${english("workspace.view.dms")}`, "u") })
+      .first()
+      .tap();
     await page.getByRole("button", { name: /Ana.*Lunch at 12\?/u }).waitFor({ timeout: UI_WAIT_MS });
   });
   await shot(page, "04-dms");
-  await step(page, "a DM opens and Back returns to the DMs tab", async () => {
+  await step(page, "a DM opens and Back leaves it", async () => {
     await page.getByRole("button", { name: /Ana.*Lunch at 12\?/u }).tap();
     await channelPane(page, "Ana").waitFor({ timeout: UI_WAIT_MS });
     await back(page);
-    await tab(page, "workspace.phone.dms").waitFor({ timeout: UI_WAIT_MS });
-    assert.equal(await tab(page, "workspace.phone.dms").getAttribute("aria-current"), "page");
+    await channelPane(page, "Ana").waitFor({ state: "hidden", timeout: UI_WAIT_MS });
+    await shot(page, "04a-after-dm");
   });
 
   await step(page, "a long press on a DM opens its actions in a sheet", async () => {
-    const row = page.getByRole("button", { name: /Ana.*Lunch at 12\?/u });
+    // Back from the DM showed Chat: its Ana row has the same actions as the DMs list.
+    const row = page.getByRole("button", { name: /^Ana/u }).first();
     const box = await row.boundingBox();
     assert.ok(box, "The DM row has no box.");
     const cdp = await context.newCDPSession(page);
@@ -267,29 +287,51 @@ try {
     await sheet.waitFor({ state: "detached", timeout: UI_WAIT_MS });
   });
 
-  // 6. Activity: an item opens its conversation; Back returns to Activity.
-  await step(page, "the Activity tab opens an item and Back returns to it", async () => {
-    await tab(page, "workspace.phone.activity").tap();
+  // 6. Inbox (Activity): an item opens its conversation; Back returns to Inbox.
+  await step(page, "the Inbox tab opens an item and Back returns to it", async () => {
+    await back(page);
+    await tab(page, "workspace.phone.inbox").waitFor({ timeout: UI_WAIT_MS });
+    await tab(page, "workspace.phone.inbox").tap();
     const item = page.getByRole("button", { name: /Ana/u }).filter({ hasText: "Lunch at 12?" }).first();
     await item.waitFor({ timeout: UI_WAIT_MS });
     await shot(page, "05-activity");
     await item.tap();
     await channelPane(page, "Ana").waitFor({ timeout: UI_WAIT_MS });
     await back(page);
-    await tab(page, "workspace.phone.activity").waitFor({ timeout: UI_WAIT_MS });
-    assert.equal(await tab(page, "workspace.phone.activity").getAttribute("aria-current"), "page");
+    await tab(page, "workspace.phone.inbox").waitFor({ timeout: UI_WAIT_MS });
+    assert.equal(await tab(page, "workspace.phone.inbox").getAttribute("aria-current"), "page");
   });
 
-  // 7. More: the views that the desktop keeps under More, and the profile's settings.
+  // 6b. Agents: the fleet with the views of the agents; the "+" opens the sheet of new things.
+  await step(page, "the Agents tab shows the fleet and its views", async () => {
+    await tab(page, "workspace.phone.agents").tap();
+    await page.getByRole("region", { name: english("workspace.view.fleet") }).waitFor({ timeout: UI_WAIT_MS });
+    await page.getByRole("button", { name: english("workspace.view.org") }).waitFor({ timeout: UI_WAIT_MS });
+    await shot(page, "05b-agents");
+  });
+  await step(page, "the + opens ask, message, channel and more", async () => {
+    await tabBar(page)
+      .getByRole("button", { name: english("workspace.phone.create") })
+      .tap();
+    const sheet = page.getByRole("dialog");
+    await sheet.getByRole("button", { name: english("workspace.phone.askAgent") }).waitFor({ timeout: UI_WAIT_MS });
+    await shot(page, "05c-create");
+    await page.keyboard.press("Escape");
+    await sheet.waitFor({ state: "detached", timeout: UI_WAIT_MS });
+  });
+
+  // 7. More, from Today's header: the views, and the profile's settings.
+  const more = () => page.getByRole("button", { name: english("workspace.view.agents") });
   await step(page, "More opens Between agents, and Back returns to More", async () => {
-    await tab(page, "workspace.phone.more").tap();
+    await tab(page, "workspace.view.today").tap();
+    await page.getByRole("button", { name: english("workspace.phone.more") }).tap();
     await page.getByRole("button", { name: english("workspace.view.agents") }).waitFor({ timeout: UI_WAIT_MS });
     await shot(page, "06-more");
     await page.getByRole("button", { name: english("workspace.view.agents") }).tap();
     await waitForPath(page, "/app/general/between-agents");
     assert.equal(await tabBar(page).isVisible(), false);
     await back(page);
-    await tab(page, "workspace.phone.more").waitFor({ timeout: UI_WAIT_MS });
+    await more().waitFor({ timeout: UI_WAIT_MS });
   });
   await step(page, "the profile opens the settings, and its back button returns to More", async () => {
     await page.getByRole("button", { name: /Preview User/u }).tap();
@@ -310,13 +352,13 @@ try {
       .getByRole("button", { name: english("workspace.layout.back") })
       .first()
       .tap();
-    await tab(page, "workspace.phone.more").waitFor({ timeout: UI_WAIT_MS });
+    await more().waitFor({ timeout: UI_WAIT_MS });
     assert.equal(await page.getByRole("heading", { name: english("app.settingsPage.title") }).isVisible(), false);
   });
 
-  // 8. The space switcher: a sheet of spaces; a pick shows that space's Home.
+  // 8. The space switcher: a sheet of spaces; a pick shows that space's channels.
   await step(page, "the switcher sheet changes the space", async () => {
-    await tab(page, "workspace.phone.home").tap();
+    await tab(page, "workspace.phone.chat").tap();
     await page.getByRole("button", { name: new RegExp(`^${english("workspace.phone.switch")}`, "u") }).tap();
     const trading = page.getByRole("dialog").getByRole("button", { name: /^Trading/u });
     await trading.waitFor({ timeout: UI_WAIT_MS });
@@ -350,7 +392,7 @@ try {
     await touch("touchStart", 4);
     for (const x of [20, 60, 120, 180, 240, 300]) await touch("touchMove", x);
     await touch("touchEnd", 300);
-    await tab(app, "workspace.phone.home").waitFor({ timeout: UI_WAIT_MS });
+    await tab(app, "workspace.view.today").waitFor({ timeout: UI_WAIT_MS });
     assert.equal(await channelPane(app, "general").isVisible(), false);
   });
   await app.close();

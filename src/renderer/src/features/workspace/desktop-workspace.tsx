@@ -39,7 +39,7 @@ import { hostTrustCalls } from "../trust/trust-port";
 import { useUsage } from "../usage/usage-context";
 import { createAgentMailboxesStore } from "./agent-mailboxes-store";
 import { createConnectorAccessStore } from "./connector-access-store";
-import { createOwnerAwayStore } from "./owner-away-store";
+import { createOwnerAwayStore, ownerAwayWelcomeParts } from "./owner-away-store";
 import { workspaceAttention } from "./workspace-attention";
 import { WorkspaceProvider } from "./workspace-context";
 import { createWorkspaceController, desktopMessageLink } from "./workspace-controller";
@@ -205,7 +205,7 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     enabled: () => ownerRoutes() !== undefined,
     hostId: () => activeServerId(),
     onWelcome: (welcome) =>
-      toast(t("workspace.away.welcome", welcome), {
+      toast(t("workspace.away.welcome", { what: ownerAwayWelcomeParts(welcome, t) }), {
         action: { label: t("workspace.away.welcomeShow"), onClick: () => controller.openView("activity") },
       }),
   });

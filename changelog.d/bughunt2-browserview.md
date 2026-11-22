@@ -7,3 +7,5 @@
   the page kept the button down and selected text on every move until the next click.
 - The dock over a sign-in popup of a page that an agent asked you to use shows Hand back, as over the
   page itself. Before, the popup had no Hand back until it closed.
+- On a phone, a finger held still on the agent's page in the live view no longer opens the
+  workspace's menu (New channel, Browse channels…) over the page.

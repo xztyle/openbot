@@ -557,6 +557,13 @@ async function phone(browser: Browser, origin: string): Promise<void> {
     const next = await onScreen(page, tab, "#next");
     await page.touchscreen.tap(next.x, next.y);
     await waitForTab(tab, clicksAre, nextClicks, "1", "One tap is one click");
+    // The keyboard the person opened stays up for the page: a tap does not take its field's focus.
+    await page.waitForTimeout(300);
+    assert.equal(
+      await page.evaluate(() => document.activeElement?.getAttribute("aria-label")),
+      english("browser.liveView.keyboardInput"),
+      "The keyboard field keeps the focus after a tap on the page.",
+    );
   });
 
   await step(page, viewport, "a drag scrolls the page", async () => {
@@ -565,6 +572,24 @@ async function phone(browser: Browser, origin: string): Promise<void> {
     const x = view.x + view.width / 2;
     await swipe(page, { x, y: view.y + view.height * 0.8 }, { x, y: view.y + view.height * 0.2 });
     await waitForTab(tab, scrolledPast, scrollTop, "100", "A finger that moves up scrolls the page down");
+  });
+
+  await step(page, viewport, "a finger held still on the page does not open the workspace's menu", async () => {
+    const view = await liveView(page).boundingBox();
+    assert.ok(view);
+    const cdp = await page.context().newCDPSession(page);
+    const point = { x: view.x + view.width / 2, y: view.y + view.height * 0.75, id: 1 };
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+    // Longer than the long press of the workspace's sheet, as a person who holds to read does.
+    await page.waitForTimeout(900);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await cdp.detach();
+    await page.waitForTimeout(300);
+    assert.equal(
+      await page.getByText(english("workspace.app.menu.createChannel"), { exact: true }).count(),
+      0,
+      "The workspace's menu opened over the page.",
+    );
   });
 
   await step(page, viewport, "two fingers zoom the view, and Fit undoes it", async () => {
@@ -595,6 +620,29 @@ async function phone(browser: Browser, origin: string): Promise<void> {
       });
     },
   );
+
+  await step(page, viewport, "closing a popup from the tab list goes back to the page", async () => {
+    const opened = tab.context().waitForEvent("page");
+    await tab.evaluate(() => window.scrollTo(0, 0));
+    const before = host.starts;
+    const oauth = await onScreen(page, tab, "#oauth");
+    await page.touchscreen.tap(oauth.x, oauth.y);
+    const popup = await opened;
+    await popup.waitForLoadState();
+    host.pages.set(POPUP_ID, popup);
+    await page.evaluate((id) => window.liveViewBridge?.addTab(id, "Sign in to Example"), POPUP_ID);
+    await waitUntil(() => host.current === POPUP_ID && host.starts > before, "The view shows the popup");
+    await viewing(page, host);
+    await page.locator("#browser-expanded-panel .browser-full-switch").tap();
+    await button(page, english("browser.tab.closeNamed", { name: "Sign in to Example" })).tap();
+    await page.waitForFunction(() => (window.closedTabs ?? []).length > 0, undefined, { timeout: UI_WAIT_MS });
+    await popup.close();
+    host.pages.delete(POPUP_ID);
+    await waitUntil(() => host.current === TAB_ID, "The view goes back to the page that opened the popup");
+    await page.keyboard.press("Escape");
+    await viewing(page, host);
+    await shot(page, "phone-popup-closed");
+  });
 
   await step(page, viewport, "I'm done hands the page back once", async () => {
     await page.getByRole("button", { name: handBackName }).last().tap();
@@ -800,6 +848,32 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
   await step(page, viewport, "a sign-in popup opens in the view, and the view goes back when it closes", () =>
     signInThroughPopup(page, host, tab),
   );
+
+  await step(page, viewport, "Escape in the page goes to the page, and the full view stays open", async () => {
+    await tab.evaluate(() => {
+      document.body.dataset.escapes = "0";
+      window.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key === "Escape") document.body.dataset.escapes = String(Number(document.body.dataset.escapes) + 1);
+      });
+    });
+    const name = await onScreen(page, tab, "#name");
+    await page.mouse.click(name.x, name.y);
+    await page.keyboard.press("Escape");
+    await waitForTab(
+      tab,
+      (expected) => document.body.dataset.escapes === expected,
+      () => document.body.dataset.escapes,
+      "1",
+      "The page gets the Escape, as a dialog in it needs",
+    );
+    assert.ok(await page.locator("#browser-expanded-panel").isVisible(), "The full view stays open.");
+    // Escape from the chat closes the full view, as before the page had the focus.
+    await page
+      .locator("#browser-expanded-panel")
+      .getByRole("button", { name: english("browser.hide") })
+      .click();
+    await page.locator("#browser-expanded-panel").waitFor({ state: "hidden", timeout: UI_WAIT_MS });
+  });
 
   await step(page, viewport, "Hand back ends the takeover once", async () => {
     await page.keyboard.press("Escape");

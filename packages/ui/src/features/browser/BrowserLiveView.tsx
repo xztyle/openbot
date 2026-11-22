@@ -18,6 +18,7 @@ import {
   Show,
   untrack,
 } from "solid-js";
+import { claimLongPress } from "../../long-press";
 
 /** CDP's modifier bitmap, which is what the host dispatches the event with. */
 const ALT = 1;
@@ -702,8 +703,10 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
   const touchDown = (event: PointerEvent) => {
     if (event.pointerType === "mouse") canvas()?.setPointerCapture?.(event.pointerId);
     if (event.pointerType !== "touch") return;
-    // The view takes the finger: no compatibility mouse event, no scroll or zoom of this page.
+    // The view takes the finger: no compatibility mouse event, no scroll or zoom of this page, and
+    // no long press of the workspace around it, whose sheet opened over a page held for a moment.
     event.preventDefault();
+    claimLongPress(event);
     lastTouchAt = performance.now();
     setTouch(true);
     canvas()?.setPointerCapture?.(event.pointerId);

@@ -205,6 +205,8 @@ export function createWorkspaceSearch(deps: WorkspaceSearchDeps) {
       draft.hits = [];
       draft.total = 0;
       draft.nextCursor = null;
+      // A page of the last search that still loads is dropped: its button must not spin on.
+      draft.loadingMore = false;
       draft.error = null;
       draft.unknown = request.unknown;
       draft.invalid = request.invalid;
@@ -327,6 +329,7 @@ export function createWorkspaceSearch(deps: WorkspaceSearchDeps) {
         draft.total = 0;
         draft.nextCursor = null;
         draft.loading = false;
+        draft.loadingMore = false;
         draft.error = null;
       });
     },

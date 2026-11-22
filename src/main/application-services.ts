@@ -2589,6 +2589,7 @@ export async function createApplicationServices({
       return service.learning.taskFinished(known, { source: "task", ref: key, title });
     },
     evidence: (agentId) => service.recentWork(agentId),
+    workRoots: (agentId) => service.workRoots(agentId),
     judge: (input) => Effect.runPromise(service.generateReviewText(input)),
     observesToolCalls: chatMcp !== undefined,
   });

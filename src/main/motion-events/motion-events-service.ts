@@ -34,6 +34,8 @@ const SEEN_MS = 7 * 86_400_000;
 const SEEN_LIMIT = 5_000;
 const WAITING_MS = 3 * 86_400_000;
 const QUIET_LIMIT = 500;
+/** How long an order card being made holds the assignment wakes of its recipient. */
+const ORDER_CARD_HOLD_MS = 60_000;
 
 export interface MotionEventsAgent {
   id: string;
@@ -249,6 +251,8 @@ function noteText(event: MotionEvent, line: string, fyi: boolean): string {
 
 export class MotionEventsService {
   readonly #deps: MotionEventsDependencies;
+  /** Agents an order card is being made for (`expectOrderCard`), and since when. */
+  readonly #expected = new Map<string, { token: symbol; at: number }>();
   #state: State = emptyState();
   #loaded: Promise<void> | null = null;
   #chain: Promise<unknown> = Promise.resolve();
@@ -356,6 +360,19 @@ export class MotionEventsService {
     this.#state.wakes[`${agentId}\n${issueId}`] = this.#now();
   }
 
+  /**
+   * The host is making an order card for `agentId` now. Motion sends the card's `issue.assigned`
+   * before its `issues_create` answers, so before `noteWoken` knows the issue: an assignment of that
+   * agent in the meantime is held too. The returned function ends the hold.
+   */
+  expectOrderCard(agentId: string): () => void {
+    const token = Symbol(agentId);
+    this.#expected.set(agentId, { token, at: this.#now() });
+    return () => {
+      if (this.#expected.get(agentId)?.token === token) this.#expected.delete(agentId);
+    };
+  }
+
   /** A ticket that must go to the owner now (the grader gave up on it): a Needs you item with a push. */
   escalate(ticket: Omit<WaitingTicket, "createdAt">, body: string): void {
     const item: WaitingTicket = { ...ticket, createdAt: new Date(this.#now()).toISOString() };
@@ -458,7 +475,11 @@ export class MotionEventsService {
   ): Promise<MotionDeliveryMode> {
     const key = `${plan.agentId}\n${plan.issueId}`;
     const last = this.#state.wakes[key];
-    let fyi = plan.fyi || (!plan.urgent && last !== undefined && now - last < settings.burstMinutes * 60_000);
+    const expected = this.#expected.get(plan.agentId);
+    const ordering =
+      event.type === "issue.assigned" && expected !== undefined && now - expected.at < ORDER_CARD_HOLD_MS;
+    let fyi =
+      plan.fyi || ordering || (!plan.urgent && last !== undefined && now - last < settings.burstMinutes * 60_000);
     if (!fyi && inQuietHours(settings, now, this.#deps.timeZone())) {
       this.#state.quiet = [...this.#state.quiet, { agentId: plan.agentId, eventId: event.id, line: plan.line }].slice(
         -QUIET_LIMIT,

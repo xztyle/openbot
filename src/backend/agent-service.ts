@@ -256,6 +256,7 @@ import { toUsageReadFailed, UsageLimitGate, type UsageLimitKey } from "./agent/u
 import { WarmGenerations } from "./agent/warm-generations";
 import type { WebhookRoutineWriter } from "./agent/webhook-routine-tool";
 import { WideResearch } from "./agent/wide-research";
+import { workspaceWritableRoots } from "./agent/workspace-sandbox";
 import type { AgentApiKeys } from "./agent-api-keys";
 import type { AgentProvider } from "./agent-client";
 import type { SpaceAgentTables } from "./agent-data/space-agent-tables";
@@ -2246,6 +2247,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   }
 
   /** The newest messages of the agent's own chat, oldest first: the evidence of its recent work. */
+  /** The folders an agent may write: its workspace and its space's shared folder. */
+  workRoots(agentId: string): readonly string[] {
+    const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+    return agent ? workspaceWritableRoots(agent, this.#store.spaces.agentSharedDirectory(agentId)) : [];
+  }
+
   recentWork(agentId: string): readonly ConversationMessage[] {
     const agent = this.#store.list().find((candidate) => candidate.id === agentId);
     if (!agent) return [];

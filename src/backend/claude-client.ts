@@ -2047,6 +2047,10 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           ...(name === "Skill" && isRecord(input) && typeof input.skill === "string"
             ? { skill: input.skill.slice(0, INPUT_LIMITS.identifier) }
             : {}),
+          // The step trail names the file of a file tool, as it does for Codex file changes.
+          ...(["Read", "Write", "Edit", "MultiEdit", "NotebookEdit"].includes(name) && isRecord(input)
+            ? fileToolArguments(input)
+            : {}),
           // The turn trace shows the command and the recipients; it redacts the command.
           ...(name === "Bash" && isRecord(input) && typeof input.command === "string"
             ? { command: input.command.slice(0, INPUT_LIMITS.messageText) }
@@ -2995,4 +2999,15 @@ function claudeTurnModelUsage(
     total.smallestRequestInputTokens = isNumber(smallest) && prompt !== null ? Math.min(smallest, prompt) : null;
   }
   return models;
+}
+
+/** The path argument of a Claude file tool, as the step trail reads it (`toolStepView`). */
+function fileToolArguments(input: DynamicRecord): { arguments: { file_path: string } } | Record<never, never> {
+  const path =
+    typeof input.file_path === "string"
+      ? input.file_path
+      : typeof input.notebook_path === "string"
+        ? input.notebook_path
+        : null;
+  return path ? { arguments: { file_path: path.slice(0, 1_000) } } : {};
 }

@@ -24,6 +24,8 @@ import type { MotionAnswer, MotionCaller } from "./motion-client";
 import type { MotionEvent } from "./motion-event";
 import type { WaitingTicket } from "./motion-events-service";
 import {
+  type DeliverableFile,
+  deliverablePaths,
   EVIDENCE_WINDOW_MS,
   isImportantTicket,
   MAX_REVIEW_ROUNDS,
@@ -50,6 +52,8 @@ export interface MotionGraderDependencies {
   agents(): readonly MotionGraderAgent[];
   /** The assignee's recent chat, the evidence of its run. */
   evidence(agentId: string): readonly ConversationMessage[];
+  /** The text of files in the assignee's workspace (a path outside it reads as not found). */
+  readFiles?(agentId: string, paths: readonly string[]): Promise<readonly DeliverableFile[]>;
   /** One answer of the judge, and the model that gave it. */
   judge(input: { agentId: string; important: boolean; prompt: string }): Promise<{ text: string; model: string }>;
   /** Hands the ticket to the owner: a Needs you item with a push. */
@@ -161,6 +165,11 @@ export class MotionGrader {
     );
   }
 
+  #escalate(ticket: Omit<WaitingTicket, "createdAt">, body: string): void {
+    this.#deps.log(`The grader handed ${ticket.key} to the owner: ${body}`);
+    this.#deps.escalate(ticket, body);
+  }
+
   async #grade(event: MotionEvent): Promise<void> {
     await this.#load();
     const agents = this.#deps.agents();
@@ -190,14 +199,21 @@ export class MotionGrader {
       url: ticket.url,
     };
     if (round > MAX_REVIEW_ROUNDS) {
-      this.#deps.escalate(waiting, `${ticket.key} failed review ${MAX_REVIEW_ROUNDS} times. It waits for your call.`);
+      this.#escalate(waiting, `${ticket.key} failed review ${MAX_REVIEW_ROUNDS} times. It waits for your call.`);
       return;
     }
     const important = isImportantTicket(ticket);
+    const since = this.#now() - EVIDENCE_WINDOW_MS;
+    const messages = this.#deps.evidence(assignee.id);
+    const paths = deliverablePaths(messages, since, ticket);
+    const files =
+      paths.length && this.#deps.readFiles
+        ? await this.#deps.readFiles(assignee.id, paths).catch((): readonly DeliverableFile[] => [])
+        : [];
     const prompt = reviewPrompt({
       ticket,
       assignee: assignee.name,
-      evidence: reviewEvidence(this.#deps.evidence(assignee.id), this.#now() - EVIDENCE_WINDOW_MS),
+      evidence: reviewEvidence(messages, since, files),
       round,
     });
     let answer = await this.#deps.judge({ agentId: assignee.id, important, prompt });
@@ -207,7 +223,7 @@ export class MotionGrader {
       verdict = parseReviewVerdict(answer.text);
     }
     if (!verdict) {
-      this.#deps.escalate(waiting, `The grader could not grade ${ticket.key}. It waits in review for you.`);
+      this.#escalate(waiting, `The grader could not grade ${ticket.key}. It waits in review for you.`);
       return;
     }
     const signed = `${verdict.notes}\n\n(Independent grader, ${answer.model}, round ${round} of ${MAX_REVIEW_ROUNDS}.)`;
@@ -221,7 +237,7 @@ export class MotionGrader {
         .catch(() => undefined);
       this.#rounds[event.issue.id] = { rounds: round, at: this.#now() };
       await this.#save();
-      this.#deps.escalate(
+      this.#escalate(
         waiting,
         `${ticket.key} still misses its criteria after ${MAX_REVIEW_ROUNDS} reviews. It waits for your call.`,
       );

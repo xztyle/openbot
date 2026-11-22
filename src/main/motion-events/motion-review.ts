@@ -4,8 +4,9 @@
  * grader's prompt, and the verdict it answers.
  *
  * The evidence is what the run did, not what the agent says it did: the tool steps of its recent
- * turns (commands, files, searches, tools, with failures marked), the links and files it named, and
- * its last messages, each clipped. Nothing in it is an instruction to the grader.
+ * turns (commands, files, searches, tools, with failures marked), the links and files it named, the
+ * text of the files it wrote as they are on disk now, and its last messages, each clipped. Nothing in
+ * it is an instruction to the grader.
  */
 
 import type { ConversationMessage } from "@openbot/contracts/ipc";
@@ -23,6 +24,9 @@ const STEPS = 60;
 const MESSAGES = 12;
 const MESSAGE_LIMIT = 800;
 const LINKS = 30;
+/** The files the grader reads from disk, and how much of each. */
+export const DELIVERABLE_FILES = 6;
+export const DELIVERABLE_LIMIT = 3_000;
 
 const IMPORTANT_PRIORITY = /\b(high|urgent|highest|critical|alta|urgente|cr[ií]tica)\b/iu;
 const MONEY =
@@ -76,12 +80,54 @@ function clip(text: string, limit: number): string {
 }
 
 const URL_PATTERN = /https?:\/\/[^\s<>"')\]]+/gu;
+/** A file name with a text extension, as a ticket or a hand-off names a deliverable. */
+const FILE_PATTERN =
+  /(?:^|[\s`'"(])((?:\/|~\/)?(?:[\w.-]+\/)*[\w.-]+\.(?:md|markdown|txt|csv|tsv|json|ya?ml|html?|css|js|mjs|ts|tsx|py|sh|sql|toml|xml|srt|vtt))(?=$|[\s`'"),.;:])/giu;
+
+/** A file that the grader read from disk for the evidence: its text, or null when it is not there. */
+export interface DeliverableFile {
+  path: string;
+  text: string | null;
+}
+
+/**
+ * The files whose text the grader should see, newest last: the paths of the assignee's own file steps
+ * in the window, then the text files that the criteria and the hand-off name. A step trail only names
+ * a file, so without its text the grader cannot check a criterion about what the file holds.
+ */
+export function deliverablePaths(
+  messages: readonly ConversationMessage[],
+  sinceMs: number,
+  ticket: Pick<ReviewTicket, "criteria" | "handoff">,
+): string[] {
+  const paths: string[] = [];
+  const add = (path: string) => {
+    const clean = path.trim();
+    if (!clean || clean.length > 1_000) return;
+    const at = paths.indexOf(clean);
+    if (at >= 0) paths.splice(at, 1);
+    paths.push(clean);
+  };
+  for (const message of messages) {
+    if ((Date.parse(message.createdAt) || 0) < sinceMs) continue;
+    for (const step of message.trace?.steps ?? [])
+      if (step.kind === "tool" && step.category === "file" && step.label && /[./]/u.test(step.label))
+        add(step.label.replace(/ \+\d+$/u, ""));
+  }
+  for (const text of [ticket.criteria, ticket.handoff])
+    for (const match of (text ?? "").matchAll(FILE_PATTERN)) if (match[1]) add(match[1]);
+  return paths.slice(-DELIVERABLE_FILES);
+}
 
 /**
  * The evidence of the assignee's recent work: its tool steps, the links and files it named, and its
  * last messages, newest last. `sinceMs` is the start of the window.
  */
-export function reviewEvidence(messages: readonly ConversationMessage[], sinceMs: number): string {
+export function reviewEvidence(
+  messages: readonly ConversationMessage[],
+  sinceMs: number,
+  deliverables: readonly DeliverableFile[] = [],
+): string {
   const recent = messages.filter((message) => (Date.parse(message.createdAt) || 0) >= sinceMs);
   const steps: string[] = [];
   const links = new Set<string>();
@@ -104,6 +150,15 @@ export function reviewEvidence(messages: readonly ConversationMessage[], sinceMs
     steps.length ? `Tool steps (${steps.length}, newest last):\n${steps.slice(-STEPS).join("\n")}` : "Tool steps: none",
     links.size ? `Links it named:\n${[...links].slice(-LINKS).join("\n")}` : "",
     files.size ? `Files it sent: ${[...files].slice(-LINKS).join(", ")}` : "",
+    deliverables.length
+      ? `Files it wrote or named, as they are on disk now (read by the host, not by the agent):\n${deliverables
+          .map((file) =>
+            file.text === null
+              ? `--- ${file.path}: not found`
+              : `--- ${file.path}\n${redactText(file.text).slice(0, DELIVERABLE_LIMIT)}${file.text.length > DELIVERABLE_LIMIT ? "\n…(cut)" : ""}`,
+          )
+          .join("\n")}`
+      : "",
     said.length
       ? `Its last messages:\n${said
           .slice(-MESSAGES)

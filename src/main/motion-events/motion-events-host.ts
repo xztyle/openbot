@@ -20,6 +20,7 @@ import type { McpAgent } from "../../backend/mcp-agent-values";
 import { MotionClient, motionServer } from "./motion-client";
 import { startMotionEventsServer } from "./motion-events-server";
 import { type MotionEventsAgent, MotionEventsService, type WaitingTicket } from "./motion-events-service";
+import { readDeliverableFiles } from "./motion-files";
 import { MotionGrader } from "./motion-grader";
 import { MotionOrders } from "./motion-orders";
 import { type MotionStartInput, MotionTickets } from "./motion-tickets";
@@ -55,6 +56,8 @@ export interface MotionEventsHostOptions {
   ticketsChanged: () => void;
   /** A ticket of these local agents is done: each may learn a lesson from the work. */
   taskDone?: (input: { agentIds: string[]; key: string; title: string; priority?: string | null }) => void;
+  /** The folders an agent may write, where the grader reads the files it delivered. */
+  workRoots?: (agentId: string) => readonly string[];
   /** The agent's recent chat, the evidence the grader reads. */
   evidence: (agentId: string) => readonly ConversationMessage[];
   /** One answer of the grader's judge, in a fresh context (`AgentService.generateReviewText`). */
@@ -135,6 +138,12 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
     tool,
     agents: options.agents,
     evidence: options.evidence,
+    ...(options.workRoots
+      ? {
+          readFiles: (agentId: string, paths: readonly string[]) =>
+            readDeliverableFiles(options.workRoots?.(agentId) ?? [], paths),
+        }
+      : {}),
     judge: options.judge,
     escalate: (ticket, body) => events.escalate(ticket, body),
     tell: (agentId, text, clientMessageId) =>
@@ -149,6 +158,7 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
     agents: options.agents,
     currentTicket: (agentId) => tickets.current(agentId),
     woken: (agentId, issueId) => events.noteWoken(agentId, issueId),
+    expecting: (agentId) => events.expectOrderCard(agentId),
     note: (input) => events.note(input),
     stateFile: join(options.userData, "motion-orders-v1.json"),
     log: (message) => logger.info(message),

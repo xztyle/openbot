@@ -71,6 +71,8 @@ export interface MotionOrdersDependencies {
   currentTicket(agentId: string): { key: string } | null;
   /** The message wakes the recipient: the assignment event of the card is held. */
   woken(agentId: string, issueId: string): void;
+  /** A card for the agent is being made: its assignment event, which can come first, is held too. */
+  expecting?(agentId: string): () => void;
   /** A note that wakes the agent (in quiet hours it waits for their end). */
   note(input: { agentId: string; text: string; clientMessageId: string }): Promise<MotionDeliveryMode>;
   stateFile: string;
@@ -137,17 +139,20 @@ export class MotionOrders implements OrderCardsPort {
       projectOf(this.#deps.currentTicket(input.senderAgentId)?.key) ??
       projectOf(this.#orders.findLast((order) => order.senderId === input.senderAgentId)?.key);
     if (!project) throw new Error("name card.project, the Motion project key such as UO");
-    const answer = await this.#deps.tool({ agentId: input.senderAgentId }, "issues_create", {
-      project,
-      title: input.card.title,
-      description: input.text,
-      assignee: input.recipientName,
-      ...(input.card.criteria ? { criteria: input.card.criteria } : {}),
-      ...(input.card.dedupeKey ? { dedupe_key: input.card.dedupeKey } : {}),
-      ...(input.card.due ? { due_date: input.card.due } : {}),
-      ...(input.card.priority ? { priority: input.card.priority } : {}),
-      ...(input.card.estimateHours ? { estimate_hours: input.card.estimateHours } : {}),
-    });
+    const release = this.#deps.expecting?.(input.recipientAgentId);
+    const answer = await this.#deps
+      .tool({ agentId: input.senderAgentId }, "issues_create", {
+        project,
+        title: input.card.title,
+        description: input.text,
+        assignee: input.recipientName,
+        ...(input.card.criteria ? { criteria: input.card.criteria } : {}),
+        ...(input.card.dedupeKey ? { dedupe_key: input.card.dedupeKey } : {}),
+        ...(input.card.due ? { due_date: input.card.due } : {}),
+        ...(input.card.priority ? { priority: input.card.priority } : {}),
+        ...(input.card.estimateHours ? { estimate_hours: input.card.estimateHours } : {}),
+      })
+      .finally(() => release?.());
     const row = isDynamicRecord(answer) ? answer : {};
     if (!isString(row.key) || !isString(row.url)) throw new Error("Motion made no issue");
     const card: OrderCard = {

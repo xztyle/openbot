@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,9 +13,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MotionClient, motionHeaders, motionToolAnswer } from "./motion-client";
 import { decodeMotionEvent, type MotionEvent } from "./motion-event";
 import { MotionEventsService, type WaitingTicket } from "./motion-events-service";
+import { readDeliverableFiles } from "./motion-files";
 import { MotionGrader } from "./motion-grader";
 import { MotionOrders } from "./motion-orders";
-import { isImportantTicket, parseReviewVerdict, reviewEvidence, reviewTicket } from "./motion-review";
+import { deliverablePaths, isImportantTicket, parseReviewVerdict, reviewEvidence, reviewTicket } from "./motion-review";
 
 const agent = (id: string, name: string, reportsToAgentId?: string) => ({
   id,
@@ -106,6 +107,18 @@ describe("Motion review events", () => {
     expect(person.grade).toBeUndefined();
   });
 
+  it("holds the assignment of an order card that Motion sends before the card is made", async () => {
+    const { events, sent } = service();
+    const release = events.expectOrderCard("agent-dev");
+    await events.receive(event("issue.assigned", { actor: lead, recipients: [dev] }));
+    release();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ agentId: "agent-dev", fyi: true });
+    // Once the card is made, another assignment wakes again.
+    await events.receive(event("issue.assigned", { actor: lead, recipients: [dev] }, { id: "issue-2", key: "UO-8" }));
+    expect(sent[1]).toMatchObject({ agentId: "agent-dev", fyi: false });
+  });
+
   it("wakes the assignee with the notes of a reopen even right after another wake, and holds a pass", async () => {
     const { events, sent } = service();
     await events.receive(event("issue.assigned", { actor: ana, recipients: [dev] }));
@@ -170,6 +183,59 @@ describe("the grader's pure parts", () => {
     expect(evidence).toContain("[shell] npm run build (FAILED)");
     expect(evidence).toContain("https://site.test/landing");
     expect(evidence).not.toContain("old");
+  });
+
+  it("shows the text of the files the run wrote or the ticket names", () => {
+    const messages: ConversationMessage[] = [
+      {
+        id: "m1",
+        author: "assistant",
+        text: "Done.",
+        createdAt: new Date(2_000).toISOString(),
+        status: "completed",
+        trace: {
+          startedAt: "",
+          endedAt: "",
+          steps: [
+            { id: "w", kind: "tool", category: "file", label: "/ws/hooks.md", startedAt: "", endedAt: "" },
+            { id: "x", kind: "tool", category: "file", label: "Write", startedAt: "", endedAt: "" },
+          ],
+        },
+      },
+    ];
+    const paths = deliverablePaths(messages, 1_000, {
+      criteria: "- a file `notes/plan.md` exists; - hooks.md has 3 hooks",
+      handoff: "See /ws/hooks.md.",
+    });
+    expect(paths).toEqual(["notes/plan.md", "hooks.md", "/ws/hooks.md"]);
+    const evidence = reviewEvidence(messages, 1_000, [
+      { path: "/ws/hooks.md", text: "1. One\n2. Two\n3. Three" },
+      { path: "notes/plan.md", text: null },
+    ]);
+    expect(evidence).toContain("--- /ws/hooks.md\n1. One\n2. Two\n3. Three");
+    expect(evidence).toContain("--- notes/plan.md: not found");
+  });
+
+  it("reads deliverables only inside the agent's own folders", async () => {
+    const workspace = join(root, "ws");
+    await mkdir(workspace, { recursive: true });
+    await writeFile(join(workspace, "hooks.md"), "1. One");
+    await writeFile(join(root, "secret.txt"), "key");
+    await writeFile(join(workspace, "image.bin"), Buffer.from([1, 0, 2]));
+    await symlink(join(root, "secret.txt"), join(workspace, "link.txt"));
+    const files = await readDeliverableFiles(
+      [workspace],
+      [
+        "hooks.md",
+        join(workspace, "hooks.md"),
+        "../secret.txt",
+        join(root, "secret.txt"),
+        "link.txt",
+        "image.bin",
+        "none.md",
+      ],
+    );
+    expect(files.map((file) => file.text)).toEqual(["1. One", "1. One", null, null, null, null, null]);
   });
 
   it("parses a verdict, and an answer that is none passes nothing", () => {
@@ -257,6 +323,27 @@ describe("the grader", () => {
     expect(judged).toEqual([true]);
   });
 
+  it("gives the judge the text of the files the ticket names", async () => {
+    const prompts: string[] = [];
+    const motion = new MotionGrader({
+      tool: async (_caller, name) =>
+        name === "rows_get" ? { key: "UO-7", title: "Hooks", url: "https://m", criteria: "hooks.md has 3 hooks" } : {},
+      agents: () => [agent("agent-dev", "Dev")],
+      evidence: () => [],
+      readFiles: async (_agentId, paths) => paths.map((path) => ({ path, text: "1. A\n2. B\n3. C" })),
+      judge: async (input) => {
+        prompts.push(input.prompt);
+        return { text: '{"verdict":"pass","notes":"Three hooks."}', model: "claude/haiku" };
+      },
+      escalate: () => undefined,
+      tell: () => undefined,
+      stateFile: join(root, "grader.json"),
+      log: () => undefined,
+    });
+    await motion.grade(event("issue.review_requested", { criteria: "hooks.md has 3 hooks" }));
+    expect(prompts[0]).toContain("--- hooks.md\n1. A\n2. B\n3. C");
+  });
+
   it("hands the ticket to the owner instead of a fourth round", async () => {
     const reopen = '{"verdict":"reopen","notes":"Still no CTA."}';
     const { motion, calls, escalated } = grader([reopen, reopen, reopen]);
@@ -304,6 +391,10 @@ describe("order cards", () => {
       agents: () => [agent("agent-dev", "Dev"), agent("agent-lead", "Lead")],
       currentTicket: (agentId) => (agentId === "agent-lead" ? { key: "UO-3" } : null),
       woken: (agentId, issueId) => woken.push(`${agentId}:${issueId}`),
+      expecting: (agentId) => {
+        woken.push(`expecting:${agentId}`);
+        return () => woken.push(`released:${agentId}`);
+      },
       note: async (input) => {
         notes.push(input);
         return "wake";
@@ -324,7 +415,7 @@ describe("order cards", () => {
       agentId: "agent-lead",
       args: { project: "UO", assignee: "Dev", criteria: "10 questions", dedupe_key: "faq-v1" },
     });
-    expect(woken).toEqual(["agent-dev:issue-9"]);
+    expect(woken).toEqual(["expecting:agent-dev", "released:agent-dev", "agent-dev:issue-9"]);
 
     now += 2 * 3_600_000;
     orders.observeToolCall("agent-dev", "motion__issues_update", { issue: "UO-9", status: "In Progress" });

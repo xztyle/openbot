@@ -855,8 +855,7 @@ export const messages = {
   "workspace.mailboxes.mode": "Tryb",
   "workspace.mailboxes.modeReply": "Tylko odpowiedzi",
   "workspace.mailboxes.modeWriteFirst": "Może pisać pierwszy",
-  "workspace.mailboxes.modeReplyHint":
-    "Agent odpowiada na otrzymaną pocztę. Pierwszy e-mail do każdej nowej osoby czeka na Twoją zgodę.",
+  "workspace.mailboxes.modeReplyHint": "Agent od razu odpowiada na otrzymaną pocztę. Nigdy nie pisze pierwszy.",
   "workspace.mailboxes.modeWriteFirstHint":
     "Agent może też pisać do nowych osób, najwyżej 10 dziennie. Każdy pierwszy e-mail czeka na Twoją zgodę i kończy się linią o rezygnacji.",
   "workspace.mailboxes.displayName": "Nazwa nadawcy",

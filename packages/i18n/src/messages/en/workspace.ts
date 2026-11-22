@@ -1214,8 +1214,7 @@ export const messages = defineMessages("workspace", {
   "workspace.mailboxes.mode": "Mode",
   "workspace.mailboxes.modeReply": "Reply only",
   "workspace.mailboxes.modeWriteFirst": "May write first",
-  "workspace.mailboxes.modeReplyHint":
-    "The agent answers mail it gets. The first mail to each new person waits for your OK.",
+  "workspace.mailboxes.modeReplyHint": "The agent answers mail it gets, at once. It never writes first.",
   "workspace.mailboxes.modeWriteFirstHint":
     "The agent may also write to new people, at most 10 a day. Each first mail waits for your OK and ends with an opt-out line.",
   "workspace.mailboxes.displayName": "Sender name",

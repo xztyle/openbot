@@ -37,14 +37,14 @@ export interface MailCallPlan {
   from: string;
   to: string;
   subject: string;
-  /** The owner has not approved mail from this address to this recipient yet: ask first. */
+  /** A first contact (`email_send` to someone new) that the owner has not approved yet: ask first. */
   needsApproval: boolean;
 }
 
 /**
  * The agent mailboxes of the host (`src/main/agent-mail`), as the tool router uses them. `plan`
  * checks a call (the address, the mode, the rate limits, an opt-out) without sending; `send` checks
- * it again and sends. `approved` is true after the owner's OK for a new recipient. `key` names the
+ * it again and sends. `approved` is true after the owner's OK for a first contact. `key` names the
  * tool call, so a retried call sends once.
  */
 export interface AgentMailPort {
@@ -62,7 +62,7 @@ export const MAIL_TOOL_DEFINITIONS = [
     description: [
       "Answer a mail that came to your mail address, as that address, in the same mail thread. Pass the threadId from the message that brought the mail.",
       "Write plain text like a person on the team: short, in the customer's language, no signature block of secrets or prices you were not given. Never promise refunds, money or anything only the owner decides: ask the owner first.",
-      "The first mail to a new recipient waits for the owner's OK in Needs you. Atelier limits how many mails you send an hour and a day.",
+      "It sends at once, with no approval. Atelier limits how many mails you send an hour and a day.",
       'The result is JSON {"status":"sent","to","subject","messageId"}.',
     ].join(" "),
     shape: emailReplyToolSchema.shape,
@@ -71,7 +71,7 @@ export const MAIL_TOOL_DEFINITIONS = [
     name: EMAIL_SEND_TOOL,
     description: [
       "Write a new mail to someone who has not written to you, from your mail address. It works only from an address that the owner set to may write first; otherwise answer mail with email_reply.",
-      "The first mail to each recipient waits for the owner's OK in Needs you, and Atelier adds a line on how to opt out. Never write to someone who opted out. Keep it short and personal: no bulk mail.",
+      "The first mail to each new person waits for the owner's OK in Needs you, and Atelier adds a line on how to opt out. Never write to someone who opted out. Keep it short and personal: no bulk mail.",
       'The result is JSON {"status":"sent","to","subject","threadId","messageId"}.',
     ].join(" "),
     shape: emailSendToolSchema.shape,

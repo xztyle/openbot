@@ -684,7 +684,7 @@ export const messages = {
   "workspace.mailboxes.mode": "Mod",
   "workspace.mailboxes.modeReply": "Yalnızca yanıt",
   "workspace.mailboxes.modeWriteFirst": "İlk yazabilir",
-  "workspace.mailboxes.modeReplyHint": "Ajan gelen e-postaları yanıtlar. Her yeni kişiye ilk e-posta onayınızı bekler.",
+  "workspace.mailboxes.modeReplyHint": "Ajan gelen e-postaları hemen yanıtlar. Asla ilk yazmaz.",
   "workspace.mailboxes.modeWriteFirstHint":
     "Ajan yeni kişilere de yazabilir, günde en fazla 10. Her ilk e-posta onayınızı bekler ve abonelikten çıkma satırıyla biter.",
   "workspace.mailboxes.displayName": "Gönderen adı",

@@ -7,8 +7,8 @@
   Message-ID and References, and as a card in the space's customer inbox loop when the space has one.
   A mail the host does not take bounces, so the sender knows.
 - `email_reply` answers a mail as that address, in the same thread. `email_send` writes first, only
-  from an address the owner set to "may write first". The first mail to each new recipient waits for
-  the owner's OK in Needs you, a first contact ends with an opt-out line and `List-Unsubscribe`, an
+  from an address the owner set to "may write first". A reply sends at once; a first contact waits for
+  the owner's OK in Needs you and ends with an opt-out line and `List-Unsubscribe`, an
   opt-out reply stops later first mails, and each agent sends at most 20 mails an hour, 100 a day and
   10 first contacts a day.
 - Mail counts as untrusted content for the injection monitor, and a mail tool is a send: after a turn

@@ -706,7 +706,7 @@ export class OpenBotToolRouter {
               this.#acknowledgeRequest(client, toolRequest, toolRequest.params);
               return;
             }
-            // Mail leaves Atelier: the first mail to a new recipient waits for the owner's card.
+            // Mail leaves Atelier: a first contact waits for the owner's card; a reply does not.
             if (MAIL_TOOLS.has(toolRequest.params.tool)) {
               const result = yield* this.#mailTool(client, toolRequest, toolRequest.params);
               if (!toolRequest.signal?.aborted && client.running) client.respond(toolRequest.id, result);
@@ -1761,7 +1761,7 @@ export class OpenBotToolRouter {
 
   /**
    * `email_reply` and `email_send`: the host's mailboxes check the address, the mode, the limits and
-   * an opt-out; the first mail to a new recipient waits for the owner's approval card, which Full
+   * an opt-out; a first contact from `email_send` waits for the owner's approval card, which Full
    * access does not answer.
    */
   readonly #mailTool = Effect.fn("OpenBotToolRouter.mailTool")(function* (

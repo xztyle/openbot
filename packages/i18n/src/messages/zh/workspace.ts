@@ -661,7 +661,7 @@ export const messages = {
   "workspace.mailboxes.mode": "模式",
   "workspace.mailboxes.modeReply": "仅回复",
   "workspace.mailboxes.modeWriteFirst": "可主动发信",
-  "workspace.mailboxes.modeReplyHint": "智能体回复收到的邮件。发给每位新联系人的第一封邮件需等待你的批准。",
+  "workspace.mailboxes.modeReplyHint": "智能体会立即回复收到的邮件，从不主动发信。",
   "workspace.mailboxes.modeWriteFirstHint":
     "智能体也可以给新联系人写信，每天最多 10 封。每封首次邮件都需你批准，并以退订说明结尾。",
   "workspace.mailboxes.displayName": "发件人名称",

@@ -37,8 +37,9 @@ agent: email_reply / email_send ──> host ──signed POST /send──> mail
 - A turn that read a mail is tainted for the injection monitor, and `email_reply` and `email_send` are
   sends: each one passes the monitor's check first, and a send that follows the mail and not the task
   is blocked and the owner is alerted.
-- The first mail from an address to each new recipient waits for the owner's approval card in Needs
-  you; Full access does not answer it. Later mails to that person need no OK.
+- A reply (`email_reply`) to someone who wrote to the address sends at once. Only a first contact
+  (`email_send` to someone who never wrote) waits for the owner's approval card in Needs you; Full
+  access does not answer it. Later mails to that person need no OK.
 - Each agent sends at most 20 mails an hour and 100 a day, and writes first to at most 10 new people
   a day.
 - `email_send` works only from an address set to **May write first**. A first contact ends with an
@@ -87,8 +88,8 @@ Do these once per business domain, in the Cloudflare dashboard (the host's token
 4. Paste the address the deploy printed (`https://atelier-mail.<subdomain>.workers.dev`) in **Secrets
    → Agent mailboxes → Link the Worker**.
 5. Check: `curl https://atelier-mail.<subdomain>.workers.dev/health` answers `{"ok":true}`; mail the
-   address from another account and the agent's chat shows it. Then let the agent answer once and
-   approve the card.
+   address from another account and the agent's chat shows it. Then let the agent answer it; a reply
+   needs no approval.
 
 A new mail secret stops the old one at once: put it in the Worker right away with `wrangler secret
 put MAIL_SECRET`. The state lives in `openbot-agent-mailboxes-v1.json` in the profile, with the secret

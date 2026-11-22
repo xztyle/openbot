@@ -236,7 +236,7 @@ function answer(response: ServerResponse, status: number): void {
  * gateway, signed with the mail secret; the message becomes an `inbound-email` note in the agent's
  * chat, threaded by Message-ID and References, and a card in the space's customer-inbox loop.
  * `email_reply` and `email_send` go back through the Worker's `/send`, within per-agent limits and
- * after the owner's OK for a new recipient. The state is one JSON file of the profile; the secret is
+ * after the owner's OK for a first contact. The state is one JSON file of the profile; the secret is
  * encrypted with the host's secret storage.
  */
 export class AgentMail {
@@ -574,7 +574,8 @@ export class AgentMail {
       return {
         message: `You wrote first to ${AGENT_MAIL_RATE.firstContactsPerDay} new people today, the limit. Write to the rest tomorrow.`,
       };
-    const needsApproval = !this.#contact(mailbox.id, to)?.approvedAt;
+    // Only a first contact asks the owner: a reply goes to someone who wrote to this address first.
+    const needsApproval = firstContact && !this.#contact(mailbox.id, to)?.approvedAt;
     return { plan: { from: mailbox.address, to, subject, needsApproval }, mailbox, thread, firstContact };
   }
 

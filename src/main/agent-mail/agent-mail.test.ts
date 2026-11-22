@@ -195,18 +195,14 @@ describe("AgentMail outbound", () => {
     return /Mail thread: (mt_[\w-]+)/u.exec(delivered.at(-1)?.text ?? "")?.[1] ?? "";
   }
 
-  it("asks the owner before the first reply to a person, then not again", async () => {
+  it("sends a reply to someone who wrote first without asking the owner", async () => {
     const threadId = await threadOfFirstMail();
     const first = mail.port.plan("lucia", reply(threadId));
     expect(first).toEqual({
       ok: true,
-      plan: { from: "ventas@aprendivo.com", to: "ana@example.org", subject: "Re: ¿Certificado?", needsApproval: true },
+      plan: { from: "ventas@aprendivo.com", to: "ana@example.org", subject: "Re: ¿Certificado?", needsApproval: false },
     });
-    expect(await mail.port.send("lucia", reply(threadId), { approved: false, key: "t:1" })).toEqual({
-      ok: false,
-      message: "The first mail to ana@example.org needs the owner's OK.",
-    });
-    const done = await mail.port.send("lucia", reply(threadId), { approved: true, key: "t:2" });
+    const done = await mail.port.send("lucia", reply(threadId), { approved: false, key: "t:2" });
     expect(done.ok).toBe(true);
     expect(sent[0]?.url).toBe("https://atelier-mail.example.workers.dev/send");
     expect(sent[0]?.body).toMatchObject({
@@ -218,10 +214,8 @@ describe("AgentMail outbound", () => {
       references: ["root@example.org", "m1@example.org"],
       listUnsubscribe: null,
     });
-    const second = mail.port.plan("lucia", reply(threadId, "Otra cosa"));
-    expect(second.ok && second.plan.needsApproval).toBe(false);
     // The same tool call sends once.
-    await mail.port.send("lucia", reply(threadId), { approved: true, key: "t:2" });
+    await mail.port.send("lucia", reply(threadId), { approved: false, key: "t:2" });
     expect(sent).toHaveLength(1);
   });
 
@@ -245,8 +239,17 @@ describe("AgentMail outbound", () => {
       tool: "email_send",
       input: { to: "Pepe@Example.org", subject: "Curso nuevo", text: "Hola Pepe" },
     } as const;
+    // A first contact waits for the owner's OK, once per person.
+    const planned = mail.port.plan("lucia", send);
+    expect(planned.ok && planned.plan.needsApproval).toBe(true);
+    expect(await mail.port.send("lucia", send, { approved: false, key: "s:0" })).toEqual({
+      ok: false,
+      message: "The first mail to pepe@example.org needs the owner's OK.",
+    });
     const result = await mail.port.send("lucia", send, { approved: true, key: "s:1" });
     expect(result.ok).toBe(true);
+    const later = mail.port.plan("lucia", { ...send, input: { ...send.input, subject: "Otra" } });
+    expect(later.ok && later.plan.needsApproval).toBe(false);
     expect(sent[0]?.body?.text).toContain("responde «baja»");
     expect(sent[0]?.body?.listUnsubscribe).toBe("<mailto:ventas@aprendivo.com?subject=unsubscribe>");
     await post(

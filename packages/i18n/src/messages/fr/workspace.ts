@@ -677,8 +677,7 @@ export const messages = {
   "workspace.mailboxes.mode": "Mode",
   "workspace.mailboxes.modeReply": "Répondre seulement",
   "workspace.mailboxes.modeWriteFirst": "Peut écrire en premier",
-  "workspace.mailboxes.modeReplyHint":
-    "L'agent répond aux e-mails reçus. Le premier e-mail à chaque nouvelle personne attend votre accord.",
+  "workspace.mailboxes.modeReplyHint": "L'agent répond tout de suite aux e-mails reçus. Il n'écrit jamais en premier.",
   "workspace.mailboxes.modeWriteFirstHint":
     "L'agent peut aussi écrire à de nouvelles personnes, 10 par jour au plus. Chaque premier e-mail attend votre accord et se termine par une ligne de désinscription.",
   "workspace.mailboxes.displayName": "Nom de l'expéditeur",

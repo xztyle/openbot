@@ -1201,8 +1201,7 @@ export const messages = {
   "workspace.mailboxes.mode": "Modo",
   "workspace.mailboxes.modeReply": "Solo responder",
   "workspace.mailboxes.modeWriteFirst": "Puede escribir primero",
-  "workspace.mailboxes.modeReplyHint":
-    "El agente responde el correo que recibe. El primer correo a cada persona nueva espera tu OK.",
+  "workspace.mailboxes.modeReplyHint": "El agente responde al momento el correo que recibe. Nunca escribe primero.",
   "workspace.mailboxes.modeWriteFirstHint":
     "El agente también puede escribir a personas nuevas, como máximo 10 al día. Cada primer correo espera tu OK y termina con una línea para darse de baja.",
   "workspace.mailboxes.displayName": "Nombre del remitente",

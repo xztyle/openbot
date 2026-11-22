@@ -679,8 +679,7 @@ export const messages = {
   "workspace.mailboxes.mode": "モード",
   "workspace.mailboxes.modeReply": "返信のみ",
   "workspace.mailboxes.modeWriteFirst": "先に送信できる",
-  "workspace.mailboxes.modeReplyHint":
-    "エージェントは届いたメールに返信します。新しい相手への最初のメールはあなたの承認を待ちます。",
+  "workspace.mailboxes.modeReplyHint": "エージェントは届いたメールにすぐ返信します。先に送ることはありません。",
   "workspace.mailboxes.modeWriteFirstHint":
     "エージェントは新しい相手にも 1 日最大 10 件まで送れます。最初のメールはそれぞれ承認を待ち、配信停止の一文で終わります。",
   "workspace.mailboxes.displayName": "送信者名",

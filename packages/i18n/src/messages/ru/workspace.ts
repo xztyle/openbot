@@ -857,8 +857,7 @@ export const messages = {
   "workspace.mailboxes.mode": "Режим",
   "workspace.mailboxes.modeReply": "Только ответы",
   "workspace.mailboxes.modeWriteFirst": "Может писать первым",
-  "workspace.mailboxes.modeReplyHint":
-    "Агент отвечает на полученные письма. Первое письмо каждому новому человеку ждёт вашего одобрения.",
+  "workspace.mailboxes.modeReplyHint": "Агент сразу отвечает на полученные письма. Сам первым не пишет.",
   "workspace.mailboxes.modeWriteFirstHint":
     "Агент может писать и новым людям, не больше 10 в день. Каждое первое письмо ждёт вашего одобрения и заканчивается строкой об отписке.",
   "workspace.mailboxes.displayName": "Имя отправителя",

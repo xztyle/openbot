@@ -674,8 +674,7 @@ export const messages = {
   "workspace.mailboxes.mode": "모드",
   "workspace.mailboxes.modeReply": "답장만",
   "workspace.mailboxes.modeWriteFirst": "먼저 보낼 수 있음",
-  "workspace.mailboxes.modeReplyHint":
-    "에이전트는 받은 메일에 답합니다. 새 사람에게 보내는 첫 메일은 승인을 기다립니다.",
+  "workspace.mailboxes.modeReplyHint": "에이전트는 받은 메일에 바로 답합니다. 먼저 보내지는 않습니다.",
   "workspace.mailboxes.modeWriteFirstHint":
     "에이전트는 새 사람에게도 하루 최대 10통까지 보낼 수 있습니다. 첫 메일마다 승인을 기다리며 수신 거부 안내로 끝납니다.",
   "workspace.mailboxes.displayName": "보낸 사람 이름",

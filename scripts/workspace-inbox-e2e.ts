@@ -268,7 +268,7 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
       const jump = page.getByRole("dialog", { name: english("workspace.app.switcher.title") });
       await jump.waitFor({ timeout: UI_WAIT_MS });
       await page.keyboard.type("rivals");
-      await jump.getByRole("button", { name: english("workspace.jump.searchMessages", { query: "rivals" }) }).click();
+      await jump.getByRole("option", { name: english("workspace.jump.searchMessages", { query: "rivals" }) }).click();
       await page
         .getByRole("heading", { name: english("workspace.view.search"), exact: true })
         .waitFor({ timeout: UI_WAIT_MS });
@@ -315,13 +315,13 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
     const dialog = page.getByRole("dialog", { name: english("workspace.app.switcher.title") });
     await dialog.waitFor({ timeout: UI_WAIT_MS });
     await dialog
-      .getByRole("button", { name: /general/u })
+      .getByRole("option", { name: /general/u })
       .first()
       .waitFor();
     await shot(page, `${viewport}-jump`);
     await page.keyboard.type("gnrl");
     await dialog
-      .getByRole("button", { name: /^#?general/u })
+      .getByRole("option", { name: /^#?general/u })
       .first()
       .waitFor({ timeout: UI_WAIT_MS });
     await page.keyboard.press("Enter");

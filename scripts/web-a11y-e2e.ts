@@ -148,6 +148,16 @@ async function focusSettles(
   assert.fail(`The focus is not on ${what}: it is on ${JSON.stringify(last)}.`);
 }
 
+/**
+ * Moves the focus of an open menu to the item `name`. The menu focuses its first item a frame after
+ * it opens, so this waits for that before it moves on.
+ */
+async function focusMenuItem(page: Page, name: string) {
+  await focusSettles(page, "the menu", (focus) => focus.role === "menuitem");
+  await page.getByRole("menuitem", { name }).focus();
+  await focusSettles(page, name, (focus) => focus.role === "menuitem" && focus.text === name);
+}
+
 const dialogs = (page: Page) => page.locator('[role="dialog"], [role="alertdialog"]');
 const composer = (page: Page) => page.locator('.ws-layout-main [role="textbox"][contenteditable="true"]').first();
 
@@ -236,7 +246,7 @@ try {
       await page.keyboard.press("Tab");
       await focusSettles(page, "the options of general", (focus) => focus.name === "Options for general");
       await page.keyboard.press("Enter");
-      await page.getByRole("menuitem", { name: "Move to a new section" }).focus();
+      await focusMenuItem(page, "Move to a new section");
       await page.keyboard.press("Enter");
       await dialogs(page).filter({ hasText: "New section" }).waitFor();
       await page.keyboard.press("Escape");
@@ -268,6 +278,8 @@ try {
       assert.equal(await page.getByRole("option", { selected: true }).count(), 1, "More than one option is selected.");
       await page.keyboard.press("Escape");
       await dialogs(page).first().waitFor({ state: "detached" });
+      // The focus goes back after a paint: wait for it, so it does not land after the next step's.
+      await focusSettles(page, "the options of general", (focus) => focus.name === "Options for general");
     });
 
     await step("Escape closes a thread and gives the focus back to View thread", async () => {
@@ -290,20 +302,26 @@ try {
       await mine.focus();
       await mine.getByRole("button", { name: "More actions" }).focus();
       await page.keyboard.press("Enter");
-      await page.getByRole("menuitem", { name: "Delete message" }).focus();
+      await focusMenuItem(page, "Delete message");
       await page.keyboard.press("Enter");
       const confirm = page.getByRole("alertdialog");
       await confirm.waitFor();
       await confirm.getByRole("button", { name: "Delete message" }).press("Enter");
       await mine.waitFor({ state: "detached" });
       await focusSettles(page, "a message", (focus) => focus.tag === "article" && focus.name.includes(" at "));
+      // The confirm focuses its target once more two frames after it closes: let that pass.
+      await page.evaluate(
+        () =>
+          new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(done)))),
+      );
     });
 
     await step("leaving a channel from its menu keeps the focus in the sidebar", async () => {
       await page.locator('.ws-sidebar button[aria-label^="Channel general"]').first().focus();
       await page.keyboard.press("Tab");
+      await focusSettles(page, "the options of general", (focus) => focus.name === "Options for general");
       await page.keyboard.press("Enter");
-      await page.getByRole("menuitem", { name: "Leave channel" }).focus();
+      await focusMenuItem(page, "Leave channel");
       await page.keyboard.press("Enter");
       await page.locator('.ws-sidebar button[aria-label^="Channel general"]').waitFor({ state: "detached" });
       await focusSettles(page, "a sidebar row", (focus) => focus.tag === "button" && focus.text.length > 0);

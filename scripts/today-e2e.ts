@@ -264,7 +264,7 @@ try {
     await deskPage.keyboard.press("Control+k");
     await deskPage.keyboard.type("approve spring");
     await deskPage
-      .getByRole("button", { name: /Approve: Run the spring ad test/u })
+      .getByRole("option", { name: /Approve: Run the spring ad test/u })
       .first()
       .waitFor({ timeout: UI_WAIT_MS });
     await shot(deskPage, "04-desk-command-bar");

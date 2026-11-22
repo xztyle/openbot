@@ -3,7 +3,6 @@
 // resolve an `?url` specifier. That is why the font asset arrives as an argument
 // from the root route instead of as an import here.
 
-import { LANDING_FAQ_STRUCTURED_DATA } from "./landing-faq";
 import { OPENBOT_ALTERNATE_DOWNLOAD_LINKS, OPENBOT_DOWNLOAD_LINKS } from "./landing-links";
 
 export const OPENBOT_SITE_URL = "https://openbot.run/";
@@ -13,14 +12,12 @@ export const OPENBOT_SITE_DESCRIPTION =
 export const OPENBOT_SOCIAL_IMAGE_URL = `${OPENBOT_SITE_URL}openbot-social.png`;
 /** The account `OPENBOT_LINKS.x` opens, which a shared card names. */
 export const OPENBOT_X_HANDLE = "@OpenBot_";
-const OPENBOT_X_URL = "https://x.com/OpenBot_";
 const OPENBOT_REPOSITORY_URL = "https://github.com/nightly-labs/openbot";
 const OPENBOT_PRODUCT_HUNT_URL = "https://www.producthunt.com/products/openbot-3";
 const OPENBOT_LICENSE_URL = "https://polyformproject.org/licenses/noncommercial/1.0.0/";
 // One id for each entity, so that every page describes the same organization,
 // site and app, and an assistant can join what the pages say about each.
 const OPENBOT_ORGANIZATION_ID = `${OPENBOT_SITE_URL}#organization`;
-const OPENBOT_WEBSITE_ID = `${OPENBOT_SITE_URL}#website`;
 const OPENBOT_APPLICATION_ID = `${OPENBOT_SITE_URL}#app`;
 /** Square, as schema.org wants for a publisher logo. */
 export const OPENBOT_LOGO_URL = `${OPENBOT_SITE_URL}icon-512x512.png`;
@@ -108,26 +105,6 @@ export function openBotSoftwareApplication(facts: OpenBotApplicationFacts) {
 
 export type OpenBotSoftwareApplication = ReturnType<typeof openBotSoftwareApplication>;
 
-// Search engines read these two for the site name and the logo next to a result.
-const OPENBOT_ORGANIZATION = {
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  "@id": OPENBOT_ORGANIZATION_ID,
-  name: "OpenBot",
-  url: OPENBOT_SITE_URL,
-  logo: OPENBOT_LOGO_URL,
-  sameAs: [OPENBOT_REPOSITORY_URL, OPENBOT_X_URL, OPENBOT_PRODUCT_HUNT_URL],
-} as const;
-
-const OPENBOT_WEBSITE = {
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  "@id": OPENBOT_WEBSITE_ID,
-  name: "OpenBot",
-  url: OPENBOT_SITE_URL,
-  publisher: { "@id": OPENBOT_ORGANIZATION_ID },
-} as const;
-
 export const OPENBOT_SECURITY_HEADERS = {
   "Permissions-Policy": "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
   "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -177,30 +154,5 @@ export function openBotRootHead(interLatinFont: string, options: { webApp?: bool
             { rel: "manifest", href: "/site.webmanifest" },
           ]),
     ],
-  };
-}
-
-export function openBotHomeHead(application: OpenBotSoftwareApplication) {
-  return {
-    meta: [
-      { "script:ld+json": application },
-      { "script:ld+json": OPENBOT_ORGANIZATION },
-      { "script:ld+json": OPENBOT_WEBSITE },
-      { property: "og:type", content: "website" },
-      { property: "og:site_name", content: "OpenBot" },
-      { property: "og:locale", content: "en_US" },
-      { property: "og:url", content: OPENBOT_SITE_URL },
-      { property: "og:title", content: OPENBOT_SITE_TITLE },
-      { property: "og:description", content: OPENBOT_SITE_DESCRIPTION },
-      ...OPENBOT_SOCIAL_IMAGE_META,
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: OPENBOT_X_HANDLE },
-      { name: "twitter:title", content: OPENBOT_SITE_TITLE },
-      { name: "twitter:description", content: OPENBOT_SITE_DESCRIPTION },
-      { name: "twitter:image", content: OPENBOT_SOCIAL_IMAGE_URL },
-      { name: "twitter:image:alt", content: OPENBOT_SOCIAL_IMAGE_ALT },
-      { "script:ld+json": LANDING_FAQ_STRUCTURED_DATA },
-    ],
-    links: [{ rel: "canonical", href: OPENBOT_SITE_URL }],
   };
 }

@@ -57,14 +57,3 @@ export const LANDING_FAQ: readonly LandingQuestion[] = [
       "OpenBot is a development preview. Agents can read and change files, run commands, use the network and control the built-in browser without asking each time. Give them only tasks you trust, and keep backups.",
   },
 ];
-
-/** schema.org `FAQPage`, from the questions the page shows. */
-export const LANDING_FAQ_STRUCTURED_DATA = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: LANDING_FAQ.map((entry) => ({
-    "@type": "Question",
-    name: entry.question,
-    acceptedAnswer: { "@type": "Answer", text: entry.answer },
-  })),
-};

@@ -9,3 +9,6 @@
   on each streamed word. An agent's picture that fails to load is no longer loaded again at every
   change of the agent, and the short success face after finished work is no longer cut off by an
   unrelated change.
+- The web app loads about 300 KB (64 KB compressed) less script before the workspace shows: Money,
+  Org chart, Storage, Loops, Secrets, Reviews, Portfolio, Insights and Trust load when you open
+  them.

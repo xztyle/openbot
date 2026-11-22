@@ -9,10 +9,7 @@ import { WorkspaceSelect } from "@openbot/ui/features/workspace/WorkspaceSelect"
 import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSidebar";
 import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createMemo, Match, Show, Switch } from "solid-js";
-import { WorkspaceReviewsView } from "../efficiency/WorkspaceReviews";
-import { WorkspacePortfolioView } from "../portfolio/WorkspacePortfolio";
-import { WorkspaceTrustView } from "../trust/WorkspaceTrustView";
+import { createEffect, createMemo, Loading, lazy, Match, Show, Switch } from "solid-js";
 import { WorkspaceAgentTalkView } from "./WorkspaceAgentTalk";
 import { WorkspaceDraftsView } from "./WorkspaceDrafts";
 import {
@@ -22,18 +19,44 @@ import {
   WorkspaceSearchView,
   WorkspaceUnreadsView,
 } from "./WorkspaceInboxViews";
-import { WorkspaceInsightView } from "./WorkspaceInsight";
-import { WorkspaceLoopsView } from "./WorkspaceLoops";
-import { WorkspaceMoneyView } from "./WorkspaceMoney";
-import { WorkspaceOrgChart } from "./WorkspaceOrgChart";
 import { WorkspaceWhenBackSection } from "./WorkspaceOwnerAway";
-import { WorkspaceSecretsView } from "./WorkspaceSecrets";
 import { WorkspaceSpaceAgentsView } from "./WorkspaceSpaceAgents";
-import { WorkspaceStorageView } from "./WorkspaceStorageView";
 import { WorkspaceTodayView } from "./WorkspaceToday";
 import { openArtifact } from "./workspace-artifact-open";
 import { useWorkspace } from "./workspace-context";
 import { activityGroupKey, conversationName, memberById, previewText } from "./workspace-model";
+
+/**
+ * The views under More, each its own bundle chunk: a phone that opens the workspace loads none of
+ * them until the reader opens one.
+ */
+const WorkspaceReviewsView = lazy(() =>
+  import("../efficiency/WorkspaceReviews").then((module) => ({ default: module.WorkspaceReviewsView })),
+);
+const WorkspacePortfolioView = lazy(() =>
+  import("../portfolio/WorkspacePortfolio").then((module) => ({ default: module.WorkspacePortfolioView })),
+);
+const WorkspaceTrustView = lazy(() =>
+  import("../trust/WorkspaceTrustView").then((module) => ({ default: module.WorkspaceTrustView })),
+);
+const WorkspaceInsightView = lazy(() =>
+  import("./WorkspaceInsight").then((module) => ({ default: module.WorkspaceInsightView })),
+);
+const WorkspaceLoopsView = lazy(() =>
+  import("./WorkspaceLoops").then((module) => ({ default: module.WorkspaceLoopsView })),
+);
+const WorkspaceMoneyView = lazy(() =>
+  import("./WorkspaceMoney").then((module) => ({ default: module.WorkspaceMoneyView })),
+);
+const WorkspaceOrgChart = lazy(() =>
+  import("./WorkspaceOrgChart").then((module) => ({ default: module.WorkspaceOrgChart })),
+);
+const WorkspaceSecretsView = lazy(() =>
+  import("./WorkspaceSecrets").then((module) => ({ default: module.WorkspaceSecretsView })),
+);
+const WorkspaceStorageView = lazy(() =>
+  import("./WorkspaceStorageView").then((module) => ({ default: module.WorkspaceStorageView })),
+);
 
 /** The views of the workspace: Unreads, Threads, Activity, Later, DMs, search, Fleet and the views under More. */
 export function WorkspaceViewPane(props: { view: WorkspaceView }) {
@@ -43,7 +66,9 @@ export function WorkspaceViewPane(props: { view: WorkspaceView }) {
         <WorkspaceTodayView />
       </Match>
       <Match when={props.view === "money"}>
-        <WorkspaceMoneyView />
+        <Loading>
+          <WorkspaceMoneyView />
+        </Loading>
       </Match>
       <Match when={props.view === "activity"}>
         <WorkspaceActivityView />
@@ -55,7 +80,9 @@ export function WorkspaceViewPane(props: { view: WorkspaceView }) {
         <WorkspaceFleetView />
       </Match>
       <Match when={props.view === "org"}>
-        <WorkspaceOrgChart />
+        <Loading>
+          <WorkspaceOrgChart />
+        </Loading>
       </Match>
       <Match when={props.view === "artifacts"}>
         <WorkspaceArtifactsView />
@@ -67,25 +94,39 @@ export function WorkspaceViewPane(props: { view: WorkspaceView }) {
         <WorkspaceRoutinesView />
       </Match>
       <Match when={props.view === "storage"}>
-        <WorkspaceStorageView />
+        <Loading>
+          <WorkspaceStorageView />
+        </Loading>
       </Match>
       <Match when={props.view === "loops"}>
-        <WorkspaceLoopsView />
+        <Loading>
+          <WorkspaceLoopsView />
+        </Loading>
       </Match>
       <Match when={props.view === "secrets"}>
-        <WorkspaceSecretsView />
+        <Loading>
+          <WorkspaceSecretsView />
+        </Loading>
       </Match>
       <Match when={props.view === "reviews"}>
-        <WorkspaceReviewsView />
+        <Loading>
+          <WorkspaceReviewsView />
+        </Loading>
       </Match>
       <Match when={props.view === "portfolio"}>
-        <WorkspacePortfolioView />
+        <Loading>
+          <WorkspacePortfolioView />
+        </Loading>
       </Match>
       <Match when={props.view === "insights"}>
-        <WorkspaceInsightView />
+        <Loading>
+          <WorkspaceInsightView />
+        </Loading>
       </Match>
       <Match when={props.view === "trust"}>
-        <WorkspaceTrustView />
+        <Loading>
+          <WorkspaceTrustView />
+        </Loading>
       </Match>
       <Match when={props.view === "space-agents"}>
         <WorkspaceSpaceAgentsView />

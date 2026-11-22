@@ -611,10 +611,21 @@ export class ProviderAccounts {
           // The reading comes first: a usage request for a connected account uses it and starts no client.
           const limit =
             agentProviderDescriptor(provider).reportsUsage && !isKeyAccount(account)
-              ? yield* this.#storeUsage(
-                  account,
-                  client,
-                  yield* this.#host.readUsage(client, defaultUsageModel(provider)),
+              ? yield* this.#host.readUsage(client, defaultUsageModel(provider)).pipe(
+                  Effect.flatMap((usage) => this.#storeUsage(account, client, usage)),
+                  // The sign-in worked: only a failed sign-in marks the account signed out. Claude answers
+                  // a refused usage read (HTTP 429) with a failure, and the account keeps its last reading.
+                  Effect.catchIf(
+                    (error) => !isSignInError(error),
+                    (error) =>
+                      Effect.sync(() => {
+                        logger.warn("A provider account usage reading failed.", {
+                          provider,
+                          message: this.#message(provider, error),
+                        });
+                        return null;
+                      }),
+                  ),
                 )
               : null;
           this.#setState(account.id, { state: "connected", email, message: null });

@@ -108,6 +108,8 @@ export const messages = {
     "Lokalne skrypty uruchomiły rutyny tego agenta {limit} razy w ciągu ostatniej godziny. Spróbuj ponownie później.",
   "error.agent.workspaceOnlyMacOnly":
     "Tryb „Tylko obszar roboczy” jest dla tego dostawcy dostępny wyłącznie w macOS. Wybierz pełny dostęp w ustawieniach agenta.",
+  "error.agent.jailUnavailable":
+    "Ten serwer nie może uruchamiać agentów w izolacji, a operator jej wymaga. Poproś operatora o sprawdzenie, czy python3 jest zainstalowany i jądro obsługuje Landlock, albo o usunięcie OPENBOT_AGENT_JAIL_STRICT.",
   "error.agent.lowMemory":
     "Na tym serwerze brakuje pamięci. Twoja wiadomość czeka w kolejce i ruszy, gdy pamięć się zwolni. Większy plan daje serwerowi więcej pamięci.",
   "error.agent.lowMemoryServer":

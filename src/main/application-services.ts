@@ -79,7 +79,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { homedir, hostname, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { selfHostedApiOrigin } from "@openbot/contracts/invite-links";
 import type {
   AgentStatus,
@@ -123,6 +123,7 @@ import {
 import { pasteCodeLoginSupported } from "../backend/agent/cli-code-login";
 import { toMcpGatewayFailed } from "../backend/agent/mcp-gateway";
 import { ProviderAccountStore } from "../backend/agent/provider-account-store";
+import { createAgentJail } from "../backend/agent-jail";
 import { AgentLifecycleFailed, AgentService } from "../backend/agent-service";
 import { AgentStore } from "../backend/agent-store";
 import { BrowserHost } from "../backend/browser-host";
@@ -1155,6 +1156,22 @@ export async function createApplicationServices({
     hostMemory.start();
     teardown.push(TEARDOWN_ORDER.serverMemory, "the server memory reading", () => Effect.runPromise(hostMemory.stop()));
   }
+  // On a Linux server each agent's provider process runs in a jail of its own folders: the other
+  // agents' keys, the other spaces, main's data and /proc of main stay out of its reach.
+  const agentJail =
+    hostedServer || serverModeEnvironment
+      ? createAgentJail({
+          platform: process.platform,
+          environment: process.env,
+          launcher: app.isPackaged
+            ? join(process.resourcesPath, "agent-runtime", "agent-jail.py")
+            : resolve(__dirname, "../../resources/agent-runtime/agent-jail.py"),
+          home: homedir(),
+          userDataPath: app.getPath("userData"),
+          openbotRoot: dirname(store.sharedRoot),
+          downloadsRoot: store.downloadsRoot,
+        })
+      : undefined;
   const browserProfileStore = new BrowserProfileStore(store.database);
   // The browser saves a secret that a page shows into the same store as the agents' API keys.
   const agentApiKeys = new AgentApiKeys(join(app.getPath("userData"), "agent-api-keys"));
@@ -1920,6 +1937,7 @@ export async function createApplicationServices({
       providerStateDirectory: join(app.getPath("userData"), "provider-state"),
       ...(process.platform === "win32" ? { providerTempDirectory } : {}),
       ...(serverEnvironment ? { serverEnvironment } : {}),
+      ...(agentJail ? { agentJail } : {}),
       // The GitHub entries are paths only: `gh` and `git` read the token from the files the connection
       // keeps current. On a server with an agent display, `DISPLAY` names it, so a program an agent
       // starts opens where the driver sees it.

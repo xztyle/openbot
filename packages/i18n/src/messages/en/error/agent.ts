@@ -115,6 +115,8 @@ export const messages = defineMessages("error.agent", {
     "Local scripts ran this agent's routines {limit} times in the last hour. Try again later.",
   "error.agent.workspaceOnlyMacOnly":
     "Workspace only is available for this provider on macOS only. Choose Full access in the agent settings.",
+  "error.agent.jailUnavailable":
+    "This server cannot start agents in their jail, and its operator requires the jail. Ask the operator to check that python3 is installed and the kernel has Landlock, or to unset OPENBOT_AGENT_JAIL_STRICT.",
   "error.agent.lowMemory":
     "This server is low on memory. Your message waits in the queue and starts when memory is free. A larger plan gives the server more memory.",
   "error.agent.lowMemoryServer":

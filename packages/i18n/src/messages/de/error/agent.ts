@@ -128,6 +128,8 @@ export const messages = {
     "Lokale Skripte haben die Routinen dieses Agenten in der letzten Stunde {limit}-mal ausgeführt. Versuche es später erneut.",
   "error.agent.workspaceOnlyMacOnly":
     "„Nur Arbeitsbereich“ ist für diesen Anbieter nur unter macOS verfügbar. Wähle „Voller Zugriff“ in den Agenteneinstellungen.",
+  "error.agent.jailUnavailable":
+    "Dieser Server kann Agenten nicht in ihrer Isolierung starten, und sein Betreiber verlangt sie. Bitte den Betreiber zu prüfen, ob python3 installiert ist und der Kernel Landlock hat, oder OPENBOT_AGENT_JAIL_STRICT zu entfernen.",
   "error.agent.lowMemory":
     "Dieser Server hat wenig freien Arbeitsspeicher. Deine Nachricht wartet in der Warteschlange und startet, wenn Speicher frei ist. Ein größerer Tarif gibt dem Server mehr Arbeitsspeicher.",
   "error.agent.lowMemoryServer":

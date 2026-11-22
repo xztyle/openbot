@@ -107,6 +107,8 @@ export const messages = {
     "Yerel betikler bu ajanın rutinlerini son bir saat içinde {limit} kez çalıştırdı. Daha sonra tekrar deneyin.",
   "error.agent.workspaceOnlyMacOnly":
     "Bu sağlayıcıda “Yalnızca çalışma alanı” seçeneği yalnızca macOS'ta kullanılabilir. Ajan ayarlarından Tam erişim'i seçin.",
+  "error.agent.jailUnavailable":
+    "Bu sunucu ajanları yalıtım içinde başlatamıyor ve operatörü yalıtımı zorunlu tutuyor. Operatörden python3'ün kurulu olduğunu ve çekirdeğin Landlock desteklediğini kontrol etmesini ya da OPENBOT_AGENT_JAIL_STRICT ayarını kaldırmasını iste.",
   "error.agent.lowMemory":
     "Bu sunucunun belleği azaldı. Mesajınız kuyrukta bekler ve bellek boşaldığında başlar. Daha büyük bir plan sunucuya daha fazla bellek sağlar.",
   "error.agent.lowMemoryServer":

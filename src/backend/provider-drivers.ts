@@ -27,6 +27,7 @@ import {
   modelsAfterOpenCodeDiscoveryFailure,
 } from "./agent/provider-models";
 import type { AgentClient } from "./agent-client";
+import type { AgentJail } from "./agent-jail";
 import { ANTIGRAVITY_USAGE_PROMPT, antigravityRateLimits } from "./antigravity-usage";
 import { CodexAppServerClient } from "./app-server-client";
 import { ClaudeAgentClient } from "./claude-client";
@@ -412,6 +413,11 @@ export interface ProviderClientContext {
    * (`PROVIDER_ENVIRONMENT_RESERVED_NAMES`). Optional for the same reason as `reportMcpDrops`.
    */
   readonly providerEnvironment?: (provider: ProviderEnvironmentProvider) => Readonly<Record<string, string>>;
+  /**
+   * The jail of each agent's provider process, on a Linux server only (`agent-jail.ts`). Optional for
+   * the same reason as `reportMcpDrops`: without it every process runs as before.
+   */
+  readonly agentJail?: AgentJail;
 }
 
 /** The model provider of Codex that `OPENAI_BASE_URL` on the Codex page makes. */
@@ -771,6 +777,7 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
         undefined,
         claudeFallbackApiKey(context),
         context.claudeUserSetup,
+        context.agentJail,
       ),
     authState: (account) => ({ kind: "claude", email: account?.email ?? null }),
     validateAccount: () => undefined,

@@ -110,6 +110,8 @@ export const messages = {
     "Scripts locais executaram as rotinas deste agente {limit} vezes na última hora. Tente de novo mais tarde.",
   "error.agent.workspaceOnlyMacOnly":
     "Para este provedor, o acesso Somente o espaço de trabalho existe apenas no macOS. Escolha Acesso completo nas configurações do agente.",
+  "error.agent.jailUnavailable":
+    "Este servidor não consegue iniciar os agentes no seu isolamento, e o operador exige-o. Pede ao operador que verifique se o python3 está instalado e se o kernel tem Landlock, ou que remova OPENBOT_AGENT_JAIL_STRICT.",
   "error.agent.lowMemory":
     "Este servidor está com pouca memória. Sua mensagem aguarda na fila e começa quando houver memória livre. Um plano maior oferece mais memória ao servidor.",
   "error.agent.lowMemoryServer":

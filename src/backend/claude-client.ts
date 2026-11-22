@@ -66,6 +66,13 @@ import {
   RequestTimeoutError,
 } from "./agent-client";
 import { agentInheritedEnvironment } from "./agent-inherited-environment";
+import {
+  type AgentJail,
+  type AgentJailPlan,
+  AgentJailUnavailableError,
+  seedClaudeGlobalConfig,
+  spawnJailed,
+} from "./agent-jail";
 import { claudeContextCategories } from "./claude-context-categories";
 import {
   type ClaudeHistoryOptions,
@@ -364,6 +371,8 @@ interface ThreadConfig {
    * the project settings do not load. See `claude-workspace-sandbox.ts`.
    */
   workspaceOnly: boolean;
+  /** The agent whose session this is, on a server that jails its process. See `agent-jail.ts`. */
+  jailAgentId?: string;
 }
 
 interface ActiveTurn {
@@ -552,6 +561,8 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
   readonly #fallbackApiKey: (() => string | null) | undefined;
   /** Whether agents load the user's own Claude Code setup. Read at each session start. */
   readonly #userSetup: () => boolean;
+  /** The jail of an agent's process on a Linux server, absent elsewhere. See `agent-jail.ts`. */
+  readonly #jail: AgentJail | undefined;
   /** Whether the last account read found no claude.ai account and signed in with the key. */
   #onApiKey = false;
   readonly readHistory: ReadProviderHistory;
@@ -602,9 +613,11 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     historyIndexDirectory?: string,
     fallbackApiKey?: () => string | null,
     userSetup: () => boolean = () => false,
+    jail?: AgentJail,
   ) {
     super();
     this.#userSetup = userSetup;
+    this.#jail = jail;
     this.#cli = cli;
     this.#sdkLaunch = claudeSdkLaunch(cli.executable);
     this.#createQuery = createQuery;
@@ -1005,6 +1018,44 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     return { ...this.#agentEnvironment?.(), ...(key ? { ANTHROPIC_API_KEY: key } : {}) };
   }
 
+  /**
+   * The jail of an agent's process, or null for a process that runs as before: a start that is not
+   * an agent's session (a title, a profile), a provider the server does not jail, or a server that
+   * cannot make the jail. The default account gets `CLAUDE_CONFIG_DIR` so that the CLI keeps its
+   * global config in the config folder, inside the jail, and never in the real home.
+   */
+  readonly #jailPlan = Effect.fn("ClaudeAgentClient.jailPlan")(function* (
+    this: ClaudeAgentClient,
+    config: ThreadConfig,
+    environment: NodeJS.ProcessEnv,
+    files: { readFiles: string[]; linkFolders: string[]; commands: string[] },
+  ) {
+    const jail = this.#jail;
+    const agentId = config.jailAgentId;
+    if (!jail || !agentId || !jail.jails(this.provider)) return null;
+    const home = homedir();
+    const providerHome = environment.CLAUDE_CONFIG_DIR ?? join(home, ".claude");
+    if (!environment.CLAUDE_CONFIG_DIR) yield* providerCall(() => seedClaudeGlobalConfig(home, providerHome));
+    const plan: AgentJailPlan | null = yield* providerCall(() =>
+      jail.prepare({
+        agentId,
+        cwd: config.cwd,
+        writableRoots: config.additionalDirectories,
+        providerHome,
+        executable: this.#sdkLaunch.pathToClaudeCodeExecutable ?? this.#cli.executable,
+        ...files,
+        environment: { ...environment, CLAUDE_CONFIG_DIR: providerHome },
+      }),
+    ).pipe(
+      Effect.mapError((error) =>
+        error.cause instanceof AgentJailUnavailableError
+          ? providerFailure(new Error(sourceText("error.agent.jailUnavailable"), { cause: error.cause }))
+          : error,
+      ),
+    );
+    return plan;
+  });
+
   #setTurnContext(threadId: string, params: unknown, resume: boolean): void {
     const current = readMemoryContext(params);
     if (current) {
@@ -1274,6 +1325,37 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
         : Object.keys(signInSettings).length > 0
           ? { ...queryOptions.settings, ...(nodeOptions ? { env: { NODE_OPTIONS: nodeOptions } } : {}) }
           : flagSettings;
+    const environment = withClaudeClientLabels({
+      ...claudeEnvironment(this.#cli),
+      // The login shell's `PATH`, so the Bash tool and hooks find Homebrew and `~/.local/bin`
+      // tools when Finder starts OpenBot. An `env.PATH` in the Claude settings still wins.
+      ...(launchPath ? { PATH: launchPath } : {}),
+      // Subagents (the Task tool) run on Sonnet unless this server's variables name another
+      // model: an Opus lead's subagents on Opus cost twice as much for work that needs less.
+      ...(process.env.CLAUDE_CODE_SUBAGENT_MODEL ? {} : { CLAUDE_CODE_SUBAGENT_MODEL: CLAUDE_SUBAGENT_MODEL }),
+      ...queryOptions.env,
+      // Last: the agent environment ends with the provider variables of this server, which an
+      // admin sets, so they win over OpenBot's own values of the same name.
+      ...this.#environment(this.#onApiKey),
+    });
+    const jail = yield* this.#jailPlan(config, environment, {
+      readFiles: [mcpConfigFile, typeof settings === "string" ? settings : null].filter((file) => file !== null),
+      linkFolders: plugins.map((plugin) => plugin.path),
+      commands: handoff
+        ? Object.values(handoff.servers).flatMap((server) => (server.type === "stdio" ? [server.command] : []))
+        : [],
+    }).pipe(
+      Effect.tapError(() =>
+        Effect.sync(() => {
+          if (mcpConfigFile) void rm(mcpConfigFile, { force: true }).catch(() => undefined);
+        }),
+      ),
+    );
+    // The plan reads the disk: `stop()` may have run meanwhile, as above.
+    if (jail && !this.#running) {
+      if (mcpConfigFile) void rm(mcpConfigFile, { force: true }).catch(() => undefined);
+      return yield* providerFailure(new Error("Claude Agent SDK is not running."));
+    }
     const taskLimit = readTaskLimit();
     const claudeQuery = yield* providerSync(() =>
       this.#createQuery({
@@ -1281,6 +1363,8 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
         options: {
           cwd: config.cwd,
           ...this.#sdkLaunch,
+          // The jailed process starts through the launcher, which then starts the CLI. See `agent-jail.ts`.
+          ...(jail ? { spawnClaudeCodeProcess: (options: SpawnOptions) => spawnJailed(jail, options) } : {}),
           ...(config.model ? { model: this.#sdkModel(config.model) } : {}),
           ...(appliedEffort ? { effort: appliedEffort } : {}),
           ...(resume ? { resume: threadId } : { sessionId: threadId }),
@@ -1323,19 +1407,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
             : { hooks: { PreToolUse: [trustHooks], PostToolUse: [untrustedHooks] } }),
           ...(plugins.length ? { plugins } : {}),
           mcpServers,
-          env: withClaudeClientLabels({
-            ...claudeEnvironment(this.#cli),
-            // The login shell's `PATH`, so the Bash tool and hooks find Homebrew and `~/.local/bin`
-            // tools when Finder starts OpenBot. An `env.PATH` in the Claude settings still wins.
-            ...(launchPath ? { PATH: launchPath } : {}),
-            // Subagents (the Task tool) run on Sonnet unless this server's variables name another
-            // model: an Opus lead's subagents on Opus cost twice as much for work that needs less.
-            ...(process.env.CLAUDE_CODE_SUBAGENT_MODEL ? {} : { CLAUDE_CODE_SUBAGENT_MODEL: CLAUDE_SUBAGENT_MODEL }),
-            ...queryOptions.env,
-            // Last: the agent environment ends with the provider variables of this server, which an
-            // admin sets, so they win over OpenBot's own values of the same name.
-            ...this.#environment(this.#onApiKey),
-          }),
+          env: jail?.environment ?? environment,
         },
       }),
     );
@@ -2799,6 +2871,7 @@ function readThreadConfig(params: unknown): ThreadConfig {
   const cwd = requiredString(params, "cwd");
   const model = getString(params, "model");
   const effort = getString(params, "effort");
+  const jailAgentId = getString(params, "jailAgentId");
   return {
     cwd,
     mcpChatId: getString(params, "mcpChatId") ?? undefined,
@@ -2813,6 +2886,7 @@ function readThreadConfig(params: unknown): ThreadConfig {
       : {}),
     computerUse: computerUseParam(params),
     workspaceOnly: isRecord(params) && params.workspaceOnly === true,
+    ...(jailAgentId ? { jailAgentId } : {}),
   };
 }
 

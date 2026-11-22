@@ -581,6 +581,7 @@ export class ThreadLifecycle {
       sandbox: codexSandboxMode(agent),
       ...this.#workspaceOnlyParam(agent, client),
       ...this.#computerUseParam(agent, client),
+      ...this.#jailParam(agent, client),
       ...this.#instructions(
         agent,
         client,
@@ -990,6 +991,14 @@ export class ThreadLifecycle {
       : {};
   }
 
+  /**
+   * Claude starts a process for each session, and so can jail it with the agent's own folders on a
+   * server (`agent-jail.ts`). The other providers share one process between agents.
+   */
+  #jailParam(agent: AgentSummary, client: AgentClient): { jailAgentId?: string } {
+    return client.provider === "claude" ? { jailAgentId: agent.id } : {};
+  }
+
   /** Claude and the ACP clients read the servers themselves, so they are told to leave Computer Use out. */
   #computerUseParam(agent: AgentSummary, client: AgentClient): { computerUse?: false } {
     return client.provider === "codex" || agentComputerUseEnabled(agent) ? {} : { computerUse: false };
@@ -1126,6 +1135,7 @@ export class ThreadLifecycle {
       sandbox: codexSandboxMode(agent),
       ...this.#workspaceOnlyParam(agent, client),
       ...this.#computerUseParam(agent, client),
+      ...this.#jailParam(agent, client),
       ...this.#instructions(
         agent,
         client,

@@ -1,8 +1,9 @@
 import type { JSX } from "@solidjs/web";
-import { For, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { Button } from "../../button";
 import { Dialog, Popover } from "../../complex";
 import { Cpu, Gauge, Globe2, MessageSquare, Server, Settings, Terminal } from "../../icons";
+import { sheetDragToDismiss } from "../../sheet-drag";
 import { type TextValue, useText } from "../../text";
 import { cx, usesTouchLayout } from "../../utils";
 import { AiBadge, MemberAvatar, presenceLabelKey } from "./WorkspaceAvatar";
@@ -203,14 +204,15 @@ export function MemberProfilePopover(props: MemberProfilePopoverProps): JSX.Elem
 
 /** The card in a sheet from the bottom edge, the form of `ActionSheet` with the card as its content. */
 function ProfileSheet(props: MemberProfilePopoverProps): JSX.Element {
+  const [open, setOpen] = createSignal(false);
   return (
-    <Dialog.Root>
+    <Dialog.Root open={open()} onOpenChange={setOpen}>
       <Dialog.Trigger class={cx("ws-profile-trigger", props.class)} aria-label={props.label}>
         {props.children}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay class="ui-sheet-overlay">
-          <Dialog.Content class="ui-sheet ws-profile-sheet">
+          <Dialog.Content class="ui-sheet ws-profile-sheet" ref={sheetDragToDismiss(() => setOpen(false))}>
             <span class="ui-sheet-handle" aria-hidden="true" />
             <Dialog.Title class="sr-only">{props.label}</Dialog.Title>
             {props.card?.()}

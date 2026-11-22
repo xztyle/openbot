@@ -2,6 +2,7 @@ import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 import { Button } from "./button";
 import { Dialog } from "./complex";
+import { sheetDragToDismiss } from "./sheet-drag";
 import { cx } from "./utils";
 
 export interface ActionSheetItem {
@@ -30,7 +31,7 @@ export interface ActionSheetProps {
 /**
  * The phone form of a menu: a sheet that rises from the bottom edge, with rows a finger can hit.
  * It is a modal dialog on the overlay layer, so a dialog that one of its items opens stacks above
- * it. An item closes the sheet first, then runs. A tap on the backdrop or Escape closes it.
+ * it. An item closes the sheet first, then runs. A tap on the backdrop, a drag down or Escape closes it.
  */
 export function ActionSheet(props: ActionSheetProps): JSX.Element {
   const firstDanger = () => props.items.findIndex((item) => item.danger);
@@ -38,7 +39,7 @@ export function ActionSheet(props: ActionSheetProps): JSX.Element {
     <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay class="ui-sheet-overlay">
-          <Dialog.Content class={cx("ui-sheet", props.class)}>
+          <Dialog.Content class={cx("ui-sheet", props.class)} ref={sheetDragToDismiss(() => props.onOpenChange(false))}>
             <span class="ui-sheet-handle" aria-hidden="true" />
             <Dialog.Title class={props.showTitle ? "ui-sheet-title" : "sr-only"}>{props.title}</Dialog.Title>
             <Show when={props.header}>

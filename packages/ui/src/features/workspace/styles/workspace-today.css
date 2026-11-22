@@ -101,8 +101,10 @@
   opacity: 0.7;
 }
 
+/* A long amount goes to a line of its own, at the right, so the text keeps the card's width. */
 .ws-today-decision-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--openbot-space-3);
 }
@@ -110,7 +112,7 @@
 .ws-today-decision-copy {
   display: flex;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 10rem;
   flex-direction: column;
   gap: var(--openbot-space-0-5);
 }
@@ -124,6 +126,10 @@
   align-items: baseline;
   gap: var(--openbot-space-2);
   color: var(--openbot-text-primary);
+}
+
+.ws-today-decision-time {
+  white-space: nowrap;
 }
 
 .ws-today-decision-time,
@@ -168,6 +174,7 @@
 
 .ws-today-amount {
   flex: none;
+  margin-left: auto;
   border-radius: var(--openbot-radius-pill);
   background: var(--openbot-warning-soft);
   padding: var(--openbot-space-0-5) var(--openbot-space-2);

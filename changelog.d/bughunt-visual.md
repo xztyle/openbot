@@ -11,3 +11,5 @@
   stood over its left part, and in Riso Press light the title and the agent, cost and date controls in
   the top row were navy on navy.
 - When the schedule cannot load, its error is one line at the top, not a red fill of the whole week.
+- Today: a large amount goes to a line of its own, so the request keeps the card's width. Before, an
+  amount such as $1,234,567.00 squeezed the text into a narrow column and broke the time in two.

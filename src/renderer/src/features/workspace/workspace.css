@@ -806,6 +806,23 @@
 }
 
 /*
+ * A narrow window keeps the DM header on one row: the topic goes first, then the effort, and at the
+ * narrowest the model shows as its provider's mark, as on a phone. The picker names it when it opens.
+ */
+@media (max-width: 1100px) {
+  .ws-agent-dm-header .ws-channel-header-topic,
+  .ws-agent-dm-controls .provider-model-trigger-effort {
+    display: none;
+  }
+}
+
+@media (max-width: 960px) {
+  .ws-agent-dm-controls .provider-model-trigger-name {
+    display: none;
+  }
+}
+
+/*
  * A phone shows the model as its provider's mark, so one row holds Back, the agent, the controls and
  * details. The picker names the model when it opens.
  */

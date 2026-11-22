@@ -13,6 +13,10 @@
 
 ### Fixed
 
+- An agent DM's header stays on one row on a computer. "Why is this slow?" sat on a row of its own
+  above the model picker while a request waited, and a narrow window pushed the buttons over each
+  other; the topic, the effort and then the model name now give way first.
+
 - On a phone, every control a finger hits is at least 44 px: the channel header icons, the composer
   buttons, saved replies, attachment buttons and the model picker. Links inside text (an agent's
   name, "Show more", "Show original", reactions) get a 44 px hit area without moving the text.

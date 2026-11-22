@@ -33,7 +33,8 @@ const logger = createOpenBotLogger("agent-jail");
  * - the system folders, `/proc` and `/sys`, to read and run;
  * - the agent's workspace, the shared folder of its space, `/tmp`, the browser downloads, the
  *   provider's own config folder (its sign-in and sessions), and a home folder of the agent's own;
- * - the agent's own key folder and the shared keys, to read, and the files that main gives this
+ * - the workspaces of its teammates in the same space, its own key folder and the shared keys, to
+ *   read, and the files that main gives this
  *   start (the MCP config, the settings file, the skill plugins, the MCP server programs).
  *
  * The agent's home is a folder of links: each folder of the real home links there, except the ones
@@ -171,6 +172,8 @@ export interface AgentJailRequest {
   readonly cwd: string;
   /** The workspace and the shared folder of the agent's space. */
   readonly writableRoots: readonly string[];
+  /** The workspaces of the agent's teammates in its space, to read only. */
+  readonly readRoots: readonly string[];
   /** The provider's own folder: its sign-in, settings and sessions, such as `CLAUDE_CONFIG_DIR`. */
   readonly providerHome: string;
   /** The provider program. */
@@ -291,6 +294,7 @@ export class AgentJail {
     // The default folder of `appctl deploy --src`, from before spaces.
     add("write", join(this.#host.openbotRoot, "Shared", "apps"));
     for (const path of linked) add("write", path);
+    for (const path of request.readRoots) add("read", path);
     add("read", join(this.#host.apiKeysRoot, request.agentId));
     add("read", join(this.#host.apiKeysRoot, "_shared"));
     add("read", join(this.#host.userDataPath, "provider-runtimes"));

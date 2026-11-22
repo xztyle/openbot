@@ -7,7 +7,8 @@
 // 3. through the real Claude CLI and `ClaudeAgentClient`, with a fake model that has the Bash tool
 //    run the probe, and a stdio MCP server that the CLI starts and that probes too.
 // In the jail the probe must still do its work (its own key, its workspace, its space, git, node,
-// python, the toolchains of the home, a broker socket, the loopback network) and reach nothing else.
+// python, the toolchains of the home, a broker socket, the loopback network), read the workspace of a
+// teammate in its space, and reach nothing else.
 // Needs Linux with Landlock 3 and python3. `bun scripts/agent-jail-e2e.ts`.
 // Writes .openbot-build/agent-jail-e2e/report.json.
 import assert from "node:assert/strict";
@@ -31,6 +32,8 @@ const openbotRoot = join(home, "OpenBot");
 const runtime = join(root, "run-openbot");
 const workspace = join(openbotRoot, "Agents", "agent-a");
 const otherWorkspace = join(openbotRoot, "Agents", "agent-b");
+// Agent C is in agent A's space, and agent B is in another one.
+const teammateWorkspace = join(openbotRoot, "Agents", "agent-c");
 const ownSpace = join(openbotRoot, "Spaces", "one", "Shared");
 const otherSpace = join(openbotRoot, "Spaces", "two", "Shared");
 const providerHome = join(home, ".claude");
@@ -65,6 +68,8 @@ const EXPECTED: Record<string, "ok" | "no"> = {
   broker_socket: "ok",
   loopback_http: "ok",
   self_environ: "ok",
+  teammate_read: "ok",
+  teammate_write: "no",
   other_key: "no",
   other_workspace: "no",
   other_space: "no",
@@ -111,6 +116,8 @@ function probeScript(mainPid: number, brokerSocket: string, httpUrl: string, out
     ),
     check("loopback_http", `curl -sf ${httpUrl} | grep -q motion-ok`),
     check("self_environ", "grep -qa HOME= /proc/self/environ"),
+    check("teammate_read", `grep -q teammate ${teammateWorkspace}/notes.txt`),
+    check("teammate_write", `echo w >> ${teammateWorkspace}/notes.txt`),
     check("other_key", `cat ${userData}/agent-api-keys/agent-b/KEY_B`),
     check("other_workspace", `cat ${otherWorkspace}/secret.txt`),
     check("other_space", `cat ${otherSpace}/secret.txt`),
@@ -150,6 +157,7 @@ async function makeServer(): Promise<void> {
   await file(join(home, ".cargo", "bin", "tool"), "#!/bin/sh\necho tool-ok\n");
   await chmod(join(home, ".cargo", "bin", "tool"), 0o755);
   await file(join(otherWorkspace, "secret.txt"), "other workspace");
+  await file(join(teammateWorkspace, "notes.txt"), "teammate notes");
   await file(join(otherSpace, "secret.txt"), "other space");
   await mkdir(workspace, { recursive: true });
   await mkdir(ownSpace, { recursive: true });
@@ -329,6 +337,7 @@ try {
     agentId: "agent-a",
     cwd: workspace,
     writableRoots: [workspace, ownSpace],
+    readRoots: [teammateWorkspace],
     providerHome,
     executable: "/bin/bash",
     readFiles: [],
@@ -414,6 +423,7 @@ try {
         persistSession: false,
         model: "claude-haiku-4-5",
         jailAgentId: "agent-a",
+        jailReadRoots: [teammateWorkspace],
         developerInstructions: "Run the probe.",
       },
       (value) => {

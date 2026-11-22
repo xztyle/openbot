@@ -995,8 +995,14 @@ export class ThreadLifecycle {
    * Claude starts a process for each session, and so can jail it with the agent's own folders on a
    * server (`agent-jail.ts`). The other providers share one process between agents.
    */
-  #jailParam(agent: AgentSummary, client: AgentClient): { jailAgentId?: string } {
-    return client.provider === "claude" ? { jailAgentId: agent.id } : {};
+  #jailParam(agent: AgentSummary, client: AgentClient): { jailAgentId?: string; jailReadRoots?: string[] } {
+    if (client.provider !== "claude") return {};
+    // Teammates of one space read each other's work, so the jail gives their workspaces to read.
+    const teammates = this.#store
+      .list()
+      .filter((other) => other.id !== agent.id && this.#store.spaces.sameSpace(agent.id, other.id))
+      .map((other) => other.workspacePath);
+    return { jailAgentId: agent.id, jailReadRoots: teammates };
   }
 
   /** Claude and the ACP clients read the servers themselves, so they are told to leave Computer Use out. */

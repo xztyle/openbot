@@ -294,7 +294,8 @@ The jail reaches:
 - the agent's workspace, the shared folder of its space, the browser downloads (`~/OpenBot/Downloads`),
   the old default of `appctl deploy --src` (`~/OpenBot/Shared/apps`), and the CLI's config folder
   with its sign-in and sessions (`CLAUDE_CONFIG_DIR`, `~/.claude` for the first account);
-- the agent's own key folder and the shared keys, the provider runtimes, the GitHub connection's
+- the workspaces of the agent's teammates in the same space, to read only (the list is read when the
+  process starts), the agent's own key folder and the shared keys, the provider runtimes, the GitHub connection's
   folder, and the files that main writes for one start: the MCP config, the settings file and the
   skill plugins, with the folders their links point at, and the folder of each MCP server program;
 - a home folder of the agent's own, `<profile>/agent-jail/<agent>/home`, which `HOME` names. Each
@@ -304,7 +305,8 @@ The jail reaches:
   `~/.cargo`, `~/.bun`, `~/.cache` and `~/.config/godot` stay shared, and a new file in `~` stays the
   agent's. `TMPDIR` and `XDG_RUNTIME_DIR` are folders of the agent too, emptied at each start of OpenBot.
 
-Everything else is out of reach: the other agents' keys and workspaces, the other spaces, the
+Everything else is out of reach: the other agents' keys, the workspaces of agents in other spaces
+and writes to a teammate's workspace, the other spaces, the
 database and the rest of the profile, the provider sign-ins of other providers, the keyring and its
 password, the automation token and `/run/openbot`. Landlock also refuses a jailed process the memory,
 `environ`, open files and links of any process outside its jail in `/proc`, main's and PID 1's

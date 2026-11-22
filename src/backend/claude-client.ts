@@ -373,6 +373,8 @@ interface ThreadConfig {
   workspaceOnly: boolean;
   /** The agent whose session this is, on a server that jails its process. See `agent-jail.ts`. */
   jailAgentId?: string;
+  /** The workspaces of the agent's teammates in its space, which its jail reads. */
+  jailReadRoots?: string[];
 }
 
 interface ActiveTurn {
@@ -1041,6 +1043,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
         agentId,
         cwd: config.cwd,
         writableRoots: config.additionalDirectories,
+        readRoots: config.jailReadRoots ?? [],
         providerHome,
         executable: this.#sdkLaunch.pathToClaudeCodeExecutable ?? this.#cli.executable,
         ...files,
@@ -2872,6 +2875,10 @@ function readThreadConfig(params: unknown): ThreadConfig {
   const model = getString(params, "model");
   const effort = getString(params, "effort");
   const jailAgentId = getString(params, "jailAgentId");
+  const jailReadRoots =
+    isRecord(params) && Array.isArray(params.jailReadRoots)
+      ? params.jailReadRoots.filter((value): value is string => isString(value))
+      : [];
   return {
     cwd,
     mcpChatId: getString(params, "mcpChatId") ?? undefined,
@@ -2886,7 +2893,7 @@ function readThreadConfig(params: unknown): ThreadConfig {
       : {}),
     computerUse: computerUseParam(params),
     workspaceOnly: isRecord(params) && params.workspaceOnly === true,
-    ...(jailAgentId ? { jailAgentId } : {}),
+    ...(jailAgentId ? { jailAgentId, jailReadRoots } : {}),
   };
 }
 
@@ -2896,8 +2903,11 @@ function readThreadConfig(params: unknown): ThreadConfig {
  * the same configuration. A restart sends the full conversation to the model again.
  */
 function threadConfigKey(config: ThreadConfig, withModel: boolean): string {
+  // A teammate who joins or leaves the space reaches the jail at the next start of the process; a
+  // restart only for that would write the whole conversation to the cache again.
+  const { jailReadRoots: _teammates, ...kept } = config;
   const fields = {
-    ...config,
+    ...kept,
     model: withModel ? (config.model ?? null) : null,
     effort: withModel ? (config.effort ?? null) : null,
   };

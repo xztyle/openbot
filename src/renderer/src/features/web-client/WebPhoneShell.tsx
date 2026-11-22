@@ -1,34 +1,39 @@
 import { GENERAL_SPACE_ID } from "@openbot/contracts/ipc";
 import {
+  ActionSheet,
   type ActionSheetItem,
-  Activity,
   ArrowLeftRight,
   Bell,
   Blocks,
   Bookmark,
   Bot,
   Briefcase,
-  Ellipsis,
+  Coins,
   Gauge,
-  Hand,
   HardDrive,
   Hash,
-  House,
+  IconButton,
   Inbox,
   Kanban,
   KeyRound,
   LayoutDashboard,
   MessageSquareText,
   MessagesSquare,
+  Network,
   Pencil,
   Plus,
   Search,
   ShieldCheck,
+  Sparkles,
+  SquarePen,
+  Sunrise,
   Target,
+  UserAvatar,
   Workflow,
 } from "@openbot/ui";
 import {
   type PhoneChip,
+  PhoneChips,
   PhoneHomeHeader,
   type PhoneMoreRow,
   PhoneMoreScreen,
@@ -41,14 +46,28 @@ import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSide
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, Match, Switch } from "solid-js";
-import { WorkspaceDmsView } from "../workspace/WorkspaceInboxViews";
 import { useWorkspaceMenu, WorkspaceSidebarPane } from "../workspace/WorkspaceSidebarPane";
+import { WorkspaceTodayView } from "../workspace/WorkspaceToday";
 import { WorkspaceMentions } from "../workspace/WorkspaceView";
 import { WorkspaceViewPane } from "../workspace/WorkspaceViews";
 import { useWorkspace } from "../workspace/workspace-context";
+import { useDecisionQueue } from "../workspace/workspace-decisions";
+import { openInsightTab } from "../workspace/workspace-insight-report";
 
-/** The tabs of the phone workspace, as Slack's bottom bar: Home, DMs, Activity and More. */
-export type WebPhoneTab = "home" | "dms" | "activity" | "more";
+/**
+ * The tabs of the phone workspace: Today (what waits on the owner, who works, the briefing), Chat
+ * (the space's channels and DMs), Agents (the fleet and its views) and Inbox (mentions and replies),
+ * around a centre "+". More (the account, the views and the server's pages) opens from Today's header.
+ */
+export type WebPhoneTab = "today" | "chat" | "agents" | "inbox" | "more";
+
+/** The tab that shows a view on a phone, for a view that is a tab. */
+export function phoneTabOfView(view: WorkspaceView): "today" | "inbox" | "agents" | undefined {
+  if (view === "today") return "today";
+  if (view === "activity") return "inbox";
+  if (view === "fleet") return "agents";
+  return undefined;
+}
 
 export interface WebPhoneShellProps {
   tab: WebPhoneTab;
@@ -110,23 +129,7 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
 
   const openView = (view: WorkspaceView) => ws.openView(view);
   const chips = createMemo((): PhoneChip[] => {
-    const working = ws.fleet
-      .agents()
-      .filter((agent) => agent.status.state === "working" && ws.spaces.agentInCurrent(agent.member.id)).length;
-    const needsYou = ws.needsYou().length;
     return [
-      ...(needsYou > 0
-        ? [
-            {
-              id: "needs-you",
-              label: t("workspace.needsYou.title"),
-              icon: <Hand />,
-              detail: String(needsYou),
-              urgent: true,
-              onSelect: () => openView("activity"),
-            },
-          ]
-        : []),
       {
         id: "unreads",
         label: t("workspace.view.unreads"),
@@ -160,27 +163,11 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
         onSelect: () => openView("drafts"),
       },
       {
-        id: "fleet",
-        label: t("workspace.view.fleet"),
-        icon: <Activity />,
-        detail: working > 0 ? t("workspace.sidebar.workingCount", { count: working }) : undefined,
-        onSelect: () => openView("fleet"),
-      },
-      ...(ws.spaces.available()
-        ? [
-            {
-              id: "space-agents",
-              label: t("workspace.view.spaceAgents"),
-              icon: <Bot />,
-              onSelect: () => openView("space-agents"),
-            },
-          ]
-        : []),
-      {
-        id: "artifacts",
-        label: t("workspace.view.artifacts"),
-        icon: <LayoutDashboard />,
-        onSelect: () => openView("artifacts"),
+        id: "dms",
+        label: t("workspace.view.dms"),
+        icon: <MessagesSquare />,
+        unread: unreadDms() > 0,
+        onSelect: () => openView("dms"),
       },
     ];
   });
@@ -312,29 +299,119 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
     return rows;
   });
 
+  /** The views of the agents, over the fleet on the Agents tab. */
+  const agentChips = createMemo((): PhoneChip[] => {
+    const chips: PhoneChip[] = [];
+    if (ws.viewAvailable("loops"))
+      chips.push({
+        id: "loops",
+        label: t("workspace.view.loops"),
+        icon: <Kanban />,
+        onSelect: () => openView("loops"),
+      });
+    if (ws.viewAvailable("money"))
+      chips.push({ id: "money", label: t("workspace.view.money"), icon: <Coins />, onSelect: () => openView("money") });
+    if (ws.viewAvailable("insights"))
+      chips.push({ id: "insights", label: t("insight.title"), icon: <Target />, onSelect: () => openView("insights") });
+    chips.push(
+      { id: "org", label: t("workspace.view.org"), icon: <Network />, onSelect: () => openView("org") },
+      {
+        id: "artifacts",
+        label: t("workspace.view.artifacts"),
+        icon: <LayoutDashboard />,
+        onSelect: () => openView("artifacts"),
+      },
+    );
+    if (ws.spaces.available())
+      chips.push({
+        id: "space-agents",
+        label: t("workspace.view.spaceAgents"),
+        icon: <Bot />,
+        onSelect: () => openView("space-agents"),
+      });
+    return chips;
+  });
+
+  /** Unread channels and DMs: the Chat tab has a dot, not a count. */
+  const chatUnread = () =>
+    unreadDms() > 0 || ws.sidebarChannels().some((row) => !row.muted && (row.unread || (row.mentionCount ?? 0) > 0));
+  const queue = useDecisionQueue();
   const tabs = createMemo((): PhoneTab[] => [
-    { id: "home", label: t("workspace.phone.home"), icon: <House /> },
     {
-      id: "dms",
-      label: t("workspace.phone.dms"),
+      id: "today",
+      label: t("workspace.view.today"),
+      icon: <Sunrise />,
+      // Only what waits on the owner counts, in amber: every space's requests, loop decisions and alerts.
+      count: queue.queue().length,
+      tone: "attention",
+      badgeLabel: t("workspace.phone.waiting", { count: queue.queue().length }),
+    },
+    {
+      id: "chat",
+      label: t("workspace.phone.chat"),
       icon: <MessagesSquare />,
-      count: unreadDms(),
-      badgeLabel: t("workspace.phone.unreadConversations", { count: unreadDms() }),
+      dot: chatUnread(),
+      badgeLabel: t("workspace.sidebar.unread"),
     },
     {
-      id: "activity",
-      label: t("workspace.phone.activity"),
-      icon: <Bell />,
-      // What waits for the reader is at the top of Activity, so it counts there too.
-      count: ws.activityCount() + ws.needsYou().length,
-      badgeLabel: t("workspace.phone.newActivity", { count: ws.activityCount() + ws.needsYou().length }),
+      id: "agents",
+      label: t("workspace.phone.agents"),
+      icon: <Bot />,
     },
-    { id: "more", label: t("workspace.phone.more"), icon: <Ellipsis /> },
+    {
+      id: "inbox",
+      label: t("workspace.phone.inbox"),
+      icon: <Bell />,
+      dot: ws.activityCount() > 0,
+      badgeLabel: t("workspace.phone.newActivity", { count: ws.activityCount() }),
+    },
+  ]);
+  const [createOpen, setCreateOpen] = createSignal(false);
+  /** The "+" of the bar: ask an agent, write a message, or start a channel, a loop or a goal. */
+  const createItems = createMemo((): ActionSheetItem[] => [
+    {
+      id: "ask",
+      label: t("workspace.phone.askAgent"),
+      icon: <Sparkles aria-hidden="true" />,
+      onSelect: () => ws.openDialog({ kind: "switcher" }),
+    },
+    {
+      id: "message",
+      label: t("workspace.sidebar.newMessage"),
+      icon: <SquarePen aria-hidden="true" />,
+      onSelect: () => ws.openDialog({ kind: "new-message" }),
+    },
+    {
+      id: "channel",
+      label: t("workspace.phone.newChannel"),
+      icon: <Hash aria-hidden="true" />,
+      onSelect: () => ws.openDialog({ kind: "create-channel" }),
+    },
+    ...(ws.viewAvailable("loops")
+      ? [
+          {
+            id: "loop",
+            label: t("workspace.loops.new"),
+            icon: <Kanban aria-hidden="true" />,
+            onSelect: () => openView("loops"),
+          },
+        ]
+      : []),
+    ...(ws.viewAvailable("insights")
+      ? [
+          {
+            id: "goal",
+            label: t("workspace.phone.newGoal"),
+            icon: <Target aria-hidden="true" />,
+            onSelect: () => openInsightTab(ws, "goals"),
+          },
+        ]
+      : []),
   ]);
 
   function selectTab(id: string): void {
-    const tab = id === "dms" || id === "activity" || id === "more" ? id : "home";
-    if (tab === "activity") void ws.refreshActivity();
+    const tab = id === "chat" || id === "agents" || id === "inbox" ? id : "today";
+    if (tab === "inbox") void ws.refreshActivity();
     props.onTab(tab);
   }
 
@@ -343,7 +420,25 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
       <div class="ws-phone-shell-banner">{props.banner}</div>
       <div class="ws-phone-shell-screen">
         <Switch>
-          <Match when={props.tab === "home"}>
+          <Match when={props.tab === "today"}>
+            <WorkspaceMentions>
+              <div class="ws-phone-tab-view">
+                <WorkspaceTodayView
+                  actions={
+                    <IconButton
+                      variant="ghost"
+                      class="ws-phone-account-button"
+                      label={t("workspace.phone.more")}
+                      onClick={() => props.onTab("more")}
+                    >
+                      <UserAvatar user={props.account} decorative />
+                    </IconButton>
+                  }
+                />
+              </div>
+            </WorkspaceMentions>
+          </Match>
+          <Match when={props.tab === "chat"}>
             <PhoneHomeHeader
               title={title()}
               mark={currentSpace() ?? { name: ws.env.serverName(), icon: null, hue: null }}
@@ -359,12 +454,13 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
               <WorkspaceSidebarPane searchShortcut={props.searchShortcut} />
             </div>
           </Match>
-          <Match when={props.tab === "dms"}>
-            <div class="ws-phone-tab-view">
-              <WorkspaceDmsView tab />
+          <Match when={props.tab === "agents"}>
+            <div class="ws-phone-tab-view ws-phone-agents">
+              <PhoneChips chips={agentChips()} label={t("workspace.phone.agentViews")} />
+              <WorkspaceViewPane view="fleet" />
             </div>
           </Match>
-          <Match when={props.tab === "activity"}>
+          <Match when={props.tab === "inbox"}>
             <WorkspaceMentions>
               <div class="ws-phone-tab-view">
                 <WorkspaceViewPane view="activity" />
@@ -380,7 +476,19 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
           </Match>
         </Switch>
       </div>
-      <PhoneTabBar tabs={tabs()} active={props.tab} onSelect={selectTab} label={t("workspace.phone.tabs")} />
+      <PhoneTabBar
+        tabs={tabs()}
+        active={props.tab}
+        onSelect={selectTab}
+        label={t("workspace.phone.tabs")}
+        center={{ label: t("workspace.phone.create"), icon: <Plus />, onSelect: () => setCreateOpen(true) }}
+      />
+      <ActionSheet
+        open={createOpen()}
+        onOpenChange={setCreateOpen}
+        title={t("workspace.phone.create")}
+        items={createItems()}
+      />
       <PhoneSwitcherSheet
         open={switcherOpen()}
         onOpenChange={setSwitcherOpen}

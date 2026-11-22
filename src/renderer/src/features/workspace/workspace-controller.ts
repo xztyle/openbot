@@ -262,6 +262,8 @@ export interface WorkspaceEnvironment {
   trust?: (() => TrustCalls | undefined) | undefined;
   /** Opens Server settings > Storage, where the cleanup rules are. */
   openStorageRules?: (() => void) | undefined;
+  /** Opens the plan's usage and limits page of the server, for Money. Absent where the shell has none. */
+  openUsage?: (() => void) | undefined;
   /**
    * The runtime state that the org chart reads beside the fleet: each agent's queue, for the agents
    * that message each other, and the last failed turn of each agent. Absent, the chart shows the
@@ -330,6 +332,8 @@ interface SavedPlace {
 }
 
 const SAVED_VIEWS: readonly WorkspaceView[] = [
+  "today",
+  "money",
   "unreads",
   "later",
   "dms",
@@ -687,7 +691,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (state.view) return { kind: "view", view: state.view };
     const agentId = env.activeAgentId();
     if (agentId && dmIsMainChat(agentId) && (state.agentChosen || !workspaceEmpty())) return { kind: "agent", agentId };
-    return { kind: "view", view: "activity" };
+    return { kind: "view", view: "today" };
   });
 
   /** The sidebar row of the open conversation: a channel id, or the agent row of the owner's DM. */
@@ -755,7 +759,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     spaces.select(spaceId);
     const open = activeConversationId();
     // A phone shows one pane: the reader picked the space on the sidebar and wants to see its list.
-    if (open && rowSpace(open) !== spaceId) openView("activity", env.phone() ? "sidebar" : "main");
+    if (open && rowSpace(open) !== spaceId) openView("today", env.phone() ? "sidebar" : "main");
   }
   /**
    * A conversation of another space that the reader opens, from Jump to, a notification, a link or a
@@ -1151,7 +1155,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       draft.sidebar.closed = [...others, id];
     });
     saveSidebar();
-    if (activeConversationId() === id) openView("activity");
+    if (activeConversationId() === id) openView("today");
   }
   /** A DM that the reader opens comes back to the list. */
   function reopenConversation(id: string) {
@@ -1764,6 +1768,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     // The owner and the admins: the same role as the key store, on a host that has the routes.
     if (view === "insights") return env.secrets?.() === true && Boolean(channels.port().agent.workspaceInsight);
     if (view === "storage") return Boolean(env.storageHygiene?.());
+    // Money is the owner's and the admins': what the team costs and the spend that waits for them.
+    if (view === "money") return env.secrets?.() === true;
     if (view === "reviews") return Boolean(env.efficiency?.());
     if (view === "portfolio") return Boolean(env.portfolio?.());
     if (view === "loops") return Boolean(channels.port().agent.workspaceLoops);
@@ -2359,7 +2365,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     }
     closePanel();
     channels.close();
-    openView("activity");
+    openView("today");
     return true;
   }
 
@@ -2386,7 +2392,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       return failureText(error, "workspace.app.error.archive");
     }
     closePanel();
-    openView("activity");
+    openView("today");
     return true;
   }
 

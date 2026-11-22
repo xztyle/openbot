@@ -1,102 +1,12 @@
 /*
- * "Needs you": every request of an agent that waits for the reader in the space that shows, from the
- * host's list. The top bar has a button with the count, Activity starts with the list, and a phone's
- * Home has a chip. A row opens the chat that answers the request.
+ * "Needs you": the top bar's button with the count and the list. It shows the one decision queue of
+ * every space (`useDecisionQueue`), the same list as Today, so the counts agree. A row opens the
+ * exact place where the request waits.
  */
-import { agentAttentionKey, isTicketAttention } from "@openbot/contracts/ipc";
-import { NeedsYouButton, type NeedsYouRow, NeedsYouSection } from "@openbot/ui/features/workspace/NeedsYou";
-import { useText } from "@openbot/ui/text";
-import { createMemo } from "solid-js";
-import { needsYouAction } from "../agents/needs-you";
-import { useLoopDecisions } from "./loop-decisions-feed";
-import { useWorkspace } from "./workspace-context";
-import { insightAlerts, pollInsightAlerts } from "./workspace-insight-alerts";
-import { memberById } from "./workspace-model";
-
-/** The key of a loop decision's row, apart from the keys of agent requests. */
-const LOOP_DECISION_KEY = "loop-decision\n";
-const ALERT_KEY = "insight:";
-
-/** The rows of the requests that wait for the reader, and the action that opens one. */
-export function useNeedsYouRows() {
-  const ws = useWorkspace();
-  const { t, format } = useText();
-  const loopDecisions = useLoopDecisions(ws);
-  const decisionRows = createMemo((): NeedsYouRow[] =>
-    loopDecisions.decisions().map((decision) => {
-      const agent = ws.env.agents().find((candidate) => candidate.id === decision.requestedBy);
-      const amount = decision.amountUsd === undefined ? "" : ` ${format.currencyUsd(decision.amountUsd)}`;
-      return {
-        key: `${LOOP_DECISION_KEY}${decision.id}`,
-        member: memberById(ws.directory(), decision.requestedBy ?? "", agent?.name ?? t("chat.message.agentFallback")),
-        kind: "decision",
-        action:
-          decision.subject === "question"
-            ? t("workspace.loops.needsYou.answer")
-            : t("workspace.loops.needsYou.approve", { amount }),
-        summary: decision.title,
-        where: t("workspace.view.loops"),
-        at: decision.createdAt,
-      };
-    }),
-  );
-  // The insight alerts of the owner and the admins: money spent with no sale, a goal behind.
-  pollInsightAlerts(() => {
-    const read = ws.channels.port().agent.workspaceInsight;
-    return ws.viewAvailable("insights") && read ? async () => (await read({ days: 1 })).alerts : undefined;
-  });
-  const alertRows = createMemo((): NeedsYouRow[] =>
-    insightAlerts()
-      .filter((alert) => ws.spaces.current() === alert.spaceId || !ws.spaces.available())
-      .map((alert) => ({
-        key: `${ALERT_KEY}${alert.id}`,
-        member: { id: "insight", kind: "agent", name: t("insight.title"), avatarSeed: "insight" },
-        kind: "alert",
-        action: alert.text,
-        where: t("insight.needsYou.alert"),
-        at: Date.parse(alert.createdAt),
-      })),
-  );
-  const requestRows = createMemo((): NeedsYouRow[] =>
-    ws.needsYou().map((item) => {
-      const agent = ws.env.agents().find((candidate) => candidate.id === item.agentId);
-      const place = ws.needsYouPlace(item);
-      const channel = "channelId" in place ? ws.summary(place.channelId) : undefined;
-      return {
-        key: agentAttentionKey(item),
-        member: memberById(ws.directory(), item.agentId, agent?.name ?? t("chat.message.agentFallback")),
-        kind: isTicketAttention(item) ? "ticket" : item.kind,
-        action: needsYouAction(item, t),
-        summary: item.summary,
-        where: channel ? t("workspace.activity.in", { channel: channel.name }) : t("workspace.activity.directMessage"),
-        at: Date.parse(item.createdAt),
-      };
-    }),
-  );
-  const rows = createMemo(() =>
-    [...requestRows(), ...decisionRows(), ...alertRows()].sort((left, right) => left.at - right.at),
-  );
-  const open = (key: string) => {
-    if (key.startsWith(ALERT_KEY)) {
-      ws.openView("insights");
-      return;
-    }
-    if (key.startsWith(LOOP_DECISION_KEY)) {
-      ws.openView("loops");
-      return;
-    }
-    const item = ws.needsYou().find((candidate) => agentAttentionKey(candidate) === key);
-    if (item) ws.openNeedsYou(item);
-  };
-  return { rows, open };
-}
+import { NeedsYouButton } from "@openbot/ui/features/workspace/NeedsYou";
+import { useDecisionQueue } from "./workspace-decisions";
 
 export function WorkspaceNeedsYouButton() {
-  const needsYou = useNeedsYouRows();
+  const needsYou = useDecisionQueue();
   return <NeedsYouButton rows={needsYou.rows()} onOpen={needsYou.open} />;
-}
-
-export function WorkspaceNeedsYouSection() {
-  const needsYou = useNeedsYouRows();
-  return <NeedsYouSection rows={needsYou.rows()} onOpen={needsYou.open} />;
 }

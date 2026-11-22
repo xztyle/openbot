@@ -24,12 +24,14 @@ import {
 } from "./WorkspaceInboxViews";
 import { WorkspaceInsightView } from "./WorkspaceInsight";
 import { WorkspaceLoopsView } from "./WorkspaceLoops";
-import { WorkspaceNeedsYouSection } from "./WorkspaceNeedsYou";
+import { WorkspaceMoneyView } from "./WorkspaceMoney";
 import { WorkspaceOrgChart } from "./WorkspaceOrgChart";
 import { WorkspaceWhenBackSection } from "./WorkspaceOwnerAway";
 import { WorkspaceSecretsView } from "./WorkspaceSecrets";
 import { WorkspaceSpaceAgentsView } from "./WorkspaceSpaceAgents";
 import { WorkspaceStorageView } from "./WorkspaceStorageView";
+import { WorkspaceTodayView } from "./WorkspaceToday";
+import { openArtifact } from "./workspace-artifact-open";
 import { useWorkspace } from "./workspace-context";
 import { conversationName, memberById, previewText } from "./workspace-model";
 
@@ -37,6 +39,12 @@ import { conversationName, memberById, previewText } from "./workspace-model";
 export function WorkspaceViewPane(props: { view: WorkspaceView }) {
   return (
     <Switch>
+      <Match when={props.view === "today"}>
+        <WorkspaceTodayView />
+      </Match>
+      <Match when={props.view === "money"}>
+        <WorkspaceMoneyView />
+      </Match>
       <Match when={props.view === "activity"}>
         <WorkspaceActivityView />
       </Match>
@@ -153,12 +161,8 @@ function WorkspaceActivityView() {
         void ws.channels.markAllRead(channelIds).then(() => ws.refreshActivity());
       }}
       onBack={() => ws.back()}
-      needsYou={
-        <>
-          <WorkspaceWhenBackSection />
-          <WorkspaceNeedsYouSection />
-        </>
-      }
+      // What waits for the reader has its own place, Today; Activity keeps the messages.
+      needsYou={<WorkspaceWhenBackSection />}
     />
   );
 }
@@ -221,22 +225,6 @@ function WorkspaceFleetView() {
       onBack={() => ws.back()}
     />
   );
-}
-
-/** Opens an artifact: its address, or the file an agent attached. */
-export function openArtifact(ws: ReturnType<typeof useWorkspace>, id: string, channelId?: string) {
-  const artifact = ws.artifacts.artifacts(channelId ? { channelId } : undefined).find((item) => item.id === id);
-  if (artifact?.url) {
-    void ws.channels.port().openUrl(artifact.url);
-    return;
-  }
-  const file = ws.artifactRecord(id)?.file;
-  const attachmentId = file?.id ?? (id.includes(":attachment:") ? id.split(":attachment:")[1] : undefined);
-  if (attachmentId)
-    void ws.channels
-      .port()
-      .agent.openAttachment({ attachmentId, action: "open" })
-      .catch(() => undefined);
 }
 
 function WorkspaceArtifactsView() {

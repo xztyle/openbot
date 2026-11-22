@@ -14,6 +14,7 @@ import {
   Bot,
   Briefcase,
   Button,
+  Coins,
   FormDialog,
   Gauge,
   HardDrive,
@@ -31,6 +32,7 @@ import {
   Plus,
   Search,
   ShieldCheck,
+  Sunrise,
   Target,
   Workflow,
 } from "@openbot/ui";
@@ -70,6 +72,8 @@ export interface JumpEntry {
 
 /** The icon of each view, as on its sidebar row, so a view does not look like a channel. */
 const VIEW_ICON: Record<WorkspaceView, () => JSX.Element> = {
+  today: () => <Sunrise />,
+  money: () => <Coins />,
   unreads: () => <Inbox />,
   threads: () => <MessageSquareText />,
   activity: () => <AtSign />,
@@ -144,6 +148,8 @@ export function useJumpEntries() {
   const { t } = useText();
   const VIEWS: readonly { view: WorkspaceView; label: () => string }[] = (
     [
+      "today",
+      "money",
       "unreads",
       "threads",
       "activity",

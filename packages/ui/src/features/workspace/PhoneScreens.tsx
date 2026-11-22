@@ -30,6 +30,48 @@ export interface PhoneChip {
   onSelect: () => void;
 }
 
+/** A row of shortcut chips that scrolls sideways, as under the phone's Home header. */
+export function PhoneChips(props: { chips: readonly PhoneChip[]; label?: string | undefined }): JSX.Element {
+  const { t } = useText();
+  return (
+    <Show when={props.chips.length > 0}>
+      <ul class="ws-phone-chips" aria-label={props.label ?? t("workspace.phone.shortcuts")}>
+        <For each={props.chips} keyed={(chip) => chip.id}>
+          {(chip) => (
+            <li>
+              <Button
+                variant="secondary"
+                class="ws-phone-chip"
+                data-unread={chip().unread ? "" : undefined}
+                data-urgent={chip().urgent ? "" : undefined}
+                aria-label={[chip().label, chip().detail ?? "", chip().unread ? t("workspace.sidebar.unread") : ""]
+                  .filter(Boolean)
+                  .join(", ")}
+                onClick={() => chip().onSelect()}
+              >
+                <span class="ws-phone-chip-icon" aria-hidden="true">
+                  {chip().icon}
+                </span>
+                <span aria-hidden="true">{chip().label}</span>
+                <Show when={chip().detail}>
+                  {(detail) => (
+                    <span class="ws-phone-chip-detail" aria-hidden="true">
+                      {detail()}
+                    </span>
+                  )}
+                </Show>
+                <Show when={chip().unread}>
+                  <span class="ws-unread-dot" aria-hidden="true" />
+                </Show>
+              </Button>
+            </li>
+          )}
+        </For>
+      </ul>
+    </Show>
+  );
+}
+
 /** The mark of the space at the top left of Home. Without spaces the server's initials show. */
 export interface PhoneHomeMark {
   name: string;
@@ -137,41 +179,7 @@ export function PhoneHomeHeader(props: PhoneHomeHeaderProps): JSX.Element {
           </Show>
         </div>
       </div>
-      <Show when={props.chips.length > 0}>
-        <ul class="ws-phone-chips" aria-label={t("workspace.phone.shortcuts")}>
-          <For each={props.chips} keyed={(chip) => chip.id}>
-            {(chip) => (
-              <li>
-                <Button
-                  variant="secondary"
-                  class="ws-phone-chip"
-                  data-unread={chip().unread ? "" : undefined}
-                  data-urgent={chip().urgent ? "" : undefined}
-                  aria-label={[chip().label, chip().detail ?? "", chip().unread ? t("workspace.sidebar.unread") : ""]
-                    .filter(Boolean)
-                    .join(", ")}
-                  onClick={() => chip().onSelect()}
-                >
-                  <span class="ws-phone-chip-icon" aria-hidden="true">
-                    {chip().icon}
-                  </span>
-                  <span aria-hidden="true">{chip().label}</span>
-                  <Show when={chip().detail}>
-                    {(detail) => (
-                      <span class="ws-phone-chip-detail" aria-hidden="true">
-                        {detail()}
-                      </span>
-                    )}
-                  </Show>
-                  <Show when={chip().unread}>
-                    <span class="ws-unread-dot" aria-hidden="true" />
-                  </Show>
-                </Button>
-              </li>
-            )}
-          </For>
-        </ul>
-      </Show>
+      <PhoneChips chips={props.chips} />
       <ActionSheet
         open={menuOpen()}
         onOpenChange={setMenuOpen}

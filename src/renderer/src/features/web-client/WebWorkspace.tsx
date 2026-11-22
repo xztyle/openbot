@@ -273,7 +273,7 @@ import { workspaceViewLabel } from "../workspace/workspace-view-labels";
 import { WebAgentSettings } from "./WebAgentSettings";
 import { WebConnectComputer } from "./WebConnectComputer";
 import { WebMobileNavigation, type WebMobilePane } from "./WebMobileNavigation";
-import { WebPhoneShell, type WebPhoneTab } from "./WebPhoneShell";
+import { phoneTabOfView, WebPhoneShell, type WebPhoneTab } from "./WebPhoneShell";
 import { createWebAccountCalls } from "./web-account";
 import { createWebAccountUsage } from "./web-account-usage";
 import { createWebAgentImportCalls } from "./web-agent-import";
@@ -2178,6 +2178,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       const id = server()?.id;
       if (id) void openServerSettings(id, null, "storage");
     },
+    openUsage: () => {
+      const id = server()?.id;
+      if (id) void openHostPage(id, "usage", null);
+    },
     messageLink: (channelId, messageId, threadRootId) =>
       placeLink({ kind: "channel", channelId, threadRootId }, messageId, ws.rowSpace(channelId)),
     channelLink: (channelId) =>
@@ -2222,11 +2226,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       workspaceController.openConversation(id);
     },
     openView: (view, pane) => {
-      // A phone has DMs and Activity as tabs of its bottom bar, as Slack's app: Jump to opens the tab,
-      // not a second DMs or Activity screen over the tab that shows.
-      if (phoneShell() && (view === "dms" || view === "activity")) {
+      // A phone has Today, Inbox (Activity) and Agents (Fleet) as tabs of its bottom bar: Jump to
+      // opens the tab, not a second screen of the same view over the tab that shows.
+      const tab = phoneShell() ? phoneTabOfView(view) : undefined;
+      if (tab) {
         if (view === "activity") void workspaceController.refreshActivity();
-        setPhoneTab(view);
+        setPhoneTab(tab);
         setMobilePane("workspace");
         return;
       }
@@ -2389,7 +2394,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       </Show>
     </>
   );
-  const [phoneTab, setPhoneTab] = createSignal<WebPhoneTab>("home");
+  const [phoneTab, setPhoneTab] = createSignal<WebPhoneTab>("today");
   /**
    * A page that the More tab opened (settings, usage, schedule) shows over the conversation pane. When
    * it closes with nothing else opened, the phone goes back to the More tab, as Slack's back button does.
@@ -2637,14 +2642,22 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           controller.openView(target.view);
           // A phone shows DMs and Activity as tabs of its bottom bar: the address opens the tab, not a
           // screen over another tab. The address keeps naming the view.
-          if (phoneShell() && (target.view === "dms" || target.view === "activity")) {
-            setPhoneTab(target.view);
+          const tab = phoneShell() ? phoneTabOfView(target.view) : undefined;
+          if (tab) {
+            setPhoneTab(tab);
             setMobilePane("workspace");
           } else if (phone()) {
             // The view pushes over the list. A space that the address chose showed its list first, and
             // the pane that the view asks for can come in the same update, before the list's.
             setMobilePane("conversation");
           }
+        }
+      } else if (!target && !location.page) {
+        // An address with no place is the space's home: Today, not the last agent's chat.
+        controller.openView("today");
+        if (phoneShell()) {
+          setPhoneTab("today");
+          setMobilePane("workspace");
         }
       }
     } else if (target?.kind === "channel" && channelsSupported() && channelListed(target.channelId)) {
@@ -2659,7 +2672,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     setMessageAnchor(shown && target && location.messageId ? { target, messageId: location.messageId } : null);
     if (!shown) {
       showLocationNotice();
-      if (workspaceOn()) controller.openView("activity");
+      if (workspaceOn()) controller.openView("today");
     }
     openLocationPage(location.page);
     return shown;
@@ -3247,12 +3260,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                     <Show
                       when={phoneShell()}
                       fallback={
-                        <div class="sidebar ws-frame-sidebar">
+                        <div id="agent-sidebar" class="sidebar ws-frame-sidebar">
                           <WorkspaceSidebarPane searchShortcut={globalSearchShortcutLabel(currentDevicePlatform())} />
                         </div>
                       }
                     >
-                      <div class="sidebar ws-frame-sidebar ws-phone-shell">
+                      <div id="agent-sidebar" class="sidebar ws-frame-sidebar ws-phone-shell">
                         <WebPhoneShell
                           tab={phoneTab()}
                           onTab={setPhoneTab}

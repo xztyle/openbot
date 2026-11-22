@@ -31,6 +31,7 @@ import { createMemo, createSignal, Show } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { WorkspaceSpaceRail } from "./WorkspaceSpaceRail";
 import { useWorkspace } from "./workspace-context";
+import { useDecisionQueue } from "./workspace-decisions";
 import { AGENT_DM_PREFIX } from "./workspace-model";
 import {
   isCustomSection,
@@ -196,6 +197,7 @@ export function useConversationMenu(): (id: string, extra?: readonly WorkspaceMe
 export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
   const { t } = useText();
   const ws = useWorkspace();
+  const queue = useDecisionQueue();
   const menu = useWorkspaceMenu();
   /** Star, the reader's sections, and back to the conversation's own group. */
   const sectionItems = (id: string, section: string): WorkspaceMenuItem[] => {
@@ -361,8 +363,9 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
         activeConversationId={ws.activeConversationId()}
         onSelectView={(next) => ws.openView(next)}
         onSelectConversation={(id) => ws.openConversation(id)}
-        // What waits for the reader is at the top of Activity, so it counts there too.
-        activityCount={ws.activityCount() + ws.needsYou().length}
+        activityCount={ws.activityCount()}
+        // What waits for the reader, from every space: Today lists it with its answers.
+        todayCount={queue.queue().length}
         threadsUnread={ws.threadsUnread()}
         unreadsUnread={ws.unreads.hasUnread()}
         showLater={ws.later.supported()}

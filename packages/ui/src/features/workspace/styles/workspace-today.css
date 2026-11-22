@@ -1,0 +1,627 @@
+/* Today and Money (TodayView, MoneyView): the owner's decision queue, the agents at work, the
+   briefing as cards, and the money figures. Cards use the surface tokens of the theme, so Craft,
+   Modern and Riso in light and dark all read; every button a finger hits is at least
+   --openbot-touch-target high on a touch screen. */
+
+.ws-today-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-5);
+  padding: var(--openbot-space-4) var(--openbot-space-4) var(--openbot-space-8);
+}
+
+.ws-today-scroll > * {
+  width: 100%;
+  max-width: 880px;
+  margin-inline: auto;
+}
+
+.ws-today-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+}
+
+.ws-today-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-family: var(--atelier-font-display, inherit);
+  font-size: var(--openbot-text-lg);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-today-heading > svg {
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
+  flex: none;
+  color: var(--openbot-text-muted);
+}
+
+.ws-today-heading[data-tone="warn"] > svg {
+  color: var(--openbot-warning-text);
+}
+
+.ws-today-heading-action.ui-button {
+  margin-left: auto;
+  font-family: var(--atelier-font-ui, inherit);
+}
+
+.ws-today-clear,
+.ws-today-quiet {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-md);
+}
+
+.ws-today-clear > svg {
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
+  flex: none;
+  color: var(--openbot-success-text);
+}
+
+.ws-today-decisions,
+.ws-today-workers,
+.ws-today-goals,
+.ws-today-shipped,
+.ws-today-guide-steps,
+.ws-money-agents {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A decision card ------------------------------------------------------------------------------- */
+
+.ws-today-decision {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-3);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--atelier-radius-card, var(--openbot-radius-lg));
+  background: var(--openbot-bg-surface);
+  padding: var(--openbot-space-3) var(--openbot-space-4);
+}
+
+/* What stops an agent's work has the amber edge of "needs you". */
+.ws-today-decision[data-blocking] {
+  border-left: 4px solid var(--openbot-warning);
+}
+
+.ws-today-decision[data-sent] {
+  opacity: 0.7;
+}
+
+.ws-today-decision-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--openbot-space-3);
+}
+
+.ws-today-decision-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-0-5);
+}
+
+.ws-today-decision-copy > p {
+  margin: 0;
+}
+
+.ws-today-decision-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--openbot-space-2);
+  color: var(--openbot-text-primary);
+}
+
+.ws-today-decision-time,
+.ws-today-card-meta {
+  color: var(--openbot-text-dim);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-regular);
+}
+
+.ws-today-card-meta {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.ws-today-decision-action {
+  color: var(--openbot-text-primary);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-today-decision-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--openbot-text-secondary);
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.ws-today-decision-where {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-today-amount {
+  flex: none;
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-warning-soft);
+  padding: var(--openbot-space-0-5) var(--openbot-space-2);
+  color: var(--openbot-warning-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-today-decision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-2);
+}
+
+.ws-today-decision-actions > .ui-button > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-today-answer {
+  display: flex;
+  gap: var(--openbot-space-2);
+}
+
+.ws-today-answer > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ws-today-decision-sent {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-1-5);
+  margin: 0;
+  color: var(--openbot-success-text);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-today-decision-sent > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-today-error {
+  margin: 0;
+  color: var(--openbot-danger-text);
+  font-size: var(--openbot-text-sm);
+}
+
+/* Agents at work ------------------------------------------------------------------------------- */
+
+.ws-today-worker {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--atelier-radius-card, var(--openbot-radius-lg));
+  background: var(--openbot-bg-surface);
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+}
+
+.ui-button.ws-today-worker-open {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--openbot-space-3);
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.ws-today-worker-avatar {
+  position: relative;
+  flex: none;
+  border-radius: var(--openbot-radius-pill);
+}
+
+/* The live ring of an agent at work. */
+.ws-today-worker-avatar[data-live]::after {
+  position: absolute;
+  inset: -3px;
+  border: 2px solid var(--openbot-accent);
+  border-radius: inherit;
+  content: "";
+  animation: ws-pulse 1.6s var(--openbot-ease-in-out) infinite;
+}
+
+.ws-today-worker-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.ws-today-worker-name {
+  color: var(--openbot-text-primary);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-today-worker-task,
+.ws-today-worker-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-today-worker-task {
+  color: var(--openbot-text-secondary);
+}
+
+.ws-today-worker-meta {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-today-stop.ui-button {
+  flex: none;
+  min-width: var(--openbot-touch-target);
+  min-height: var(--openbot-touch-target);
+  gap: var(--openbot-space-1-5);
+}
+
+.ws-today-stop.ui-button > svg {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+  fill: currentColor;
+}
+
+/* Briefing cards -------------------------------------------------------------------------------- */
+
+.ws-today-cards {
+  display: grid;
+  gap: var(--openbot-space-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+}
+
+.ws-today-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--atelier-radius-card, var(--openbot-radius-lg));
+  background: var(--openbot-bg-surface);
+  padding: var(--openbot-space-3) var(--openbot-space-4);
+}
+
+.ws-today-card-wide {
+  grid-column: 1 / -1;
+}
+
+.ws-today-card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-1-5);
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-today-card-title > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  flex: none;
+  color: var(--openbot-text-muted);
+}
+
+.ws-today-card-link.ui-button {
+  align-self: flex-start;
+  margin-top: auto;
+  margin-left: calc(-1 * var(--openbot-space-2));
+}
+
+.ws-today-card-link.ui-button > svg {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+}
+
+.ws-today-figures,
+.ws-money-figures {
+  display: grid;
+  gap: var(--openbot-space-3);
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  margin: 0;
+}
+
+.ws-today-figures dt,
+.ws-money-figures dt {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-today-figures dd,
+.ws-money-figures dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--openbot-space-1-5);
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-family: var(--atelier-font-display, inherit);
+  font-size: var(--openbot-text-xl);
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-money-figures dd[data-negative] {
+  color: var(--openbot-danger-text);
+}
+
+.ws-today-change {
+  color: var(--openbot-success-text);
+  font-family: var(--atelier-font-ui, inherit);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-today-change[data-up] {
+  color: var(--openbot-warning-text);
+}
+
+.ws-today-goal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+}
+
+.ws-today-goal-head {
+  display: flex;
+  min-width: 0;
+  justify-content: space-between;
+  gap: var(--openbot-space-2);
+  color: var(--openbot-text-primary);
+}
+
+.ws-today-goal-count {
+  flex: none;
+  color: var(--openbot-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-today-goal-bar {
+  display: block;
+  overflow: hidden;
+  height: 6px;
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-bg-control-hover);
+}
+
+.ws-today-goal-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--openbot-accent);
+}
+
+.ws-today-goal[data-pace="behind"] .ws-today-goal-bar > span {
+  background: var(--openbot-warning);
+}
+
+.ws-today-goal[data-pace="done"] .ws-today-goal-bar > span {
+  background: var(--openbot-success);
+}
+
+.ws-today-goal-pace {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-today-goal[data-pace="behind"] .ws-today-goal-pace {
+  color: var(--openbot-warning-text);
+}
+
+.ui-button.ws-today-shipped-item,
+.ui-button.ws-money-agent {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  border: 0;
+  border-radius: var(--openbot-radius-md);
+  background: none;
+  padding: var(--openbot-space-1);
+  color: var(--openbot-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.ws-today-briefing-text {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  white-space: pre-line;
+  -webkit-line-clamp: 8;
+  -webkit-box-orient: vertical;
+}
+
+/* The first-run guide ------------------------------------------------------------------------- */
+
+.ws-today-guide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  border: 1px solid var(--openbot-border-strong);
+  border-radius: var(--atelier-radius-card, var(--openbot-radius-lg));
+  background: var(--openbot-accent-soft);
+  padding: var(--openbot-space-3) var(--openbot-space-4);
+}
+
+.ws-today-guide-head {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+.ws-today-guide-title {
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-family: var(--atelier-font-display, inherit);
+  font-size: var(--openbot-text-lg);
+}
+
+.ws-today-guide-intro {
+  margin: 0;
+  color: var(--openbot-text-secondary);
+}
+
+.ui-button.ws-today-guide-step {
+  display: flex;
+  width: 100%;
+  min-height: var(--openbot-touch-target);
+  align-items: center;
+  gap: var(--openbot-space-3);
+  border: 0;
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-bg-surface);
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  color: var(--openbot-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.ui-button.ws-today-guide-step > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  flex: none;
+  color: var(--openbot-text-muted);
+}
+
+.ws-today-guide-check {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  place-items: center;
+  border: 2px solid var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-pill);
+}
+
+.ui-button.ws-today-guide-step[data-done] .ws-today-guide-check {
+  border-color: var(--openbot-success);
+  background: var(--openbot-success);
+  color: var(--openbot-text-on-success);
+}
+
+.ws-today-guide-check > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ui-button.ws-today-guide-step[data-done] .ws-today-guide-step-title {
+  color: var(--openbot-text-muted);
+  text-decoration: line-through;
+}
+
+.ws-today-guide-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.ws-today-guide-step-title {
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-today-guide-hint {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+/* Money -------------------------------------------------------------------------------------- */
+
+.ws-money-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  margin: 0;
+}
+
+.ws-money-bars {
+  display: flex;
+  height: 96px;
+  align-items: flex-end;
+  gap: 2px;
+  margin: 0;
+  border-bottom: 1px solid var(--openbot-border);
+  padding: 0;
+  list-style: none;
+}
+
+.ws-money-bars > li {
+  min-height: 2px;
+  flex: 1 1 0;
+  border-radius: var(--openbot-radius-xs) var(--openbot-radius-xs) 0 0;
+  background: var(--openbot-accent);
+}
+
+.ws-money-agent-name {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ws-money-agent-cost {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--openbot-weight-semibold);
+}
+
+/* The phone: the account button of Today's header, and full-size buttons. */
+.ws-phone-account-button.ui-button {
+  width: var(--openbot-touch-target);
+  height: var(--openbot-touch-target);
+  border-radius: var(--openbot-radius-pill);
+  padding: 0;
+}
+
+.ws-phone-agents > .ws-phone-chips {
+  padding: var(--openbot-space-2) var(--openbot-space-4) 0;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .ws-today-decision-actions > .ui-button,
+  .ws-today-answer > .ui-button,
+  .ws-today-card-link.ui-button,
+  .ws-today-heading-action.ui-button {
+    min-height: var(--openbot-touch-target);
+  }
+
+  .ui-button.ws-today-shipped-item,
+  .ui-button.ws-money-agent {
+    min-height: var(--openbot-touch-target);
+  }
+}
+
+/* The rows that are buttons keep the height and the start alignment of their content. */
+.ui-button:is(.ws-today-worker-open, .ws-today-shipped-item, .ws-money-agent, .ws-today-guide-step) {
+  height: auto;
+  justify-content: flex-start;
+  font-weight: var(--openbot-weight-regular);
+  white-space: normal;
+}

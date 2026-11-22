@@ -27,6 +27,8 @@ export interface FleetAgent {
   modelReason?: string | undefined;
   /** The Motion ticket it works on now. */
   currentTicket?: WorkspaceTicket | undefined;
+  /** Where the running turn works and its task, so Today can stop it. Absent without the host's fleet. */
+  run?: { channelId?: string | undefined; taskId?: string | undefined; startedAt: number } | undefined;
 }
 
 type FleetFilter = "all" | AgentWorkStatus["state"];

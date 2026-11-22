@@ -473,6 +473,8 @@
     "./features/workspace/DirectMessagesView": "./src/features/workspace/DirectMessagesView.tsx",
     "./features/workspace/LaterView": "./src/features/workspace/LaterView.tsx",
     "./features/workspace/NeedsYou": "./src/features/workspace/NeedsYou.tsx",
+    "./features/workspace/TodayView": "./src/features/workspace/TodayView.tsx",
+    "./features/workspace/MoneyView": "./src/features/workspace/MoneyView.tsx",
     "./features/workspace/WhenBack": "./src/features/workspace/WhenBack.tsx",
     "./features/workspace/SearchView": "./src/features/workspace/SearchView.tsx",
     "./features/workspace/ShortcutsSheet": "./src/features/workspace/ShortcutsSheet.tsx",

@@ -34,6 +34,7 @@ import {
   Plus,
   ShieldCheck,
   SquarePen,
+  Sunrise,
   Target,
   Trash2,
   UserRoundPlus,
@@ -48,6 +49,10 @@ import type { ChannelVisibility, WorkspaceMember, WorkspaceMenuItem } from "./wo
 
 /** The views above the channel list. */
 export type WorkspaceView =
+  /** The owner's home: what waits for them from every space, who works now, and the briefing. */
+  | "today"
+  /** What the agents cost, the spend that waits for approval, and the plan's limits. */
+  | "money"
   | "threads"
   | "activity"
   | "fleet"
@@ -155,6 +160,11 @@ export interface WorkspaceSidebarProps {
   onSelectConversation: (id: string) => void;
   /** Unread activity: mentions, replies and DMs. */
   activityCount?: number | undefined;
+  /**
+   * What waits on the reader from every space, for the Today row's amber count. Undefined: no
+   * Today row, as in a shell that has no Today view.
+   */
+  todayCount?: number | undefined;
   threadsUnread?: boolean | undefined;
   /** A conversation has unread messages: the Unreads row is bold. */
   unreadsUnread?: boolean | undefined;
@@ -410,6 +420,17 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
         </Show>
         <div class="ws-sidebar-scroll">
           <div class="ws-sidebar-quick">
+            <Show when={props.todayCount !== undefined}>
+              <QuickRow
+                view="today"
+                icon={<Sunrise aria-hidden="true" />}
+                label={t("workspace.view.today")}
+                active={props.activeView === "today"}
+                count={props.todayCount}
+                tone="attention"
+                onSelect={props.onSelectView}
+              />
+            </Show>
             <QuickRow
               view="unreads"
               icon={<Inbox aria-hidden="true" />}
@@ -659,6 +680,8 @@ function QuickRow(props: {
   label: string;
   active: boolean;
   count?: number | undefined;
+  /** "attention": an amber count for what waits on the reader, apart from the red mentions. */
+  tone?: "attention" | undefined;
   unread?: boolean | undefined;
   trailing?: JSX.Element;
   onSelect: (view: WorkspaceView) => void;
@@ -676,7 +699,13 @@ function QuickRow(props: {
       <span class="ws-sidebar-row-icon">{props.icon}</span>
       <span class="ws-sidebar-row-label">{props.label}</span>
       {props.trailing}
-      <Show when={props.count}>{(count) => <span class="ws-mention-badge">{Math.min(count(), 99)}</span>}</Show>
+      <Show when={props.count}>
+        {(count) => (
+          <span class="ws-mention-badge" data-tone={props.tone}>
+            {Math.min(count(), 99)}
+          </span>
+        )}
+      </Show>
     </Button>
   );
 }

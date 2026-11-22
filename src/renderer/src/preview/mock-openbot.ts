@@ -4,6 +4,7 @@ import type {
   AcpRegistryEntry,
   AgentSessionSettings,
   HiddenAgentsSnapshot,
+  LoopDecision,
   McpSignInApp,
   McpSignInAppState,
 } from "@openbot/contracts/ipc";
@@ -265,6 +266,8 @@ export interface MockOpenBotOptions
   channels?: MockChannelSeed[];
   /** The spaces besides General when the preview starts, with their agents and channels. */
   spaces?: MockSpaceSeed[];
+  /** The loop decisions that wait for the owner, in any space. A decide answers and removes one. */
+  loopDecisions?: LoopDecision[];
   /** The member id the preview writes channel messages as. The browser preview names its own. */
   channelMemberId?: string;
   /** The sidebar sections and assignments when the preview starts. */
@@ -431,6 +434,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       message: null,
     };
   };
+  let loopDecisions = clone(options.loopDecisions ?? []);
   let analyticsPreference = clone<AnalyticsPreference>(options.analyticsPreference ?? { enabled: true });
   let approvalAutomation = clone<ApprovalAutomationPreference>(DEFAULT_APPROVAL_AUTOMATION_PREFERENCE);
   let busyMessageMode: BusyMessageModePreference = { mode: DEFAULT_BUSY_MESSAGE_MODE };
@@ -1970,12 +1974,24 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         loops: [],
         items: [],
         experiments: [],
-        decisions: [],
+        decisions: loopDecisions.filter((decision) => decision.spaceId === spaceId),
         events: [],
         templates: [],
       }),
-      workspaceLoopAction: async () => {
-        throw new Error("Loops are not available in the preview.");
+      workspaceLoopAction: async (action) => {
+        const decision =
+          action.kind === "decide" ? loopDecisions.find((entry) => entry.id === action.decisionId) : undefined;
+        if (!decision) throw new Error("Loops are not available in the preview.");
+        loopDecisions = loopDecisions.filter((entry) => entry !== decision);
+        return {
+          spaceId: decision.spaceId,
+          loops: [],
+          items: [],
+          experiments: [],
+          decisions: loopDecisions.filter((entry) => entry.spaceId === decision.spaceId),
+          events: [],
+          templates: [],
+        };
       },
       workspaceDecisions: async () => {
         const [first] = agents;

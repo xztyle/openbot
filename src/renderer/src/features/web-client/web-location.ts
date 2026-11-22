@@ -59,6 +59,8 @@ const SECTION_PARAM = "section";
 const MAX_PART_LENGTH = 200;
 
 const VIEW_SEGMENTS = {
+  today: "today",
+  money: "money",
   activity: "activity",
   threads: "threads",
   fleet: "fleet",
@@ -82,6 +84,8 @@ const VIEW_SEGMENTS = {
 } as const satisfies Record<WorkspaceView, string>;
 
 const VIEWS: readonly WorkspaceView[] = [
+  "today",
+  "money",
   "activity",
   "threads",
   "fleet",

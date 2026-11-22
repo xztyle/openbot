@@ -4,6 +4,10 @@ import type { TextValue } from "@openbot/ui/text";
 /** The name of a workspace view, as its header, Jump to and the tab title show it. */
 export function workspaceViewLabel(view: WorkspaceView, t: TextValue["t"]): string {
   switch (view) {
+    case "today":
+      return t("workspace.view.today");
+    case "money":
+      return t("workspace.view.money");
     case "unreads":
       return t("workspace.view.unreads");
     case "threads":

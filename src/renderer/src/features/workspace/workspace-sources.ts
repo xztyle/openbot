@@ -188,7 +188,11 @@ export function createHostFleetSource(input: {
                 ...(status.reason === "usage-limit" ? { usageLimit: { resetsAt: status.resetsAt } } : {}),
               }
             : status?.kind === "queued"
-              ? { state: "working", task: t("workspace.app.fleet.queued", { count: status.count }) }
+              ? {
+                  state: "working",
+                  task: t("workspace.app.fleet.queued", { count: status.count }),
+                  queued: status.count,
+                }
               : { state: "idle" };
       return {
         member: agentMember(agent, status?.kind === "working"),
@@ -199,6 +203,9 @@ export function createHostFleetSource(input: {
         todayCostUsd: record?.todayCostUsd,
         todayDurationMs: record?.todayDurationMs,
         currentTicket: record?.currentTicket,
+        ...(status?.kind === "working"
+          ? { run: { channelId: status.channelId, taskId: status.taskId, startedAt: status.startedAt } }
+          : {}),
       };
     });
   });

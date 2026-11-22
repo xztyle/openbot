@@ -1,6 +1,8 @@
 // Checks Today, the owner's one decision queue: on an iPhone the Today tab counts every request of
 // every space in amber and lists them blocking first, then by money; Approve and an inline answer on
-// a card send the answer and the count goes down. On a computer the sidebar's Today row and the top
+// a card send the answer and the count goes down. A money approval shows the amount of its effect
+// line; an insight alert of the host shows as soon as the host connects; the queue keeps its count
+// while the connection comes back; Dismiss takes an alert off every count. On a computer the sidebar's Today row and the top
 // bar's "Needs you" count the same queue, and Ctrl+K approves a decision by name. It serves the web
 // client on a mock host (`src/renderer/stories/web-client-today-harness.tsx`) at every address under
 // `/app`, and drives it in Chromium. No account service, host or provider is needed.
@@ -200,6 +202,48 @@ try {
   await shot(page, "02-phone-answered");
   await phone.close();
 
+  // 4b. The host's insight alert, a money approval's effect line, and a connection that drops.
+  const alertPhone = await browser.newContext({ ...iphone, hasTouch: true, isMobile: true });
+  const alertPage = await alertPhone.newPage();
+  track(alertPage);
+  const todayTab = (count: number) =>
+    tabBar(alertPage).getByRole("button", {
+      name: `${english("workspace.view.today")}, ${english("workspace.phone.waiting", { count })}`,
+    });
+  await step(alertPage, "an insight alert shows as soon as the host connects", async () => {
+    await alertPage.goto(`${origin}/app/general?alert`, COMMIT);
+    // The alert poll runs every ten minutes: the first read waits for the connection, not for it.
+    await waiting(alertPage, 5).waitFor({ timeout: UI_WAIT_MS });
+    await todayTab(5).waitFor({ timeout: UI_WAIT_MS });
+    await alertPage.getByText("Spent $60 on ads with no sale in 3 days").first().waitFor({ timeout: UI_WAIT_MS });
+  });
+  await step(alertPage, "a money approval shows the amount of its effect line, after the bigger one", async () => {
+    const cards = alertPage.getByRole("article");
+    await cards.nth(1).getByText("Hotmart · pay 19 USD", { exact: false }).waitFor({ timeout: UI_WAIT_MS });
+    assert.match((await cards.nth(1).getAttribute("aria-label")) ?? "", /^Chief/u);
+    assert.match((await cards.nth(1).textContent()) ?? "", /\$19\.00/u);
+  });
+  await shot(alertPage, "02b-phone-alert-and-payment");
+  await step(alertPage, "the queue keeps its count while the connection comes back", async () => {
+    await alertPage.evaluate(() => window.dispatchEvent(new CustomEvent("today-connection", { detail: "connecting" })));
+    await alertPage.waitForFunction(() =>
+      document.querySelector(".web-app")?.textContent?.includes("Waiting on you (5)"),
+    );
+    assert.equal(await waiting(alertPage, 5).count(), 1);
+    assert.equal(await todayTab(5).count(), 1);
+    await alertPage.evaluate(() => window.dispatchEvent(new CustomEvent("today-connection", { detail: "online" })));
+    await waiting(alertPage, 5).waitFor({ timeout: UI_WAIT_MS });
+  });
+  await step(alertPage, "Dismiss takes an alert off Today and the tab", async () => {
+    await alertPage
+      .getByRole("article", { name: /Spent \$60/u })
+      .getByRole("button", { name: english("workspace.today.dismiss"), exact: true })
+      .tap();
+    await waiting(alertPage, 4).waitFor({ timeout: UI_WAIT_MS });
+    await todayTab(4).waitFor({ timeout: UI_WAIT_MS });
+  });
+  await alertPhone.close();
+
   // 5. A computer: the sidebar's Today row and the top bar count the same queue.
   const desk = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const deskPage = await desk.newPage();
@@ -248,6 +292,9 @@ try {
       .waitFor({ timeout: UI_WAIT_MS });
     await guardPage.getByText(english("workspace.money.topToday")).waitFor({ timeout: UI_WAIT_MS });
     await guardPage.getByText(/claude\/claude-sonnet-5-5 → codex\/gpt-6-luna/u).waitFor({ timeout: UI_WAIT_MS });
+    // A pause and a failover whose times do not parse still show, without the time.
+    await guardPage.getByText("$601 of $600 today").first().waitFor({ timeout: UI_WAIT_MS });
+    await guardPage.getByText(/claude\/claude-opus-5-5 → codex\/gpt-6/u).waitFor({ timeout: UI_WAIT_MS });
   });
   await shot(guardPage, "05-guardrails");
   await step(guardPage, "a learning proposal applies from its card", async () => {

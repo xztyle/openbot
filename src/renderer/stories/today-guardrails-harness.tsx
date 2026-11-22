@@ -1,7 +1,8 @@
 /*
  * Today and Money with the guardrails and the learning queue of a fake host, for `scripts/today-e2e.ts`:
  * an agent paused at its turn limit (Resume), a learning proposal (Apply / Dismiss), a blocked prompt
- * injection, a Claude account at 97% of its five-hour window, today's spenders and a failover. The
+ * injection, a Claude account at 97% of its five-hour window, today's spenders and a failover. A space
+ * pause and a failover carry times that do not parse, as a malformed host would send them. The
  * script reads what was pressed from `document.body.dataset.todayCalls`.
  */
 import { DEFAULT_GUARDRAIL_POLICY, type GuardrailsView, type GuardrailUsageRow } from "@openbot/contracts/guardrails";
@@ -49,6 +50,15 @@ const view: GuardrailsView = {
       until: iso(8 * 3_600_000),
       detail: "200 of 200 turns today",
     },
+    // A host time that does not parse: Money must still render.
+    {
+      scope: "space",
+      id: "space-uo",
+      reason: "cost",
+      since: iso(-1_200_000),
+      until: "tomorrow morning",
+      detail: "$601 of $600 today",
+    },
   ],
   meter: [
     {
@@ -94,6 +104,12 @@ const view: GuardrailsView = {
       from: { provider: "claude", model: "claude-sonnet-5-5" },
       to: { provider: "codex", model: "gpt-6-luna" },
       since: iso(-300_000),
+    },
+    {
+      agentId: "ana-1",
+      from: { provider: "claude", model: "claude-opus-5-5" },
+      to: { provider: "codex", model: "gpt-6" },
+      since: "not a time",
     },
   ],
   events: [

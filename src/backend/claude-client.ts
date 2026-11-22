@@ -2113,9 +2113,10 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
   ): void {
     const turn = runtime.activeTurn;
     if (!turn) return;
-    // A bridged call names the OpenBot tool and holds its own arguments in `arguments`.
-    const bridged = name === "mcp__openbot__tool_call" && isRecord(input) && input.name === "openbot.send_message";
-    const message = name === "mcp__openbot__send_message" ? input : bridged ? input.arguments : undefined;
+    // A bridged call holds the tool's own arguments in `arguments`. `name` is already the bridged tool's
+    // (`claudeBridgedToolName`), so a bridged send_message arrives as mcp__openbot__send_message.
+    const bridged = isRecord(input) && isString(input.name) && "arguments" in input;
+    const message = name === "mcp__openbot__send_message" ? (bridged ? input.arguments : input) : undefined;
     const recipientAgentIds = isRecord(message) ? normalizeSendMessageArguments(message).recipientAgentIds : undefined;
     const recipients = Array.isArray(recipientAgentIds) ? { recipientAgentIds } : null;
     this.emit("notification", {

@@ -54,7 +54,7 @@ def database_state(path):
 
 def probe_ready(container, name, online=False):
     start = time.monotonic()
-    for _ in range(30):
+    for _ in range(90):
         state = docker("inspect", container, "--format", "{{.State.Running}}", name=f"{name}-running")
         if state != "true":
             raise RuntimeError(f"{container} exited during startup.")

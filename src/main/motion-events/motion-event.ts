@@ -21,6 +21,9 @@ export const MOTION_EVENT_TYPES = [
   "issue.due_soon",
   "issue.overdue",
   "issue.waiting_on_person",
+  "issue.review_requested",
+  "issue.reviewed",
+  "issue.blocker_cleared",
 ] as const;
 export type MotionEventType = (typeof MOTION_EVENT_TYPES)[number];
 
@@ -63,6 +66,16 @@ export interface MotionEvent {
   daysOverdue: number | null;
   /** `comment.mentioned`: the comment text (at most 600 characters). */
   comment: string | null;
+  /** `issue.review_requested`: who grades the issue (empty: the host picks a grader). */
+  reviewer: MotionPerson[];
+  /** `issue.review_requested`: the acceptance criteria and the hand-off note (each at most 2,000 characters). */
+  criteria: string | null;
+  handoff: string | null;
+  /** `issue.reviewed`: whether the review passed it (Done) or sent it back, and the reviewer's notes. */
+  verdict: "passed" | "reopened" | null;
+  notes: string | null;
+  /** `issue.blocker_cleared`: the issue that was the last open blocker. */
+  blocker: { id: string; key: string; title: string } | null;
 }
 
 /** Why a request is refused. Safe to log: it names no secret and no body. */
@@ -134,6 +147,11 @@ function issue(value: unknown): MotionIssue | null {
   };
 }
 
+function blocker(value: unknown): MotionEvent["blocker"] {
+  if (!isDynamicRecord(value) || !isString(value.id)) return null;
+  return { id: value.id.slice(0, 64), key: text(value.key, 64) ?? "", title: text(value.title, 240) ?? "" };
+}
+
 /** The event of a verified body, or null when it is not one this host knows. */
 export function decodeMotionEvent(value: unknown): MotionEvent | null {
   if (!isDynamicRecord(value) || !isString(value.id) || value.id.length > 200) return null;
@@ -155,5 +173,11 @@ export function decodeMotionEvent(value: unknown): MotionEvent | null {
     minutesLeft: count(value.minutes_left),
     daysOverdue: count(value.days_overdue),
     comment: text(comment.body, 600),
+    reviewer: people(value.reviewer),
+    criteria: text(value.criteria, 2_000),
+    handoff: text(value.handoff, 2_000),
+    verdict: value.verdict === "passed" || value.verdict === "reopened" ? value.verdict : null,
+    notes: text(value.notes, 2_000),
+    blocker: blocker(value.blocker),
   };
 }

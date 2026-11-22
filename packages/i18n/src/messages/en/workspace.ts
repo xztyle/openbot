@@ -1136,6 +1136,7 @@ export const messages = defineMessages("workspace", {
   "workspace.money.waiting": { one: "Waiting for your OK ({count})", other: "Waiting for your OK ({count})" },
   "workspace.money.noSpendWaiting": "No spending waits for your OK.",
   "workspace.money.byAgent": "By agent",
+  "workspace.money.loadFailed": "The costs did not load. The figures here may be missing.",
   "workspace.money.details": "Cost details",
   "workspace.money.plan": "Plan limits",
   "workspace.money.planHint": "How much of each provider plan the agents used, and when it resets.",

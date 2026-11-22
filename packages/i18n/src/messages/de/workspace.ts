@@ -589,6 +589,7 @@ export const messages = {
   "workspace.money.waiting": { one: "Wartet auf dein OK ({count})", other: "Warten auf dein OK ({count})" },
   "workspace.money.noSpendWaiting": "Keine Ausgabe wartet auf dein OK.",
   "workspace.money.byAgent": "Nach Agent",
+  "workspace.money.loadFailed": "Die Kosten wurden nicht geladen. Hier können Zahlen fehlen.",
   "workspace.money.details": "Kostendetails",
   "workspace.money.plan": "Tariflimits",
   "workspace.money.planHint": "Wie viel jedes Anbietertarifs die Agenten genutzt haben und wann er zurückgesetzt wird.",

@@ -596,6 +596,7 @@ export const messages = {
   "workspace.money.waiting": { other: "承認待ち（{count}）" },
   "workspace.money.noSpendWaiting": "承認待ちの支出はありません。",
   "workspace.money.byAgent": "エージェント別",
+  "workspace.money.loadFailed": "コストを読み込めませんでした。ここに表示されない数値があります。",
   "workspace.money.details": "費用の詳細",
   "workspace.money.plan": "プランの上限",
   "workspace.money.planHint": "各プロバイダーのプランをどれだけ使ったか、いつリセットされるか。",

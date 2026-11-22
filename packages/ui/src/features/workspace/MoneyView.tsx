@@ -6,7 +6,7 @@ import { Button } from "../../button";
 import { ArrowRight, CirclePause, Coins, Gauge, Hand, TriangleAlert } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
-import { EmptyState, LoadingState } from "../../view-state";
+import { EmptyState, ErrorState, LoadingState } from "../../view-state";
 import { createDecisionFocus, type TodayDecision, TodayDecisionCard } from "./TodayView";
 import { MemberAvatar } from "./WorkspaceAvatar";
 import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
@@ -36,6 +36,9 @@ export interface MoneyViewProps {
   /** The report of the last 30 days, null while it loads or where the reader may not read it. */
   report: WorkspaceInsight | null;
   loading?: boolean | undefined;
+  /** The report did not load: the costs say so with Retry, not that there were none. */
+  failed?: boolean | undefined;
+  onRetry?: (() => void) | undefined;
   /** What the agents cost today, from the fleet. */
   todayUsd: number;
   /** The requests to spend money that wait for the owner, from every space. */
@@ -62,6 +65,8 @@ export function MoneyView(props: MoneyViewProps): JSX.Element {
   const { t, format } = useText();
   const uid = createUniqueId();
   const decisionFocus = createDecisionFocus(() => props.spend);
+  /** The report did not load: an empty list would say that nothing cost anything. */
+  const unread = () => Boolean(props.failed) && !props.report;
   const cost = useCost();
   const costs = () => props.report?.costs;
   const change = () => {
@@ -104,6 +109,9 @@ export function MoneyView(props: MoneyViewProps): JSX.Element {
         onBack={props.onBack}
       />
       <div class="ws-view-scroll ws-today-scroll">
+        <Show when={unread()}>
+          <ErrorState size="compact" title={t("workspace.money.loadFailed")} onRetry={props.onRetry} />
+        </Show>
         <dl class="ws-money-figures">
           <div>
             <dt>{t("workspace.today.spendToday")}</dt>
@@ -222,12 +230,14 @@ export function MoneyView(props: MoneyViewProps): JSX.Element {
             when={props.agents.length > 0}
             fallback={
               <Show when={!props.loading} fallback={<LoadingState label={t("workspace.view.money")} />}>
-                <EmptyState
-                  size="compact"
-                  icon={<Coins />}
-                  title={t("insight.costs.emptyTitle")}
-                  description={t("insight.costs.empty")}
-                />
+                <Show when={!unread()}>
+                  <EmptyState
+                    size="compact"
+                    icon={<Coins />}
+                    title={t("insight.costs.emptyTitle")}
+                    description={t("insight.costs.empty")}
+                  />
+                </Show>
               </Show>
             }
           >

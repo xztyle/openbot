@@ -17,3 +17,5 @@
   Before, it showed a fixed English sentence such as "Invalid answer.".
 - Web app: a host failure that repeats, such as a read that fails each time the page shows again,
   now replaces its toast instead of stacking a new one each time.
+- Money: when the costs do not load, the view says so with Retry. Before, it said "No cost in this
+  period", as if the agents had cost nothing.

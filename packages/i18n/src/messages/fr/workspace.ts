@@ -594,6 +594,7 @@ export const messages = {
   },
   "workspace.money.noSpendWaiting": "Aucune dépense n’attend votre accord.",
   "workspace.money.byAgent": "Par agent",
+  "workspace.money.loadFailed": "Les coûts ne se sont pas chargés. Des chiffres peuvent manquer ici.",
   "workspace.money.details": "Détail des coûts",
   "workspace.money.plan": "Limites du forfait",
   "workspace.money.planHint": "La part de chaque forfait utilisée par les agents et quand elle se réinitialise.",

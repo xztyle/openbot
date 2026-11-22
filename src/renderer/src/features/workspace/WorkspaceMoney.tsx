@@ -63,6 +63,8 @@ export function WorkspaceMoneyView() {
     <MoneyView
       report={insight.report()}
       loading={insights() && insight.report() === null && !insight.failed()}
+      failed={insights() && insight.failed()}
+      onRetry={() => void insight.refresh()}
       todayUsd={todayUsd()}
       spend={spend()}
       agents={agents()}

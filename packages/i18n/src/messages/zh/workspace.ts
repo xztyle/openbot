@@ -582,6 +582,7 @@ export const messages = {
   "workspace.money.waiting": { other: "等你批准（{count}）" },
   "workspace.money.noSpendWaiting": "没有等你批准的支出。",
   "workspace.money.byAgent": "按智能体",
+  "workspace.money.loadFailed": "费用未能加载。这里的数据可能不完整。",
   "workspace.money.details": "费用明细",
   "workspace.money.plan": "套餐限额",
   "workspace.money.planHint": "智能体用了各服务商套餐的多少，以及何时重置。",

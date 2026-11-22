@@ -749,6 +749,7 @@ export const messages = {
   },
   "workspace.money.noSpendWaiting": "Нет трат, ожидающих одобрения.",
   "workspace.money.byAgent": "По агентам",
+  "workspace.money.loadFailed": "Не удалось загрузить расходы. Здесь могут не хватать данных.",
   "workspace.money.details": "Подробности",
   "workspace.money.plan": "Лимиты тарифа",
   "workspace.money.planHint": "Сколько тарифа каждого провайдера израсходовано и когда обновится.",

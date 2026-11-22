@@ -591,6 +591,7 @@ export const messages = {
   "workspace.money.waiting": { other: "승인 대기 ({count})" },
   "workspace.money.noSpendWaiting": "승인을 기다리는 지출이 없어요.",
   "workspace.money.byAgent": "에이전트별",
+  "workspace.money.loadFailed": "비용을 불러오지 못했습니다. 일부 수치가 빠져 있을 수 있습니다.",
   "workspace.money.details": "비용 상세",
   "workspace.money.plan": "요금제 한도",
   "workspace.money.planHint": "각 제공업체 요금제를 얼마나 썼는지, 언제 초기화되는지.",

@@ -601,6 +601,7 @@ export const messages = {
   "workspace.money.waiting": { one: "Onayınızı bekliyor ({count})", other: "Onayınızı bekliyor ({count})" },
   "workspace.money.noSpendWaiting": "Onay bekleyen harcama yok.",
   "workspace.money.byAgent": "Ajana göre",
+  "workspace.money.loadFailed": "Maliyetler yüklenmedi. Buradaki rakamlar eksik olabilir.",
   "workspace.money.details": "Maliyet ayrıntıları",
   "workspace.money.plan": "Plan limitleri",
   "workspace.money.planHint": "Ajanların her sağlayıcı planından ne kadar kullandığı ve ne zaman sıfırlanacağı.",

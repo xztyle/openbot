@@ -747,6 +747,7 @@ export const messages = {
   },
   "workspace.money.noSpendWaiting": "Żaden wydatek nie czeka na zgodę.",
   "workspace.money.byAgent": "Według agenta",
+  "workspace.money.loadFailed": "Nie udało się wczytać kosztów. Może tu brakować danych.",
   "workspace.money.details": "Szczegóły kosztów",
   "workspace.money.plan": "Limity planu",
   "workspace.money.planHint": "Ile każdego planu zużyli agenci i kiedy się odnowi.",

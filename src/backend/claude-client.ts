@@ -28,6 +28,7 @@ import { type DynamicRecord, isDynamicRecord, isNumber, isOneOf, isString } from
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger } from "@openbot/logging";
 import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
+import { idlePrecompactEnabled } from "./agent/context-compaction";
 import {
   isTurnContextBlock,
   type MemoryContext,
@@ -313,6 +314,9 @@ export function claudeAgentQueryOptions(config: ClaudeAgentQueryConfig) {
     // OpenBot is not a co-author of the agent's commits; a user's own attribution still applies.
     ...(config.ownAttribution ? {} : { attribution: { commit: "", pr: "" } }),
     disableRemoteControl: true,
+    // OpenBot compacts an idle session itself, once and with instructions that keep the latest turns.
+    // The CLI's own idle compaction would compact it a second time.
+    ...(idlePrecompactEnabled() ? { idleCompaction: false } : {}),
     skillOverrides: Object.fromEntries(overrides.filter(([skill]) => !ownSkills.has(skill))),
     // Without the user's setup, a workspace under the home folder still loaded `~/.claude/CLAUDE.md` and
     // its rules as project files, on each turn.

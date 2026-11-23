@@ -4,7 +4,7 @@
 
 `apps/auth-api` serves `/app`. Its lazy route mounts the interactive client after browser startup.
 `src/renderer/src/features/web-client` owns the browser composition and its typed
-`WebWorkspaceRuntime` interface. It mounts the existing account login, page rail, server rail,
+`WebWorkspaceRuntime` interface. It mounts the existing account login, page rail,
 sidebar, and full conversation view. `ConversationRuntime` routes host actions through
 the browser connection; its desktop default is the preload API. The desktop `WorkspaceShell` and the
 web client draw the same `WorkspaceFrame` under `LayoutProvider`, so the rail geometry, the sidebar

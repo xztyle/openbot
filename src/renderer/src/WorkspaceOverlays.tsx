@@ -33,7 +33,6 @@ import {
   hostedUpsellRoutineCreated,
 } from "./features/servers/hosted-server-upsell-controller";
 import { mcpToolRuntimeNote } from "./features/servers/mcp-servers";
-import { useServerActions } from "./features/servers/server-actions";
 import { remoteMcpSignIn, serverCanAdminister, serverSupportsCapability } from "./features/servers/server-capabilities";
 import { useServerSelection } from "./features/servers/server-selection";
 import { useServerSettings } from "./features/servers/server-settings";
@@ -211,7 +210,7 @@ function JoinServer(props: AccountProps) {
 /** A hosted server: the plans, the payment, then the setup. */
 function AddServer() {
   const { servers, addServerOpen, addServerEntryPoint, setAddServerOpen, setJoinServerOpen } = useServers();
-  const { select } = useServerActions();
+  const { selectServer } = useServerSelection();
   const { openAppSettings } = useSettings();
 
   return (
@@ -223,7 +222,14 @@ function AddServer() {
       onClose={() => setAddServerOpen(false)}
       onOpenServer={(serverId) => {
         setAddServerOpen(false);
-        void select(serverId);
+        // The new hosted server is the host that this app connects to.
+        void selectServer(serverId).catch((error: unknown) => {
+          const text = currentText();
+          actionToast.error(text.t("server.connection.failedTitle"), {
+            description: text.errorMessage(error, text.t("server.connection.failedDescription")),
+            report: { operation: "team", source: "action", cause_code: classifyFailure(error) },
+          });
+        });
       }}
       onContactUs={() => void appPort().openExternal("hosted-server-contact")}
       onJoinWithInvite={() => {
@@ -373,7 +379,6 @@ function ServerSettings(props: { connectors: ConnectorRegistry }) {
   const holdsToolRuntimes = (server: ServerSummary) =>
     server.kind === "local" ? providerAdminServerId() === undefined : server.id === providerAdminServerId();
   const {
-    openServerSettings,
     serverSettingsTarget,
     serverSettingsSection,
     serverSettingsOpen,
@@ -568,29 +573,6 @@ function ServerSettings(props: { connectors: ConnectorRegistry }) {
     };
   };
 
-  /**
-   * Another server's providers are managed after a switch to it, in its own Providers section. A
-   * failed switch shows the error and opens the section again, with its switch button.
-   */
-  const switchToManageProviders = (server: ServerSummary) => {
-    setServerSettingsOpen(false);
-    void selectServer(server.id).then(
-      (selected) => {
-        if (selected) openServerSettings(server.id, null, "providers");
-      },
-      (error: unknown) => {
-        const text = currentText();
-        actionToast.error(text.t("server.select.failedTitle"), {
-          ...{
-            description: text.errorMessage(error, text.t("server.select.failedDescription")),
-          },
-          report: { operation: "other", source: "action", cause_code: classifyFailure(error) },
-        });
-        openServerSettings(server.id, null, "providers");
-      },
-    );
-  };
-
   const storageOptions = (server: ServerSummary): Omit<ServerStorageOptions, "canManage"> => ({
     hostName:
       server.kind === "local"
@@ -682,11 +664,6 @@ function ServerSettings(props: { connectors: ConnectorRegistry }) {
           }
           storage={storageOptions(server())}
           providers={providerSettings(server())}
-          onSwitchToManageProviders={
-            !server().active && serverCanAdminister(server(), "providers-v1")
-              ? () => switchToManageProviders(server())
-              : undefined
-          }
           // This computer, or a remote host with `hosted-sites-v1`. Every member lists; the host deletes
           // only for an owner or admin.
           hostedSites={

@@ -71,7 +71,6 @@ export function WorkspaceFrame(props: WorkspaceFrameProps) {
         {
           "app-frame-sidebar-compact": props.compact,
           "app-frame-edge": platform.appInfo() !== null,
-          "app-frame-with-server-rail": layout.serverRailVisible(),
           "app-frame-page-open": pageOpen(),
           "app-frame-sidebar-hidden": props.sidebarHidden === true,
           "app-frame-platform-darwin": platform.appInfo()?.platform === "darwin",

@@ -2,7 +2,7 @@ import type { JSX } from "@solidjs/web";
 import { createSignal, For, Show } from "solid-js";
 import { ActionSheet, type ActionSheetItem } from "../../action-sheet";
 import { Button, IconButton } from "../../button";
-import { ChevronDown, ChevronLeft, ChevronRight, Search, Server, SquarePen } from "../../icons";
+import { ChevronDown, ChevronLeft, ChevronRight, Search, SquarePen } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { SpaceMark, type SpaceRailItem } from "../spaces/SpaceRail";
@@ -83,11 +83,11 @@ export interface PhoneHomeHeaderProps {
   /** The name of the space, or of the server on a host without spaces. */
   title: string;
   mark: PhoneHomeMark;
-  /** Mentions in the other spaces and servers. The mark shows their count, as Slack's workspace icon. */
+  /** Mentions in the other spaces. The mark shows their count, as Slack's workspace icon. */
   elsewhereCount?: number | undefined;
   /** Unread messages in the other spaces, without mentions: the mark shows a dot. */
   elsewhereUnread?: boolean | undefined;
-  /** Opens the switcher of spaces and servers. */
+  /** Opens the switcher of spaces. */
   onOpenSwitcher?: (() => void) | undefined;
   /** The workspace's actions: the title opens them in a sheet. */
   menuItems: readonly WorkspaceMenuItem[];
@@ -200,31 +200,19 @@ export function PhoneHomeHeader(props: PhoneHomeHeaderProps): JSX.Element {
   );
 }
 
-/** A server in the phone's switcher. */
-export interface PhoneSwitcherServer {
-  id: string;
-  name: string;
-  active: boolean;
-  /** Not connected, such as offline or asleep. */
-  unavailable?: boolean | undefined;
-}
-
 export interface PhoneSwitcherSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   spaces: readonly SpaceRailItem[];
   activeSpaceId: string;
   onSelectSpace: (spaceId: string) => void;
-  /** The account's servers. The list shows when there is more than one. */
-  servers?: readonly PhoneSwitcherServer[] | undefined;
-  onSelectServer?: ((serverId: string) => void) | undefined;
   /** Actions under the lists, such as Create a space. */
   actions?: readonly ActionSheetItem[] | undefined;
 }
 
 /**
- * The phone's switcher of spaces and servers, as Slack's workspace switcher: a sheet with one row
- * for each space, with its unread dot or mention count, then the other servers.
+ * The phone's switcher of spaces, as Slack's workspace switcher: a sheet with one row for each space,
+ * with its unread dot or mention count.
  */
 export function PhoneSwitcherSheet(props: PhoneSwitcherSheetProps): JSX.Element {
   const { t } = useText();
@@ -239,89 +227,56 @@ export function PhoneSwitcherSheet(props: PhoneSwitcherSheetProps): JSX.Element 
       title={t("workspace.phone.switch")}
       class="ws-phone-switcher"
       header={
-        <>
-          <Show when={props.spaces.length > 0}>
-            <section class="ws-phone-switcher-section" aria-label={t("workspace.phone.spaces")}>
-              <h2 class="ws-phone-switcher-heading">{t("workspace.phone.spaces")}</h2>
-              <ul class="ws-phone-switcher-list">
-                <For each={props.spaces} keyed={(space) => space.id}>
-                  {(space) => {
-                    const active = () => space().id === props.activeSpaceId;
-                    return (
-                      <li>
-                        <Button
-                          variant="ghost"
-                          class="ws-phone-switcher-row"
-                          data-active={active() ? "" : undefined}
-                          aria-current={active() ? "true" : undefined}
-                          aria-label={[
-                            space().name,
-                            space().mentionCount > 0
-                              ? t("workspace.sidebar.mentions", { count: space().mentionCount })
-                              : space().unread
-                                ? t("workspace.sidebar.unread")
-                                : "",
-                          ]
-                            .filter(Boolean)
-                            .join(", ")}
-                          onClick={() => choose(() => props.onSelectSpace(space().id))}
+        <Show when={props.spaces.length > 0}>
+          <section class="ws-phone-switcher-section" aria-label={t("workspace.phone.spaces")}>
+            <h2 class="ws-phone-switcher-heading">{t("workspace.phone.spaces")}</h2>
+            <ul class="ws-phone-switcher-list">
+              <For each={props.spaces} keyed={(space) => space.id}>
+                {(space) => {
+                  const active = () => space().id === props.activeSpaceId;
+                  return (
+                    <li>
+                      <Button
+                        variant="ghost"
+                        class="ws-phone-switcher-row"
+                        data-active={active() ? "" : undefined}
+                        aria-current={active() ? "true" : undefined}
+                        aria-label={[
+                          space().name,
+                          space().mentionCount > 0
+                            ? t("workspace.sidebar.mentions", { count: space().mentionCount })
+                            : space().unread
+                              ? t("workspace.sidebar.unread")
+                              : "",
+                        ]
+                          .filter(Boolean)
+                          .join(", ")}
+                        onClick={() => choose(() => props.onSelectSpace(space().id))}
+                      >
+                        <SpaceMark name={space().name} icon={space().icon} hue={space().hue} class="ws-phone-mark" />
+                        <span class="ws-phone-switcher-name ws-truncate" data-unread={space().unread ? "" : undefined}>
+                          {space().name}
+                        </span>
+                        <Show
+                          when={space().mentionCount > 0}
+                          fallback={
+                            <Show when={space().unread && !active()}>
+                              <span class="ws-unread-dot" aria-hidden="true" />
+                            </Show>
+                          }
                         >
-                          <SpaceMark name={space().name} icon={space().icon} hue={space().hue} class="ws-phone-mark" />
-                          <span
-                            class="ws-phone-switcher-name ws-truncate"
-                            data-unread={space().unread ? "" : undefined}
-                          >
-                            {space().name}
+                          <span class="ws-mention-badge" aria-hidden="true">
+                            {countText(space().mentionCount)}
                           </span>
-                          <Show
-                            when={space().mentionCount > 0}
-                            fallback={
-                              <Show when={space().unread && !active()}>
-                                <span class="ws-unread-dot" aria-hidden="true" />
-                              </Show>
-                            }
-                          >
-                            <span class="ws-mention-badge" aria-hidden="true">
-                              {countText(space().mentionCount)}
-                            </span>
-                          </Show>
-                        </Button>
-                      </li>
-                    );
-                  }}
-                </For>
-              </ul>
-            </section>
-          </Show>
-          <Show when={(props.servers?.length ?? 0) > 1 && props.onSelectServer}>
-            {(select) => (
-              <section class="ws-phone-switcher-section" aria-label={t("workspace.phone.servers")}>
-                <h2 class="ws-phone-switcher-heading">{t("workspace.phone.servers")}</h2>
-                <ul class="ws-phone-switcher-list">
-                  <For each={props.servers ?? []} keyed={(server) => server.id}>
-                    {(server) => (
-                      <li>
-                        <Button
-                          variant="ghost"
-                          class="ws-phone-switcher-row"
-                          data-active={server().active ? "" : undefined}
-                          data-unavailable={server().unavailable ? "" : undefined}
-                          aria-current={server().active ? "true" : undefined}
-                          onClick={() => choose(() => select()(server().id))}
-                        >
-                          <span class="ws-phone-switcher-server-icon" aria-hidden="true">
-                            <Server />
-                          </span>
-                          <span class="ws-phone-switcher-name ws-truncate">{server().name}</span>
-                        </Button>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-              </section>
-            )}
-          </Show>
-        </>
+                        </Show>
+                      </Button>
+                    </li>
+                  );
+                }}
+              </For>
+            </ul>
+          </section>
+        </Show>
       }
       items={props.actions ?? []}
     />

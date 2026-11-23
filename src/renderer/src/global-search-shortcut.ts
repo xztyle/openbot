@@ -26,7 +26,7 @@ export function globalSearchShortcutLabel(platform: DevicePlatform): string {
 
 /**
  * The keyboard shortcuts that this client has, for the list in the search. A shortcut shows here only
- * when code listens for it: the desktop app also has the settings and server shortcuts and the menu's
+ * when code listens for it: the desktop app also has the settings shortcut and the menu's
  * stop-all item, and the web client has the first and the conversation search ones.
  */
 export function keyboardShortcuts(
@@ -44,10 +44,6 @@ export function keyboardShortcuts(
     { id: "next", label: t("chat.search.next"), keys: chord(platform, "G") },
     { id: "previous", label: t("chat.search.previous"), keys: chord(platform, "G", true) },
   );
-  if (client === "desktop")
-    rows.push(
-      { id: "server", label: t("conversation.globalSearch.shortcut.server"), keys: chord(platform, "1–9") },
-      { id: "stop", label: t("menu.stopAllAgents"), keys: chord(platform, ".") },
-    );
+  if (client === "desktop") rows.push({ id: "stop", label: t("menu.stopAllAgents"), keys: chord(platform, ".") });
   return rows;
 }

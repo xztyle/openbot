@@ -47,7 +47,6 @@ const ServerSelection = createSimpleContext({
       setPendingChannelSelection,
       pendingWorkspaceLink,
       setPendingWorkspaceLink,
-      setPreviousServerId,
     } = useServerSwitch();
     const { agentSetupOpen, creatingAgent } = useAgents();
     const { stopComposerTyping } = useConversationController();
@@ -122,7 +121,6 @@ const ServerSelection = createSimpleContext({
           }
           throw error;
         }
-        if (switchingServers && previousServerId) setPreviousServerId(previousServerId);
         setServers(nextServers);
         return true;
       } finally {

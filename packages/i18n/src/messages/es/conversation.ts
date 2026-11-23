@@ -19,7 +19,6 @@ export const messages = {
   "conversation.globalSearch.shortcuts": "Atajos de teclado",
   "conversation.globalSearch.shortcut.settings": "Abrir ajustes",
   "conversation.globalSearch.shortcut.chatSearch": "Buscar en la conversación abierta",
-  "conversation.globalSearch.shortcut.server": "Cambiar al servidor en esta posición",
   "conversation.globalSearch.keywords.shortcuts": "atajo teclado tecla teclas shortcut hotkey keys",
   "conversation.globalSearch.keywords.usage": "costo gasto tokens dinero límite informe cost spend money",
   "conversation.globalSearch.keywords.serverGeneral": "servidor nombre logo identidad publicar notificaciones server",

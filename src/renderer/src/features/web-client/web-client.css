@@ -78,19 +78,6 @@ body {
   height: 100%;
 }
 
-/* The browser has no window controls, so the rail starts at the top. */
-.web-app-frame > .server-rail {
-  padding-top: var(--openbot-space-3);
-}
-
-.web-app-frame > .server-rail::before {
-  display: none;
-}
-
-.web-app-frame > .server-rail::after {
-  top: 0;
-}
-
 .web-mobile-navigation {
   display: none;
 }
@@ -246,9 +233,6 @@ body {
   }
 
   .web-app-frame {
-    /* The workspace pane gives the rail a 56px column, also in the macOS geometry. */
-    --server-rail-width: 56px;
-
     grid-template-columns: minmax(0, 1fr);
     padding-bottom: calc(var(--web-mobile-navigation-height) + env(safe-area-inset-bottom, 0px));
   }
@@ -257,7 +241,6 @@ body {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .web-app-frame[data-web-mobile-pane="conversation"] > .server-rail,
   .web-app-frame[data-web-mobile-pane="conversation"] > .sidebar {
     display: none;
   }
@@ -283,12 +266,6 @@ body {
   .web-app-frame[data-web-mobile-pane="workspace"] .remote-compatibility-screen,
   .web-app-frame[data-web-mobile-pane="workspace"] > .server-connection-workspace {
     display: none;
-  }
-
-  .web-app-frame[data-web-mobile-pane="workspace"] > .server-rail {
-    display: flex;
-    grid-column: 1;
-    grid-row: 1;
   }
 
   .web-app-frame[data-web-mobile-pane="workspace"] > .sidebar {
@@ -435,8 +412,7 @@ body {
    * The phone workspace, as Slack's app: the tab bar and Home's switcher replace the page rail, the
    * server rail and the space rail. The tab bar keeps clear of the home indicator itself.
    */
-  .web-app-window:has(> .web-app-frame[data-web-phone-shell]) > .window-rail,
-  .web-app-frame[data-web-phone-shell] > .server-rail {
+  .web-app-window:has(> .web-app-frame[data-web-phone-shell]) > .window-rail {
     display: none;
   }
 

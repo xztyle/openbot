@@ -187,11 +187,6 @@ export interface ServerSettingsModalProps {
    */
   providers?: HostProviderSettings | undefined;
   /**
-   * For a server that the window has not selected. The provider state belongs to the selected server,
-   * so the Providers section shows a note and this action in place of the list.
-   */
-  onSwitchToManageProviders?: (() => void) | undefined;
-  /**
    * The Import section appears only when a caller supplies this: the local server, or a remote host
    * with `agent-import-v1`. Any member can import.
    */
@@ -432,7 +427,7 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
       case "sites":
         return Boolean(props.hostedSites);
       case "providers":
-        return Boolean(props.providers || props.onSwitchToManageProviders);
+        return Boolean(props.providers);
       case "updates":
         return Boolean(props.hostUpdate);
       case "backups":
@@ -916,28 +911,9 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
             </Tabs.Content>
           )}
         </Show>
-        <Show when={props.providers || props.onSwitchToManageProviders}>
+        <Show when={props.providers}>
           <Tabs.Content value="providers" class="settings-modal-tab-panel server-settings-panel" data-tab="providers">
-            <Show
-              when={props.providers}
-              fallback={
-                <Alert>
-                  <AlertIcon>
-                    <Sparkles />
-                  </AlertIcon>
-                  <AlertContent>
-                    <AlertDescription>
-                      {t("server.settings.providersSwitchNote", { name: props.server.name })}
-                    </AlertDescription>
-                  </AlertContent>
-                  <AlertActions>
-                    <Button type="button" size="sm" onClick={() => props.onSwitchToManageProviders?.()}>
-                      {t("server.settings.providersSwitch")}
-                    </Button>
-                  </AlertActions>
-                </Alert>
-              }
-            >
+            <Show when={props.providers}>
               {(providers) => (
                 <HostProviderSettingsPanel
                   {...providers()}

@@ -73,7 +73,7 @@ import {
   type WebRuntimeEvents,
   type WebWorkspaceRuntime,
 } from "./web-runtime";
-import { orderWebHosts, readWebServerOrder, writeWebServerOrder } from "./web-server-order";
+import { orderWebHosts, readWebServerOrder } from "./web-server-order";
 import { readWebServerSelection, writeWebServerSelection } from "./web-server-selection";
 
 interface WebConversation {
@@ -797,8 +797,8 @@ export function createWebWorkspace(
         : null,
     (id) => focusUse.setTarget(id),
   );
-  const [serverOrder, setServerOrder] = createSignal(readWebServerOrder(props.accountId));
-  const orderedHosts = createMemo(() => orderWebHosts(state.hosts, serverOrder()));
+  const serverOrder = readWebServerOrder(props.accountId);
+  const orderedHosts = createMemo(() => orderWebHosts(state.hosts, serverOrder));
   const profiles = createMemo(() => state.agents.map(toAgentProfile));
   // Every face of an agent, also one drawn from its seed alone, wears its name's hat and its own choice.
   createEffect(profiles, (list) => registerAgentFaces(list));
@@ -960,8 +960,7 @@ export function createWebWorkspace(
         for (const left of leftHostIds) if (!hosts.some((host) => host.hostId === left)) leftHostIds.delete(left);
         if (!hostId) {
           const savedHostId = readWebServerSelection(props.accountId);
-          const initialHost =
-            hosts.find((host) => host.hostId === savedHostId) ?? orderWebHosts(hosts, serverOrder())[0];
+          const initialHost = hosts.find((host) => host.hostId === savedHostId) ?? orderWebHosts(hosts, serverOrder)[0];
           if (initialHost) await connect(initialHost);
         }
         // After the opened host, so it takes its Signal connection before the status connections.
@@ -2171,10 +2170,6 @@ export function createWebWorkspace(
     preferences,
     orderedHosts,
     duplicatingSectionIds,
-    reorderHosts(hostIds: string[]) {
-      setServerOrder(hostIds);
-      writeWebServerOrder(props.accountId, hostIds);
-    },
     /** Every event of the connected host. Returns the unsubscribe function. */
     onHostEvent(listener: (event: AgentEvent | TeamRealtimeEvent) => void) {
       hostEventListeners.add(listener);

@@ -1,8 +1,7 @@
 import type { ServerSummary } from "@openbot/contracts/ipc";
-import { Heading, Text } from "@openbot/ui";
+import { Button, Heading, Text } from "@openbot/ui";
 import { AddServerDialog, type HostedServerSetupStatus } from "@openbot/ui/features/servers/AddServerDialog";
 import { hostedServerPlansFromCatalog } from "@openbot/ui/features/servers/HostedServerPricing";
-import { ServerRail } from "@openbot/ui/features/servers/ServerRail";
 import { createMemo, createSignal, onCleanup, Show } from "solid-js";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { MOCK_HOSTED_SERVER_CATALOG } from "../src/preview/mock-hosted-servers";
@@ -24,9 +23,9 @@ interface FlowProps {
 }
 
 /**
- * The server rail with a working plus button. Create a hosted server: the fake payment page
- * "confirms" after one step, then the setup runs and the new server is added to the rail. Nothing
- * leaves the browser: every call is fake.
+ * The add server dialog, opened from a button. Create a hosted server: the fake payment page
+ * "confirms" after one step, then the setup runs and the new server opens. Nothing leaves the
+ * browser: every call is fake.
  */
 function AddServerFlow(props: FlowProps) {
   const [servers, setServers] = createSignal<ServerSummary[]>(STORY_SERVERS);
@@ -71,25 +70,13 @@ function AddServerFlow(props: FlowProps) {
 
   return (
     <>
-      <ServerRail
-        servers={servers()}
-        onSelect={(serverId) =>
-          setServers((current) => current.map((server) => ({ ...server, active: server.id === serverId })))
-        }
-        onReorder={(serverIds) =>
-          setServers((current) => [
-            ...current.filter((server) => server.kind === "local"),
-            ...serverIds.flatMap((id) => current.filter((server) => server.id === id)),
-          ])
-        }
-        onAdd={openAdd}
-        addCreatesServer
-      />
       <main class="foundation-story">
         <Heading as="h1" size="lg">
           {activeServer()?.name}
         </Heading>
-        <Text tone="muted">Click the plus button in the server rail to add a server.</Text>
+        <Button type="button" onClick={openAdd}>
+          Add a server
+        </Button>
         <Show when={contactNote()}>
           <Text tone="muted">"Contact us" was clicked. The app opens an email to hello@openbot.run here.</Text>
         </Show>

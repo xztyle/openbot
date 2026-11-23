@@ -27,7 +27,6 @@ import { createServerConnectionToast } from "./features/servers/server-connectio
 import { useServerScope } from "./features/servers/server-scope";
 import { followsServerUpdate, ServerUpdateDialogHost } from "./features/servers/server-update-flow";
 import { useServers } from "./features/servers/servers-context";
-import { WorkspaceServerRail } from "./features/servers/WorkspaceServerRail";
 import { useSettings } from "./features/settings/settings-context";
 import { WorkspaceSidebar } from "./features/sidebar/WorkspaceSidebar";
 import { TasksPanel } from "./features/tasks/TasksPanel";
@@ -285,7 +284,6 @@ function WorkspaceShellFrame(props: { account: () => CentralAuthUser }) {
           sidebarHidden={tasksAgentsHidden()}
           left={
             <Show when={!chatWindow}>
-              <WorkspaceServerRail />
               <Show when={workspaceOn()} fallback={<WorkspaceSidebar peopleEnabled={activePeopleEnabled()} />}>
                 <div id="agent-sidebar" class="sidebar ws-frame-sidebar">
                   <WorkspaceSidebarPane

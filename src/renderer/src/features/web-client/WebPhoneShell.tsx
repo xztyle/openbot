@@ -41,7 +41,6 @@ import {
   type PhoneMoreRow,
   PhoneMoreScreen,
   type PhoneMoreSection,
-  type PhoneSwitcherServer,
   PhoneSwitcherSheet,
 } from "@openbot/ui/features/workspace/PhoneScreens";
 import { type PhoneTab, PhoneTabBar } from "@openbot/ui/features/workspace/PhoneTabBar";
@@ -96,9 +95,6 @@ export interface WebPhoneShellProps {
   searchShortcut: string;
   account: { name: string; email: string; avatarUrl: string | null };
   onOpenAccount: () => void;
-  /** The account's servers, for the switcher. */
-  servers: readonly PhoneSwitcherServer[];
-  onSelectServer: (serverId: string) => void;
   /** The server's pages and the app's links, after the workspace views in the More tab. */
   moreSections: readonly PhoneMoreSection[];
   /** The notices about the server, such as Reconnecting, as a bar over each tab. */
@@ -146,7 +142,7 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
     }
     return { count, unread };
   });
-  const switcherAvailable = () => spaceItems().length > 1 || props.servers.length > 1;
+  const switcherAvailable = () => spaceItems().length > 1;
 
   /** Slack's DMs badge counts conversations, not messages. */
   const unreadDms = () =>
@@ -547,8 +543,6 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
         spaces={spaceItems()}
         activeSpaceId={ws.spaces.current()}
         onSelectSpace={(spaceId) => ws.selectSpace(spaceId)}
-        servers={props.servers}
-        onSelectServer={props.onSelectServer}
         actions={switcherActions()}
       />
     </div>

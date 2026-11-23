@@ -219,7 +219,7 @@
     "./features/servers/ServerUpdateDialog": "./src/features/servers/ServerUpdateDialog.tsx",
     "./features/servers/server-update-dialog.css": "./src/features/servers/server-update-dialog.css",
     "./features/servers/ServerConnectionNotice": "./src/features/servers/ServerConnectionNotice.tsx",
-    "./features/servers/ServerRail": "./src/features/servers/ServerRail.tsx",
+    "./features/servers/ServerMark": "./src/features/servers/ServerMark.tsx",
     "./features/servers/ServerRoles": "./src/features/servers/ServerRoles.tsx",
     "./features/servers/server-roles.css": "./src/features/servers/server-roles.css",
     "./features/settings/AgentSelect": "./src/features/settings/AgentSelect.tsx",

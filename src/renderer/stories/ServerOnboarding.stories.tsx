@@ -48,11 +48,7 @@ function host(agentStatus: AgentStatus): HostProviderSettings {
 
 type ServerOnboardingProps = Parameters<typeof ServerOnboarding>[0];
 
-function Story(props: {
-  agentStatus: AgentStatus;
-  onContinue: ServerOnboardingProps["onContinue"];
-  onClose: ServerOnboardingProps["onClose"];
-}) {
+function Story(props: { agentStatus: AgentStatus; onContinue: ServerOnboardingProps["onContinue"] }) {
   onCleanup(() => toast.dismiss());
   return (
     <div style={{ height: "100vh" }}>
@@ -60,7 +56,6 @@ function Story(props: {
         serverName="Ada’s server"
         setup={hostSetupProviderProps(host(props.agentStatus))}
         onContinue={props.onContinue}
-        onClose={props.onClose}
       />
       <Toaster />
     </div>
@@ -70,7 +65,7 @@ function Story(props: {
 const meta = {
   title: "Setup/ServerOnboarding",
   component: Story,
-  args: { agentStatus: newHostStatus, onContinue: fn(), onClose: fn() },
+  args: { agentStatus: newHostStatus, onContinue: fn() },
   parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof Story>;
 

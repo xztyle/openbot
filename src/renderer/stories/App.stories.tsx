@@ -1,9 +1,8 @@
 import type { AgentEvent } from "@openbot/contracts/ipc";
-import type { ServerView } from "@openbot/ui/features/servers/ServerMenu";
 import { onCleanup } from "solid-js";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { App } from "../src/App";
-import { LEFT_PANEL_COLLAPSED_STORAGE_KEY, SERVER_VIEW_STORAGE_KEY } from "../src/layout-constants";
+import { LEFT_PANEL_COLLAPSED_STORAGE_KEY } from "../src/layout-constants";
 import { createMockOpenBot, type MockOpenBotOptions } from "../src/preview/mock-openbot";
 import { OpenBotPlayground } from "../src/preview/OpenBotPlayground";
 import { STORY_AGENT_STATUS, STORY_AGENT_SUMMARIES, STORY_APP_INFO, STORY_SERVERS } from "./fixtures";
@@ -32,9 +31,8 @@ function useStoredLayoutValue(key: string, value: string): void {
   });
 }
 
-function SidebarStatePlayground(props: { compact: boolean; serverView?: ServerView; options?: MockOpenBotOptions }) {
+function SidebarStatePlayground(props: { compact: boolean; options?: MockOpenBotOptions }) {
   useStoredLayoutValue(LEFT_PANEL_COLLAPSED_STORAGE_KEY, props.compact ? "true" : "false");
-  if (props.serverView) useStoredLayoutValue(SERVER_VIEW_STORAGE_KEY, props.serverView);
   return <OpenBotPlayground options={props.options} />;
 }
 
@@ -44,11 +42,6 @@ export const Playground: Story = {
 
 export const ExpandedSidebar: Story = {
   render: () => <SidebarStatePlayground compact={false} />,
-};
-
-/** The servers in a rail at the left of the sidebar, instead of the server menu. */
-export const ServerRailView: Story = {
-  render: () => <SidebarStatePlayground compact={false} serverView="rail" />,
 };
 
 export const CompactSidebar: Story = {

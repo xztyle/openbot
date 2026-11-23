@@ -636,7 +636,6 @@ export const messages = {
   "workspace.phone.newActivity": { one: "{count} elemento nuevo", other: "{count} elementos nuevos" },
   "workspace.phone.switch": "Cambiar de espacio",
   "workspace.phone.spaces": "Espacios",
-  "workspace.phone.servers": "Servidores",
   "workspace.phone.shortcuts": "Accesos directos",
   "workspace.phone.views": "Espacio de trabajo",
   "workspace.phone.server": "Servidor",

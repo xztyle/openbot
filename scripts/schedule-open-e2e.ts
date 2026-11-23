@@ -1,9 +1,10 @@
-// Checks that the Schedule loads again when the server changes while it is open (#2300). It drives
-// the real app against the preview mock in a running Storybook. Read-only. Pass the Storybook URL
-// that `bun run storybook` reports: `bun scripts/schedule-server-switch-e2e.ts --storybook=http://localhost:6006`.
-// Each server's calendar names its routines after the server, so a routine from the previous
-// server on screen is stale data. Writes .openbot-build/schedule-server-switch-e2e/report.json
-// and a screenshot.
+// Checks that Schedule opens from the More menu of the page rail and shows the calendar of the host
+// that the app runs on, with its routines. It drives the real app against the preview mock in a
+// running Storybook. Read-only. Pass the Storybook URL that `bun run storybook` reports:
+// `bun scripts/schedule-open-e2e.ts --storybook=http://localhost:6006`.
+// `--browser-executable=<path>` picks a Chromium build; Playwright's own is the default.
+// The calendar of the host names its routine after the host, so a routine with another name is not
+// the host's data. Writes .openbot-build/schedule-open-e2e/report.json and a screenshot.
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -16,29 +17,31 @@ declare global {
   }
 }
 
-const OUT = resolve(import.meta.dirname, "../.openbot-build/schedule-server-switch-e2e");
+const OUT = resolve(import.meta.dirname, "../.openbot-build/schedule-open-e2e");
 const t = translateFor("en");
 const storybook = process.argv.find((arg) => arg.startsWith("--storybook="))?.slice("--storybook=".length);
 assert.ok(storybook, "Pass --storybook=<url> with the URL that `bun run storybook` reports.");
+const browserExecutable = process.argv
+  .find((arg) => arg.startsWith("--browser-executable="))
+  ?.slice("--browser-executable=".length);
 
 interface Report {
-  from?: string;
-  to?: string;
+  host?: string;
+  scheduleInMoreMenu?: boolean;
   requests?: string[];
-  routinesBeforeSwitch?: string[];
-  routinesAfterSwitch?: string[];
+  routines?: string[];
   passed: boolean;
 }
 
 const report: Report = { passed: false };
 
-/** Waits until the calendar is no longer loading, then fails on the load error. */
 const rail = (page: Page) => page.getByRole("navigation", { name: t("app.rail.label") });
 
-/** Opens Schedule: a rail button when it is pinned, else a row of the rail's More menu. */
-async function openSchedule(page: Page): Promise<void> {
+/** Opens Schedule from the rail's More menu. Schedule is not a rail button until the user pins it. */
+async function openScheduleFromMoreMenu(page: Page): Promise<void> {
   const pinned = rail(page).getByRole("button", { name: t("app.rail.schedule"), exact: true });
-  if (await pinned.isVisible()) return pinned.click();
+  report.scheduleInMoreMenu = !(await pinned.isVisible());
+  assert.ok(report.scheduleInMoreMenu, "Schedule is a rail button. It must start in the More menu.");
   await rail(page)
     .getByRole("button", { name: t("app.rail.more"), exact: true })
     .click();
@@ -46,8 +49,10 @@ async function openSchedule(page: Page): Promise<void> {
     .getByRole("menuitem", { name: new RegExp(`^${t("app.rail.schedule")}`, "u") })
     .first()
     .click();
+  await page.getByRole("menu").waitFor({ state: "detached" });
 }
 
+/** Waits until the calendar is no longer loading, then fails on the load error. */
 async function calendarReady(page: Page): Promise<void> {
   const schedule = page.getByRole("region", { name: t("routine.calendar.title") });
   await schedule.waitFor();
@@ -68,15 +73,19 @@ async function visibleRoutines(page: Page): Promise<string[]> {
 }
 
 mkdirSync(OUT, { recursive: true });
-const browser = await chromium.launch();
+const browser = await chromium.launch(
+  browserExecutable ? { executablePath: resolve(browserExecutable), args: ["--no-sandbox"] } : {},
+);
 try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  // No saved pins: the rail shows its default pages, and Schedule is in the More menu.
+  await page.addInitScript(() => window.localStorage.removeItem("openbot:rail-pins"));
   await page.goto(`${storybook}/iframe.html?id=app--playground&viewMode=story`);
   await rail(page)
     .getByRole("button", { name: t("app.rail.more"), exact: true })
     .waitFor();
-  // Each server has one routine named after it, with a run in the next hour. Each request is
-  // recorded with the server it asked.
+  // The host has one routine named after it, with a run in the next hour. Each request is recorded
+  // with the server it asked.
   await page.evaluate(() => {
     const agent = window.openbot.agent;
     window.scheduleCalendarRequests = [];
@@ -100,30 +109,22 @@ try {
     };
   });
 
-  const servers = await page.evaluate(() => window.openbot.servers.list());
-  const from = servers.find((server) => server.active);
-  const to = servers.find((server) => !server.active && server.state === "online");
-  assert.ok(from && to, "The preview needs an active server and another online server.");
-  report.from = from.id;
-  report.to = to.id;
+  const host = (await page.evaluate(() => window.openbot.servers.list())).find((server) => server.active);
+  assert.ok(host, "The preview has no active host.");
+  report.host = host.id;
 
-  await openSchedule(page);
-  await calendarReady(page);
-  report.routinesBeforeSwitch = await visibleRoutines(page);
-  assert.deepEqual(report.routinesBeforeSwitch, [`Routine@${from.id}`], "The first server's calendar is wrong.");
-
-  await page.getByRole("button", { name: t("server.menu.open", { name: from.name }), exact: true }).click();
-  await page.getByRole("menuitem", { name: to.name, exact: true }).click();
-  await page.getByRole("button", { name: t("server.menu.open", { name: to.name }), exact: true }).waitFor();
-  // The server name changes before the open pane follows it, so wait for the request to the new server.
-  await page.waitForFunction((serverId) => window.scheduleCalendarRequests?.includes(serverId), to.id);
+  await openScheduleFromMoreMenu(page);
+  await page.waitForFunction(() => (window.scheduleCalendarRequests?.length ?? 0) > 0);
   await calendarReady(page);
 
   report.requests = await page.evaluate(() => window.scheduleCalendarRequests ?? []);
-  report.routinesAfterSwitch = await visibleRoutines(page);
-  assert.equal(report.requests.at(-1), to.id, "The calendar did not ask the new server.");
-  assert.deepEqual(report.routinesAfterSwitch, [`Routine@${to.id}`], "The new server's calendar is wrong.");
-  await page.screenshot({ path: resolve(OUT, "after-switch.png") });
+  report.routines = await visibleRoutines(page);
+  assert.ok(
+    report.requests.every((serverId) => serverId === host.id),
+    "The calendar asked a server that is not the host.",
+  );
+  assert.deepEqual(report.routines, [`Routine@${host.id}`], "The calendar does not show the host's routine.");
+  await page.screenshot({ path: resolve(OUT, "schedule.png") });
   report.passed = true;
 } finally {
   writeFileSync(resolve(OUT, "report.json"), `${JSON.stringify(report, null, 2)}\n`);

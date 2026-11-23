@@ -23,7 +23,6 @@
 
 .app-frame {
   --left-header-height: 38px;
-  --server-rail-width: 64px;
 
   position: relative;
   display: grid;
@@ -41,14 +40,6 @@
     cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-.app-frame-with-server-rail {
-  grid-template-columns: var(--server-rail-width) var(--left-panel-width, 280px) 0 minmax(0, 1fr);
-}
-
-.app-frame-platform-darwin {
-  --server-rail-width: 72px;
-}
-
 .remote-compatibility-screen {
   display: flex;
   min-width: 0;
@@ -58,10 +49,6 @@
   justify-content: center;
   flex-direction: column;
   padding: var(--openbot-space-6);
-}
-
-.app-frame-with-server-rail .remote-compatibility-screen {
-  grid-column: 4;
 }
 
 .remote-compatibility-alert,
@@ -587,158 +574,6 @@
   }
 }
 
-.server-rail {
-  --server-rail-inline-padding: 7px;
-
-  position: relative;
-  z-index: 45;
-  display: flex;
-  min-width: var(--server-rail-width);
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 42px var(--server-rail-inline-padding) calc(9px + 52px);
-  background: var(--openbot-bg-sidebar);
-  -webkit-app-region: drag;
-}
-
-.server-rail::before {
-  position: absolute;
-  top: calc(var(--left-header-height) - 1px);
-  right: 0;
-  left: 0;
-  height: 1px;
-  background: var(--openbot-border);
-  content: "";
-  pointer-events: none;
-}
-
-.server-rail::after {
-  position: absolute;
-  top: var(--left-header-height);
-  right: 0;
-  bottom: 0;
-  width: clamp(0.5px, 0.05123cqw, 1px);
-  background: var(--openbot-border);
-  content: "";
-  pointer-events: none;
-}
-
-.server-rail-list {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.server-rail-list {
-  box-sizing: border-box;
-  width: calc(100% + var(--server-rail-inline-padding) + var(--server-rail-inline-padding));
-  min-height: 0;
-  flex: 1 1 auto;
-  margin-inline: calc(-1 * var(--server-rail-inline-padding));
-  padding-inline: var(--server-rail-inline-padding);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
-}
-
-.server-rail-list::-webkit-scrollbar {
-  display: none;
-}
-
-.server-rail-tooltip-trigger {
-  display: flex;
-}
-
-.server-rail-remote-list {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.server-rail-server-item {
-  --server-rail-drag-step: 0;
-
-  position: relative;
-  display: flex;
-  width: 100%;
-  justify-content: center;
-  opacity: 1;
-  transform: translate3d(0, calc(var(--server-rail-drag-step) * 54px), 0);
-  transition:
-    transform var(--openbot-duration-normal) var(--openbot-ease-out),
-    opacity var(--openbot-duration-normal) var(--openbot-ease-out);
-}
-
-.server-rail-server-item .server-rail-button {
-  cursor: grab;
-}
-
-.server-rail-server-item-dragging {
-  z-index: 1;
-  opacity: 0.55;
-}
-
-.server-rail-drag-preview {
-  position: fixed;
-  z-index: var(--openbot-layer-dropdown);
-  box-sizing: border-box;
-  margin: 0;
-  list-style: none;
-  opacity: 0.96;
-  pointer-events: none;
-  transform: none;
-  transition: none;
-}
-
-.server-rail-server-item-dragging .server-rail-button,
-.server-rail-remote-list[data-dragging] {
-  cursor: grabbing;
-}
-
-.server-rail-remote-list[data-dragging] .server-rail-server-item {
-  will-change: transform;
-}
-
-.server-rail-button {
-  position: relative;
-  display: grid;
-  width: 46px;
-  height: 46px;
-  flex: 0 0 46px;
-  place-items: center;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--openbot-text-secondary);
-  cursor: pointer;
-  -webkit-app-region: no-drag;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .ui-button.server-rail-button.ui-button-variant-outline:hover:not(:disabled) {
-    background: transparent;
-    color: var(--openbot-text-secondary);
-  }
-}
-
-.server-rail-monogram {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  border: 1px solid var(--openbot-border);
-  border-radius: var(--openbot-radius-lg);
-  background: var(--openbot-bg-surface);
-  color: var(--openbot-text-secondary);
-  font-size: var(--openbot-text-sm);
-  font-weight: 740;
-  letter-spacing: -0.02em;
-}
-
 .server-rail-logo {
   width: 40px;
   height: 40px;
@@ -747,87 +582,6 @@
   object-fit: cover;
   outline: 1px solid var(--openbot-image-outline);
   outline-offset: -1px;
-}
-
-.server-rail-mark {
-  position: absolute;
-  top: 50%;
-  left: -7px;
-  width: 3px;
-  height: 0;
-  border-radius: 0 var(--openbot-radius-xs) var(--openbot-radius-xs) 0;
-  background: var(--openbot-text-primary);
-  opacity: 0;
-  transform: translateY(-50%);
-  transition:
-    height var(--openbot-duration-hover) var(--openbot-ease-out),
-    opacity var(--openbot-duration-hover) ease;
-}
-
-.server-rail-button[aria-pressed="true"] .server-rail-mark {
-  height: 26px;
-  opacity: 1;
-}
-
-.server-rail-button[aria-pressed="false"]:hover .server-rail-mark {
-  height: 12px;
-  opacity: 1;
-}
-
-.server-rail-action .server-rail-monogram {
-  border-style: dashed;
-  background: transparent;
-  color: var(--openbot-accent-text);
-  font-size: var(--openbot-text-2xl);
-  font-weight: 400;
-}
-
-.server-rail-action svg {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: var(--openbot-icon-stroke);
-}
-
-.server-rail-tooltip {
-  z-index: var(--openbot-layer-tooltip);
-  max-width: min(240px, calc(100vw - 16px));
-  border: 1px solid var(--openbot-border-strong);
-  border-radius: var(--openbot-radius-sm);
-  background: var(--openbot-bg-surface-raised);
-  box-shadow: var(--openbot-shadow-raised);
-  padding: var(--openbot-space-2) var(--openbot-space-3);
-  color: var(--openbot-text-primary);
-  font-size: var(--openbot-text-md);
-  font-weight: var(--openbot-weight-semibold);
-  line-height: var(--openbot-leading-md);
-  overflow-wrap: anywhere;
-  pointer-events: none;
-}
-
-.server-rail-tooltip::before {
-  position: absolute;
-  top: 50%;
-  left: -6px;
-  width: 6px;
-  height: 12px;
-  background: var(--openbot-bg-surface-raised);
-  clip-path: polygon(100% 0, 100% 100%, 0 50%);
-  content: "";
-  transform: translateY(-50%);
-}
-
-@media (max-width: 800px) {
-  .app-frame-with-server-rail {
-    --server-rail-width: 56px;
-  }
-  .app-frame-platform-darwin {
-    --server-rail-width: 72px;
-  }
-  .server-rail {
-    --server-rail-inline-padding: 5px;
-  }
 }
 
 .panel-resizer {
@@ -930,19 +684,8 @@ textarea {
 }
 
 /* The frame edge. The top row of the sidebar, the chat and the side panel has no line of its own: the
- * window card in `window.css` draws the lines, the surfaces and the rounded corners. The theme layer at
- * the end of this file also sets the server rail background, so the selector carries the frame class
- * to win. */
+ * window card in `window.css` draws the lines, the surfaces and the rounded corners. */
 @media (min-width: 721px) and (not ((max-height: 520px) and (pointer: coarse))) {
-  .app-frame-edge > .server-rail {
-    background: var(--openbot-bg-native-sidebar);
-  }
-
-  .app-frame-edge > .server-rail::before,
-  .app-frame-edge > .server-rail::after {
-    content: none;
-  }
-
   .app-frame-edge > .sidebar {
     position: relative;
     isolation: isolate;
@@ -1083,12 +826,7 @@ textarea {
   height: var(--openbot-icon-lg);
 }
 
-/* The logo of a newly selected server springs in. */
-.sidebar-server-name-mark[data-entering] {
-  animation: sidebar-server-mark-in 420ms cubic-bezier(0.34, 1.36, 0.64, 1) both;
-}
-
-/* No overflow clip here: the old name blurs out past the box. The name itself ends in an ellipsis. */
+/* No overflow clip here: an old name blurs out past the box. The name itself ends in an ellipsis. */
 .sidebar-server-name-label {
   min-width: 0;
   flex: 0 1 auto;
@@ -1121,22 +859,8 @@ textarea {
   animation: server-sleep-waking 1200ms ease-in-out infinite;
 }
 
-@keyframes sidebar-server-mark-in {
-  from {
-    opacity: 0;
-    scale: 0.6;
-    filter: blur(2px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sidebar-server-name-mark[data-entering] {
-    animation: none;
-  }
-}
-
-/* The server menu view has no rail, so the server name moves right of the macOS traffic lights. The web
- * frame uses the macOS geometry but has no traffic lights, so these rules skip it. */
+/* The server name moves right of the macOS traffic lights. The web frame uses the macOS geometry but
+ * has no traffic lights, so these rules skip it. */
 .app-frame-platform-darwin:not(.app-frame-with-server-rail, .web-app-frame) .sidebar-topbar {
   padding-left: 78px;
 }
@@ -1173,10 +897,6 @@ textarea {
   overflow-y: auto;
 }
 
-.server-menu-row {
-  gap: var(--openbot-space-2);
-}
-
 .server-menu-mark {
   position: relative;
   display: grid;
@@ -1207,28 +927,6 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.server-menu-muted {
-  flex: 0 0 auto;
-  color: var(--openbot-text-secondary);
-}
-
-.server-menu-sleep {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 auto;
-  border-radius: var(--openbot-radius-pill);
-  background: var(--openbot-text-muted);
-}
-
-.server-menu-sleep[data-state="waking"] {
-  background: var(--openbot-accent);
-  animation: server-sleep-waking 1200ms ease-in-out infinite;
-}
-
-.server-menu .server-menu-layout-chevron {
-  margin-left: 0;
 }
 
 /* The add item: a dashed circle that fills in on the highlighted row, with the plus cut out of it. */
@@ -3338,8 +3036,6 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .server-rail-mark,
-  .server-rail-server-item,
   .sidebar-section,
   .sidebar-pinned-item {
     transition: none;
@@ -3376,16 +3072,8 @@ textarea {
   }
 }
 
-.server-rail,
 .sidebar {
   background: var(--openbot-bg-sidebar);
-}
-
-.server-rail-monogram,
-.server-rail-action .server-rail-monogram {
-  border-color: var(--openbot-border);
-  background: var(--openbot-bg-surface);
-  color: var(--openbot-text-secondary);
 }
 
 .sidebar-icon-button:hover,
@@ -3447,14 +3135,6 @@ textarea {
   background: var(--openbot-bg-control-hover);
   color: var(--openbot-text-secondary);
 }
-.server-rail-muted {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  color: var(--openbot-text-secondary);
-  background: var(--openbot-bg-sidebar);
-  border-radius: var(--openbot-radius-sm);
-}
 
 /* A hosted server that sleeps for no use: muted. One that wakes after the user's input: a pulsing accent. */
 @keyframes server-sleep-waking {
@@ -3469,7 +3149,6 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .server-menu-sleep[data-state="waking"],
   .sidebar-server-name > .sidebar-server-name-sleep[data-state="waking"] {
     animation: none;
   }

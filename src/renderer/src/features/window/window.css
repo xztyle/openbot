@@ -83,14 +83,6 @@
     pointer-events: none;
   }
 
-  .app-window > .app-frame-edge.app-frame-with-server-rail::before {
-    left: var(--server-rail-width);
-  }
-
-  .app-window > .app-frame-edge > .server-rail {
-    background: var(--window-frame);
-  }
-
   .app-window > .app-frame-edge > .sidebar,
   .app-window > .app-frame-edge :is(.conversation-panel, .direct-conversation, .diagram-view),
   .app-window > .app-frame-edge :is(.settings-panel, .browser-panel) {
@@ -482,10 +474,6 @@
 
   .app-frame-edge[data-window-page-kind="titled"] > .window-page {
     pointer-events: none;
-  }
-
-  .app-frame-edge.app-frame-with-server-rail:not([data-window-page-kind="agents"]) > .window-page {
-    left: calc(var(--server-rail-width) + 1px);
   }
 
   .app-frame-edge:not([data-window-page-kind="agents"]) > .sidebar > :not(.sidebar-topbar),

@@ -26,7 +26,7 @@ import {
   OpenBotDynamicIsland,
   openBotIdleCompactWidth,
 } from "@openbot/ui/features/dynamic-island/OpenBotDynamicIsland";
-import { ServerMark, serverStatusLabels } from "@openbot/ui/features/servers/ServerRail";
+import { ServerMark, serverStatusLabels } from "@openbot/ui/features/servers/ServerMark";
 import type { GeneralSettingsValue } from "@openbot/ui/features/settings/app-settings";
 import type { JSX } from "@solidjs/web";
 import { createSignal, createUniqueId, For, onSettled, Show } from "solid-js";

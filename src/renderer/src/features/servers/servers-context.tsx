@@ -391,24 +391,6 @@ const Servers = createSimpleContext({
       }
     }
 
-    async function reorderServers(serverIds: string[]): Promise<void> {
-      const previous = servers();
-      const serversById = new Map(previous.map((server) => [server.id, server]));
-      setServers([
-        ...previous.filter((server) => server.kind === "local"),
-        ...serverIds.flatMap((serverId) => {
-          const server = serversById.get(serverId);
-          return server?.kind === "remote" ? [server] : [];
-        }),
-      ]);
-      try {
-        setServers(await serversPort().servers.reorder({ serverIds }));
-      } catch (error) {
-        setServers(previous);
-        throw error;
-      }
-    }
-
     return {
       servers,
       serversLoaded,
@@ -430,7 +412,6 @@ const Servers = createSimpleContext({
       hostedServerIds,
       hostedServersLoaded,
       refreshHostedServersAvailable,
-      reorderServers,
       setServerMuted,
       setServerNotificationLevel,
       retryServerConnection,

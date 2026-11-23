@@ -160,8 +160,6 @@ function ServerProvidersStory(props: {
   hiddenDetected?: readonly string[];
   /** Where the scan looks. Without it the section has no detection settings. */
   detectionSettings?: ProviderDetectionSettingsValue;
-  /** A server that the window has not selected: the section offers the switch. */
-  inactive?: boolean;
   /** Providers the user turned off. With it every provider row has the switch that turns one on or off. */
   offProviders?: readonly AgentProviderId[];
   providerUsers?: Partial<Record<AgentProviderId, readonly string[]>>;
@@ -253,7 +251,7 @@ function ServerProvidersStory(props: {
             page={page()}
             open={open()}
             platform="darwin"
-            server={props.inactive ? { ...localServer, active: false } : localServer}
+            server={localServer}
             hostStatus={STORY_HOST_STATUS}
             members={STORY_PRESENCE.members}
             invites={STORY_INVITES}
@@ -270,91 +268,86 @@ function ServerProvidersStory(props: {
             onRecheckScreenRecording={fn(async () => undefined)}
             initialSection="providers"
             hostPromptCacheTtl={{}}
-            onSwitchToManageProviders={props.inactive ? fn() : undefined}
-            providers={
-              props.inactive
-                ? undefined
-                : {
-                    get defaultProvider() {
-                      return {
-                        ...preference(),
-                        save: async (provider: AgentProviderId, model?: string | null) => {
-                          setPreference((current) => ({
-                            completed: true,
-                            preferredProvider: provider,
-                            preferredModel:
-                              model === undefined && current.preferredProvider === provider
-                                ? current.preferredModel
-                                : (model ?? null),
-                          }));
-                        },
-                      };
-                    },
-                    get agentStatus() {
-                      return props.usageReset
-                        ? usageResetAgentStatus
-                        : props.codeSignIn
-                          ? codeSignInAgentStatus
-                          : props.providerUpdate
-                            ? providerUpdateAgentStatus
-                            : props.openCodeInstalled
-                              ? openCodeInstalledAgentStatus
-                              : providerAgentStatus;
-                    },
-                    connection: props.codeSignIn
-                      ? codeConnection
-                      : props.providerDownloads || props.providerUpdate
-                        ? browserConnection
-                        : undefined,
-                    get providerRuntimeStatuses() {
-                      return props.providerUpdate
-                        ? runtimes.providerRuntimeStatuses()
-                        : props.providerDownloads
-                          ? providerRuntimeStatuses
-                          : undefined;
-                    },
-                    get providerAvailableVersions() {
-                      return props.providerUpdate ? runtimes.providerAvailableVersions() : undefined;
-                    },
-                    onUpdateProvider: props.providerUpdate ? runtimes.downloadProviderRuntime : undefined,
-                    onDownloadProvider: props.providerUpdate
-                      ? runtimes.downloadProviderRuntime
-                      : props.providerDownloads
-                        ? fn()
-                        : undefined,
-                    onCancelProviderDownload: props.providerUpdate
-                      ? runtimes.cancelProviderRuntimeDownload
-                      : props.providerDownloads
-                        ? fn()
-                        : undefined,
-                    accountActions: usageResetAccounts,
-                    onAddCustomProvider: addCustomProvider,
-                    onDeleteCustomProvider: deleteCustomProvider,
-                    onUpdateCustomProvider: updateCustomProvider,
-                    get customProviders() {
-                      return customProviders();
-                    },
-                    get providerDetection() {
-                      return detection?.detection();
-                    },
-                    detectedProviderApi: detection?.api,
-                    get detectionSettings() {
-                      return detectionSettings();
-                    },
-                    onDetectionSettingsChange: setDetectionSettings,
-                    get offProviders() {
-                      return offProviders();
-                    },
-                    providerUsers: props.providerUsers,
-                    onSetProviderOn: props.offProviders
-                      ? (provider: AgentProviderId, on: boolean) => {
-                          setOffProviders((current = []) =>
-                            on ? current.filter((id) => id !== provider) : [...current, provider],
-                          );
-                        }
-                      : undefined,
+            providers={{
+              get defaultProvider() {
+                return {
+                  ...preference(),
+                  save: async (provider: AgentProviderId, model?: string | null) => {
+                    setPreference((current) => ({
+                      completed: true,
+                      preferredProvider: provider,
+                      preferredModel:
+                        model === undefined && current.preferredProvider === provider
+                          ? current.preferredModel
+                          : (model ?? null),
+                    }));
+                  },
+                };
+              },
+              get agentStatus() {
+                return props.usageReset
+                  ? usageResetAgentStatus
+                  : props.codeSignIn
+                    ? codeSignInAgentStatus
+                    : props.providerUpdate
+                      ? providerUpdateAgentStatus
+                      : props.openCodeInstalled
+                        ? openCodeInstalledAgentStatus
+                        : providerAgentStatus;
+              },
+              connection: props.codeSignIn
+                ? codeConnection
+                : props.providerDownloads || props.providerUpdate
+                  ? browserConnection
+                  : undefined,
+              get providerRuntimeStatuses() {
+                return props.providerUpdate
+                  ? runtimes.providerRuntimeStatuses()
+                  : props.providerDownloads
+                    ? providerRuntimeStatuses
+                    : undefined;
+              },
+              get providerAvailableVersions() {
+                return props.providerUpdate ? runtimes.providerAvailableVersions() : undefined;
+              },
+              onUpdateProvider: props.providerUpdate ? runtimes.downloadProviderRuntime : undefined,
+              onDownloadProvider: props.providerUpdate
+                ? runtimes.downloadProviderRuntime
+                : props.providerDownloads
+                  ? fn()
+                  : undefined,
+              onCancelProviderDownload: props.providerUpdate
+                ? runtimes.cancelProviderRuntimeDownload
+                : props.providerDownloads
+                  ? fn()
+                  : undefined,
+              accountActions: usageResetAccounts,
+              onAddCustomProvider: addCustomProvider,
+              onDeleteCustomProvider: deleteCustomProvider,
+              onUpdateCustomProvider: updateCustomProvider,
+              get customProviders() {
+                return customProviders();
+              },
+              get providerDetection() {
+                return detection?.detection();
+              },
+              detectedProviderApi: detection?.api,
+              get detectionSettings() {
+                return detectionSettings();
+              },
+              onDetectionSettingsChange: setDetectionSettings,
+              get offProviders() {
+                return offProviders();
+              },
+              providerUsers: props.providerUsers,
+              onSetProviderOn: props.offProviders
+                ? (provider: AgentProviderId, on: boolean) => {
+                    setOffProviders((current = []) =>
+                      on ? current.filter((id) => id !== provider) : [...current, provider],
+                    );
                   }
-            }
+                : undefined,
+            }}
           />
         )}
       </SettingsPageStory>
@@ -501,11 +494,6 @@ export const ProvidersOff: Story = {
  */
 export const CodexUsageReset: Story = {
   render: () => <ServerProvidersStory usageReset />,
-};
-
-/** A server that the window has not selected. Its providers are managed after a switch to it. */
-export const NotSelectedServer: Story = {
-  render: () => <ServerProvidersStory inactive />,
 };
 
 function localStoryServer(): ServerSummary {

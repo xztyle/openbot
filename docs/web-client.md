@@ -7,7 +7,7 @@ No deployment or pull request is made by these source changes.
 
 ## Shared application UI
 
-The browser uses the existing `AccountLogin`, `PageRail`, `ServerRail`, `Sidebar`,
+The browser uses the existing `AccountLogin`, `PageRail`, `Sidebar`,
 `Conversation`, `AgentSettingsPanel`, and `FirstAgentSetup` components. After sign-in it
 connects to the first available host and selects a teammate. There is no web dashboard,
 welcome screen, separate conversation toolbar, or always-visible invitation form.
@@ -71,7 +71,7 @@ mock. The separate web preview implements the browser runtime with that same moc
   goes to its own origin. Other services are refused. Host fingerprints are checked before use.
 - One tab can connect to a given host with an account. Other accounts and hosts have separate
   locks. A second tab gets an explicit message instead of replacing the first tab's peer.
-- As on mobile, the server rail shows the real state of every host. Each host that no tab has open
+- The client keeps the real state of every host of the account. Each host that no tab has open
   gets a status connection (connect and compatibility read, no events) in one tab, which holds that
   host's lock. The other tabs learn its state on a `BroadcastChannel`. A tab that opens the host
   asks for it on the channel: the status connection ends its session, then gives up the lock, and

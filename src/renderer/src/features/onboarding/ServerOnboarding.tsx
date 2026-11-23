@@ -1,8 +1,7 @@
 import type { AgentModelId, AgentProviderId } from "@openbot/contracts/ipc";
-import { Button, ErrorReference, IconButton, X } from "@openbot/ui";
+import { Button, ErrorReference } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
-import { createSignal, createUniqueId, onSettled, Show } from "solid-js";
-import { listenForEscape } from "./onboarding-escape";
+import { createSignal, createUniqueId, Show } from "solid-js";
 import { createSetupProviders, SetupProviderPicker, type SetupProviderProps } from "./SetupProviderPicker";
 import { createSetupNext } from "./setup-next";
 
@@ -16,11 +15,6 @@ export interface ServerOnboardingProps {
    * keeps its own default, and names an endpoint when the user chose their own.
    */
   onContinue: (provider: AgentProviderId, model: AgentModelId | null) => void;
-  /**
-   * Goes back to the server that was open before, from the close button or Escape. With no other
-   * server, the screen has no close.
-   */
-  onClose?: (() => void) | undefined;
 }
 
 /**
@@ -40,9 +34,6 @@ export function ServerOnboarding(props: ServerOnboardingProps) {
   const next = createSetupNext(providers);
   const reasonId = createUniqueId();
 
-  // The sign-in dialog, the add server dialog and a row menu close on Escape themselves.
-  onSettled(() => listenForEscape(() => props.onClose));
-
   function continueToAgent(): void {
     const provider = providers.selectedProvider();
     if (!provider || !providers.selectedProviderConnected()) {
@@ -58,13 +49,6 @@ export function ServerOnboarding(props: ServerOnboardingProps) {
       aria-labelledby="server-onboarding-title"
       ref={(element) => setScreenElement(element)}
     >
-      <Show when={props.onClose}>
-        {(close) => (
-          <IconButton class="server-onboarding-close" label={t("common.close")} variant="ghost" onClick={close()}>
-            <X />
-          </IconButton>
-        )}
-      </Show>
       <div class="onboarding-shell">
         <section class="onboarding-panel">
           <h1 id="server-onboarding-title">{t("onboarding.server.title", { server: props.serverName })}</h1>

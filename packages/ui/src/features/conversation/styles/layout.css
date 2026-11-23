@@ -61,10 +61,6 @@
   color: var(--openbot-text-primary);
 }
 
-.app-frame-with-server-rail .direct-conversation {
-  grid-column: 4;
-}
-
 .direct-conversation-header {
   display: flex;
   height: 46px;
@@ -275,8 +271,4 @@
 .direct-composer > button:disabled {
   background: var(--openbot-border);
   color: var(--openbot-text-dim);
-}
-
-.app-frame-with-server-rail .conversation-panel {
-  grid-column: 4;
 }

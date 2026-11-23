@@ -19,13 +19,11 @@
 }
 
 @media (max-width: 640px) {
-  .openbot-playground-root .app-frame,
-  .openbot-playground-root .app-frame-with-server-rail {
+  .openbot-playground-root .app-frame {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 68px minmax(0, 1fr);
   }
 
-  .openbot-playground-root .server-rail,
   .openbot-playground-root .left-panel-resizer,
   .openbot-playground-root .sidebar-topbar,
   .openbot-playground-root .sidebar-search-wrap,
@@ -83,8 +81,7 @@
 
   /* The chat is inside the panes wrapper, which the frame puts in the first row. */
   .openbot-playground-root .app-frame-panes,
-  .openbot-playground-root .conversation-panel,
-  .openbot-playground-root .app-frame-with-server-rail .conversation-panel {
+  .openbot-playground-root .conversation-panel {
     grid-column: 1;
     grid-row: 2;
   }

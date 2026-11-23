@@ -111,8 +111,8 @@ export function SidebarTopbar() {
             );
           }}
         </Show>
-        {/* The menu view needs the room for the server name. The page rail also opens the marketplace. */}
-        <Show when={props.compact || (props.marketplaceSupported !== false && props.serverMenu?.view !== "menu")}>
+        {/* The server menu needs the room for the server name. The page rail also opens the marketplace. */}
+        <Show when={props.compact || (props.marketplaceSupported !== false && !props.serverMenu)}>
           <Button
             variant="ghost"
             type="button"

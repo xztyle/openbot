@@ -62,7 +62,7 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
   const tasksOpen = () => windowPage.page() === "tasks";
   const platform = usePlatform();
   const channels = useChannels();
-  const { activeServer, activeServerId, activeServerSupportsCapability } = useServers();
+  const { servers, activeServer, activeServerId, activeServerSupportsCapability } = useServers();
   // The chats that main shows in a window of their own. Main sends the list on each change.
   const [chatWindows, setChatWindows] = createSignal<ChatWindowTarget[]>([]);
   onSettled(() => {
@@ -254,19 +254,7 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
         const badge = server ? serverUpdateBadge(server.id) : null;
         return server && badge ? { ...badge, onOpen: () => void showServerUpdate(server.id) } : undefined;
       })()}
-      serverMenu={
-        platform.appInfo()
-          ? {
-              servers: serverActions.orderedServers(),
-              view: layout.serverView(),
-              onViewChange: layout.setServerView,
-              onSelect: serverActions.select,
-              onAdd: serverActions.add,
-              addCreatesServer: serverActions.addCreatesServer(),
-              ...serverActions.callbacks,
-            }
-          : undefined
-      }
+      serverMenu={platform.appInfo() ? { servers: servers(), ...serverActions.callbacks } : undefined}
       agents={agentList()}
       activeAgentId={tasksOpen() || activeDirectMember() || channels.state.selectedId ? "" : (activeAgent()?.id ?? "")}
       showPeople={props.peopleEnabled}

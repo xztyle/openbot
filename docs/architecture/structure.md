@@ -142,7 +142,7 @@ tokens and include the package source in Tailwind scanning. App-specific styles 
 the application. The desktop TypeScript project includes the package source for CI checks.
 
 The package also owns prop-driven feature UI: the complete sidebar and its scoped interaction
-stores, account login, server rail and invitation dialog, message rendering, composer
+stores, account login, server menu and invitation dialog, message rendering, composer
 editor, attachment cards, preview renderers, agent setup, and reusable settings panels. Feature
 exports use explicit subpaths such as `@openbot/ui/features/sidebar/Sidebar`. Shared display
 models live at `@openbot/ui/data`. Source files are moved, not copied or re-exported from the

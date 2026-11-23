@@ -484,7 +484,7 @@ The renderer's workspace (`src/renderer/src/features/workspace/`) is the main vi
 channels controller, agents and their runtime states, the presence roster, the reader, host events)
 and holds the route (a channel, the owner's agent DM, or a view), the right panel, the open thread
 page, drafts per conversation (local storage), the activity read and every workspace command. The
-desktop keeps the frame's left column for the server rail and the workspace sidebar; the middle shows
+desktop keeps the frame's left column for the workspace sidebar; the middle shows
 `WorkspaceMain` (the shared `WorkspaceLayout` with the message pane and the right panel) or, for the
 owner's agent DM, the existing agent chat under a DM header. The classic agent sidebar is a menu item
 (`workspace-mode.ts`, per computer), and the Routines view still uses it.

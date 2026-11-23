@@ -654,7 +654,6 @@ export const messages = defineMessages("workspace", {
   "workspace.phone.newActivity": { one: "{count} new item", other: "{count} new items" },
   "workspace.phone.switch": "Switch space",
   "workspace.phone.spaces": "Spaces",
-  "workspace.phone.servers": "Servers",
   "workspace.phone.shortcuts": "Shortcuts",
   "workspace.phone.views": "Workspace",
   "workspace.phone.server": "Server",

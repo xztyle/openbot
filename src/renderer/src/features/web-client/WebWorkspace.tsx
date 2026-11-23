@@ -130,7 +130,6 @@ import {
   ServerPanelLoadNotice,
   serverWorkspacePhase,
 } from "@openbot/ui/features/servers/ServerConnectionNotice";
-import { ServerRail } from "@openbot/ui/features/servers/ServerRail";
 import { ChatAppsDialog } from "@openbot/ui/features/settings/ChatAppsDialog";
 import type { SettingsPagePlacement } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { createSettingsHostedServersStore } from "@openbot/ui/features/settings/stores/hosted-servers-store";
@@ -1420,7 +1419,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     setServerSettingsLoaded(true);
     serverSettings.open(trigger);
   }
-  /** The server items of the rail and of the server menu. */
+  /** The server items of the server menu. */
   const serverActionCallbacks = {
     onOpenSettings: (serverId, trigger) => void openServerSettings(serverId, trigger),
     onSetMuted: setMuted,
@@ -1920,8 +1919,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       await select(agent.id);
     });
   }
-  /** The host a switch left, so the provider step of a new server can go back to it. */
-  const [previousHostId, setPreviousHostId] = createSignal<string | null>(null);
+  /** Connects to a host of the account, such as the host that a link or a new hosted server names. */
   function selectServer(id: string) {
     if (workspace.state.host?.hostId !== id) chatHistory.userOpensServer(id);
     void connectServer(id);
@@ -1929,16 +1927,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   async function connectServer(id: string): Promise<void> {
     const host = workspace.state.hosts.find((item) => item.hostId === id);
     if (!host) return;
-    const current = workspace.state.host?.hostId;
-    if (current && current !== id) setPreviousHostId(current);
     await workspace.connect(host);
   }
-  /** The server the provider step goes back to: the one open before, else any other on the rail. */
-  const returnHostId = () => {
-    const current = workspace.state.host?.hostId;
-    const others = workspace.state.hosts.filter((item) => item.hostId !== current);
-    return others.find((item) => item.hostId === previousHostId())?.hostId ?? others[0]?.hostId;
-  };
   /** As on desktop: Agents and Routines show the same page; they set the list of the sidebar. */
   function showSidebarView(view: SidebarView) {
     showAgents();
@@ -3230,16 +3220,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
             }
             left={
               <>
-                <Show when={layout.serverRailVisible() && !phoneShell()}>
-                  <ServerRail
-                    servers={servers()}
-                    onSelect={selectServer}
-                    onReorder={workspace.reorderHosts}
-                    onAdd={() => hostedServers.openAddServer("server_rail")}
-                    addCreatesServer={hostedServers.available()}
-                    {...serverActionCallbacks}
-                  />
-                </Show>
                 <Show
                   when={workspaceOn()}
                   fallback={
@@ -3280,15 +3260,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                         const badge = id ? serverUpdateBadge(id) : null;
                         return id && badge ? { ...badge, onOpen: () => void showServerUpdate(id) } : undefined;
                       })()}
-                      serverMenu={{
-                        servers: servers(),
-                        view: layout.serverView(),
-                        onViewChange: layout.setServerView,
-                        onSelect: selectServer,
-                        onAdd: () => hostedServers.openAddServer("server_rail"),
-                        addCreatesServer: hostedServers.available(),
-                        ...serverActionCallbacks,
-                      }}
+                      serverMenu={{ servers: servers(), ...serverActionCallbacks }}
                       agents={workspace.profiles()}
                       activeAgentId={tasksOpen() || channelOpen() ? "" : (workspace.state.selectedId ?? "")}
                       people={[]}
@@ -3408,13 +3380,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                             avatarUrl: props.accountAvatarUrl ?? null,
                           }}
                           onOpenAccount={() => openFromPhoneList(() => openAccountSettings())}
-                          servers={servers().map((item) => ({
-                            id: item.id,
-                            name: item.name,
-                            active: item.active,
-                            unavailable: item.state !== "online",
-                          }))}
-                          onSelectServer={selectServer}
                           moreSections={phoneMoreSections()}
                           banner={serverNotices(true)}
                         />
@@ -3797,14 +3762,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                           [id]: { preferredProvider: provider, preferredModel: model },
                         }));
                     }}
-                    onClose={
-                      returnHostId()
-                        ? () => {
-                            const id = returnHostId();
-                            if (id) selectServer(id);
-                          }
-                        : undefined
-                    }
                   />
                 </Loading>
               )}

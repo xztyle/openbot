@@ -546,22 +546,16 @@ export const LongServerName: Story = {
   decorators: [(Story) => <div style={{ width: "240px", height: "100vh" }}>{Story()}</div>],
 };
 
-const serverMenu = {
-  servers: STORY_SERVERS,
-  onViewChange: fn(),
-  onSelect: fn(),
-  onAdd: fn(),
-  onSetMuted: fn(),
-  onSetNotificationLevel: fn(),
-  onOpenSettings: fn(),
-};
-
-export const ServerMenuRailView: Story = {
-  args: { serverMenu: { ...serverMenu, view: "rail" } },
-};
-
-export const ServerMenuMenuView: Story = {
-  args: { serverMenu: { ...serverMenu, view: "menu" } },
+/** The menu on the server name: the actions of the server that the app runs on. */
+export const ServerMenu: Story = {
+  args: {
+    serverMenu: {
+      servers: STORY_SERVERS,
+      onSetMuted: fn(),
+      onSetNotificationLevel: fn(),
+      onOpenSettings: fn(),
+    },
+  },
 };
 
 export const EmptyPinDropTarget: Story = {

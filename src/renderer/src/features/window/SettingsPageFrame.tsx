@@ -1,6 +1,6 @@
 import type { ServerSummary } from "@openbot/contracts/ipc";
 import { ChevronLeft, IconButton, X } from "@openbot/ui";
-import { ServerMark } from "@openbot/ui/features/servers/ServerRail";
+import { ServerMark } from "@openbot/ui/features/servers/ServerMark";
 import type { SettingsPagePlacement } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";

@@ -1,6 +1,6 @@
 import { z } from "zod/mini";
 
-type ServerOrderStorage = Pick<Storage, "getItem" | "setItem">;
+type ServerOrderStorage = Pick<Storage, "getItem">;
 
 const serverOrderSchema = z.array(z.string().check(z.trim(), z.minLength(1)));
 
@@ -8,25 +8,16 @@ function serverOrderKey(accountId: string): string {
   return `openbot.web.server-order:${accountId}`;
 }
 
-/** The rail order that this browser keeps for one account. Mobile keeps its own order the same way. */
+/**
+ * The host order that an earlier version of this browser saved for one account, from its server rail.
+ * The first host in it is the one that the client connects to when no host was open before.
+ */
 export function readWebServerOrder(accountId: string, storage: ServerOrderStorage = window.localStorage): string[] {
   try {
     const parsed = serverOrderSchema.safeParse(JSON.parse(storage.getItem(serverOrderKey(accountId)) ?? "[]"));
     return parsed.success ? parsed.data : [];
   } catch {
     return [];
-  }
-}
-
-export function writeWebServerOrder(
-  accountId: string,
-  hostIds: readonly string[],
-  storage: ServerOrderStorage = window.localStorage,
-): void {
-  try {
-    storage.setItem(serverOrderKey(accountId), JSON.stringify(hostIds));
-  } catch {
-    // A UI preference must not block navigation when browser storage is unavailable.
   }
 }
 

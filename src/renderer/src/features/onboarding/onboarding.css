@@ -558,13 +558,6 @@
   position: fixed;
 }
 
-.server-onboarding-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  -webkit-app-region: no-drag;
-}
-
 /* The first question of first run. The team rises in from the sides to the large agent in the
    middle; the two answers are rows of one grouped list. */
 

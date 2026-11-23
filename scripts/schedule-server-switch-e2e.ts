@@ -33,6 +33,21 @@ interface Report {
 const report: Report = { passed: false };
 
 /** Waits until the calendar is no longer loading, then fails on the load error. */
+const rail = (page: Page) => page.getByRole("navigation", { name: t("app.rail.label") });
+
+/** Opens Schedule: a rail button when it is pinned, else a row of the rail's More menu. */
+async function openSchedule(page: Page): Promise<void> {
+  const pinned = rail(page).getByRole("button", { name: t("app.rail.schedule"), exact: true });
+  if (await pinned.isVisible()) return pinned.click();
+  await rail(page)
+    .getByRole("button", { name: t("app.rail.more"), exact: true })
+    .click();
+  await page
+    .getByRole("menuitem", { name: new RegExp(`^${t("app.rail.schedule")}`, "u") })
+    .first()
+    .click();
+}
+
 async function calendarReady(page: Page): Promise<void> {
   const schedule = page.getByRole("region", { name: t("routine.calendar.title") });
   await schedule.waitFor();
@@ -57,7 +72,9 @@ const browser = await chromium.launch();
 try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
   await page.goto(`${storybook}/iframe.html?id=app--playground&viewMode=story`);
-  await page.getByRole("button", { name: t("app.rail.schedule"), exact: true }).waitFor();
+  await rail(page)
+    .getByRole("button", { name: t("app.rail.more"), exact: true })
+    .waitFor();
   // Each server has one routine named after it, with a run in the next hour. Each request is
   // recorded with the server it asked.
   await page.evaluate(() => {
@@ -90,7 +107,7 @@ try {
   report.from = from.id;
   report.to = to.id;
 
-  await page.getByRole("button", { name: t("app.rail.schedule"), exact: true }).click();
+  await openSchedule(page);
   await calendarReady(page);
   report.routinesBeforeSwitch = await visibleRoutines(page);
   assert.deepEqual(report.routinesBeforeSwitch, [`Routine@${from.id}`], "The first server's calendar is wrong.");

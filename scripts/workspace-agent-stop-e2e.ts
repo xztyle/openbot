@@ -37,12 +37,22 @@ interface Report {
 
 const report: Report = { passed: false };
 
+/** Waits for the channel list. A phone opens on Today; its channels are on the Chat tab. */
+async function showChannels(page: Page): Promise<void> {
+  const general = page.getByText("general", { exact: true }).first();
+  const chat = page.getByRole("navigation", { name: "Workspace sections" }).getByRole("button", { name: /^Chat/u });
+  // A cold Storybook bundles its dependencies on the first load.
+  await general.or(chat).first().waitFor({ timeout: 120_000 });
+  if (await chat.isVisible()) await chat.click();
+  await general.waitFor({ timeout: 30_000 });
+}
+
 async function openStory(browser: Browser, options: BrowserContextOptions): Promise<Page> {
   const context = await browser.newContext(options);
   const page = await context.newPage();
   await page.goto(`${storybook}/iframe.html?id=${STORY}&viewMode=story`, { waitUntil: "load", timeout: 180_000 });
   // A cold Storybook bundles its dependencies on the first load.
-  await page.getByText("general", { exact: true }).first().waitFor({ timeout: 120_000 });
+  await showChannels(page);
   return page;
 }
 

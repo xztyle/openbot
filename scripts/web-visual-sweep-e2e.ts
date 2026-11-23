@@ -13,6 +13,7 @@
 //
 // `bun scripts/web-visual-sweep-e2e.ts [--themes=craft,modern,riso] [--routes=<substring>] [--long]
 //   [--browser-executable=<path>] [--shots]`
+// deploy-tests timeout: 3600s (every theme on seven screen sizes takes about 45 minutes).
 // `--long` gives an agent, a channel and a message very long names and numbers. `--shots` keeps a
 // screenshot of each screen. Writes .openbot-build/web-visual-sweep-e2e/report.json.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";

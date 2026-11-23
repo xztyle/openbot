@@ -110,6 +110,8 @@ const NEEDS_SETUP: [RegExp, string][] = [
   [/Windows only/u, "Windows"],
   [/STRIPE_SECRET_KEY|--print-user-ids/u, "a Stripe test-mode key"],
   [/\belectron\b/iu, "Electron with a display"],
+  // An audit, not a check of one change: hours long, with findings that wait for translation work.
+  [/Opens every story of a running Storybook in each interface language/u, "an hours-long audit run by hand"],
 ];
 
 /** The newest Playwright headless Chromium, for scripts that take `--browser-executable`. */

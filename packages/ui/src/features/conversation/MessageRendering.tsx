@@ -34,7 +34,6 @@ import { CodePreview } from "./CodePreview";
 import { ComparisonTable } from "./ComparisonTable";
 import { CheckIcon, CopyIcon, PlusIcon, ReactionIcon, ReplyIcon, StopIcon } from "./ConversationIcons";
 import { createContentBlockCache } from "./contentBlockCache";
-import { createSmoothHeightResize } from "./createSmoothHeightResize";
 import { DataTable, type MessageContentBlock, messageContentBlocks, reuseUnchangedBlocks } from "./DataTable";
 import { messageFileReferences } from "./FileReference";
 import { ImageGeneration } from "./ImageGeneration";
@@ -101,7 +100,6 @@ function createStreamingBody(message: () => AgentMessage, animate?: boolean) {
   const [buffer, setBuffer] = createSignal({ id: shownId, text: shownBody });
   const [trail, setTrail] = createSignal<StreamingRevealChunk[]>([]);
   const [animateTail, setAnimateTail] = createSignal(false);
-  const [smoothHeight, setSmoothHeight] = createSignal(targetStreaming || animateInitialText);
   let smoothingActive = targetStreaming || animateInitialText;
   /* A plain copy, for the same reason as `shownBody`: true when the height smoothing, tail and
      trail are all off and no timer will change them. */
@@ -128,7 +126,6 @@ function createStreamingBody(message: () => AgentMessage, animate?: boolean) {
     if (smoothHeightTimer !== undefined) window.clearTimeout(smoothHeightTimer);
     smoothHeightTimer = undefined;
     smoothingSettled = false;
-    setSmoothHeight(true);
   };
   const settleHeightSmoothing = () => {
     /* Each row that the virtual list mounts comes here. When nothing animated, there is nothing to
@@ -139,7 +136,6 @@ function createStreamingBody(message: () => AgentMessage, animate?: boolean) {
       () => {
         smoothHeightTimer = undefined;
         smoothingSettled = true;
-        setSmoothHeight(false);
         setAnimateTail(false);
         setTrail([]);
       },
@@ -228,7 +224,7 @@ function createStreamingBody(message: () => AgentMessage, animate?: boolean) {
     return shown.id === current.id && current.body.startsWith(shown.text) ? shown.text : current.body;
   });
   const revealing = createMemo(() => message().streaming === true || body() !== message().body);
-  return { animateTail, body, smoothHeight, revealing, trail };
+  return { animateTail, body, revealing, trail };
 }
 
 /**
@@ -373,11 +369,9 @@ export function MessageBody(props: {
   });
   let messageContentResize: HTMLDivElement | undefined;
   let messageContent: HTMLDivElement | undefined;
-  createSmoothHeightResize({
-    container: () => messageContentResize,
-    content: () => messageContent,
-    enabled: () => props.message.author === "agent" && streamingBody.smoothHeight(),
-  });
+  /* No height animation of a reply that grows: it started from the old height after the layout had
+     the new one, so a chat that follows the end read the taller list, scrolled to it, and was then
+     pulled back by a line on each new line. The words still fade in. */
   // A markdown image is a web address, not an attachment, so the viewer has no download for it.
   const [lightbox, setLightbox] = createSignal<(ImageLightboxOpening & { markdown?: boolean }) | null>(null);
   const lightboxImages = createMemo(() => (props.message.attachments ?? []).filter(inlineImage).map(shownImage));

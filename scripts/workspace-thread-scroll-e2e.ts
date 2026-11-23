@@ -147,6 +147,22 @@ async function run(browser: Browser, options: BrowserContextOptions, touch: bool
   await nextReply(page, openedAtEnd.replies);
   const followedAtEnd = await place(page);
 
+  // An agent's progress replies fold into one row, so the thread can fit in a tall panel. The reader
+  // opens the earlier updates, and the replies fill more than the panel: now they can leave the end.
+  await press(
+    page
+      .locator("section.ws-thread-panel")
+      .getByRole("button", { name: /more updates/i })
+      .first(),
+  );
+  await page.waitForFunction(
+    (limit) => {
+      const element = document.querySelector("section.ws-thread-panel .ws-thread-scroll");
+      return element ? element.scrollHeight - element.clientHeight > limit * 2 : false;
+    },
+    FOLLOW_DISTANCE,
+    { timeout: 10_000 },
+  );
   await scrollThreadTo(page, 0);
   const before = await place(page);
   await nextReply(page, before.replies);

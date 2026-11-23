@@ -27,7 +27,7 @@ import { MessageRow } from "@openbot/ui/features/workspace/MessageRow";
 import { StepTrail } from "@openbot/ui/features/workspace/StepTrail";
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createMemo, createSignal, For, Show, untrack } from "solid-js";
 import { toAgentMessage } from "../../app-message-projection";
 import { writeClipboardText } from "../../clipboard";
 import { WorkspaceChatCard } from "../portfolio/WorkspaceChatCard";
@@ -430,12 +430,25 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
 }
 
 /**
+ * The folds that the reader opened, by their first line, for this window's life. A thread or channel
+ * opened again shows them open, so the place saved in it points at the same replies.
+ */
+const openProgressFolds = new Set<string>();
+
+/**
  * The progress lines that an agent posted one after another, folded under the first: "28 more
  * updates" opens them in place. The newest line shows as its own row below.
  */
 function ProgressFold(props: { lines: readonly ChannelMessage[] }) {
   const { t, format } = useText();
-  const [open, setOpen] = createSignal(false);
+  const key = () => props.lines[0]?.id ?? "";
+  const [open, setOpen] = createSignal(openProgressFolds.has(untrack(key)));
+  const toggle = () => {
+    const next = !open();
+    if (next) openProgressFolds.add(key());
+    else openProgressFolds.delete(key());
+    setOpen(next);
+  };
   return (
     <div class="ws-progress-fold" data-open={open() ? "" : undefined}>
       <Button
@@ -443,7 +456,7 @@ function ProgressFold(props: { lines: readonly ChannelMessage[] }) {
         size="xs"
         class="ws-progress-fold-toggle"
         aria-expanded={open() ? "true" : "false"}
-        onClick={() => setOpen((value) => !value)}
+        onClick={toggle}
       >
         <ChevronRight aria-hidden="true" />
         {open()

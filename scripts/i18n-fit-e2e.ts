@@ -1,8 +1,9 @@
-// Opens every story of a running Storybook in each interface language, and finds control text that
+// Opens every story of a running Storybook in English and Spanish, and finds control text that
 // does not fit: a button, tab, menu item, option, badge or select value whose text is cut off,
 // runs past its box, or wraps to a second line. Opens each menu and list trigger once, so the items
 // of a closed menu are measured too. Pass the URL that `bun run storybook` reports:
-// `bun scripts/i18n-fit-e2e.ts --storybook=http://localhost:6006 [--locales=de,pl] [--stories=sidebar,dialog]`.
+// `bun scripts/i18n-fit-e2e.ts --storybook=http://localhost:6006 [--locales=es] [--stories=sidebar,dialog]`.
+// It is no part of a deploy: `scripts/i18n-fit-weekly.sh` runs it once a week on the server.
 // Writes .openbot-build/i18n-fit/report.json and one screenshot per failure that English does not have.
 // `--out=<name>` writes to .openbot-build/<name> instead, so a second run keeps the first report.
 import assert from "node:assert/strict";
@@ -42,15 +43,17 @@ const storyFilters = option("stories")?.split(",") ?? [];
 const workers = Number(option("workers") ?? "1");
 assert.ok(Number.isInteger(workers) && workers >= 1, "--workers takes a whole number, 1 or more.");
 const requestedLocales = option("locales")?.split(",");
+/** The owner's languages: Atelier ships in English and Spanish, so the audit checks those two. */
+const AUDITED_LOCALES = TRANSLATED_LOCALES.filter((locale) => locale === "en" || locale === "es");
 for (const locale of requestedLocales ?? []) {
   assert.ok(
-    TRANSLATED_LOCALES.some((known) => known === locale),
-    `--locales: "${locale}" is not one of ${TRANSLATED_LOCALES.join(", ")}.`,
+    AUDITED_LOCALES.some((known) => known === locale),
+    `--locales: "${locale}" is not one of ${AUDITED_LOCALES.join(", ")}.`,
   );
 }
 const locales: readonly TranslatedLocale[] = requestedLocales
-  ? TRANSLATED_LOCALES.filter((locale) => requestedLocales.includes(locale))
-  : TRANSLATED_LOCALES;
+  ? AUDITED_LOCALES.filter((locale) => requestedLocales.includes(locale))
+  : AUDITED_LOCALES;
 // English runs first and always: it is the baseline that marks a failure as not caused by a translation.
 const order: TranslatedLocale[] = ["en", ...locales.filter((locale) => locale !== "en")];
 // Design explorations are not shipped screens.

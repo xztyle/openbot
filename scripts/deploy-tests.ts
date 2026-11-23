@@ -110,9 +110,13 @@ const NEEDS_SETUP: [RegExp, string][] = [
   [/Windows only/u, "Windows"],
   [/STRIPE_SECRET_KEY|--print-user-ids/u, "a Stripe test-mode key"],
   [/\belectron\b/iu, "Electron with a display"],
-  // An audit, not a check of one change: hours long, with findings that wait for translation work.
-  [/Opens every story of a running Storybook in each interface language/u, "an hours-long audit run by hand"],
 ];
+
+/**
+ * Scripts that are not part of a deploy. The text-fit audit of every story in English and Spanish
+ * runs once a week on the server (`scripts/i18n-fit-weekly.sh`), and sends its count to the owner.
+ */
+const NOT_PER_DEPLOY = new Set(["i18n-fit-e2e.ts"]);
 
 /** The newest Playwright headless Chromium, for scripts that take `--browser-executable`. */
 function headlessChromium(): string | null {
@@ -130,7 +134,7 @@ const browserExecutable = headlessChromium();
 function standaloneE2e(): Test[] {
   const critical = new Set(CRITICAL.map((test) => test.name));
   return readdirSync(join(root, "scripts"))
-    .filter((file) => /-e2e\.ts$/u.test(file) && !critical.has(file))
+    .filter((file) => /-e2e\.ts$/u.test(file) && !critical.has(file) && !NOT_PER_DEPLOY.has(file))
     .sort()
     .map((file) => {
       const source = readFileSync(join(root, "scripts", file), "utf8");

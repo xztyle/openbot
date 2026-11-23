@@ -4,8 +4,8 @@
 // tab and pane, Maximize and Restore, a resize, and Delete on a tab. Both stories open on the
 // workspace, so each step first opens the owner's DM with an agent, which is the agent's chat. At a
 // phone width the web client alone is checked: More in the DM header opens the panel, an open pane
-// takes the full width under the DM header, which keeps the panel button while the panel is open, and
-// the tab row does not cover it.
+// takes the full width under the DM header, which keeps the panel button while the panel is open, the
+// tab row does not cover it, and the pane has no Maximize (it would cover Back).
 //
 // `bun scripts/web-side-panel-e2e.ts --storybook=<url> [--browser-executable=<path>]`
 // Writes .openbot-build/web-side-panel-e2e/report.json and a screenshot of each client, width and
@@ -67,10 +67,22 @@ async function measure(page: Page): Promise<Record<string, Part>> {
       const box = element.getBoundingClientRect();
       const style = getComputedStyle(element);
       if (style.visibility === "hidden" || box.width === 0) continue;
+      // The header's Browser menu shows only while the agent has open tabs, and only the desktop
+      // story's agent has some. Compare the header without that button.
+      const browser =
+        selector === ".conversation-header"
+          ? [...element.querySelectorAll(".conversation-header-actions > button")].find((button) =>
+              /browser$/iu.test(button.getAttribute("aria-label") ?? ""),
+            )
+          : undefined;
+      const extra = browser
+        ? browser.getBoundingClientRect().width +
+          (Number.parseFloat(getComputedStyle(browser.parentElement ?? element).columnGap) || 0)
+        : 0;
       parts[selector] = {
-        x: Math.round(box.x),
+        x: Math.round(box.x + extra),
         y: Math.round(box.y),
-        width: Math.round(box.width),
+        width: Math.round(box.width - extra),
         height: Math.round(box.height),
         style: [style.font, style.color, style.backgroundColor, style.borderRadius, style.padding].join(" | "),
       };
@@ -121,9 +133,18 @@ async function open(browser: Browser, client: Client, width: number): Promise<Pa
   const page = await browser.newPage({ viewport: { width, height: HEIGHT } });
   await page.goto(`${storybook}/iframe.html?id=${STORIES[client]}&viewMode=story`);
   const agentRow = page.getByRole("button", { name: AGENT_ROW, exact: true });
-  await agentRow.waitFor({ timeout: 120_000 });
+  // A phone opens the workspace on Today; its channels and DMs are on the Chat tab.
+  const chat = page.getByRole("navigation", { name: "Workspace sections" }).getByRole("button", { name: /^Chat/u });
+  await agentRow.or(chat).first().waitFor({ timeout: 120_000 });
+  if (await chat.isVisible()) await chat.click();
+  await agentRow.waitFor({ timeout: 30_000 });
   await agentRow.click();
-  await page.locator(".side-panel-toggle").first().waitFor({ timeout: 60_000 });
+  // A phone's header keeps More in place of the panel button while the panel is closed.
+  const control =
+    width === PHONE_WIDTH
+      ? page.getByRole("button", { name: "More actions" }).first()
+      : page.locator(".side-panel-toggle").first();
+  await control.waitFor({ timeout: 60_000 });
   return page;
 }
 
@@ -227,14 +248,12 @@ async function phone(browser: Browser) {
     const settingsToggleReachable = await reachable(toggle);
     await shot(page, `web-${PHONE_WIDTH}-settings`);
 
-    await page.getByRole("button", { name: "Maximize" }).click();
-    await settled(page);
-    const maximized = await measure(page);
-    await shot(page, `web-${PHONE_WIDTH}-maximized`);
-    // A maximized pane covers the chat header, so its own button closes the panel.
-    await page.locator(".side-panel-actions").getByRole("button", { name: "Close side panel" }).click();
+    // The pane already covers the chat on a phone, so it has no Maximize: that would also cover the
+    // DM header with Back. The header's panel button closes the panel.
+    const maximizeShown = await page.getByRole("button", { name: "Maximize" }).isVisible();
+    await toggle.click();
     await page.locator(".side-panel-header").waitFor({ state: "detached" });
-    return { launcher, toggleReachable, settings, settingsToggleReachable, maximized };
+    return { launcher, toggleReachable, settings, settingsToggleReachable, maximizeShown };
   } finally {
     await page.close();
   }
@@ -316,17 +335,7 @@ try {
       result.settings[".settings-panel"]?.y === tabs.y + tabs.height,
     result.settings[".settings-panel"],
   );
-  // The DM header stays over a maximized pane: it has Back and the panel button. The pane covers
-  // the messages and the message box under it.
-  const maximizedHeader = result.maximized[".ws-agent-dm-header"];
-  check(
-    `web ${PHONE_WIDTH}: a maximized pane covers the chat under the DM header`,
-    full(result.maximized[".side-panel-header"]) &&
-      maximizedHeader !== undefined &&
-      result.maximized[".side-panel-header"]?.y === maximizedHeader.y + maximizedHeader.height &&
-      full(result.maximized[".settings-panel"]),
-    result.maximized,
-  );
+  check(`web ${PHONE_WIDTH}: the pane has no Maximize, which would cover Back`, !result.maximizeShown);
   report.passed = checks.every((entry) => entry.passed);
 } catch (error) {
   report.error = error instanceof Error ? (error.stack ?? error.message) : String(error);

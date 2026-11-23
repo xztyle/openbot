@@ -1,15 +1,20 @@
-// End-to-end check of the app demo on the home page (the `/app-preview` iframe).
+// End-to-end check of the home page and of the app demo (the `/app-preview` page).
 //   bun scripts/landing-demo-e2e.ts [--origin=http://127.0.0.1:3100] [--browser-executable=<path>]
 // 1. Starts the site's development server on a free port, or uses `--origin`.
-// 2. Opens `/` in Chrome in the Europe/Warsaw time zone and checks, in the iframe:
+// 2. Opens `/` in Chrome at 1440 px and at 390 px with touch, and checks the Atelier landing: the
+//    heading, the workspace example, every call to action opens `/app`, the section links reach
+//    their sections, a question of the FAQ opens, no horizontal scroll, and no page error. At 390 px
+//    the bottom bar hides at the hero, shows below it and hides again at the last call to action.
+// 3. Opens the demo in a same-origin frame that sends the start message, as a page that embeds the
+//    demo does, in the Europe/Warsaw time zone, and checks:
 //    - desktop 1440 px: exactly the four agents, no foreign helper agent, no update card and no time
 //      zone toast; the visitor answers the channel question and the launch plan uses that answer;
 //      reactions, unread replies and a fuller context meter at the end; a click on each teammate
 //      plays its scene with its own model; a typed message gets the agent's scripted reply; the
 //      sidebar groups the chats in sections with no People section, and the launch channel opens with
 //      its history.
-//    - mobile 390 px: the four agents show side by side in the top row; the scene plays to the end
-//      with no visitor and uses the automatic answer.
+//    - mobile 390 px: the lead's chat takes the full width; the scene plays to the end with no visitor
+//      and uses the automatic answer; Back shows the four agents in the workspace list.
 //    - reduced motion: the end state shows at once, with no question to answer.
 // Writes .openbot-build/landing-demo/report.json and the screenshots beside it.
 import assert from "node:assert/strict";
@@ -17,8 +22,12 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
+import {
+  LANDING_PREVIEW_READY_MESSAGE,
+  LANDING_PREVIEW_START_MESSAGE,
+} from "@openbot/contracts/landing-preview-messages";
 import { createOpenBotLogger } from "@openbot/logging";
-import { type Browser, chromium, type FrameLocator, type Page } from "playwright-core";
+import { type Browser, chromium, type FrameLocator, type Locator, type Page } from "playwright-core";
 
 const logger = createOpenBotLogger("landing-demo-e2e");
 
@@ -29,7 +38,8 @@ const browserExecutable = option("browser-executable");
 const givenOrigin = option("origin");
 
 const TIME_ZONE = "Europe/Warsaw";
-const IFRAME = 'iframe[title="Interactive OpenBot application preview"]';
+const IFRAME_TITLE = "Interactive OpenBot application preview";
+const IFRAME = `iframe[title="${IFRAME_TITLE}"]`;
 const AGENTS = ["Atlas", "Scout", "Forge", "Pulse"] as const;
 const QUESTION = "Which channels should the launch use?";
 const AUTO_ANSWER = "Blog and changelog, X, Newsletter";
@@ -102,10 +112,104 @@ async function openDemo(
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
   });
-  await page.goto(`${origin}/`);
-  await page.locator(".landing-app-preview").scrollIntoViewIfNeeded();
+  // The home page no longer embeds the demo. A same-origin page hosts it as an embedding page does:
+  // it waits for the demo's ready message and answers with the start message.
+  await page.goto(`${origin}/terms`);
+  await page.evaluate(
+    ({ title, ready, start }) => {
+      document.body.innerHTML = "";
+      const host = document.createElement("section");
+      host.className = "landing-app-preview";
+      host.dataset.previewState = "loading";
+      host.style.cssText = "position:fixed;inset:0;margin:0";
+      const frame = document.createElement("iframe");
+      frame.title = title;
+      frame.style.cssText = "width:100%;height:100%;border:0";
+      window.addEventListener("message", (event) => {
+        if (event.source !== frame.contentWindow || event.data?.type !== ready) return;
+        if (host.dataset.previewState === "shown") return;
+        host.dataset.previewState = "shown";
+        frame.contentWindow?.postMessage({ type: start }, window.location.origin);
+      });
+      frame.src = "/app-preview";
+      host.append(frame);
+      document.body.append(host);
+    },
+    { title: IFRAME_TITLE, ready: LANDING_PREVIEW_READY_MESSAGE, start: LANDING_PREVIEW_START_MESSAGE },
+  );
   await page.locator('.landing-app-preview[data-preview-state="shown"]').waitFor({ timeout: SCENE_TIMEOUT_MS });
+  lastDemoPage = page;
   return { page, app: page.frameLocator(IFRAME), errors };
+}
+/** The demo opened last: on a failure, its accessibility tree and a screenshot show what it drew. */
+let lastDemoPage: Page | undefined;
+
+/** The phone's bottom bar: shown or hidden. */
+const barShown = (page: Page) => page.locator(".al-bar").getAttribute("data-shown");
+
+/** Checks the Atelier home page at one width. Answers what it found. */
+async function checkLanding(browser: Browser, width: number, height: number, touch: boolean) {
+  const context = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  try {
+    await page.goto(`${origin}/`);
+    const heading = page.getByRole("heading", { level: 1 });
+    await heading.waitFor();
+    assert.match((await heading.textContent()) ?? "", /equipo de IA/u);
+    const example = page.getByRole("figure", { name: /^Ejemplo del espacio de trabajo/u });
+    assert.equal(await example.isVisible(), true, "The workspace example must show.");
+    // Every call to action opens the app.
+    const calls = page.getByRole("link", { name: /^(Abrir mi espacio|Abrir Atelier|Entrar)$/u });
+    const targets = await calls.evaluateAll((links) => links.map((link) => link.getAttribute("href")));
+    assert.ok(targets.length >= 4, JSON.stringify(targets));
+    assert.ok(
+      targets.every((target) => target === "/app"),
+      JSON.stringify(targets),
+    );
+    // Each in-page link reaches a section of the page. The section menu shows from 720 px; a phone
+    // keeps the hero's "Ver cómo funciona".
+    const anchors = await page.locator('a[href^="#"]').evaluateAll((links) =>
+      links
+        .filter((link) => link.getClientRects().length > 0)
+        .map((link) => {
+          const id = link.getAttribute("href")?.replace(/^#/u, "") ?? "";
+          return { id, found: document.getElementById(id) !== null };
+        }),
+    );
+    assert.ok(
+      anchors.length >= (width >= 720 ? 4 : 1) && anchors.every((anchor) => anchor.found),
+      JSON.stringify(anchors),
+    );
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    assert.ok(overflow <= 0, `The page scrolls sideways by ${overflow} px at ${width} px.`);
+    await page.screenshot({ path: resolve(OUT, `landing-${width}.png`) });
+
+    // A question of the FAQ opens its answer.
+    const question = page.locator("#al-preguntas details").first();
+    await question.locator("summary").scrollIntoViewIfNeeded();
+    await (touch ? question.locator("summary").tap() : question.locator("summary").click());
+    assert.equal(await question.evaluate((element) => element instanceof HTMLDetailsElement && element.open), true);
+
+    let bar: { atHero: string | null; belowHero: string | null; atEnd: string | null } | undefined;
+    if (touch) {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForFunction(() => document.querySelector(".al-bar")?.getAttribute("data-shown") === "false");
+      const atHero = await barShown(page);
+      await page.locator("#al-como").scrollIntoViewIfNeeded();
+      await page.waitForFunction(() => document.querySelector(".al-bar")?.getAttribute("data-shown") === "true");
+      const belowHero = await barShown(page);
+      await page.screenshot({ path: resolve(OUT, `landing-${width}-bar.png`) });
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await page.waitForFunction(() => document.querySelector(".al-bar")?.getAttribute("data-shown") === "false");
+      bar = { atHero, belowHero, atEnd: await barShown(page) };
+    }
+    assert.deepEqual(errors, []);
+    return { width, callsToAction: targets.length, sections: anchors.map((anchor) => anchor.id), bar };
+  } finally {
+    await context.close();
+  }
 }
 
 const contextMeter = (app: FrameLocator) => app.locator('[aria-label^="Context "]').first();
@@ -113,20 +217,31 @@ const modelLabel = async (app: FrameLocator) =>
   (await app.getByRole("button", { name: /^Agent model: / }).getAttribute("aria-label")) ??
   (await app.getByRole("button", { name: /^Agent model: / }).textContent()) ??
   "";
+/** The workspace sidebar: a DM row per agent, named "<agent>, AI agent[, <state>]". */
+const chatList = (app: FrameLocator) => app.getByRole("navigation", { name: "Workspace" });
 const agentRow = (app: FrameLocator, name: string) =>
-  app.getByRole("navigation", { name: "Chat list" }).getByRole("button", { name: new RegExp(`^${name}, `) });
-const chatList = (app: FrameLocator) => app.getByRole("navigation", { name: "Chat list" });
-const CHANNEL_ROW = /^launch, Friday launch\. /u;
-const SECTIONS = ["Launch", "Research"] as const;
+  chatList(app).getByRole("button", { name: new RegExp(`^${name}, AI agent`, "u") });
+/** The unread count in an agent's DM row: its replies to the person mention them. */
+const unreadLabel = async (app: FrameLocator, name: string) =>
+  (await agentRow(app, name).getAttribute("aria-label"))?.match(/\d+ mentions?/u)?.[0] ?? "none";
+const CHANNEL_ROW = /^Channel launch/u;
+const SECTIONS = ["Channels", "Direct messages"] as const;
+const agentHeading = (app: FrameLocator, name: string) =>
+  app.getByRole("heading", { name: new RegExp(`^${name}, open details`, "u"), level: 1 });
+/** A text in the open chat or channel. The chat's live region also announces a new message; it is left out. */
+const chatText = (app: FrameLocator, text: string | RegExp) =>
+  app.getByRole("main").getByText(text).and(app.locator(":not([aria-live])"));
+/** The teammates' reactions on a message: one button each, "<name> reacted with <emoji>". */
+const reactions = (message: Locator) => message.getByRole("button", { name: / reacted with / });
 const launchPlan = (app: FrameLocator) =>
-  app.getByRole("article", { name: "Message from Atlas" }).filter({
+  app.getByRole("article", { name: /^Atlas at / }).filter({
     has: app.getByRole("heading", { name: "Friday's launch plan" }),
   });
 
 /** Checks what every view shows: the four agents, the channel, and none of the old noise or people. */
 async function checkRoster(app: FrameLocator): Promise<string[]> {
   const rows = chatList(app).getByRole("button");
-  await rows.first().waitFor();
+  await rows.first().waitFor({ timeout: SCENE_TIMEOUT_MS });
   const names = (await rows.allTextContents()).map((text) => text.trim());
   for (const agent of AGENTS) assert.equal(await agentRow(app, agent).count(), 1, `${agent}: ${names}`);
   assert.equal(await chatList(app).getByRole("button", { name: CHANNEL_ROW }).count(), 1, names.join(" | "));
@@ -171,6 +286,9 @@ try {
     browserExecutable ? { executablePath: browserExecutable } : { channel: "chrome" },
   );
   try {
+    // The Atelier home page, on a computer and on a phone.
+    const landing = [await checkLanding(browser, 1440, 900, false), await checkLanding(browser, 390, 844, true)];
+
     // Desktop: the visitor answers the question and clicks through the team.
     const desktop = await openDemo(browser, origin, { width: 1440, height: 900 }, "no-preference");
     const { app } = desktop;
@@ -189,9 +307,10 @@ try {
 
     const plan = launchPlan(app);
     await plan.waitFor({ timeout: SCENE_TIMEOUT_MS });
-    const reactions = plan.getByRole("group", { name: /^Reactions: / });
-    await reactions.waitFor({ timeout: SCENE_TIMEOUT_MS });
-    const reactionLabel = (await reactions.getAttribute("aria-label")) ?? "";
+    await reactions(plan).first().waitFor({ timeout: SCENE_TIMEOUT_MS });
+    const reactionLabel = (
+      await reactions(plan).evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label")))
+    ).join(", ");
     // The reactions come after the stream, so the table is complete.
     const channels = await plan.getByRole("row").allTextContents();
     assert.ok(
@@ -208,7 +327,7 @@ try {
     const contextAfter = (await contextMeter(app).getAttribute("aria-label")) ?? "";
     const unread: Record<string, boolean> = {};
     for (const agent of AGENTS.slice(1)) {
-      unread[agent] = (await agentRow(app, agent).textContent())?.includes("1 new reply") === true;
+      unread[agent] = (await unreadLabel(app, agent)) === "1 mention";
     }
     assert.deepEqual(unread, { Scout: true, Forge: true, Pulse: true });
     const models: Record<string, string> = { Atlas: await modelLabel(app) };
@@ -219,12 +338,12 @@ try {
     // while the answer streams, so each scene also ends at once when the visitor leaves.
     for (const agent of AGENTS.slice(1)) {
       await agentRow(app, agent).click();
-      await app.getByRole("heading", { name: agent, level: 1 }).waitFor();
+      await agentHeading(app, agent).waitFor();
       const prompt = SCENE_PROMPTS[agent];
       const answer = SCENE_ANSWERS[agent];
       assert.ok(prompt && answer);
-      await app.getByRole("article", { name: "Message from You" }).filter({ hasText: prompt }).waitFor();
-      await app.getByText(answer).waitFor({ timeout: SCENE_TIMEOUT_MS });
+      await app.getByRole("article").filter({ hasText: prompt }).first().waitFor();
+      await chatText(app, answer).waitFor({ timeout: SCENE_TIMEOUT_MS });
       models[agent] = await modelLabel(app);
       await desktop.page
         .locator(".landing-app-preview")
@@ -237,27 +356,27 @@ try {
     const composer = app.getByRole("textbox", { name: "Message Pulse" });
     await composer.fill(TYPED_MESSAGE);
     await composer.press("Enter");
-    await app.getByText(TYPED_REPLY).waitFor({ timeout: SCENE_TIMEOUT_MS });
+    await chatText(app, TYPED_REPLY).waitFor({ timeout: SCENE_TIMEOUT_MS });
     await app.getByRole("button", { name: "Send message" }).waitFor();
-    assert.equal(await app.getByText(/Mock reply/u).count(), 0);
+    assert.equal(await chatText(app, /Mock reply/u).count(), 0);
     await desktop.page.locator(".landing-app-preview").screenshot({ path: resolve(OUT, "desktop-typed-reply.png") });
 
     // A scene that the visitor left while it streamed is complete, once, on return.
     const leftUnread: Record<string, string> = {};
     for (const agent of ["Scout", "Forge"]) {
-      leftUnread[agent] = (await agentRow(app, agent).textContent())?.match(/\d+ new repl(y|ies)/u)?.[0] ?? "none";
+      leftUnread[agent] = await unreadLabel(app, agent);
       await agentRow(app, agent).click();
-      await app.getByRole("heading", { name: agent, level: 1 }).waitFor();
+      await agentHeading(app, agent).waitFor();
       const ending = SCENE_ENDINGS[agent];
       assert.ok(ending);
-      await app.getByText(ending).waitFor();
-      assert.equal(await app.getByText(ending).count(), 1, agent);
+      await chatText(app, ending).waitFor();
+      assert.equal(await chatText(app, ending).count(), 1, agent);
       assert.equal(await app.getByRole("button", { name: "Stop agent" }).count(), 0, agent);
     }
 
     // The launch channel opens with its history.
     await chatList(app).getByRole("button", { name: CHANNEL_ROW }).click();
-    await app.getByLabel("Conversation").getByText(CHANNEL_LAST_LINE).waitFor();
+    await chatText(app, CHANNEL_LAST_LINE).waitFor();
     await desktop.page.locator(".landing-app-preview").screenshot({ path: resolve(OUT, "desktop-channel.png") });
     assert.deepEqual(desktop.errors, []);
     await desktop.page.context().close();
@@ -268,14 +387,13 @@ try {
       timeout: SCENE_TIMEOUT_MS,
     });
     await agentRow(early.app, "Scout").click();
-    await early.app.getByRole("heading", { name: "Scout", level: 1 }).waitFor();
-    await agentRow(early.app, "Atlas")
-      .filter({ hasText: /new repl/u })
-      .waitFor();
-    await early.app.getByText(SCENE_ANSWERS.Scout ?? "").waitFor({ timeout: SCENE_TIMEOUT_MS });
+    await agentHeading(early.app, "Scout").waitFor();
+    await early.app.getByRole("button", { name: /^Atlas, AI agent, \d+ mentions?/u }).waitFor();
+    await chatText(early.app, SCENE_ANSWERS.Scout ?? "").waitFor({ timeout: SCENE_TIMEOUT_MS });
     await agentRow(early.app, "Atlas").click();
     await launchPlan(early.app)
-      .getByRole("group", { name: /^Reactions: / })
+      .getByRole("button", { name: / reacted with / })
+      .first()
       .waitFor();
     await early.app.getByRole("region", { name: "Answers sent" }).getByText(AUTO_ANSWER).waitFor();
     assert.equal(await early.app.getByRole("button", { name: "Submit answer" }).count(), 0);
@@ -284,30 +402,40 @@ try {
     assert.deepEqual(early.errors, []);
     await early.page.context().close();
 
-    // Mobile: the agents show side by side, and nobody answers, so the scene uses the automatic answer.
+    // Mobile: the demo opens on the lead's chat at the full width, and nobody answers, so the scene
+    // uses the automatic answer. Back shows the workspace list with the four agents, one under the other.
     const mobile = await openDemo(browser, origin, { width: 390, height: 844 }, "no-preference");
-    const mobileList = await mobile.app.getByRole("navigation", { name: "Chat list" }).boundingBox();
-    assert.ok(mobileList, "The phone chat list has no box.");
-    const mobileAvatars: { agent: string; x: number; y: number }[] = [];
-    for (const agent of AGENTS) {
-      const box = await agentRow(mobile.app, agent).boundingBox();
-      assert.ok(box, `${agent} has no box on the phone.`);
-      assert.ok(
-        box.y >= mobileList.y && box.y + box.height <= mobileList.y + mobileList.height,
-        `${agent} is outside the phone agent row.`,
-      );
-      mobileAvatars.push({ agent, x: Math.round(box.x), y: Math.round(box.y) });
-    }
-    // One row: the active row can sit a few pixels higher, but not a row lower.
-    const avatarTops = mobileAvatars.map((avatar) => avatar.y);
-    assert.ok(Math.max(...avatarTops) - Math.min(...avatarTops) < 8, JSON.stringify(mobileAvatars));
+    await agentHeading(mobile.app, "Atlas").waitFor({ timeout: SCENE_TIMEOUT_MS });
     await mobile.app
       .getByRole("region", { name: "Answers sent" })
       .getByText(AUTO_ANSWER)
       .waitFor({ timeout: SCENE_TIMEOUT_MS });
-    await launchPlan(mobile.app)
-      .getByRole("group", { name: /^Reactions: / })
-      .waitFor({ timeout: SCENE_TIMEOUT_MS });
+    await reactions(launchPlan(mobile.app)).first().waitFor({ timeout: SCENE_TIMEOUT_MS });
+    const chatBox = await mobile.app.getByRole("main", { name: "Conversation" }).boundingBox();
+    assert.ok(
+      chatBox && Math.round(chatBox.width) === 390,
+      `The phone chat is not full width: ${JSON.stringify(chatBox)}`,
+    );
+    await mobile.page.locator(".landing-app-preview").screenshot({ path: resolve(OUT, "mobile-autoplay-end.png") });
+    await mobile.app.getByRole("button", { name: "Back" }).click();
+    const mobileAvatars: { agent: string; x: number; y: number }[] = [];
+    for (const agent of AGENTS) {
+      const row = agentRow(mobile.app, agent);
+      await row.waitFor();
+      const box = await row.boundingBox();
+      assert.ok(box, `${agent} has no box on the phone.`);
+      assert.ok(
+        box.x >= 0 && box.x + box.width <= 390 && box.y >= 0 && box.y + box.height <= 844,
+        `${agent} is off the screen.`,
+      );
+      mobileAvatars.push({ agent, x: Math.round(box.x), y: Math.round(box.y) });
+    }
+    // One list: the rows share a left edge and go down in order.
+    assert.equal(new Set(mobileAvatars.map((avatar) => avatar.x)).size, 1, JSON.stringify(mobileAvatars));
+    assert.ok(
+      mobileAvatars.every((avatar, index) => index === 0 || avatar.y > (mobileAvatars[index - 1]?.y ?? 0)),
+      JSON.stringify(mobileAvatars),
+    );
     await mobile.page.locator(".landing-app-preview").screenshot({ path: resolve(OUT, "mobile-autoplay-end.png") });
     await mobile.page.screenshot({ path: resolve(OUT, "mobile-page.png") });
     assert.deepEqual(mobile.errors, []);
@@ -317,7 +445,7 @@ try {
     const still = await openDemo(browser, origin, { width: 1440, height: 900 }, "reduce");
     const stillRoster = await checkRoster(still.app);
     const stillPlan = launchPlan(still.app);
-    await stillPlan.getByRole("group", { name: /^Reactions: / }).waitFor();
+    await reactions(stillPlan).first().waitFor();
     await still.app.getByRole("region", { name: "Answers sent" }).getByText(AUTO_ANSWER).waitFor();
     assert.equal(await still.app.getByRole("button", { name: "Submit answer" }).count(), 0);
     assert.equal(await still.app.getByRole("button", { name: "Stop agent" }).count(), 0);
@@ -327,6 +455,7 @@ try {
 
     const report = {
       ok: true,
+      landing,
       timeZone: TIME_ZONE,
       roster,
       reducedMotionRoster: stillRoster,
@@ -339,6 +468,9 @@ try {
       unreadAfterLeavingMidStream: leftUnread,
       mobileAvatars,
       screenshots: [
+        "landing-1440.png",
+        "landing-390.png",
+        "landing-390-bar.png",
         "desktop-question.png",
         "desktop-autoplay-end.png",
         "desktop-scout.png",
@@ -355,6 +487,19 @@ try {
     assert.notEqual(contextAfter, contextBefore);
     writeFileSync(resolve(OUT, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
     logger.info(`Passed. Report: ${resolve(OUT, "report.json")}`);
+  } catch (error) {
+    if (lastDemoPage) {
+      writeFileSync(
+        resolve(OUT, "failure-aria.yml"),
+        await lastDemoPage
+          .frameLocator(IFRAME)
+          .locator("body")
+          .ariaSnapshot()
+          .catch(() => ""),
+      );
+      await lastDemoPage.screenshot({ path: resolve(OUT, "failure.png") }).catch(() => undefined);
+    }
+    throw error;
   } finally {
     await browser.close();
   }

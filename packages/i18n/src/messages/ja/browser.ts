@@ -64,6 +64,9 @@ export const messages = {
   "browser.liveView.failed": "このページはライブで表示できませんでした。",
   "browser.liveView.clipboardUnsupported": "このページでコピーと貼り付けを使うには、サーバーを更新してください。",
   "browser.liveView.pasteTooLong": "このテキストは長すぎて貼り付けできません。100,000 文字未満にしてください。",
+  "browser.liveView.paste": "貼り付け",
+  "browser.liveView.pasteUnreadable":
+    "Atelier はクリップボードを読み取れませんでした。クリップボードへのアクセスを許可して、もう一度お試しください。",
   "browser.liveView.copyTooLarge": "選択範囲が長すぎてコピーできません。選択するテキストを減らしてください。",
   "browser.liveView.copyFailed": "テキストをコピーできませんでした。ページをクリックしてもう一度お試しください。",
   "browser.previews.label": "ブラウザーのプレビュー",

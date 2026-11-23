@@ -65,6 +65,8 @@ export const messages = {
   "browser.liveView.failed": "无法实时显示该页面。",
   "browser.liveView.clipboardUnsupported": "请更新服务器，以便在该页面中复制粘贴。",
   "browser.liveView.pasteTooLong": "文本过长，无法粘贴。请粘贴少于 100,000 个字符。",
+  "browser.liveView.paste": "粘贴",
+  "browser.liveView.pasteUnreadable": "Atelier 无法读取剪贴板。请允许访问剪贴板，然后重试。",
   "browser.liveView.copyTooLarge": "选中内容过长，无法复制。请少选一些文字。",
   "browser.liveView.copyFailed": "无法复制文本，请点击页面后重试。",
   "browser.previews.label": "浏览器预览",

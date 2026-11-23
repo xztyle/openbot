@@ -66,6 +66,9 @@ export const messages = {
   "browser.liveView.clipboardUnsupported":
     "Aktualisiere den Server, um auf dieser Seite kopieren und einfügen zu können.",
   "browser.liveView.pasteTooLong": "Dieser Text ist zu lang zum Einfügen. Füge weniger als 100.000 Zeichen ein.",
+  "browser.liveView.paste": "Einfügen",
+  "browser.liveView.pasteUnreadable":
+    "Atelier konnte die Zwischenablage nicht lesen. Erlaube den Zugriff auf die Zwischenablage und versuche es erneut.",
   "browser.liveView.copyTooLarge": "Die Auswahl ist zu lang zum Kopieren. Wähle weniger Text aus.",
   "browser.liveView.copyFailed": "Der Text konnte nicht kopiert werden. Klicke auf die Seite und versuche es erneut.",
   "browser.previews.label": "Browser-Vorschauen",

@@ -37,7 +37,9 @@ declare global {
       removeTab(tabId: string): void;
       failNextClose(): void;
       acting(on: boolean): void;
+      pageState(tabId: string, canGoBack: boolean): void;
     };
+    navigations?: { tabId: string; direction: string }[];
     takeoverResponses?: { requestId: string | number; decision: string }[];
     closedTabs?: string[];
   }
@@ -423,6 +425,14 @@ async function waitUntil(condition: () => boolean, what: string): Promise<void> 
   }
 }
 
+async function waitUntilAsync(condition: () => Promise<boolean>, what: string): Promise<void> {
+  const deadline = Date.now() + UI_WAIT_MS;
+  while (!(await condition())) {
+    if (Date.now() > deadline) assert.fail(what);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 /** The view shows the page: a frame is drawn and the host has a stream for it. */
 async function viewing(page: Page, host: TabHost): Promise<void> {
   await liveView(page).waitFor({ timeout: UI_WAIT_MS });
@@ -552,6 +562,28 @@ async function phone(browser: Browser, origin: string): Promise<void> {
       "The typed text, the Backspace and the composed text reach the field",
     );
     await shot(page, "phone-typed");
+  });
+
+  await step(page, viewport, "Paste puts the phone's clipboard in the page", async () => {
+    // A phone shows no Paste callout for the hidden keyboard field: the Paste button reads the clipboard.
+    await page.evaluate(() => navigator.clipboard.writeText(" (pasted)"));
+    await button(page, english("browser.liveView.paste")).tap();
+    await waitForTab(tab, nameIs, nameValue, "Ada Lovelace ✓ (pasted)", "The clipboard text reaches the field");
+    assert.ok(
+      host.inputs.some((input) => input.type === "paste" && input.text === " (pasted)"),
+      "The client sends the text as one paste.",
+    );
+    // The keyboard stays up: the tap on Paste keeps the focus in the keyboard field.
+    assert.equal(
+      await page.evaluate(() => document.activeElement?.getAttribute("aria-label")),
+      english("browser.liveView.keyboardInput"),
+    );
+    await shot(page, "phone-pasted");
+    // The page as the next steps expect it.
+    await tab.evaluate(() => {
+      const field = document.querySelector<HTMLInputElement>("#name");
+      if (field) field.value = "Ada Lovelace ✓";
+    });
   });
 
   await step(page, viewport, "a tap on a button clicks it", async () => {
@@ -698,6 +730,55 @@ async function phone(browser: Browser, origin: string): Promise<void> {
       .waitFor({ timeout: UI_WAIT_MS });
     assert.ok(host.starts > starts, "The full view starts a stream of the tab.");
     await shot(page, "phone-header-browser");
+  });
+
+  await step(page, viewport, "a tap on the tab count opens the tab list while the agent works", async () => {
+    await page.evaluate(() => window.liveViewBridge?.acting(true));
+    const count = page.locator("#browser-expanded-panel .browser-full-switch");
+    await count.waitFor({ timeout: UI_WAIT_MS });
+    await count.tap();
+    const row = page.locator(".browser-full-switch-select").first();
+    await row.waitFor({ timeout: 5_000 });
+    // A working agent changes its tabs while the list is open: titles, loads and popups.
+    await page.evaluate(() => window.liveViewBridge?.addTab("browser-tab-busy", "Loading"));
+    await page.evaluate(() => window.liveViewBridge?.removeTab("browser-tab-busy"));
+    await page.waitForTimeout(500);
+    assert.ok(await row.isVisible(), "The tab list stays open while the agent's tabs change.");
+    // The list paints over the page: the point at the middle of its first row hits the row.
+    const onTop = await row.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      const view = document.getElementById("browser-expanded-panel");
+      const layer = (node: Element | null) => Number.parseInt(node ? getComputedStyle(node).zIndex : "", 10) || 0;
+      // Content without its own layer paints under the fixed full view, though it is later in the body.
+      return {
+        hit: hit !== null && element.contains(hit),
+        above: layer(element.closest("[data-popper-positioner]")) > layer(view),
+      };
+    });
+    assert.deepEqual(onTop, { hit: true, above: true }, "The tab list shows above the page.");
+    await shot(page, "phone-tab-list");
+    await row.tap();
+    await row.waitFor({ state: "detached", timeout: 5_000 });
+    await page.evaluate(() => window.liveViewBridge?.acting(false));
+  });
+
+  await step(page, viewport, "the phone bar has Back, which follows the host's history", async () => {
+    const back = page.locator("#browser-expanded-panel").getByRole("button", { name: english("browser.goBack") });
+    await back.waitFor({ timeout: UI_WAIT_MS });
+    await page.evaluate((tabId) => window.liveViewBridge?.pageState(tabId, false), TAB_ID);
+    await waitUntilAsync(async () => await back.isDisabled(), "Back is off with no history");
+    await page.evaluate((tabId) => window.liveViewBridge?.pageState(tabId, true), TAB_ID);
+    await waitUntilAsync(async () => await back.isEnabled(), "Back is on once the tab has a page behind it");
+    const before = (await page.evaluate(() => window.navigations?.length)) ?? 0;
+    await back.tap();
+    await waitUntilAsync(
+      async () => ((await page.evaluate(() => window.navigations?.length)) ?? 0) > before,
+      "The tap asks the host to go back",
+    );
+    const last = await page.evaluate(() => window.navigations?.at(-1));
+    assert.deepEqual(last, { tabId: TAB_ID, direction: "back" });
+    await shot(page, "phone-back");
   });
   await context.close();
   await tabContext.close();

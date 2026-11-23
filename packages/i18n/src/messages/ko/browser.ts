@@ -62,6 +62,9 @@ export const messages = {
   "browser.liveView.failed": "이 페이지를 실시간으로 표시할 수 없어요.",
   "browser.liveView.clipboardUnsupported": "이 페이지에서 복사하고 붙여넣으려면 서버를 업데이트해 주세요.",
   "browser.liveView.pasteTooLong": "텍스트가 너무 길어서 붙여넣을 수 없어요. 100,000자 미만으로 붙여넣어 주세요.",
+  "browser.liveView.paste": "붙여넣기",
+  "browser.liveView.pasteUnreadable":
+    "Atelier가 클립보드를 읽지 못했습니다. 클립보드 접근을 허용한 다음 다시 시도하세요.",
   "browser.liveView.copyTooLarge": "선택한 영역이 너무 길어서 복사할 수 없어요. 더 적은 텍스트를 선택해 주세요.",
   "browser.liveView.copyFailed": "텍스트를 복사할 수 없어요. 페이지를 클릭한 후 다시 시도해 주세요.",
   "browser.previews.label": "브라우저 미리보기",

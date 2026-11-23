@@ -3351,6 +3351,22 @@ async function runPopupScenario(browser: BrowserHost, origin: string): Promise<v
       "independent popup navigation",
     );
     if (independent.openerTabId) throw new Error("noopener link gained an opener.");
+    // A person's Back in a tab that a link opened shows the tab it came from, as a phone browser does.
+    await click(parent.id, "link", "Independent tab");
+    const linked = await waitForValue(() =>
+      browser
+        .listTabs()
+        .find(
+          (tab) =>
+            tab.id !== parent.id && tab.id !== independent.id && tab.url === `${origin}/popup-login` && !tab.loading,
+        ),
+    );
+    if (!linked.canGoBack) throw new Error("A tab that a link opened has no Back.");
+    await runCauseEffect(browser.navigate(linked.id, "back"));
+    if (browser.listTabs().some((tab) => tab.id === linked.id))
+      throw new Error("Back kept the tab that a link opened.");
+    await waitFor(async () => browser.activeTabId === parent.id, "Back shows the tab that the link came from");
+    if (!browser.listTabs().find((tab) => tab.id === parent.id)) throw new Error("Back closed the tab it came from.");
     await runCauseEffect(browser.activate(parent.id));
     await click(parent.id, "button", "Post sign-in");
     const post = await waitForValue(() => browser.listTabs().find((tab) => tab.url === `${origin}/popup-post`));

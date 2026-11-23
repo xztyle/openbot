@@ -636,7 +636,9 @@ body:has(.browser-full-view) .app-frame {
   line-height: 1;
 }
 
+/* The list portals to the body: the overlay layer puts it above the full view, which is fixed. */
 .browser-full-switch-menu {
+  z-index: var(--openbot-layer-popover);
   display: flex;
   width: min(360px, calc(100vw - 2 * var(--openbot-space-3)));
   max-height: min(480px, 70dvh);

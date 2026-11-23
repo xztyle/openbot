@@ -65,6 +65,9 @@ export const messages = {
   "browser.liveView.failed": "Non è stato possibile mostrare questa pagina in diretta.",
   "browser.liveView.clipboardUnsupported": "Aggiorna il server per copiare e incollare in questa pagina.",
   "browser.liveView.pasteTooLong": "Questo testo è troppo lungo da incollare. Incolla meno di 100.000 caratteri.",
+  "browser.liveView.paste": "Incolla",
+  "browser.liveView.pasteUnreadable":
+    "Atelier non ha potuto leggere gli appunti. Consenti l’accesso agli appunti e riprova.",
   "browser.liveView.copyTooLarge": "La selezione è troppo lunga da copiare. Seleziona meno testo.",
   "browser.liveView.copyFailed": "Impossibile copiare il testo. Fai clic sulla pagina e riprova.",
   "browser.previews.label": "Anteprime del browser",

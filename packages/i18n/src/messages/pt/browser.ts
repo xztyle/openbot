@@ -65,6 +65,9 @@ export const messages = {
   "browser.liveView.failed": "Não foi possível mostrar esta página ao vivo.",
   "browser.liveView.clipboardUnsupported": "Atualize o servidor para copiar e colar nesta página.",
   "browser.liveView.pasteTooLong": "Este texto é longo demais para colar. Cole menos de 100.000 caracteres.",
+  "browser.liveView.paste": "Colar",
+  "browser.liveView.pasteUnreadable":
+    "O Atelier não conseguiu ler a área de transferência. Permita o acesso à área de transferência e tente de novo.",
   "browser.liveView.copyTooLarge": "A seleção é longa demais para copiar. Selecione menos texto.",
   "browser.liveView.copyFailed": "Não foi possível copiar o texto. Clique na página e tente de novo.",
   "browser.previews.label": "Prévias do navegador",

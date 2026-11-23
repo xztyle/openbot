@@ -65,7 +65,11 @@ interface HarnessWindow {
     failNextClose(): void;
     /** Chief acts on the tab, or stops, as the host's browser control state says. */
     acting(on: boolean): void;
+    /** The host's history state of a tab, as `browser-page-state-changed` sends it. */
+    pageState(tabId: string, canGoBack: boolean): void;
   };
+  /** The Back and Forward the client asked the host for, in order. */
+  navigations?: { tabId: string; direction: string }[];
   /** The tabs the client asked the host to close, in order. */
   closedTabs?: string[];
   takeoverResponses?: { requestId: string | number; decision: string }[];
@@ -76,6 +80,7 @@ declare global {
 const harness: HarnessWindow = window;
 harness.takeoverResponses = [];
 harness.closedTabs = [];
+harness.navigations = [];
 /** A host answers a close after a round trip; the row must not wait for it. */
 const CLOSE_ROUND_TRIP_MS = 600;
 
@@ -113,6 +118,15 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     failNextClose: () => {
       failNextClose = true;
     },
+    pageState: (tabId, canGoBack) =>
+      mock.emitAgentEvent({
+        type: "browser-page-state-changed",
+        tabs: tabs.map((tab) => ({
+          tabId: tab.id,
+          canGoBack: tab.id === tabId ? canGoBack : false,
+          canGoForward: false,
+        })),
+      }),
     acting: (on) =>
       mock.emitAgentEvent({
         type: "browser-control-changed",
@@ -137,6 +151,9 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
   const web = mockWebRuntimeFor(mock, events);
   return {
     ...web,
+    navigateBrowserTab: async (input) => {
+      if ("direction" in input) harness.navigations?.push({ tabId: input.tabId, direction: input.direction });
+    },
     closeBrowserTab: async (tabId) => {
       harness.closedTabs?.push(tabId);
       await new Promise((resolve) => setTimeout(resolve, CLOSE_ROUND_TRIP_MS));
@@ -174,6 +191,7 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
         "browser-view-frame-point",
         "browser-view-clipboard",
         "browser-user-control",
+        "browser-page-state",
       ];
     },
     respondToTakeover: async (input) => {

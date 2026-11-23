@@ -64,6 +64,8 @@ export const messages = defineMessages("browser", {
   "browser.liveView.failed": "This page could not be shown live.",
   "browser.liveView.clipboardUnsupported": "Update the server to copy and paste in this page.",
   "browser.liveView.pasteTooLong": "This text is too long to paste. Paste less than 100,000 characters.",
+  "browser.liveView.paste": "Paste",
+  "browser.liveView.pasteUnreadable": "Atelier could not read the clipboard. Allow clipboard access, then try again.",
   "browser.liveView.copyTooLarge": "The selection is too long to copy. Select less text.",
   "browser.liveView.copyFailed": "Could not copy the text. Click the page and try again.",
   "browser.liveView.reconnecting": "Reconnecting to the page…",

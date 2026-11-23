@@ -198,22 +198,22 @@ export function BrowserAddressRow(props: {
   return (
     <div class="browser-full-address-row" data-narrow={props.narrow ? "" : undefined}>
       {props.leading}
-      {/* A narrow bar has room for the address only: Back, Forward and Reload go in the page menu. */}
+      {/* Back stays in a narrow bar, as on a phone browser. Forward and Reload go in the page menu. */}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={t("browser.goBack")}
+        aria-keyshortcuts={browserAriaShortcut("back", props.view.shortcuts)}
+        disabled={!tab() || tab()?.canGoBack === false}
+        data-cuelume-tap="navigate"
+        onClick={() => {
+          const current = tab();
+          if (current) props.view.onNavigate(current.id, "back");
+        }}
+      >
+        <BrowserBackIcon />
+      </Button>
       <Show when={!props.narrow}>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t("browser.goBack")}
-          aria-keyshortcuts={browserAriaShortcut("back", props.view.shortcuts)}
-          disabled={!tab() || tab()?.canGoBack === false}
-          data-cuelume-tap="navigate"
-          onClick={() => {
-            const current = tab();
-            if (current) props.view.onNavigate(current.id, "back");
-          }}
-        >
-          <BrowserBackIcon />
-        </Button>
         <Button
           variant="ghost"
           size="icon-sm"

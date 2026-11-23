@@ -65,6 +65,9 @@ export const messages = {
   "browser.liveView.failed": "No se pudo mostrar esta página en vivo.",
   "browser.liveView.clipboardUnsupported": "Actualiza el servidor para copiar y pegar en esta página.",
   "browser.liveView.pasteTooLong": "Este texto es demasiado largo para pegarlo. Pega menos de 100.000 caracteres.",
+  "browser.liveView.paste": "Pegar",
+  "browser.liveView.pasteUnreadable":
+    "Atelier no pudo leer el portapapeles. Permite el acceso al portapapeles e inténtalo de nuevo.",
   "browser.liveView.copyTooLarge": "La selección es demasiado larga para copiarla. Selecciona menos texto.",
   "browser.liveView.copyFailed": "No se pudo copiar el texto. Haz clic en la página e inténtalo de nuevo.",
   "browser.liveView.reconnecting": "Volviendo a conectar con la página…",

@@ -67,6 +67,9 @@ export const messages = {
   "browser.liveView.failed": "Не удалось показать эту страницу в реальном времени.",
   "browser.liveView.clipboardUnsupported": "Обновите сервер, чтобы копировать и вставлять на этой странице.",
   "browser.liveView.pasteTooLong": "Этот текст слишком длинный для вставки. Вставьте меньше 100 000 символов.",
+  "browser.liveView.paste": "Вставить",
+  "browser.liveView.pasteUnreadable":
+    "Atelier не удалось прочитать буфер обмена. Разрешите доступ к буферу обмена и повторите попытку.",
   "browser.liveView.copyTooLarge": "Выделение слишком длинное для копирования. Выделите меньше текста.",
   "browser.liveView.copyFailed": "Не удалось скопировать текст. Нажмите на страницу и повторите попытку.",
   "browser.previews.label": "Превью браузера",

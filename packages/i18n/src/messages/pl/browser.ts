@@ -67,6 +67,9 @@ export const messages = {
   "browser.liveView.failed": "Nie udało się pokazać tej strony na żywo.",
   "browser.liveView.clipboardUnsupported": "Zaktualizuj serwer, aby kopiować i wklejać na tej stronie.",
   "browser.liveView.pasteTooLong": "Ten tekst jest za długi do wklejenia. Wklej mniej niż 100 000 znaków.",
+  "browser.liveView.paste": "Wklej",
+  "browser.liveView.pasteUnreadable":
+    "Atelier nie może odczytać schowka. Zezwól na dostęp do schowka i spróbuj ponownie.",
   "browser.liveView.copyTooLarge": "Zaznaczenie jest za długie do skopiowania. Zaznacz mniej tekstu.",
   "browser.liveView.copyFailed": "Nie udało się skopiować tekstu. Kliknij stronę i spróbuj ponownie.",
   "browser.previews.label": "Podglądy przeglądarki",

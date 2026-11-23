@@ -65,6 +65,8 @@ export const messages = {
   "browser.liveView.failed": "Bu sayfa canlı olarak gösterilemedi.",
   "browser.liveView.clipboardUnsupported": "Bu sayfada kopyalayıp yapıştırmak için sunucuyu güncelleyin.",
   "browser.liveView.pasteTooLong": "Bu metin yapıştırmak için çok uzun. 100.000 karakterden az yapıştırın.",
+  "browser.liveView.paste": "Yapıştır",
+  "browser.liveView.pasteUnreadable": "Atelier panoyu okuyamadı. Pano erişimine izin verin ve yeniden deneyin.",
   "browser.liveView.copyTooLarge": "Seçim kopyalamak için çok uzun. Daha az metin seçin.",
   "browser.liveView.copyFailed": "Metin kopyalanamadı. Sayfaya tıklayıp yeniden deneyin.",
   "browser.previews.label": "Tarayıcı önizlemeleri",

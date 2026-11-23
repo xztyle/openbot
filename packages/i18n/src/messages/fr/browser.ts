@@ -65,6 +65,9 @@ export const messages = {
   "browser.liveView.failed": "Impossible d’afficher cette page en direct.",
   "browser.liveView.clipboardUnsupported": "Mettez à jour le serveur pour copier et coller dans cette page.",
   "browser.liveView.pasteTooLong": "Ce texte est trop long pour être collé. Collez moins de 100 000 caractères.",
+  "browser.liveView.paste": "Coller",
+  "browser.liveView.pasteUnreadable":
+    "Atelier n’a pas pu lire le presse-papiers. Autorisez l’accès au presse-papiers, puis réessayez.",
   "browser.liveView.copyTooLarge": "La sélection est trop longue pour être copiée. Sélectionnez moins de texte.",
   "browser.liveView.copyFailed": "Impossible de copier le texte. Cliquez sur la page et réessayez.",
   "browser.previews.label": "Aperçus du navigateur",

@@ -25,6 +25,11 @@ export interface BrowserHostTab {
   contents: WebContents;
   requestedUrl: string;
   openerTabId?: string;
+  /**
+   * The tab whose page opened this one, with or without an opener: a `target=_blank` link is noopener
+   * and has no `openerTabId`. A person's Back in a tab with no history goes back to it.
+   */
+  sourceTabId?: string;
   /** Retained document references can outlive popup closure and navigation. */
   hasSharedBrowsingContext?: boolean;
   /**

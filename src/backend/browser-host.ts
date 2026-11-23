@@ -816,8 +816,16 @@ export class BrowserHost {
       .filter((tab) => !tab.closing && !tab.contents.isDestroyed())
       .map((tab) => {
         const publicTab = toPublicTab(tab);
-        return this.#userControlTabIds.has(tab.id) ? { ...publicTab, userControl: true as const } : publicTab;
+        const withBack = publicTab.canGoBack || !this.#backSource(tab) ? publicTab : { ...publicTab, canGoBack: true };
+        return this.#userControlTabIds.has(tab.id) ? { ...withBack, userControl: true as const } : withBack;
       });
+  }
+
+  /** The open tab that opened this one, which a person's Back returns to when this tab has no history. */
+  #backSource(tab: BrowserHostTab): BrowserHostTab | undefined {
+    const id = tab.sourceTabId ?? tab.openerTabId;
+    const source = id ? this.#tabs.get(id) : undefined;
+    return source && !source.closing && !source.contents.isDestroyed() ? source : undefined;
   }
 
   /** The renderer process of each open tab, so the resource monitor can count tabs apart from windows. */
@@ -1006,6 +1014,17 @@ export class BrowserHost {
     tabId: string,
     direction: BrowserNavigationDirection,
   ): Effect.fn.Return<void, BrowserOperationError> {
+    // A tab that a link opened has no history of its own. Back closes it and shows the tab it came
+    // from, as a phone browser does.
+    const current = yield* this.#requireTab(tabId);
+    if (direction === "back" && !hasHistoryEntry(current.contents, -1)) {
+      const source = this.#backSource(current);
+      if (source) {
+        yield* this.close(tabId);
+        yield* this.activate(source.id);
+        return;
+      }
+    }
     yield* this.#enqueue(tabId, (tab) =>
       Effect.gen({ self: this }, function* () {
         yield* untilStopped(
@@ -1134,6 +1153,7 @@ export class BrowserHost {
     if (this.#activeTabId === tabId) {
       this.#activeTabId =
         (tab.openerTabId && this.#tabs.has(tab.openerTabId) ? tab.openerTabId : null) ??
+        (tab.sourceTabId && this.#tabs.has(tab.sourceTabId) ? tab.sourceTabId : null) ??
         tabIds.slice(closedIndex + 1).find((id) => this.#tabs.has(id)) ??
         tabIds
           .slice(0, closedIndex)
@@ -3165,6 +3185,7 @@ export class BrowserHost {
             tab.privateSession,
             tab.tabSession,
           );
+          popup.sourceTabId = tab.id;
           // Chromium exposes no opener for noopener/noreferrer requests.
           if (options.webContents?.opener) {
             popup.openerTabId = tab.id;

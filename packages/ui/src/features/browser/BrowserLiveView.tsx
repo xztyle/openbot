@@ -3,7 +3,7 @@ import {
   type BrowserDesktopApi,
   type BrowserLiveViewInput,
 } from "@openbot/contracts/ipc";
-import { Button, ErrorReference, IconButton, Input, Keyboard, Scan, toast } from "@openbot/ui";
+import { Button, ClipboardPaste, ErrorReference, IconButton, Input, Keyboard, Scan, toast } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import { clamp, usesTouchLayout } from "@openbot/ui/utils";
 import { errorReference } from "@openbot/user-errors";
@@ -902,13 +902,35 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
       toast.error(t("browser.liveView.clipboardUnsupported"), { id: CLIPBOARD_UNSUPPORTED_TOAST });
       return;
     }
-    const text = event.clipboardData?.getData("text/plain") ?? "";
+    pasteText(event.clipboardData?.getData("text/plain") ?? "");
+  };
+
+  const pasteText = (text: string) => {
     if (!text) return;
     if (text.length > BROWSER_LIVE_VIEW_MAX_PASTE_TEXT) {
       toast.error(t("browser.liveView.pasteTooLong"));
       return;
     }
     send({ type: "paste", text });
+  };
+
+  /**
+   * A phone shows no Paste callout for the hidden keyboard field, so the paste event never comes. The
+   * Paste button reads the clipboard in the tap, a user gesture, and the browser asks the user itself.
+   */
+  const pasteFromClipboard = async () => {
+    if (!props.clipboard) {
+      toast.error(t("browser.liveView.clipboardUnsupported"), { id: CLIPBOARD_UNSUPPORTED_TOAST });
+      return;
+    }
+    let text: string;
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      toast.error(t("browser.liveView.pasteUnreadable"));
+      return;
+    }
+    pasteText(text);
   };
 
   // Copy or Cut from the Edit menu. The event is not cancelled: a cancelled copy with no data would
@@ -1042,6 +1064,20 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
       />
       <Show when={touch() && state.live}>
         <div class="browser-live-view-controls">
+          <Show when={keyboard()}>
+            <IconButton
+              variant="secondary"
+              label={t("browser.liveView.paste")}
+              // The keyboard field keeps the focus, so the phone keeps its keyboard up. Paste comes first:
+              // the row is on the right, so the buttons after it do not move when it goes.
+              onPointerDown={(event: PointerEvent) => {
+                if (event.pointerType === "touch") event.preventDefault();
+              }}
+              onClick={() => void pasteFromClipboard()}
+            >
+              <ClipboardPaste aria-hidden="true" />
+            </IconButton>
+          </Show>
           <Show when={zoom().scale > 1}>
             <IconButton
               variant="secondary"

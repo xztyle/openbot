@@ -115,8 +115,12 @@ export function WorkspaceSearchBar(props: WorkspaceSearchBarProps): JSX.Element 
       setActive(0);
       input?.focus();
       if (value !== undefined) {
+        // The caret goes after the given words once they show. If the reader typed before that
+        // frame, the caret stays where their words end.
         const end = value.length;
-        requestAnimationFrame(() => input?.setSelectionRange(end, end));
+        requestAnimationFrame(() => {
+          if (input?.value === value) input.setSelectionRange(end, end);
+        });
       } else input?.select();
     },
   });

@@ -384,6 +384,11 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
       });
       assert.equal(await field.inputValue(), "in:@Ana ");
       await page.keyboard.type("lunch");
+      // On a cold start the field can still be taking the words; Enter searches what it holds.
+      for (const deadline = Date.now() + UI_WAIT_MS; (await field.inputValue()) !== "in:@Ana lunch"; ) {
+        assert.ok(Date.now() < deadline, `The search field holds "${await field.inputValue()}".`);
+        await page.evaluate(() => new Promise((done) => requestAnimationFrame(done)));
+      }
       await page.keyboard.press("Enter");
       await page
         .getByRole("tab", { name: english("workspace.search.messages", { count: 1 }) })

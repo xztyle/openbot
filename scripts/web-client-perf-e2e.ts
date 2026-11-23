@@ -158,10 +158,10 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-async function waitForOk(url: string, child: ChildProcess): Promise<void> {
+async function waitForOk(url: string, child: ChildProcess, failed: () => Error | undefined): Promise<void> {
   const deadline = Date.now() + 60_000;
   for (;;) {
-    assert.ok(child.exitCode === null, "vite preview stopped during startup.");
+    assert.ok(child.exitCode === null && !failed(), `vite preview stopped during startup. ${failed() ?? ""}`);
     const ok = await fetch(url, { signal: AbortSignal.timeout(2_000) })
       .then((response) => response.ok)
       .catch(() => false);
@@ -174,10 +174,15 @@ async function waitForOk(url: string, child: ChildProcess): Promise<void> {
 /** Starts `vite preview` of the last build, without secrets. Stops only the process group it started. */
 async function startPreview(): Promise<{ url: string; stop: () => void }> {
   const port = await freePort();
-  const child = spawn("bunx", ["vite", "preview", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
-    cwd: API_DIR,
-    detached: true,
-    stdio: "ignore",
+  // `bun x`, through this Bun: a server can have Bun without the `bunx` link on its PATH.
+  const child = spawn(
+    process.execPath,
+    ["x", "vite", "preview", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
+    { cwd: API_DIR, detached: true, stdio: "ignore" },
+  );
+  let spawnError: Error | undefined;
+  child.once("error", (error) => {
+    spawnError = error;
   });
   const url = `http://127.0.0.1:${port}`;
   const stop = () => {
@@ -190,7 +195,7 @@ async function startPreview(): Promise<{ url: string; stop: () => void }> {
     }
   };
   try {
-    await waitForOk(`${url}/app`, child);
+    await waitForOk(`${url}/app`, child, () => spawnError);
   } catch (error) {
     stop();
     throw error;
@@ -383,12 +388,26 @@ const CALL_NAMES = new Set([
   "accountUsage",
 ]);
 
+/** Opens the DM of a bench agent from the workspace sidebar: the workspace opens on its welcome. */
+async function openBenchAgent(page: Page, key: "open" | "other"): Promise<void> {
+  const name = await page.evaluate<unknown>(`globalThis.openbotWebBench.agentNames.${key}`);
+  assert.ok(typeof name === "string" && name.length > 0, `The bench has no ${key} agent name.`);
+  await page
+    .getByRole("navigation", { name: "Workspace" })
+    .getByRole("button", { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}, AI agent`, "u") })
+    .first()
+    .click();
+}
+
 async function measureRuntime(browser: Browser, samples: Samples): Promise<void> {
   assert.ok(storybook, "The runtime phase needs --storybook=<url> from `bun run storybook`.");
   // The first open of a story makes Vite bundle its dependencies. One open before the runs keeps
   // that out of the first reading.
   const warmUp = await browser.newPage();
   await warmUp.goto(`${storybook}/iframe.html?id=${STORY}&viewMode=story`);
+  await warmUp.waitForFunction("globalThis.openbotWebBench !== undefined", undefined, { timeout: 300_000 });
+  await warmUp.evaluate("globalThis.openbotWebBench.ready");
+  await openBenchAgent(warmUp, "open");
   await warmUp.getByText("Question 158:").first().waitFor({ timeout: 300_000 });
   await warmUp.close();
   for (let run = 0; run < runs; run++) {
@@ -397,6 +416,7 @@ async function measureRuntime(browser: Browser, samples: Samples): Promise<void>
       await page.goto(`${storybook}/iframe.html?id=${STORY}&viewMode=story`);
       await page.waitForFunction("globalThis.openbotWebBench !== undefined", undefined, { timeout: 120_000 });
       await page.evaluate("globalThis.openbotWebBench.ready");
+      await openBenchAgent(page, "open");
       await page.getByText("Question 158:").first().waitFor({ timeout: 60_000 });
       await page.evaluate("globalThis.openbotWebBench.idle()");
       record(samples, "runtime.openMs", await page.evaluate<number>("performance.now()"));

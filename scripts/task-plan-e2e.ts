@@ -2,7 +2,8 @@
 // conversation timeline and composer against the preview mock. Read-only. Pass the Storybook URL
 // that `bun run storybook` reports: `bun scripts/task-plan-e2e.ts --storybook=http://localhost:6006`.
 // It also checks the panels above the input: each panel goes under the next one, the lower panel
-// paints over the shared edge, and the top of each panel stays visible. The cards in the one stack
+// paints over the shared edge, and the top of each panel stays visible. Where saved reply chips sit
+// between two panels, the panels do not tuck and no panel covers a chip. The cards in the one stack
 // above the input sit flush, with one shared line between them, and fill the stack's width.
 // Writes .openbot-build/task-plan-e2e/report.json and one screenshot per story.
 import assert from "node:assert/strict";
@@ -41,6 +42,11 @@ interface StackSeam {
   overlap: number;
   lowerPaintsOver: boolean;
   upperTopVisible: boolean;
+  /**
+   * Saved reply chips sit between the two panels. The upper panel does not tuck under the lower one
+   * then, and neither panel covers a chip.
+   */
+  chipsClear?: boolean;
 }
 
 interface CardSeam {
@@ -67,7 +73,8 @@ async function composerStack(page: Page): Promise<ComposerStack> {
     if (!wrap) return { seams: [], cards: [], cardsFillStack: false };
     const visible = (node: Element) => node.getBoundingClientRect().height > 0;
     const label = (node: Element) => [...node.classList].find((name) => !name.startsWith("task-list")) ?? node.tagName;
-    const panels = [...wrap.children].filter(visible);
+    const chips = wrap.querySelector(":scope > .saved-replies");
+    const panels = [...wrap.children].filter((node) => visible(node) && node !== chips);
     const stack = wrap.querySelector(":scope > .composer-stack");
     const cards = stack
       ? [...stack.querySelectorAll(":scope > *, :scope > .agent-queue-slot > .agent-queue-slot-inner > *")].filter(
@@ -103,12 +110,21 @@ async function composerStack(page: Page): Promise<ComposerStack> {
       const overlap = Math.round(top.bottom - bottom.top);
       const seam = document.elementFromPoint(bottom.left + 60, (top.bottom + bottom.top) / 2);
       const head = document.elementFromPoint(top.left + 40, top.top + 8);
+      const between = chips && visible(chips) && upper.nextElementSibling === chips ? chips : null;
+      const chipBox = between?.getBoundingClientRect();
       return [
         {
           pair: `${label(upper)} > ${label(lower)}`,
           overlap,
           lowerPaintsOver: overlap <= 0 || Boolean(seam && lower.contains(seam)),
           upperTopVisible: Boolean(head && upper.contains(head)),
+          ...(chipBox
+            ? {
+                chipsClear:
+                  Math.round(top.bottom) <= Math.round(chipBox.top) &&
+                  Math.round(chipBox.bottom) <= Math.round(bottom.top),
+              }
+            : {}),
         },
       ];
     });
@@ -224,6 +240,10 @@ try {
     const { seams } = stack;
     assert.ok(seams.length > 0, `${id}: no panel above the input.`);
     for (const seam of seams) {
+      if (seam.chipsClear !== undefined) {
+        assert.ok(seam.chipsClear, `${id}: ${seam.pair} covers the saved replies between them.`);
+        continue;
+      }
       assert.ok(seam.overlap > 0, `${id}: ${seam.pair} does not go under the next panel.`);
       assert.ok(seam.lowerPaintsOver, `${id}: ${seam.pair} covers the next panel.`);
       assert.ok(seam.upperTopVisible, `${id}: the top of ${seam.pair} is hidden.`);

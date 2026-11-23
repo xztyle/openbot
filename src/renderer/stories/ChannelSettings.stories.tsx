@@ -107,6 +107,7 @@ function AgentPanelStory() {
   return (
     <main class="conversation-panel agent-memories-story-stage" style="--settings-panel-width: 296px">
       <AgentSettingsPanel
+        onOpenUrl={async () => {}}
         onOpenUsage={fn()}
         agent={STORY_AGENT}
         runtimeSettings={storyRuntimeSettings(STORY_AGENT)}

@@ -1,10 +1,10 @@
 import type { InstalledSkill, MarketplaceSkillDetail } from "@openbot/contracts/ipc";
 import { Button, ErrorReference, Switch } from "@openbot/ui";
+import { SkillPreview } from "@openbot/ui/components/SkillPreview";
 import { SkillGlyph } from "@openbot/ui/features/conversation/SkillGlyph";
 import { useText } from "@openbot/ui/text";
 import { errorReference } from "@openbot/user-errors";
 import { createEffect, createSignal, createStore, For, onSettled, Show } from "solid-js";
-import { SkillPreview } from "../../components/SkillPreview";
 import { skillsPort } from "../../skills-port";
 
 export function LocalSkillsLibrary(props: {
@@ -14,6 +14,8 @@ export function LocalSkillsLibrary(props: {
   installed: InstalledSkill[];
   onInstalled: () => Promise<void>;
   onTry?: ((skill: MarketplaceSkillDetail) => void) | undefined;
+  /** Opens a link of a skill's text, in the browser of the client that shows it. */
+  onOpenUrl: (url: string) => Promise<void>;
 }) {
   const { t, errorMessage } = useText();
   const [reload, setReload] = createSignal(0);
@@ -243,6 +245,7 @@ export function LocalSkillsLibrary(props: {
           {(skill) => (
             <SkillPreview
               skill={skill()}
+              onOpenUrl={props.onOpenUrl}
               onTry={
                 installed()?.installedVersion === skill().version &&
                 installed()?.state !== "needs-repair" &&

@@ -157,6 +157,7 @@ function FullSettingsPanelStory() {
   return (
     <main class="agent-memories-story-stage">
       <AgentSettingsPanel
+        onOpenUrl={async () => {}}
         onOpenUsage={fn()}
         agent={STORY_AGENT}
         runtimeSettings={storyRuntimeSettings(STORY_AGENT)}

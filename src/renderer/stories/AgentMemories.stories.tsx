@@ -61,6 +61,7 @@ function AgentMemoriesStory(props: { memories: AgentMemory[] }) {
   return (
     <main class="agent-memories-story-stage">
       <AgentSettingsPanel
+        onOpenUrl={async () => {}}
         onOpenUsage={fn()}
         agent={storyAgent}
         runtimeSettings={storyRuntimeSettings(storyAgent)}

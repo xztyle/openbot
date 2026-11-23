@@ -28,6 +28,7 @@ function SharedTablesStory(props: { tables: SharedTable[] }) {
   return (
     <main class="agent-memories-story-stage">
       <AgentSettingsPanel
+        onOpenUrl={async () => {}}
         onOpenUsage={fn()}
         agent={storyAgent}
         agents={STORY_AGENTS}

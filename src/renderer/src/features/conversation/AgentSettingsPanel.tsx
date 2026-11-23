@@ -83,6 +83,8 @@ interface AgentSettingsPanelProps
   eventCheckDeliveryAvailable?: boolean | undefined;
   onCreateSkill?: (() => void) | undefined;
   onTrySkill?: ((skill: SkillDetail) => void) | undefined;
+  /** Opens a link of a skill's text, in the browser of the client that shows it. */
+  onOpenUrl: (url: string) => Promise<void>;
   /** Reads a file in the agent workspace, on the computer that runs the agent. */
   previewWorkspaceFile?: ((path: string) => Promise<FilePreview>) | undefined;
   onAddFromMarketplace?: ((agentId: string) => void) | undefined;
@@ -669,6 +671,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
           catalog={props.remoteClient ? null : undefined}
           onCreateSkill={props.onCreateSkill}
           onTrySkill={props.onTrySkill}
+          onOpenUrl={props.onOpenUrl}
           previewWorkspaceFile={props.previewWorkspaceFile}
           onAddFromMarketplace={
             props.onAddFromMarketplace

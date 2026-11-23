@@ -565,6 +565,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
                     }
                   : undefined
               }
+              onOpenUrl={openExternalMessageUrl}
               onTrySkill={
                 serverCanAdminister(props.server, "skills-admin-v1") &&
                 agentReady() &&

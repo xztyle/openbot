@@ -625,6 +625,7 @@ function SkillMarkers() {
         />
       ))}
       <AgentSkillsModal
+        onOpenUrl={async () => {}}
         open={Boolean(selected())}
         selectionRequest={selected()}
         agentId="chief"

@@ -21,12 +21,12 @@ import {
   X,
 } from "@openbot/ui";
 import { createScrollFades } from "@openbot/ui/components/createScrollFades";
+import { SkillPreview } from "@openbot/ui/components/SkillPreview";
 import { SkillGlyph } from "@openbot/ui/features/conversation/SkillGlyph";
 import { SkillLibraryToolbar } from "@openbot/ui/features/conversation/SkillLibraryToolbar";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, For, onSettled, Show, untrack } from "solid-js";
 import { desktopAnalytics } from "../../analytics";
-import { SkillPreview } from "../../components/SkillPreview";
 import { type AgentSkillCalls, agentSkillCalls, type SkillCatalogCalls, skillsPort } from "../../skills-port";
 import { LocalSkillsLibrary } from "./LocalSkillsLibrary";
 
@@ -52,6 +52,8 @@ interface AgentSkillsModalProps {
   catalog?: SkillCatalogCalls | null | undefined;
   onCreateSkill?: (() => void) | undefined;
   onTrySkill?: ((skill: SkillDetail) => void) | undefined;
+  /** Opens a link of a skill's text, in the browser of the client that shows it. */
+  onOpenUrl: (url: string) => Promise<void>;
   /** Reads a file in the agent workspace on the host, where a joined server keeps each skill's SKILL.md. */
   previewWorkspaceFile?: ((path: string) => Promise<FilePreview>) | undefined;
   onAddFromMarketplace?: ((agentId: string) => void) | undefined;
@@ -464,6 +466,7 @@ export function AgentSkillsModal(props: AgentSkillsModalProps) {
                             initialSkillId={props.selectionRequest?.skillId}
                             agentId={props.agentId}
                             installed={skills()}
+                            onOpenUrl={props.onOpenUrl}
                             disabled={loading() || savingId() !== null}
                             onInstalled={async () => {
                               await loadSkills(false);
@@ -623,6 +626,7 @@ export function AgentSkillsModal(props: AgentSkillsModalProps) {
                                     {(current) => (
                                       <SkillPreview
                                         skill={current()}
+                                        onOpenUrl={props.onOpenUrl}
                                         onTry={
                                           mutable() &&
                                           skill().state !== "needs-repair" &&

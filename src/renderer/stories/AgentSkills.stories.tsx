@@ -31,6 +31,7 @@ function AgentSkillsStory(props: {
   return (
     <main class="agent-memories-story-stage">
       <AgentSettingsPanel
+        onOpenUrl={async () => {}}
         onCreateSkill={fn()}
         onTrySkill={fn()}
         onOpenUsage={fn()}

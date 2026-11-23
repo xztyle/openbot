@@ -7,7 +7,7 @@ import { WORKSPACE_SHARED_SECRET_SCOPE } from "@openbot/contracts/ipc";
 import { type FoundSecret, freeSecretName, type SecretScan, scanForSecrets } from "@openbot/contracts/secret-hygiene";
 import { toast } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
-import { useWorkspace } from "./workspace-context";
+import { useOptionalWorkspace } from "./workspace-context";
 
 /** A notice stays this long: the reader may need a moment to decide, and nothing else waits on it. */
 const OFFER_DURATION_MS = 60_000;
@@ -23,7 +23,7 @@ export function useSecretHygiene(): {
   const { t } = useText();
   // Absent outside the workspace (an agent chat of the desktop app): the secret is still hidden,
   // and the notice then sends the reader to Secrets instead of saving it.
-  const ws: ReturnType<typeof useWorkspace> | undefined = useWorkspace();
+  const ws = useOptionalWorkspace();
   const agent = () => ws?.channels.port().agent;
 
   async function save(secret: FoundSecret): Promise<void> {

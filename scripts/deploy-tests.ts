@@ -133,10 +133,11 @@ function standaloneE2e(): Test[] {
     .map((file) => {
       const source = readFileSync(join(root, "scripts", file), "utf8");
       const head = source.split("\n").slice(0, 30).join("\n");
-      // A script that needs longer than the default says so in its header: `deploy-tests timeout: 600s`.
+      // A script that needs longer than the 20 minutes of the others says so in its header:
+      // `deploy-tests timeout: 3600s`.
       const seconds = Number(/deploy-tests timeout: (\d+)s/u.exec(source.slice(0, 4_000))?.[1] ?? 0);
       const test: Test = {
-        ...e2e(file, file.replace(/-e2e\.ts$/u, ""), [], seconds > 0 ? seconds * 1_000 : undefined),
+        ...e2e(file, file.replace(/-e2e\.ts$/u, ""), [], seconds > 0 ? seconds * 1_000 : 1_200_000),
         critical: false,
       };
       const setup = NEEDS_SETUP.find(([pattern]) => pattern.test(head));

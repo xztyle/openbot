@@ -17,9 +17,11 @@ import { answerTicket, ticketAsksApproval } from "./workspace-ticket-answer";
 
 export function WorkspaceAgentWaits(props: { agentId: string }) {
   const ws = useWorkspace();
-  const { t } = useText();
+  const { t, errorMessage } = useText();
   const [gone, setGone] = createSignal<ReadonlySet<string>>(new Set());
   const [failed, setFailed] = createSignal<string | null>(null);
+  /** What went wrong with the last answer, when the failure says it; otherwise the general sentence. */
+  const [failure, setFailure] = createSignal("");
   const [busy, setBusy] = createSignal<string | null>(null);
   const [replying, setReplying] = createSignal<string | null>(null);
   const [reply, setReply] = createSignal("");
@@ -36,8 +38,9 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
     hide(key);
     try {
       await ws.channels.port().agent.respondToPrompt({ requestId, answers: {} });
-    } catch {
+    } catch (cause) {
       show(key);
+      setFailure(errorMessage(cause, t("workspace.today.answerFailed")));
       setFailed(key);
     }
   };
@@ -51,13 +54,17 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
     try {
       hide(key);
       const message = t("workspace.needsYou.ticket.message", { ticket: item.summary ?? "", answer: trimmed });
-      const { commented } = await answerTicket(ws, item, message, trimmed);
+      const { commented } = await answerTicket(ws.channels.port(), item, message, trimmed);
       setReplying(null);
       setReply("");
       // The agent has the answer; the comment on the ticket is a copy, so its failure only shows.
-      if (!commented) setFailed(key);
-    } catch {
+      if (!commented) {
+        setFailure(t("workspace.today.answerFailed"));
+        setFailed(key);
+      }
+    } catch (cause) {
       show(key);
+      setFailure(errorMessage(cause, t("workspace.today.answerFailed")));
       setFailed(key);
     } finally {
       setBusy(null);
@@ -74,7 +81,7 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
               <Ticket class="ws-agent-dm-wait-icon" aria-hidden="true" />
               <span class="ws-agent-dm-wait-text">
                 {t("workspace.needsYou.banner.ticket", { ticket: item().summary ?? "" })}
-                {failed() === key() ? ` · ${t("workspace.today.answerFailed")}` : ""}
+                {failed() === key() ? ` · ${failure() || t("workspace.today.answerFailed")}` : ""}
               </span>
               <Show when={approval()}>
                 <Button

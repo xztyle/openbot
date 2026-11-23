@@ -192,7 +192,7 @@ export function useDecisionQueue() {
           ? async () => {
               const answer = t("workspace.needsYou.ticket.approved");
               const message = t("workspace.needsYou.ticket.message", { ticket: item.summary ?? "", answer });
-              await answerTicket(ws, item, message, answer);
+              await answerTicket(ws.channels.port(), item, message, answer);
             }
           : undefined;
       return {

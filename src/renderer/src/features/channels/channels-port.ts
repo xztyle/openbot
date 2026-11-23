@@ -87,6 +87,11 @@ export interface ChannelsPort {
   importProgress?: () => { current: number; total: number } | null;
   /** Reports the files the desktop preload imports from a drop or a paste. Only the desktop has it. */
   onAttachmentImport?: OpenBotDesktopApi["agent"]["onAttachmentImport"];
+  /**
+   * Sends the reader's own message to an agent's chat, outside the chat view: an answer from Today or a
+   * DM strip. The desktop sends it through preload, the browser client over the host connection.
+   */
+  sendAgentMessage?: (input: { agentId: string; text: string; clientMessageId: string }) => Promise<void>;
 }
 
 /**
@@ -112,5 +117,8 @@ export function channelsPort(): ChannelsPort {
     openUrl: (url) => api.openUrl(url),
     fileActions: "native",
     onAttachmentImport: (listener) => api.agent.onAttachmentImport(listener),
+    sendAgentMessage: async (input) => {
+      await api.agent.sendMessage(input);
+    },
   };
 }

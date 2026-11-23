@@ -278,6 +278,39 @@ async function phone(browser: Browser, origin: string): Promise<void> {
   await context.close();
 }
 
+/**
+ * A Motion ticket that asks the reader to approve, on a phone, where the browser client has no desktop
+ * preload: Approve on Today's card sends the reader's message to the agent and answers the ticket.
+ */
+async function ticketApproval(browser: Browser, origin: string): Promise<void> {
+  const viewport = "phone";
+  const context = await browser.newContext(VIEWPORTS.phone);
+  const page = await context.newPage();
+  watch(page, viewport);
+  const ticketAction = english("workspace.needsYou.action.ticket");
+  await step(page, viewport, "Approve on a Motion ticket's card sends the answer", async () => {
+    await load(page, origin, "/app/general", todayTab(page, 0));
+    await page.waitForFunction(() => document.documentElement.dataset.needsYouReady !== undefined, null, {
+      timeout: UI_WAIT_MS,
+    });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("needs-you-harness", { detail: "ticket" })));
+    const ticketCard = todayCard(page, ticketAction);
+    await ticketCard.waitFor({ timeout: UI_WAIT_MS });
+    await shot(page, "phone-ticket");
+    await button(ticketCard, english("workspace.needsYou.ticket.approve")).tap();
+    await page.waitForFunction(() => document.documentElement.dataset.needsYouTicket !== undefined, null, {
+      timeout: UI_WAIT_MS,
+    });
+    const sent = await page.evaluate(() => document.documentElement.dataset.needsYouSent ?? "");
+    assert.match(sent, /^sales: .*MAN-5.*Approved\./u, "The agent did not get the approval.");
+    const answers = await page.evaluate(() => document.documentElement.dataset.needsYouTicket ?? "");
+    assert.deepEqual(JSON.parse(answers), { answer: [english("workspace.needsYou.ticket.approved")] });
+    assert.equal(await page.getByText(english("workspace.today.answerFailed")).count(), 0, "The card says it failed.");
+    await shot(page, "phone-ticket-approved");
+  });
+  await context.close();
+}
+
 const secretAction = english("workspace.needsYou.action.secretAt", { site: SITE });
 const secretTitle = () => english("browser.secret.title.code");
 
@@ -416,6 +449,7 @@ try {
   await secretCard(browser, origin, "desktop");
   await secretCard(browser, origin, "phone");
   await stalledSecret(browser, origin);
+  await ticketApproval(browser, origin);
   report.passed =
     report.steps.length > 0 &&
     report.steps.every((item) => item.passed) &&

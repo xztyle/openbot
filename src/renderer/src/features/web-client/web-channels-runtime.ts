@@ -163,5 +163,8 @@ export function createWebChannelsPort(
     visualPage: files.visualPage,
     importAttachments,
     importProgress,
+    sendAgentMessage: async ({ agentId, text, clientMessageId }) => {
+      await remote.send(agentId, text, [], null, clientMessageId);
+    },
   };
 }

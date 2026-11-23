@@ -5,9 +5,17 @@
  * to sign in on accounts.google.com in a browser tab (the takeover event, the escalation to Chief and
  * the host's attention list), and "resolve" ends it as the host does after an answer anywhere. The
  * page sets `data-needs-you-ready` on the root element once it takes events, and writes the number of
- * takeover answers it sent to `data-needs-you-answered`.
+ * takeover answers it sent to `data-needs-you-answered`. "ticket" makes a Motion ticket that asks the
+ * reader for an approval wait on Sales Outbound; the page writes the messages it sent to an agent to
+ * `data-needs-you-sent` and the ticket answers to `data-needs-you-ticket`.
  */
-import type { AgentAttentionItem, AgentEvent, BrowserTab, RespondToBrowserTakeoverInput } from "@openbot/contracts/ipc";
+import {
+  type AgentAttentionItem,
+  type AgentEvent,
+  type BrowserTab,
+  MOTION_TICKET_TURN,
+  type RespondToBrowserTakeoverInput,
+} from "@openbot/contracts/ipc";
 import { Toaster } from "@openbot/ui";
 import { render } from "@solidjs/web";
 import { WebWorkspace } from "../src/features/web-client/WebWorkspace";
@@ -46,6 +54,17 @@ const ITEM: AgentAttentionItem = {
   createdAt: new Date().toISOString(),
   summary: SALES_TAB.title,
   origin: "accounts.google.com",
+};
+
+const TICKET: AgentAttentionItem = {
+  kind: "question",
+  requestId: "motion:issue-man-5",
+  agentId: REQUEST.agentId,
+  threadId: REQUEST.threadId,
+  turnId: MOTION_TICKET_TURN,
+  createdAt: new Date().toISOString(),
+  summary: "MAN-5 · Approve affiliation: Christmas decorations",
+  url: "https://motion.example.com/p/man-5",
 };
 
 const CONDENSED_MESSAGE = "message-agent-2";
@@ -105,6 +124,7 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     if (detail === "request") request();
     if (detail === "secret") secret();
     if (detail === "resolve") resolve();
+    if (detail === "ticket") emit({ type: "agent-attention-changed", items: [TICKET] });
   });
   document.documentElement.dataset.needsYouReady = "";
   // The reader wrote to Chief only: the other agents have no DM row until one needs them.
@@ -142,6 +162,21 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
           },
         }
       : {}),
+    // As the host: the reader's message to an agent, and the answer that takes a ticket off the list.
+    send: async (...args: Parameters<typeof web.send>) => {
+      const [agentId, text] = args;
+      const root = document.documentElement;
+      root.dataset.needsYouSent = [root.dataset.needsYouSent, `${agentId}: ${text}`].filter(Boolean).join("\n");
+      return web.send(...args);
+    },
+    answer: async (input: Parameters<typeof web.answer>[0]) => {
+      if (String(input.requestId) === TICKET.requestId) {
+        document.documentElement.dataset.needsYouTicket = JSON.stringify(input.answers);
+        emit({ type: "agent-attention-changed", items: [] });
+        return;
+      }
+      return web.answer(input);
+    },
     respondToBrowserSecret: async (input) => {
       secrets.push(input.decision === "submit" ? input.secret : input.decision);
       document.documentElement.dataset.needsYouSecrets = secrets.join(",");

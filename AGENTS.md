@@ -245,9 +245,11 @@ risks since the last release.
 
 ### Deploys and critical flows
 
-- Every deploy runs the critical-flows E2E suite in parallel with the deploy. It is mandatory: it
-  always runs and has no skip flag, and it never blocks or delays the deploy.
-- The suite drives the web client at phone width with touch, against a real host. It covers:
+- Tests run in parallel with the deploy, never before it. Every deploy starts the whole test
+  suite (the E2E scripts, the permitted Vitest files, and the critical-flows suite) at the same time
+  as the build. It is mandatory: it always runs and has no skip flag, and no test blocks or delays
+  the deploy.
+- The critical-flows suite drives the web client at phone width with touch, against a real host. It covers:
   - sign-in with a code;
   - sending a message to an agent;
   - tool approvals, including owner-only money approvals;
@@ -255,7 +257,7 @@ risks since the last release.
   - browser takeover;
   - answering a Motion ticket;
   - a host with more than 100 agents.
-- A failure during or after a deploy is never left standing: fix the cause, redeploy, and run the
+- Any test failure during or after a deploy is never left standing: fix the cause, redeploy, and run the
   suite again until it passes. Tell the owner what failed and what fixed it.
 - Desktop, web, and phone run the same application code. Only the presentation layer may differ;
   the desktop IPC and the Team API are transports behind one port, and shared UI never reads

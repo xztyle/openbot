@@ -61,6 +61,9 @@ if [[ -f "$release/deployment.json" ]]; then
   exit 1
 fi
 mkdir -p "$release"
+# Every test of the revision, beside this build and its deploy: always, never blocking (AGENTS.md).
+setsid nohup scripts/deploy-tests-launch.sh "$revision" "$release" > /dev/null 2>&1 < /dev/null &
+echo "Tests of ${revision:0:12} run beside the build: $release/deploy-tests"
 cat /opt/openbot/source/apps/auth-api/wrangler.jsonc > "$release/wrangler.jsonc"
 config_sha=$(sha256sum "$release/wrangler.jsonc" | cut -d ' ' -f 1)
 

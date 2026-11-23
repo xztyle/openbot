@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Runs every test of one revision beside its build and deploy (OpenBot AGENTS.md, "Deploys and critical
+# flows"). build-vps.sh starts it in the background for every build; it never blocks or delays the
+# deploy, and it has no skip flag.
+#
+# 1. A checkout of the revision with the shared node_modules, in its own worktree.
+# 2. The whole suite: `scripts/deploy-tests.ts` (critical flows first, then every standalone E2E script
+#    and the Vitest suite). It sends the owner an urgent push on any failure.
+# 3. When the deploy of the revision finishes (its deployment.json appears, at most 2 h later), the
+#    critical flows once more, against the code that is now live.
+#
+# Results: .openbot-build/deploy-tests/<revision>-<time>/ (deploy-tests.json, logs/, FAILED on a
+# failure, after-deploy/), linked from the release folder as deploy-tests. One suite runs at a time;
+# a later one waits for the lock.
+# Usage: deploy-tests-launch.sh <revision> <release-dir>
+set -u
+revision=$1 release=$2
+work=/home/ubuntu/openbot-release-work
+base="$work/openbot-release/.openbot-build/deploy-tests"
+out="$base/${revision}-$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "$out"
+exec >> "$out/launcher.log" 2>&1
+echo "Tests of $revision for $release, queued $(date -u +%FT%TZ)."
+ln -sfn "$out" "$release/deploy-tests" 2>/dev/null || true
+
+exec 8> "$base/suite.lock"
+flock 8
+echo "Started $(date -u +%FT%TZ)."
+export PATH=/opt/openbot/build-tools:/opt/openbot/build-tools/node/bin:$PATH
+
+tree="$work/wt-deploy-tests-${revision:0:12}"
+dev="$work/openbot-dev"
+git -C "$dev" fetch -q fork main || true
+git -C "$dev" worktree remove --force "$tree" 2>/dev/null || rm -rf "$tree"
+git -C "$dev" worktree add -q --detach "$tree" "$revision"
+# The shared node_modules, as a link farm: the workspace packages link back into this checkout.
+source_modules="$work/wt-ux-polish/node_modules"
+[[ -d $source_modules ]] || source_modules="$dev/node_modules"
+mkdir -p "$tree/node_modules"
+for entry in $(ls -A "$source_modules"); do
+  if [[ $entry == @openbot || $entry == .bin ]]; then cp -a "$source_modules/$entry" "$tree/node_modules/"
+  else ln -s "$(readlink -f "$source_modules/$entry")" "$tree/node_modules/$entry"; fi
+done
+email_modules="$(dirname "$source_modules")/apps/email-app/node_modules"
+if [[ -d $email_modules ]]; then
+  mkdir -p "$tree/apps/email-app/node_modules"
+  for entry in $(ls -A "$email_modules"); do
+    ln -s "$(readlink -f "$email_modules/$entry")" "$tree/apps/email-app/node_modules/$entry"
+  done
+fi
+
+label="release ${revision:0:12}"
+if [[ ! -f "$tree/scripts/deploy-tests.ts" ]]; then
+  echo "This revision has no scripts/deploy-tests.ts; nothing to run."
+  git -C "$dev" worktree remove --force "$tree" 2>/dev/null || rm -rf "$tree"
+  exit 0
+fi
+(cd "$tree" && nice -n 10 bun scripts/deploy-tests.ts --out="$out" --label="$label")
+echo "Suite exit $? at $(date -u +%FT%TZ)."
+
+# The check after the deploy: once the release says it is live, the critical flows again.
+for _ in $(seq 1 720); do
+  [[ -f "$release/deployment.json" ]] && break
+  sleep 10
+done
+if [[ -f "$release/deployment.json" ]]; then
+  (cd "$tree" && nice -n 10 bun scripts/deploy-tests.ts --out="$out/after-deploy" --label="$label (live)" --critical-only)
+  echo "After-deploy exit $? at $(date -u +%FT%TZ)."
+else
+  echo "No deployment of $release within 2 h; no after-deploy run."
+fi
+
+git -C "$dev" worktree remove --force "$tree" 2>/dev/null || rm -rf "$tree"
+echo "Done $(date -u +%FT%TZ)."

@@ -1,5 +1,5 @@
-// Checks Today, the owner's one decision queue: on an iPhone the Today tab counts every request of
-// every space in amber and lists them blocking first, then by money; Approve and an inline answer on
+// Checks Today, the owner's one decision queue: on an iPhone the Today tab counts the requests of the
+// space that shows in amber, and lists them blocking first, then by money; Approve and an inline answer on
 // a card send the answer and the count goes down. A money approval shows the amount of its effect
 // line; an insight alert of the host shows as soon as the host connects; the queue keeps its count
 // while the connection comes back; Dismiss takes an alert off every count. On a computer the sidebar's Today row and the top
@@ -158,13 +158,14 @@ try {
   const page = await phone.newPage();
   track(page);
 
-  // 1. The Today tab counts every space: two loop decisions of Trading and two requests of General.
-  await step(page, "Today counts the requests of every space in amber", async () => {
-    await page.goto(`${origin}/app/general`, COMMIT);
-    await waiting(page, 4).waitFor({ timeout: UI_WAIT_MS });
+  // 1. The Today tab counts the space that shows: the two loop decisions of Trading, not the two
+  // requests of General.
+  await step(page, "Today counts the requests of the space that shows in amber", async () => {
+    await page.goto(`${origin}/app/market-trading`, COMMIT);
+    await waiting(page, 2).waitFor({ timeout: UI_WAIT_MS });
     await tabBar(page)
       .getByRole("button", {
-        name: `${english("workspace.view.today")}, ${english("workspace.phone.waiting", { count: 4 })}`,
+        name: `${english("workspace.view.today")}, ${english("workspace.phone.waiting", { count: 2 })}`,
       })
       .waitFor({ timeout: UI_WAIT_MS });
   });
@@ -184,10 +185,10 @@ try {
       .first()
       .getByRole("button", { name: english("workspace.today.approve"), exact: true })
       .tap();
-    await waiting(page, 3).waitFor({ timeout: UI_WAIT_MS });
+    await waiting(page, 1).waitFor({ timeout: UI_WAIT_MS });
     await tabBar(page)
       .getByRole("button", {
-        name: `${english("workspace.view.today")}, ${english("workspace.phone.waiting", { count: 3 })}`,
+        name: `${english("workspace.view.today")}, ${english("workspace.phone.waiting", { count: 1 })}`,
       })
       .waitFor({ timeout: UI_WAIT_MS });
   });
@@ -197,7 +198,7 @@ try {
     const card = page.getByRole("article", { name: /Answer a question/u }).first();
     await card.getByRole("textbox").fill("Open with the price drop");
     await card.getByRole("button", { name: english("workspace.today.send"), exact: true }).tap();
-    await waiting(page, 2).waitFor({ timeout: UI_WAIT_MS });
+    await page.getByRole("article", { name: /Answer a question/u }).waitFor({ state: "detached", timeout: UI_WAIT_MS });
   });
   await shot(page, "02-phone-answered");
   await phone.close();
@@ -213,49 +214,50 @@ try {
   await step(alertPage, "an insight alert shows as soon as the host connects", async () => {
     await alertPage.goto(`${origin}/app/general?alert`, COMMIT);
     // The alert poll runs every ten minutes: the first read waits for the connection, not for it.
-    await waiting(alertPage, 5).waitFor({ timeout: UI_WAIT_MS });
-    await todayTab(5).waitFor({ timeout: UI_WAIT_MS });
+    await waiting(alertPage, 3).waitFor({ timeout: UI_WAIT_MS });
+    await todayTab(3).waitFor({ timeout: UI_WAIT_MS });
     await alertPage.getByText("Spent $60 on ads with no sale in 3 days").first().waitFor({ timeout: UI_WAIT_MS });
   });
-  await step(alertPage, "a money approval shows the amount of its effect line, after the bigger one", async () => {
+  // General's money leads its queue: the bigger $40 decision is of Trading.
+  await step(alertPage, "a money approval shows the amount of its effect line", async () => {
     const cards = alertPage.getByRole("article");
-    await cards.nth(1).getByText("Hotmart · pay 19 USD", { exact: false }).waitFor({ timeout: UI_WAIT_MS });
-    assert.match((await cards.nth(1).getAttribute("aria-label")) ?? "", /^Chief/u);
-    assert.match((await cards.nth(1).textContent()) ?? "", /\$19\.00/u);
+    await cards.first().getByText("Hotmart · pay 19 USD", { exact: false }).waitFor({ timeout: UI_WAIT_MS });
+    assert.match((await cards.first().getAttribute("aria-label")) ?? "", /^Chief/u);
+    assert.match((await cards.first().textContent()) ?? "", /\$19\.00/u);
   });
   await shot(alertPage, "02b-phone-alert-and-payment");
   await step(alertPage, "the queue keeps its count while the connection comes back", async () => {
     await alertPage.evaluate(() => window.dispatchEvent(new CustomEvent("today-connection", { detail: "connecting" })));
     await alertPage.waitForFunction(() =>
-      document.querySelector(".web-app")?.textContent?.includes("Waiting on you (5)"),
+      document.querySelector(".web-app")?.textContent?.includes("Waiting on you (3)"),
     );
-    assert.equal(await waiting(alertPage, 5).count(), 1);
-    assert.equal(await todayTab(5).count(), 1);
+    assert.equal(await waiting(alertPage, 3).count(), 1);
+    assert.equal(await todayTab(3).count(), 1);
     await alertPage.evaluate(() => window.dispatchEvent(new CustomEvent("today-connection", { detail: "online" })));
-    await waiting(alertPage, 5).waitFor({ timeout: UI_WAIT_MS });
+    await waiting(alertPage, 3).waitFor({ timeout: UI_WAIT_MS });
   });
   await step(alertPage, "Dismiss takes an alert off Today and the tab", async () => {
     await alertPage
       .getByRole("article", { name: /Spent \$60/u })
       .getByRole("button", { name: english("workspace.today.dismiss"), exact: true })
       .tap();
-    await waiting(alertPage, 4).waitFor({ timeout: UI_WAIT_MS });
-    await todayTab(4).waitFor({ timeout: UI_WAIT_MS });
+    await waiting(alertPage, 2).waitFor({ timeout: UI_WAIT_MS });
+    await todayTab(2).waitFor({ timeout: UI_WAIT_MS });
   });
   await alertPhone.close();
 
-  // 5. A computer: the sidebar's Today row and the top bar count the same queue.
+  // 5. A computer: the sidebar's Today row and the top bar count the same queue, of the space that shows.
   const desk = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const deskPage = await desk.newPage();
   track(deskPage);
   await step(deskPage, "the sidebar's Today row and the top bar agree", async () => {
-    await deskPage.goto(`${origin}/app/general`, COMMIT);
-    await waiting(deskPage, 4).waitFor({ timeout: UI_WAIT_MS });
+    await deskPage.goto(`${origin}/app/market-trading`, COMMIT);
+    await waiting(deskPage, 2).waitFor({ timeout: UI_WAIT_MS });
     await deskPage
-      .getByRole("button", { name: english("workspace.needsYou.buttonLabel", { count: 4 }) })
+      .getByRole("button", { name: english("workspace.needsYou.buttonLabel", { count: 2 }) })
       .waitFor({ timeout: UI_WAIT_MS });
     const row = deskPage.getByRole("button", { name: new RegExp(`^${english("workspace.view.today")}`, "u") }).first();
-    assert.match((await row.textContent()) ?? "", /4/u);
+    assert.match((await row.textContent()) ?? "", /2/u);
   });
   await shot(deskPage, "03-desk-today");
 
@@ -269,9 +271,9 @@ try {
       .waitFor({ timeout: UI_WAIT_MS });
     await shot(deskPage, "04-desk-command-bar");
     await deskPage.keyboard.press("Enter");
-    await waiting(deskPage, 3).waitFor({ timeout: UI_WAIT_MS });
+    await waiting(deskPage, 1).waitFor({ timeout: UI_WAIT_MS });
     await deskPage
-      .getByRole("button", { name: english("workspace.needsYou.buttonLabel", { count: 3 }) })
+      .getByRole("button", { name: english("workspace.needsYou.buttonLabel", { count: 1 }) })
       .waitFor({ timeout: UI_WAIT_MS });
   });
   await desk.close();

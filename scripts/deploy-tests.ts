@@ -12,8 +12,10 @@
 //
 // `bun scripts/deploy-tests.ts --out=<dir> [--label=<release>] [--critical-only] [--concurrency=<n>]`
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { homedir } from "node:os";
+import { extname, join, normalize } from "node:path";
 
 interface Test {
   name: string;
@@ -24,13 +26,17 @@ interface Test {
   program: string;
   args: string[];
   timeoutMs: number;
+  /** What the server must give the script first: a static Storybook, or the account service's build. */
+  needs?: ("storybook" | "api-build")[];
+  /** Set when this server cannot give what the script needs; the script then does not run. */
+  setup?: string;
 }
 
 interface Result {
   name: string;
   flow: string;
   critical: boolean;
-  status: "passed" | "failed" | "timed-out";
+  status: "passed" | "failed" | "timed-out" | "needs-setup";
   exitCode: number | null;
   durationMs: number;
   log: string;
@@ -93,29 +99,61 @@ const CRITICAL: Test[] = [
 ];
 
 /**
- * An E2E script needs a dev stack, an account, a real provider or a flag when its header says so; those
- * run by hand. The rest run here.
+ * What an E2E script needs that this server does not have, read from its header: those run by hand,
+ * and the report names each one with its reason. Everything else runs here.
  */
-const NEEDS_SETUP = /bun run dev|--allow-mutations|--api=|signed in|real provider|Start the app|--host=|electron/iu;
+const NEEDS_SETUP: [RegExp, string][] = [
+  [/bun run dev|Start the app|--allow-mutations|--host=|--api=/iu, "a running dev stack or app"],
+  [/signed[ -]in|real provider|a real account/iu, "a signed-in provider account"],
+  [/real `codex app-server`|real Codex/u, "the Codex CLI"],
+  [/OPENBOT_OPENCODE_PATH|<opencode binary>/u, "the OpenCode CLI"],
+  [/Windows only/u, "Windows"],
+  [/STRIPE_SECRET_KEY|--print-user-ids/u, "a Stripe test-mode key"],
+  [/--phase=before\|after/u, "a run before and after a change"],
+  [/\belectron\b/iu, "Electron with a display"],
+];
+
+/** The newest Playwright headless Chromium, for scripts that take `--browser-executable`. */
+function headlessChromium(): string | null {
+  const cache = join(homedir(), ".cache", "ms-playwright");
+  if (!existsSync(cache)) return null;
+  const folder = readdirSync(cache)
+    .filter((name) => name.startsWith("chromium_headless_shell-"))
+    .sort()
+    .at(-1);
+  const path = folder ? join(cache, folder, "chrome-headless-shell-linux64", "chrome-headless-shell") : null;
+  return path && existsSync(path) ? path : null;
+}
+const browserExecutable = headlessChromium();
 
 function standaloneE2e(): Test[] {
   const critical = new Set(CRITICAL.map((test) => test.name));
   return readdirSync(join(root, "scripts"))
     .filter((file) => /-e2e\.ts$/u.test(file) && !critical.has(file))
-    .filter((file) => {
-      const head = readFileSync(join(root, "scripts", file), "utf8")
-        .split("\n")
-        .slice(0, 30)
-        .join("\n");
-      return !NEEDS_SETUP.test(head);
-    })
     .sort()
     .map((file) => {
+      const source = readFileSync(join(root, "scripts", file), "utf8");
+      const head = source.split("\n").slice(0, 30).join("\n");
       // A script that needs longer than the default says so in its header: `deploy-tests timeout: 600s`.
-      const head = readFileSync(join(root, "scripts", file), "utf8").slice(0, 4_000);
-      const seconds = Number(/deploy-tests timeout: (\d+)s/u.exec(head)?.[1] ?? 0);
-      const test = e2e(file, file.replace(/-e2e\.ts$/u, ""), [], seconds > 0 ? seconds * 1_000 : undefined);
-      return { ...test, critical: false };
+      const seconds = Number(/deploy-tests timeout: (\d+)s/u.exec(source.slice(0, 4_000))?.[1] ?? 0);
+      const test: Test = {
+        ...e2e(file, file.replace(/-e2e\.ts$/u, ""), [], seconds > 0 ? seconds * 1_000 : undefined),
+        critical: false,
+      };
+      const setup = NEEDS_SETUP.find(([pattern]) => pattern.test(head));
+      if (setup) return { ...test, setup: setup[1] };
+      // A script that needs Node's inspector or `node:sqlite` says how it runs.
+      if (head.includes(`node --import tsx scripts/${file}`))
+        Object.assign(test, {
+          program: process.env.OPENBOT_NODE ?? "node",
+          args: ["--import", "tsx", `scripts/${file}`],
+        });
+      const needs: Test["needs"] = [];
+      if (source.includes("--storybook=")) needs.push("storybook");
+      if (source.includes("bun run api:build")) needs.push("api-build");
+      if (browserExecutable && source.includes("browser-executable"))
+        test.args.push(`--browser-executable=${browserExecutable}`);
+      return needs.length > 0 ? { ...test, needs } : test;
     });
 }
 
@@ -135,11 +173,13 @@ const tests = criticalOnly
     ];
 
 mkdirSync(join(out, "logs"), { recursive: true });
+/** A script that this server cannot run is listed with its reason, and is no failure. */
+const isFailure = (result: Result) => result.status !== "passed" && result.status !== "needs-setup";
 const results: Result[] = [];
 const startedAt = new Date().toISOString();
 
 function save(done: boolean): void {
-  const failed = results.filter((result) => result.status !== "passed");
+  const failed = results.filter(isFailure);
   writeFileSync(
     join(out, "deploy-tests.json"),
     `${JSON.stringify(
@@ -149,8 +189,9 @@ function save(done: boolean): void {
         done,
         criticalOnly,
         total: tests.length,
-        passed: results.length - failed.length,
+        passed: results.filter((result) => result.status === "passed").length,
         failed: failed.length,
+        needsSetup: results.filter((result) => result.status === "needs-setup").length,
         results,
       },
       null,
@@ -159,11 +200,89 @@ function save(done: boolean): void {
   );
 }
 
-function run(test: Test): Promise<Result> {
+const MIME: Record<string, string> = {
+  ".html": "text/html",
+  ".js": "text/javascript",
+  ".mjs": "text/javascript",
+  ".css": "text/css",
+  ".json": "application/json",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".woff2": "font/woff2",
+};
+
+/** Serves a folder on a free local port; answers its URL. The server ends with this process. */
+function serveFolder(folder: string): Promise<string> {
+  const server = createServer((request, response) => {
+    const path = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
+    let file = normalize(join(folder, path));
+    if (!file.startsWith(folder)) return void response.writeHead(403).end();
+    if (existsSync(file) && statSync(file).isDirectory()) file = join(file, "index.html");
+    if (!existsSync(file)) return void response.writeHead(404).end();
+    response.writeHead(200, { "content-type": MIME[extname(file)] ?? "application/octet-stream" });
+    response.end(readFileSync(file));
+  });
+  server.unref();
+  return new Promise((resolve) =>
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      resolve(typeof address === "object" && address ? `http://127.0.0.1:${address.port}` : "");
+    }),
+  );
+}
+
+/** Runs one command to its end; its output goes to `log`. Answers whether it succeeded. */
+function build(args: string[], log: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = spawn(bun, args, { cwd: root, env: { ...process.env, CI: "1" }, stdio: ["ignore", "pipe", "pipe"] });
+    const chunks: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => chunks.push(chunk));
+    child.on("close", (code) => {
+      writeFileSync(log, Buffer.concat(chunks));
+      resolve(code === 0);
+    });
+  });
+}
+
+/** Each build that scripts need, made once: the arguments it gives them, or why it failed. */
+const prepared = new Map<string, Promise<{ args: string[] } | { error: string }>>();
+function prepare(need: NonNullable<Test["needs"]>[number]): Promise<{ args: string[] } | { error: string }> {
+  const known = prepared.get(need);
+  if (known) return known;
+  const log = join(out, "logs", `prepare-${need}.log`);
+  const made =
+    need === "storybook"
+      ? (async () => {
+          const folder = join(root, ".openbot-build", "deploy-tests-storybook");
+          if (!(await build(["run", "build-storybook", "--", "-o", folder, "--quiet"], log)))
+            return { error: `The Storybook build failed: ${log}` };
+          return { args: [`--storybook=${await serveFolder(folder)}`] };
+        })()
+      : build(["run", "api:build"], log).then((built) =>
+          built ? { args: [] } : { error: `The account service build failed: ${log}` },
+        );
+  prepared.set(need, made);
+  return made;
+}
+
+async function run(test: Test): Promise<Result> {
   const log = join(out, "logs", `${test.name.replace(/[^\w.-]+/gu, "_")}.log`);
   const started = Date.now();
+  const result = (status: Result["status"], text: string): Result => {
+    writeFileSync(log, `${text}\n`);
+    const { name, flow, critical } = test;
+    return { name, flow, critical, status, exitCode: null, durationMs: Date.now() - started, log };
+  };
+  if (test.setup) return result("needs-setup", `Not run on this server: it needs ${test.setup}.`);
+  const args = [...test.args];
+  for (const need of test.needs ?? []) {
+    const made = await prepare(need);
+    if ("error" in made) return result("failed", made.error);
+    args.push(...made.args);
+  }
   return new Promise((resolve) => {
-    const child = spawn(test.program, test.args, {
+    const child = spawn(test.program, args, {
       cwd: root,
       env: { ...process.env, ...BROWSER_ENV, CI: "1" },
       stdio: ["ignore", "pipe", "pipe"],
@@ -207,7 +326,7 @@ async function runAll(list: Test[]): Promise<void> {
         results.push(result);
         save(false);
         say(
-          `${result.status === "passed" ? "PASS" : "FAIL"} ${result.name} (${Math.round(result.durationMs / 1000)} s)`,
+          `${result.status === "passed" ? "PASS" : result.status === "needs-setup" ? "SETUP" : "FAIL"} ${result.name} (${Math.round(result.durationMs / 1000)} s)`,
         );
       }
     }),
@@ -248,7 +367,7 @@ function alertOwner(failed: Result[]): void {
 await runAll(CRITICAL);
 if (!criticalOnly) await runAll(tests.filter((test) => !test.critical));
 save(true);
-const failed = results.filter((result) => result.status !== "passed");
+const failed = results.filter(isFailure);
 if (failed.length > 0) {
   writeFileSync(
     join(out, "FAILED"),
@@ -256,5 +375,7 @@ if (failed.length > 0) {
   );
   alertOwner(failed);
 }
-say(`${results.length - failed.length}/${results.length} passed. Report: ${join(out, "deploy-tests.json")}`);
+say(
+  `${results.filter((result) => result.status === "passed").length}/${results.length} passed, ${failed.length} failed. Report: ${join(out, "deploy-tests.json")}`,
+);
 process.exit(failed.length > 0 ? 1 : 0);

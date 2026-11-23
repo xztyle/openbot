@@ -139,7 +139,7 @@ function host(answers: string[], memories: AgentMemory[], chat: ConversationMess
   return { learning: new AgentLearning(hooks), state };
 }
 
-await check("applies a near-duplicate merge by itself and queues the rest for the owner", async () => {
+await check("applies memory changes by itself and queues the rest for the owner", async () => {
   const { learning, state } = host(
     [
       JSON.stringify({
@@ -160,13 +160,13 @@ await check("applies a near-duplicate merge by itself and queues the rest for th
     items.map((item) => [item.kind, item.risk, item.state]),
     [
       ["memory", "low", "auto-applied"],
-      ["memory", "review", "pending"],
+      ["memory", "review", "auto-applied"],
       ["instructions", "review", "pending"],
     ],
   );
   assert.deepEqual(
     state.memories.map((item) => item.id),
-    ["m1", "m3", "m4"],
+    ["m1", "m4"],
   );
 
   // Undo puts the merged memory back.
@@ -183,7 +183,7 @@ await check("applies a near-duplicate merge by itself and queues the rest for th
   assert.deepEqual(state.instructions, ["Check the image size before posting."]);
 });
 
-await check("never touches a manual memory and marks an item stale when its memory changed", async () => {
+await check("never touches a manual memory and marks an undo stale when its memory changed", async () => {
   const { learning, state } = host(
     [
       JSON.stringify({
@@ -191,18 +191,30 @@ await check("never touches a manual memory and marks an item stale when its memo
           { memoryId: "m4", why: "Old." },
           { memoryId: "m3", why: "Old." },
         ],
+        rewrites: [{ memoryId: "m5", text: "The newsletter goes out on Fridays.", why: "Clearer." }],
       }),
     ],
-    [memory("m3", "The launch is on 2026-10-01."), memory("m4", "Manual note.", { origin: "manual" })],
+    [
+      memory("m3", "The launch is on 2026-10-01."),
+      memory("m4", "Manual note.", { origin: "manual" }),
+      memory("m5", "Newsletter: friday."),
+    ],
   );
   const items = await Effect.runPromise(learning.dreamAgent("a", true));
-  assert.equal(items.length, 1);
-  state.memories = state.memories.map((item) => (item.id === "m3" ? { ...item, text: "Moved to 2026-12-01." } : item));
-  const item = items[0];
-  if (!item) throw new Error("No item.");
-  const decided = await Effect.runPromise(learning.decide({ itemId: item.id, decision: "accept" }));
+  assert.deepEqual(
+    items.map((item) => item.state),
+    ["auto-applied", "auto-applied"],
+  );
+  assert.deepEqual(state.memories.map((item) => item.id).sort(), ["m4", "m5"]);
+  // The rewritten memory changed again after the review applied it: undoing would overwrite that change.
+  state.memories = state.memories.map((item) =>
+    item.id === "m5" ? { ...item, text: "The newsletter goes out on Mondays." } : item,
+  );
+  const rewrite = items.find((item) => item.changes.some((change) => change.type === "memory-update"));
+  if (!rewrite) throw new Error("No rewrite.");
+  const decided = await Effect.runPromise(learning.decide({ itemId: rewrite.id, decision: "revert" }));
   assert.equal(decided.state, "stale");
-  assert.equal(state.memories.length, 2);
+  assert.equal(state.memories.find((item) => item.id === "m5")?.text, "The newsletter goes out on Mondays.");
 });
 
 await check("skips an idle agent at night once its memories were read", async () => {
@@ -220,8 +232,8 @@ await check("refuses a second decision of the same item", async () => {
   );
   const [item] = await Effect.runPromise(learning.dreamAgent("a", true));
   if (!item) throw new Error("No item.");
-  await Effect.runPromise(learning.decide({ itemId: item.id, decision: "dismiss" }));
-  const again = await Effect.runPromise(Effect.result(learning.decide({ itemId: item.id, decision: "accept" })));
+  await Effect.runPromise(learning.decide({ itemId: item.id, decision: "revert" }));
+  const again = await Effect.runPromise(Effect.result(learning.decide({ itemId: item.id, decision: "revert" })));
   assert.equal(again._tag, "Failure");
 });
 

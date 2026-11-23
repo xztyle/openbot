@@ -43,7 +43,11 @@ import { OpenBotDatabase } from "../src/backend/openbot-database";
 import { HttpError } from "../src/main/team-api/http-error";
 import type { TeamApiRequestContext } from "../src/main/team-api/request-context";
 import { requestCapabilities, requestProtocol } from "../src/main/team-api/request-helpers";
-import { type AgentQueueRouteDependencies, routeAgentQueue } from "../src/main/team-api/route-agent-queue";
+import {
+  type AgentQueueRouteDependencies,
+  QUEUE_WINDOW_COMPLETED_LIMIT,
+  routeAgentQueue,
+} from "../src/main/team-api/route-agent-queue";
 
 const OUT = resolve(import.meta.dirname, "../.openbot-build/queue-window-e2e");
 const HISTORY_AGENT = "agent-history";
@@ -319,7 +323,7 @@ async function checkOldFailure(origin: string, mailbox: MailboxStore): Promise<v
   assert.equal(byId.get(interrupted)?.status, "interrupted", "The old interrupted delivery stays.");
   assert.deepEqual(
     snapshot.deliveries.map((delivery) => delivery.id),
-    [failed, interrupted, ...completed.slice(-100)],
+    [failed, interrupted, ...completed.slice(-QUEUE_WINDOW_COMPLETED_LIMIT)],
     "Only the oldest completed deliveries leave, and queue order stays.",
   );
   report.checks.push(
@@ -370,7 +374,7 @@ async function checkHistoryOnly(origin: string, mailbox: MailboxStore, history: 
   const frameBytes = report.reads["history-with-window"]?.frameBytes ?? Number.POSITIVE_INFINITY;
   assert.ok(frameBytes <= TEAM_PROTOCOL_V2_MAX_JSON_FRAME_BYTES);
   assert.equal(windowed.agentId, HISTORY_AGENT);
-  assert.ok(windowed.deliveries.length > 0 && windowed.deliveries.length <= 100);
+  assert.ok(windowed.deliveries.length > 0 && windowed.deliveries.length <= QUEUE_WINDOW_COMPLETED_LIMIT);
   assert.ok(windowed.deliveries.every((delivery) => delivery.status === "completed"));
   assert.deepEqual(
     windowed.deliveries.map((delivery) => delivery.id),

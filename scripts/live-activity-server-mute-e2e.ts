@@ -127,6 +127,11 @@ plugin({
       const { textFor }: { textFor: (locale: "en") => unknown } = await import(mobileUrl("shared/lib/text-value.ts"));
       return { loader: "object", exports: { currentText: () => textFor("en"), currentLocale: () => "en" } };
     });
+    // Product analytics reach OpenPanel and Expo's native modules; the hook only counts actions there.
+    build.onLoad({ filter: /analytics[/\\]mobile-analytics\.ts$/ }, () => ({
+      loader: "object",
+      exports: { mobileAnalytics: { track: () => undefined } },
+    }));
     build.onLoad({ filter: /analytics[/\\]failure-reports\.ts$/ }, () => ({
       loader: "object",
       exports: { showFailureAlert: () => undefined },

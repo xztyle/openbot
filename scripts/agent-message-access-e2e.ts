@@ -7,6 +7,7 @@ import { AGENT_PROVIDERS } from "@openbot/contracts/ipc";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { AgentBrowserHost } from "../src/backend/agent/turn-lifecycle";
+import { AGENT_WAKE_COALESCE_MS } from "../src/backend/collaboration-limits";
 
 const OUT = resolve(import.meta.dirname, "../.openbot-build/agent-message-access-e2e");
 const root = await mkdtemp(join(tmpdir(), "openbot-message-access-"));
@@ -182,8 +183,18 @@ function pass(name: string, condition: boolean, detail?: string) {
   assert.ok(condition, detail ? `${name}: ${detail}` : name);
 }
 
-async function stepResult(step: string) {
-  const entry = await waitFor(`the ${step} tool result`, () => toolLogs().find((item) => item.step === step));
+/**
+ * A teammate's message starts the recipient's turn only after `AGENT_WAKE_COALESCE_MS`, so a step that
+ * another agent's message starts waits that long and more.
+ */
+const AFTER_TEAMMATE_MS = AGENT_WAKE_COALESCE_MS + 30_000;
+
+async function stepResult(step: string, timeoutMs?: number) {
+  const entry = await waitFor(
+    `the ${step} tool result`,
+    () => toolLogs().find((item) => item.step === step),
+    timeoutMs,
+  );
   const text = entry.result?.contentItems.map((item) => item.text).join("\n") ?? JSON.stringify(entry.error);
   const result = { step, success: entry.result?.success === true, text };
   report.calls.push(result);
@@ -211,11 +222,14 @@ const agents = new AgentService({
   },
 });
 
-function idle(agentId: string) {
-  return waitFor("the agent to finish", () =>
-    agents
-      .listQueue(agentId)
-      .deliveries.every((delivery) => !["queued", "starting", "running"].includes(delivery.status)),
+function idle(agentId: string, timeoutMs?: number) {
+  return waitFor(
+    "the agent to finish",
+    () =>
+      agents
+        .listQueue(agentId)
+        .deliveries.every((delivery) => !["queued", "starting", "running"].includes(delivery.status)),
+    timeoutMs,
   );
 }
 
@@ -312,7 +326,7 @@ try {
   await runCauseEffect(agents.sendMessage({ agentId: lead.id, text: "STEP:member-send-helper" }, MEMBER));
   const toHelper = await stepResult("member-send-helper");
   pass("send_message for a member's turn reaches an agent that the role allows", toHelper.success, toHelper.text);
-  const chained = await stepResult("helper-send-secret");
+  const chained = await stepResult("helper-send-secret", AFTER_TEAMMATE_MS);
   await idle(helper.id);
   await idle(lead.id);
   pass(
@@ -334,9 +348,10 @@ try {
 
   await runCauseEffect(agents.sendMessage({ agentId: lead.id, text: "STEP:person-send-helper" }, PERSON));
   const personToHelper = await stepResult("person-send-helper");
-  const personChain = await stepResult("helper-send-secret-for-person");
+  const personChain = await stepResult("helper-send-secret-for-person", AFTER_TEAMMATE_MS);
   await idle(helper.id);
-  await idle(secret.id);
+  // The helper's message to the secret agent waits out the teammate wake hold before its turn.
+  await idle(secret.id, AFTER_TEAMMATE_MS);
   pass(
     "Work for this computer's person still reaches every agent along a chain",
     personToHelper.success && personChain.success && hiddenDeliveries(secret.id) === 1,

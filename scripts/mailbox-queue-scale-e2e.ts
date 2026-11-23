@@ -13,6 +13,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { AGENT_WAKE_COALESCE_MS } from "../src/backend/collaboration-limits";
 import { runCauseEffect } from "../src/backend/effect-boundary";
 import { MailboxStore } from "../src/backend/mailbox-store";
 import { OpenBotDatabase } from "../src/backend/openbot-database";
@@ -220,6 +221,10 @@ try {
   const mailbox = new MailboxStore(path, join(root, "shared"), database);
   await runCauseEffect(mailbox.initialize());
   const seeded = await seed(mailbox);
+  // A new teammate message starts a turn only after `AGENT_WAKE_COALESCE_MS`. The seeded messages
+  // stand for an old queue, so the mailbox's clock (`Date.now`) runs past that hold.
+  const realNow = Date.now.bind(Date);
+  Date.now = () => realNow() + AGENT_WAKE_COALESCE_MS;
   report.agentDeliveries = seeded.length;
   checkQueue(mailbox, seeded);
   await checkDeliveryReads(mailbox, seeded);

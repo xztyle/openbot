@@ -16,6 +16,7 @@ import { AGENT_PROVIDERS, GENERAL_SPACE_ID, isSidebarLayoutSnapshot } from "@ope
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { Effect } from "effect";
 import type { AgentBrowserHost } from "../src/backend/agent/turn-lifecycle";
+import { AGENT_WAKE_COALESCE_MS } from "../src/backend/collaboration-limits";
 
 const OUT = resolve(import.meta.dirname, "../.openbot-build/spaces-isolation-e2e");
 const root = await mkdtemp(join(tmpdir(), "openbot-spaces-"));
@@ -234,11 +235,20 @@ const agents = new AgentService({
 });
 const channels = () => agents.channels;
 
-function idle(agentId: string) {
-  return waitFor("the agent's turns to end", () =>
-    agents
-      .listQueue(agentId)
-      .deliveries.every((delivery) => !["queued", "starting", "running"].includes(delivery.status)),
+/**
+ * A teammate's message starts the recipient's turn only after `AGENT_WAKE_COALESCE_MS`, so waiting for
+ * a turn that another agent's message starts takes that long and more.
+ */
+const AFTER_TEAMMATE_MS = AGENT_WAKE_COALESCE_MS + 30_000;
+
+function idle(agentId: string, timeoutMs?: number) {
+  return waitFor(
+    "the agent's turns to end",
+    () =>
+      agents
+        .listQueue(agentId)
+        .deliveries.every((delivery) => !["queued", "starting", "running"].includes(delivery.status)),
+    timeoutMs,
   );
 }
 
@@ -436,7 +446,7 @@ try {
     expectsReply: false,
   });
   pass("send_message in the space goes out", sameSend.success, sameSend.text);
-  await idle(beta.id);
+  await idle(beta.id, AFTER_TEAMMATE_MS);
 
   // read_agent, interrupt_agent, update_agents, create_routine
   const refusedCalls: [string, string, ToolArgs][] = [
@@ -476,7 +486,8 @@ try {
     scout !== undefined && store.spaces.agentSpaceId(scout.id) === tradingId,
     created.text,
   );
-  if (scout) await idle(scout.id);
+  // The creator's first message is a teammate message: it waits out the wake hold.
+  if (scout) await idle(scout.id, AFTER_TEAMMATE_MS);
 
   // Channels: members of the channel's space only.
   const generalChannel = randomUUID();

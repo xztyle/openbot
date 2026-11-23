@@ -12,11 +12,22 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { AGENT_WAKE_COALESCE_MS } from "../src/backend/collaboration-limits";
 import { runCauseEffect } from "../src/backend/effect-boundary";
 import { MailboxStore } from "../src/backend/mailbox-store";
 import { OpenBotDatabase } from "../src/backend/openbot-database";
 
 const OUT = resolve(import.meta.dirname, "../.openbot-build/teammate-answers-e2e");
+/**
+ * A new teammate message starts a turn only after `AGENT_WAKE_COALESCE_MS`. The mailbox reads the time
+ * from `Date.now`, so this clock runs ahead to the end of that hold instead of waiting two minutes.
+ */
+const realNow = Date.now.bind(Date);
+let ahead = 0;
+Date.now = () => realNow() + ahead;
+const passWakeHold = () => {
+  ahead += AGENT_WAKE_COALESCE_MS;
+};
 const LEAD = "agent-lead";
 const FAST = "agent-fast";
 const SLOW = "agent-slow";
@@ -97,6 +108,7 @@ try {
     text: "Daily check.",
   });
   await runTurn(mailbox, [deliveryFor(routine, LEAD)], "routine-turn", "completed");
+  passWakeHold();
   assert.equal(
     mailbox.nextQueued(LEAD)?.delivery.id,
     answerId,

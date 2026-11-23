@@ -13,9 +13,10 @@
 // Writes .openbot-build/agent-jail-e2e/report.json.
 import assert from "node:assert/strict";
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer, type Server } from "node:http";
 import { createServer as createSocketServer } from "node:net";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { McpServerConfig } from "@openbot/contracts/ipc";
 import { AgentJail, type AgentJailHost } from "../src/backend/agent-jail";
@@ -284,6 +285,7 @@ process.stdin.on("data", (chunk) => {
 
 const children: ChildProcess[] = [];
 const servers: { close: () => void }[] = [];
+let brokersFolder: string | null = null;
 let client: ClaudeAgentClient | null = null;
 let passed = false;
 
@@ -293,8 +295,11 @@ try {
   const main = spawn("sleep", ["300"], { env: { ...process.env, MAIN_SECRET }, stdio: "ignore" });
   children.push(main);
   const mainPid = main.pid ?? 0;
-  const brokerSocket = join(root, "brokers", "appctl.sock");
-  await mkdir(join(root, "brokers"), { recursive: true });
+  // A UNIX socket path holds at most 107 bytes, and a checkout's path can be longer than that. The
+  // jail does not limit socket connections, so the socket's folder can be anywhere.
+  const brokers = await mkdtemp(join(tmpdir(), "openbot-jail-brokers-"));
+  brokersFolder = brokers;
+  const brokerSocket = join(brokers, "appctl.sock");
   const broker = createSocketServer((socket) => socket.end("pong"));
   await new Promise<void>((done) => broker.listen(brokerSocket, done));
   servers.push(broker);
@@ -453,6 +458,7 @@ try {
   if (client) await runCauseEffect(client.stop()).catch(() => undefined);
   for (const child of children) child.kill();
   for (const server of servers) server.close();
+  if (brokersFolder) await rm(brokersFolder, { recursive: true, force: true }).catch(() => undefined);
   if (!process.env.KEEP_AGENT_JAIL_E2E) await rm(root, { recursive: true, force: true }).catch(() => undefined);
 }
 

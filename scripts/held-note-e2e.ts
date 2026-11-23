@@ -15,6 +15,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { isQueuedAgentNote } from "@openbot/contracts/ipc";
+import { AGENT_WAKE_COALESCE_MS } from "../src/backend/collaboration-limits";
 import { runCauseEffect } from "../src/backend/effect-boundary";
 import { MailboxStore } from "../src/backend/mailbox-store";
 import { OpenBotDatabase } from "../src/backend/openbot-database";
@@ -38,6 +39,17 @@ function queued(mailbox: MailboxStore, id: string) {
   assert.ok(delivery, `The queue lists ${id}.`);
   return delivery;
 }
+
+/**
+ * A new teammate message starts a turn only after `AGENT_WAKE_COALESCE_MS`. The mailbox reads the time
+ * from `Date.now`, so this clock runs ahead to the end of that hold instead of waiting two minutes.
+ */
+const realNow = Date.now.bind(Date);
+let ahead = 0;
+Date.now = () => realNow() + ahead;
+const passWakeHold = () => {
+  ahead += AGENT_WAKE_COALESCE_MS;
+};
 
 const root = await mkdtemp(join(tmpdir(), "openbot-held-note-"));
 const path = join(root, "profile");
@@ -64,6 +76,8 @@ try {
     recipientAgentIds: [AGENT],
     text: "Check the landing page and report.",
   });
+  assert.equal(mailbox.nextQueued(AGENT), null, "A teammate's request waits for the wake hold.");
+  passWakeHold();
   assert.equal(mailbox.nextQueued(AGENT)?.delivery.id, request, "The request behind the note starts the turn.");
   assert.deepEqual(
     mailbox.notesToStartWith(request).map((context) => context.delivery.id),
@@ -133,6 +147,7 @@ try {
     text: "Top priority: review the branch now.",
     expectsReply: false,
   });
+  passWakeHold();
   assert.equal(mailbox.nextQueued(AGENT)?.delivery.id, order, "An order without fyi starts a turn.");
   assert.equal(mailbox.hasUnfinishedDelivery(AGENT), true, "The order is unfinished work.");
   assert.equal(isQueuedAgentNote(queued(mailbox, order)), false, "A client shows the order as ordinary work.");

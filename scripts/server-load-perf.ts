@@ -84,6 +84,9 @@ const log = (message: string) => process.stdout.write(`[${new Date().toISOString
 // The copy: agents work in this temporary home, and every agent runs on the Claude stand-in.
 log(`Copying ${sourceDatabase}`);
 copyFileSync(sourceDatabase, join(userData, "openbot.db"));
+// Bun's SQLite leaves the write-ahead log of a closed database in place, and the latest writes are in
+// it: without the log the copy misses them.
+if (existsSync(`${sourceDatabase}-wal`)) copyFileSync(`${sourceDatabase}-wal`, join(userData, "openbot.db-wal"));
 const workspaceRoot = join(home, "OpenBot", "Agents");
 /** The member that reads the chats: the one with the most read cursors, as the owner on a server. */
 let memberId = "owner";

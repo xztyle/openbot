@@ -311,6 +311,8 @@ try {
 } finally {
   try {
     if (closeWorkflows) await closeWorkflows();
+    // The agent service keeps timers, which would hold the process open after the report.
+    await runCauseEffect(agents.stop()).catch(() => undefined);
     database.close();
   } finally {
     await rm(root, { recursive: true, force: true });

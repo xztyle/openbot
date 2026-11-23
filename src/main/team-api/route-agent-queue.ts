@@ -138,7 +138,7 @@ export async function routeAgentQueue(
 }
 
 /** The completed deliveries a queue-window-v1 snapshot keeps at most. */
-const QUEUE_WINDOW_COMPLETED_LIMIT = 20;
+export const QUEUE_WINDOW_COMPLETED_LIMIT = 20;
 /**
  * The text a finished delivery keeps. Clients read the text of open deliveries only (the queue, an
  * edit); a finished one is kept for its id, status and failure.

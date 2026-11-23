@@ -884,6 +884,37 @@ try {
     return { status };
   });
 
+  await step("v8 RPC: a password card's answer over WebRTC reaches the secret route", async () => {
+    // What the phone sends from the secure password card. The host peer forwards the body in wire keys
+    // (`botId`); the secret route must still read its `agentId`. No card waits here, so a read body
+    // answers 409 (the request is gone), and a body the route could not read answered 400.
+    const path = "/v1/browser-secrets/respond";
+    const requestId = randomUUID();
+    const from = v2.bridge.sent.length;
+    v2.bridge.emit(
+      "data",
+      "peer-v2",
+      "rpc",
+      encodeTeamProtocolV2Frame(
+        createTeamProtocolV2Request(requestId, "http.request", {
+          method: "POST",
+          path,
+          body: encodeTeamProtocolV8WebRtcHttpRequest("POST", path, {
+            requestId: randomUUID(),
+            agentId: source.id,
+            decision: "submit",
+            secret: "not-a-real-password",
+          }),
+          capabilities: [...teamCapabilitiesForProtocol(8)],
+        }),
+      ),
+    );
+    const frame = await v2.bridge.rpcFrom(from, rpcResponse(requestId));
+    const status = "result" in frame ? record(frame.result, "RPC result").status : frame.error?.status;
+    assert.equal(status, 409, `The secret route did not read the body: ${JSON.stringify(frame)}.`);
+    return { status };
+  });
+
   await step("v2 handshake: a forged proof or an RPC before the proof gets no session", async () => {
     const before = team.listSessions().length;
     const results: Record<string, boolean> = {};

@@ -143,3 +143,15 @@ export function toCurrentAgentKeysObjectForPath(
 export function toWireAgentKeysObjectForPath(path: string, value: TeamProtocolV1JsonObject): TeamProtocolV1JsonObject {
   return isUntranslatedPath(path) ? value : walkObject(value, "toWire", "");
 }
+
+/**
+ * A request body in the current spelling, whichever spelling it came in. A current body has no wire key,
+ * so it passes unchanged; a wire body (the host peer forwards WebRTC bodies in wire keys) gets current ones.
+ */
+export function currentAgentKeysBody(path: string, value: unknown): TeamProtocolV1JsonValue {
+  // A JSON copy: the body came off JSON, and the copy gives the walk a typed value to read.
+  const json: TeamProtocolV1JsonValue = JSON.parse(JSON.stringify(value ?? null));
+  return json !== null && typeof json === "object" && !Array.isArray(json)
+    ? toCurrentAgentKeysObjectForPath(path, json)
+    : json;
+}

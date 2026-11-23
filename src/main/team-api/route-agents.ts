@@ -337,7 +337,7 @@ export async function routeAgents(
   }
   if (method === "POST" && url.pathname === BROWSER_SECRET_RESPONSE_PATH) {
     if (!capabilities.has("browser-secret-handoff"))
-      throw new HttpError(400, sourceText("error.team.secureAuthUnsupported"));
+      throw new HttpError(400, sourceText("error.team.secureAuthUnsupported"), "capability_missing");
     const input = parseBrowserSecretResponse(await readJson(request));
     // The agent service refuses an agent ID that is not the request's own.
     requireRequestAgent(input.agentId);

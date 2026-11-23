@@ -1108,6 +1108,12 @@ export class TeamApiServer {
           : sourceText("error.team.requestFailed");
       const code = error instanceof RemoteScreenError ? error.code : undefined;
       if (!expected) (this.#options.logger ?? logger).error("Team API request failed:", toLogValue(error));
+      // A refused body names no value, only the route, so the next "400" in the field has a line here.
+      else if (status === 400)
+        (this.#options.logger ?? logger).warn("A Team API request was refused.", {
+          route: new URL(request.url ?? "/", "http://openbot.invalid").pathname,
+          ...(error instanceof HttpError && error.code ? { code: error.code } : {}),
+        });
       // A streamed file can fail after its head is on the wire. A second head is not possible, so
       // the socket closes and the client sees an incomplete download.
       if (response.headersSent) {

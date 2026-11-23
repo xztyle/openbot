@@ -11,6 +11,11 @@ export class HttpError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /**
+     * A stable code for the host log, such as `invalid_request_body`. The frozen wire error codes are a
+     * fixed set, so it does not go to the client.
+     */
+    readonly code?: string,
   ) {
     super(message);
   }

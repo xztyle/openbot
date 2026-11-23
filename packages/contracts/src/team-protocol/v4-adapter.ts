@@ -33,7 +33,12 @@ import {
   readPath,
   scopedUsageRoute,
 } from "./current-adapter-routes";
-import { toCurrentAgentKeys, toCurrentAgentKeysObjectForPath, toWireAgentKeys } from "./current-agent-keys";
+import {
+  currentAgentKeysBody,
+  toCurrentAgentKeys,
+  toCurrentAgentKeysObjectForPath,
+  toWireAgentKeys,
+} from "./current-agent-keys";
 import { decodeHostAnalyticsV1Response } from "./host-analytics-v1";
 import { decodeProfileV4Request, decodeProfileV4Response } from "./profile-v4";
 import { decodeQueueEditRequest, isQueueEditRoute } from "./queue-edit-v1";
@@ -186,16 +191,19 @@ export function decodeTeamProtocolV4CurrentHttpRequest(
   value: unknown,
   options: { preserveSemanticTags?: boolean; agentCreateModel?: boolean } = {},
 ): TeamProtocolV4BaseJsonObject {
-  if (isRemoteDesktopSetupRoute(method, path)) return decodeRemoteDesktopSetupRequest(path, value);
-  if (method === "POST" && path === BROWSER_SECRET_RESPONSE_PATH) return { ...parseBrowserSecretResponse(value) };
-  if (isBrowserLoadRoute(method, path)) return { ...decodeBrowserLoadRequest(value) };
-  if (isBrowserViewSessionsRoute(method, path)) return { ...decodeBrowserViewSessionRequest(value) };
-  if (isQueueEditRoute(method, path)) return { ...decodeQueueEditRequest(value) };
-  if (isAgentAnalyticsRoute(method, path) || isHostAnalyticsRoute(method, path)) return decodeScopedUsageRequest(value);
-  if (isAgentProfileRoute(method, path)) return profile.decodeRequest(path, value);
-  if (isConversationUnreadRoute(method, path)) return decodeUnreadRequest(value);
+  // Over WebRTC the host peer hands a body on in wire keys (`botId`), and the side decoders below read
+  // current keys (`agentId`). A body in current keys passes unchanged.
+  const body = currentAgentKeysBody(path, value);
+  if (isRemoteDesktopSetupRoute(method, path)) return decodeRemoteDesktopSetupRequest(path, body);
+  if (method === "POST" && path === BROWSER_SECRET_RESPONSE_PATH) return { ...parseBrowserSecretResponse(body) };
+  if (isBrowserLoadRoute(method, path)) return { ...decodeBrowserLoadRequest(body) };
+  if (isBrowserViewSessionsRoute(method, path)) return { ...decodeBrowserViewSessionRequest(body) };
+  if (isQueueEditRoute(method, path)) return { ...decodeQueueEditRequest(body) };
+  if (isAgentAnalyticsRoute(method, path) || isHostAnalyticsRoute(method, path)) return decodeScopedUsageRequest(body);
+  if (isAgentProfileRoute(method, path)) return profile.decodeRequest(path, body);
+  if (isConversationUnreadRoute(method, path)) return decodeUnreadRequest(body);
   if (scopedUsageRoute(method, path)) {
-    return decodeScopedUsageRequest(value);
+    return decodeScopedUsageRequest(body);
   }
   if (!duplicateRoute(method, path)) {
     const decoded = options.preserveSemanticTags

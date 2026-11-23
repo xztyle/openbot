@@ -265,7 +265,7 @@ export async function readJson(request: IncomingMessage): Promise<DynamicRecord>
       agentCreateModel: capabilities.has(TEAM_AGENT_CREATE_MODEL_CAPABILITY),
     });
   } catch {
-    throw new HttpError(400, "A valid JSON object is required.");
+    throw new HttpError(400, "A valid JSON object is required.", "invalid_request_body");
   }
 }
 

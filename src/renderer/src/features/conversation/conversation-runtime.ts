@@ -27,7 +27,6 @@ export interface ConversationRuntime {
     OpenBotDesktopApi["agent"],
     | "discardDraftAttachment"
     | "importAttachmentData"
-    | "downloadAttachments"
     | "editQueuedMessage"
     | "listInstalledSkills"
     | "listMcpServers"

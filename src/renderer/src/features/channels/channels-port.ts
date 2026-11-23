@@ -29,7 +29,6 @@ export interface ChannelsPort {
       Pick<
         OpenBotDesktopApi["agent"],
         | "discardDraftAttachment"
-        | "downloadAttachments"
         | "workspaceActivity"
         | "workspaceThreadStates"
         | "workspaceReadThread"
@@ -91,7 +90,7 @@ export interface ChannelsPort {
    * Sends the reader's own message to an agent's chat, outside the chat view: an answer from Today or a
    * DM strip. The desktop sends it through preload, the browser client over the host connection.
    */
-  sendAgentMessage?: (input: { agentId: string; text: string; clientMessageId: string }) => Promise<void>;
+  sendAgentMessage: (input: { agentId: string; text: string; clientMessageId: string }) => Promise<void>;
 }
 
 /**

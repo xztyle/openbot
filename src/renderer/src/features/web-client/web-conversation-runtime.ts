@@ -270,7 +270,6 @@ export function createWebConversationRuntime(
         }),
       // A voice recording is a draft of this client's own host. Another host's upload waits for that host.
       discardDraftAttachment: (id, serverId) => remote.discard(id, serverId === LOCAL_SERVER_ID ? undefined : serverId),
-      downloadAttachments: unavailable,
       editQueuedMessage: async (input, serverId) => {
         // The edit belongs to the host that queued the message. This client talks only to the connected one.
         if (serverId !== hostId()) throw new Error(currentText().t("webClient.error.hostChanged"));

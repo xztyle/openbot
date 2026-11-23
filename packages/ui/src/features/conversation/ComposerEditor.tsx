@@ -4,7 +4,7 @@ import { serializeChatTagReference } from "@openbot/contracts/chat-tag-reference
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { DraftAttachment } from "@openbot/contracts/ipc";
 import { AtSign, Badge, Blocks, createFieldListPress, Hash, Listbox, Lock, overlayMount, Puzzle } from "@openbot/ui";
-import { usesTouchLayout } from "@openbot/ui/utils";
+import { hoverHandlers, usesTouchLayout } from "@openbot/ui/utils";
 import { Dynamic, Portal } from "@solidjs/web";
 import {
   createEffect,
@@ -1326,7 +1326,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
                         },
                       ]}
                       {...pickerPress.optionProps(() => insertOption(option))}
-                      onMouseEnter={() => setActiveOption(optionIndex())}
+                      {...hoverHandlers(
+                        () => setActiveOption(optionIndex()),
+                        () => undefined,
+                      )}
                     >
                       {option.type === "agent" ? (
                         <AgentAvatar agent={option.agent} />

@@ -3,7 +3,7 @@ import type { AttachmentSummary } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
 import { Blocks, Button, Puzzle, TextQuote } from "@openbot/ui";
 import { ReferenceChip } from "@openbot/ui/reference-chip";
-import { usesTouchLayout } from "@openbot/ui/utils";
+import { hoverHandlers, usesTouchLayout } from "@openbot/ui/utils";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, createUniqueId, For, Show, untrack } from "solid-js";
 import type { ComposerAgent, ComposerSkill, MessageCitation } from "../../data";
@@ -133,10 +133,7 @@ export function RichMessageText(props: RichMessageTextProps) {
                 aria-label={attachment ? t("chat.file.openAttached", { name }) : t("chat.file.openShared", { name })}
                 aria-describedby={tooltipId}
                 data-cuelume-tap="open"
-                onPointerEnter={(event) => openTooltip(event.currentTarget, name, true)}
-                onMouseEnter={(event) => openTooltip(event.currentTarget, name, true)}
-                onPointerLeave={(event) => closeTooltip(event.currentTarget)}
-                onMouseLeave={(event) => closeTooltip(event.currentTarget)}
+                {...hoverHandlers<HTMLButtonElement>((element) => openTooltip(element, name, true), closeTooltip)}
                 onFocus={(event) => openTooltip(event.currentTarget, name, true)}
                 onBlur={(event) => closeTooltip(event.currentTarget)}
                 onKeyDown={closeTooltipOnEscape}
@@ -253,10 +250,10 @@ export function RichMessageText(props: RichMessageTextProps) {
                   data-cuelume-emphasis="subtle"
                   aria-label={t("chat.citation.open", { number: part.citation.number, label: part.citation.label })}
                   aria-describedby={tooltipId}
-                  onPointerEnter={(event) => openTooltip(event.currentTarget, part.citation?.label ?? "")}
-                  onMouseEnter={(event) => openTooltip(event.currentTarget, part.citation?.label ?? "")}
-                  onPointerLeave={(event) => closeTooltip(event.currentTarget)}
-                  onMouseLeave={(event) => closeTooltip(event.currentTarget)}
+                  {...hoverHandlers<HTMLAnchorElement>(
+                    (element) => openTooltip(element, part.citation?.label ?? ""),
+                    closeTooltip,
+                  )}
                   onFocus={(event) => openTooltip(event.currentTarget, part.citation?.label ?? "")}
                   onBlur={(event) => closeTooltip(event.currentTarget)}
                   onKeyDown={closeTooltipOnEscape}

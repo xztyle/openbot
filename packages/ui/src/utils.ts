@@ -40,6 +40,29 @@ export function usesTouchLayout(): boolean {
 }
 
 /**
+ * Hover handlers that only a hovering pointer runs: a mouse or a pen, never a finger. On a phone a tap
+ * sends pointer and emulated mouse enter events first; when they show something (a tooltip), iOS
+ * Safari treats the tap as a hover and drops its click, so the button needs a second tap. Use these
+ * instead of `onMouseEnter`/`onMouseLeave` (`scripts/check-hover-media.ts` refuses those).
+ */
+export function hoverHandlers<T extends HTMLElement>(
+  enter: (element: T) => void,
+  leave: (element: T) => void,
+): {
+  onPointerEnter: (event: PointerEvent & { currentTarget: T }) => void;
+  onPointerLeave: (event: PointerEvent & { currentTarget: T }) => void;
+} {
+  return {
+    onPointerEnter: (event) => {
+      if (event.pointerType !== "touch") enter(event.currentTarget);
+    },
+    onPointerLeave: (event) => {
+      if (event.pointerType !== "touch") leave(event.currentTarget);
+    },
+  };
+}
+
+/**
  * Where the app takes Slack's phone layout: a window as narrow as a phone, or a touch phone on its
  * side, which is wider than 720px but too short for the computer's layout. The phone media queries
  * of the stylesheets spell out the same condition (see `workspace-shell.css`).

@@ -22,6 +22,13 @@ const SCROLL = ".conversation-scroll";
 const AGENT_COMPOSER = ".composer [contenteditable='true']";
 const REPLY = '[data-chat-search-message="reading-history-reply"]';
 
+declare global {
+  interface Window {
+    /** The scroll event that `scrollWith` waits for. */
+    chatScrolled?: Promise<void>;
+  }
+}
+
 interface StoryCase {
   id: string;
   /** An element that must hold still; by default the top row on the screen. */
@@ -153,19 +160,21 @@ async function waitForGrowth(page: Page, story: StoryCase): Promise<void> {
 
 /*
  * An input, then the scroll event that moves the chat in its direction. A scroll event that the chat's
- * own follow queued before the input can arrive first.
+ * own follow queued before the input can arrive first. The listener is in place before the input is
+ * sent: the page can run an input before a script that was sent first, and the scroll of that input
+ * would then come before the start position.
  */
 async function scrollWith(page: Page, up: boolean, input: () => Promise<void>): Promise<void> {
-  const scrolled = page.evaluate(
+  await page.evaluate(
     ({ scrollSelector, towardTop }) => {
       const scroll = document.querySelector<HTMLElement>(scrollSelector);
       if (!scroll) throw new Error("The conversation is missing.");
       const from = scroll.scrollTop;
-      return new Promise((done) => {
+      window.chatScrolled = new Promise((done) => {
         const onScroll = () => {
           if (towardTop ? scroll.scrollTop >= from : scroll.scrollTop <= from) return;
           scroll.removeEventListener("scroll", onScroll);
-          done(undefined);
+          done();
         };
         scroll.addEventListener("scroll", onScroll);
       });
@@ -173,7 +182,7 @@ async function scrollWith(page: Page, up: boolean, input: () => Promise<void>): 
     { scrollSelector: SCROLL, towardTop: up },
   );
   await input();
-  await scrolled;
+  await page.evaluate(() => window.chatScrolled);
 }
 
 function wheel(page: Page, deltaY: number): Promise<void> {

@@ -40,6 +40,11 @@ const AGENT_PROCESS_NICE = 10;
 const STOP_GRACE_MS = 5_000;
 /** A process younger than this is never stopped, such as the wake-up command that a stopped job's shell runs. */
 const STOP_MIN_AGE_MS = 5_000;
+/**
+ * A process that holds less than this is never stopped: it gives back too little to help, and an idle
+ * job such as a `sleep` of a routine would die while the process that fills the memory runs on.
+ */
+const STOP_MIN_RSS_BYTES = 32 * 1024 * 1024;
 
 export interface ServerMemoryOptions {
   /** True on a hosted server, whose plan sets the memory. */
@@ -465,7 +470,7 @@ class AgentProcesses {
       { concurrency: PROC_READ_CONCURRENCY },
     );
     for (const { entry, rssBytes } of leaves.sort((left, right) => right.rssBytes - left.rssBytes)) {
-      if (freeing >= neededBytes) break;
+      if (freeing >= neededBytes || rssBytes < STOP_MIN_RSS_BYTES) break;
       if (!signal(entry.pid, "SIGTERM")) continue;
       this.#stopping.set(entry.pid, { start: entry.start, at: now, killed: false });
       freeing += rssBytes;

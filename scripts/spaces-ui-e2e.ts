@@ -1,5 +1,5 @@
-// Walks the spaces of the web client on a computer and on an iPhone: Back after Open on a Today card
-// or Jump to of another space returns to the space the reader came from; moving the open agent to
+// Walks the spaces of the web client on a computer and on an iPhone: Back after Open on a request
+// of another space in "Needs you" returns to the space the reader came from; moving the open agent to
 // another space takes the reader along; a space's Mark all as read leaves the other spaces unread;
 // a phone deletes a space from its switcher. It serves the web client on the mock host of
 // `src/renderer/stories/web-client-today-harness.tsx` (General, Trading with Research and
@@ -92,12 +92,24 @@ async function at(page: Page, pathname: string): Promise<void> {
   await page.waitForFunction((wanted) => window.location.pathname === wanted, pathname, { timeout: UI_WAIT_MS });
 }
 
-/** Opens `/app/<space>` and waits for Today's cards and the host's spaces. */
-async function start(page: Page, space: string): Promise<void> {
+/**
+ * Opens `/app/<space>` and waits for the card of Today named `card`: Today lists the requests of the
+ * space that shows. The host's attention list comes a moment after the first connect.
+ */
+async function start(page: Page, space: string, card: RegExp): Promise<void> {
   await page.goto(`/app/${space}`, COMMIT);
   await firstCard(page).waitFor({ timeout: UI_WAIT_MS });
-  // The host's attention list comes a moment after the first connect.
-  await page.getByRole("article", { name: /^Chief/u }).waitFor({ timeout: UI_WAIT_MS });
+  await page.getByRole("article", { name: card }).waitFor({ timeout: UI_WAIT_MS });
+}
+
+/** Opens the first request of `agent` in another space from the "Needs you" button of the top bar. */
+async function openOtherSpaceRequest(page: Page, here: number, others: number, agent: string): Promise<void> {
+  await page.getByRole("button", { name: english("workspace.needsYou.buttonLabel", { count: here }) }).click();
+  await page.getByRole("button", { name: english("workspace.needsYou.otherSpaces", { count: others }) }).click();
+  await page
+    .getByText(english("workspace.needsYou.rowTitle", { name: agent }), { exact: true })
+    .first()
+    .click();
 }
 
 rmSync(OUT, { recursive: true, force: true });
@@ -132,16 +144,13 @@ try {
   const desk = await browser.newContext({ viewport: { width: 1440, height: 900 }, baseURL: origin });
   const page = await desk.newPage();
   page.on("pageerror", (error) => report.pageErrors.push(error.stack ?? error.message));
-  const open = english("workspace.needsYou.open");
 
-  // 1. Today in Trading: Open on Chief's payment (General) and Back returns to Trading.
-  await step(page, "Back after Open on a card of another space returns to the space before", async () => {
-    await start(page, "market-trading");
+  // 1. Trading: Open on Chief's payment (General) from the other spaces of "Needs you", and Back
+  // returns to Trading.
+  await step(page, "Back after Open on a request of another space returns to the space before", async () => {
+    await start(page, "market-trading", /Approve \$40/u);
     await at(page, "/app/market-trading/today");
-    await page
-      .getByRole("article", { name: /^Chief/u })
-      .getByRole("button", { name: open })
-      .click();
+    await openOtherSpaceRequest(page, 2, 2, "Chief");
     await at(page, "/app/general/dm/chief");
     await page.goBack();
     await at(page, "/app/market-trading/today");
@@ -150,14 +159,11 @@ try {
       .waitFor({ timeout: UI_WAIT_MS });
   });
 
-  // 2. Today in General: Open on the loop decision (Trading) and Back returns to General.
+  // 2. General: Open on the loop decision (Trading) from the other spaces, and Back returns to General.
   await step(page, "Back after Open on a loop decision of another space returns to the space before", async () => {
-    await start(page, "general");
+    await start(page, "general", /^Chief/u);
     await at(page, "/app/general/today");
-    await page
-      .getByRole("article", { name: /Approve \$40/u })
-      .getByRole("button", { name: open })
-      .click();
+    await openOtherSpaceRequest(page, 2, 2, "Research");
     await at(page, "/app/market-trading/loops");
     await page.goBack();
     await at(page, "/app/general/today");
@@ -165,7 +171,7 @@ try {
 
   // 3. Research's chat is open in Trading; moving Research to Piks shows Piks with the chat.
   await step(page, "moving the open agent to another space takes the reader along", async () => {
-    await start(page, "market-trading");
+    await start(page, "market-trading", /Approve \$40/u);
     const research = page.getByRole("button", { name: /^Research, AI agent/u });
     await research.click();
     await at(page, "/app/market-trading/dm/research");
@@ -182,7 +188,7 @@ try {
 
   // 4. Mark all as read in Trading's menu: Trading is read, General's Unreads still lists #general.
   await step(page, "a space's Mark all as read leaves the other spaces unread", async () => {
-    await start(page, "market-trading");
+    await start(page, "market-trading", /Approve \$40/u);
     await spacesRail(page)
       .getByRole("button", { name: /^Trading, /u })
       .waitFor({ timeout: UI_WAIT_MS });
@@ -208,7 +214,7 @@ try {
   const phonePage = await phone.newPage();
   phonePage.on("pageerror", (error) => report.pageErrors.push(error.stack ?? error.message));
   await step(phonePage, "a phone deletes a space from the space switcher", async () => {
-    await start(phonePage, "piks");
+    await phonePage.goto("/app/piks", COMMIT);
     const tabs = phonePage.getByRole("navigation", { name: english("workspace.phone.tabs") });
     await tabs.getByRole("button", { name: /^Chat/u }).tap();
     const switcher = phonePage.getByRole("button", { name: new RegExp(`^${english("workspace.phone.switch")}`, "u") });

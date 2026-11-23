@@ -121,7 +121,13 @@ function header(page: Page, title: string) {
 }
 
 mkdirSync(OUT, { recursive: true });
-const browser = await chromium.launch({ channel: "chrome" });
+// Installed Chrome, or the Chromium that `--browser-executable` names.
+const browserExecutable = process.argv
+  .find((arg) => arg.startsWith("--browser-executable="))
+  ?.slice("--browser-executable=".length);
+const browser = await chromium.launch(
+  browserExecutable ? { executablePath: browserExecutable } : { channel: "chrome" },
+);
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 860 } });
 

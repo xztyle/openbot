@@ -124,10 +124,10 @@ async function showSidebar(page: Page, viewport: ViewportName): Promise<void> {
   if (viewport !== "phone") return;
   const back = page.getByRole("button", { name: english("workspace.layout.back"), exact: true }).first();
   if (await back.isVisible()) await back.click();
-  // Back shows the tab the conversation came from; the list is the Home tab.
+  // Back shows the tab the conversation came from; the list is the Chat tab.
   const home = page
     .getByRole("navigation", { name: english("workspace.phone.tabs") })
-    .getByRole("button", { name: new RegExp(`^${english("workspace.phone.home")}`, "u") });
+    .getByRole("button", { name: new RegExp(`^${english("workspace.phone.chat")}`, "u") });
   await home.waitFor({ timeout: UI_WAIT_MS });
   if ((await home.getAttribute("aria-current")) !== "page") await home.click();
   await page
@@ -247,7 +247,8 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
     await remove.click();
     await confirm.getByRole("button", { name: english("sidebar.channelMenu.delete"), exact: true }).click();
     await confirm.waitFor({ state: "detached", timeout: UI_WAIT_MS });
-    await waitForPath(page, (path) => path.endsWith("/activity"), "deleted channel");
+    // A deleted channel leaves for Today, the home of the workspace.
+    await waitForPath(page, (path) => path.endsWith("/today"), "deleted channel");
   });
 
   // 4. New message: Cancel closes it; Start DM opens the conversation.
@@ -283,11 +284,12 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
       "Between agents is not a top row",
     );
     if (viewport === "phone") {
-      // The phone shell has no More row in the list: More is a tab of the bottom bar.
+      // The phone shell has no More row in the list: More opens from the account button of Today.
       await page
         .getByRole("navigation", { name: english("workspace.phone.tabs") })
-        .getByRole("button", { name: english("workspace.phone.more"), exact: true })
+        .getByRole("button", { name: new RegExp(`^${english("workspace.view.today")}`, "u") })
         .click();
+      await page.getByRole("button", { name: english("workspace.phone.more"), exact: true }).click();
       await page.getByRole("button", { name: english("workspace.view.agents"), exact: true }).click();
     } else {
       await sidebar.getByRole("button", { name: english("workspace.sidebar.more"), exact: true }).click();
@@ -341,13 +343,13 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
     await waitForPath(page, (path) => path === "/app/general/activity", "settings closed");
   });
 
-  // 7. New space from the rail (a computer) or the space switcher of Home (a phone): the new space opens.
+  // 7. New space from the rail (a computer) or the space switcher of Chat (a phone): the new space opens.
   await step(page, viewport, "New space creates the space and shows it", async () => {
     if (viewport === "phone") {
       await showSidebar(page, viewport);
       await page
         .getByRole("navigation", { name: english("workspace.phone.tabs") })
-        .getByRole("button", { name: english("workspace.phone.home"), exact: true })
+        .getByRole("button", { name: new RegExp(`^${english("workspace.phone.chat")}`, "u") })
         .click();
       await page.getByRole("button", { name: new RegExp(`^${english("workspace.phone.switch")}`, "u") }).click();
       await dialogNamed(page, english("workspace.phone.switch"))
@@ -365,7 +367,7 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
     await dialog.waitFor({ state: "detached", timeout: UI_WAIT_MS });
     // The new space shows: the address names it (its slug, or its id when the host gives no slug).
     await waitForPath(page, (path) => !path.startsWith("/app/general/"), "new space");
-    // A computer shows it on the rail; a phone names it at the top of Home.
+    // A computer shows it on the rail; a phone names it at the top of Chat.
     await (viewport === "phone"
       ? page.getByText(`Ops ${suffix}`, { exact: true })
       : page.getByRole("button", { name: new RegExp(`^Ops ${suffix}`, "u") })

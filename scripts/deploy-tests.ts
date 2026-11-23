@@ -109,7 +109,6 @@ const NEEDS_SETUP: [RegExp, string][] = [
   [/OPENBOT_OPENCODE_PATH|<opencode binary>/u, "the OpenCode CLI"],
   [/Windows only/u, "Windows"],
   [/STRIPE_SECRET_KEY|--print-user-ids/u, "a Stripe test-mode key"],
-  [/--phase=before\|after/u, "a run before and after a change"],
   [/\belectron\b/iu, "Electron with a display"],
 ];
 
@@ -151,6 +150,8 @@ function standaloneE2e(): Test[] {
       const needs: Test["needs"] = [];
       if (source.includes("--storybook=")) needs.push("storybook");
       if (source.includes("bun run api:build")) needs.push("api-build");
+      // A script that compares a run before and after a change keeps each in its own folder.
+      if (/--phase=before( or --phase=|\|)after/u.test(source)) test.args.push("--phase=after");
       if (browserExecutable && source.includes("browser-executable"))
         test.args.push(`--browser-executable=${browserExecutable}`);
       return needs.length > 0 ? { ...test, needs } : test;

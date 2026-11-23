@@ -133,7 +133,15 @@ async function main() {
     report.codeBlock.sha256 = createHash("sha256")
       .update(readFileSync(resolve(ROOT, CODE_BLOCK)))
       .digest("hex");
-    browser = await chromium.launch({ channel: "chrome", headless: true, timeout: 30_000 });
+    // Installed Chrome, or the Chromium that `--browser-executable` names.
+    const executablePath = process.argv
+      .find((arg) => arg.startsWith("--browser-executable="))
+      ?.slice("--browser-executable=".length);
+    browser = await chromium.launch({
+      ...(executablePath ? { executablePath } : { channel: "chrome" }),
+      headless: true,
+      timeout: 30_000,
+    });
     for (const [index, story] of stories.entries()) {
       const result = report.cases[index];
       if (!result) throw new Error("Missing story report.");

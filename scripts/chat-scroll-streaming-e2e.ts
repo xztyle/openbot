@@ -391,8 +391,11 @@ async function checkRailJump(page: Page, story: StoryCase, result: StoryResult):
 }
 
 mkdirSync(OUT, { recursive: true });
-const browser = await chromium.launch({ channel: "chrome", args: ["--disable-smooth-scrolling"] });
-const smoothBrowser = await chromium.launch({ channel: "chrome" });
+// Installed Chrome, or the Chromium that `--browser-executable` names.
+const browserExecutable = option("browser-executable");
+const chrome = browserExecutable ? { executablePath: browserExecutable } : { channel: "chrome" };
+const browser = await chromium.launch({ ...chrome, args: ["--disable-smooth-scrolling"] });
+const smoothBrowser = await chromium.launch(chrome);
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 860 } });
   const smoothPage = await smoothBrowser.newPage({ viewport: { width: 1200, height: 860 } });

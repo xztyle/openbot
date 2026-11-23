@@ -1,9 +1,9 @@
 // Checks the seams between the Slack-parity parts of the workspace on a computer and on an iPhone:
 // the tab title names the place; ⌘J goes to the first unread message; a thread reply also sent to
 // the channel says "Replied to a thread" and opens its thread; the row menu has Mark as read;
-// Activity names a DM as a DM; Unreads filters and sorts. On a phone: the DMs tab is the DMs view
-// (Jump to "DMs" opens the tab), a long press on a DM opens its actions, the bell opens a sheet, a
-// thread has Back and no close, the address of Activity opens its tab, and the search field takes
+// Activity names a DM as a DM; Unreads filters and sorts. On a phone: the Chat tab lists the DMs
+// (Jump to "DMs" opens their view), a long press on a DM opens its actions, the bell opens a sheet, a
+// thread has Back and no close, the address of Activity opens the Inbox tab, and the search field takes
 // the focus. It serves the web client on a
 // mock host with unread messages (`src/renderer/stories/web-client-inbox-harness.tsx`) and drives it
 // in Chromium. No account service, host or provider is needed.
@@ -118,7 +118,7 @@ const button = (page: Page, name: string | RegExp) =>
   page.getByRole("button", { name, exact: typeof name === "string" });
 const sidebar = (page: Page) => page.getByRole("navigation", { name: english("workspace.sidebar.label"), exact: true });
 const pane = (page: Page, name: string) => page.getByRole("region", { name, exact: true }).first();
-const tab = (page: Page, key: "workspace.phone.home" | "workspace.phone.dms" | "workspace.phone.more") =>
+const tab = (page: Page, key: "workspace.view.today" | "workspace.phone.chat" | "workspace.phone.inbox") =>
   page
     .getByRole("navigation", { name: english("workspace.phone.tabs") })
     .getByRole("button", { name: new RegExp(`^${english(key)}`, "u") });
@@ -259,21 +259,20 @@ async function phone(browser: Browser, origin: string): Promise<void> {
   const page = await context.newPage();
   watch(page, viewport);
 
-  await step(page, viewport, "the DMs tab is the DMs view, without Back", async () => {
-    await load(page, origin, "/app/general", tab(page, "workspace.phone.home"));
-    await tab(page, "workspace.phone.dms").tap();
-    const view = pane(page, english("workspace.view.dms"));
-    await view.getByRole("searchbox", { name: english("workspace.dms.search") }).waitFor({ timeout: UI_WAIT_MS });
+  await step(page, viewport, "the Chat tab lists the DMs, without Back", async () => {
+    await load(page, origin, "/app/general", tab(page, "workspace.phone.chat"));
+    await tab(page, "workspace.phone.chat").tap();
+    await sidebar(page).getByRole("button", { name: /^Ana/u }).first().waitFor({ timeout: UI_WAIT_MS });
     assert.equal(
-      await view.getByRole("button", { name: english("workspace.layout.back"), exact: true }).count(),
+      await page.getByRole("button", { name: english("workspace.layout.back"), exact: true }).count(),
       0,
       "a tab has no Back",
     );
-    await shot(page, "phone-dms-tab");
+    await shot(page, "phone-chat-tab");
   });
 
   await step(page, viewport, "a long press on an unread DM offers Mark as read", async () => {
-    const row = pane(page, english("workspace.view.dms")).getByRole("button", { name: /^Ana/u }).first();
+    const row = sidebar(page).getByRole("button", { name: /^Ana/u }).first();
     const sheet = page.getByRole("dialog");
     await longPress(context, page, row, sheet.getByRole("button", { name: english("workspace.app.channel.markRead") }));
     await shot(page, "phone-dm-actions");
@@ -281,20 +280,12 @@ async function phone(browser: Browser, origin: string): Promise<void> {
     await sheet.waitFor({ state: "detached", timeout: UI_WAIT_MS });
   });
 
-  await step(page, viewport, "Jump to DMs opens the DMs tab", async () => {
-    await tab(page, "workspace.phone.home").tap();
+  await step(page, viewport, "Jump to DMs opens the DMs view", async () => {
+    await tab(page, "workspace.phone.chat").tap();
     await button(page, english("workspace.app.menu.search")).first().tap();
     await page.keyboard.type("DMs");
     await page.keyboard.press("Enter");
-    await page.waitForFunction(
-      (label) =>
-        [...document.querySelectorAll('[aria-current="page"]')].some((element) =>
-          (element.getAttribute("aria-label") ?? "").startsWith(label),
-        ),
-      english("workspace.phone.dms"),
-      { timeout: UI_WAIT_MS },
-    );
-    assert.equal(await pane(page, english("workspace.view.dms")).isVisible(), true);
+    await pane(page, english("workspace.view.dms")).waitFor({ timeout: UI_WAIT_MS });
   });
 
   await step(page, viewport, "the bell of a channel opens its choices in a sheet", async () => {
@@ -322,14 +313,14 @@ async function phone(browser: Browser, origin: string): Promise<void> {
     );
   });
 
-  await step(page, viewport, "the address of Activity opens the Activity tab", async () => {
+  await step(page, viewport, "the address of Activity opens the Inbox tab", async () => {
     await load(page, origin, "/app/general/activity", pane(page, english("workspace.view.activity")));
     await page.waitForFunction(
       (label) =>
         [...document.querySelectorAll('[aria-current="page"]')].some((element) =>
           (element.getAttribute("aria-label") ?? "").startsWith(label),
         ),
-      english("workspace.phone.activity"),
+      english("workspace.phone.inbox"),
       { timeout: UI_WAIT_MS },
     );
     assert.equal(
@@ -342,8 +333,10 @@ async function phone(browser: Browser, origin: string): Promise<void> {
   });
 
   await step(page, viewport, "Search from More takes the focus", async () => {
-    await load(page, origin, "/app/general", tab(page, "workspace.phone.home"));
-    await tab(page, "workspace.phone.more").tap();
+    await load(page, origin, "/app/general", tab(page, "workspace.view.today"));
+    // More opens from the account button of Today.
+    await tab(page, "workspace.view.today").tap();
+    await button(page, english("workspace.phone.more")).tap();
     await button(page, english("workspace.view.search")).tap();
     await page.waitForFunction(
       (label) => document.activeElement?.getAttribute("aria-label") === label,

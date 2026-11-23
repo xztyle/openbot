@@ -363,9 +363,11 @@ try {
   // A computer, with things that wait: Today's decisions and a thread where an agent reports.
   {
     const { context, page } = await newPage(browser, false);
-    await load(page, `${origin}/app/general/today?harness=today`);
+    // Today lists the space that shows: Trading has a money decision and a question. Each check loads
+    // the page again, so the other decision is still there to take the focus.
+    await load(page, `${origin}/app/market-trading/today?harness=today`);
     const cards = page.locator("article.ws-today-decision");
-    await cards.first().waitFor({ timeout: UI_WAIT_MS });
+    await cards.nth(1).waitFor({ timeout: UI_WAIT_MS });
     await step("Today has no serious axe-core violations", () => checkAxe(page, "desk-today"));
     await step("after Approve, the next decision takes the focus", async () => {
       const before = await cards.count();
@@ -377,6 +379,8 @@ try {
       );
       await focusSettles(page, "the next decision", (focus) => focus.tag === "article" && focus.name.includes("needs"));
     });
+    await load(page, `${origin}/app/market-trading/today?harness=today`);
+    await cards.nth(1).waitFor({ timeout: UI_WAIT_MS });
     await step("after an answer, the next decision takes the focus", async () => {
       const before = await cards.count();
       const answer = page.getByPlaceholder("Type your answer").first();

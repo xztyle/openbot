@@ -791,7 +791,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     spaces.select(spaceId);
     const open = activeConversationId();
     // A phone shows one pane: the reader picked the space on the sidebar and wants to see its list.
-    if (open && rowSpace(open) !== spaceId) openView("today", env.phone() ? "sidebar" : "main");
+    if (open && rowSpace(open) !== spaceId) openHome();
   }
   /**
    * A conversation of another space that the reader opens, from Jump to, a notification, a link or a
@@ -1201,7 +1201,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       draft.sidebar.closed = [...others, id];
     });
     saveSidebar();
-    if (activeConversationId() === id) openView("today");
+    if (activeConversationId() === id) openHome();
   }
   /** A DM that the reader opens comes back to the list. */
   function reopenConversation(id: string) {
@@ -1947,6 +1947,13 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   }
 
   /** Shows a view. `pane` is the pane that a phone shows after it; a store read in this batch is stale. */
+  /**
+   * Today, where the reader lands when the open conversation goes away. A phone shows it as the Today
+   * tab, with the tab bar: as a pane it would have no way back.
+   */
+  function openHome() {
+    openView("today", env.phone() ? "sidebar" : "main");
+  }
   function openView(view: WorkspaceView, pane: WorkspacePhonePane = "main") {
     channels.close();
     setState((draft) => {
@@ -2483,7 +2490,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     }
     closePanel();
     channels.close();
-    openView("today");
+    openHome();
     return true;
   }
 
@@ -2510,7 +2517,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       return failureText(error, "workspace.app.error.archive");
     }
     closePanel();
-    openView("today");
+    openHome();
     return true;
   }
 

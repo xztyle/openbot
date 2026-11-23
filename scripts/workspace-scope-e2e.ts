@@ -25,6 +25,7 @@ import { AGENT_PROVIDERS, type ChannelMessage } from "@openbot/contracts/ipc";
 import { Effect, Schema } from "effect";
 import type { AgentBrowserHost } from "../src/backend/agent/turn-lifecycle";
 import type { ChannelGateModel } from "../src/backend/channel-gate";
+import { AGENT_WAKE_COALESCE_MS } from "../src/backend/collaboration-limits";
 
 const OUT = resolve(import.meta.dirname, "../.openbot-build/workspace-scope-e2e");
 const root = await mkdtemp(join(tmpdir(), "openbot-workspace-scope-"));
@@ -485,8 +486,23 @@ try {
     channels()
       .store.messages(team)
       .find((entry) => entry.author.id === agentId && entry.message.text.includes(part));
+  /**
+   * The baker sends the marker to the tester, whose turn starts only after the teammate wake hold
+   * (`AGENT_WAKE_COALESCE_MS`): this waits until that turn ended, so a check after it reads its result.
+   */
   const relayTo = async (marker: string) => {
+    const before = agents.listQueue(tester.id).deliveries.length;
     await runCauseEffect(agents.sendMessage({ agentId: baker.id, text: `E2E_SEND:${tester.id}:${marker}` }));
+    await waitFor(
+      `the tester's turn for ${marker}`,
+      () => {
+        const added = agents.listQueue(tester.id).deliveries.slice(before);
+        return (
+          added.length > 0 && added.every((delivery) => !["queued", "starting", "running"].includes(delivery.status))
+        );
+      },
+      AGENT_WAKE_COALESCE_MS + 30_000,
+    );
   };
   await relayTo("E2E_ASK_USER");
   await waitFor("the teammate's question in the team channel", () =>

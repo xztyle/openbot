@@ -33,19 +33,23 @@ dev="$work/openbot-dev"
 git -C "$dev" fetch -q fork main || true
 git -C "$dev" worktree remove --force "$tree" 2>/dev/null || rm -rf "$tree"
 git -C "$dev" worktree add -q --detach "$tree" "$revision"
-# The shared node_modules, as a link farm: the workspace packages link back into this checkout.
+# The shared node_modules as real folders of hard links (a few seconds, no extra disk): a symbolic
+# link to another checkout makes Vite refuse files outside this one, and a container that mounts this
+# checkout cannot follow it. The workspace packages link back into this checkout.
 source_modules="$work/wt-ux-polish/node_modules"
 [[ -d $source_modules ]] || source_modules="$dev/node_modules"
 mkdir -p "$tree/node_modules"
 for entry in $(ls -A "$source_modules"); do
   if [[ $entry == @openbot || $entry == .bin ]]; then cp -a "$source_modules/$entry" "$tree/node_modules/"
-  else ln -s "$(readlink -f "$source_modules/$entry")" "$tree/node_modules/$entry"; fi
+  else cp -alL "$source_modules/$entry" "$tree/node_modules/" 2>/dev/null \
+    || ln -sfn "$(readlink -f "$source_modules/$entry")" "$tree/node_modules/$entry"; fi
 done
 email_modules="$(dirname "$source_modules")/apps/email-app/node_modules"
 if [[ -d $email_modules ]]; then
   mkdir -p "$tree/apps/email-app/node_modules"
   for entry in $(ls -A "$email_modules"); do
-    ln -s "$(readlink -f "$email_modules/$entry")" "$tree/apps/email-app/node_modules/$entry"
+    cp -alL "$email_modules/$entry" "$tree/apps/email-app/node_modules/" 2>/dev/null \
+      || ln -sfn "$(readlink -f "$email_modules/$entry")" "$tree/apps/email-app/node_modules/$entry"
   done
 fi
 

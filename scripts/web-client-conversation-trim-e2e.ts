@@ -74,10 +74,10 @@ async function scrollToTop(
 }
 
 async function openAgent(page: Page, name: string): Promise<void> {
-  // The chat list names each agent button "<name>, <role>. <preview>".
+  // The workspace sidebar names each agent's DM "<name>, AI agent[, <state>]".
   await page
-    .getByRole("navigation", { name: "Chat list" })
-    .getByRole("button", { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")},`) })
+    .getByRole("navigation", { name: "Workspace" })
+    .getByRole("button", { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}, AI agent`) })
     .first()
     .click();
   await idle(page);
@@ -91,10 +91,12 @@ try {
   await page.goto(`${storybook}/iframe.html?id=${STORY}&viewMode=story`);
   await page.waitForFunction("globalThis.openbotWebBench !== undefined", undefined, { timeout: 300_000 });
   await page.evaluate("globalThis.openbotWebBench.ready");
-  await page.getByText("Question 158:").first().waitFor({ timeout: 120_000 });
-  await idle(page);
   const open = await agentName(page, "open");
   const other = await agentName(page, "other");
+  // The workspace opens on its welcome; the long conversation is the DM with the "open" agent.
+  await openAgent(page, open);
+  await page.getByText("Question 158:").first().waitFor({ timeout: 120_000 });
+  await idle(page);
 
   const first = await scrollToTop(page, []);
   const firstOlderReads = await olderReads(page);

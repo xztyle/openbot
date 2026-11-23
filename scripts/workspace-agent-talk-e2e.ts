@@ -69,8 +69,13 @@ async function openStory(browser: Browser, options: BrowserContextOptions): Prom
   const context = await browser.newContext(options);
   const page = await context.newPage();
   await page.goto(`${storybook}/iframe.html?id=${STORY}&viewMode=story`, { waitUntil: "load", timeout: 180_000 });
-  // A cold Storybook bundles its dependencies on the first load.
-  await page.getByText("nicho-cocina", { exact: true }).first().waitFor({ timeout: 120_000 });
+  // A cold Storybook bundles its dependencies on the first load. A phone opens on Today; its channel
+  // list is on the Chat tab.
+  const channel = page.getByText("nicho-cocina", { exact: true }).first();
+  const chat = page.getByRole("navigation", { name: "Workspace sections" }).getByRole("button", { name: /^Chat/u });
+  await channel.or(chat).first().waitFor({ timeout: 120_000 });
+  if (await chat.isVisible()) await chat.click();
+  await channel.waitFor({ timeout: 30_000 });
   return page;
 }
 

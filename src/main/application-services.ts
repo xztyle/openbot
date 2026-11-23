@@ -3561,6 +3561,14 @@ export async function createApplicationServices({
         drain: (timeoutMs) => Effect.runPromise(service.drainForDeploy(timeoutMs)),
         endDrain: () => service.endDeployDrain(),
         announceRestart: (state) => host.announceRestart(state, null),
+        alertOwner: (title, body) =>
+          webPush.notifyOwner({
+            kind: "alert",
+            agentId: "",
+            view: "activity",
+            urgent: true,
+            text: () => ({ title, body }),
+          }),
       })
     : undefined;
   // The turns that this start's recovery cut off continue by themselves once the agents are ready,

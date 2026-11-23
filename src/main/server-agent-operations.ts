@@ -67,6 +67,8 @@ export interface ServerAgentOperationsDependencies {
   endDrain?: () => void;
   /** `HostService.announceRestart`: the `host-restart` event to every connected device. */
   announceRestart?: (state: HostRestartState) => void;
+  /** An urgent push to the owner's devices, for an operator alert such as a failed check after a deploy. */
+  alertOwner?: (title: string, body: string) => void;
 }
 
 /** A restart notice that no restart followed ends after this long. */
@@ -75,6 +77,10 @@ const RESTART_NOTICE_MS = 5 * 60_000;
 /** The default and the longest wait of `POST /v1/drain`. */
 const DRAIN_DEFAULT_SECONDS = 600;
 const DRAIN_MAX_SECONDS = 1_800;
+
+/** The longest title and body of `POST /v1/owner-alert`, as a push shows them. */
+const OWNER_ALERT_TITLE_LIMIT = 120;
+const OWNER_ALERT_BODY_LIMIT = 600;
 
 interface InterruptedDelivery {
   deliveryId: string;
@@ -157,6 +163,17 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
       announce(state);
       dependencies.log(`Restart notice sent: ${state}.`);
       return { status: 200, lines: { restart_notice: state } };
+    }
+    if (path === "/v1/owner-alert") {
+      if (method !== "POST") return failure(405, "method_not_allowed");
+      if (!dependencies.alertOwner) return failure(404, "not_found");
+      const fields = readFields(rawBody);
+      const title = fields.title?.trim().slice(0, OWNER_ALERT_TITLE_LIMIT);
+      const body = fields.text?.trim().slice(0, OWNER_ALERT_BODY_LIMIT);
+      if (!title || !body) return failure(400, "title_and_text_required");
+      dependencies.alertOwner(title, body);
+      dependencies.log(`Owner alert sent: ${title}`);
+      return { status: 200, lines: { alert: "sent" } };
     }
     if (path === "/v1/resume-interrupted") {
       if (method !== "POST") return failure(405, "method_not_allowed");
@@ -355,6 +372,8 @@ interface Fields {
   system: boolean;
   /** The state of `POST /v1/restart-notice`. */
   state: string | undefined;
+  /** The title of `POST /v1/owner-alert`; its body is `text`. */
+  title: string | undefined;
 }
 
 /** A JSON object, or form fields (`delivery` may repeat). */
@@ -377,6 +396,7 @@ function readFields(rawBody: string): Fields {
       dryRun: record.dryRun === true,
       system: record.system === true,
       state: isString(record.state) ? record.state : undefined,
+      title: isString(record.title) ? record.title : undefined,
     };
   }
   const form = new URLSearchParams(trimmed);
@@ -393,6 +413,7 @@ function readFields(rawBody: string): Fields {
     dryRun: form.get("dry_run") === "1" || form.get("dry_run") === "yes",
     system: form.get("system") === "1" || form.get("system") === "yes" || form.get("system") === "true",
     state: form.get("state") ?? undefined,
+    title: form.get("title") ?? undefined,
   };
 }
 

@@ -42,7 +42,9 @@ export class HeldReplyTimer {
         this.#timer = null;
         this.#at = 0;
         const now = this.#now();
-        const due = [...this.#releases()].filter(([, release]) => release <= now).map(([agentId]) => agentId);
+        // The releases read when the timer was set: a hold that ended is no longer in a fresh read,
+        // because the store lists only the holds that still run.
+        const due = [...releases].filter(([, release]) => release <= now).map(([agentId]) => agentId);
         if (due.length > 0) this.#due(due);
         this.arm();
       },

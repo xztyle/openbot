@@ -38,6 +38,7 @@ import { WEB_PUSH_CODECS, WEB_PUSH_ROUTES } from "@openbot/contracts/team-protoc
 import { WORKSPACE_CODECS, WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
 import { Effect } from "effect";
 import type { AgentBrowserHost } from "../src/backend/agent/turn-lifecycle";
+import { AGENT_WAKE_COALESCE_MS } from "../src/backend/collaboration-limits";
 import type { RequestId } from "../src/backend/protocol";
 import type { JsonObject } from "./workspace-e2e-host";
 
@@ -269,8 +270,8 @@ function turnsLogged(): { threadId: string; turnId: string; input: string }[] {
 }
 
 /** The provider thread and turn of the turn whose input holds `marker`. */
-function providerTurn(marker: string) {
-  return waitFor(`the turn of "${marker}"`, () => turnsLogged().find((turn) => turn.input.includes(marker)));
+function providerTurn(marker: string, timeoutMs?: number) {
+  return waitFor(`the turn of "${marker}"`, () => turnsLogged().find((turn) => turn.input.includes(marker)), timeoutMs);
 }
 
 let toolCalls = 0;
@@ -356,21 +357,21 @@ try {
     assert.equal(response.status, 200);
   });
 
-  const publisherTurn = await step(
-    "The orchestrator gives the publisher work; the publisher's turn starts",
-    async () => {
-      await runCauseEffect(
-        service().sendMessage({ agentId: orchestrator.id, text: "case:orchestrator hold-turn create the account" }),
-      );
-      const turn = await providerTurn("case:orchestrator");
-      const sent = callTool(turn, "openbot", "send_message", {
-        recipientAgentIds: [publisher.id],
-        text: "case:publisher hold-turn Create the Google account for GTA 6 Pulse.",
-      });
-      await sent.answer();
-      return providerTurn("case:publisher");
-    },
-  );
+  await step("The orchestrator gives the publisher work", async () => {
+    await runCauseEffect(
+      service().sendMessage({ agentId: orchestrator.id, text: "case:orchestrator hold-turn create the account" }),
+    );
+    const turn = await providerTurn("case:orchestrator");
+    const sent = callTool(turn, "openbot", "send_message", {
+      recipientAgentIds: [publisher.id],
+      text: "case:publisher hold-turn Create the Google account for GTA 6 Pulse.",
+    });
+    await sent.answer();
+  });
+  // A teammate's message starts its recipient's turn after the wake hold (`AGENT_WAKE_COALESCE_MS`),
+  // longer than one step may take.
+  process.stdout.write("- The publisher's turn starts after the wake hold\n");
+  const publisherTurn = await providerTurn("case:publisher", AGENT_WAKE_COALESCE_MS + 20_000);
 
   await step("The publisher has no DM row: no person wrote to it", async () => {
     const response = await e2e.optional(WORKSPACE_CODECS, WORKSPACE_ROUTES.dmAgents, owner.token, {});

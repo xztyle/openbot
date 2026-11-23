@@ -932,15 +932,19 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       setMessageFocusRequest({ agentId, messageId, nonce: Date.now() });
     });
   }
-  /** The admin requests of the connected host. A call for another server is refused, not redirected. */
+  /**
+   * The admin requests of the connected host. A call for another server is refused, not redirected.
+   * A refusal is a rejected request, never a throw: callers start these from effects, where a throw
+   * halts the whole page instead of failing one call.
+   */
   function hostRequest(serverId?: string): TeamApiRequest {
     const admin = workspace.runtime.admin;
     const current = untrack(server);
-    if (!admin || !current || (serverId !== undefined && serverId !== current.id))
-      throw new Error(t("webClient.error.connectServerFirst"));
+    const refused = () => Promise.reject(new Error(t("webClient.error.connectServerFirst")));
+    if (!admin || !current || (serverId !== undefined && serverId !== current.id)) return refused;
     const pinnedId = current.id;
     return (method, path, decode, body) => {
-      if (untrack(server)?.id !== pinnedId) throw new Error(t("webClient.error.connectServerFirst"));
+      if (untrack(server)?.id !== pinnedId) return refused();
       return admin.request(method, path, decode, body);
     };
   }
@@ -1288,7 +1292,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         runTeamEffect(clearStorage(hostRequest(serverId), input).pipe(Effect.mapError((error) => error.cause))),
       // A stored file is an attachment. The browser has no app to open it in, so it downloads.
       openFile: async (input, serverId) => {
-        hostRequest(serverId);
+        const current = untrack(server);
+        if (!workspace.runtime.admin || !current || (serverId !== undefined && serverId !== current.id))
+          throw new Error(t("webClient.error.connectServerFirst"));
         saveFile(await workspace.runtime.download(input.fileId));
       },
     },

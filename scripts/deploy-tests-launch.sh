@@ -62,9 +62,12 @@ fi
 (cd "$tree" && nice -n 10 bun scripts/deploy-tests.ts --out="$out" --label="$label")
 echo "Suite exit $? at $(date -u +%FT%TZ)."
 
-# The check after the deploy: once the release says it is live, the critical flows again.
+# The check after the deploy: once the release says it is live, the critical flows again. The wait
+# does not hold the suite lock, so the next build's suite starts at once; a release folder that is
+# gone (a build that was not deployed and was cleaned up) ends the wait.
+exec 8>&-
 for _ in $(seq 1 720); do
-  [[ -f "$release/deployment.json" ]] && break
+  [[ -f "$release/deployment.json" || ! -d $release ]] && break
   sleep 10
 done
 if [[ -f "$release/deployment.json" ]]; then

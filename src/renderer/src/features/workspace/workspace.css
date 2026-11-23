@@ -623,7 +623,8 @@
 .ws-agent-dm-wait {
   display: flex;
   flex: 0 0 auto;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: var(--openbot-space-2);
   margin: var(--openbot-space-2) var(--openbot-space-4) 0;
   padding: var(--openbot-space-2) var(--openbot-space-3);
@@ -633,6 +634,43 @@
   font-size: var(--openbot-text-sm);
 }
 
+.ws-agent-dm-wait-row,
+.ws-agent-dm-wait-reply {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+.ws-agent-dm-wait-input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  padding: var(--openbot-space-1) var(--openbot-space-2);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-sm);
+  background: var(--openbot-bg-control);
+  color: inherit;
+  font: inherit;
+}
+
+.ws-agent-dm-wait-link {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  cursor: pointer;
+}
+
+.ws-agent-dm-wait-link svg {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+}
+
 .ws-agent-dm-wait-icon {
   flex: 0 0 auto;
   width: var(--openbot-icon-sm);
@@ -640,11 +678,8 @@
 }
 
 .ws-agent-dm-wait-text {
-  flex: 1 1 auto;
+  flex: 1 1 12rem;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .ws-agent-dm-body {
@@ -1226,4 +1261,58 @@
   .ws-progress-fold-toggle.ui-button {
     min-height: var(--openbot-touch-target);
   }
+}
+
+.ws-learned {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  margin: var(--openbot-space-3) var(--openbot-space-4);
+}
+
+.ws-learned-title {
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  font-weight: 600;
+}
+
+.ws-learned-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--openbot-space-3);
+  padding: var(--openbot-space-3);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-md);
+}
+
+.ws-learned-copy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+}
+
+.ws-learned-head,
+.ws-learned-change,
+.ws-learned-note {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ws-learned-change {
+  white-space: pre-line;
+}
+
+.ws-learned-note {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-learned-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-2);
+  margin-top: var(--openbot-space-1);
 }

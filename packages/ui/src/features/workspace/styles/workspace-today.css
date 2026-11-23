@@ -167,6 +167,23 @@
   -webkit-box-orient: vertical;
 }
 
+.ws-today-decision-detail[data-expanded] {
+  display: block;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+
+.ws-today-decision-more {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .ws-today-decision-where {
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);

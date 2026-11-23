@@ -2,7 +2,8 @@
  * Calls Motion's MCP tools from the host, as an agent: through that agent's own filled `motion` MCP
  * row (its gateway token and agent headers), so Motion's history shows the agent act. The grader acts
  * as its own Motion member instead: the same row with the grader's agent headers, because Motion lets
- * nobody assigned to a ticket review it.
+ * nobody assigned to a ticket review it. The owner's answer from Atelier to a ticket that waits on
+ * them goes the same way, as the owner's own member.
  *
  * Motion's MCP route is stateless and answers JSON, so each call is one `tools/call` request. A tool
  * answers one line of compact JSON (Motion's `docs/agents.md`); an error comes back as text.
@@ -17,6 +18,16 @@ const CALL_TIMEOUT_MS = 20_000;
 /** The Motion member the host's grader acts as. Motion makes it on first use. */
 export const MOTION_GRADER_KEY = "atelier-grader";
 export const MOTION_GRADER_NAME = "Grader";
+/** The Motion member the owner's answers from Atelier come from. */
+export const MOTION_OWNER_KEY = "atelier-owner";
+
+/** A Motion member the host acts as in place of the agent of the row. */
+export interface MotionMember {
+  key: string;
+  name: string;
+}
+
+export const MOTION_GRADER: MotionMember = { key: MOTION_GRADER_KEY, name: MOTION_GRADER_NAME };
 
 export interface MotionClientOptions {
   mcpServers: () => readonly McpServerConfig[];
@@ -24,10 +35,11 @@ export interface MotionClientOptions {
   personalMcpServer: (config: McpServerConfig, agent: McpAgent | null) => McpServerConfig | null;
 }
 
-/** Who a call acts as: an agent, or the grader in the workspace of that agent. */
+/** Who a call acts as: an agent, or the grader or another member in the workspace of that agent. */
 export interface MotionCaller {
   agentId: string;
   asGrader?: boolean;
+  asMember?: MotionMember;
 }
 
 /** The `motion` MCP row: the board the agents use. */
@@ -37,19 +49,19 @@ export function motionServer(configs: readonly McpServerConfig[]): McpServerConf
   );
 }
 
-/** The headers of a call: the agent's own, or the grader's in place of its agent headers. */
-export function motionHeaders(headers: readonly { key: string; value: string }[], asGrader: boolean) {
+/** The headers of a call: the agent's own, or a member's (the grader's) in place of its agent headers. */
+export function motionHeaders(headers: readonly { key: string; value: string }[], member: MotionMember | null) {
   const out: Record<string, string> = {};
   for (const header of headers) {
     const name = header.key.toLowerCase();
-    if (asGrader && name === "x-motion-agent") out[header.key] = MOTION_GRADER_KEY;
-    else if (asGrader && name === "x-motion-agent-name") out[header.key] = MOTION_GRADER_NAME;
+    if (member && name === "x-motion-agent") out[header.key] = member.key;
+    else if (member && name === "x-motion-agent-name") out[header.key] = member.name;
     else out[header.key] = header.value;
   }
-  if (asGrader && !Object.keys(out).some((key) => key.toLowerCase() === "x-motion-agent"))
-    throw new Error("The motion MCP row sends no agent headers, so the grader cannot act as its own member.");
-  if (asGrader && !Object.keys(out).some((key) => key.toLowerCase() === "x-motion-agent-name"))
-    out["X-Motion-Agent-Name"] = MOTION_GRADER_NAME;
+  if (member && !Object.keys(out).some((key) => key.toLowerCase() === "x-motion-agent"))
+    throw new Error("The motion MCP row sends no agent headers, so the host cannot act as another member.");
+  if (member && !Object.keys(out).some((key) => key.toLowerCase() === "x-motion-agent-name"))
+    out["X-Motion-Agent-Name"] = member.name;
   return out;
 }
 
@@ -102,7 +114,7 @@ export class MotionClient {
     const response = await fetch(config.url, {
       method: "POST",
       headers: {
-        ...motionHeaders(config.headers, caller.asGrader === true),
+        ...motionHeaders(config.headers, caller.asMember ?? (caller.asGrader === true ? MOTION_GRADER : null)),
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
         "mcp-protocol-version": "2025-06-18",

@@ -157,12 +157,38 @@ function classifyAppctl(command: string): TrustClassification | null {
   return null;
 }
 
+/** Branches whose push publishes: the default branch and a production branch. */
+const PUBLISHED_BRANCHES = /^(main|master|production|prod|live|release)$/u;
+
+/**
+ * Whether each `git push` in the command names only review branches, such as `git push origin
+ * cambio/hero`: a branch that waits for review is normal work, not a deployment. A push with no
+ * branch (the current one), with HEAD, --all or --mirror, or to a published branch is not.
+ */
+export function pushesOnlyReviewBranches(command: string): boolean {
+  const pushes = [...command.matchAll(/\bgit\s+(?:-C\s+\S+\s+)?push\b([^;&|\n]*)/gu)];
+  if (pushes.length === 0) return false;
+  return pushes.every((push) => {
+    const words = (push[1] ?? "").trim().split(/\s+/u).filter(Boolean);
+    if (words.some((word) => word === "--all" || word === "--mirror" || word === "--tags")) return false;
+    const refs = words.filter((word) => !word.startsWith("-") && !/^\d?>/u.test(word)).slice(1);
+    if (refs.length === 0) return false;
+    return refs.every((ref) => {
+      const target = (ref.includes(":") ? ref.slice(ref.indexOf(":") + 1) : ref)
+        .replace(/^\+/u, "")
+        .replace(/^refs\/heads\//u, "");
+      return target !== "" && target !== "HEAD" && !PUBLISHED_BRANCHES.test(target);
+    });
+  });
+}
+
 function classifyGit(command: string): TrustClassification | null {
   if (/\bgh\s+repo\s+delete\b/u.test(command))
     return { action: "delete", label: "gh repo delete", summary: trustSummary(command), platform: "github" };
   if (!/\bgit\s+(?:-C\s+\S+\s+)?push\b/u.test(command)) return null;
-  // A push to the landings repository deploys on Render: auto-deploy follows the folder.
-  if (!/landing/iu.test(command)) return null;
+  // A push to the landings repository deploys on Render: auto-deploy follows the folder. A push of a
+  // review branch publishes nothing until it is merged.
+  if (!/landing/iu.test(command) || pushesOnlyReviewBranches(command)) return null;
   return {
     action: "publish",
     label: "git push (landings)",

@@ -391,10 +391,10 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
       id: "today",
       label: t("workspace.view.today"),
       icon: <Sunrise />,
-      // Only what waits on the owner counts, in amber: every space's requests, loop decisions and alerts.
-      count: queue.queue().length,
+      // Only what waits on the owner counts, in amber: the space that shows, as Today's list does.
+      count: queue.here().length,
       tone: "attention",
-      badgeLabel: t("workspace.phone.waiting", { count: queue.queue().length }),
+      badgeLabel: t("workspace.phone.waiting", { count: queue.here().length }),
     },
     {
       id: "chat",

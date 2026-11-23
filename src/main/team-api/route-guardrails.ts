@@ -1,4 +1,5 @@
 import {
+  decodeGuardrailAllowOnce,
   decodeGuardrailPolicySave,
   decodeGuardrailResume,
   GUARDRAILS_CAPABILITY,
@@ -14,7 +15,8 @@ const ROUTES: ReadonlySet<string> = new Set(Object.values(GUARDRAILS_ROUTES));
 
 /**
  * The guardrails routes of this fork (`guardrails-v1.ts`, under `fork-host-v1`): the view, the policy
- * save and the resume of a pause. Only the owner and the admins may read or change them.
+ * save, the resume of a pause and the owner's one-time allow of a blocked action. Only the owner and
+ * the admins may read or change them; only the owner allows a blocked action.
  */
 export async function routeGuardrails(
   context: TeamApiRequestContext,
@@ -35,6 +37,19 @@ export async function routeGuardrails(
       throw new HttpError(400, "Invalid guardrails policy.");
     }
     return context.json(200, await runCauseEffect(guardrails.savePolicy(policy)));
+  }
+  if (url.pathname === GUARDRAILS_ROUTES.allowOnce) {
+    // Only the owner allows a blocked action: an admin sees it, the owner decides.
+    if (context.member.role !== "owner") throw new HttpError(403, "Only the owner allows a blocked action.");
+    let allow: ReturnType<typeof decodeGuardrailAllowOnce>;
+    try {
+      allow = decodeGuardrailAllowOnce(body);
+    } catch {
+      throw new HttpError(400, "Invalid guardrails allow.");
+    }
+    if (!guardrails.allowOnce(allow.eventId, context.member.name ?? context.member.username))
+      throw new HttpError(404, "No blocked action to allow.");
+    return context.json(200, guardrails.view());
   }
   let resume: ReturnType<typeof decodeGuardrailResume>;
   try {

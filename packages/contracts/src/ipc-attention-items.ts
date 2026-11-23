@@ -61,6 +61,12 @@ export interface AgentAttentionItem {
 /** The `turnId` of a Motion ticket that waits on the user. */
 export const MOTION_TICKET_TURN = "motion";
 
+/**
+ * The answer field of a waiting Motion ticket's `respondToPrompt`: its text goes on the ticket as the
+ * owner's comment. Answers without it dismiss the ticket from Needs you.
+ */
+export const TICKET_ANSWER_FIELD = "answer";
+
 /** A Motion ticket that waits on the user, which opens at its `url`, not in a chat. */
 export function isTicketAttention(item: Pick<AgentAttentionItem, "turnId" | "url">): item is AgentAttentionItem & {
   url: string;

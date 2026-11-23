@@ -10,7 +10,7 @@ import {
 } from "@openbot/contracts/ipc";
 import type { DynamicRecord } from "@openbot/contracts/runtime-values";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MotionClient, motionHeaders, motionToolAnswer } from "./motion-client";
+import { MOTION_GRADER, MotionClient, motionHeaders, motionToolAnswer } from "./motion-client";
 import { decodeMotionEvent, type MotionEvent } from "./motion-event";
 import { MotionEventsService, type WaitingTicket } from "./motion-events-service";
 import { readDeliverableFiles } from "./motion-files";
@@ -263,7 +263,7 @@ describe("the grader's pure parts", () => {
         { key: "X-Motion-Agent", value: "agent-dev" },
         { key: "X-Motion-Agent-Name", value: "Dev" },
       ],
-      true,
+      MOTION_GRADER,
     );
     expect(headers).toEqual({
       Authorization: "Bearer t",

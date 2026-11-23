@@ -147,10 +147,26 @@ export const GUARDRAIL_EVENT_KINDS = [
   "money-expired",
   "failover",
   "failover-return",
+  "blocked-allowed",
 ] as const;
 export type GuardrailEventKind = (typeof GUARDRAIL_EVENT_KINDS)[number];
 
 export const GUARDRAIL_TEXT_LIMIT = 300;
+/** The longest reason or action of a blocked action's details. */
+export const GUARDRAIL_DETAIL_LIMIT = 1_200;
+
+/**
+ * What the injection monitor blocked, in full: the action (its label and the command or call), the
+ * sources of untrusted text that the turn read, and the monitor's whole reason. `allowedAt`: the
+ * owner allowed it once, so the agent may run the same action again.
+ */
+export interface GuardrailBlockedAction {
+  label: string;
+  action: string;
+  sources: string[];
+  reason: string;
+  allowedAt?: string;
+}
 
 /** One thing the guardrails did, newest first in a view. */
 export interface GuardrailEvent {
@@ -162,6 +178,23 @@ export interface GuardrailEvent {
   threadId?: string;
   turnId?: string;
   summary: string;
+  /** An `injection-blocked` event of a host that keeps the details. */
+  blocked?: GuardrailBlockedAction;
+  /** A `blocked-allowed` event: the id of the `injection-blocked` event that the owner allowed. */
+  ref?: string;
+}
+
+export function isGuardrailBlockedAction(value: unknown): value is GuardrailBlockedAction {
+  return (
+    isDynamicRecord(value) &&
+    isBoundedString(value.label, GUARDRAIL_TEXT_LIMIT) &&
+    isBoundedString(value.action, GUARDRAIL_DETAIL_LIMIT) &&
+    Array.isArray(value.sources) &&
+    value.sources.length <= 8 &&
+    value.sources.every((source) => isBoundedString(source, 32)) &&
+    isBoundedString(value.reason, GUARDRAIL_DETAIL_LIMIT) &&
+    (value.allowedAt === undefined || isBoundedString(value.allowedAt, 64))
+  );
 }
 
 /** Today's work of one agent or space against its limits. */
@@ -353,7 +386,9 @@ export function isGuardrailEvent(value: unknown): value is GuardrailEvent {
     optionalId(value.spaceId) &&
     optionalId(value.threadId) &&
     optionalId(value.turnId) &&
-    isBoundedString(value.summary, GUARDRAIL_TEXT_LIMIT)
+    isBoundedString(value.summary, GUARDRAIL_TEXT_LIMIT) &&
+    (value.blocked === undefined || isGuardrailBlockedAction(value.blocked)) &&
+    optionalId(value.ref)
   );
 }
 

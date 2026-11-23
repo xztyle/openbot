@@ -17,6 +17,13 @@ const KEPT = 2_000;
 
 export type GuardrailEventInput = Omit<GuardrailEvent, "id" | "at"> & { at?: string };
 
+/** A `blocked-allowed` event marks the blocked action it allowed, in memory: the file only appends. */
+function markAllowed(events: readonly GuardrailEvent[], event: GuardrailEvent): void {
+  if (event.kind !== "blocked-allowed" || !event.ref) return;
+  const blocked = events.find((candidate) => candidate.id === event.ref)?.blocked;
+  if (blocked) blocked.allowedAt = event.at;
+}
+
 /**
  * Owns the append-only record of what the guardrails did: one JSON line per warning, pause, resume,
  * breaker, stuck nudge or stop, blocked injection and failover, in one file per month under
@@ -52,6 +59,7 @@ export class GuardrailEventLog {
     }
     const recent = this.#load();
     recent.push(event);
+    markAllowed(recent, event);
     if (recent.length > KEPT) recent.splice(0, recent.length - KEPT);
     return event;
   }
@@ -85,7 +93,13 @@ export class GuardrailEventLog {
       }
     }
     this.#recent = events.slice(-KEPT);
+    for (const event of this.#recent) markAllowed(this.#recent, event);
     return this.#recent;
+  }
+
+  /** One kept event by its id. */
+  find(id: string): GuardrailEvent | undefined {
+    return this.#load().find((event) => event.id === id);
   }
 
   /** The newest events, newest first. */

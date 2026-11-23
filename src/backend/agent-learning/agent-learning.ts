@@ -312,7 +312,31 @@ export class AgentLearning {
     if (this.#timer) return;
     this.#timer = setInterval(() => void this.tick(), CHECK_INTERVAL_MS);
     this.#timer.unref?.();
+    // Memory items of before, which waited for the owner, apply now the way new ones do.
+    void Effect.runPromise(this.applyPendingMemory().pipe(Effect.ignore));
     void this.tick();
+  }
+
+  /**
+   * Applies every memory item that still waits: a memory change applies by itself and the owner
+   * keeps or reverts it afterwards (the items of the agent's own memories only; a memory the owner
+   * wrote or controls is never in an item). One that no longer applies becomes stale.
+   */
+  readonly applyPendingMemory = Effect.fn("AgentLearning.applyPendingMemory")(function* (this: AgentLearning) {
+    const stored = yield* this.#store.load();
+    const waiting = stored.items.filter((item) => item.state === "pending" && item.kind === "memory");
+    for (const item of waiting) {
+      const applied = this.#autoApply(item);
+      yield* this.#settle(item.id, applied ? "auto-applied" : "stale");
+    }
+    return waiting.length;
+  });
+
+  /** Applies a memory item at once. False when nothing of it applies any more. */
+  #autoApply(item: Pick<LearningReviewItem, "agentId" | "changes">): boolean {
+    const agentId = item.agentId;
+    if (!agentId || !this.#hooks.agents().some((agent) => agent.id === agentId)) return false;
+    return this.#applyMemory(agentId, item.changes);
   }
 
   dispose(): void {
@@ -837,13 +861,22 @@ export class AgentLearning {
   readonly #add = Effect.fn("AgentLearning.add")(function* (this: AgentLearning, items: readonly NewItem[]) {
     if (items.length === 0) return [];
     const now = new Date().toISOString();
-    const made: LearningReviewItem[] = items.map((item) => ({
-      ...item,
-      id: randomUUID(),
-      state: item.state ?? "pending",
-      createdAt: now,
-      ...(item.state && item.state !== "pending" ? { decidedAt: now } : {}),
-    }));
+    // A memory item applies by itself; the owner keeps or reverts it from the inbox.
+    const made: LearningReviewItem[] = items.map((item) => {
+      const state =
+        (item.state ?? "pending") === "pending" && item.kind === "memory"
+          ? this.#autoApply(item)
+            ? "auto-applied"
+            : "stale"
+          : (item.state ?? "pending");
+      return {
+        ...item,
+        id: randomUUID(),
+        state,
+        createdAt: now,
+        ...(state !== "pending" ? { decidedAt: now } : {}),
+      };
+    });
     yield* this.#store.update((stored) => {
       const all = [...made, ...stored.items];
       const pending = all.filter((item) => item.state === "pending");

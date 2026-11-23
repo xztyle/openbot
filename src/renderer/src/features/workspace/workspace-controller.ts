@@ -2731,6 +2731,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
    * delegated request, or that owns the thread), else the agent's chat.
    */
   function needsYouPlace(item: AgentAttentionItem): { channelId: string } | { agentId: string } {
+    // A Motion ticket belongs to no chat turn: its agent's DM answers it.
+    if (isTicketAttention(item)) return { agentId: item.agentId };
     const channelId = item.channelId ?? channelOfThread().get(`${item.agentId}\n${item.threadId}`);
     return channelId ? { channelId } : { agentId: item.agentId };
   }
@@ -2741,13 +2743,11 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       return "channelId" in place ? spaces.channelInCurrent(place.channelId) : spaces.agentInCurrent(item.agentId);
     }),
   );
-  /** Opens the chat that answers a request: the card waits at its end. */
+  /**
+   * Opens the chat that answers a request: the card waits at its end. A Motion ticket that waits on
+   * the reader opens its agent's DM, which answers it in place (`WorkspaceAgentWaits`).
+   */
   function openNeedsYou(item: AgentAttentionItem) {
-    // A Motion ticket that waits on the reader opens in Motion.
-    if (isTicketAttention(item)) {
-      void channels.port().openUrl(item.url);
-      return;
-    }
     const place = needsYouPlace(item);
     if ("channelId" in place) openChannel(place.channelId);
     else openAgent(place.agentId);

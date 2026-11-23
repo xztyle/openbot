@@ -2074,6 +2074,17 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         scheduleDrain: (agentId) => this.#drain.scheduleDrain(agentId),
         generateCheap: (prompt) => this.generateCheapText(prompt, Date.now() + 20_000),
         ownerAway: options.ownerAway ?? null,
+        noteAgent: (agentId, text) =>
+          Effect.runFork(
+            this.sendMessage({ agentId, text }, undefined, undefined, "operator-note").pipe(
+              Effect.catch((failure) =>
+                Effect.sync(() => this.#emitError("guardrail_note_failed", failure.cause, agentId)),
+              ),
+            ),
+          ),
+        recordTrust: (entry) => {
+          options.trust?.record(entry);
+        },
         modelReady: (choice) => this.#usageLimitReady(choice),
         changed: () => undefined,
       }),
@@ -2249,9 +2260,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.emit("event", { type: "agent-attention-changed", items });
   }
 
-  /** Where a Motion ticket that the owner dismissed in Needs you goes, by its id in Motion. */
-  onWaitingTicketDismissed(dismiss: (issueId: string) => Promise<void>): void {
-    this.#attention.onTicketDismissed((requestId) => dismiss(requestId.replace(/^motion:/u, "")));
+  /**
+   * Where a Motion ticket that the owner dismissed or answered in Needs you goes, by its id in Motion.
+   * An answer is the text the owner wrote; a dismissal has none.
+   */
+  onWaitingTicketDismissed(dismiss: (issueId: string, answer: string | null) => Promise<void>): void {
+    this.#attention.onTicketDismissed((requestId, answer) => dismiss(requestId.replace(/^motion:/u, ""), answer));
   }
 
   /** The source of each agent's current Motion ticket, which the fleet shows. */

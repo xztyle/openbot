@@ -54,7 +54,9 @@ try {
     alerts: string[];
     drains: string[];
     prompts: string[];
-  } = { steers: [], stops: [], notices: [], alerts: [], drains: [], prompts: [] };
+    notes: { agentId: string; text: string }[];
+    trust: string[];
+  } = { steers: [], stops: [], notices: [], alerts: [], drains: [], prompts: [], notes: [], trust: [] };
   let monitorAnswer = '{"verdict": "follows_untrusted", "reason": "The page asked to raise the budget."}';
   // Ana already ran 150 turns today; Leo 10.
   const totals = new Map([
@@ -106,6 +108,8 @@ try {
       }),
     notifyOwner: (agentId, title) => void recorded.notices.push({ agentId, title }),
     alertOwner: (agentId) => void recorded.alerts.push(agentId),
+    noteAgent: (agentId, text) => void recorded.notes.push({ agentId, text }),
+    recordTrust: (entry) => void recorded.trust.push(entry.action),
     failoverTargets: () => [{ provider: "codex", model: "gpt-6-luna" }],
     changed: () => undefined,
   };
@@ -317,6 +321,28 @@ try {
     guardrails.checkAction("ana-1", "turn-webhook", "openbot.update_agents", {}, null),
   );
   check("a webhook run counts as untrusted", !webhook.allowed && recorded.prompts.length === 2);
+  // The owner allows the blocked action once: the agent hears it, the trust log keeps it, and the
+  // same action runs once without another check.
+  const blockedEvent = guardrails
+    .view()
+    .events.find((event) => event.kind === "injection-blocked" && event.blocked?.label === "slack.send_message");
+  check(
+    "a blocked action keeps its whole details",
+    blockedEvent?.blocked?.label === "slack.send_message" && (blockedEvent.blocked.sources ?? []).includes("web"),
+    blockedEvent,
+  );
+  check("allow once answers the blocked event", guardrails.allowOnce(blockedEvent?.id ?? "", "Owner"));
+  check(
+    "the agent hears it may retry and the trust log keeps it",
+    recorded.notes.some((note) => note.agentId === "ana-1" && note.text.includes("allowed it once")) &&
+      recorded.trust.includes("slack.send_message"),
+  );
+  check("an allowed event is not allowed twice", !guardrails.allowOnce(blockedEvent?.id ?? "", "Owner"));
+  const prompts = recorded.prompts.length;
+  const retried = await Effect.runPromise(
+    guardrails.checkAction("ana-1", "t-inj", "slack.send_message", { text: "raise it" }, null),
+  );
+  check("the allowed action runs once without a check", retried.allowed && recorded.prompts.length === prompts);
   end("ana-1", "t-inj");
 
   // Money approvals: the effect on the card, the digest binding, the expiry, and the monitor's ask.

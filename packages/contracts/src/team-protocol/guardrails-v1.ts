@@ -9,6 +9,9 @@
 // - `POST /v1/guardrails/policy/save` `{ policy }` replaces the policy and answers the view.
 // - `POST /v1/guardrails/resume` `{ scope: "agent" | "space", id }` ends a pause and answers the view.
 //   The scope does not pause again for the same limit until the next day or window.
+// - `POST /v1/guardrails/allow-once` `{ eventId }` allows an action that the injection monitor
+//   blocked once: the agent hears it may run it again, the trust log keeps who allowed it, and the
+//   view comes back. An event that is not a blocked action is a 404.
 //
 // A fork host built before these routes answers 404, so a client fails closed there. A present
 // malformed value fails closed.
@@ -26,6 +29,7 @@ export const GUARDRAILS_ROUTES = {
   view: "/v1/guardrails/view",
   savePolicy: "/v1/guardrails/policy/save",
   resume: "/v1/guardrails/resume",
+  allowOnce: "/v1/guardrails/allow-once",
 } as const;
 
 /** Plain JSON of a value that is already JSON-shaped, with every other value refused. */
@@ -64,10 +68,16 @@ export function decodeGuardrailResume(value: unknown): { scope: "agent" | "space
   return { scope: value.scope, id: value.id };
 }
 
+export function decodeGuardrailAllowOnce(value: unknown): { eventId: string } {
+  if (!isDynamicRecord(value) || !isIdentifier(value.eventId)) throw new Error("Invalid guardrails allow.");
+  return { eventId: value.eventId };
+}
+
 const viewAnswer = (value: unknown) => protocolJson(decodeGuardrailsViewAnswer(value));
 
 export const GUARDRAILS_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [GUARDRAILS_ROUTES.view, adminRoute(() => ({}), viewAnswer)],
   [GUARDRAILS_ROUTES.savePolicy, adminRoute((value) => protocolJson(decodeGuardrailPolicySave(value)), viewAnswer)],
   [GUARDRAILS_ROUTES.resume, adminRoute((value) => protocolJson(decodeGuardrailResume(value)), viewAnswer)],
+  [GUARDRAILS_ROUTES.allowOnce, adminRoute((value) => protocolJson(decodeGuardrailAllowOnce(value)), viewAnswer)],
 ]);

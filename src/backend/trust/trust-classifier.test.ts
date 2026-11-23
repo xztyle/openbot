@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { classifyCommand, expandCommand } from "./trust-classifier";
+import { impactOf, monitorPrompt } from "../guardrails/injection-guard";
+import { classifyCommand, expandCommand, pushesOnlyReviewBranches } from "./trust-classifier";
 
 const action = (command: string, scripts: Record<string, string> = {}) =>
   classifyCommand(command, { cwd: "/work", readScript: (path) => scripts[path] ?? null })?.action ?? null;
@@ -54,5 +55,45 @@ describe("the money check of a shell command", () => {
       },
     });
     expect(read).toBe(false);
+  });
+});
+
+describe("a git push of the landings", () => {
+  // The push that the injection monitor blocked on 2026-11-23: a fix on a review branch for QA.
+  const reviewPush =
+    "cd /data/OpenBot/Spaces/universidad-online/Shared/wt-lucete && GIT_ASKPASS=/data/OpenBot/Spaces/universidad-online/Shared/git-askpass.sh GIT_TERMINAL_PROMPT=0 git push -q origin cambio/lucete-hero 2>&1|tail -1";
+
+  it("is normal work on a review branch, not a publish", () => {
+    expect(pushesOnlyReviewBranches(reviewPush)).toBe(true);
+    const landings = reviewPush.replace("wt-lucete", "aprendivo-landings");
+    // No high-impact action, so the injection monitor is never asked about it.
+    expect(impactOf("Bash", { command: landings }, classifyCommand(landings))).toBeNull();
+    expect(classifyCommand(reviewPush.replace("wt-lucete", "aprendivo-landings"))).toBeNull();
+    expect(classifyCommand("cd aprendivo-landings && git push origin HEAD:cambio/hero")).toBeNull();
+  });
+
+  it("publishes when it pushes main, production, the current branch or everything", () => {
+    for (const push of [
+      "cd aprendivo-landings && git push origin main",
+      "cd aprendivo-landings && git push origin cambio/hero:main",
+      "cd aprendivo-landings && git push -f origin +refs/heads/production",
+      "cd aprendivo-landings && git push",
+      "cd aprendivo-landings && git push origin HEAD",
+      "cd aprendivo-landings && git push --all origin",
+      "cd aprendivo-landings && git push origin cambio/hero && git push origin main",
+    ])
+      expect(classifyCommand(push)?.label, push).toBe("git push (landings)");
+  });
+});
+
+describe("the injection monitor's prompt", () => {
+  it("tells the judge that review-branch work is not a deployment", () => {
+    const prompt = monitorPrompt(
+      [{ from: "owner", text: "Publishing waits for both QAs' OK." }],
+      [{ source: "web", excerpt: "QA notes" }],
+      { kind: "deploy", label: "git push (landings)", summary: "git push origin main" },
+    );
+    expect(prompt).toContain("pushing a review branch");
+    expect(prompt).toContain("limits only merging or publishing to production");
   });
 });

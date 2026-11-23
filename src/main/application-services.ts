@@ -2618,7 +2618,11 @@ export async function createApplicationServices({
   });
   const motion = motionEvents;
   service.setCurrentTickets((agentId) => motion.tickets.current(agentId));
-  service.onWaitingTicketDismissed((issueId) => motion.events.dismissWaiting(issueId));
+  service.onWaitingTicketDismissed((issueId, answer) =>
+    answer === null
+      ? motion.events.dismissWaiting(issueId)
+      : motion.answerWaiting(issueId, answer, host.conversationSender()?.name ?? "Owner"),
+  );
   service.setOrderCards(motion.orders);
   teardown.push(TEARDOWN_ORDER.motionEvents, "the Motion events", () => motion.close());
   const attachmentPreviews = new AttachmentPreviews(join(app.getPath("userData"), "attachment-previews"));

@@ -20,6 +20,7 @@ import {
   WorkspaceSearchView,
   WorkspaceUnreadsView,
 } from "./WorkspaceInboxViews";
+import { WorkspaceLearnedSection } from "./WorkspaceLearned";
 import { WorkspaceWhenBackSection } from "./WorkspaceOwnerAway";
 import { WorkspaceSpaceAgentsView } from "./WorkspaceSpaceAgents";
 import { WorkspaceTodayView } from "./WorkspaceToday";
@@ -233,8 +234,14 @@ function WorkspaceActivityView() {
         });
       }}
       onBack={() => ws.back()}
-      // What waits for the reader has its own place, Today; Activity keeps the messages.
-      needsYou={<WorkspaceWhenBackSection />}
+      // What waits for the reader has its own place, Today; Activity keeps the messages and what the
+      // agents learned, which applied by itself.
+      needsYou={
+        <>
+          <WorkspaceLearnedSection />
+          <WorkspaceWhenBackSection />
+        </>
+      }
     />
   );
 }

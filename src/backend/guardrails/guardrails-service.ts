@@ -2,8 +2,10 @@ import { readFileSync } from "node:fs";
 import {
   DEFAULT_GUARDRAIL_POLICY,
   effectiveGuardrailLimits,
+  GUARDRAIL_DETAIL_LIMIT,
   GUARDRAIL_LIMIT_KEYS,
   GUARDRAIL_PAUSE_REASON_LIMIT,
+  GUARDRAIL_TEXT_LIMIT,
   GUARDRAIL_VIEW_LIMITS,
   type GuardrailEventKind,
   type GuardrailFailoverRow,
@@ -25,6 +27,7 @@ import { Effect, Result } from "effect";
 import { modelTier } from "../agent/model-policy";
 import { writeJsonFileAtomically } from "../atomic-json-file";
 import { type DynamicToolResult, getString, type ThreadItem } from "../protocol";
+import type { TrustAuditInput } from "../trust/trust-audit-log";
 import type { TrustClassification } from "../trust/trust-classifier";
 import type { GuardrailEventInput, GuardrailEventLog } from "./guardrail-event-log";
 import { type ImpactAction, InjectionGuard, impactOf, type TurnTask, untrustedSourceOf } from "./injection-guard";
@@ -43,6 +46,8 @@ const TURN_COUNT_DELAY_MS = 3_000;
 const LOOP_PAUSE_MS = 60 * 60_000;
 const WEEK_MS = 7 * 24 * 60 * 60_000;
 const METER_CACHE_MS = 30_000;
+/** How long the owner's one-time pass of a blocked action waits for the agent to run it again. */
+const PASS_MS = 24 * 60 * 60_000;
 
 /** Today's work of one agent. */
 interface Tally {
@@ -97,6 +102,10 @@ export interface GuardrailsRuntime {
   notifyOwner(agentId: string, title: string, detail: string): void;
   /** An urgent alert to the owner's phone, through quiet hours. */
   alertOwner(agentId: string, category: "security" | "money"): void;
+  /** A note from Atelier to an agent's chat, which starts a turn. */
+  noteAgent(agentId: string, text: string): void;
+  /** One line of the trust log. */
+  recordTrust(entry: TrustAuditInput): void;
   /** The model a failover moves an agent to: the other vendor, or the API key. Null: none is ready. */
   failoverTargets(agent: GuardrailAgent, allowApiKey: boolean): AgentModelChoice[];
   changed(): void;
@@ -471,6 +480,49 @@ export class GuardrailsService {
     return headSender === "user" || this.pauseFor(agentId) === null;
   }
 
+  /** The owner's one-time passes of blocked actions, by agent and action, until when. */
+  readonly #passes = new Map<string, number>();
+
+  #passKey(agentId: string, label: string, summary: string): string {
+    return `${agentId}\n${label}\n${summary}`;
+  }
+
+  /**
+   * The owner allows a blocked action once: the agent's next run of the same action skips the
+   * injection check (other trust rules still apply), the trust log records who allowed it, and the
+   * agent hears that it may try again. False for an event that is not a blocked action.
+   */
+  allowOnce(eventId: string, actor: string): boolean {
+    const runtime = this.#runtime;
+    const event = this.#events.find(eventId);
+    const blocked = event?.kind === "injection-blocked" ? event.blocked : undefined;
+    if (!runtime || !event?.agentId || !blocked || blocked.allowedAt) return false;
+    const agentId = event.agentId;
+    this.#passes.set(this.#passKey(agentId, blocked.label, blocked.action), this.#now() + PASS_MS);
+    const agent = this.#agentName(agentId);
+    this.#record({
+      kind: "blocked-allowed",
+      agentId,
+      ref: event.id,
+      summary: `${actor} allowed ${blocked.label} of ${agent} once.`,
+    });
+    runtime.recordTrust({
+      actor: { kind: "person", name: actor },
+      category: "approval",
+      action: blocked.label,
+      summary: `Allowed once after a security block: ${blocked.action}`.slice(0, 500),
+      outcome: "approved",
+      agentId,
+      answeredBy: actor,
+    });
+    runtime.noteAgent(
+      agentId,
+      `The owner reviewed the action that Atelier's security check blocked and allowed it once: ${blocked.label}: ${blocked.action}\nYou may run it again now, exactly as before. This covers that one action only.`,
+    );
+    this.#changed();
+    return true;
+  }
+
   /** Ends a pause. The same limit does not pause the scope again today, or for this window. */
   resume(scope: "agent" | "space", id: string, actor: string): void {
     const ended = this.#state.pauses.filter((pause) => pause.scope === scope && pause.id === id);
@@ -687,6 +739,13 @@ export class GuardrailsService {
     if (!runtime || !policy.enabled || !policy.injection.enabled) return none;
     const action: ImpactAction | null = impactOf(name, input, trust);
     if (!action) return none;
+    // The owner allowed this very action once after a block: it runs without another check.
+    const pass = this.#passKey(agentId, action.label, action.summary);
+    const until = this.#passes.get(pass);
+    if (until !== undefined) {
+      this.#passes.delete(pass);
+      if (until > this.#now()) return { allowed: true as const, askOwner: false, tainted: true };
+    }
     const task = runtime.turnTask(agentId, turnId);
     for (const entry of task) if (entry.untrusted) this.#injection.taint(turnId, entry.untrusted, entry.text);
     const sources = this.#injection.tainted(turnId);
@@ -701,6 +760,12 @@ export class GuardrailsService {
           agentId,
           turnId,
           summary: `Blocked ${action.label} of ${agent} after it read ${sources.join(", ")}: ${verdict.reason}`,
+          blocked: {
+            label: action.label.slice(0, GUARDRAIL_TEXT_LIMIT),
+            action: action.summary.slice(0, GUARDRAIL_DETAIL_LIMIT),
+            sources: [...sources],
+            reason: (verdict.reason || "").slice(0, GUARDRAIL_DETAIL_LIMIT),
+          },
         });
       if (fresh) runtime.alertOwner(agentId, "security");
       if (fresh)

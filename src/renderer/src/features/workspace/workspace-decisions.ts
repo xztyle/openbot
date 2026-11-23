@@ -17,6 +17,7 @@ import { useWorkspace } from "./workspace-context";
 import { useGuardrails, useLearningQueue } from "./workspace-host-feeds";
 import { insightAlerts, pollInsightAlerts, setInsightAlerts } from "./workspace-insight-alerts";
 import { memberById } from "./workspace-model";
+import { answerTicket, ticketAsksApproval } from "./workspace-ticket-answer";
 
 /** The loop decision that Today opened, for the Loops view to show first and scroll to. */
 const [loopFocus, setLoopFocus] = createSignal<{ loopId: string; decisionId: string } | null>(null, {
@@ -97,6 +98,24 @@ if (typeof window !== "undefined")
     setSeenVersion((version) => version + 1);
   });
 
+/** A source of untrusted text, as the owner reads it. */
+function sourceName(source: string, t: ReturnType<typeof useText>["t"]): string {
+  switch (source) {
+    case "web":
+      return t("workspace.today.source.web");
+    case "browser":
+      return t("workspace.today.source.browser");
+    case "email":
+      return t("workspace.today.source.email");
+    case "webhook":
+      return t("workspace.today.source.webhook");
+    case "event-check":
+      return t("workspace.today.source.eventCheck");
+    default:
+      return source;
+  }
+}
+
 /** What a learning proposal asks, by where it comes from. */
 const PROPOSAL_KEY = {
   learning: "workspace.today.proposal.learning",
@@ -167,6 +186,15 @@ export function useDecisionQueue() {
       const dismissTicket = ticket
         ? () => ws.channels.port().agent.respondToPrompt({ requestId: item.requestId, answers: {} })
         : undefined;
+      // A ticket that asks for an approval is approved here; any other answer is written in the DM.
+      const approveTicket =
+        ticket && ticketAsksApproval(item.summary)
+          ? async () => {
+              const answer = t("workspace.needsYou.ticket.approved");
+              const message = t("workspace.needsYou.ticket.message", { ticket: item.summary ?? "", answer });
+              await answerTicket(ws, item, message, answer);
+            }
+          : undefined;
       return {
         key: agentAttentionKey(item),
         member: memberById(ws.directory(), item.agentId, agentName(item.agentId)),
@@ -182,12 +210,13 @@ export function useDecisionQueue() {
         spaceId,
         blocking: !ticket,
         at: Date.parse(item.createdAt) || 0,
-        approve: approval?.("accept"),
+        approve: approval?.("accept") ?? approveTicket,
+        ...(approveTicket ? { approveLabel: t("workspace.needsYou.ticket.approve") } : {}),
         reject: approval?.("decline") ?? dismissTicket,
         ...(dismissTicket ? { rejectLabel: t("workspace.today.dismiss"), dismiss: dismissTicket } : {}),
         openLabel: browser
           ? t("workspace.today.takeOver")
-          : item.kind === "question" || item.kind === "form"
+          : ticket || item.kind === "question" || item.kind === "form"
             ? t("workspace.today.answer")
             : t("workspace.needsYou.open"),
         open: () => ws.openNeedsYou(item),
@@ -252,38 +281,42 @@ export function useDecisionQueue() {
     })),
   );
 
-  // The learning queue: memory, playbook and instruction proposals that wait for the owner's OK.
+  // The playbook and instruction proposals that wait for the owner's OK. What the agents learned
+  // (the learning items) is not a decision: it applies by itself and the inbox lists it.
   const learning = useLearningQueue(ws);
   const proposals = createMemo((): TodayDecision[] =>
-    learning.value().map((entry) => {
-      const decideEntry = (decision: "approve" | "dismiss") => async () => {
-        const calls = ws.env.efficiency?.();
-        if (!calls) throw new Error(t("workspace.today.answerFailed"));
-        await calls.decideQueue(entry.id, decision);
-        learning.update((list) => list.filter((candidate) => candidate.id !== entry.id));
-      };
-      return {
-        key: `${LEARNING_KEY}${entry.id}`,
-        member: entry.agentId
-          ? memberById(ws.directory(), entry.agentId, agentName(entry.agentId))
-          : { id: "learning", kind: "agent", name: t("workspace.today.learning"), avatarSeed: "learning" },
-        kind: "proposal",
-        action: t(PROPOSAL_KEY[entry.source]),
-        summary: entry.title,
-        detail: entry.detail,
-        where: where(entry.spaceId ?? undefined, undefined),
-        spaceId: entry.spaceId ?? undefined,
-        blocking: false,
-        at: Date.parse(entry.createdAt) || 0,
-        approve: decideEntry("approve"),
-        approveLabel: t("workspace.today.apply"),
-        reject: decideEntry("dismiss"),
-        rejectLabel: t("workspace.today.dismiss"),
-        dismiss: decideEntry("dismiss"),
-        openLabel: t("workspace.needsYou.open"),
-        open: () => ws.openView("reviews"),
-      };
-    }),
+    learning
+      .value()
+      .filter((entry) => entry.source !== "learning")
+      .map((entry) => {
+        const decideEntry = (decision: "approve" | "dismiss") => async () => {
+          const calls = ws.env.efficiency?.();
+          if (!calls) throw new Error(t("workspace.today.answerFailed"));
+          await calls.decideQueue(entry.id, decision);
+          learning.update((list) => list.filter((candidate) => candidate.id !== entry.id));
+        };
+        return {
+          key: `${LEARNING_KEY}${entry.id}`,
+          member: entry.agentId
+            ? memberById(ws.directory(), entry.agentId, agentName(entry.agentId))
+            : { id: "learning", kind: "agent", name: t("workspace.today.learning"), avatarSeed: "learning" },
+          kind: "proposal",
+          action: t(PROPOSAL_KEY[entry.source]),
+          summary: entry.title,
+          detail: entry.detail,
+          where: where(entry.spaceId ?? undefined, undefined),
+          spaceId: entry.spaceId ?? undefined,
+          blocking: false,
+          at: Date.parse(entry.createdAt) || 0,
+          approve: decideEntry("approve"),
+          approveLabel: t("workspace.today.apply"),
+          reject: decideEntry("dismiss"),
+          rejectLabel: t("workspace.today.dismiss"),
+          dismiss: decideEntry("dismiss"),
+          openLabel: t("workspace.needsYou.open"),
+          open: () => ws.openView("reviews"),
+        };
+      }),
   );
 
   // The guardrails: an agent or a space that a budget paused, and a blocked prompt injection.
@@ -319,28 +352,53 @@ export function useDecisionQueue() {
     const workspaceKey = ws.env.storageKey();
     const seen = seenInjections(workspaceKey);
     const injections = view.events
-      .filter((event) => event.kind === "injection-blocked" && Date.parse(event.at) >= day && !seen.has(event.id))
-      .map(
-        (event): TodayDecision => ({
+      .filter(
+        (event) =>
+          event.kind === "injection-blocked" &&
+          Date.parse(event.at) >= day &&
+          !seen.has(event.id) &&
+          !event.blocked?.allowedAt,
+      )
+      .map((event): TodayDecision => {
+        const blocked = event.blocked;
+        const allowOnce = ws.env.trust?.()?.guardrails.allowOnce;
+        return {
           key: `${INJECTION_KEY}${event.id}`,
           member: event.agentId
             ? memberById(ws.directory(), event.agentId, agentName(event.agentId))
             : { id: "guardrails", kind: "agent", name: t("trust.title"), avatarSeed: "guardrails" },
           kind: "injection",
           action: t("workspace.today.injection"),
-          summary: event.summary,
+          summary: blocked ? t("workspace.today.injectionSummary", { action: blocked.label }) : event.summary,
+          detail: blocked
+            ? t("workspace.today.injectionDetail", {
+                action: blocked.action,
+                sources: blocked.sources.map((source) => sourceName(source, t)).join(", "),
+                reason: blocked.reason || "—",
+              })
+            : undefined,
           where: where(event.spaceId ?? (event.agentId ? ws.spaces.agentSpace(event.agentId) : undefined), undefined),
           spaceId: event.spaceId ?? (event.agentId ? ws.spaces.agentSpace(event.agentId) : undefined),
           blocking: false,
           at: Date.parse(event.at) || 0,
+          // The owner who read the details may let the agent run it once; the host tells the agent.
+          ...(blocked && allowOnce
+            ? {
+                approve: async () => {
+                  guardrails.set(await allowOnce(event.id));
+                  dismissInjection(workspaceKey, event.id);
+                },
+                approveLabel: t("workspace.today.injectionAllow"),
+              }
+            : {}),
           // The host keeps the event; the owner who read it does not need it here again.
           reject: async () => dismissInjection(workspaceKey, event.id),
           dismiss: async () => dismissInjection(workspaceKey, event.id),
           rejectLabel: t("workspace.today.dismiss"),
           openLabel: t("workspace.needsYou.open"),
           open: () => ws.openView("trust"),
-        }),
-      );
+        };
+      });
     return [...pauses, ...injections];
   });
 

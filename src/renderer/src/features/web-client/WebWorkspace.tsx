@@ -18,7 +18,6 @@ import {
   decodeHostTurnLimits,
   GENERAL_SPACE_ID,
   isBackgroundAgent,
-  isTicketAttention,
   type ServerConnectionState,
   type ServerSummary,
   type WorkspaceNotifyLevel,
@@ -2287,11 +2286,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     },
     // Open on a card of Today: the place of the request is a step that Back undoes, as a link is.
     openNeedsYou: (item) => {
-      if (!isTicketAttention(item)) {
-        const place = workspaceController.needsYouPlace(item);
-        if ("agentId" in place) userOpensAgent(place.agentId);
-        else locationHistory.userMoves();
-      }
+      const place = workspaceController.needsYouPlace(item);
+      if ("agentId" in place) userOpensAgent(place.agentId);
+      else locationHistory.userMoves();
       workspaceController.openNeedsYou(item);
     },
     openThread: (channelId, rootId) => {

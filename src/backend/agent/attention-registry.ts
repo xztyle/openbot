@@ -20,6 +20,7 @@ import {
   AGENT_RUNTIME_ATTENTION_LIMIT,
   type AgentAttentionItem,
   BROWSER_TAKEOVER_REASONS,
+  TICKET_ANSWER_FIELD,
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isOneOf } from "@openbot/contracts/runtime-values";
 import { parseTwoStepKey, twoStepCode } from "@openbot/contracts/two-step-code";
@@ -693,10 +694,13 @@ export class AttentionRegistry {
     this.#tickets = [...items];
   }
 
-  /** Where a dismissed Motion ticket goes: the Motion events, which keep the waiting list. */
-  #ticketDismissed: (requestId: string) => Promise<void> = async () => undefined;
+  /**
+   * Where a dismissed or answered Motion ticket goes: the Motion events, which keep the waiting list.
+   * An answer is the owner's text, which goes on the ticket; a dismissal has none.
+   */
+  #ticketDismissed: (requestId: string, answer: string | null) => Promise<void> = async () => undefined;
 
-  onTicketDismissed(dismiss: (requestId: string) => Promise<void>): void {
+  onTicketDismissed(dismiss: (requestId: string, answer: string | null) => Promise<void>): void {
     this.#ticketDismissed = dismiss;
   }
 
@@ -843,11 +847,13 @@ export class AttentionRegistry {
     input: RespondToPromptInput,
     responder?: PromptResponder,
   ) {
-    // A waiting Motion ticket has no turn to answer: an answer of it dismisses it from Needs you.
+    // A waiting Motion ticket has no turn to answer. Empty answers dismiss it from Needs you; the
+    // `answer` field's text goes on the ticket as the owner's comment, then it leaves Needs you too.
     const ticket = this.#tickets.find((item) => item.requestId === input.requestId);
     if (ticket) {
       const requestId = String(ticket.requestId);
-      return yield* attentionIo(() => this.#ticketDismissed(requestId));
+      const answer = (input.answers[TICKET_ANSWER_FIELD] ?? []).join("\n").trim() || null;
+      return yield* attentionIo(() => this.#ticketDismissed(requestId, answer));
     }
     const saved = yield* this.#saveApiKeyAnswer(input, responder);
     yield* attentionStep(() => {

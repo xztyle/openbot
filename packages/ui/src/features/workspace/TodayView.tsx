@@ -375,6 +375,7 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
   const cost = useCost();
   const [busy, setBusy] = createSignal(false);
   const [sent, setSent] = createSignal(false);
+  const [expanded, setExpanded] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [answer, setAnswer] = createSignal("");
   const decision = () => props.decision;
@@ -421,7 +422,26 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
           </p>
           <p class="ws-today-decision-action">{decision().action}</p>
           <Show when={decision().summary}>{(summary) => <p class="ws-today-decision-summary">{summary()}</p>}</Show>
-          <Show when={decision().detail}>{(detail) => <p class="ws-today-decision-detail">{detail()}</p>}</Show>
+          <Show when={decision().detail}>
+            {(detail) => (
+              <>
+                <p class="ws-today-decision-detail" data-expanded={expanded() ? "" : undefined}>
+                  {detail()}
+                </p>
+                <Button
+                  variant="link"
+                  size="xs"
+                  class="ws-today-decision-more"
+                  aria-expanded={expanded() ? "true" : "false"}
+                  onClick={() => {
+                    setExpanded(!expanded());
+                  }}
+                >
+                  {expanded() ? t("workspace.today.lessDetail") : t("workspace.today.moreDetail")}
+                </Button>
+              </>
+            )}
+          </Show>
           <Show when={decision().where}>{(where) => <p class="ws-today-decision-where">{where()}</p>}</Show>
         </div>
         <Show when={decision().amountUsd !== undefined}>

@@ -18,6 +18,7 @@ import type { AgentStore } from "../agent-store";
 import type { MailboxStore } from "../mailbox-store";
 import type { OwnerAwayService } from "../owner-away";
 import { decodeRecordResponse } from "../protocol";
+import type { TrustAuditInput } from "../trust/trust-audit-log";
 import type { GuardrailsRuntime } from "./guardrails-service";
 import type { MeterAccount } from "./subscription-meter";
 
@@ -39,6 +40,10 @@ export interface GuardrailsRuntimeOptions {
   scheduleDrain(agentId: string): void;
   generateCheap(prompt: string): Effect.Effect<string, unknown>;
   ownerAway: OwnerAwayService | null;
+  /** A note from Atelier to an agent's chat, which starts a turn. */
+  noteAgent(agentId: string, text: string): void;
+  /** One line of the trust log, when the host keeps one. */
+  recordTrust(entry: TrustAuditInput): void;
   /** Whether a model choice is ready and no usage limit holds it. */
   modelReady(choice: AgentModelChoice): boolean;
   changed(): void;
@@ -156,6 +161,8 @@ export function guardrailsRuntime(options: GuardrailsRuntimeOptions): Guardrails
     alertOwner: (agentId, category) => {
       options.ownerAway?.alert({ agentId, category });
     },
+    noteAgent: (agentId, text) => options.noteAgent(agentId, text),
+    recordTrust: (entry) => options.recordTrust(entry),
     failoverTargets: (target, allowApiKey) => {
       const models = options.models();
       const choices: AgentModelChoice[] = [];

@@ -24,6 +24,8 @@ export interface GuardrailCalls {
   view(): Promise<GuardrailsView>;
   save(policy: GuardrailPolicy): Promise<GuardrailsView>;
   resume(scope: "agent" | "space", id: string): Promise<GuardrailsView>;
+  /** Allows an action that the injection monitor blocked, once. Only the owner may. */
+  allowOnce?(eventId: string): Promise<GuardrailsView>;
 }
 
 /** The routes of the connected host, for the browser client. A host that is not connected rejects. */
@@ -44,6 +46,7 @@ export function hostTrustCalls(request: () => TeamApiRequest): TrustCalls {
           policy: JSON.parse(JSON.stringify(policy)),
         }),
       resume: (scope, id) => request()("POST", GUARDRAILS_ROUTES.resume, decodeGuardrailsViewAnswer, { scope, id }),
+      allowOnce: (eventId) => request()("POST", GUARDRAILS_ROUTES.allowOnce, decodeGuardrailsViewAnswer, { eventId }),
     },
   };
 }

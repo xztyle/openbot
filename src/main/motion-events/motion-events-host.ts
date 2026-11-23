@@ -17,7 +17,7 @@ import type { DynamicRecord } from "@openbot/contracts/runtime-values";
 import { createOpenBotLogger, registerSecretValue } from "@openbot/logging";
 import { Effect } from "effect";
 import type { McpAgent } from "../../backend/mcp-agent-values";
-import { MotionClient, motionServer } from "./motion-client";
+import { MOTION_OWNER_KEY, MotionClient, motionServer } from "./motion-client";
 import { startMotionEventsServer } from "./motion-events-server";
 import { type MotionEventsAgent, MotionEventsService, type WaitingTicket } from "./motion-events-service";
 import { readDeliverableFiles } from "./motion-files";
@@ -100,6 +100,11 @@ export interface MotionEventsHost {
   orders: MotionOrders;
   /** A Motion tool call of an agent's turn, after it answered. */
   observeToolCall(agentId: string, tool: string, args: unknown): void;
+  /**
+   * The owner answered a ticket that waits on them from Atelier: the answer goes on the ticket as a
+   * comment of the owner's own Motion member, and the ticket leaves Needs you.
+   */
+  answerWaiting(issueId: string, answer: string, ownerName: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -221,6 +226,16 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
       tickets.observeToolCall(agentId, name, args);
       grader.observeToolCall(agentId, name, args);
       orders.observeToolCall(agentId, name, args);
+    },
+    answerWaiting: async (issueId, answer, ownerName) => {
+      const ticket = events.waiting().find((item) => item.issueId === issueId);
+      if (!ticket) return;
+      await motion.tool(
+        { agentId: ticket.agentId, asMember: { key: MOTION_OWNER_KEY, name: ownerName } },
+        "comments_create",
+        { page_id: issueId, body: answer },
+      );
+      await events.dismissWaiting(issueId);
     },
     close: async () => {
       events.dispose();

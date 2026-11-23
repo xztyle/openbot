@@ -37,11 +37,17 @@
   grid-row: 3;
 }
 
+/*
+ * The avatar stands at the end of the text, and it comes first in the row. It is never the scroll
+ * anchor: as a streamed reply grows, it moves down with the end of the text, and the browser would
+ * move a reader who scrolled up down with it.
+ */
 .message-author-avatar {
   grid-column: 1;
   grid-row: 2;
   align-self: end;
   overflow: visible;
+  overflow-anchor: none;
   border: 0;
   background: transparent;
 }

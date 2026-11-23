@@ -83,6 +83,30 @@ function followConversationBottom(element: HTMLDivElement): void {
   element.scrollTop = element.scrollHeight - element.clientHeight;
 }
 
+/** A field or a list control uses the arrow keys itself, so a key there does not scroll the chat. */
+function usesArrowKeys(element: Element): boolean {
+  return (
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLTextAreaElement ||
+    element instanceof HTMLSelectElement ||
+    (element instanceof HTMLElement && element.isContentEditable)
+  );
+}
+
+/**
+ * Whether a scroll up from `target` moves `chat`: the target is in the chat, the chat is not at its
+ * top, and no scroll box between them, such as a code block, can take the scroll up first.
+ */
+function scrollUpMovesChat(chat: HTMLElement, target: EventTarget | null): boolean {
+  if (chat.scrollTop <= 0 || !(target instanceof Element) || !chat.contains(target)) return false;
+  for (let node: Element | null = target; node && node !== chat; node = node.parentElement) {
+    if (node.scrollTop <= 0 || node.scrollHeight <= node.clientHeight) continue;
+    const overflow = getComputedStyle(node).overflowY;
+    if (overflow === "auto" || overflow === "scroll" || overflow === "overlay") return false;
+  }
+  return true;
+}
+
 export function createConversationViewScope(props: ConversationProps) {
   const controller = useConversationController();
   /** A view shows one agent or one channel for its whole life, so each branch below is fixed. */
@@ -815,6 +839,11 @@ export function createConversationViewScope(props: ConversationProps) {
   let readerDragging = false;
   let readerIntent: { up: boolean; at: number } | undefined;
   let lastTouchY: number | undefined;
+  /**
+   * The last press was in the chat. A key with no focused element scrolls the scroll box of the last
+   * press. The pressed row can leave the page as the drawn rows move, so only this is kept.
+   */
+  let lastPressInChat = false;
   let currentUnreadCount = 0;
   let unreadOpening: { identity: string | undefined; pending: boolean; boundaryId: string | null | undefined } = {
     identity: undefined,
@@ -1007,6 +1036,7 @@ export function createConversationViewScope(props: ConversationProps) {
     keyboardWindow.addEventListener("keydown", closeActiveRemoteBrowserTab);
     keyboardTarget.addEventListener("keydown", chatSearchListener);
     window.addEventListener("pointerdown", closeMessageMenus);
+    keyboardWindow.addEventListener("pointerdown", notePress, { capture: true, passive: true });
     const readerInput = scrollElement;
     const endReaderDrag = () => {
       readerDragging = false;
@@ -1045,6 +1075,7 @@ export function createConversationViewScope(props: ConversationProps) {
       keyboardWindow.removeEventListener("keydown", closeActiveRemoteBrowserTab);
       keyboardTarget.removeEventListener("keydown", chatSearchListener);
       window.removeEventListener("pointerdown", closeMessageMenus);
+      keyboardWindow.removeEventListener("pointerdown", notePress, { capture: true });
       readerInput?.removeEventListener("wheel", readerWheel);
       readerInput?.removeEventListener("touchmove", readerTouchMove);
       readerInput?.removeEventListener("touchend", readerTouchEnd);
@@ -1676,26 +1707,41 @@ export function createConversationViewScope(props: ConversationProps) {
       stickToLatest = true;
     }
   };
-  function noteReaderIntent(up: boolean) {
+  /**
+   * The reader's input. An input up that moves the chat stops the follow at once, before its scroll
+   * event. A follow that a frame or a resize queued before the input can run before that event; it
+   * then moves the chat back to the bottom, and the scroll event sees a move down, or no move.
+   */
+  function noteReaderIntent(up: boolean, target: EventTarget | null) {
     readerIntent = { up, at: performance.now() };
+    if (up && scrollElement && scrollUpMovesChat(scrollElement, target)) leaveLatest();
   }
   function readerWheel(event: WheelEvent) {
     // Ctrl with the wheel zooms, and a sideways swipe can report a small vertical delta.
     if (event.ctrlKey || event.deltaY === 0 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
-    noteReaderIntent(event.deltaY < 0);
+    noteReaderIntent(event.deltaY < 0, event.target);
   }
   function readerKeyDown(event: KeyboardEvent) {
     // A control that used the key, such as the rows of a trace dialog, did not scroll the chat.
     if (event.defaultPrevented) return;
-    if (event.key === "ArrowUp" || event.key === "PageUp" || event.key === "Home") noteReaderIntent(true);
-    else if (event.key === "ArrowDown" || event.key === "PageDown" || event.key === "End") noteReaderIntent(false);
-    else if (event.key === " ") noteReaderIntent(event.shiftKey);
+    // With no focused element, the key scrolls the scroll box of the last press.
+    const focus = event.target instanceof Element ? event.target : null;
+    const target =
+      !focus || focus === focus.ownerDocument.body ? (lastPressInChat ? (scrollElement ?? null) : null) : focus;
+    if (target instanceof Element && usesArrowKeys(target)) return;
+    if (event.key === "ArrowUp" || event.key === "PageUp" || event.key === "Home") noteReaderIntent(true, target);
+    else if (event.key === "ArrowDown" || event.key === "PageDown" || event.key === "End")
+      noteReaderIntent(false, target);
+    else if (event.key === " ") noteReaderIntent(event.shiftKey, target);
   }
   function readerTouchMove(event: TouchEvent) {
     const y = event.touches.length === 1 ? event.touches[0]?.clientY : undefined;
     // A finger that moves down scrolls the chat up.
-    if (y !== undefined && lastTouchY !== undefined && y !== lastTouchY) noteReaderIntent(y > lastTouchY);
+    if (y !== undefined && lastTouchY !== undefined && y !== lastTouchY) noteReaderIntent(y > lastTouchY, event.target);
     lastTouchY = y;
+  }
+  function notePress(event: PointerEvent) {
+    lastPressInChat = event.target instanceof Node && scrollElement?.contains(event.target) === true;
   }
   function readerTouchEnd() {
     lastTouchY = undefined;

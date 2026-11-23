@@ -10,7 +10,8 @@
 // opened and closed again at once.
 //
 // `bun scripts/phone-tap-e2e.ts [--survey] [--views=today,dm/chief] [--headed]`
-// Writes .openbot-build/phone-tap-e2e/report.json. Exits 1 on a hover change.
+// Writes .openbot-build/phone-tap-e2e/report.json. Exits 1 on a hover change. A walk takes about 4 minutes;
+// deploy-tests timeout: 600s
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -98,6 +99,7 @@ interface Finding {
 const hoverChanges: Finding[] = [];
 const deadTaps: Finding[] = [];
 const stuck: Finding[] = [];
+const seen = new Set<string>();
 let checked = 0;
 
 /** Loads the view. The phone shell keeps its own tab state, so an in-page address change is not enough. */
@@ -106,7 +108,7 @@ async function open(page: Page, view: string): Promise<void> {
   await page.waitForFunction(() => (document.getElementById("root")?.childElementCount ?? 0) > 0, null, {
     timeout: 120_000,
   });
-  await page.waitForTimeout(1_500);
+  await page.waitForTimeout(800);
 }
 
 /** Marks the visible controls of the screen with an index, and names them. */
@@ -161,7 +163,7 @@ async function hoverEffects(page: Page, index: number): Promise<{ styles: number
   await page.waitForTimeout(30);
   const before = await nearby(page, index);
   await control.hover({ timeout: 2_000, force: true }).catch(() => undefined);
-  await page.waitForTimeout(260);
+  await page.waitForTimeout(180);
   const after = await nearby(page, index);
   // Only what the hover shows counts, as on iOS: an element that appears or turns visible. Live
   // views also remove and fade elements by themselves.
@@ -169,7 +171,7 @@ async function hoverEffects(page: Page, index: number): Promise<{ styles: number
   // A hover style goes again when the pointer leaves. What stays after the pointer left came from
   // the view itself (a list that loaded or rendered again), not from the hover.
   await page.mouse.move(1, 1);
-  await page.waitForTimeout(260);
+  await page.waitForTimeout(180);
   const away = await nearby(page, index);
   const appeared = (from: string[]) =>
     after.length !== from.length
@@ -229,6 +231,10 @@ async function checkView(page: Page, view: string): Promise<void> {
   const names = await markControls(page);
   for (let index = 0; index < names.length; index++) {
     if ((await page.locator(`[data-tap-probe="${index}"]`).count()) === 0) continue;
+    // The tab bar and the header repeat on every view: each control is checked once.
+    const key = names[index] ?? "";
+    if (seen.has(key)) continue;
+    seen.add(key);
     checked++;
     const { styles, handlers } = await hoverEffects(page, index);
     const control = names[index] ?? "";

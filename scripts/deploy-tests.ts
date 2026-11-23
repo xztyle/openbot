@@ -110,7 +110,13 @@ function standaloneE2e(): Test[] {
       return !NEEDS_SETUP.test(head);
     })
     .sort()
-    .map((file) => ({ ...e2e(file, file.replace(/-e2e\.ts$/u, "")), critical: false }));
+    .map((file) => {
+      // A script that needs longer than the default says so in its header: `deploy-tests timeout: 600s`.
+      const head = readFileSync(join(root, "scripts", file), "utf8").slice(0, 4_000);
+      const seconds = Number(/deploy-tests timeout: (\d+)s/u.exec(head)?.[1] ?? 0);
+      const test = e2e(file, file.replace(/-e2e\.ts$/u, ""), [], seconds > 0 ? seconds * 1_000 : undefined);
+      return { ...test, critical: false };
+    });
 }
 
 const tests = criticalOnly

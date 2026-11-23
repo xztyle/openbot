@@ -341,7 +341,7 @@
     "check:api": "bun run typecheck:api && bun run test:api && bun run test:billing-snapshot && bun run test:remote-auth-events && bun run test:invite-acceptance && bun run test:host-key-handover && bun run test:cloud-authorization && bun run test:hosted-held-resume && bun run test:hosted-retention-wake && bun run test:mobile-connected-devices && bun run api:build:check",
     "desktop:typecheck": "bun run --parallel typecheck:node typecheck:renderer typecheck:contracts typecheck:brand typecheck:storybook",
     "api:build:check": "CLOUDFLARE_ENV=preview bun run api:build",
-    "check:ui": "bun scripts/ui-foundation-check.ts",
+    "check:ui": "bun scripts/ui-foundation-check.ts && bun scripts/check-web-preload.ts",
     "check:assets": "bun scripts/check-image-assets.ts",
     "check:doc-links": "bun scripts/check-doc-links.ts",
     "verify:preload": "bun scripts/verify-preload-bundle.ts",

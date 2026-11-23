@@ -27,6 +27,9 @@ export interface NeedsYouSources {
   takeovers: readonly BrowserTakeoverRequest[];
 }
 
+/** How long a request that the client holds may wait for the host's list to name it. */
+const HOST_LIST_GRACE_MS = 60_000;
+
 /** When this client first saw a request that the host's list does not name. */
 const firstSeen = new Map<string, string>();
 
@@ -58,12 +61,17 @@ export function takeoverKind(request: Pick<BrowserTakeoverRequest, "secret" | "r
  * the list does not name (a host without `attention-items-v1`, or an event that came first). Oldest
  * first.
  */
-export function needsYouItems(sources: NeedsYouSources): AgentAttentionItem[] {
+export function needsYouItems(sources: NeedsYouSources, now = Date.now()): AgentAttentionItem[] {
   const items = new Map<string, AgentAttentionItem>();
   for (const item of sources.items ?? []) items.set(agentAttentionKey(item), item);
   const add = (item: Omit<AgentAttentionItem, "createdAt">) => {
     const key = agentAttentionKey(item);
-    if (!items.has(key)) items.set(key, { ...item, createdAt: seenAt(key) });
+    if (items.has(key)) return;
+    const at = seenAt(key);
+    // Where the host sends its list, a request that it still does not name after a while ended there:
+    // its end event was lost. It does not wait for the user any more.
+    if (sources.items && now - Date.parse(at) > HOST_LIST_GRACE_MS) return;
+    items.set(key, { ...item, createdAt: at });
   };
   for (const prompt of sources.prompts) {
     const question = prompt.questions?.some((entry) => entry.isSecret) ? undefined : prompt.questions?.[0]?.question;

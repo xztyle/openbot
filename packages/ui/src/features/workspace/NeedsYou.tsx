@@ -56,6 +56,8 @@ export interface NeedsYouRow {
   /** Where it waits: "Direct message" or "in #launch". */
   where?: string | undefined;
   at: number;
+  /** Takes the row off the list without a decision. */
+  dismiss?: (() => Promise<void>) | undefined;
 }
 
 const KIND_ICON = {
@@ -86,6 +88,11 @@ export interface NeedsYouListProps {
 export function NeedsYouList(props: NeedsYouListProps): JSX.Element {
   const { t } = useText();
   const recent = useRecentTime();
+  const [failed, setFailed] = createSignal<string | null>(null);
+  const dismiss = (key: string, run: () => Promise<void>) => {
+    setFailed(null);
+    void run().catch(() => setFailed(key));
+  };
   return (
     <WorkspaceList label={props.label ?? t("workspace.needsYou.title")} class={cx("ws-needs-you-list", props.class)}>
       <For each={props.rows} keyed={(row) => row.key}>
@@ -94,6 +101,26 @@ export function NeedsYouList(props: NeedsYouListProps): JSX.Element {
             unread
             class="ws-needs-you-row"
             onOpen={() => props.onOpen(row().key)}
+            actions={
+              row().dismiss ? (
+                <>
+                  <Button variant="ghost" size="sm" onClick={() => props.onOpen(row().key)}>
+                    {t("workspace.needsYou.open")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={t("workspace.needsYou.dismissLabel", { action: row().action })}
+                    onClick={() => {
+                      const run = row().dismiss;
+                      if (run) dismiss(row().key, run);
+                    }}
+                  >
+                    {t("workspace.today.dismiss")}
+                  </Button>
+                </>
+              ) : undefined
+            }
             label={t("workspace.needsYou.rowLabel", { name: row().member.name, action: row().action })}
             leading={
               <span class="ws-feed-avatar">
@@ -105,9 +132,14 @@ export function NeedsYouList(props: NeedsYouListProps): JSX.Element {
             }
             title={t("workspace.needsYou.rowTitle", { name: row().member.name })}
             titleEnd={recent(row().at)}
-            trailing={<span class="ws-needs-you-open">{t("workspace.needsYou.open")}</span>}
+            trailing={row().dismiss ? undefined : <span class="ws-needs-you-open">{t("workspace.needsYou.open")}</span>}
           >
             <span class="ws-needs-you-action">{row().action}</span>
+            <Show when={failed() === row().key}>
+              <span class="ws-feed-preview" role="alert">
+                {t("workspace.today.answerFailed")}
+              </span>
+            </Show>
             <Show when={row().summary}>{(summary) => <span class="ws-feed-preview">{summary()}</span>}</Show>
             <Show when={row().where}>{(where) => <span class="ws-feed-where">{where()}</span>}</Show>
           </WorkspaceListRow>
@@ -133,15 +165,27 @@ export function NeedsYouSection(props: NeedsYouListProps): JSX.Element {
   );
 }
 
+export interface NeedsYouButtonProps extends NeedsYouListProps {
+  /** What waits in the other spaces: a line under the list, opened on demand, never in the count. */
+  others?: readonly NeedsYouRow[] | undefined;
+}
+
 /**
- * The "Needs you" button of the top bar: it shows only while something waits, with the count, and
- * opens the list of the requests. A row opens the chat that answers it.
+ * The "Needs you" button of the top bar: it shows only while something waits, with the count of the
+ * space that shows, and opens the list of the requests. A row opens the chat that answers it; what
+ * waits in other spaces is one line that opens their list.
  */
-export function NeedsYouButton(props: NeedsYouListProps): JSX.Element {
+export function NeedsYouButton(props: NeedsYouButtonProps): JSX.Element {
   const { t } = useText();
   const [open, setOpen] = createSignal(false);
+  const [showOthers, setShowOthers] = createSignal(false);
+  const others = () => props.others ?? [];
+  const choose = (key: string) => {
+    setOpen(false);
+    props.onOpen(key);
+  };
   return (
-    <Show when={props.rows.length > 0}>
+    <Show when={props.rows.length > 0 || others().length > 0}>
       <Popover.Root modal open={open()} onOpenChange={setOpen} placement="bottom-end" gutter={6}>
         <Popover.Trigger
           class={cx(buttonVariants({ variant: "secondary", size: "sm" }), "ws-needs-you-button")}
@@ -149,23 +193,34 @@ export function NeedsYouButton(props: NeedsYouListProps): JSX.Element {
         >
           <Hand aria-hidden="true" />
           <span>{t("workspace.needsYou.title")}</span>
-          <span class="ws-needs-you-count" aria-hidden="true">
-            {Math.min(props.rows.length, 99)}
-          </span>
+          <Show when={props.rows.length > 0}>
+            <span class="ws-needs-you-count" aria-hidden="true">
+              {Math.min(props.rows.length, 99)}
+            </span>
+          </Show>
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Content class="ui-popover-menu-surface ws-needs-you-popover">
             <Popover.Title class="ws-needs-you-popover-title">
               {t("workspace.needsYou.count", { count: props.rows.length })}
             </Popover.Title>
-            <NeedsYouList
-              rows={props.rows}
-              label={props.label}
-              onOpen={(key) => {
-                setOpen(false);
-                props.onOpen(key);
-              }}
-            />
+            <NeedsYouList rows={props.rows} label={props.label} onOpen={choose} />
+            <Show when={others().length > 0}>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="ws-needs-you-others"
+                aria-expanded={showOthers() ? "true" : "false"}
+                onClick={() => setShowOthers((value) => !value)}
+              >
+                {showOthers()
+                  ? t("workspace.needsYou.hideOthers")
+                  : t("workspace.needsYou.otherSpaces", { count: others().length })}
+              </Button>
+              <Show when={showOthers()}>
+                <NeedsYouList rows={others()} label={t("workspace.needsYou.otherSpacesLabel")} onOpen={choose} />
+              </Show>
+            </Show>
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>

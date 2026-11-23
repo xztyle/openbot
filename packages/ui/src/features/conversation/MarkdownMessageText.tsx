@@ -1025,9 +1025,11 @@ function sharedFileTarget(value: string): string | null {
   const path = value.trim();
   if (!path || /[\0\r\n]/u.test(path)) return null;
   const normalized = path.replaceAll("\\", "/");
+  // A space's shared folder, such as `/data/OpenBot/Spaces/sales/Shared/report.pdf`, is shared too.
   return normalized.startsWith("~/OpenBot/Shared/") ||
     normalized.startsWith("OpenBot/Shared/") ||
-    normalized.includes("/OpenBot/Shared/")
+    normalized.includes("/OpenBot/Shared/") ||
+    /(?:^|\/)OpenBot\/Spaces\/[^/]+\/Shared\//u.test(normalized)
     ? path
     : null;
 }

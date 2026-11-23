@@ -370,7 +370,7 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
         onSelectConversation={(id) => ws.openConversation(id)}
         activityCount={ws.activityCount()}
         // What waits for the reader, from every space: Today lists it with its answers.
-        todayCount={queue.queue().length}
+        todayCount={queue.here().length}
         threadsUnread={ws.threadsUnread()}
         unreadsUnread={ws.unreads.hasUnread()}
         showLater={ws.later.supported()}

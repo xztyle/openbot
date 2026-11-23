@@ -545,7 +545,8 @@ export class AttentionRegistry {
     return (
       this.#prompts.get(requestId)?.agentId ??
       this.#approvals.get(requestId)?.approval.agentId ??
-      this.#takeovers.get(requestId)?.request.agentId
+      this.#takeovers.get(requestId)?.request.agentId ??
+      this.#tickets.find((item) => item.requestId === requestId)?.agentId
     );
   }
 
@@ -692,6 +693,13 @@ export class AttentionRegistry {
     this.#tickets = [...items];
   }
 
+  /** Where a dismissed Motion ticket goes: the Motion events, which keep the waiting list. */
+  #ticketDismissed: (requestId: string) => Promise<void> = async () => undefined;
+
+  onTicketDismissed(dismiss: (requestId: string) => Promise<void>): void {
+    this.#ticketDismissed = dismiss;
+  }
+
   /** Full details for one agent; the UI snapshot has a separate size budget. */
   localAttention(agentId: string) {
     return {
@@ -835,6 +843,12 @@ export class AttentionRegistry {
     input: RespondToPromptInput,
     responder?: PromptResponder,
   ) {
+    // A waiting Motion ticket has no turn to answer: an answer of it dismisses it from Needs you.
+    const ticket = this.#tickets.find((item) => item.requestId === input.requestId);
+    if (ticket) {
+      const requestId = String(ticket.requestId);
+      return yield* attentionIo(() => this.#ticketDismissed(requestId));
+    }
     const saved = yield* this.#saveApiKeyAnswer(input, responder);
     yield* attentionStep(() => {
       const pending = this.#prompts.get(input.requestId);
@@ -2366,7 +2380,11 @@ function localQuestionNeedsOpenBot(question: AgentPromptQuestion): boolean {
   );
 }
 
-const { sync: attentionStep, rewrap: toAttentionOperationFailed } = causeHelpers(AttentionOperationFailed);
+const {
+  io: attentionIo,
+  sync: attentionStep,
+  rewrap: toAttentionOperationFailed,
+} = causeHelpers(AttentionOperationFailed);
 
 /**
  * An approval's command or reason as its card shows it: a token in a `curl -H "Authorization: …"` goes,

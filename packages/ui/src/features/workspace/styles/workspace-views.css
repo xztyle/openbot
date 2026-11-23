@@ -732,6 +732,14 @@
   padding: var(--openbot-space-1) 0;
 }
 
+.ws-needs-you-others {
+  width: 100%;
+  justify-content: flex-start;
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
 .ws-needs-you-popover-title {
   margin: 0;
   padding: var(--openbot-space-2) var(--openbot-space-3);

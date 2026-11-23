@@ -2249,6 +2249,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.emit("event", { type: "agent-attention-changed", items });
   }
 
+  /** Where a Motion ticket that the owner dismissed in Needs you goes, by its id in Motion. */
+  onWaitingTicketDismissed(dismiss: (issueId: string) => Promise<void>): void {
+    this.#attention.onTicketDismissed((requestId) => dismiss(requestId.replace(/^motion:/u, "")));
+  }
+
   /** The source of each agent's current Motion ticket, which the fleet shows. */
   setCurrentTickets(source: (agentId: string) => WorkspaceFleetTicket | null): void {
     this.#currentTicket = source;

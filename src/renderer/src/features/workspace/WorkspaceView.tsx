@@ -10,6 +10,7 @@ import {
   type ConversationWorkspaceLayout,
   ConversationWorkspaceLayoutContext,
 } from "../conversation/conversation-workspace-layout";
+import { WorkspaceAgentWaits } from "./WorkspaceAgentWaits";
 import { WorkspaceChannelPane } from "./WorkspaceChannelPane";
 import { WorkspaceDetailsPanel } from "./WorkspaceDetailsPanel";
 import { WorkspaceDialogs } from "./WorkspaceDialogs";
@@ -196,6 +197,7 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
               />
             )}
           </Show>
+          <WorkspaceAgentWaits agentId={props.agentId} />
           <div class="ws-agent-dm-body">{props.children}</div>
         </section>
       </WorkspaceContextMenu>

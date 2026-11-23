@@ -620,6 +620,33 @@
   flex-direction: column;
 }
 
+.ws-agent-dm-wait {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  margin: var(--openbot-space-2) var(--openbot-space-4) 0;
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  border: 1px solid color-mix(in oklab, var(--openbot-warning) 45%, transparent);
+  border-radius: var(--openbot-radius-md);
+  background: color-mix(in oklab, var(--openbot-warning) 12%, transparent);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-agent-dm-wait-icon {
+  flex: 0 0 auto;
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-agent-dm-wait-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ws-agent-dm-body {
   position: relative;
   display: flex;

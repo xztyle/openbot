@@ -1,5 +1,5 @@
 /*
- * Today, the owner's home on a phone and a computer: the one decision queue of every space with
+ * Today, the owner's home on a phone and a computer: the decision queue of the space that shows with
  * one-tap answers, the agents that work now with Stop, and the briefing as cards (spend, goals, what
  * the agents made). A new workspace also gets a short guide to goals, loops, the briefing and costs.
  */
@@ -209,7 +209,7 @@ export function WorkspaceTodayView(props: { actions?: JSX.Element; onBack?: (() 
     <>
       <TodayView
         name={firstName()}
-        decisions={queue.queue()}
+        decisions={queue.here()}
         working={working()}
         report={insight.report()}
         shipped={shipped()}

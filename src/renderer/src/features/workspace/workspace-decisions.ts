@@ -1,9 +1,9 @@
 /*
  * The one decision queue of the owner: every request of an agent that waits for them (questions,
  * approvals, browser steps, Motion tickets), every pending loop decision and every insight alert, from
- * every space, not only the one that shows. Today lists it with one-tap answers; the top bar's
- * "Needs you" and the phone's Today badge count the same list, so the numbers always agree and a
- * request of another space is never missed.
+ * every space. Today lists it with one-tap answers. The top bar's "Needs you" counts the space that
+ * shows and names how many wait in the others, so a request of another space is never missed and
+ * never counted as this one's.
  */
 import type { DecisionQueueSource } from "@openbot/contracts/agent-learning";
 import { agentAttentionKey, isTicketAttention, type LoopDecision } from "@openbot/contracts/ipc";
@@ -163,6 +163,10 @@ export function useDecisionQueue() {
             )
           : undefined;
       const effect = held?.command?.trim() || undefined;
+      // A waiting Motion ticket has no turn: an answer of it takes it off the list, in Motion it stays.
+      const dismissTicket = ticket
+        ? () => ws.channels.port().agent.respondToPrompt({ requestId: item.requestId, answers: {} })
+        : undefined;
       return {
         key: agentAttentionKey(item),
         member: memberById(ws.directory(), item.agentId, agentName(item.agentId)),
@@ -175,10 +179,12 @@ export function useDecisionQueue() {
           spaceId,
           channel ? t("workspace.activity.in", { channel: channel.name }) : t("workspace.activity.directMessage"),
         ),
+        spaceId,
         blocking: !ticket,
         at: Date.parse(item.createdAt) || 0,
         approve: approval?.("accept"),
-        reject: approval?.("decline"),
+        reject: approval?.("decline") ?? dismissTicket,
+        ...(dismissTicket ? { rejectLabel: t("workspace.today.dismiss"), dismiss: dismissTicket } : {}),
         openLabel: browser
           ? t("workspace.today.takeOver")
           : item.kind === "question" || item.kind === "form"
@@ -206,6 +212,7 @@ export function useDecisionQueue() {
         action: question ? t("workspace.loops.needsYou.answer") : t("workspace.loops.needsYou.approve", { amount }),
         summary: [decision.title, decision.detail].filter(Boolean).join(" — "),
         where: where(decision.spaceId, t("workspace.view.loops")),
+        spaceId: decision.spaceId,
         amountUsd: decision.amountUsd,
         blocking: true,
         at: decision.createdAt,
@@ -221,6 +228,12 @@ export function useDecisionQueue() {
     }),
   );
 
+  const dismissAlert = (alertId: string) => async () => {
+    const run = ws.channels.port().agent.workspaceInsightAction;
+    if (!run) throw new Error(t("workspace.today.answerFailed"));
+    const report = await run({ kind: "alert-dismiss", alertId });
+    setInsightAlerts(report.alerts);
+  };
   const alerts = createMemo((): TodayDecision[] =>
     insightAlerts().map((alert) => ({
       key: `${ALERT_KEY}${alert.id}`,
@@ -228,14 +241,11 @@ export function useDecisionQueue() {
       kind: "alert",
       action: alert.text,
       where: where(alert.spaceId, t("insight.needsYou.alert")),
+      spaceId: alert.spaceId,
       blocking: false,
       at: Date.parse(alert.createdAt) || 0,
-      reject: async () => {
-        const run = ws.channels.port().agent.workspaceInsightAction;
-        if (!run) throw new Error(t("workspace.today.answerFailed"));
-        const report = await run({ kind: "alert-dismiss", alertId: alert.id });
-        setInsightAlerts(report.alerts);
-      },
+      reject: dismissAlert(alert.id),
+      dismiss: dismissAlert(alert.id),
       rejectLabel: t("workspace.today.dismiss"),
       openLabel: t("workspace.needsYou.open"),
       open: () => openSpaceView(alert.spaceId, "insights"),
@@ -262,12 +272,14 @@ export function useDecisionQueue() {
         summary: entry.title,
         detail: entry.detail,
         where: where(entry.spaceId ?? undefined, undefined),
+        spaceId: entry.spaceId ?? undefined,
         blocking: false,
         at: Date.parse(entry.createdAt) || 0,
         approve: decideEntry("approve"),
         approveLabel: t("workspace.today.apply"),
         reject: decideEntry("dismiss"),
         rejectLabel: t("workspace.today.dismiss"),
+        dismiss: decideEntry("dismiss"),
         openLabel: t("workspace.needsYou.open"),
         open: () => ws.openView("reviews"),
       };
@@ -290,6 +302,7 @@ export function useDecisionQueue() {
         action: t(agent ? "workspace.today.pausedAgent" : "workspace.today.pausedSpace"),
         summary: pause.detail,
         where: where(agent ? ws.spaces.agentSpace(pause.id) : pause.id, undefined),
+        spaceId: agent ? ws.spaces.agentSpace(pause.id) : pause.id,
         blocking: true,
         at: Date.parse(pause.since) || 0,
         approve: async () => {
@@ -317,10 +330,12 @@ export function useDecisionQueue() {
           action: t("workspace.today.injection"),
           summary: event.summary,
           where: where(event.spaceId ?? (event.agentId ? ws.spaces.agentSpace(event.agentId) : undefined), undefined),
+          spaceId: event.spaceId ?? (event.agentId ? ws.spaces.agentSpace(event.agentId) : undefined),
           blocking: false,
           at: Date.parse(event.at) || 0,
           // The host keeps the event; the owner who read it does not need it here again.
           reject: async () => dismissInjection(workspaceKey, event.id),
+          dismiss: async () => dismissInjection(workspaceKey, event.id),
           rejectLabel: t("workspace.today.dismiss"),
           openLabel: t("workspace.needsYou.open"),
           open: () => ws.openView("trust"),
@@ -329,24 +344,53 @@ export function useDecisionQueue() {
     return [...pauses, ...injections];
   });
 
-  const queue = createMemo(() =>
-    [...requests(), ...decisions(), ...alerts(), ...proposals(), ...guarded()].sort(compareDecisions),
-  );
+  // What the reader dismissed leaves at once, before the host's list drops it.
+  const [hidden, setHidden] = createSignal<ReadonlySet<string>>(new Set());
+  const withDismiss = (decision: TodayDecision): TodayDecision => {
+    const dismiss = decision.dismiss;
+    if (!dismiss) return decision;
+    const hide = async () => {
+      setHidden((keys) => new Set([...keys, decision.key]));
+      try {
+        await dismiss();
+      } catch (error) {
+        setHidden((keys) => new Set([...keys].filter((key) => key !== decision.key)));
+        throw error;
+      }
+    };
+    // A reject that is a dismissal hides the row the same way.
+    const dismissing = decision.rejectLabel === t("workspace.today.dismiss");
+    return { ...decision, dismiss: hide, ...(dismissing ? { reject: hide } : {}) };
+  };
+  const queue = createMemo(() => {
+    const gone = hidden();
+    return [...requests(), ...decisions(), ...alerts(), ...proposals(), ...guarded()]
+      .filter((decision) => !gone.has(decision.key))
+      .map(withDismiss)
+      .sort(compareDecisions);
+  });
+  /** The queue of the space that shows: all of it where the workspace has one space. */
+  const inSpace = (decision: TodayDecision) =>
+    !ws.spaces.available() || !decision.spaceId || decision.spaceId === ws.spaces.current();
+  const here = createMemo(() => queue().filter(inSpace));
+  const elsewhere = createMemo(() => queue().filter((decision) => !inSpace(decision)));
+  const row = (decision: TodayDecision): NeedsYouRow => ({
+    key: decision.key,
+    member: decision.member,
+    kind: decision.kind,
+    action: decision.action,
+    summary: decision.summary,
+    where: decision.where,
+    at: decision.at,
+    dismiss: decision.dismiss,
+  });
   /** The same queue as the rows of the top bar's list. */
-  const rows = createMemo((): NeedsYouRow[] =>
-    queue().map((decision) => ({
-      key: decision.key,
-      member: decision.member,
-      kind: decision.kind,
-      action: decision.action,
-      summary: decision.summary,
-      where: decision.where,
-      at: decision.at,
-    })),
-  );
+  const rows = createMemo((): NeedsYouRow[] => queue().map(row));
+  const hereRows = createMemo((): NeedsYouRow[] => here().map(row));
+  const elsewhereRows = createMemo((): NeedsYouRow[] => elsewhere().map(row));
   const open = (key: string) =>
     queue()
       .find((decision) => decision.key === key)
       ?.open();
-  return { queue, rows, open };
+  return { queue, rows, here, hereRows, elsewhereRows, open };
 }

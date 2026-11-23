@@ -293,6 +293,22 @@ export class MotionEventsService {
     return this.#state.waiting;
   }
 
+  /**
+   * The owner dismissed a waiting ticket in Needs you: it leaves the list until Motion says it waits
+   * again. The ticket itself stays as it is in Motion.
+   */
+  dismissWaiting(issueId: string): Promise<void> {
+    const run = this.#chain.then(async () => {
+      await this.start();
+      if (!this.#state.waiting.some((item) => item.issueId === issueId)) return;
+      this.#state.waiting = this.#state.waiting.filter((item) => item.issueId !== issueId);
+      this.#deps.showWaiting(this.#state.waiting);
+      await this.#save();
+    });
+    this.#chain = run.catch(() => undefined);
+    return run;
+  }
+
   /** Handles one verified event. Calls run one at a time. */
   receive(event: MotionEvent): Promise<MotionEventOutcome> {
     const run = this.#chain.then(() => this.#receive(event));
@@ -565,9 +581,15 @@ export class MotionEventsService {
     }
   }
 
+  /** The last write of the state file: writes run one at a time, so the newest state is the one kept. */
+  #saving: Promise<void> = Promise.resolve();
+
   #save(): Promise<void> {
-    return Effect.runPromise(
-      writeJsonFileAtomically(this.#deps.stateFile, this.#state, { createDirectory: true }),
-    ).catch(() => this.#deps.log("Could not save the Motion events state."));
+    this.#saving = this.#saving.then(() =>
+      Effect.runPromise(writeJsonFileAtomically(this.#deps.stateFile, this.#state, { createDirectory: true })).catch(
+        () => this.#deps.log("Could not save the Motion events state."),
+      ),
+    );
+    return this.#saving;
   }
 }

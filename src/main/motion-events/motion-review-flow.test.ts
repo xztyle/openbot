@@ -511,4 +511,18 @@ describe("the Motion client", () => {
       server.close();
     }
   });
+
+  it("drops a waiting ticket that the owner dismissed, and keeps it dropped after a restart", async () => {
+    const { events, waiting } = service();
+    await events.start();
+    const ticket = { issueId: "issue-9", agentId: "agent-dev", key: "UO-9", title: "Approve", url: "https://m/9" };
+    events.escalate(ticket, "UO-9 waits on you.");
+    expect(events.waiting().map((item) => item.issueId)).toEqual(["issue-9"]);
+    await events.dismissWaiting("issue-9");
+    expect(events.waiting()).toEqual([]);
+    expect(waiting.at(-1)).toEqual([]);
+    const restarted = service().events;
+    await restarted.start();
+    expect(restarted.waiting()).toEqual([]);
+  });
 });

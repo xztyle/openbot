@@ -51,6 +51,10 @@ export interface TodayDecision {
   detail?: string | undefined;
   /** Where it waits: "Trading · #launch". */
   where?: string | undefined;
+  /** The space it belongs to, for the counts of the space that shows. */
+  spaceId?: string | undefined;
+  /** Takes it off the list without a decision, such as a Motion ticket or an alert. */
+  dismiss?: (() => Promise<void>) | undefined;
   /** Money that the answer lets an agent spend. */
   amountUsd?: number | undefined;
   /** The agent's work stops until the owner answers. */

@@ -288,6 +288,17 @@ try {
     return "ready and peer-ready";
   });
 
+  // A live host is often quiet for minutes and answers only pings. Signal once missed those pongs and
+  // ended every live host 30 s after its last message.
+  await check("A quiet host that answers pings stays connected for 45 s", async () => {
+    const quiet = await openHost(signalUrl);
+    await new Promise((done) => setTimeout(done, 45_000));
+    const code = quiet.closeCode;
+    quiet.socket.close();
+    expect(code === null, `the quiet host's socket closed with ${code}`);
+    return "still open";
+  });
+
   relay.freeze();
   const frozenAt = Date.now();
   const held: { tab: Socket | null; session: string } = { tab: null, session: "" };

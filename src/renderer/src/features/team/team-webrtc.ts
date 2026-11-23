@@ -21,6 +21,7 @@ export interface BridgeCommand {
     | "disconnect-peer"
     | "send"
     | "restart-ice"
+    | "renew-signal"
     | "set-private-network"
     | "close";
   peerId: string;
@@ -230,6 +231,9 @@ async function handleCommand(command: BridgeCommand): Promise<void> {
       sent = await sendChannelPayload(state, channel, command.data);
     } else if (command.type === "restart-ice") {
       await restartIce(requirePeer(command.peerId));
+    } else if (command.type === "renew-signal") {
+      const state = requirePeer(command.peerId);
+      if (!state.signalHost) replaceSignal(state);
     } else if (command.type === "set-private-network") {
       // A host that is not connected now reads the route again when it connects.
       const host = peers.get(command.peerId);
@@ -328,6 +332,9 @@ function connectSignal(state: PeerState, prepared: WebSocket | null = null): voi
   }
   const socket = prepared ?? new WebSocket(state.signalUrl);
   state.socket = socket;
+  // The deadline starts now, not at `open`: a socket that hangs while it opens sends no open and no
+  // close, and the host then stayed off Signal for an hour.
+  awaitSignalReady(state, socket);
   // The frames of the old socket are skipped. A new host socket does not wait for them.
   if (state.role === "host") state.signalChain = Promise.resolve();
   const sendHello = () => {

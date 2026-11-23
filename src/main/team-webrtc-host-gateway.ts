@@ -323,13 +323,46 @@ export class TeamWebRtcHostGateway {
       this.#scheduleSignalLostReport();
       return;
     }
-    if (this.#signalLostReported) return;
-    this.#signalLostReported = true;
-    logger.warn(
-      `Host Signal socket not ready ${SIGNAL_LOST_REPORT_AFTER_MS / 60_000} minutes after ${this.#lastSignalEnd ?? "a close"}.`,
-    );
-    this.#options.onSignalLost?.(true);
+    if (!this.#signalLostReported) {
+      this.#signalLostReported = true;
+      logger.warn(
+        `Host Signal socket not ready ${SIGNAL_LOST_REPORT_AFTER_MS / 60_000} minutes after ${this.#lastSignalEnd ?? "a close"}.`,
+      );
+      this.#options.onSignalLost?.(true);
+    }
+    this.#rebuildLostSignal();
   };
+
+  /**
+   * The window's own reconnects did not bring a `ready`: its socket can hang while it opens, or its
+   * timers stop. The host once stayed off Signal for an hour that way. Main asks the window for a new
+   * socket, which keeps the device connections; a window that does not answer gets the whole
+   * registration built again with a new ticket. It tries again on the same interval until a `ready`.
+   */
+  #rebuildLostSignal(): void {
+    const hostId = this.#hostId;
+    if (!hostId || this.#signalRecovery) return;
+    logger.warn("Host Signal socket is opened again.");
+    const renew = this.#bridge.renewSignal(hostId).pipe(
+      Effect.catch(() => {
+        if (this.#hostId !== hostId || !this.#options.renewSignal) return Effect.void;
+        logger.warn("The WebRTC window did not open a new Signal socket; the registration is built again.");
+        return this.#recoverSignal(hostId);
+      }),
+      Effect.catch(() =>
+        Effect.sync(() => {
+          if (this.#hostId === hostId)
+            logger.warn("Host Signal registration could not be built again; it tries again.");
+        }),
+      ),
+    );
+    const fiber = this.#runtime.runFork(renew);
+    this.#signalRecovery = fiber;
+    fiber.addObserver(() => {
+      if (this.#signalRecovery === fiber) this.#signalRecovery = null;
+      if (this.#hostId === hostId && this.#signalLostReported) this.#scheduleSignalLostReport();
+    });
+  }
 
   readonly #onError = (peerId: string, code: string, _message: string, terminal = false): void => {
     // The message text can come from Signal, so only the code is logged. A late relayed frame gets

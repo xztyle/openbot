@@ -388,9 +388,11 @@ export function createRemoteApiApp(
   return app;
 }
 
+// Elysia gives `open`, `message` and `close` its own socket with an `id`, but `pong` the raw Bun socket,
+// which has the id only in `data`. Without it a pong never counted, and Signal ended every quiet host.
 interface ElysiaSocketLike {
-  id: string;
-  data?: { request?: Request };
+  id?: string;
+  data?: { request?: Request; id?: string };
   remoteAddress?: string;
   send(data: string): unknown;
   close(code?: number, reason?: string): void;
@@ -400,7 +402,7 @@ interface ElysiaSocketLike {
 
 function socketAdapter(ws: ElysiaSocketLike, trustProxy: boolean): SignalSocket {
   return {
-    id: ws.id,
+    id: ws.id ?? ws.data?.id ?? "",
     ip: signalClientIp(ws.remoteAddress, ws.data?.request?.headers.get("x-forwarded-for"), trustProxy),
     send: (message) => {
       ws.send(message);

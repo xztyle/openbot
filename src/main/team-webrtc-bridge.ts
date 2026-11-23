@@ -128,7 +128,7 @@ type BridgeCommand =
     }
   | { type: "prepare-signal"; peerId: string; signalUrl: string }
   | { type: "set-private-network"; peerId: string; privateNetwork: boolean }
-  | { type: "disconnect" | "disconnect-peer" | "restart-ice" | "close"; peerId: string }
+  | { type: "disconnect" | "disconnect-peer" | "restart-ice" | "renew-signal" | "close"; peerId: string }
   | { type: "send"; peerId: string; channel: TeamWebRtcChannel; data: string | ArrayBuffer };
 
 const COMMAND_TIMEOUT_MS = 15_000;
@@ -221,6 +221,11 @@ export class TeamWebRtcBridge extends EventEmitter<TeamWebRtcBridgeEvents> {
 
   readonly restartIce = Effect.fn("TeamWebRtcBridge.restartIce")(function* (this: TeamWebRtcBridge, peerId: string) {
     yield* this.#command({ type: "restart-ice", peerId });
+  }).bind(this);
+
+  /** Opens a new Signal socket for a host peer now. Its device connections stay. */
+  readonly renewSignal = Effect.fn("TeamWebRtcBridge.renewSignal")(function* (this: TeamWebRtcBridge, peerId: string) {
+    yield* this.#command({ type: "renew-signal", peerId });
   }).bind(this);
 
   getIceServers(peerId: string): RemoteDesktopIceServer[] {

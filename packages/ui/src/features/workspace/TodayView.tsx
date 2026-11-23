@@ -66,6 +66,12 @@ export interface TodayDecision {
   reject?: (() => Promise<void>) | undefined;
   /** The label of `reject` when it is not "Decline", such as "Dismiss" for an alert. */
   rejectLabel?: string | undefined;
+  /**
+   * A decline that takes a note, such as sending a ticket back: the reject button opens a note field
+   * whose send runs this instead of `reject`. `rejectNoteRequired` disables an empty send.
+   */
+  rejectWithNote?: ((note: string) => Promise<void>) | undefined;
+  rejectNoteRequired?: boolean | undefined;
   /** A written answer, such as for a loop question. */
   answer?: ((text: string) => Promise<void>) | undefined;
   /** The label of `open`: "Open", "Answer", "Take over". */
@@ -378,6 +384,8 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
   const [expanded, setExpanded] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [answer, setAnswer] = createSignal("");
+  const [noting, setNoting] = createSignal(false);
+  const [note, setNote] = createSignal("");
   const decision = () => props.decision;
   let card: HTMLElement | undefined;
   async function run(action: () => Promise<void>) {
@@ -487,12 +495,21 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
               </Button>
             )}
           </Show>
-          <Show when={decision().reject}>
-            {(reject) => (
-              <Button variant="outline" disabled={busy()} onClick={() => void run(reject())}>
-                {decision().rejectLabel ?? t("workspace.today.decline")}
-              </Button>
-            )}
+          <Show when={decision().rejectWithNote ? true : decision().reject}>
+            <Button
+              variant="outline"
+              disabled={busy()}
+              aria-expanded={decision().rejectWithNote ? (noting() ? "true" : "false") : undefined}
+              onClick={() => {
+                if (decision().rejectWithNote) setNoting(!noting());
+                else {
+                  const reject = decision().reject;
+                  if (reject) void run(reject);
+                }
+              }}
+            >
+              {decision().rejectLabel ?? t("workspace.today.decline")}
+            </Button>
           </Show>
           <Button
             variant={decision().approve || decision().answer ? "ghost" : "secondary"}
@@ -502,6 +519,37 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
             <ArrowRight aria-hidden="true" />
           </Button>
         </div>
+        <Show when={noting() ? decision().rejectWithNote : undefined}>
+          {(send) => (
+            <form
+              class="ws-today-answer"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const text = note().trim();
+                if (!text && decision().rejectNoteRequired) return;
+                void run(() => send()(text));
+              }}
+            >
+              <Input
+                value={note()}
+                aria-label={t("workspace.today.noteLabel")}
+                placeholder={
+                  decision().rejectNoteRequired
+                    ? t("workspace.today.notePlaceholderRequired")
+                    : t("workspace.today.notePlaceholder")
+                }
+                onValueChange={setNote}
+                ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus())}
+              />
+              <Button
+                type="submit"
+                disabled={busy() || (decision().rejectNoteRequired === true && note().trim() === "")}
+              >
+                {decision().rejectLabel ?? t("workspace.today.decline")}
+              </Button>
+            </form>
+          )}
+        </Show>
         <Show when={error()}>
           {(message) => (
             <p class="ws-today-error" role="alert">

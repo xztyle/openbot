@@ -5,7 +5,8 @@
  * to sign in on accounts.google.com in a browser tab (the takeover event, the escalation to Chief and
  * the host's attention list), and "resolve" ends it as the host does after an answer anywhere. The
  * page sets `data-needs-you-ready` on the root element once it takes events, and writes the number of
- * takeover answers it sent to `data-needs-you-answered`. "ticket" makes a Motion ticket that asks the
+ * takeover answers it sent to `data-needs-you-answered`. "ticket-review" makes a Motion ticket whose
+ * review the grader escalated. "ticket" makes a Motion ticket that asks the
  * reader for an approval wait on Sales Outbound; the page writes the messages it sent to an agent to
  * `data-needs-you-sent` and the ticket answers to `data-needs-you-ticket`.
  */
@@ -65,6 +66,22 @@ const TICKET: AgentAttentionItem = {
   createdAt: new Date().toISOString(),
   summary: "MAN-5 · Approve affiliation: Christmas decorations",
   url: "https://motion.example.com/p/man-5",
+  asks: "approval",
+  reason: "Approve the affiliation to Christmas decorations before the 10th",
+};
+
+/** A ticket whose title asks nothing: the independent grader sent it back three times. */
+const REVIEW_TICKET: AgentAttentionItem = {
+  kind: "question",
+  requestId: "motion:issue-coc-44",
+  agentId: REQUEST.agentId,
+  threadId: REQUEST.threadId,
+  turnId: MOTION_TICKET_TURN,
+  createdAt: new Date().toISOString(),
+  summary: "COC-44 · Meta ad library: which courses advertise",
+  url: "https://motion.example.com/p/coc-44",
+  asks: "review-escalated",
+  reason: "Courses advertised with evidence; texts and days active of the longest ads",
 };
 
 const CONDENSED_MESSAGE = "message-agent-2";
@@ -125,6 +142,7 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     if (detail === "secret") secret();
     if (detail === "resolve") resolve();
     if (detail === "ticket") emit({ type: "agent-attention-changed", items: [TICKET] });
+    if (detail === "ticket-review") emit({ type: "agent-attention-changed", items: [REVIEW_TICKET] });
   });
   document.documentElement.dataset.needsYouReady = "";
   // The reader wrote to Chief only: the other agents have no DM row until one needs them.
@@ -170,7 +188,7 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
       return web.send(...args);
     },
     answer: async (input: Parameters<typeof web.answer>[0]) => {
-      if (String(input.requestId) === TICKET.requestId) {
+      if (String(input.requestId) === TICKET.requestId || String(input.requestId) === REVIEW_TICKET.requestId) {
         document.documentElement.dataset.needsYouTicket = JSON.stringify(input.answers);
         emit({ type: "agent-attention-changed", items: [] });
         return;

@@ -108,6 +108,7 @@ import type {
   TestChannelRoutineInput,
   TestMcpServerInput,
   TestRoutineInput,
+  TicketAsks,
   UpdateAgentInput,
   UpdateAgentMemoryInput,
   UpdateChannelMemoryInput,
@@ -2231,6 +2232,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       title: string;
       url: string;
       createdAt: string;
+      asks?: TicketAsks | undefined;
+      reason?: string | undefined;
     }[],
   ): void {
     const threads = new Map(this.listAgents().map((agent) => [agent.id, agent.threadId]));
@@ -2249,6 +2252,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             createdAt: ticket.createdAt,
             summary,
             url: ticket.url,
+            ...(ticket.asks ? { asks: ticket.asks } : {}),
+            ...(ticket.reason ? { reason: ticket.reason.slice(0, AGENT_ATTENTION_TEXT_LIMIT) } : {}),
           },
         ];
       }),

@@ -17,7 +17,7 @@ import { useWorkspace } from "./workspace-context";
 import { useGuardrails, useLearningQueue } from "./workspace-host-feeds";
 import { insightAlerts, pollInsightAlerts, setInsightAlerts } from "./workspace-insight-alerts";
 import { memberById } from "./workspace-model";
-import { answerTicket, ticketAsksApproval } from "./workspace-ticket-answer";
+import { answerTicket, ticketAnswers } from "./workspace-ticket-answer";
 
 /** The loop decision that Today opened, for the Loops view to show first and scroll to. */
 const [loopFocus, setLoopFocus] = createSignal<{ loopId: string; decisionId: string } | null>(null, {
@@ -186,22 +186,24 @@ export function useDecisionQueue() {
       const dismissTicket = ticket
         ? () => ws.channels.port().agent.respondToPrompt({ requestId: item.requestId, answers: {} })
         : undefined;
-      // A ticket that asks for an approval is approved here; any other answer is written in the DM.
-      const approveTicket =
-        ticket && ticketAsksApproval(item.summary)
-          ? async () => {
-              const answer = t("workspace.needsYou.ticket.approved");
-              const message = t("workspace.needsYou.ticket.message", { ticket: item.summary ?? "", answer });
-              await answerTicket(ws.channels.port(), item, message, answer);
-            }
-          : undefined;
+      // Why the ticket waits picks its answers: Approve / Decline, Accept as is / Send back, or a
+      // written answer. Each goes to the agent and on the ticket.
+      const answers = ticket ? ticketAnswers(item, t) : {};
+      const answerWith = (answer: string) => async () => {
+        const message = t("workspace.needsYou.ticket.message", { ticket: item.summary ?? "", answer });
+        await answerTicket(ws.channels.port(), item, message, answer);
+      };
+      const primary = answers.primary;
+      const secondary = answers.secondary;
+      const approveTicket = primary ? answerWith(primary.answer) : undefined;
+      const writtenAnswer = ticket && !primary ? (text: string) => answerWith(text.trim())() : undefined;
       return {
         key: agentAttentionKey(item),
         member: memberById(ws.directory(), item.agentId, agentName(item.agentId)),
         kind: ticket ? "ticket" : item.kind,
         action: needsYouAction(item, t),
         summary: effect ?? item.summary,
-        detail: effect ? (held?.reason ?? undefined) : undefined,
+        detail: effect ? (held?.reason ?? undefined) : ticket ? item.reason : undefined,
         amountUsd: effect ? amountIn(effect) : undefined,
         where: where(
           spaceId,
@@ -211,9 +213,17 @@ export function useDecisionQueue() {
         blocking: !ticket,
         at: Date.parse(item.createdAt) || 0,
         approve: approval?.("accept") ?? approveTicket,
-        ...(approveTicket ? { approveLabel: t("workspace.needsYou.ticket.approve") } : {}),
+        ...(primary ? { approveLabel: primary.label } : {}),
         reject: approval?.("decline") ?? dismissTicket,
         ...(dismissTicket ? { rejectLabel: t("workspace.today.dismiss"), dismiss: dismissTicket } : {}),
+        ...(secondary
+          ? {
+              rejectLabel: secondary.label,
+              rejectWithNote: (note: string) => answerWith(secondary.answer(note))(),
+              rejectNoteRequired: secondary.noteRequired,
+            }
+          : {}),
+        ...(writtenAnswer ? { answer: writtenAnswer } : {}),
         openLabel: browser
           ? t("workspace.today.takeOver")
           : ticket || item.kind === "question" || item.kind === "form"

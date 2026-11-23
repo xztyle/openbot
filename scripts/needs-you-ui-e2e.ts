@@ -311,6 +311,51 @@ async function ticketApproval(browser: Browser, origin: string): Promise<void> {
   await context.close();
 }
 
+/**
+ * A ticket whose title asks nothing, which the grader handed to the reader after three reviews: the
+ * card says what it still misses, and Send back takes a note that goes to the agent and the ticket.
+ */
+async function ticketReview(browser: Browser, origin: string): Promise<void> {
+  const viewport = "phone";
+  const context = await browser.newContext(VIEWPORTS.phone);
+  const page = await context.newPage();
+  watch(page, viewport);
+  const ticketAction = english("workspace.needsYou.action.ticket");
+  await step(page, viewport, "Send back on an escalated review takes a note", async () => {
+    await load(page, origin, "/app/general", todayTab(page, 0));
+    await page.waitForFunction(() => document.documentElement.dataset.needsYouReady !== undefined, null, {
+      timeout: UI_WAIT_MS,
+    });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("needs-you-harness", { detail: "ticket-review" })));
+    const ticketCard = todayCard(page, ticketAction);
+    await ticketCard.waitFor({ timeout: UI_WAIT_MS });
+    await ticketCard.getByText("Courses advertised with evidence", { exact: false }).waitFor({ timeout: UI_WAIT_MS });
+    assert.equal(
+      await button(ticketCard, english("workspace.needsYou.ticket.acceptAsIs")).count(),
+      1,
+      "The escalated review has no Accept as is.",
+    );
+    await shot(page, "phone-ticket-review");
+    const sendBack = english("workspace.needsYou.ticket.sendBack");
+    await button(ticketCard, sendBack).first().tap();
+    const note = ticketCard.getByLabel(english("workspace.today.noteLabel"));
+    await note.waitFor({ timeout: UI_WAIT_MS });
+    await note.fill("Paste the table of ads");
+    await button(ticketCard, sendBack).last().tap();
+    await page.waitForFunction(() => document.documentElement.dataset.needsYouTicket !== undefined, null, {
+      timeout: UI_WAIT_MS,
+    });
+    const sent = await page.evaluate(() => document.documentElement.dataset.needsYouSent ?? "");
+    assert.match(sent, /^sales: .*COC-44.*Paste the table of ads/u, "The agent did not get the note.");
+    const answers = await page.evaluate(() => document.documentElement.dataset.needsYouTicket ?? "");
+    assert.deepEqual(JSON.parse(answers), {
+      answer: [english("workspace.needsYou.ticket.sentBack", { note: "Paste the table of ads" })],
+    });
+    await shot(page, "phone-ticket-sent-back");
+  });
+  await context.close();
+}
+
 const secretAction = english("workspace.needsYou.action.secretAt", { site: SITE });
 const secretTitle = () => english("browser.secret.title.code");
 
@@ -450,6 +495,7 @@ try {
   await secretCard(browser, origin, "phone");
   await stalledSecret(browser, origin);
   await ticketApproval(browser, origin);
+  await ticketReview(browser, origin);
   report.passed =
     report.steps.length > 0 &&
     report.steps.every((item) => item.passed) &&

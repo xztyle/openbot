@@ -12,6 +12,9 @@
 // client of before drops it, as it drops any key it does not know, and shows the request as before.
 // Added later, optional: `url` (http or https, at most 2000 characters), on a Motion ticket that waits
 // on the user: a `question` whose `turnId` is `motion`. A client of before shows it as a question.
+// Added later, optional, on such a ticket: `asks` (`approval`, `review-escalated`, `blocked` or
+// `other`: why it waits, which picks its answers) and `reason` (what the agent needs, at most 200
+// characters). A client of before drops both and shows the ticket as before.
 //
 // The host sends the event after each runtime snapshot that it sends to a peer, and again at each
 // change, to a peer that has `fork-host-v1` only. It leaves out each request of an agent that the peer
@@ -27,6 +30,7 @@ import {
   AGENT_ATTENTION_KINDS,
   AGENT_ATTENTION_TEXT_LIMIT,
   type AgentAttentionItem,
+  TICKET_ASKS,
 } from "../ipc-attention-items";
 import { isDynamicRecord, isNumber, isOneOf, isString } from "../runtime-values";
 import { FORK_HOST_CAPABILITY } from "./fork-host-v1";
@@ -63,6 +67,8 @@ function item(value: unknown): AgentAttentionItem {
   const origin = text(value.origin);
   const channelId = value.channelId === undefined ? undefined : identifier(value.channelId);
   const url = value.url === undefined ? undefined : ticketUrl(value.url);
+  const asks = value.asks === undefined ? undefined : isOneOf(TICKET_ASKS, value.asks) ? value.asks : invalid();
+  const reason = text(value.reason);
   return {
     kind: value.kind,
     requestId: requestId(value.requestId),
@@ -74,6 +80,8 @@ function item(value: unknown): AgentAttentionItem {
     ...(origin === undefined ? {} : { origin }),
     ...(channelId === undefined ? {} : { channelId }),
     ...(url === undefined ? {} : { url }),
+    ...(asks === undefined ? {} : { asks }),
+    ...(reason === undefined ? {} : { reason }),
   };
 }
 

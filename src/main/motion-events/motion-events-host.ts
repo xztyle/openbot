@@ -24,6 +24,7 @@ import { readDeliverableFiles } from "./motion-files";
 import { MotionGrader } from "./motion-grader";
 import { MotionOrders } from "./motion-orders";
 import { type MotionStartInput, MotionTickets } from "./motion-tickets";
+import { fallbackReason, parseWaitingAsks, waitingAsksPrompt, waitingComments } from "./motion-waiting-asks";
 
 export { motionServer } from "./motion-client";
 
@@ -130,13 +131,41 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
     deliver: ({ agentId, text, fyi, clientMessageId }) =>
       Effect.runPromise(options.send({ agentId, text, clientMessageId }, fyi)).then(() => undefined),
     showWaiting: options.showWaiting,
+    classify: (ticket) => void classify(ticket),
     notifyOwner: options.notifyOwner,
     timeZone: options.timeZone,
     stateFile: join(options.userData, "motion-events-v1.json"),
     log: (message) => logger.info(message),
   });
-  await events.start();
   const motion = new MotionClient(options);
+  /** Reads why a ticket waits on the owner (its comments, through a judge) and records it. */
+  const classifying = new Set<string>();
+  async function classify(ticket: WaitingTicket): Promise<void> {
+    if (classifying.has(ticket.issueId)) return;
+    classifying.add(ticket.issueId);
+    try {
+      const answer = await motion
+        .tool({ agentId: ticket.agentId }, "comments_list", { page_id: ticket.issueId })
+        .catch(() => null);
+      const comments = waitingComments(answer && typeof answer === "object" ? answer : null);
+      const prompt = waitingAsksPrompt({ key: ticket.key, title: ticket.title, comments });
+      const judged = await options
+        .judge({ agentId: ticket.agentId, important: false, prompt })
+        .then((reply) => parseWaitingAsks(reply.text))
+        .catch(() => null);
+      const reason = judged?.reason || fallbackReason(comments);
+      await events.setAsks(ticket.issueId, judged?.asks ?? "other", reason);
+      logger.info("Read why a Motion ticket waits on the owner.", { key: ticket.key, asks: judged?.asks ?? "other" });
+    } catch (error) {
+      logger.warn("Could not read why a Motion ticket waits on the owner.", {
+        key: ticket.key,
+        error: error instanceof Error ? error.message : "failed",
+      });
+    } finally {
+      classifying.delete(ticket.issueId);
+    }
+  }
+  await events.start();
   const tool = (caller: Parameters<MotionClient["tool"]>[0], name: string, args: DynamicRecord) =>
     motion.tool(caller, name, args);
   const grader = new MotionGrader({
@@ -150,7 +179,7 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
         }
       : {}),
     judge: options.judge,
-    escalate: (ticket, body) => events.escalate(ticket, body),
+    escalate: (ticket, body, reason) => events.escalate(ticket, body, reason),
     tell: (agentId, text, clientMessageId) =>
       void Effect.runPromise(options.send({ agentId, text, clientMessageId }, true)).catch(() => undefined),
     stateFile: join(options.userData, "motion-grader-v1.json"),

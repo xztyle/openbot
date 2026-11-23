@@ -57,7 +57,7 @@ export interface MotionGraderDependencies {
   /** One answer of the judge, and the model that gave it. */
   judge(input: { agentId: string; important: boolean; prompt: string }): Promise<{ text: string; model: string }>;
   /** Hands the ticket to the owner: a Needs you item with a push. */
-  escalate(ticket: Omit<WaitingTicket, "createdAt">, body: string): void;
+  escalate(ticket: Omit<WaitingTicket, "createdAt" | "asks" | "reason">, body: string, reason?: string): void;
   /** A held note to the agent: it reads it with its next turn. */
   tell(agentId: string, text: string, clientMessageId: string): void;
   stateFile: string;
@@ -77,6 +77,20 @@ function decodeRounds(value: unknown): Record<string, Rounds> {
     if (isDynamicRecord(entry) && typeof entry.rounds === "number" && typeof entry.at === "number")
       out[id] = { rounds: entry.rounds, at: entry.at };
   return out;
+}
+
+/**
+ * What a review still misses, in one line: the items of its "Missing:" list, or else its notes. The
+ * owner reads it on the escalated ticket.
+ */
+export function missingLine(notes: string): string {
+  const lines = notes.split("\n").map((line) => line.trim());
+  const start = lines.findIndex((line) => /^missing:?$/iu.test(line));
+  const items =
+    start < 0
+      ? []
+      : lines.slice(start + 1).flatMap((line) => (/^[-*•]\s+/u.test(line) ? [line.replace(/^[-*•]\s+/u, "")] : []));
+  return items.length > 0 ? items.join("; ") : lines.filter(Boolean).join(" ");
 }
 
 export class MotionGrader {
@@ -165,9 +179,9 @@ export class MotionGrader {
     );
   }
 
-  #escalate(ticket: Omit<WaitingTicket, "createdAt">, body: string): void {
+  #escalate(ticket: Omit<WaitingTicket, "createdAt" | "asks" | "reason">, body: string, reason?: string): void {
     this.#deps.log(`The grader handed ${ticket.key} to the owner: ${body}`);
-    this.#deps.escalate(ticket, body);
+    this.#deps.escalate(ticket, body, reason);
   }
 
   async #grade(event: MotionEvent): Promise<void> {
@@ -240,6 +254,7 @@ export class MotionGrader {
       this.#escalate(
         waiting,
         `${ticket.key} still misses its criteria after ${MAX_REVIEW_ROUNDS} reviews. It waits for your call.`,
+        missingLine(verdict.notes),
       );
       return;
     }

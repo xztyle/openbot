@@ -26,6 +26,16 @@ export const AGENT_ATTENTION_KINDS = [
 ] as const;
 export type AgentAttentionKind = (typeof AGENT_ATTENTION_KINDS)[number];
 
+/**
+ * Why a Motion ticket waits on the user, which picks its answers:
+ * - `approval`: the agent asks for the user's OK (Approve / Decline);
+ * - `review-escalated`: the independent grader used up its rounds (Accept as is / Send back);
+ * - `blocked`: the agent needs information or access from the user (a written answer);
+ * - `other`: anything else (a written answer).
+ */
+export const TICKET_ASKS = ["approval", "review-escalated", "blocked", "other"] as const;
+export type TicketAsks = (typeof TICKET_ASKS)[number];
+
 /** The most items one list holds. More requests than this seldom wait at the same time. */
 export const AGENT_ATTENTION_ITEMS_LIMIT = 200;
 /** The longest summary or origin of an item. */
@@ -56,6 +66,10 @@ export interface AgentAttentionItem {
   channelId?: string;
   /** The web address of a `ticket`. */
   url?: string;
+  /** A ticket: why it waits on the user. Absent while the host has not read it yet. */
+  asks?: TicketAsks;
+  /** A ticket: what the agent needs from the user, in one line. */
+  reason?: string;
 }
 
 /** The `turnId` of a Motion ticket that waits on the user. */
@@ -86,7 +100,9 @@ export function isAgentAttentionItem(value: unknown): value is AgentAttentionIte
     (value.summary === undefined || isBoundedString(value.summary, AGENT_ATTENTION_TEXT_LIMIT)) &&
     (value.origin === undefined || isBoundedString(value.origin, AGENT_ATTENTION_TEXT_LIMIT)) &&
     (value.channelId === undefined || isIdentifier(value.channelId)) &&
-    (value.url === undefined || (isBoundedString(value.url, 2_000) && /^https?:\/\//u.test(value.url)))
+    (value.url === undefined || (isBoundedString(value.url, 2_000) && /^https?:\/\//u.test(value.url))) &&
+    (value.asks === undefined || isOneOf(TICKET_ASKS, value.asks)) &&
+    (value.reason === undefined || isBoundedString(value.reason, AGENT_ATTENTION_TEXT_LIMIT))
   );
 }
 

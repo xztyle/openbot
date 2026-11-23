@@ -4,11 +4,47 @@
  * comment (the host posts it), which also takes the ticket off Needs you.
  */
 import { type AgentAttentionItem, TICKET_ANSWER_FIELD } from "@openbot/contracts/ipc";
+import type { AppTranslate } from "@openbot/i18n";
 import type { ChannelsPort } from "../channels/channels-port";
 
-/** A ticket whose title asks the owner to approve something ("Aprobar afiliación…", "Approve the spend"). */
-export function ticketAsksApproval(summary: string | undefined): boolean {
-  return /\b(aprob|aprueb|approv)/iu.test(summary ?? "");
+/**
+ * The answers a waiting ticket offers, from why it waits (the host reads that from the ticket):
+ * - an approval: Approve, and Decline with an optional note;
+ * - an escalated review: Accept as is, and Send back with a note it needs;
+ * - anything else, or a ticket the host has not read yet: only a written answer.
+ * Each answer is the text that goes to the agent and on the ticket.
+ */
+export interface TicketAnswers {
+  primary?: { label: string; answer: string };
+  secondary?: { label: string; answer: (note: string) => string; noteRequired: boolean };
+}
+
+export function ticketAnswers(item: Pick<AgentAttentionItem, "asks">, t: AppTranslate): TicketAnswers {
+  if (item.asks === "approval")
+    return {
+      primary: { label: t("workspace.needsYou.ticket.approve"), answer: t("workspace.needsYou.ticket.approved") },
+      secondary: {
+        label: t("workspace.needsYou.ticket.decline"),
+        answer: (note) =>
+          note.trim()
+            ? t("workspace.needsYou.ticket.declinedNote", { note: note.trim() })
+            : t("workspace.needsYou.ticket.declined"),
+        noteRequired: false,
+      },
+    };
+  if (item.asks === "review-escalated")
+    return {
+      primary: {
+        label: t("workspace.needsYou.ticket.acceptAsIs"),
+        answer: t("workspace.needsYou.ticket.acceptedAsIs"),
+      },
+      secondary: {
+        label: t("workspace.needsYou.ticket.sendBack"),
+        answer: (note) => t("workspace.needsYou.ticket.sentBack", { note: note.trim() }),
+        noteRequired: true,
+      },
+    };
+  return {};
 }
 
 /**

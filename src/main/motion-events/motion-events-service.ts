@@ -29,8 +29,8 @@
 
 import { readFile } from "node:fs/promises";
 import { agentManagers } from "@openbot/contracts/agent-org";
-import type { WorkspaceMotionEventsSettings } from "@openbot/contracts/ipc";
-import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
+import { TICKET_ASKS, type TicketAsks, type WorkspaceMotionEventsSettings } from "@openbot/contracts/ipc";
+import { isDynamicRecord, isOneOf, isString } from "@openbot/contracts/runtime-values";
 import { Effect } from "effect";
 import { writeJsonFileAtomically } from "../../backend/atomic-json-file";
 import { MOTION_GRADER_KEY, MOTION_OWNER_KEY } from "./motion-client";
@@ -59,7 +59,14 @@ export interface WaitingTicket {
   title: string;
   url: string;
   createdAt: string;
+  /** Why it waits on the owner, which picks the answers Atelier offers. Absent until it is read. */
+  asks?: TicketAsks | undefined;
+  /** What the agent needs from the owner, in one line. */
+  reason?: string | undefined;
 }
+
+/** The longest `reason` kept: Needs you shows at most 200 characters. */
+const REASON_LIMIT = 200;
 
 export interface MotionEventsDependencies {
   settings(): WorkspaceMotionEventsSettings;
@@ -68,6 +75,11 @@ export interface MotionEventsDependencies {
   deliver(input: { agentId: string; text: string; fyi: boolean; clientMessageId: string }): Promise<void>;
   /** Shows the waiting tickets in Needs you, the whole list each time. */
   showWaiting(tickets: readonly WaitingTicket[]): void;
+  /**
+   * Reads why a new waiting ticket waits (its comments, the hand-off) and answers with `setAsks`.
+   * Called once per ticket that has no `asks`, also for the tickets of before at start.
+   */
+  classify?(ticket: WaitingTicket): void;
   /** A push to the owner: a ticket waits on them. */
   notifyOwner(input: { agentId: string; title: string; body: string }): void;
   /** The host's IANA time zone, for the quiet hours. */
@@ -128,7 +140,9 @@ function isWaitingTicket(value: unknown): value is WaitingTicket {
     isString(value.key) &&
     isString(value.title) &&
     isString(value.url) &&
-    isString(value.createdAt)
+    isString(value.createdAt) &&
+    (value.asks === undefined || isOneOf(TICKET_ASKS, value.asks)) &&
+    (value.reason === undefined || isString(value.reason))
   );
 }
 
@@ -176,6 +190,12 @@ function facts(event: MotionEvent): string {
     event.issue.due ? `Due: ${event.issue.due}` : null,
   ].filter(Boolean);
   return [parts.join(" · "), event.issue.url].filter(Boolean).join("\n");
+}
+
+/** Text as one line of at most `REASON_LIMIT` characters. */
+function oneLine(text: string): string {
+  const line = text.replace(/\s+/gu, " ").trim();
+  return line.length > REASON_LIMIT ? `${line.slice(0, REASON_LIMIT - 1).trimEnd()}…` : line;
 }
 
 /** The workspace owner: a person, not an agent, with Motion's owner role. */
@@ -297,7 +317,11 @@ export class MotionEventsService {
       .catch(() => {
         this.#state = emptyState();
       })
-      .then(() => this.#deps.showWaiting(this.#state.waiting));
+      .then(() => {
+        this.#deps.showWaiting(this.#state.waiting);
+        // The tickets of before this field: read why each waits, once.
+        for (const ticket of this.#state.waiting) if (!ticket.asks) this.#deps.classify?.(ticket);
+      });
     if (!this.#timer) {
       this.#timer = setInterval(() => void this.tick(), 60_000);
       this.#timer.unref?.();
@@ -417,9 +441,38 @@ export class MotionEventsService {
     };
   }
 
-  /** A ticket that must go to the owner now (the grader gave up on it): a Needs you item with a push. */
-  escalate(ticket: Omit<WaitingTicket, "createdAt">, body: string): void {
-    const item: WaitingTicket = { ...ticket, createdAt: new Date(this.#now()).toISOString() };
+  /**
+   * Why a waiting ticket waits, read by `classify`. A ticket that stopped waiting meanwhile, or that
+   * says the same already, changes nothing.
+   */
+  setAsks(issueId: string, asks: TicketAsks, reason: string): Promise<void> {
+    const run = this.#chain.then(async () => {
+      await this.start();
+      const line = oneLine(reason);
+      const ticket = this.#state.waiting.find((item) => item.issueId === issueId);
+      if (!ticket || (ticket.asks === asks && ticket.reason === line)) return;
+      this.#state.waiting = this.#state.waiting.map((item) =>
+        item.issueId === issueId ? { ...item, asks, ...(line ? { reason: line } : {}) } : item,
+      );
+      this.#deps.showWaiting(this.#state.waiting);
+      await this.#save();
+    });
+    this.#chain = run.catch(() => undefined);
+    return run;
+  }
+
+  /**
+   * A ticket that must go to the owner now (the grader gave up on it): a Needs you item with a push.
+   * `reason` says what the reviews still miss; the owner accepts it as is or sends it back.
+   */
+  escalate(ticket: Omit<WaitingTicket, "createdAt" | "asks" | "reason">, body: string, reason?: string): void {
+    const line = oneLine(reason ?? "");
+    const item: WaitingTicket = {
+      ...ticket,
+      createdAt: new Date(this.#now()).toISOString(),
+      asks: "review-escalated",
+      ...(line ? { reason: line } : {}),
+    };
     this.#state.waiting = [...this.#state.waiting.filter((entry) => entry.issueId !== item.issueId), item];
     this.#deps.showWaiting(this.#state.waiting);
     const agent = this.#deps.agents().find((candidate) => candidate.id === ticket.agentId);
@@ -566,6 +619,7 @@ export class MotionEventsService {
     this.#state.waiting = [...this.#state.waiting.filter((item) => item.issueId !== ticket.issueId), ticket];
     this.#deps.showWaiting(this.#state.waiting);
     this.#deps.notifyOwner({ agentId: agent.id, title: agent.name, body: `${ticketName(event)} waits on you.` });
+    this.#deps.classify?.(ticket);
     return true;
   }
 

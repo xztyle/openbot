@@ -82,6 +82,14 @@ const REVIEW_TICKET: AgentAttentionItem = {
   url: "https://motion.example.com/p/coc-44",
   asks: "review-escalated",
   reason: "Courses advertised with evidence; texts and days active of the longest ads",
+  plain: {
+    asks: "Do you accept the ad research as it is?",
+    why: "It decides which courses we advertise first.",
+    ifYes: "The team closes it and starts the ads plan.",
+    ifNo: "The agent adds what is missing first.",
+  },
+  escalatedBy: "Lead",
+  escalationReason: "The owner set the course list.",
 };
 
 const CONDENSED_MESSAGE = "message-agent-2";

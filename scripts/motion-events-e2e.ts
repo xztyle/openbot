@@ -413,11 +413,24 @@ try {
     passed: true,
   });
 
-  // (d) Waiting on the owner: Needs you and a push, no wake; it goes when the owner gives it back.
+  // (d) Waiting on a person (docs/approvals.md): nothing shows until the host read who answers it; a
+  // ticket for the manager never shows in Needs you, one that needs money does, with a push, and no
+  // wake; it goes when the owner gives it back.
   const handed = await post(
     motionEvent("issue.waiting_on_person", landing, { actor: member(dev), recipients: [OWNER], reason: "assigned" }),
   );
   assert.equal(handed.body.waiting, true);
+  assert.equal(agents.attentionItems().filter((item) => isTicketAttention(item)).length, 0, "Unread, it waits.");
+  await service.setAsks("issue-1", "approval", "Approve the course landing", { ownerOnly: null });
+  await service.setApprover("issue-1", "manager");
+  assert.equal(
+    agents.attentionItems().filter((item) => isTicketAttention(item)).length,
+    0,
+    "A ticket for the manager is not in Needs you.",
+  );
+  assert.equal(pushes.length, 0, "A ticket for the manager sends the owner no push.");
+  await service.setAsks("issue-1", "approval", "Pay 40 USD for the course ads", { ownerOnly: "money" });
+  await service.setApprover("issue-1", "owner");
   const items = agents.attentionItems().filter((item) => isTicketAttention(item));
   assert.equal(items.length, 1, "The ticket shows in Needs you.");
   assert.equal(items[0]?.agentId, dev.id);

@@ -312,8 +312,9 @@ async function ticketApproval(browser: Browser, origin: string): Promise<void> {
 }
 
 /**
- * A ticket whose title asks nothing, which the grader handed to the reader after three reviews: the
- * card says what it still misses, and Send back takes a note that goes to the agent and the ticket.
+ * A ticket whose title asks nothing, which a manager passed to the reader after the grader's three
+ * reviews: the card says it in plain words, the raw reason only behind "Technical details", and Send
+ * back takes a note that goes to the agent and the ticket.
  */
 async function ticketReview(browser: Browser, origin: string): Promise<void> {
   const viewport = "phone";
@@ -329,7 +330,14 @@ async function ticketReview(browser: Browser, origin: string): Promise<void> {
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("needs-you-harness", { detail: "ticket-review" })));
     const ticketCard = todayCard(page, ticketAction);
     await ticketCard.waitFor({ timeout: UI_WAIT_MS });
-    await ticketCard.getByText("Courses advertised with evidence", { exact: false }).waitFor({ timeout: UI_WAIT_MS });
+    // The card says it in plain words (docs/approvals.md); the raw reason waits behind the collapsed
+    // technical details until the reader opens them.
+    await ticketCard.getByText("Do you accept the ad research as it is?").waitFor({ timeout: UI_WAIT_MS });
+    await ticketCard.getByText("Lead passed this to you.", { exact: false }).waitFor({ timeout: UI_WAIT_MS });
+    const technical = ticketCard.getByText("Courses advertised with evidence", { exact: false });
+    assert.equal(await technical.isVisible(), false, "The technical reason shows before the reader asks for it.");
+    await ticketCard.getByText(english("workspace.today.technicalDetails")).tap();
+    await technical.waitFor({ timeout: UI_WAIT_MS });
     assert.equal(
       await button(ticketCard, english("workspace.needsYou.ticket.acceptAsIs")).count(),
       1,

@@ -3,13 +3,13 @@ import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { redactText } from "@openbot/logging";
 import { Effect, Option } from "effect";
 import { extractJsonObject } from "../structured-output";
-import type { TrustClassification } from "../trust/trust-classifier";
+import { deletionTierOf, type TrustClassification } from "../trust/trust-classifier";
 
 /** Where untrusted text came from. */
 export type UntrustedSource = "web" | "browser" | "email" | "webhook" | "event-check";
 
 /** A high-impact action, which a turn that read untrusted text runs only after the monitor's check. */
-export type ImpactKind = "money" | "send" | "deploy" | "secret" | "agents";
+export type ImpactKind = "money" | "send" | "deploy" | "secret" | "agents" | "delete";
 
 export interface ImpactAction {
   kind: ImpactKind;
@@ -72,6 +72,9 @@ export function impactOf(name: string, input: unknown, trust: TrustClassificatio
   if (trust?.action === "email") return { kind: "send", label: trust.label, summary: trust.summary };
   if (trust?.action === "publish") return { kind: "deploy", label: trust.label, summary: trust.summary };
   if (trust?.action === "create_agent") return { kind: "agents", label: trust.label, summary: trust.summary };
+  // A deletion that only the owner approves (an agent, a channel, a live site or its data); the others are
+  // routine work.
+  if (trust && deletionTierOf(trust) === "owner") return { kind: "delete", label: trust.label, summary: trust.summary };
   const args = isDynamicRecord(input) ? input : {};
   const command = isString(args.command) ? args.command : null;
   if (command !== null) {

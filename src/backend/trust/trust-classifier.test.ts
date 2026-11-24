@@ -85,13 +85,18 @@ describe("a git push of the landings", () => {
     for (const push of [
       "cd aprendivo-landings && git push origin main",
       "cd aprendivo-landings && git push origin cambio/hero:main",
-      "cd aprendivo-landings && git push -f origin +refs/heads/production",
       "cd aprendivo-landings && git push",
       "cd aprendivo-landings && git push origin HEAD",
       "cd aprendivo-landings && git push --all origin",
       "cd aprendivo-landings && git push origin cambio/hero && git push origin main",
     ])
       expect(classifyCommand(push)?.label, push).toBe("git push (landings)");
+    // A force push rewrites production: a deletion that only the owner approves.
+    const forced = classifyCommand("cd aprendivo-landings && git push -f origin +refs/heads/production");
+    expect(forced && { action: forced.action, deletes: forced.deletes }).toEqual({
+      action: "delete",
+      deletes: "owner",
+    });
   });
 });
 

@@ -17,7 +17,8 @@ Reversible internal work runs at once:
 - drafts, branches, review-branch pushes and local files;
 - reading the web;
 - runs in the agent's own jail;
-- scheduled routines that already exist.
+- scheduled routines that already exist;
+- deletions of anything that is not in tier 1 or tier 2 (see [Deletions](#deletions)).
 
 The trust policy's default rules allow publish, email and create-agent actions. Every action is still
 recorded in the trust audit trail.
@@ -41,7 +42,8 @@ Tier 1 covers:
 - publishing to production once both QA agents said OK (a go-live of `request_decision`, or a publish
   that the trust policy asks for);
 - an agent's first mail to a stranger, within the existing rate caps;
-- lessons for an agent's instructions, a role playbook or a skill (the decision queue).
+- lessons for an agent's instructions, a role playbook or a skill (the decision queue);
+- deleting a routine, a skill or a shared table (see [Deletions](#deletions)).
 
 How it works:
 
@@ -60,16 +62,16 @@ How it works:
 
 The trust policy has an approver per action (`approvers`): `owner` or `manager`. Publish, email and
 create-agent default to `manager`. Pay, ad launches and deletions are always `owner`
-(`OWNER_ONLY_TRUST_ACTIONS`).
+(`OWNER_ONLY_TRUST_ACTIONS`), except the deletions of tier 0 and tier 1 below.
 
 ## Tier 2: the owner only
 
 - Money: any spend, payment, ad budget or price change, subscriptions and budget caps. The money
   approvals of the trust gate stay exactly as they were: owner-only cards that full access does not
   answer, with their expiry and budgets.
-- Deletions and irreversible actions: deleting data, agents, spaces, files outside the agent's own
-  work, databases or pages in production; a force-push or history rewrite on main or production
-  branches; revoking access. The default trust rule for `delete` asks the owner.
+- Deletions of crucial things (see [Deletions](#deletions)): an agent, a channel, a space, a live site,
+  app or database, an account connection or its credentials; a force-push or a delete of main or a
+  production branch. The default trust rule for `delete` asks the owner for these only.
 - Credentials, secrets and sign-in codes for accounts.
 - Legal or identity commitments in the owner's name: contracts, terms with fees, KYC and ID checks.
 - Security blocks: injection blocks and "Allow once".
@@ -78,6 +80,22 @@ create-agent default to `manager`. Pay, ad launches and deletions are always `ow
 `request_decision` takes `concerns` for these classes. Without it, an amount or the words of the
 decision (`ownerOnlyClassOf`) put it in a class; the manager can still escalate what slips through.
 The judge that reads a waiting Motion ticket answers `owner_only` the same way.
+
+## Deletions
+
+A deletion goes to a tier by what it deletes, not by the word "delete" (`deletionTier` and
+`classifyOpenBotTool` in `src/backend/trust/trust-classifier.ts`):
+
+| Tier | Who decides | What is deleted |
+| --- | --- | --- |
+| 2 | The owner | An agent; a channel (`openbot.delete_channel`); a whole space; a live production site, app or database: published hosted sites (`render-sites delete`), `appctl delete`, `appctl db delete` / `db drop`, and every deletion on a database or hosting MCP server, such as Supabase or Vercel; an owner account connection or its stored credentials (`openbot.remove_api_key`, a Vault login, an MCP tool that removes a connection, an account, a token or a key); a force-push or a delete of main or a production branch. |
+| 1 | The asking agent's manager | A routine or a schedule (`openbot.delete_routine`); a skill (`openbot.uninstall_skill`); a shared table (`openbot.delete_table`, `DROP TABLE` in `openbot.execute_data`). |
+| 0 | Nobody: it runs at once | Every other deletion: Motion tickets, pages and comments; messages; files and folders in agent or space workspaces (`rm`); git branches and repositories; drafts, staging copies (such as a site named `<name>-preview`) and memories; browser tabs and temporary data. |
+
+A deletion whose target is not clear is tier 0, unless it names a tier-2 thing. Hotmart coupon and
+subscription deletes stay with the owner: they change prices and money. Tier-2 deletions also count as
+high-impact actions for the injection monitor. Every deletion is still recorded in the trust audit
+trail.
 
 ## What the owner sees
 

@@ -29,6 +29,7 @@ import type { AppServerRequest, DynamicToolCallParams, DynamicToolResult } from 
 import {
   classifyBrowserCall,
   classifyCommand,
+  classifyOpenBotTool,
   classifyToolUse,
   type TrustClassification,
   trustCategory,
@@ -266,7 +267,7 @@ export class TrustToolGate {
     const gated = money && guard?.allowed && guard.tainted ? withoutSurface(action) : action;
     let accepted = false;
     const approve = (reason: string) =>
-      (this.#trust.approverFor(gated.action) === "manager"
+      (this.#trust.approverFor(gated) === "manager"
         ? this.#viaManager(client, request, subject, gated, reason)
         : this.#approve(client, request, subject, gated)(reason)
       ).pipe(
@@ -373,7 +374,7 @@ export class TrustToolGate {
     });
   }
 
-  /** Checks an `openbot` tool. Today that is `create_agent`. */
+  /** Checks an `openbot` tool: `create_agent`, and the deletions of `classifyOpenBotTool`. */
   readonly checkOpenBotTool = Effect.fn("TrustToolGate.checkOpenBotTool")(function* (
     this: TrustToolGate,
     client: TrustClient,
@@ -382,15 +383,7 @@ export class TrustToolGate {
   ) {
     const agentId = this.#options.agentForThread(params.threadId);
     if (!agentId) return null;
-    const args = isDynamicRecord(params.arguments) ? params.arguments : {};
-    const action: TrustClassification | null =
-      params.tool === "create_agent"
-        ? {
-            action: "create_agent",
-            label: "openbot.create_agent",
-            summary: trustSummary(`Create the agent ${isString(args.name) ? args.name : ""}`),
-          }
-        : null;
+    const action = classifyOpenBotTool(params.tool, params.arguments);
     const guard = yield* this.#guard(agentId, params.turnId, `openbot.${params.tool}`, params.arguments, action);
     if (guard && !guard.allowed) return openBotToolFailure(guard.message);
     if (!action) return null;

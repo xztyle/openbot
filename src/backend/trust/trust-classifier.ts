@@ -31,6 +31,8 @@ export interface TrustClassification {
   currency?: string;
   /** A public-facing change that sandbox first holds until an approved preview. */
   sandbox?: keyof TrustSandbox;
+  /** Who approves a `delete` (`deletionTier`). Absent: the owner. */
+  deletes?: DeletionTier;
   /**
    * A browser surface, such as `ads:meta`. One approval covers the agent's next actions on the same
    * surface for the policy's pass time, so a person approves a session, not each click.
@@ -44,6 +46,47 @@ export interface TrustClassification {
 }
 
 const SUMMARY_LIMIT = 300;
+
+/**
+ * Who approves a deletion (docs/approvals.md, "Deletions"). `owner`: an agent, a channel, a space, a
+ * live site, app or database, an account connection or its credentials. `manager`: a routine, a skill
+ * or a shared table. `automatic`: every other deletion, such as tickets, messages, workspace files,
+ * branches, drafts and memories.
+ */
+export type DeletionTier = "automatic" | "manager" | "owner";
+
+/** Words of a deletion target that only the owner approves. */
+const OWNER_DELETION_TARGET =
+  /^(agents?|channels?|spaces?|sites?|websites?|apps?|applications?|databases?|dbs?|connections?|connectors?|integrations?|accounts?|credentials?|secrets?|tokens?|apikeys?|keys?|vault|logins?|passwords?)$/u;
+/** Words of a deletion target that the asking agent's manager approves. */
+const MANAGER_DELETION_TARGET = /^(routines?|schedules?|crons?|skills?|tables?)$/u;
+/** MCP servers whose data is live production data: every deletion there is the owner's. */
+const LIVE_DATA_SERVER =
+  /postgres|supabase|neon|mysql|mariadb|turso|planetscale|mongo|redis|firebase|firestore|dynamo|database|(^|[_-])(d1|db|sql)([_-]|$)/u;
+/** MCP servers that host live sites and apps: a deletion there is the owner's. */
+const HOSTING_SERVER =
+  /vercel|netlify|render|cloudflare|railway|heroku|appctl|webflow|wordpress|shopify|digitalocean|(^|[_-])fly([_-]|$)/u;
+/** Words of a staged copy, a draft or temporary data: never live. */
+const DRAFT_TARGET = /^(previews?|drafts?|staging|branch(es)?|tests?|temp|tmp|cache)$/u;
+
+/** The tier of a deletion by the server (empty for Atelier's own tools) and the tool's name. */
+export function deletionTier(server: string, tool: string): DeletionTier {
+  const words = tool
+    .toLowerCase()
+    .replace(/api_?keys?/gu, "apikey")
+    .split(/[^a-z0-9]+/u)
+    .filter(Boolean);
+  if (words.some((word) => DRAFT_TARGET.test(word))) return "automatic";
+  if (server && (LIVE_DATA_SERVER.test(server) || HOSTING_SERVER.test(server))) return "owner";
+  if (words.some((word) => OWNER_DELETION_TARGET.test(word))) return "owner";
+  if (words.some((word) => MANAGER_DELETION_TARGET.test(word))) return "manager";
+  return "automatic";
+}
+
+/** Who approves this classification's deletion; null when it is not a deletion. */
+export function deletionTierOf(action: TrustClassification): DeletionTier | null {
+  return action.action === "delete" ? (action.deletes ?? "owner") : null;
+}
 
 export function trustCategory(action: TrustAction): TrustAuditCategory {
   switch (action) {
@@ -131,7 +174,8 @@ function classifyHotmart(segment: string, mentioned: boolean): TrustClassificati
   if (sub === "refund" || (sub === "reactivate-subscription" && /--charge\b/u.test(segment)))
     return { action: "pay", ...base };
   if (sub === "create-coupon") return { action: "publish", ...base };
-  if (sub === "delete-coupon" || sub === "cancel-subscription") return { action: "delete", ...base };
+  // A coupon is a price and a subscription is money: both stay the owner's.
+  if (sub === "delete-coupon" || sub === "cancel-subscription") return { action: "delete", ...base, deletes: "owner" };
   return null;
 }
 
@@ -141,7 +185,11 @@ function classifyRenderSites(segment: string, mentioned: boolean): TrustClassifi
   const tail = segment.slice(segment.indexOf(sub.split(" ")[0] ?? sub) + sub.length).trim();
   const site = /^([a-z0-9-]+)/u.exec(tail)?.[1];
   const base = { label: `render-sites ${sub}`, summary: trustSummary(`${sub} ${tail}`), platform: "render" };
-  if (sub === "delete" || sub === "suspend" || sub === "domain remove") return { action: "delete", ...base };
+  if (sub === "delete" || sub === "suspend" || sub === "domain remove")
+    // A staging copy is a draft; a live site is the owner's.
+    return site && STAGING_SITE.test(site) && sub !== "domain remove"
+      ? null
+      : { action: "delete", ...base, deletes: "owner" };
   if (sub === "create" || sub === "deploy" || sub === "update" || sub === "domain add" || sub === "domain proxy") {
     if (site && STAGING_SITE.test(site) && sub !== "domain add") return null;
     return { action: "publish", ...base, sandbox: "landings" };
@@ -156,7 +204,8 @@ function classifyAppctl(command: string): TrustClassification | null {
   const [, first, second] = match;
   const sub = first === "db" ? `db ${second}` : (first ?? second);
   const base = { label: `appctl ${sub}`, summary: trustSummary(command.slice(command.indexOf("appctl"))) };
-  if (sub === "delete" || sub === "db delete" || sub === "db drop") return { action: "delete", ...base };
+  if (sub === "delete" || sub === "db delete" || sub === "db drop")
+    return { action: "delete", ...base, deletes: "owner" };
   if (sub === "publish" || (sub === "deploy" && !/--private\b/u.test(command)) || sub === "redeploy")
     return { action: "publish", ...base, platform: "appctl", sandbox: "landings" };
   return null;
@@ -187,10 +236,47 @@ export function pushesOnlyReviewBranches(command: string): boolean {
   });
 }
 
+/**
+ * Whether a `git push` in the command rewrites or deletes a published branch: a force push
+ * (`--force`, `-f`, `--force-with-lease`, a `+ref`) or a delete (`--delete`, `-d`, `:ref`) that
+ * names main or a production branch. Other branches are normal work.
+ */
+export function rewritesPublishedBranch(command: string): boolean {
+  return [...command.matchAll(/\bgit\s+(?:-C\s+\S+\s+)?push\b([^;&|\n]*)/gu)].some((push) => {
+    const words = (push[1] ?? "").trim().split(/\s+/u).filter(Boolean);
+    const forced = words.some((word) =>
+      /^(--force(-with-lease)?(=\S*)?|--delete|-[a-zA-Z]*[fd][a-zA-Z]*)$/u.test(word),
+    );
+    const refs = words.filter((word) => !word.startsWith("-")).slice(1);
+    return refs.some((ref) => {
+      const rewrites = forced || ref.startsWith("+") || ref.startsWith(":");
+      const target = (ref.includes(":") ? ref.slice(ref.indexOf(":") + 1) : ref)
+        .replace(/^\+/u, "")
+        .replace(/^refs\/heads\//u, "");
+      return rewrites && PUBLISHED_BRANCHES.test(target);
+    });
+  });
+}
+
 function classifyGit(command: string): TrustClassification | null {
+  // A repository is code, as the files of a workspace: its deletion runs at once (docs/approvals.md).
   if (/\bgh\s+repo\s+delete\b/u.test(command))
-    return { action: "delete", label: "gh repo delete", summary: trustSummary(command), platform: "github" };
+    return {
+      action: "delete",
+      label: "gh repo delete",
+      summary: trustSummary(command),
+      platform: "github",
+      deletes: "automatic",
+    };
   if (!/\bgit\s+(?:-C\s+\S+\s+)?push\b/u.test(command)) return null;
+  if (rewritesPublishedBranch(command))
+    return {
+      action: "delete",
+      label: "git push (rewrites a published branch)",
+      summary: trustSummary(command),
+      platform: "github",
+      deletes: "owner",
+    };
   // A push to the landings repository deploys on Render: auto-deploy follows the folder. A push of a
   // review branch publishes nothing until it is merged.
   if (!/landing/iu.test(command) || pushesOnlyReviewBranches(command)) return null;
@@ -464,8 +550,44 @@ export function classifyMcpTool(qualifiedName: string, input: unknown): TrustCla
         ? { sandbox: "landings" as const }
         : {}),
     };
-  if (has(/(^|_)(delete|destroy|drop|purge)(_|$)/u)) return { action: "delete", label, summary, platform: server };
+  if (has(/(^|_)(delete|destroy|drop|purge|remove|uninstall|revoke|disconnect)(_|$)/u))
+    return { action: "delete", label, summary, platform: server, deletes: deletionTier(server, tool) };
   return null;
+}
+
+/** Atelier's own tools that the trust policy governs, by the agent's call (`openbot.<tool>`). */
+export function classifyOpenBotTool(tool: string, args: unknown): TrustClassification | null {
+  const record = isDynamicRecord(args) ? args : {};
+  const text = (key: string) => (typeof record[key] === "string" ? record[key] : "");
+  if (tool === "create_agent")
+    return {
+      action: "create_agent",
+      label: "openbot.create_agent",
+      summary: trustSummary(`Create the agent ${text("name")}`),
+    };
+  const deletion = (what: string, deletes: DeletionTier): TrustClassification => ({
+    action: "delete",
+    label: `openbot.${tool}`,
+    summary: trustSummary(`${what} ${JSON.stringify(record).slice(0, 300)}`),
+    deletes,
+  });
+  switch (tool) {
+    case "delete_channel":
+      // Without userAsked the tool refuses the call itself.
+      return record.userAsked === true ? deletion("Delete a channel", "owner") : null;
+    case "remove_api_key":
+      return deletion("Delete a saved key", "owner");
+    case "delete_routine":
+      return deletion("Delete a routine", "manager");
+    case "uninstall_skill":
+      return deletion("Remove a skill", "manager");
+    case "delete_table":
+      return deletion("Delete a shared table", "manager");
+    case "execute_data":
+      return /^\s*drop\s+table\b/iu.test(text("sql")) ? deletion("Drop a shared table", "manager") : null;
+    default:
+      return null;
+  }
 }
 
 interface BrowserSurface {
@@ -972,6 +1094,14 @@ export function classifyBrowserCall(
       browser: { site: url?.hostname ?? "a page", what: "fill_card" },
     };
   }
+  // A saved login of the Vault is a stored credential: only the owner deletes it.
+  if (tool === "delete_vault_item")
+    return {
+      action: "delete",
+      label: "openbot_browser.delete_vault_item",
+      summary: trustSummary(`Delete a saved login ${typeof record.id === "string" ? record.id : ""}`),
+      deletes: "owner",
+    };
   if (!url || !ACTING_BROWSER_TOOLS.has(tool)) return null;
   const surface = BROWSER_SURFACES.find((candidate) => candidate.test(url));
   if (!surface) return null;

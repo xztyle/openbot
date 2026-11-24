@@ -20,7 +20,7 @@ export const messages = defineMessages("trust", {
   "trust.approver.owner": "You",
   "trust.approver.manager": "Their manager",
   "trust.approversDescription":
-    "When a rule asks, money and deletions always come to you. For the rest, the asking agent's manager can decide.",
+    "When a rule asks, money and the deletion of an agent, a channel, a space, a live site or an account always come to you. For the rest, the asking agent's manager can decide.",
   "trust.interventions.title": "Your interventions",
   "trust.interventions.week": "This week you decided {owner} and your agents decided {agents}.",
   "trust.interventions.share": "Agents took {share}% of the decisions.",

@@ -24,7 +24,7 @@ import { Effect } from "effect";
 import type { ApprovalRouter } from "../approvals/approval-router";
 import { writeJsonFileAtomically } from "../atomic-json-file";
 import type { TrustAuditInput, TrustAuditLog } from "./trust-audit-log";
-import { type TrustClassification, trustCategory } from "./trust-classifier";
+import { deletionTierOf, type TrustClassification, trustCategory } from "./trust-classifier";
 
 const logger = createOpenBotLogger("trust-service");
 
@@ -205,9 +205,15 @@ export class TrustService {
     return this.#approvals?.reopen(id) ?? Promise.resolve(false);
   }
 
-  /** Who answers when the policy asks for this action: always the owner for money and deletions. */
-  approverFor(action: TrustClassification["action"]): Approver {
-    return OWNER_ONLY_TRUST_ACTIONS.includes(action) ? "owner" : (this.#policy.approvers[action] ?? "owner");
+  /**
+   * Who answers when the policy asks for this action: always the owner for money and for the
+   * deletions of tier 2; the manager for a deletion of tier 1 (a routine, a skill, a shared table).
+   */
+  approverFor(action: TrustClassification): Approver {
+    if (deletionTierOf(action) === "manager") return "manager";
+    return OWNER_ONLY_TRUST_ACTIONS.includes(action.action)
+      ? "owner"
+      : (this.#policy.approvers[action.action] ?? "owner");
   }
 
   /**
@@ -282,8 +288,12 @@ export class TrustService {
   evaluate(subject: TrustSubject, action: TrustClassification): TrustVerdict {
     const policy = this.#policy;
     if (!policy.enabled) return { kind: "allow" };
-    // Tier 0 (docs/approvals.md): the agents' own Motion board is internal work, a deletion there too.
-    if (action.action === "delete" && normalizeTrustPlatform(action.platform ?? "") === "motion")
+    // Tier 0 (docs/approvals.md, "Deletions"): tickets, messages, workspace files, branches, drafts and
+    // memories. The agents' own Motion board is internal work, every deletion there too.
+    if (
+      deletionTierOf(action) === "automatic" ||
+      (action.action === "delete" && normalizeTrustPlatform(action.platform ?? "") === "motion")
+    )
       return { kind: "allow" };
     const placement = this.placement(subject.agentId);
     const { rule, source } = resolveTrustRule(policy, placement, action.action);

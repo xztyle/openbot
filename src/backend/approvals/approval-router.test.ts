@@ -98,7 +98,8 @@ describe("the tiers at the trust boundary", () => {
 
   it("tier 1: a rule that asks goes to the manager for publish, email and new agents", () => {
     const { trust } = setup();
-    for (const kind of ["publish", "email", "create_agent"] as const) expect(trust.approverFor(kind)).toBe("manager");
+    for (const kind of ["publish", "email", "create_agent"] as const)
+      expect(trust.approverFor(action(kind))).toBe("manager");
     expect(approverCandidates(AGENTS, "dev")).toEqual(["lead", "ceo"]);
   });
 
@@ -107,7 +108,7 @@ describe("the tiers at the trust boundary", () => {
     expect(trust.evaluate({ agentId: "dev" }, action("pay")).kind).toBe("ask");
     expect(trust.evaluate({ agentId: "dev" }, action("launch_ads")).kind).toBe("ask");
     expect(trust.evaluate({ agentId: "dev" }, action("delete")).kind).toBe("ask");
-    for (const kind of ["pay", "launch_ads", "delete"] as const) expect(trust.approverFor(kind)).toBe("owner");
+    for (const kind of ["pay", "launch_ads", "delete"] as const) expect(trust.approverFor(action(kind))).toBe("owner");
     const stored = normalizeTrustPolicy({
       ...DEFAULT_TRUST_POLICY,
       approvers: { pay: "manager", launch_ads: "manager", delete: "manager", publish: "owner" },

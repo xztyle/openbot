@@ -33,7 +33,9 @@ export type TrustRules = Record<TrustAction, TrustRule>;
 
 /**
  * The actions that only the owner approves (tier 2 of `docs/approvals.md`): money, and deletions,
- * which cannot be undone. Their approver is always the owner, whatever a stored policy says.
+ * which cannot be undone. Their approver is always the owner, whatever a stored policy says. The host
+ * splits a deletion by its target: a routine, a skill or a shared table goes to the manager, and a
+ * ticket, a message, a workspace file or a draft runs at once (`deletionTier` in the trust classifier).
  */
 export const OWNER_ONLY_TRUST_ACTIONS: readonly TrustAction[] = ["pay", "launch_ads", "delete"];
 
@@ -93,8 +95,8 @@ export const DEFAULT_TRUST_POLICY: TrustPolicy = {
   version: 1,
   enabled: true,
   roles: {
-    // The owner's choice (docs/approvals.md): money and deletions wait for the owner. Every other action is
-    // allowed and kept in the audit trail; where a rule asks, the agent's manager answers.
+    // The owner's choice (docs/approvals.md): money and the deletions of crucial things wait for the owner.
+    // Every other action is allowed and kept in the audit trail; where a rule asks, the agent's manager answers.
     lead: { pay: "ask", launch_ads: "ask", publish: "allow", email: "allow", create_agent: "allow", delete: "ask" },
     member: { pay: "ask", launch_ads: "ask", publish: "allow", email: "allow", create_agent: "allow", delete: "ask" },
   },

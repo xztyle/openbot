@@ -20,7 +20,7 @@ export const messages = {
   "trust.approver.owner": "Tú",
   "trust.approver.manager": "Su manager",
   "trust.approversDescription":
-    "Cuando una regla pide aprobación, el dinero y lo que se borra siempre te llega a ti. Lo demás lo puede decidir el manager del agente que pide.",
+    "Cuando una regla pide aprobación, el dinero y borrar un agente, un canal, un espacio, un sitio publicado o una cuenta siempre te llegan a ti. Lo demás lo puede decidir el manager del agente que pide.",
   "trust.interventions.title": "Tus intervenciones",
   "trust.interventions.week": "Esta semana decidiste {owner} y tus agentes decidieron {agents}.",
   "trust.interventions.share": "Los agentes tomaron el {share}% de las decisiones.",

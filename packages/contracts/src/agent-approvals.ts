@@ -115,8 +115,9 @@ function spaceTopAgent(
  * to the owner. A word that is not here leaves the request with the manager, who can still escalate.
  */
 const OWNER_ONLY_WORDS: Record<OwnerOnlyClass, RegExp> = {
+  // The action itself spends or commits money. A mention of ads, Meta, a price or a budget is not.
   money:
-    /\b(pay|payment|spend|purchase|buy|invoice|refund|subscri\w*|budget|price|pricing|ad spend|card|charge|paid plan|pagar|pago|gast\w*|compr\w*|factura|reembolso|suscripci\w*|presupuesto|precio|tarjeta|cobr\w*)\b/iu,
+    /\b(pay|paying|payment|spend|purchase|buy|charge|refund|subscribe|(?:raise|increase|set|change|approve)\s+(?:the\s+)?(?:ad\s+|daily\s+)?(?:budget|price)|pagar|pago|gastar|comprar|cobrar|reembolsar|suscribir\w*|(?:subir|aumentar|fijar|cambiar|aprobar)\s+(?:el\s+)?(?:presupuesto|precio))\b/iu,
   deletion:
     /\b(delete|deletion|remove (?:the )?(?:agent|space|database|site|page)|drop (?:the )?(?:table|database)|destroy|wipe|purge|force[- ]push|rewrite (?:the )?history|revoke|borrar|eliminar|suprimir|destruir|revocar)\b/iu,
   credentials:

@@ -66,7 +66,7 @@ export function waitingAsksPrompt(input: {
     "",
     "reason: what the owner must decide or give, in at most 160 characters, in the language of the ticket. Name the concrete thing (what to approve, what is missing). No greeting, no ticket key.",
     "",
-    "owner_only: money when it needs spend, a payment, a price, a budget or a subscription; credentials when it needs a password, a key, a sign-in or a verification code; deletion when it deletes data, an agent, a site or a database, or does something that cannot be undone; legal when it signs a contract, accepts terms with fees or needs an identity check; security for a security block. Otherwise none: the team's own managers can decide it.",
+    "owner_only: money only when the action the owner is asked to approve itself spends or commits money now (a payment, a purchase, a subscription, launching or funding paid ads, setting or raising a budget, changing a price). Writing, reviewing or planning ads, copy, landings or campaigns is not money, also when the text names a budget, a price, Meta or ads: spend is approved later, at the moment it happens; credentials only when the owner must hand over their own password, key or verification code, or sign in themselves; data that the agents can look up, a licensed photo or a product id is not credentials; deletion when it deletes data, an agent, a site or a database, or does something that cannot be undone; legal when it signs a contract, accepts terms with fees or needs an identity check; security for a security block. Otherwise none: the team's own managers can decide it.",
     "",
     `plain: the same for the owner, a self-made CEO with no technical background, in ${input.language ?? "the language of the ticket"}, in plain everyday words. asks: what is asked, one sentence. why: why it matters for the business. if_yes and if_no: what happens in each case. No ids, ticket keys, codes, error numbers, commands, file names, field names, and no words such as API, token, app mode or pixel; say the effect in business words instead. Each at most 200 characters.`,
     "",
@@ -86,7 +86,12 @@ export function parseWaitingAsks(
     return {
       asks: object.asks,
       reason: isString(object.reason) ? object.reason.trim() : "",
-      ownerOnly: isOneOf(OWNER_ONLY_CLASSES, object.owner_only) ? object.owner_only : null,
+      // Accepting reviewed work commits no money: its spend, if any, is gated when it happens.
+      ownerOnly:
+        isOneOf(OWNER_ONLY_CLASSES, object.owner_only) &&
+        !(object.owner_only === "money" && object.asks === "review-escalated")
+          ? object.owner_only
+          : null,
       plain: ownerSummaryFrom(object.plain),
     };
   } catch {

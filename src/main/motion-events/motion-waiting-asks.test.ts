@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_WORKSPACE_MOTION_EVENTS } from "@openbot/contracts/ipc";
@@ -97,6 +97,24 @@ describe("why a ticket waits on the owner", () => {
     expect(third.classified).toEqual([]);
   });
 
+  it("reads again a ticket that went to the owner under the first rules, unless a manager escalated it", async () => {
+    const first = service();
+    await first.events.receive(waitingEvent());
+    await first.events.setApprover("issue-41", "owner");
+    const saved = JSON.parse(await readFile(join(root, "events.json"), "utf8"));
+    saved.waiting[0] = { ...saved.waiting[0], asks: "review-escalated", ownerOnly: "money", rules: undefined };
+    await writeFile(join(root, "events.json"), JSON.stringify(saved));
+    const second = service();
+    await second.events.start();
+    expect(second.events.waiting()[0]?.approver).toBeUndefined();
+    expect(second.classified).toEqual(["COC-41"]);
+    expect(second.shown.at(-1)).toEqual([]);
+    await second.events.setApprover("issue-41", "owner", { by: "Lead", reason: "Needs a contract." });
+    const third = service();
+    await third.events.start();
+    expect(third.events.waiting()[0]?.approver).toBe("owner");
+  });
+
   it("marks a ticket the grader gave up on as an escalated review with what it misses", async () => {
     const { events, classified } = service();
     await events.start();
@@ -134,6 +152,12 @@ describe("why a ticket waits on the owner", () => {
         '{"asks": "blocked", "reason": "Falta la contraseña", "owner_only": "credentials", "plain": {"asks": "Necesita tu contraseña de Meta.", "why": "Sin ella no puede seguir.", "if_yes": "Sigue hoy.", "if_no": "Se queda parado."}}',
       ),
     ).toMatchObject({ asks: "blocked", ownerOnly: "credentials", plain: { asks: "Necesita tu contraseña de Meta." } });
+    // Accepting reviewed ad copy commits no money, whatever the judge says.
+    expect(
+      parseWaitingAsks(
+        '{"asks": "review-escalated", "reason": "Copys de anuncios, presupuesto 70 USD", "owner_only": "money"}',
+      )?.ownerOnly,
+    ).toBeNull();
     expect(parseWaitingAsks('{"asks": "publish"}')).toBeNull();
     expect(parseWaitingAsks("no json")).toBeNull();
     const comments = waitingComments({

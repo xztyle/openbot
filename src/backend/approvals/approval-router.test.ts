@@ -113,7 +113,13 @@ describe("the tiers at the trust boundary", () => {
       approvers: { pay: "manager", launch_ads: "manager", delete: "manager", publish: "owner" },
     });
     expect(stored?.approvers).toMatchObject({ pay: "owner", launch_ads: "owner", delete: "owner", publish: "owner" });
-    expect(ownerOnlyClassOf("Launch the Black Friday ad set at 7 USD a day? Budget 70")).toBe("money");
+    expect(ownerOnlyClassOf("Pay 40 USD for the Black Friday ad set")).toBe("money");
+    expect(ownerOnlyClassOf("Subir el presupuesto diario a 20 USD")).toBe("money");
+    // Ads, Meta, a price or a budget named in the text is no spend.
+    expect(
+      ownerOnlyClassOf("Accept the Meta ad copy drafts; the plan proposes a 70 USD budget and a price of 19"),
+    ).toBeNull();
+    expect(ownerOnlyClassOf("Textos de anuncios para Meta con presupuesto propuesto de 70 USD")).toBeNull();
     expect(ownerOnlyClassOf("Pagar la suscripción anual")).toBe("money");
     expect(ownerOnlyClassOf("Eliminar la base de datos de producción")).toBe("deletion");
     expect(ownerOnlyClassOf("Necesito la contraseña de Hotmart")).toBe("credentials");

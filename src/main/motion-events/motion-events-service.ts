@@ -85,7 +85,16 @@ export interface WaitingTicket {
   /** The manager that sent it up to the owner, and why. */
   escalatedBy?: string | undefined;
   escalationReason?: string | undefined;
+  /** The version of the rules that read it (`WAITING_RULES`); an older reading is read again. */
+  rules?: number | undefined;
 }
+
+/**
+ * The version of how a waiting ticket is read. 2: money only when the asked action itself spends,
+ * credentials only when the owner must hand over their own. A ticket that went to the owner under an
+ * older reading, and that no manager escalated, is read again at start.
+ */
+export const WAITING_RULES = 2;
 
 /** The longest `reason` kept: Needs you shows at most 200 characters. */
 const REASON_LIMIT = 200;
@@ -171,7 +180,8 @@ function isWaitingTicket(value: unknown): value is WaitingTicket {
     (value.plain === undefined || isOwnerSummary(value.plain)) &&
     (value.approver === undefined || isOneOf(APPROVERS, value.approver)) &&
     (value.escalatedBy === undefined || isString(value.escalatedBy)) &&
-    (value.escalationReason === undefined || isString(value.escalationReason))
+    (value.escalationReason === undefined || isString(value.escalationReason)) &&
+    (value.rules === undefined || typeof value.rules === "number")
   );
 }
 
@@ -349,6 +359,13 @@ export class MotionEventsService {
         this.#state = emptyState();
       })
       .then(() => {
+        // A ticket that went to the owner under older rules, and that no manager escalated, is read
+        // again: it may be one for the manager.
+        this.#state.waiting = this.#state.waiting.map((ticket) =>
+          ticket.approver === "owner" && !ticket.escalatedBy && (ticket.rules ?? 1) < WAITING_RULES
+            ? { ...ticket, approver: undefined, ownerOnly: undefined }
+            : ticket,
+        );
         this.#show();
         // The tickets of before these fields: read why each waits and who answers it, once. A ticket
         // of before the approval model goes to its manager unless only the owner may decide it.
@@ -548,6 +565,7 @@ export class MotionEventsService {
               ...(reasonKept ? { reason: reasonKept } : {}),
               ...(extra.ownerOnly !== undefined ? { ownerOnly: extra.ownerOnly } : {}),
               ...(extra.plain ? { plain: extra.plain } : {}),
+              rules: WAITING_RULES,
             }
           : item,
       );

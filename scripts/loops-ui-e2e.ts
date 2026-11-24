@@ -19,6 +19,9 @@ import { OpenBotDatabase } from "../src/backend/openbot-database";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const UI_WAIT_MS = 30_000;
+// Beside the whole deploy suite, the development server's first compile of the view can take more
+// than 30 s, so a page step waits up to this long. A page that works answers in a second.
+const PAGE_WAIT_MS = 120_000;
 const VIEWPORTS = {
   phone: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
   desktop: { viewport: { width: 1440, height: 900 } },
@@ -147,6 +150,7 @@ function check(name: string, ok: boolean, detail?: unknown) {
 async function open(viewport: keyof typeof VIEWPORTS, query = ""): Promise<Page> {
   if (!browser) throw new Error("no browser");
   const context = await browser.newContext(VIEWPORTS[viewport]);
+  context.setDefaultTimeout(PAGE_WAIT_MS);
   const page = await context.newPage();
   page.on("console", (message) => {
     // Every error, and the warnings of this view's code: Solid's diagnostics name the file they come from.

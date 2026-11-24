@@ -64,6 +64,10 @@ const TYPED_MESSAGE = "Watch the replies about pricing too.";
 const TYPED_REPLY = "Good call. I will watch the reactions to this and tell you if anything changes before Friday.";
 // A scene waits for the visitor's answer for about 3 s; the whole autoplay takes about 15 s.
 const SCENE_TIMEOUT_MS = 40_000;
+// The development server compiles each page on its first request. Beside the whole deploy suite, the
+// first load of the home page or of the demo can take more than a minute, so a page step waits longer
+// than Playwright's 30 s default.
+const LOAD_TIMEOUT_MS = 120_000;
 
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
@@ -106,6 +110,7 @@ async function openDemo(
   reducedMotion: "reduce" | "no-preference",
 ): Promise<OpenedDemo> {
   const context = await browser.newContext({ viewport, timezoneId: TIME_ZONE, reducedMotion, colorScheme: "dark" });
+  context.setDefaultTimeout(LOAD_TIMEOUT_MS);
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -137,7 +142,7 @@ async function openDemo(
     },
     { title: IFRAME_TITLE, ready: LANDING_PREVIEW_READY_MESSAGE, start: LANDING_PREVIEW_START_MESSAGE },
   );
-  await page.locator('.landing-app-preview[data-preview-state="shown"]').waitFor({ timeout: SCENE_TIMEOUT_MS });
+  await page.locator('.landing-app-preview[data-preview-state="shown"]').waitFor({ timeout: LOAD_TIMEOUT_MS });
   lastDemoPage = page;
   return { page, app: page.frameLocator(IFRAME), errors };
 }
@@ -150,6 +155,7 @@ const barShown = (page: Page) => page.locator(".al-bar").getAttribute("data-show
 /** Checks the Atelier home page at one width. Answers what it found. */
 async function checkLanding(browser: Browser, width: number, height: number, touch: boolean) {
   const context = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
+  context.setDefaultTimeout(LOAD_TIMEOUT_MS);
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

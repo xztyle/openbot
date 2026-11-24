@@ -1737,8 +1737,16 @@ function nextAnimationFrame(): Promise<void> {
 }
 
 function ApprovalContext(props: { item: DynamicIslandApprovalItem }): JSX.Element {
-  const { t } = useText();
+  const { t, sourceText } = useText();
   const approval = () => props.item.approval;
+  // A trust card's lines are source text from the host, such as a money card's effect.
+  const shown = (command: string) =>
+    approval().kind === "permissions"
+      ? command
+          .split("\n")
+          .map((line) => sourceText(line))
+          .join("\n")
+      : command;
   return (
     <>
       <Show when={approval().command}>
@@ -1748,7 +1756,7 @@ function ApprovalContext(props: { item: DynamicIslandApprovalItem }): JSX.Elemen
               <small>{t("island.approval.command")}</small>
               <Show when={approval().cwd}>{(cwd) => <span>{cwd()}</span>}</Show>
             </div>
-            <code title={command()}>{command()}</code>
+            <code title={shown(command())}>{shown(command())}</code>
           </div>
         )}
       </Show>

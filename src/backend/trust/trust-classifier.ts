@@ -1,6 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import { isDynamicRecord } from "@openbot/contracts/runtime-values";
+import { type DynamicRecord, isDynamicRecord } from "@openbot/contracts/runtime-values";
 import type { TrustAction, TrustAuditCategory, TrustSandbox } from "@openbot/contracts/trust-control";
 import { redactText } from "@openbot/logging";
 
@@ -36,6 +36,11 @@ export interface TrustClassification {
    * surface for the policy's pass time, so a person approves a session, not each click.
    */
   surface?: string;
+  /**
+   * A browser action on a payment or ads page: the site and what the call does, such as
+   * `pay.hotmart.com` and `click "Comprar"`. The approval card says this instead of an amount.
+   */
+  browser?: { site: string; what: string };
 }
 
 const SUMMARY_LIMIT = 300;
@@ -527,6 +532,423 @@ function surfacePlatform(url: URL): string {
   return host.split(".").slice(-2, -1)[0] ?? host;
 }
 
+/** The longest page script that the read-only check reads. A longer one is treated as acting. */
+const READ_ONLY_SCRIPT_LIMIT = 4_000;
+
+/** Names that a read-only page script may start from. */
+const READ_ONLY_ROOTS = new Set([
+  "document",
+  "location",
+  "window",
+  "JSON",
+  "Object",
+  "Array",
+  "Math",
+  "URL",
+  "URLSearchParams",
+  "String",
+  "Number",
+  "Boolean",
+  "parseInt",
+  "parseFloat",
+  "isNaN",
+  "encodeURIComponent",
+  "decodeURIComponent",
+  "undefined",
+  "null",
+  "true",
+  "false",
+  "NaN",
+  "Infinity",
+]);
+
+/** The only properties of `window` that a read-only script may read. */
+const READ_ONLY_WINDOW_PROPERTIES = new Set(["location", "document"]);
+
+/** Functions that a read-only script may call by their bare name. */
+const READ_ONLY_FUNCTIONS = new Set([
+  "String",
+  "Number",
+  "Boolean",
+  "parseInt",
+  "parseFloat",
+  "isNaN",
+  "encodeURIComponent",
+  "decodeURIComponent",
+]);
+
+/** Constructors that a read-only script may call with `new`. */
+const READ_ONLY_CONSTRUCTORS = new Set(["URL", "URLSearchParams"]);
+
+/**
+ * Methods that only read: DOM queries and attributes, URL and search parameter reads, and plain
+ * string, array, object and number helpers. `click`, `submit`, `dispatchEvent`, `fetch`, `assign`,
+ * `replace` (also `location.replace`), `open`, `focus` and every other name are not here.
+ */
+const READ_ONLY_METHODS = new Set([
+  "querySelector",
+  "querySelectorAll",
+  "getElementById",
+  "getElementsByClassName",
+  "getElementsByTagName",
+  "getElementsByName",
+  "getAttribute",
+  "getAttributeNames",
+  "hasAttribute",
+  "closest",
+  "matches",
+  "contains",
+  "item",
+  "get",
+  "getAll",
+  "has",
+  "keys",
+  "values",
+  "entries",
+  "fromEntries",
+  "from",
+  "of",
+  "isArray",
+  "map",
+  "filter",
+  "find",
+  "findIndex",
+  "some",
+  "every",
+  "includes",
+  "indexOf",
+  "lastIndexOf",
+  "slice",
+  "at",
+  "join",
+  "concat",
+  "flat",
+  "stringify",
+  "parse",
+  "trim",
+  "trimStart",
+  "trimEnd",
+  "toLowerCase",
+  "toUpperCase",
+  "startsWith",
+  "endsWith",
+  "split",
+  "substring",
+  "padStart",
+  "padEnd",
+  "match",
+  "test",
+  "exec",
+  "toString",
+  "toFixed",
+  "normalize",
+  "round",
+  "floor",
+  "ceil",
+  "min",
+  "max",
+  "abs",
+]);
+
+/** Properties that lead out of the page's document to a window or a prototype, which a getter can use. */
+const ESCAPE_PROPERTIES = new Set([
+  "defaultView",
+  "opener",
+  "parent",
+  "top",
+  "frames",
+  "self",
+  "globalThis",
+  "contentWindow",
+  "contentDocument",
+  "constructor",
+  "prototype",
+  "__proto__",
+  "__defineGetter__",
+  "__defineSetter__",
+  "__lookupGetter__",
+]);
+
+/** Keywords that a read-only expression may hold. Every other keyword (`function`, `delete`, `await`) is not read-only. */
+const READ_ONLY_KEYWORDS = new Set(["new", "typeof", "in", "instanceof"]);
+
+const JS_KEYWORDS = new Set([
+  "await",
+  "async",
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "debugger",
+  "default",
+  "delete",
+  "do",
+  "else",
+  "eval",
+  "export",
+  "extends",
+  "finally",
+  "for",
+  "function",
+  "if",
+  "import",
+  "let",
+  "return",
+  "super",
+  "switch",
+  "this",
+  "throw",
+  "try",
+  "var",
+  "void",
+  "while",
+  "with",
+  "yield",
+  "arguments",
+]);
+
+/** Operators that a read-only expression may hold. `=`, `+=`, `++`, `||=` and the other writes are not here. */
+const READ_ONLY_OPERATORS = [
+  "...",
+  "===",
+  "!==",
+  "=>",
+  "==",
+  "!=",
+  "<=",
+  ">=",
+  "&&",
+  "||",
+  "??",
+  "?.",
+  "(",
+  ")",
+  "[",
+  "]",
+  "{",
+  "}",
+  ".",
+  ",",
+  ":",
+  ";",
+  "?",
+  "!",
+  "+",
+  "-",
+  "*",
+  "%",
+  "<",
+  ">",
+  "/",
+] as const;
+
+type ScriptToken = { kind: "name" | "literal" | "op"; text: string };
+
+/** Ends a string literal that starts at `start`, or -1. A template literal must not hold `${`. */
+function stringEnd(source: string, start: number): number {
+  const quote = source[start];
+  for (let index = start + 1; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (quote === "`" && char === "$" && source[index + 1] === "{") return -1;
+    if (char === quote) return index + 1;
+    if (char === "\n" && quote !== "`") return -1;
+  }
+  return -1;
+}
+
+/** Ends a regular expression literal that starts at `start`, or -1. */
+function regexEnd(source: string, start: number): number {
+  let inClass = false;
+  for (let index = start + 1; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "\n") return -1;
+    if (char === "[") inClass = true;
+    else if (char === "]") inClass = false;
+    else if (char === "/" && !inClass) {
+      let end = index + 1;
+      while (end < source.length && /[a-z]/u.test(source[end] ?? "")) end += 1;
+      return end;
+    }
+  }
+  return -1;
+}
+
+/** The tokens of a page script, or null when it holds anything outside the read-only grammar. */
+function scriptTokens(source: string): ScriptToken[] | null {
+  const tokens: ScriptToken[] = [];
+  let index = 0;
+  while (index < source.length) {
+    const char = source[index] ?? "";
+    if (/\s/u.test(char)) {
+      index += 1;
+      continue;
+    }
+    const previous = tokens.at(-1);
+    if (char === "'" || char === '"' || char === "`") {
+      // A template right after a name or a call is a tagged template, which calls that name.
+      if (char === "`" && previous && (previous.kind === "name" || previous.text === ")" || previous.text === "]"))
+        return null;
+      const end = stringEnd(source, index);
+      if (end < 0) return null;
+      tokens.push({ kind: "literal", text: source.slice(index, end) });
+      index = end;
+      continue;
+    }
+    const name = /^[A-Za-z_$][\w$]*/u.exec(source.slice(index))?.[0];
+    if (name) {
+      tokens.push({ kind: "name", text: name });
+      index += name.length;
+      continue;
+    }
+    const number = /^\d[\d_]*(?:\.\d+)?(?:e[+-]?\d+)?/iu.exec(source.slice(index))?.[0];
+    if (number) {
+      tokens.push({ kind: "literal", text: number });
+      index += number.length;
+      continue;
+    }
+    // A comment can hide nothing that matters, but it is not part of a simple read.
+    if (source.startsWith("//", index) || source.startsWith("/*", index)) return null;
+    const divides = previous && (previous.kind !== "op" || previous.text === ")" || previous.text === "]");
+    if (char === "/" && !divides) {
+      const end = regexEnd(source, index);
+      if (end < 0) return null;
+      tokens.push({ kind: "literal", text: source.slice(index, end) });
+      index = end;
+      continue;
+    }
+    const operator = READ_ONLY_OPERATORS.find((candidate) => source.startsWith(candidate, index));
+    if (!operator) return null;
+    // Comparisons are listed whole, so an operator before `=` is a write: `+=`, `||=`, `??=`. A lone
+    // `=` matches nothing and is refused above.
+    if (source[index + operator.length] === "=") return null;
+    if ((operator === "+" || operator === "-") && source[index + 1] === operator) return null;
+    tokens.push({ kind: "op", text: operator });
+    index += operator.length;
+  }
+  return tokens;
+}
+
+/** The names that arrow functions of the script take as parameters. */
+function arrowParameters(tokens: readonly ScriptToken[]): Set<string> {
+  const names = new Set<string>();
+  tokens.forEach((token, position) => {
+    if (token.text !== "=>") return;
+    const before = tokens[position - 1];
+    if (before?.kind === "name") {
+      names.add(before.text);
+      return;
+    }
+    if (before?.text !== ")") return;
+    let depth = 0;
+    for (let index = position - 1; index >= 0; index -= 1) {
+      const candidate = tokens[index];
+      if (!candidate) break;
+      if (candidate.text === ")") depth += 1;
+      else if (candidate.text === "(") {
+        depth -= 1;
+        if (depth === 0) break;
+      } else if (candidate.kind === "name") names.add(candidate.text);
+    }
+  });
+  return names;
+}
+
+/**
+ * True when a page script only reads, such as `location.href`,
+ * `new URLSearchParams(location.search).get("off")`, `document.title` or
+ * `document.querySelector("h1").textContent`. It allows member reads from the document, the address
+ * and plain helpers, calls of listed reading methods only, and no assignment, update, declaration,
+ * comment, computed call, tagged template or template substitution. Anything else, including any
+ * script it cannot read, is not read-only.
+ */
+export function isReadOnlyPageScript(expression: string): boolean {
+  if (expression.length > READ_ONLY_SCRIPT_LIMIT) return false;
+  const tokens = scriptTokens(expression);
+  if (!tokens || tokens.length === 0) return false;
+  const parameters = arrowParameters(tokens);
+  for (const [position, token] of tokens.entries()) {
+    const before = tokens[position - 1];
+    const after = tokens[position + 1];
+    const member = before?.text === "." || before?.text === "?.";
+    if (token.kind === "name") {
+      if (member) {
+        if (ESCAPE_PROPERTIES.has(token.text)) return false;
+        if (after?.text === "(" && !READ_ONLY_METHODS.has(token.text)) return false;
+        const owner = tokens[position - 2];
+        if (owner?.text === "window" && !READ_ONLY_WINDOW_PROPERTIES.has(token.text)) return false;
+        continue;
+      }
+      // A key of an object literal, such as `{ offer: ... }`, names nothing.
+      if (after?.text === ":" && (before?.text === "{" || before?.text === ",")) continue;
+      if (READ_ONLY_KEYWORDS.has(token.text)) {
+        if (token.text === "new" && !(after && READ_ONLY_CONSTRUCTORS.has(after.text))) return false;
+        continue;
+      }
+      if (JS_KEYWORDS.has(token.text)) return false;
+      if (before?.text === "new") continue;
+      if (parameters.has(token.text)) {
+        if (after?.text === "(") return false;
+        continue;
+      }
+      if (!READ_ONLY_ROOTS.has(token.text)) return false;
+      if (after?.text === "(" && !READ_ONLY_FUNCTIONS.has(token.text)) return false;
+      if (token.text === "window" && after?.text !== "." && after?.text !== "?.") return false;
+      continue;
+    }
+    // A call of whatever a bracket, a call or an optional call gave, such as `el["click"]()`.
+    if (token.text === "(" && before && (before.text === ")" || before.text === "]" || before.text === "?."))
+      return false;
+    if (token.text === "(" && before?.kind === "literal") return false;
+  }
+  return true;
+}
+
+/** One line, cut to `limit` characters. */
+function oneLine(text: string, limit: number): string {
+  const line = text.replace(/\s+/gu, " ").trim();
+  return line.length > limit ? `${line.slice(0, limit - 1)}…` : line;
+}
+
+/** The element that a browser call targets, in words: `"Comprar"`, `button "Pay"`, `#submit` or `e12`. */
+function targetWords(target: unknown): string {
+  if (!isDynamicRecord(target)) return "";
+  if (typeof target.name === "string")
+    return `${typeof target.role === "string" ? `${target.role} ` : ""}"${oneLine(target.name, 60)}"`;
+  if (typeof target.text === "string") return `"${oneLine(target.text, 60)}"`;
+  if (typeof target.role === "string") return target.role;
+  if (typeof target.selector === "string") return oneLine(target.selector, 60);
+  if (typeof target.ref === "string") return target.ref;
+  return "";
+}
+
+/**
+ * What a browser call does, for the approval card: the tool and its target, key or script. Typed
+ * text never shows: on a payment page it can be a card detail.
+ */
+function browserCallWords(tool: string, record: DynamicRecord): string {
+  if (tool === "evaluate" && typeof record.expression === "string")
+    return `evaluate: ${oneLine(record.expression, 120)}`;
+  if (tool === "press" && typeof record.key === "string") return `press ${oneLine(record.key, 40)}`;
+  if (tool === "run_steps" && Array.isArray(record.steps)) {
+    const steps = record.steps
+      .map((step) => (isDynamicRecord(step) && typeof step.action === "string" ? step.action : null))
+      .filter((step): step is string => step !== null);
+    return `run_steps: ${oneLine(steps.join(", "), 100)}`;
+  }
+  const target = targetWords(record.target);
+  return target ? `${tool} ${target}` : tool;
+}
+
 /** A browser tool call, with the address of the tab it acts on. */
 export function classifyBrowserCall(
   tool: string,
@@ -547,17 +969,24 @@ export function classifyBrowserCall(
       platform: url ? surfacePlatform(url) : "browser",
       ...(amount === undefined ? {} : { amount }),
       ...(currency ? { currency } : {}),
+      browser: { site: url?.hostname ?? "a page", what: "fill_card" },
     };
   }
   if (!url || !ACTING_BROWSER_TOOLS.has(tool)) return null;
   const surface = BROWSER_SURFACES.find((candidate) => candidate.test(url));
   if (!surface) return null;
+  // A script that only reads, such as the offer in the address or the page title, cannot pay or
+  // publish. Every other script, and every click, key or typed text, is the surface's action.
+  if (tool === "evaluate" && typeof record.expression === "string" && isReadOnlyPageScript(record.expression))
+    return null;
+  const what = browserCallWords(tool, record);
   return {
     action: surface.action,
     label: `openbot_browser.${tool}`,
-    summary: trustSummary(`Acts on ${url.hostname}${url.pathname}`),
+    summary: trustSummary(`Acts on ${url.hostname}${url.pathname}: ${what}`),
     platform: surface.platform === "checkout" ? surfacePlatform(url) : surface.platform,
     surface: surface.surface,
+    browser: { site: url.hostname, what: trustSummary(what) },
   };
 }
 

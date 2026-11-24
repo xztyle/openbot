@@ -78,6 +78,15 @@ export const messages = defineMessages("status.agent", {
     "{agent} wants to spend {amount} on {platform}. This goes over the total budget: {spent} of {limit} spent.",
   "status.agent.trustAskUnknown":
     "{agent} wants to spend on {platform}, and the amount is not known. A budget covers {platform}.",
+  "status.agent.trustAskCheckout":
+    "{agent} wants to act on a payment page ({site}): {what}. The trust policy asks you first.",
+  "status.agent.trustAskCheckoutSurface":
+    "{agent} wants to act on a payment page ({site}): {what}. If you allow it, {agent} can act there for {minutes} minutes.",
+  "status.agent.moneyCard.checkout": "Acts on a payment page ({site}), amount unknown: {what}",
+  "status.agent.moneyCard.checkoutAmount": "Pays {amount} on a payment page ({site}): {what}",
+  "status.agent.moneyCard.payUnknown": "{platform} · pay an unknown amount",
+  "status.agent.moneyCard.payByHand": "After you approve: pay {amount} by hand at {where}.",
+  "status.agent.moneyCard.payByHandUnknown": "After you approve: pay by hand at {where}. The amount is unknown.",
   "status.agent.moneyApprovalExpires": "It expires in {hours} h if nobody answers, and the call does not run.",
   "status.agent.trustAskAfterUntrusted":
     "{agent} read outside content (a web page, an email or a webhook) in this turn, and the security check could not clear this payment. You decide.",

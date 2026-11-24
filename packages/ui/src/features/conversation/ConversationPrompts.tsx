@@ -277,7 +277,15 @@ export function ApprovalCard(props: {
               <Show when={props.approval.cwd}>
                 <div class="approval-cwd">{props.approval.cwd}</div>
               </Show>
-              <code>{command()}</code>
+              <code>
+                {props.approval.kind === "permissions"
+                  ? // A trust card's lines are source text from the host, such as a money card's effect.
+                    command()
+                      .split("\n")
+                      .map((line) => sourceText(line))
+                      .join("\n")
+                  : command()}
+              </code>
             </div>
           )}
         </Show>

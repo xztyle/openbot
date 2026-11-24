@@ -241,7 +241,17 @@ export class TrustService {
         if (action.currency && action.currency !== budget.currency) continue;
         const spent = this.#audit.spent(this.#covers(budget));
         if (action.amount === undefined)
-          return { kind: "ask", reason: sourceText("status.agent.trustAskUnknown", { agent, platform }) };
+          return {
+            kind: "ask",
+            reason:
+              action.action === "pay" && action.browser
+                ? sourceText("status.agent.trustAskCheckout", {
+                    agent,
+                    site: action.browser.site,
+                    what: action.browser.what,
+                  })
+                : sourceText("status.agent.trustAskUnknown", { agent, platform }),
+          };
         const amount = money(action.amount, budget.currency);
         if (budget.perDay !== undefined && spent.today + action.amount > budget.perDay)
           return {
@@ -271,13 +281,27 @@ export class TrustService {
     if (rule === "ask")
       return {
         kind: "ask",
-        reason: action.surface
-          ? sourceText("status.agent.trustAskSurface", {
-              agent,
-              site: action.platform ?? action.surface,
-              minutes: String(policy.approvalPassMinutes),
-            })
-          : sourceText(ASK_KEYS[action.action], { agent }),
+        reason:
+          action.action === "pay" && action.browser
+            ? action.surface
+              ? sourceText("status.agent.trustAskCheckoutSurface", {
+                  agent,
+                  site: action.browser.site,
+                  what: action.browser.what,
+                  minutes: String(policy.approvalPassMinutes),
+                })
+              : sourceText("status.agent.trustAskCheckout", {
+                  agent,
+                  site: action.browser.site,
+                  what: action.browser.what,
+                })
+            : action.surface
+              ? sourceText("status.agent.trustAskSurface", {
+                  agent,
+                  site: action.platform ?? action.surface,
+                  minutes: String(policy.approvalPassMinutes),
+                })
+              : sourceText(ASK_KEYS[action.action], { agent }),
       };
     return { kind: "allow" };
   }

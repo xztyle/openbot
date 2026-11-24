@@ -213,7 +213,8 @@ const BROWSER_TOOL_DEFINITIONS = [
   }),
   browserTool({
     name: "status",
-    description: "Get tabs, active control state, environments, recordings, and diagnostic error counts.",
+    description:
+      "Get tabs with their full address (query included) and title, active control state, environments, recordings, and diagnostic error counts.",
     shape: {},
   }),
   browserTool({
@@ -513,7 +514,7 @@ const BROWSER_TOOL_DEFINITIONS = [
   browserTool({
     name: "evaluate",
     description:
-      "Evaluate JavaScript in the main frame's own page context, with the same access to page scripts, DOM and cookies as the page itself. Prefer snapshots and semantic actions; use this for inspection or unsupported interactions. Returns only a JSON-serializable value up to 64 KB. To collect across pages, pass repeat: the script runs up to that many times in one call, intervalMs apart, and the call returns the list of results; it stops early when the script returns null or false. Use this rather than one call per page.",
+      "Evaluate JavaScript in the main frame's own page context, with the same access to page scripts, DOM and cookies as the page itself. Prefer snapshots and semantic actions; use this for inspection or unsupported interactions. On payment and checkout pages, read with snapshot or status instead: there, a script that does more than a plain read asks the owner as a payment. Returns only a JSON-serializable value up to 64 KB. To collect across pages, pass repeat: the script runs up to that many times in one call, intervalMs apart, and the call returns the list of results; it stops early when the script returns null or false. Use this rather than one call per page.",
     shape: {
       tabId,
       expression: z

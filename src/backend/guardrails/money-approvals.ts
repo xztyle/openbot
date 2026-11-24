@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { TrustAuditEntry, TrustAuditQuery } from "@openbot/contracts/trust-control";
+import { sourceText } from "@openbot/i18n/source";
 import type { TrustClassification } from "../trust/trust-classifier";
 
 /** What a money approval card says: the effect, what to pay and where, and the call it is bound to. */
@@ -15,8 +16,7 @@ export interface MoneyEffect {
 /** An identical call after an approval runs without a second card within this time, once. */
 const SAME_CALL_MS = 10 * 60_000;
 
-function amountText(amount: number | undefined, currency: string): string {
-  if (amount === undefined) return `? ${currency}`;
+function amountText(amount: number, currency: string): string {
   return `${Number.isInteger(amount) ? amount : amount.toFixed(2)} ${currency}`;
 }
 
@@ -77,13 +77,33 @@ export function moneyDigest(action: TrustClassification): string {
 /**
  * The effect of a money call for its approval card. The previous amount of the same target comes
  * from the last approved or allowed spend of the audit trail that names it, so "10 → 50" shows
- * without a call to the platform; it shows "?" when Atelier never saw one.
+ * without a call to the platform; it shows only the new amount when Atelier never saw one. An
+ * amount that is not known shows in words, never as "?". The lines are source text, so each reader
+ * sees them in their own language.
  */
 export function moneyEffect(
   action: TrustClassification,
   audit: { query(query: TrustAuditQuery): TrustAuditEntry[] } | null,
 ): MoneyEffect {
   const currency = action.currency ?? "USD";
+  const digest = moneyDigest(action);
+  // An agent's own browser action on a payment page: say where and what it does. The owner pays
+  // nothing by hand; the agent's click or fill is the payment step.
+  if (action.action === "pay" && action.browser) {
+    const { site, what } = action.browser;
+    return {
+      headline:
+        action.amount === undefined
+          ? sourceText("status.agent.moneyCard.checkout", { site, what })
+          : sourceText("status.agent.moneyCard.checkoutAmount", {
+              amount: amountText(action.amount, currency),
+              site,
+              what,
+            }),
+      payByHand: null,
+      digest,
+    };
+  }
   const target = moneyTarget(action.summary);
   const targetText = target ? ` · ${TARGET_WORDS[target.kind] ?? target.kind} ${target.id}` : "";
   const platform = action.platform ? action.platform.charAt(0).toUpperCase() + action.platform.slice(1) : "Payment";
@@ -101,17 +121,26 @@ export function moneyEffect(
     headline =
       action.amount === undefined
         ? `${platform} ads · ${action.label}${targetText}`
-        : `${platform} ads · ${budget} ${previous?.amount === undefined ? "?" : amountText(previous.amount, previous.currency ?? currency)} → ${amountText(action.amount, currency)}${targetText}`;
+        : `${platform} ads · ${budget} ${previous?.amount === undefined ? "" : `${amountText(previous.amount, previous.currency ?? currency)} `}→ ${amountText(action.amount, currency)}${targetText}`;
   } else {
-    headline = `${platform} · pay ${amountText(action.amount, currency)}${targetText}`;
+    headline =
+      action.amount === undefined
+        ? sourceText("status.agent.moneyCard.payUnknown", { platform: `${platform}${targetText}` })
+        : `${platform} · pay ${amountText(action.amount, currency)}${targetText}`;
   }
+  const place = `${where(action)}${target ? ` for ${TARGET_WORDS[target.kind] ?? target.kind} ${target.id}` : ""}`;
   return {
     headline,
     payByHand:
-      action.action === "pay"
-        ? `After you approve: pay ${amountText(action.amount, currency)} by hand at ${where(action)}${target ? ` for ${TARGET_WORDS[target.kind] ?? target.kind} ${target.id}` : ""}.`
-        : null,
-    digest: moneyDigest(action),
+      action.action !== "pay"
+        ? null
+        : action.amount === undefined
+          ? sourceText("status.agent.moneyCard.payByHandUnknown", { where: place })
+          : sourceText("status.agent.moneyCard.payByHand", {
+              amount: amountText(action.amount, currency),
+              where: place,
+            }),
+    digest,
   };
 }
 

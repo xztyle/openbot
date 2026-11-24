@@ -139,7 +139,13 @@ export function ChatApprovalCard({
                 className="bg-transparent p-0"
                 style={{ color: foreground, fontSize: 13, lineHeight: 19 }}
               >
-                {commandText(approval.command)}
+                {approval.kind === "permissions"
+                  ? // A trust card's lines are source text from the host, such as a money card's effect.
+                    approval.command
+                      .split("\n")
+                      .map((line) => sourceText(line))
+                      .join("\n")
+                  : commandText(approval.command)}
               </Typography.Code>
             ) : null}
             {approval.kind === "file-change" ? (

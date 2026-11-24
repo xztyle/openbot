@@ -141,7 +141,7 @@ export function amountIn(text: string): number | undefined {
 /** Every decision that waits for the reader, in queue order, with what each one opens and answers. */
 export function useDecisionQueue() {
   const ws = useWorkspace();
-  const { t, format } = useText();
+  const { t, format, sourceText } = useText();
   const loops = useLoopDecisions(ws);
   // The insight alerts of the owner and the admins: money spent with no sale, a goal behind.
   pollInsightAlerts(ws, () => {
@@ -202,7 +202,13 @@ export function useDecisionQueue() {
         member: memberById(ws.directory(), item.agentId, agentName(item.agentId)),
         kind: ticket ? "ticket" : item.kind,
         action: needsYouAction(item, t),
-        summary: effect ?? item.summary,
+        // The effect lines are source text from the host; the amount reads the host's English.
+        summary: effect
+          ? effect
+              .split("\n")
+              .map((line) => sourceText(line))
+              .join("\n")
+          : item.summary,
         detail: effect ? (held?.reason ?? undefined) : ticket ? item.reason : undefined,
         amountUsd: effect ? amountIn(effect) : undefined,
         where: where(

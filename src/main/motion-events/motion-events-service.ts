@@ -91,10 +91,28 @@ export interface WaitingTicket {
 
 /**
  * The version of how a waiting ticket is read. 2: money only when the asked action itself spends,
- * credentials only when the owner must hand over their own. A ticket that went to the owner under an
+ * credentials only when the owner must hand over their own. 3: `keptOwnerOnly` checks both. A ticket that went to the owner under an
  * older reading, and that no manager escalated, is read again at start.
  */
-export const WAITING_RULES = 2;
+export const WAITING_RULES = 3;
+
+/** Words of a real credential: what the owner alone can hand over. */
+const CREDENTIAL_WORDS =
+  /password|passcode|contraseña|verification code|código|2fa|otp|\bclave\b|api key|\btoken\b|log ?in|sign[ -]?in|iniciar sesión|inicio de sesión/iu;
+
+/**
+ * The tier-2 class that a ticket keeps after the host's checks: accepting an escalated review commits
+ * no money (its spend is gated when it happens), and "credentials" needs the reason to name one.
+ */
+export function keptOwnerOnly(
+  asks: TicketAsks,
+  reason: string,
+  ownerOnly: OwnerOnlyClass | null | undefined,
+): OwnerOnlyClass | null | undefined {
+  if (ownerOnly === "money" && asks === "review-escalated") return null;
+  if (ownerOnly === "credentials" && !CREDENTIAL_WORDS.test(reason)) return null;
+  return ownerOnly;
+}
 
 /** The longest `reason` kept: Needs you shows at most 200 characters. */
 const REASON_LIMIT = 200;
@@ -563,7 +581,9 @@ export class MotionEventsService {
               ...item,
               asks: kept,
               ...(reasonKept ? { reason: reasonKept } : {}),
-              ...(extra.ownerOnly !== undefined ? { ownerOnly: extra.ownerOnly } : {}),
+              ...(extra.ownerOnly !== undefined
+                ? { ownerOnly: keptOwnerOnly(kept, reasonKept || line, extra.ownerOnly) }
+                : {}),
               ...(extra.plain ? { plain: extra.plain } : {}),
               rules: WAITING_RULES,
             }

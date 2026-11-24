@@ -6,7 +6,7 @@ import { DEFAULT_WORKSPACE_MOTION_EVENTS } from "@openbot/contracts/ipc";
 import { decodeAttentionItems } from "@openbot/contracts/team-protocol/attention-items-v1";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { decodeMotionEvent, type MotionEvent } from "./motion-event";
-import { MotionEventsService, type WaitingTicket } from "./motion-events-service";
+import { keptOwnerOnly, MotionEventsService, type WaitingTicket } from "./motion-events-service";
 import { missingLine } from "./motion-grader";
 import { fallbackReason, parseWaitingAsks, waitingAsksPrompt, waitingComments } from "./motion-waiting-asks";
 
@@ -113,6 +113,15 @@ describe("why a ticket waits on the owner", () => {
     const third = service();
     await third.events.start();
     expect(third.events.waiting()[0]?.approver).toBe("owner");
+  });
+
+  it("keeps a ticket with the owner only for a real spend or a real credential", () => {
+    expect(keptOwnerOnly("review-escalated", "Copys de anuncios, presupuesto 70 USD", "money")).toBeNull();
+    expect(keptOwnerOnly("approval", "Pagar 70 USD en anuncios", "money")).toBe("money");
+    expect(
+      keptOwnerOnly("blocked", "Faltan el REF/OFFER/PRODUCT_ID de la oferta y una foto con licencia", "credentials"),
+    ).toBeNull();
+    expect(keptOwnerOnly("blocked", "Necesito la contraseña de Hotmart", "credentials")).toBe("credentials");
   });
 
   it("marks a ticket the grader gave up on as an escalated review with what it misses", async () => {

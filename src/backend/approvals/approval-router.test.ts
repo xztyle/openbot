@@ -93,6 +93,7 @@ describe("the tiers at the trust boundary", () => {
     const { trust } = setup();
     for (const kind of ["publish", "email", "create_agent"] as const)
       expect(trust.evaluate({ agentId: "dev" }, action(kind)).kind).toBe("allow");
+    expect(trust.evaluate({ agentId: "dev" }, { ...action("delete"), platform: "motion" }).kind).toBe("allow");
   });
 
   it("tier 1: a rule that asks goes to the manager for publish, email and new agents", () => {

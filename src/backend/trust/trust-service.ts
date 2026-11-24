@@ -282,6 +282,9 @@ export class TrustService {
   evaluate(subject: TrustSubject, action: TrustClassification): TrustVerdict {
     const policy = this.#policy;
     if (!policy.enabled) return { kind: "allow" };
+    // Tier 0 (docs/approvals.md): the agents' own Motion board is internal work, a deletion there too.
+    if (action.action === "delete" && normalizeTrustPlatform(action.platform ?? "") === "motion")
+      return { kind: "allow" };
     const placement = this.placement(subject.agentId);
     const { rule, source } = resolveTrustRule(policy, placement, action.action);
     const what = `${action.label}: ${action.summary}`;

@@ -16,6 +16,16 @@ export const messages = defineMessages("trust", {
   "trust.roles": "Defaults by role",
   "trust.rolesDescription":
     "A lead is at the top of its space or has agents that report to it. Allow runs at once, Ask waits for your approval card, Deny refuses.",
+  "trust.approverColumn": "Who approves",
+  "trust.approver.owner": "You",
+  "trust.approver.manager": "Their manager",
+  "trust.approversDescription":
+    "When a rule asks, money and deletions always come to you. For the rest, the asking agent's manager can decide.",
+  "trust.interventions.title": "Your interventions",
+  "trust.interventions.week": "This week you decided {owner} and your agents decided {agents}.",
+  "trust.interventions.share": "Agents took {share}% of the decisions.",
+  "trust.interventions.previous": "The week before: you {owner}, agents {agents}.",
+  "trust.interventions.none": "No decisions this week yet.",
   "trust.actionColumn": "Action",
   "trust.role.lead": "Lead",
   "trust.role.member": "Member",

@@ -15,6 +15,10 @@
 // Added later, optional, on such a ticket: `asks` (`approval`, `review-escalated`, `blocked` or
 // `other`: why it waits, which picks its answers) and `reason` (what the agent needs, at most 200
 // characters). A client of before drops both and shows the ticket as before.
+// Added later, optional, on such a ticket: `plain` (`{ asks, why, ifYes, ifNo }`, each at most 240
+// characters: the ticket explained for an owner with no technical background, which the card shows
+// instead of `reason`), `escalatedBy` and `escalationReason` (the manager that sent it up to the
+// owner, and why; at most 200 characters each). A client of before drops them.
 //
 // The host sends the event after each runtime snapshot that it sends to a peer, and again at each
 // change, to a peer that has `fork-host-v1` only. It leaves out each request of an agent that the peer
@@ -25,6 +29,8 @@
 // It adds no capability string: a released peer accepts at most 64, so it shares `fork-host-v1`
 // (see `fork-host-v1.ts`). A host without it never sends the event, and a client then counts the
 // requests that it has from the snapshot and the request events.
+
+import { isOwnerSummary } from "../agent-approvals";
 import {
   AGENT_ATTENTION_ITEMS_LIMIT,
   AGENT_ATTENTION_KINDS,
@@ -69,6 +75,9 @@ function item(value: unknown): AgentAttentionItem {
   const url = value.url === undefined ? undefined : ticketUrl(value.url);
   const asks = value.asks === undefined ? undefined : isOneOf(TICKET_ASKS, value.asks) ? value.asks : invalid();
   const reason = text(value.reason);
+  const plain = value.plain === undefined ? undefined : isOwnerSummary(value.plain) ? value.plain : invalid();
+  const escalatedBy = text(value.escalatedBy);
+  const escalationReason = text(value.escalationReason);
   return {
     kind: value.kind,
     requestId: requestId(value.requestId),
@@ -82,6 +91,11 @@ function item(value: unknown): AgentAttentionItem {
     ...(url === undefined ? {} : { url }),
     ...(asks === undefined ? {} : { asks }),
     ...(reason === undefined ? {} : { reason }),
+    ...(plain === undefined
+      ? {}
+      : { plain: { asks: plain.asks, why: plain.why, ifYes: plain.ifYes, ifNo: plain.ifNo } }),
+    ...(escalatedBy === undefined ? {} : { escalatedBy }),
+    ...(escalationReason === undefined ? {} : { escalationReason }),
   };
 }
 

@@ -75,7 +75,14 @@ export async function routeAgentLearning(
     case AGENT_LEARNING_ROUTES.reviews: {
       const input = parsed(parseLearningReviewsInput, body);
       const page = await refused(learning.list(input));
-      return json(200, { items: page.items.filter((item) => visible(item.agentId)), settings: page.settings });
+      // A pending lesson that the agent's manager has is not the owner's (docs/approvals.md).
+      const withManager = agents.lessonWithManager ?? (() => false);
+      return json(200, {
+        items: page.items.filter(
+          (item) => visible(item.agentId) && !(item.state === "pending" && withManager(`learning:${item.id}`)),
+        ),
+        settings: page.settings,
+      });
     }
     case AGENT_LEARNING_ROUTES.decide: {
       const input = parsed(parseDecideLearningInput, body);
@@ -97,7 +104,8 @@ export async function routeAgentLearning(
         agentSpace: (agentId) => learning.spaceOf(agentId),
         agentName: (agentId) => learning.agentName(agentId),
       });
-      return json(200, { entries: entries.filter((entry) => visible(entry.agentId)) });
+      const withManager = agents.lessonWithManager ?? (() => false);
+      return json(200, { entries: entries.filter((entry) => visible(entry.agentId) && !withManager(entry.id)) });
     }
     case AGENT_LEARNING_ROUTES.decideQueue: {
       const input = parsed(parseDecideQueueEntryInput, body);

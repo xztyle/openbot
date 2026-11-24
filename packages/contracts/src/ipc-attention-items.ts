@@ -1,3 +1,4 @@
+import { isOwnerSummary, type OwnerSummary } from "./agent-approvals";
 import { isBoundedString, isIdentifier, isRequestId } from "./ipc-bounded-values";
 import { isDynamicRecord, isOneOf } from "./runtime-values";
 
@@ -68,8 +69,13 @@ export interface AgentAttentionItem {
   url?: string;
   /** A ticket: why it waits on the user. Absent while the host has not read it yet. */
   asks?: TicketAsks;
-  /** A ticket: what the agent needs from the user, in one line. */
+  /** A ticket: what the agent needs from the user, in one line. Technical: shown only on request. */
   reason?: string;
+  /** A ticket explained for the owner, who has no technical background. The card shows this. */
+  plain?: OwnerSummary;
+  /** A ticket that a manager sent up to the owner: the manager's name, and why. */
+  escalatedBy?: string;
+  escalationReason?: string;
 }
 
 /** The `turnId` of a Motion ticket that waits on the user. */
@@ -102,7 +108,10 @@ export function isAgentAttentionItem(value: unknown): value is AgentAttentionIte
     (value.channelId === undefined || isIdentifier(value.channelId)) &&
     (value.url === undefined || (isBoundedString(value.url, 2_000) && /^https?:\/\//u.test(value.url))) &&
     (value.asks === undefined || isOneOf(TICKET_ASKS, value.asks)) &&
-    (value.reason === undefined || isBoundedString(value.reason, AGENT_ATTENTION_TEXT_LIMIT))
+    (value.reason === undefined || isBoundedString(value.reason, AGENT_ATTENTION_TEXT_LIMIT)) &&
+    (value.plain === undefined || isOwnerSummary(value.plain)) &&
+    (value.escalatedBy === undefined || isBoundedString(value.escalatedBy, AGENT_ATTENTION_TEXT_LIMIT)) &&
+    (value.escalationReason === undefined || isBoundedString(value.escalationReason, AGENT_ATTENTION_TEXT_LIMIT))
   );
 }
 

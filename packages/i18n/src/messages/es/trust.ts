@@ -16,6 +16,16 @@ export const messages = {
   "trust.roles": "Valores por rol",
   "trust.rolesDescription":
     "Un líder está arriba en su espacio o tiene agentes a su cargo. Permitir se ejecuta ya, Preguntarme espera tu aprobación, Denegar lo rechaza.",
+  "trust.approverColumn": "Quién aprueba",
+  "trust.approver.owner": "Tú",
+  "trust.approver.manager": "Su manager",
+  "trust.approversDescription":
+    "Cuando una regla pide aprobación, el dinero y lo que se borra siempre te llega a ti. Lo demás lo puede decidir el manager del agente que pide.",
+  "trust.interventions.title": "Tus intervenciones",
+  "trust.interventions.week": "Esta semana decidiste {owner} y tus agentes decidieron {agents}.",
+  "trust.interventions.share": "Los agentes tomaron el {share}% de las decisiones.",
+  "trust.interventions.previous": "La semana anterior: tú {owner}, agentes {agents}.",
+  "trust.interventions.none": "Aún no hay decisiones esta semana.",
   "trust.actionColumn": "Acción",
   "trust.role.lead": "Líder",
   "trust.role.member": "Miembro",

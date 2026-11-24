@@ -1,4 +1,5 @@
 import {
+  decodeReopenApproval,
   decodeTrustAuditQuery,
   decodeTrustPolicySave,
   TRUST_CONTROL_CAPABILITY,
@@ -35,6 +36,17 @@ export async function routeTrustControl(context: TeamApiRequestContext, trust?: 
       trust.savePolicy(policy, { id: context.member.id, name: context.member.name ?? context.member.username }),
     );
     return context.json(200, view);
+  }
+  if (url.pathname === TRUST_CONTROL_ROUTES.approvals) return context.json(200, trust.approvalsView());
+  if (url.pathname === TRUST_CONTROL_ROUTES.reopenApproval) {
+    let id: string;
+    try {
+      id = decodeReopenApproval(body).id;
+    } catch {
+      throw new HttpError(400, "Invalid approval id.");
+    }
+    if (!(await trust.reopenApproval(id))) throw new HttpError(409, "This decision can no longer be reopened.");
+    return context.json(200, trust.approvalsView());
   }
   return context.json(200, { entries: trust.audit.query(decodeTrustAuditQuery(body)) });
 }

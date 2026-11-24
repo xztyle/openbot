@@ -12,10 +12,17 @@
 // - `POST /v1/trust/audit` `{ limit? (1 to 2000), before?, since?, until?, category?, outcome?,
 //   agentId?, text? (200) }` answers `{ entries }`, newest first: `TrustAuditEntry` rows (who, what,
 //   when, the amount, and the agent, thread, turn, channel, space and ticket it belongs to).
+// - `POST /v1/trust/approvals` `{}` answers `{ pending, decided, week, previousWeek }`: the requests
+//   that wait on an agent's manager and the ones managers decided in the last two weeks (at most 200
+//   each, `AgentApproval` of `agent-approvals.ts`), and how many approvals and decisions the owner and
+//   the agents answered in the last seven days and the seven before (`{ since, owner, agents }`).
+// - `POST /v1/trust/approvals/reopen` `{ id }` puts a decided request back in the owner's Needs you
+//   and answers as above; 409 when it cannot be reopened.
 //
 // A fork host built before these routes answers 404, so a client fails closed there. A present
 // malformed value fails closed.
 
+import { decodeAgentApprovalsView } from "../agent-approvals";
 import { isDynamicRecord } from "../runtime-values";
 import {
   isTrustAuditEntry,
@@ -37,7 +44,15 @@ export const TRUST_CONTROL_ROUTES = {
   policy: "/v1/trust/policy",
   savePolicy: "/v1/trust/policy/save",
   audit: "/v1/trust/audit",
+  approvals: "/v1/trust/approvals",
+  reopenApproval: "/v1/trust/approvals/reopen",
 } as const;
+
+export function decodeReopenApproval(value: unknown): { id: string } {
+  if (!isDynamicRecord(value) || typeof value.id !== "string" || !value.id || value.id.length > 256)
+    throw new Error("Invalid approval id.");
+  return { id: value.id };
+}
 
 /** Plain JSON of a value that is already JSON-shaped, with every other value refused. */
 function protocolJson(value: unknown): TeamProtocolV2Json {
@@ -100,6 +115,20 @@ export const TRUST_CONTROL_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new
     adminRoute(
       (value) => protocolJson(decodeTrustPolicySave(value)),
       (value) => protocolJson(decodeTrustPolicyView(value)),
+    ),
+  ],
+  [
+    TRUST_CONTROL_ROUTES.approvals,
+    adminRoute(
+      () => ({}),
+      (value) => protocolJson(decodeAgentApprovalsView(value)),
+    ),
+  ],
+  [
+    TRUST_CONTROL_ROUTES.reopenApproval,
+    adminRoute(
+      (value) => protocolJson(decodeReopenApproval(value)),
+      (value) => protocolJson(decodeAgentApprovalsView(value)),
     ),
   ],
   [

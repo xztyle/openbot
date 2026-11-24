@@ -6,7 +6,12 @@
  * never counted as this one's.
  */
 import type { DecisionQueueSource } from "@openbot/contracts/agent-learning";
-import { agentAttentionKey, isTicketAttention, type LoopDecision } from "@openbot/contracts/ipc";
+import {
+  type AgentAttentionItem,
+  agentAttentionKey,
+  isTicketAttention,
+  type LoopDecision,
+} from "@openbot/contracts/ipc";
 import type { NeedsYouRow } from "@openbot/ui/features/workspace/NeedsYou";
 import type { TodayDecision } from "@openbot/ui/features/workspace/TodayView";
 import { useText } from "@openbot/ui/text";
@@ -97,6 +102,23 @@ if (typeof window !== "undefined")
     seenCache.delete(event.key.slice(seenStorageKey("").length));
     setSeenVersion((version) => version + 1);
   });
+
+/**
+ * The plain lines of a waiting ticket under its summary: why it matters, what a yes and a no do, and
+ * the manager that passed it up. Without a plain summary yet, nothing: the raw reason is technical.
+ */
+export function ticketDetail(
+  item: Pick<AgentAttentionItem, "plain" | "escalatedBy">,
+  t: ReturnType<typeof useText>["t"],
+): string | undefined {
+  const lines = [
+    item.escalatedBy ? t("workspace.needsYou.escalatedBy", { name: item.escalatedBy }) : "",
+    item.plain?.why ?? "",
+    item.plain?.ifYes ? t("workspace.needsYou.plain.ifYes", { text: item.plain.ifYes }) : "",
+    item.plain?.ifNo ? t("workspace.needsYou.plain.ifNo", { text: item.plain.ifNo }) : "",
+  ].filter(Boolean);
+  return lines.length ? lines.join("\n") : undefined;
+}
 
 /** A source of untrusted text, as the owner reads it. */
 function sourceName(source: string, t: ReturnType<typeof useText>["t"]): string {
@@ -202,14 +224,23 @@ export function useDecisionQueue() {
         member: memberById(ws.directory(), item.agentId, agentName(item.agentId)),
         kind: ticket ? "ticket" : item.kind,
         action: needsYouAction(item, t),
-        // The effect lines are source text from the host; the amount reads the host's English.
+        // The effect lines are source text from the host; the amount reads the host's English. A ticket
+        // shows its plain summary for an owner with no technical background; its raw text stays behind
+        // the collapsed technical details.
         summary: effect
           ? effect
               .split("\n")
               .map((line) => sourceText(line))
               .join("\n")
-          : item.summary,
-        detail: effect ? (held?.reason ?? undefined) : ticket ? item.reason : undefined,
+          : ticket && item.plain
+            ? item.plain.asks
+            : item.summary,
+        detail: effect ? (held?.reason ?? undefined) : ticket ? ticketDetail(item, t) : undefined,
+        ...(ticket
+          ? {
+              technical: [item.summary, item.reason, item.escalationReason].filter(Boolean).join("\n") || undefined,
+            }
+          : {}),
         amountUsd: effect ? amountIn(effect) : undefined,
         where: where(
           spaceId,

@@ -1,3 +1,4 @@
+import { type AgentApprovalsView, decodeAgentApprovalsView } from "@openbot/contracts/agent-approvals";
 import type { GuardrailPolicy, GuardrailsView } from "@openbot/contracts/guardrails";
 import { decodeGuardrailsViewAnswer, GUARDRAILS_ROUTES } from "@openbot/contracts/team-protocol/guardrails-v1";
 import {
@@ -16,6 +17,10 @@ export interface TrustCalls {
   policy(): Promise<TrustPolicyView>;
   save(policy: TrustPolicy): Promise<TrustPolicyView>;
   audit(query: TrustAuditQuery): Promise<TrustAuditEntry[]>;
+  /** What waits on managers, what they decided, and the owner's interventions by week. */
+  approvals(): Promise<AgentApprovalsView>;
+  /** Puts a request that a manager decided back in the owner's Needs you. */
+  reopenApproval(id: string): Promise<AgentApprovalsView>;
   /** The guardrails of the host (`guardrails-v1`): budgets, pauses, the meter and the events. */
   guardrails: GuardrailCalls;
 }
@@ -39,6 +44,8 @@ export function hostTrustCalls(request: () => TeamApiRequest): TrustCalls {
     audit: async (query) =>
       (await request()("POST", TRUST_CONTROL_ROUTES.audit, decodeTrustAuditEntries, JSON.parse(JSON.stringify(query))))
         .entries,
+    approvals: () => request()("POST", TRUST_CONTROL_ROUTES.approvals, decodeAgentApprovalsView, {}),
+    reopenApproval: (id) => request()("POST", TRUST_CONTROL_ROUTES.reopenApproval, decodeAgentApprovalsView, { id }),
     guardrails: {
       view: () => request()("POST", GUARDRAILS_ROUTES.view, decodeGuardrailsViewAnswer, {}),
       save: (policy) =>

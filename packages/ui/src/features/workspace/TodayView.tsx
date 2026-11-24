@@ -49,6 +49,11 @@ export interface TodayDecision {
   summary?: string | undefined;
   /** A second line under the summary, such as why a payment is asked or what a proposal changes. */
   detail?: string | undefined;
+  /**
+   * The raw technical text (ids, codes, the agent's own words), behind a collapsed "technical details"
+   * that only the reader opens: the owner reads the plain summary and detail by default.
+   */
+  technical?: string | undefined;
   /** Where it waits: "Trading · #launch". */
   where?: string | undefined;
   /** The space it belongs to, for the counts of the space that shows. */
@@ -448,6 +453,14 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
                   {expanded() ? t("workspace.today.lessDetail") : t("workspace.today.moreDetail")}
                 </Button>
               </>
+            )}
+          </Show>
+          <Show when={decision().technical}>
+            {(technical) => (
+              <details class="ws-today-decision-technical">
+                <summary>{t("workspace.today.technicalDetails")}</summary>
+                <p>{technical()}</p>
+              </details>
             )}
           </Show>
           <Show when={decision().where}>{(where) => <p class="ws-today-decision-where">{where()}</p>}</Show>

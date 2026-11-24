@@ -1,3 +1,4 @@
+import { APPROVAL_VERDICTS, OWNER_ONLY_CLASSES } from "@openbot/contracts/agent-approvals";
 import {
   CHAT_VISUAL_CONTEXT_LIMIT,
   CHAT_VISUAL_HTML_LIMIT,
@@ -398,8 +399,30 @@ export const requestDecisionToolSchema = z.strictObject({
     .optional()
     .describe("Sandbox first: approving lets you publish this staged landing, ad or email for the policy's pass time."),
   ticket: z.string().max(64).optional().describe("The Motion ticket of the work, such as UO-123."),
+  concerns: z
+    .enum(OWNER_ONLY_CLASSES)
+    .optional()
+    .describe(
+      "Set it when the decision is about money, a deletion or anything irreversible, credentials or a sign-in code, a legal or identity commitment, or security: then only the owner decides. Without it your manager decides.",
+    ),
   changeLabel: uiLabelSchema.optional().describe("The button that asks for changes. Default: Change…"),
   noLabel: uiLabelSchema.optional().describe("The button that says no. Default: No"),
+});
+
+export const answerApprovalToolSchema = z.strictObject({
+  requestId: z.string().trim().min(1).max(256).describe("The id of the approval request, from the note that woke you."),
+  verdict: z
+    .enum(APPROVAL_VERDICTS)
+    .describe(
+      "approve: it goes ahead. decline: no, with a note. escalate: the owner decides, with the reason in note.",
+    ),
+  note: z
+    .string()
+    .trim()
+    .max(1_000)
+    .optional()
+    .describe("Required to decline (what to change) and to escalate (why the owner must decide)."),
+  option: z.number().int().min(1).max(3).optional().describe("For a decision with options: the option you approve."),
 });
 
 export const askUiToolSchema = z.object({
@@ -1030,9 +1053,15 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     shape: acknowledgeRequestToolSchema.shape,
   },
   {
+    name: "answer_approval",
+    description:
+      "Answer an approval request that Atelier sent you as the asker's manager: approve, decline with a note, or escalate to the owner with the reason. Check the evidence first. Escalate only money, deletions, credentials, legal or security matters, or with a reason the owner must see. You can never answer your own request.",
+    shape: answerApprovalToolSchema.shape,
+  },
+  {
     name: "request_decision",
     description: [
-      "Ask the owner for a decision that only they can make: spend, a payment, a launch, a go-live, an email to customers, or a choice between options with consequences. The card shows in this chat and in Needs you, and the owner gets a push; they answer with one tap.",
+      "Ask for a decision you may not take alone: a launch, a go-live, an email to customers, a sign-up, or a choice between options with consequences. Your manager in the org chart decides it; a decision about money, a deletion, credentials, a legal commitment or security (set concerns) goes to the owner as a card in Needs you.",
       "Use it instead of a message such as I need you to decide, and instead of ask_ui for these decisions. Write every label in the person's language. Put the money in amount and the staged preview in previewUrl or preview.",
       "Your work waits until the answer, or until timeoutMinutes when you set it with defaultOption. Continue only with work that does not depend on it in other turns.",
       'The result is JSON {"status":"answered","option":1-3|"change"|"no","label",…}: an option means do it; "change" means ask in one sentence what to change and end the turn; "no" means do not do it. With goLive and an approved option, run the publish command now. {"status":"skipped"} or {"status":"expired"} means it was not decided.',

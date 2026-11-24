@@ -16,7 +16,9 @@ import {
 import type { DynamicRecord } from "@openbot/contracts/runtime-values";
 import { createOpenBotLogger, registerSecretValue } from "@openbot/logging";
 import { Effect } from "effect";
+import type { ApprovalRouter, PendingApproval } from "../../backend/approvals/approval-router";
 import type { McpAgent } from "../../backend/mcp-agent-values";
+import type { TrustAuditInput } from "../../backend/trust/trust-audit-log";
 import { MOTION_OWNER_KEY, MotionClient, motionServer } from "./motion-client";
 import { startMotionEventsServer } from "./motion-events-server";
 import { type MotionEventsAgent, MotionEventsService, type WaitingTicket } from "./motion-events-service";
@@ -65,6 +67,17 @@ export interface MotionEventsHostOptions {
   judge: (input: { agentId: string; important: boolean; prompt: string }) => Promise<{ text: string; model: string }>;
   /** Whether the chat app proxy reports the agents' Motion calls to `observeToolCall`. */
   observesToolCalls: boolean;
+  /** Tier 1 of `docs/approvals.md`: a waiting ticket goes to its agent's manager. Absent: the owner answers all. */
+  approvals?: ApprovalRouter | undefined;
+  /** The owner's language, for the plain summary of a ticket. */
+  ownerLanguage?: () => string;
+  /** One line of the trust audit trail: the owner answered a ticket. */
+  record?: (entry: TrustAuditInput) => void;
+}
+
+/** The approval request id of a waiting ticket. */
+export function ticketApprovalId(issueId: string): string {
+  return `ticket:${issueId}`;
 }
 
 /** Motion's operation URL from its MCP address (`http://host:8080/mcp` → `http://host:8080/api/v1/<op>`). */
@@ -131,6 +144,7 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
     deliver: ({ agentId, text, fyi, clientMessageId }) =>
       Effect.runPromise(options.send({ agentId, text, clientMessageId }, fyi)).then(() => undefined),
     showWaiting: options.showWaiting,
+    stopped: (issueId) => void options.approvals?.cancel(ticketApprovalId(issueId)),
     classify: (ticket) => void classify(ticket),
     notifyOwner: options.notifyOwner,
     timeZone: options.timeZone,
@@ -148,22 +162,67 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
         .tool({ agentId: ticket.agentId }, "comments_list", { page_id: ticket.issueId })
         .catch(() => null);
       const comments = waitingComments(answer && typeof answer === "object" ? answer : null);
-      const prompt = waitingAsksPrompt({ key: ticket.key, title: ticket.title, comments });
+      const prompt = waitingAsksPrompt({
+        key: ticket.key,
+        title: ticket.title,
+        comments,
+        language: options.ownerLanguage?.(),
+      });
       const judged = await options
         .judge({ agentId: ticket.agentId, important: false, prompt })
         .then((reply) => parseWaitingAsks(reply.text))
         .catch(() => null);
       const reason = judged?.reason || fallbackReason(comments);
-      await events.setAsks(ticket.issueId, judged?.asks ?? "other", reason);
-      logger.info("Read why a Motion ticket waits on the owner.", { key: ticket.key, asks: judged?.asks ?? "other" });
+      await events.setAsks(ticket.issueId, judged?.asks ?? "other", reason, {
+        ownerOnly: judged?.ownerOnly ?? null,
+        plain: judged?.plain ?? null,
+      });
+      logger.info("Read why a Motion ticket waits on a person.", { key: ticket.key, asks: judged?.asks ?? "other" });
+      const evidence = [
+        events.escalationBody(ticket.issueId) ?? "",
+        ...comments.slice(-4).map((comment) => `${comment.author || "comment"}: ${comment.body.slice(0, 1_500)}`),
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      await route(ticket.issueId, evidence);
     } catch (error) {
-      logger.warn("Could not read why a Motion ticket waits on the owner.", {
+      logger.warn("Could not read why a Motion ticket waits on a person.", {
         key: ticket.key,
         error: error instanceof Error ? error.message : "failed",
       });
+      await route(ticket.issueId, "").catch(() => undefined);
     } finally {
       classifying.delete(ticket.issueId);
     }
+  }
+  /**
+   * Who answers a ticket that the host read (`docs/approvals.md`): the owner when only the owner may
+   * decide it or no agent may; otherwise the approval router wakes the agent's manager.
+   */
+  async function route(issueId: string, evidence: string): Promise<void> {
+    const ticket = events.waiting().find((item) => item.issueId === issueId);
+    if (!ticket || ticket.approver) return;
+    const approvals = options.approvals;
+    if (ticket.ownerOnly || !approvals) {
+      await events.setApprover(issueId, "owner");
+      return;
+    }
+    const result = await approvals.route({
+      id: ticketApprovalId(issueId),
+      source: "ticket",
+      askerId: ticket.agentId,
+      title: `${ticket.key} · ${ticket.title}`,
+      reason: ticket.reason ?? "",
+      evidence,
+      ticket: { key: ticket.key, url: ticket.url, issueId },
+      reviewEscalated: ticket.asks === "review-escalated",
+    });
+    await events.setApprover(issueId, result.approver);
+    if (result.approver === "manager")
+      logger.info("A waiting Motion ticket goes to the agent's manager, not the owner.", {
+        key: ticket.key,
+        manager: result.agentId,
+      });
   }
   await events.start();
   const tool = (caller: Parameters<MotionClient["tool"]>[0], name: string, args: DynamicRecord) =>
@@ -198,6 +257,60 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
     log: (message) => logger.info(message),
   });
   await orders.start();
+  options.approvals?.handle("ticket", {
+    settle: async (request, answer) => {
+      const issueId = request.ticket?.issueId;
+      if (!issueId) return;
+      const key = request.ticket?.key ?? "the ticket";
+      const note = answer.note ? ` ${answer.note}` : "";
+      const text = request.reviewEscalated
+        ? answer.verdict === "approve"
+          ? `${answer.byName} (manager) accepts ${key} as is, with no more review rounds: close it.${note}`
+          : `${answer.byName} (manager) sends ${key} back. Fix this, then request review again:${note}`
+        : answer.verdict === "approve"
+          ? `${answer.byName} (manager) approves ${key}: go ahead.${note}`
+          : `${answer.byName} (manager) declines ${key}:${note}`;
+      // The answer goes on the ticket as the manager's own comment, and wakes the asker at once.
+      await motion
+        .tool({ agentId: answer.byId }, "comments_create", { page_id: issueId, body: text })
+        .catch((error: unknown) =>
+          logger.warn("Could not comment a manager's answer on a Motion ticket.", {
+            key,
+            error: error instanceof Error ? error.message : "failed",
+          }),
+        );
+      events.noteWoken(request.askerId, issueId);
+      await Effect.runPromise(
+        options.send(
+          { agentId: request.askerId, text: `Motion · ${text}`, clientMessageId: `approval-answer:${request.id}` },
+          false,
+        ),
+      ).catch(() => undefined);
+      void events.dismissWaiting(issueId);
+    },
+    toOwner: async (request, why) => {
+      const issueId = request.ticket?.issueId;
+      if (!issueId) return;
+      await events.setApprover(
+        issueId,
+        "owner",
+        why.kind === "escalated" ? { by: why.byName, reason: why.reason } : undefined,
+      );
+    },
+    reopen: async (decision: PendingApproval) => {
+      if (!decision.ticket) return false;
+      await events.reopen({
+        issueId: decision.ticket.issueId,
+        agentId: decision.askerId,
+        key: decision.ticket.key,
+        title: decision.title.replace(`${decision.ticket.key} · `, ""),
+        url: decision.ticket.url,
+        asks: decision.reviewEscalated ? "review-escalated" : "approval",
+        reason: decision.reason,
+      });
+      return true;
+    },
+  });
   let server: Server | null = null;
   const listen = options.environment.OPENBOT_MOTION_EVENTS_LISTEN?.trim();
   if (listen) {
@@ -259,6 +372,18 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
     answerWaiting: async (issueId, answer, ownerName) => {
       const ticket = events.waiting().find((item) => item.issueId === issueId);
       if (!ticket) return;
+      const agentName = options.agents().find((agent) => agent.id === ticket.agentId)?.name;
+      options.record?.({
+        actor: { kind: "agent", id: ticket.agentId, ...(agentName ? { name: agentName } : {}) },
+        category: "approval",
+        action: "ticket approval",
+        summary: `${ticket.key} · ${ticket.title} → ${answer}`,
+        outcome: "answered",
+        agentId: ticket.agentId,
+        ticket: ticket.key,
+        answeredBy: ownerName,
+        answeredByKind: "owner",
+      });
       await motion.tool(
         { agentId: ticket.agentId, asMember: { key: MOTION_OWNER_KEY, name: ownerName } },
         "comments_create",

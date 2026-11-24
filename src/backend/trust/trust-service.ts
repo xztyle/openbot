@@ -1,11 +1,14 @@
 import { readFileSync } from "node:fs";
+import type { AgentApprovalsView, ApprovalWeek, Approver } from "@openbot/contracts/agent-approvals";
 import { agentManagers } from "@openbot/contracts/agent-org";
 import {
   DEFAULT_TRUST_POLICY,
   normalizeTrustPlatform,
   normalizeTrustPolicy,
+  OWNER_ONLY_TRUST_ACTIONS,
   resolveTrustRule,
   TRUST_ACTIONS,
+  TRUST_AUDIT_QUERY_MAX,
   type TrustAgentPlacement,
   type TrustAuditEntry,
   type TrustBudget,
@@ -18,6 +21,7 @@ import {
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { Effect } from "effect";
+import type { ApprovalRouter } from "../approvals/approval-router";
 import { writeJsonFileAtomically } from "../atomic-json-file";
 import type { TrustAuditInput, TrustAuditLog } from "./trust-audit-log";
 import { type TrustClassification, trustCategory } from "./trust-classifier";
@@ -51,6 +55,22 @@ export type TrustVerdict =
   | { kind: "refuse"; message: string };
 
 export type TrustApprovalAnswer = "accept" | "decline" | "cancel";
+
+/** An answer with who gave it: the owner on the card, or the agent's manager (`ApprovalRouter`). */
+export type TrustApprovalResult =
+  | TrustApprovalAnswer
+  | { answer: TrustApprovalAnswer; byName: string; byKind: "owner" | "agent"; note?: string | undefined };
+
+function answerOf(result: TrustApprovalResult): {
+  answer: TrustApprovalAnswer;
+  byName: string;
+  byKind: "owner" | "agent";
+  note?: string | undefined;
+} {
+  return typeof result === "string" ? { answer: result, byName: "owner", byKind: "owner" } : result;
+}
+
+const WEEK_MS = 7 * 86_400_000;
 
 export type TrustGateResult = { allowed: true } | { allowed: false; message: string };
 
@@ -97,6 +117,8 @@ export class TrustService {
   readonly #directory: TrustDirectory;
   readonly #now: () => number;
   #policy: TrustPolicy;
+  /** Tier 1 of `docs/approvals.md`, for the owner's view of what agents decided. */
+  #approvals: ApprovalRouter | null = null;
   /** `agentId\nkey` → expiry in epoch milliseconds. Keys are surfaces and `go-live:<sandbox>`. */
   readonly #passes = new Map<string, number>();
 
@@ -166,6 +188,50 @@ export class TrustService {
 
   agentName(agentId: string): string | undefined {
     return this.#directory.agents().find((agent) => agent.id === agentId)?.name;
+  }
+
+  attachApprovals(approvals: ApprovalRouter): void {
+    this.#approvals = approvals;
+  }
+
+  /** What waits on managers, what they decided, and the owner's interventions by week. */
+  approvalsView(): AgentApprovalsView {
+    const view = this.#approvals?.view() ?? { pending: [], decided: [] };
+    return { ...view, ...this.approvalWeeks() };
+  }
+
+  /** The owner takes back a request that a manager decided: it goes to their Needs you. */
+  reopenApproval(id: string): Promise<boolean> {
+    return this.#approvals?.reopen(id) ?? Promise.resolve(false);
+  }
+
+  /** Who answers when the policy asks for this action: always the owner for money and deletions. */
+  approverFor(action: TrustClassification["action"]): Approver {
+    return OWNER_ONLY_TRUST_ACTIONS.includes(action) ? "owner" : (this.#policy.approvers[action] ?? "owner");
+  }
+
+  /**
+   * How many approvals and decisions the owner and the agents answered in the last seven days and
+   * the seven before, from the audit trail: the owner's interventions and the share the agents took.
+   * An escalation is no decision; a timed-out default is nobody's.
+   */
+  approvalWeeks(): { week: ApprovalWeek; previousWeek: ApprovalWeek } {
+    const now = this.#now();
+    const since = new Date(now - 2 * WEEK_MS).toISOString();
+    const rows = (["approval", "decision"] as const).flatMap((category) =>
+      this.#audit.query({ since, category, limit: TRUST_AUDIT_QUERY_MAX }),
+    );
+    const week = { since: new Date(now - WEEK_MS).toISOString(), owner: 0, agents: 0 };
+    const previousWeek = { since, owner: 0, agents: 0 };
+    for (const row of rows) {
+      if (row.escalated || !["approved", "declined", "answered"].includes(row.outcome)) continue;
+      const kind = row.answeredByKind ?? (row.answeredBy && row.answeredBy !== "timeout" ? "owner" : null);
+      if (!kind) continue;
+      const bucket = row.at >= week.since ? week : previousWeek;
+      if (kind === "owner") bucket.owner += 1;
+      else bucket.agents += 1;
+    }
+    return { week, previousWeek };
   }
 
   #passKey(agentId: string, key: string): string {
@@ -314,7 +380,7 @@ export class TrustService {
     this: TrustService,
     subject: TrustSubject,
     action: TrustClassification,
-    approve: (reason: string) => Effect.Effect<TrustApprovalAnswer, E, R>,
+    approve: (reason: string) => Effect.Effect<TrustApprovalResult, E, R>,
   ): Effect.fn.Return<TrustGateResult, E, R> {
     const verdict = this.evaluate(subject, action);
     if (verdict.kind === "allow" && verdict.covered === "pass") return { allowed: true };
@@ -328,18 +394,20 @@ export class TrustService {
       if (action.surface) this.#grant(subject.agentId, action.surface);
       return { allowed: true };
     }
-    const answer = yield* approve(verdict.reason);
+    const { answer, byName, byKind, note } = answerOf(yield* approve(verdict.reason));
+    const by = { answeredBy: byName, answeredByKind: byKind };
     if (answer === "accept") {
-      this.#audit.record({ ...base, outcome: "approved", answeredBy: "owner" });
+      this.#audit.record({ ...base, outcome: "approved", ...by });
       if (action.surface) this.#grant(subject.agentId, action.surface);
       return { allowed: true };
     }
-    this.#audit.record({ ...base, outcome: "declined", ...(answer === "decline" ? { answeredBy: "owner" } : {}) });
+    this.#audit.record({ ...base, outcome: "declined", ...(answer === "decline" ? by : {}) });
+    const who = byKind === "agent" ? `${byName} (your manager)` : "The owner";
     return {
       allowed: false,
       message:
         answer === "decline"
-          ? `The owner declined: ${action.label}. Do not retry it or try it another way. Continue without it, or ask what to change with openbot.request_decision.`
+          ? `${who} declined: ${action.label}.${note ? ` Their note: ${note}` : ""} Do not retry it or try it another way. Continue without it, or ask what to change with openbot.request_decision.`
           : `Nobody answered the approval for ${action.label}, so it did not run. Do not retry now; continue with other work or end your turn.`,
     };
   });
@@ -408,5 +476,8 @@ function policyChanges(before: TrustPolicy, after: TrustPolicy): string {
   for (const key of ["landings", "ads", "emails"] as const)
     if (before.sandbox[key] !== after.sandbox[key]) parts.push(`sandbox ${key} ${after.sandbox[key] ? "on" : "off"}`);
   if (before.approvalPassMinutes !== after.approvalPassMinutes) parts.push(`pass ${after.approvalPassMinutes} min`);
+  for (const action of TRUST_ACTIONS)
+    if (before.approvers[action] !== after.approvers[action])
+      parts.push(`${action} approver=${after.approvers[action]}`);
   return parts.join(", ") || "saved with no change";
 }

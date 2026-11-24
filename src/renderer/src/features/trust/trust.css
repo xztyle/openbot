@@ -51,7 +51,7 @@
 
 .trust-grid-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(2, minmax(0, 9rem));
+  grid-template-columns: minmax(0, 1fr) repeat(3, minmax(0, 9rem));
   align-items: center;
   gap: var(--openbot-space-3);
   font-size: var(--openbot-text-md);
@@ -315,7 +315,7 @@
 
 @media (max-width: 640px) {
   .trust-grid-row {
-    grid-template-columns: minmax(0, 1fr) repeat(2, minmax(0, 7rem));
+    grid-template-columns: minmax(0, 1fr) repeat(3, minmax(0, 6rem));
     gap: var(--openbot-space-2);
   }
 

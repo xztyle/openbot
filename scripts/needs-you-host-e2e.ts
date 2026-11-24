@@ -17,6 +17,9 @@
 // 5. A tab whose handover does not end still shows its card after the wait, and an answer clears it.
 // 6. Once the two agents share a channel, the publisher's takeover names that channel in the list, and
 //    its web push names the publisher and the channel and opens the channel.
+// 7. (docs/approvals.md) A Motion ticket of the publisher that asks for an OK goes to its manager, the
+//    orchestrator, as a wake, never to the owner's Needs you; the manager approves it and the publisher
+//    hears it. A ticket that needs money stays in the owner's Needs you, with its plain summary.
 //
 // `bun scripts/needs-you-host-e2e.ts`. Writes .openbot-build/needs-you-host-e2e/report.json.
 import assert from "node:assert/strict";
@@ -548,6 +551,122 @@ try {
       assert.equal(JSON.parse(answerText(await signIn.answer())).status, "completed");
       await waitFor("the empty list", () => attentionItems()?.length === 0);
       return { channelId: listed.channelId, title: push.message.title, path: push.message.path };
+    },
+    (value) => value,
+  );
+  await step(
+    "A ticket that asks for an OK goes to the asker's manager, not to Needs you; money stays the owner's",
+    async () => {
+      const { startMotionEventsHost } = await import("../src/main/motion-events/motion-events-host");
+      const { decodeMotionEvent } = await import("../src/main/motion-events/motion-event");
+      const { ApprovalRouter } = await import("../src/backend/approvals/approval-router");
+      await runCauseEffect(service().updateAgent({ agentId: publisher.id, reportsToAgentId: orchestrator.id }));
+      const userData = await mkdtemp(join(root, "approvals-"));
+      // Each note the host queues for an agent: both agents' turns are held open, so a note waits in its queue.
+      const notes: { agentId: string; text: string }[] = [];
+      const router = new ApprovalRouter({
+        agents: () => service().listAgents(),
+        spaceOf: () => "space",
+        wake: (input) =>
+          runCauseEffect(service().sendMessage(input, undefined, undefined, "operator-note")).then(() => {
+            notes.push(input);
+          }),
+        record: () => undefined,
+        stateFile: join(userData, "agent-approvals-v1.json"),
+        log: () => undefined,
+      });
+      await router.start();
+      const ownerPushes: string[] = [];
+      const plain = (asks: string) =>
+        JSON.stringify({ asks, why: "Para vender más.", if_yes: "Sigue hoy.", if_no: "Se para." });
+      const motion = await startMotionEventsHost({
+        userData,
+        environment: {},
+        settings: () => undefined,
+        agents: () => service().listAgents(),
+        secret: () => null,
+        send: (input, fyi) =>
+          service()
+            .sendMessage(input, undefined, undefined, "motion-event", fyi)
+            .pipe(Effect.tap(() => Effect.sync(() => notes.push(input)))),
+        showWaiting: (tickets) => service().setWaitingTickets(tickets),
+        notifyOwner: (input) => ownerPushes.push(input.body),
+        timeZone: () => "UTC",
+        mcpServers: () => [],
+        mcpAgent: () => null,
+        personalMcpServer: () => null,
+        chatPath: () => null,
+        ticketsChanged: () => undefined,
+        evidence: () => [],
+        // The judge reads the ticket: the landing waits for an OK; the ads need money.
+        judge: async ({ prompt }) => ({
+          model: "stub",
+          text: prompt.includes("Pay")
+            ? `{"asks":"approval","reason":"Pay 70 USD for the ads","owner_only":"money","plain":${plain("¿Pagamos 70 dólares en anuncios?")}}`
+            : `{"asks":"approval","reason":"OK to publish the landing","owner_only":"none","plain":${plain("¿Publicamos la página?")}}`,
+        }),
+        observesToolCalls: false,
+        approvals: router,
+        ownerLanguage: () => "Spanish",
+      });
+      const person = { id: "u-pub", name: publisher.name, kind: "agent", agent_key: publisher.id, role: "member" };
+      const waiting = (id: string, key: string, title: string) => {
+        const event = decodeMotionEvent({
+          id: `evt-${id}`,
+          type: "issue.waiting_on_person",
+          at: Date.now(),
+          workspace: { name: "W" },
+          issue: {
+            id,
+            key,
+            title,
+            url: `https://motion.test/${key}`,
+            status: { name: "Waiting", category: "in_progress" },
+            assignees: [person],
+          },
+          actor: person,
+          recipients: [],
+        });
+        if (!event) throw new Error("The Motion event does not decode.");
+        return motion.events.receive(event);
+      };
+      const tickets = () =>
+        service()
+          .attentionItems()
+          .filter((entry) => entry.turnId === "motion");
+      try {
+        await waiting("issue-ok", "MAS-12", "Publish the landing");
+        const request = await waitFor("the manager's request", () =>
+          router.pending().find((entry) => entry.id === "ticket:issue-ok"),
+        );
+        assert.equal(request.approverId, orchestrator.id, "The ticket did not go to the publisher's manager.");
+        assert.deepEqual(tickets(), [], "A ticket for the manager is in the owner's Needs you.");
+        assert.deepEqual(ownerPushes, [], "The owner got a push for a ticket the manager decides.");
+        const wake = await waitFor("the manager's wake", () =>
+          notes.find((note) => note.agentId === orchestrator.id && note.text.includes("ticket:issue-ok")),
+        );
+        assert.match(wake.text, /answer_approval/u);
+        assert.equal(
+          (await router.answer(publisher.id, { requestId: "ticket:issue-ok", verdict: "approve" })).ok,
+          false,
+        );
+        const answer = await router.answer(orchestrator.id, { requestId: "ticket:issue-ok", verdict: "approve" });
+        assert.equal(answer.ok, true, answer.message);
+        await waitFor("the publisher's answer", () =>
+          notes.find((note) => note.agentId === publisher.id && note.text.includes("approves MAS-12")),
+        );
+        assert.equal(router.decided()[0]?.id, "ticket:issue-ok");
+        assert.deepEqual(tickets(), [], "The decided ticket reached Needs you.");
+        await waiting("issue-pay", "EVE-24", "Pay for the Christmas ads");
+        const paid = await waitFor("the money ticket in Needs you", () => tickets()[0]);
+        assert.equal(router.isPending("ticket:issue-pay"), false, "A money ticket went to a manager.");
+        assert.equal(paid.plain?.asks, "¿Pagamos 70 dólares en anuncios?");
+        assert.equal(ownerPushes.length, 1);
+        return { manager: request.approverId, decided: router.decided().length, ownerTicket: paid.summary };
+      } finally {
+        await motion.close();
+        router.dispose();
+      }
     },
     (value) => value,
   );

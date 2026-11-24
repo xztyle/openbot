@@ -744,3 +744,15 @@
     min-height: var(--openbot-touch-target);
   }
 }
+
+/* The raw technical text of a request: collapsed, opened only by the reader. */
+.ws-today-decision-technical {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-today-decision-technical p {
+  margin: var(--openbot-space-1) 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}

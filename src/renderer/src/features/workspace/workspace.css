@@ -1322,3 +1322,17 @@
   gap: var(--openbot-space-2);
   margin-top: var(--openbot-space-1);
 }
+
+/* The raw technical text of a ticket or a decision: collapsed, opened only by the reader. */
+.ws-learned-technical,
+.ws-agent-dm-wait-technical {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-learned-technical p,
+.ws-agent-dm-wait-technical p {
+  margin: var(--openbot-space-1) 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}

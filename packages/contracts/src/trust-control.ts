@@ -12,6 +12,7 @@
  * The host enforces the policy at the tool layer; the prompt only explains it.
  */
 
+import { APPROVERS, type Approver } from "./agent-approvals";
 import { isBoundedString, isIdentifier } from "./ipc-bounded-values";
 import { isDynamicRecord, isOneOf } from "./runtime-values";
 
@@ -29,6 +30,15 @@ export const TRUST_ROLES = ["lead", "member"] as const;
 export type TrustRole = (typeof TRUST_ROLES)[number];
 
 export type TrustRules = Record<TrustAction, TrustRule>;
+
+/**
+ * The actions that only the owner approves (tier 2 of `docs/approvals.md`): money, and deletions,
+ * which cannot be undone. Their approver is always the owner, whatever a stored policy says.
+ */
+export const OWNER_ONLY_TRUST_ACTIONS: readonly TrustAction[] = ["pay", "launch_ads", "delete"];
+
+/** Who answers an `ask` of each action: the owner, or the asking agent's manager. */
+export type TrustApprovers = Record<TrustAction, Approver>;
 export type TrustOverrides = Partial<TrustRules>;
 
 export const TRUST_BUDGET_SCOPES = ["all", "space", "team", "agent"] as const;
@@ -66,6 +76,8 @@ export interface TrustPolicy {
   sandbox: TrustSandbox;
   /** How long one approval of a surface or a go-live lasts for the same agent and action. */
   approvalPassMinutes: number;
+  /** Who answers when a rule asks. An owner-only action (`OWNER_ONLY_TRUST_ACTIONS`) is always `owner`. */
+  approvers: TrustApprovers;
 }
 
 export const TRUST_LIMITS = {
@@ -81,9 +93,10 @@ export const DEFAULT_TRUST_POLICY: TrustPolicy = {
   version: 1,
   enabled: true,
   roles: {
-    // The owner's choice: only money waits for an approval. Every other action is allowed and kept in the audit trail.
-    lead: { pay: "ask", launch_ads: "ask", publish: "allow", email: "allow", create_agent: "allow", delete: "allow" },
-    member: { pay: "ask", launch_ads: "ask", publish: "allow", email: "allow", create_agent: "allow", delete: "allow" },
+    // The owner's choice (docs/approvals.md): money and deletions wait for the owner. Every other action is
+    // allowed and kept in the audit trail; where a rule asks, the agent's manager answers.
+    lead: { pay: "ask", launch_ads: "ask", publish: "allow", email: "allow", create_agent: "allow", delete: "ask" },
+    member: { pay: "ask", launch_ads: "ask", publish: "allow", email: "allow", create_agent: "allow", delete: "ask" },
   },
   spaces: {},
   teams: {},
@@ -91,7 +104,33 @@ export const DEFAULT_TRUST_POLICY: TrustPolicy = {
   budgets: [],
   sandbox: { landings: false, ads: false, emails: false },
   approvalPassMinutes: 30,
+  approvers: {
+    pay: "owner",
+    launch_ads: "owner",
+    delete: "owner",
+    publish: "manager",
+    email: "manager",
+    create_agent: "manager",
+  },
 };
+
+/** Reads the approvers: an owner-only action is always the owner's, a missing one takes its default. */
+function readApprovers(value: unknown): TrustApprovers {
+  const record = isDynamicRecord(value) ? value : {};
+  const approver = (action: TrustAction): Approver => {
+    if (OWNER_ONLY_TRUST_ACTIONS.includes(action)) return "owner";
+    const candidate = record[action];
+    return isOneOf(APPROVERS, candidate) ? candidate : DEFAULT_TRUST_POLICY.approvers[action];
+  };
+  return {
+    pay: approver("pay"),
+    launch_ads: approver("launch_ads"),
+    publish: approver("publish"),
+    email: approver("email"),
+    create_agent: approver("create_agent"),
+    delete: approver("delete"),
+  };
+}
 
 function readRules(value: unknown, fallback: TrustRules): TrustRules {
   const record = isDynamicRecord(value) ? value : {};
@@ -195,6 +234,7 @@ export function normalizeTrustPolicy(value: unknown): TrustPolicy | null {
       emails: typeof sandbox.emails === "boolean" ? sandbox.emails : DEFAULT_TRUST_POLICY.sandbox.emails,
     },
     approvalPassMinutes: minutes,
+    approvers: readApprovers(value.approvers),
   };
 }
 
@@ -306,6 +346,10 @@ export interface TrustAuditEntry {
   ticket?: string;
   /** Who answered an approval or a decision. */
   answeredBy?: string;
+  /** Whether a person (the owner or an admin) or an agent (a manager) answered it. */
+  answeredByKind?: "owner" | "agent";
+  /** A manager sent the request up to the owner instead of answering it. */
+  escalated?: boolean;
 }
 
 export const TRUST_AUDIT_TEXT_LIMITS = { action: 120, summary: 500, name: 120, ticket: 64 } as const;
@@ -329,7 +373,9 @@ export function isTrustAuditEntry(value: unknown): value is TrustAuditEntry {
     (value.platform === undefined || isBoundedString(value.platform, TRUST_LIMITS.platform)) &&
     ["agentId", "threadId", "turnId", "channelId", "spaceId"].every(optionalId) &&
     (value.ticket === undefined || isBoundedString(value.ticket, TRUST_AUDIT_TEXT_LIMITS.ticket)) &&
-    (value.answeredBy === undefined || isBoundedString(value.answeredBy, TRUST_AUDIT_TEXT_LIMITS.name))
+    (value.answeredBy === undefined || isBoundedString(value.answeredBy, TRUST_AUDIT_TEXT_LIMITS.name)) &&
+    (value.answeredByKind === undefined || value.answeredByKind === "owner" || value.answeredByKind === "agent") &&
+    (value.escalated === undefined || typeof value.escalated === "boolean")
   );
 }
 

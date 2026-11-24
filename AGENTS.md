@@ -93,6 +93,16 @@ Text that a user reads comes from `@openbot/i18n` catalog keys, on desktop, web 
 write a literal. Errors that the main process, backend or team client send use `sourceText(key)`.
 Read [docs/i18n.md](docs/i18n.md) before adding a key or a language.
 
+### Plain language
+
+The owner is a business owner with no technical background. Product text and agent output aimed at
+the owner (cards, reasons, Needs you and inbox items, notifications, agent replies to the owner) must
+be non-technical: say what is asked, why it matters, and what happens on a yes and on a no. No IDs,
+codes, error numbers, commands, file names, API, token or field names, and no English jargon in
+another language's UI. Give technical text only when the owner explicitly asks for it: on a card it
+stays behind a collapsed, opt-in "technical details" that never opens by itself; in a chat, only in
+the reply to that request.
+
 ## Checks
 
 Do not run broad checks locally. They overload the user's computer. This explicit user preference
@@ -183,6 +193,13 @@ See [account service setup](apps/auth-api/README.md) for loading and deployment 
 See [README.md — Commands](README.md#commands) for the flags these commands take, and
 [docs/architecture/change-rules.md](docs/architecture/change-rules.md#change-rules) for why the registry works this way, when a dev command
 does not behave as expected.
+
+## Approvals
+
+Who approves what an agent asks is in [docs/approvals.md](docs/approvals.md): tier 0 runs at once,
+tier 1 goes to the asking agent's manager, tier 2 (money, deletions and other irreversible actions,
+credentials, legal commitments, security) goes to the owner only. Keep a new approval in the lowest
+tier that is safe, and never move money out of the owner's tier.
 
 ## Terms
 

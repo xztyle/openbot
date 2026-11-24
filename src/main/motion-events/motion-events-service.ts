@@ -14,9 +14,11 @@
  *   note: it waits for the agent's next turn and starts none.
  * - A second wake about one ticket for one agent within `burstMinutes` is held instead.
  * - In quiet hours, wakes wait and go as one note per agent when the quiet hours end.
- * - A ticket that waits on a person (an agent handed it to the owner, or marked it blocked) is a Needs
- *   you item with a push, and wakes nobody. It goes when the ticket stops waiting: a later event of it
- *   by a person, a done status, or after three days.
+ * - A ticket that waits on a person (an agent handed it over, or marked it blocked) wakes nobody. The
+ *   host reads why it waits (`classify`) and who answers it (`setApprover`, `docs/approvals.md`): the
+ *   agent's manager, through the approval router, or the owner, as a Needs you item with a push when it
+ *   needs money, a credential, a sign-in or another owner-only class. It goes when the ticket stops
+ *   waiting: a later event of it by a person, a done status, or after three days.
  * - A ticket moved to review wakes its agent reviewer with the acceptance criteria and the hand-off.
  *   With no reviewer the outcome asks the host for an independent grader (`motion-grader.ts`).
  * - A review that reopens a ticket wakes its agents with the notes; one that passes it is a held note.
@@ -28,6 +30,14 @@
  */
 
 import { readFile } from "node:fs/promises";
+import {
+  APPROVERS,
+  type Approver,
+  isOwnerSummary,
+  OWNER_ONLY_CLASSES,
+  type OwnerOnlyClass,
+  type OwnerSummary,
+} from "@openbot/contracts/agent-approvals";
 import { agentManagers } from "@openbot/contracts/agent-org";
 import { TICKET_ASKS, type TicketAsks, type WorkspaceMotionEventsSettings } from "@openbot/contracts/ipc";
 import { isDynamicRecord, isOneOf, isString } from "@openbot/contracts/runtime-values";
@@ -63,6 +73,18 @@ export interface WaitingTicket {
   asks?: TicketAsks | undefined;
   /** What the agent needs from the owner, in one line. */
   reason?: string | undefined;
+  /** The tier-2 class that keeps it with the owner (`docs/approvals.md`), or null. */
+  ownerOnly?: OwnerOnlyClass | null | undefined;
+  /** The ticket explained for the owner, who has no technical background. */
+  plain?: OwnerSummary | undefined;
+  /**
+   * Who answers it: the owner (Needs you), or the asker's manager (`ApprovalRouter`). Absent until the
+   * host read why it waits; only the owner's tickets show in Needs you.
+   */
+  approver?: Approver | undefined;
+  /** The manager that sent it up to the owner, and why. */
+  escalatedBy?: string | undefined;
+  escalationReason?: string | undefined;
 }
 
 /** The longest `reason` kept: Needs you shows at most 200 characters. */
@@ -73,8 +95,10 @@ export interface MotionEventsDependencies {
   agents(): readonly MotionEventsAgent[];
   /** Sends `text` to the agent's own chat as a Motion note; `fyi` holds it for the next turn. */
   deliver(input: { agentId: string; text: string; fyi: boolean; clientMessageId: string }): Promise<void>;
-  /** Shows the waiting tickets in Needs you, the whole list each time. */
+  /** Shows the tickets that wait on the owner in Needs you, the whole list each time. */
   showWaiting(tickets: readonly WaitingTicket[]): void;
+  /** A ticket stopped waiting (answered, settled, dismissed, too old): a manager no longer decides it. */
+  stopped?(issueId: string): void;
   /**
    * Reads why a new waiting ticket waits (its comments, the hand-off) and answers with `setAsks`.
    * Called once per ticket that has no `asks`, also for the tickets of before at start.
@@ -142,7 +166,12 @@ function isWaitingTicket(value: unknown): value is WaitingTicket {
     isString(value.url) &&
     isString(value.createdAt) &&
     (value.asks === undefined || isOneOf(TICKET_ASKS, value.asks)) &&
-    (value.reason === undefined || isString(value.reason))
+    (value.reason === undefined || isString(value.reason)) &&
+    (value.ownerOnly === undefined || value.ownerOnly === null || isOneOf(OWNER_ONLY_CLASSES, value.ownerOnly)) &&
+    (value.plain === undefined || isOwnerSummary(value.plain)) &&
+    (value.approver === undefined || isOneOf(APPROVERS, value.approver)) &&
+    (value.escalatedBy === undefined || isString(value.escalatedBy)) &&
+    (value.escalationReason === undefined || isString(value.escalationReason))
   );
 }
 
@@ -295,6 +324,8 @@ export class MotionEventsService {
   readonly #deps: MotionEventsDependencies;
   /** Agents an order card is being made for (`expectOrderCard`), and since when. */
   readonly #expected = new Map<string, { token: symbol; at: number }>();
+  /** The grader's note of an escalated review, the evidence its approver reads. */
+  readonly #escalationBodies = new Map<string, string>();
   #state: State = emptyState();
   #loaded: Promise<void> | null = null;
   #chain: Promise<unknown> = Promise.resolve();
@@ -318,9 +349,10 @@ export class MotionEventsService {
         this.#state = emptyState();
       })
       .then(() => {
-        this.#deps.showWaiting(this.#state.waiting);
-        // The tickets of before this field: read why each waits, once.
-        for (const ticket of this.#state.waiting) if (!ticket.asks) this.#deps.classify?.(ticket);
+        this.#show();
+        // The tickets of before these fields: read why each waits and who answers it, once. A ticket
+        // of before the approval model goes to its manager unless only the owner may decide it.
+        for (const ticket of this.#state.waiting) if (!ticket.asks || !ticket.approver) this.#deps.classify?.(ticket);
       });
     if (!this.#timer) {
       this.#timer = setInterval(() => void this.tick(), 60_000);
@@ -334,9 +366,57 @@ export class MotionEventsService {
     this.#timer = null;
   }
 
-  /** The waiting tickets, oldest first. */
+  /** The waiting tickets, oldest first, whoever answers them. */
   waiting(): readonly WaitingTicket[] {
     return this.#state.waiting;
+  }
+
+  /** Shows the tickets that wait on the owner; a manager's ticket never shows in Needs you. */
+  #show(): void {
+    this.#deps.showWaiting(this.#state.waiting.filter((ticket) => ticket.approver === "owner"));
+  }
+
+  /**
+   * Who answers a waiting ticket, after the host read why it waits. A ticket that goes to the owner
+   * now gets a push; `escalation` names the manager that sent it up, and why.
+   */
+  setApprover(issueId: string, approver: Approver, escalation?: { by: string; reason: string }): Promise<void> {
+    const run = this.#chain.then(async () => {
+      await this.start();
+      const ticket = this.#state.waiting.find((item) => item.issueId === issueId);
+      if (!ticket) return;
+      const next: WaitingTicket = {
+        ...ticket,
+        approver,
+        ...(escalation ? { escalatedBy: escalation.by, escalationReason: oneLine(escalation.reason) } : {}),
+      };
+      this.#state.waiting = this.#state.waiting.map((item) => (item.issueId === issueId ? next : item));
+      this.#show();
+      if (approver === "owner" && ticket.approver !== "owner") {
+        const agent = this.#deps.agents().find((candidate) => candidate.id === ticket.agentId);
+        this.#deps.notifyOwner({
+          agentId: ticket.agentId,
+          title: agent?.name ?? ticket.title,
+          body: ticket.plain?.asks ?? `${ticket.title} waits on you.`,
+        });
+      }
+      await this.#save();
+    });
+    this.#chain = run.catch(() => undefined);
+    return run;
+  }
+
+  /** The owner reopened a ticket that a manager decided: it waits on the owner again, in Needs you. */
+  reopen(ticket: Omit<WaitingTicket, "createdAt" | "approver">): Promise<void> {
+    const run = this.#chain.then(async () => {
+      await this.start();
+      const item: WaitingTicket = { ...ticket, createdAt: new Date(this.#now()).toISOString(), approver: "owner" };
+      this.#state.waiting = [...this.#state.waiting.filter((entry) => entry.issueId !== item.issueId), item];
+      this.#show();
+      await this.#save();
+    });
+    this.#chain = run.catch(() => undefined);
+    return run;
   }
 
   /**
@@ -348,7 +428,8 @@ export class MotionEventsService {
       await this.start();
       if (!this.#state.waiting.some((item) => item.issueId === issueId)) return;
       this.#state.waiting = this.#state.waiting.filter((item) => item.issueId !== issueId);
-      this.#deps.showWaiting(this.#state.waiting);
+      this.#show();
+      this.#deps.stopped?.(issueId);
       await this.#save();
     });
     this.#chain = run.catch(() => undefined);
@@ -445,25 +526,46 @@ export class MotionEventsService {
    * Why a waiting ticket waits, read by `classify`. A ticket that stopped waiting meanwhile, or that
    * says the same already, changes nothing.
    */
-  setAsks(issueId: string, asks: TicketAsks, reason: string): Promise<void> {
+  setAsks(
+    issueId: string,
+    asks: TicketAsks,
+    reason: string,
+    extra: { ownerOnly?: OwnerOnlyClass | null; plain?: OwnerSummary | null } = {},
+  ): Promise<void> {
     const run = this.#chain.then(async () => {
       await this.start();
       const line = oneLine(reason);
       const ticket = this.#state.waiting.find((item) => item.issueId === issueId);
-      if (!ticket || (ticket.asks === asks && ticket.reason === line)) return;
+      if (!ticket) return;
+      // The grader's escalation says what it is; a judge's later reading does not undo it.
+      const kept = ticket.asks === "review-escalated" ? ticket.asks : asks;
+      const reasonKept = ticket.asks === "review-escalated" && ticket.reason ? ticket.reason : line;
       this.#state.waiting = this.#state.waiting.map((item) =>
-        item.issueId === issueId ? { ...item, asks, ...(line ? { reason: line } : {}) } : item,
+        item.issueId === issueId
+          ? {
+              ...item,
+              asks: kept,
+              ...(reasonKept ? { reason: reasonKept } : {}),
+              ...(extra.ownerOnly !== undefined ? { ownerOnly: extra.ownerOnly } : {}),
+              ...(extra.plain ? { plain: extra.plain } : {}),
+            }
+          : item,
       );
-      this.#deps.showWaiting(this.#state.waiting);
+      this.#show();
       await this.#save();
     });
     this.#chain = run.catch(() => undefined);
     return run;
   }
 
+  /** The grader's note of an escalated review of this ticket, if this run made one. */
+  escalationBody(issueId: string): string | undefined {
+    return this.#escalationBodies.get(issueId);
+  }
+
   /**
-   * A ticket that must go to the owner now (the grader gave up on it): a Needs you item with a push.
-   * `reason` says what the reviews still miss; the owner accepts it as is or sends it back.
+   * A ticket whose review the grader gave up on: its approver (the agent's manager, or the owner when
+   * no agent may decide) accepts it as is or sends it back. `reason` says what the reviews still miss.
    */
   escalate(ticket: Omit<WaitingTicket, "createdAt" | "asks" | "reason">, body: string, reason?: string): void {
     const line = oneLine(reason ?? "");
@@ -474,9 +576,10 @@ export class MotionEventsService {
       ...(line ? { reason: line } : {}),
     };
     this.#state.waiting = [...this.#state.waiting.filter((entry) => entry.issueId !== item.issueId), item];
-    this.#deps.showWaiting(this.#state.waiting);
-    const agent = this.#deps.agents().find((candidate) => candidate.id === ticket.agentId);
-    this.#deps.notifyOwner({ agentId: ticket.agentId, title: agent?.name ?? ticket.key, body });
+    this.#show();
+    this.#escalationBodies.set(item.issueId, body);
+    // Who answers it (its agent's manager, docs/approvals.md) is read with its plain summary.
+    this.#deps.classify?.(item);
     void this.#save();
   }
 
@@ -617,8 +720,8 @@ export class MotionEventsService {
       createdAt: new Date(now).toISOString(),
     };
     this.#state.waiting = [...this.#state.waiting.filter((item) => item.issueId !== ticket.issueId), ticket];
-    this.#deps.showWaiting(this.#state.waiting);
-    this.#deps.notifyOwner({ agentId: agent.id, title: agent.name, body: `${ticketName(event)} waits on you.` });
+    this.#show();
+    // No push yet: the host reads why it waits, and the owner hears of it only when it is theirs.
     this.#deps.classify?.(ticket);
     return true;
   }
@@ -630,7 +733,8 @@ export class MotionEventsService {
       event.actor?.kind === "person" || event.type === "issue.assigned" || event.issue.statusCategory === "done";
     if (!settled || !this.#state.waiting.some((item) => item.issueId === event.issue.id)) return;
     this.#state.waiting = this.#state.waiting.filter((item) => item.issueId !== event.issue.id);
-    this.#deps.showWaiting(this.#state.waiting);
+    this.#show();
+    this.#deps.stopped?.(event.issue.id);
   }
 
   async #tick(): Promise<void> {
@@ -639,8 +743,9 @@ export class MotionEventsService {
     const fresh = this.#state.waiting.filter((item) => now - Date.parse(item.createdAt) < WAITING_MS);
     let changed = fresh.length !== this.#state.waiting.length;
     if (changed) {
+      for (const item of this.#state.waiting) if (!fresh.includes(item)) this.#deps.stopped?.(item.issueId);
       this.#state.waiting = fresh;
-      this.#deps.showWaiting(fresh);
+      this.#show();
     }
     const settings = this.#deps.settings();
     if (this.#state.quiet.length && !inQuietHours(settings, now, this.#deps.timeZone())) {

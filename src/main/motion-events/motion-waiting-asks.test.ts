@@ -70,7 +70,12 @@ describe("why a ticket waits on the owner", () => {
       asks: "approval",
       reason: "Aprobar el copy v0.5; falta la licencia CC0 de la foto",
     });
-    expect(shown.at(-1)?.[0]?.asks).toBe("approval");
+    // Until the host knows who answers it, and when its manager does, it is not in Needs you.
+    expect(shown.at(-1)).toEqual([]);
+    await events.setApprover("issue-41", "manager");
+    expect(shown.at(-1)).toEqual([]);
+    await events.setApprover("issue-41", "owner", { by: "Lead", reason: "It needs a contract signed." });
+    expect(shown.at(-1)?.[0]).toMatchObject({ asks: "approval", approver: "owner", escalatedBy: "Lead" });
     const saved = JSON.parse(await readFile(join(root, "events.json"), "utf8"));
     expect(saved.waiting[0].asks).toBe("approval");
   });
@@ -82,6 +87,11 @@ describe("why a ticket waits on the owner", () => {
     await second.events.start();
     expect(second.classified).toEqual(["COC-41"]);
     await second.events.setAsks("issue-41", "blocked", "Falta el acceso");
+    // A ticket of before the approval model, with asks but no approver, is read again once.
+    const migrated = service();
+    await migrated.events.start();
+    expect(migrated.classified).toEqual(["COC-41"]);
+    await migrated.events.setApprover("issue-41", "manager");
     const third = service();
     await third.events.start();
     expect(third.classified).toEqual([]);
@@ -89,6 +99,7 @@ describe("why a ticket waits on the owner", () => {
 
   it("marks a ticket the grader gave up on as an escalated review with what it misses", async () => {
     const { events, classified } = service();
+    await events.start();
     events.escalate(
       {
         issueId: "issue-44",
@@ -104,14 +115,25 @@ describe("why a ticket waits on the owner", () => {
       asks: "review-escalated",
       reason: "Cursos anunciados; Textos y días activos",
     });
-    expect(classified).toEqual([]);
+    // Its approver is read next: the manager, not the owner, unless only the owner may decide it.
+    expect(classified).toEqual(["COC-44"]);
+    expect(events.waiting()[0]?.approver).toBeUndefined();
+    // Its save ends before the folder goes.
+    await events.setApprover("issue-44", "manager");
   });
 
   it("parses the judge's answer and falls back to the last comment", () => {
     expect(parseWaitingAsks('Sure: {"asks": "approval", "reason": "Aprobar el copy"}')).toEqual({
       asks: "approval",
       reason: "Aprobar el copy",
+      ownerOnly: null,
+      plain: null,
     });
+    expect(
+      parseWaitingAsks(
+        '{"asks": "blocked", "reason": "Falta la contraseña", "owner_only": "credentials", "plain": {"asks": "Necesita tu contraseña de Meta.", "why": "Sin ella no puede seguir.", "if_yes": "Sigue hoy.", "if_no": "Se queda parado."}}',
+      ),
+    ).toMatchObject({ asks: "blocked", ownerOnly: "credentials", plain: { asks: "Necesita tu contraseña de Meta." } });
     expect(parseWaitingAsks('{"asks": "publish"}')).toBeNull();
     expect(parseWaitingAsks("no json")).toBeNull();
     const comments = waitingComments({

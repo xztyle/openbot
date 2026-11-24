@@ -8,6 +8,8 @@ import { AgentApiKeys } from "../backend/agent-api-keys";
 import { AgentDatabaseSupervisor } from "../backend/agent-data/agent-database-supervisor";
 import { SpaceAgentTables } from "../backend/agent-data/space-agent-tables";
 import { AgentRoutineStore } from "../backend/agent-routine-store";
+import { ApprovalRouter } from "../backend/approvals/approval-router";
+import { ownerSummaryPrompt, parseOwnerSummary } from "../backend/approvals/owner-summary";
 import { EventCheckApiReader } from "../backend/event-check-api-reader";
 import { EventCheckEnvironment } from "../backend/event-check-environment";
 import { EventCheckStore } from "../backend/event-check-store";
@@ -43,6 +45,7 @@ import {
   HOSTED_UPDATE_TRIGGER,
   HostedUpdateAdapter,
 } from "./hosted-update-adapter";
+import { startLessonApprovals } from "./lesson-approvals";
 import { LicenseDesktopService } from "./license-service";
 import { LocalSignInWindows } from "./local-sign-in-window";
 import { localSkillLearner } from "./local-skill-learner";
@@ -1818,12 +1821,42 @@ export async function createApplicationServices({
     await Effect.runPromise(workspaceThumbnails.stop());
     workspaceThumbnailCapturer.close();
   });
+  /** The language the owner reads (docs/approvals.md: owner-facing text is plain, in their language). */
+  const ownerLanguage = () =>
+    process.env.OPENBOT_OWNER_LANGUAGE?.trim() ||
+    (new Intl.DisplayNames(["en"], { type: "language" }).of(language.locale) ?? "English");
   // Trust and control: the policy file and the append-only audit trail of this profile.
   const trust = new TrustService({
     file: join(app.getPath("userData"), "trust-policy.json"),
     audit: new TrustAuditLog(join(app.getPath("userData"), "trust-audit")),
     directory: { agents: () => store.list(), spaceOf: (agentId) => store.spaces.agentSpaceId(agentId) },
   });
+  // Tier 1 of docs/approvals.md: the requests that the asking agent's manager answers, not the owner.
+  const approvals = new ApprovalRouter({
+    agents: () => store.list(),
+    spaceOf: (agentId) => store.spaces.agentSpaceId(agentId),
+    wake: (input) =>
+      Effect.runPromise(service.sendMessage(input, undefined, undefined, "operator-note")).then(() => undefined),
+    record: (entry) => trust.record(entry),
+    summarize: async (decision, asker, approver) => {
+      const prompt = ownerSummaryPrompt({
+        language: ownerLanguage(),
+        title: decision.title,
+        reason: decision.reason,
+        details: decision.evidence,
+        decided: `${approver} (${asker}'s manager) ${decision.verdict === "approve" ? "approved it" : "said no"}${decision.note ? `: ${decision.note}` : ""}`,
+      });
+      const reply = await Effect.runPromise(
+        service.generateReviewText({ agentId: decision.askerId, important: false, prompt }),
+      );
+      return parseOwnerSummary(reply.text);
+    },
+    stateFile: join(app.getPath("userData"), "agent-approvals-v1.json"),
+    log: (message) => logger.info(message),
+  });
+  trust.attachApprovals(approvals);
+  void approvals.start();
+  teardown.push(TEARDOWN_ORDER.motionEvents, "the approval router", () => approvals.dispose());
   // Guardrails: budgets, run breakers, the stuck watch, the injection monitor and the failover.
   const guardrails = new GuardrailsService({
     file: join(app.getPath("userData"), "guardrails-v1.json"),
@@ -1834,6 +1867,7 @@ export async function createApplicationServices({
   const service: AgentService = new AgentService({
     trust,
     guardrails,
+    approvals,
     store,
     mailbox,
     browser,
@@ -2615,7 +2649,13 @@ export async function createApplicationServices({
     workRoots: (agentId) => service.workRoots(agentId),
     judge: (input) => Effect.runPromise(service.generateReviewText(input)),
     observesToolCalls: chatMcp !== undefined,
+    approvals,
+    ownerLanguage,
+    record: (entry) => trust.record(entry),
   });
+  const lessons = startLessonApprovals({ service, approvals, log: (message) => logger.info(message) });
+  service.lessonWithManager = lessons.withManager;
+  teardown.push(TEARDOWN_ORDER.motionEvents, "the lesson approvals", () => lessons.dispose());
   const motion = motionEvents;
   service.setCurrentTickets((agentId) => motion.tickets.current(agentId));
   service.onWaitingTicketDismissed((issueId, answer) =>

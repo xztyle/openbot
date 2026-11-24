@@ -11,6 +11,7 @@ import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-t
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, Loading, lazy, Match, Show, Switch } from "solid-js";
 import { actionToast } from "../../action-toast";
+import { WorkspaceAgentDecisionsSection } from "./WorkspaceAgentDecisions";
 import { WorkspaceAgentTalkView } from "./WorkspaceAgentTalk";
 import { WorkspaceDraftsView } from "./WorkspaceDrafts";
 import {
@@ -238,6 +239,7 @@ function WorkspaceActivityView() {
       // agents learned, which applied by itself.
       needsYou={
         <>
+          <WorkspaceAgentDecisionsSection />
           <WorkspaceLearnedSection />
           <WorkspaceWhenBackSection />
         </>

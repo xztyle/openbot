@@ -208,6 +208,7 @@ export type TeamApiAgents = TeamApiAgentMethods & {
       | "playbooks"
       | "reviews"
       | "learning"
+      | "lessonWithManager"
       | "settingsHistory"
       | "rollbackSettings"
       | "forgetConversation"

@@ -43,6 +43,7 @@ import type { SpaceAgentTables } from "../agent-data/space-agent-tables";
 import type { AgentStore } from "../agent-store";
 import type { AgentTasks } from "../agent-tasks/agent-tasks";
 import type { AgentWaits } from "../agent-waits/agent-waits";
+import type { ApprovalRouter } from "../approvals/approval-router";
 import { OPENBOT_BROWSER_NAMESPACE } from "../browser-tools";
 import type { ChannelService } from "../channel-service";
 import {
@@ -62,6 +63,7 @@ import { MESSAGING_OUTBOUND_TOOLS } from "../messaging/messaging-tools";
 import {
   ACKNOWLEDGE_REQUEST_ACTIONS,
   acknowledgeRequestToolSchema,
+  answerApprovalToolSchema,
   askUiToolSchema,
   CHAT_VISUAL_PREVIEW_DEFAULT_WIDTH,
   goalsToolSchema,
@@ -85,7 +87,7 @@ import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "../securi
 import { agentSeesChannel, crossSpaceRefusal } from "../spaces/space-scope";
 import type { StoredStateFailure } from "../stored-state-effects";
 import type { TrustService } from "../trust/trust-service";
-import { TRUST_CHECK_METHOD, TrustToolGate } from "../trust/trust-tool-gate";
+import { TRUST_CHECK_METHOD, TrustToolGate, withEscalation } from "../trust/trust-tool-gate";
 import type { SharePreviewDrawer } from "../workspace-thumbnails";
 import { AgentInterruptTool } from "./agent-interrupt-tool";
 import type { AgentMemories } from "./agent-memories";
@@ -334,6 +336,8 @@ export interface OpenBotToolRouterOptions {
   trust?: TrustService | null | undefined;
   /** The guardrails: the injection monitor and money approval expiry. Null where none run. */
   guardrails?: GuardrailsService | null | undefined;
+  /** Tier 1 of `docs/approvals.md`: requests that the asking agent's manager answers. */
+  approvals?: ApprovalRouter | null | undefined;
   hooks: OpenBotToolRouterHooks;
 }
 
@@ -394,6 +398,7 @@ export class OpenBotToolRouter {
   readonly #ownerTools: OwnerTools;
   readonly #trust: TrustToolGate | null;
   readonly #guardrails: GuardrailsService | null;
+  readonly #approvals: ApprovalRouter | null;
 
   constructor(options: OpenBotToolRouterOptions) {
     this.#history = new HistoryTools({
@@ -452,9 +457,11 @@ export class OpenBotToolRouter {
           listTabs: () => options.browser.listTabs(),
           messagingThread: (threadId) => options.messaging.linkForThread(threadId) !== null,
           guardrails: options.guardrails ?? null,
+          approvals: options.approvals ?? null,
         })
       : null;
     this.#guardrails = options.guardrails ?? null;
+    this.#approvals = options.approvals ?? null;
     this.#interruptTool = new AgentInterruptTool({
       store: options.store,
       mailbox: options.mailbox,
@@ -703,6 +710,11 @@ export class OpenBotToolRouter {
               if (this.#trust) this.#trust.requestDecision(client, toolRequest, toolRequest.params);
               else
                 client.respond(toolRequest.id, openBotToolFailure("This Atelier server cannot show decision cards."));
+              return;
+            }
+            if (toolRequest.params.tool === "answer_approval") {
+              const result = yield* Effect.promise(() => this.#answerApproval(toolRequest.params));
+              if (!toolRequest.signal?.aborted && client.running) client.respond(toolRequest.id, result);
               return;
             }
             const refused = this.#trust
@@ -1781,6 +1793,20 @@ export class OpenBotToolRouter {
    * an opt-out; a first contact from `email_send` waits for the owner's approval card, which Full
    * access does not answer.
    */
+  /** `answer_approval`: a manager answers an approval request that waits on it (`ApprovalRouter`). */
+  async #answerApproval(params: DynamicToolCallParams): Promise<DynamicToolResult> {
+    const agentId = this.#conversation.agentForThread(params.threadId);
+    if (!agentId) return openBotToolFailure(sourceText("error.agent.toolRequestInvalid"));
+    if (!this.#approvals) return openBotToolFailure("This Atelier server has no approval requests.");
+    const parsed = answerApprovalToolSchema.safeParse(params.arguments);
+    if (!parsed.success)
+      return openBotToolFailure(`${z.prettifyError(parsed.error)}\nCorrect the arguments and retry.`);
+    const answer = await this.#approvals.answer(agentId, parsed.data);
+    return answer.ok
+      ? openBotToolResult({ status: "answered", message: answer.message })
+      : openBotToolFailure(answer.message);
+  }
+
   readonly #mailTool = Effect.fn("OpenBotToolRouter.mailTool")(function* (
     this: OpenBotToolRouter,
     client: AgentClient,
@@ -1800,32 +1826,51 @@ export class OpenBotToolRouter {
     if (!planned.ok) return openBotToolFailure(planned.message);
     const { plan } = planned;
     if (plan.needsApproval) {
-      const decision = yield* this.#attention.awaitToolApproval(
-        client,
-        request,
-        {
-          requestId: request.id,
-          agentId,
-          threadId: this.#conversation.publicThreadId(agentId, params.threadId),
-          turnId: params.turnId,
-          kind: "permissions",
-          command: [
-            `From: ${plan.from}`,
-            `To: ${plan.to}`,
-            `Subject: ${plan.subject}`,
-            "",
-            call.input.text.slice(0, 1_500),
-          ].join("\n"),
-          cwd: null,
-          reason: sourceText("status.agent.mailFirstRecipient", { address: plan.to }),
-          grantRoot: null,
-          permissions: null,
-        },
-        { alwaysAsk: true, ownerOnly: true },
-      );
+      const body = [
+        `From: ${plan.from}`,
+        `To: ${plan.to}`,
+        `Subject: ${plan.subject}`,
+        "",
+        call.input.text.slice(0, 1_500),
+      ].join("\n");
+      const ownerCard = (reason: string) =>
+        this.#attention.awaitToolApproval(
+          client,
+          request,
+          {
+            requestId: request.id,
+            agentId,
+            threadId: this.#conversation.publicThreadId(agentId, params.threadId),
+            turnId: params.turnId,
+            kind: "permissions",
+            command: body,
+            cwd: null,
+            reason,
+            grantRoot: null,
+            permissions: null,
+          },
+          { alwaysAsk: true, ownerOnly: true },
+        );
+      const reason = sourceText("status.agent.mailFirstRecipient", { address: plan.to });
+      // Tier 1 (docs/approvals.md): the agent's manager answers a first contact; the owner only when
+      // no agent may, a manager escalates it, or nobody answered up to the top.
+      const manager = this.#approvals
+        ? yield* this.#approvals.awaitAnswer({
+            id: `gate:${agentId}:${String(request.id)}`,
+            source: "gate",
+            askerId: agentId,
+            title: `First mail to ${plan.to}: ${plan.subject}`,
+            reason: `A first mail from ${plan.from} to a new address, within the mail rate caps.`,
+            evidence: body,
+          })
+        : ({ answer: "owner", why: null } as const);
+      const decision =
+        manager.answer === "owner" ? yield* ownerCard(withEscalation(reason, manager.why)) : manager.answer;
       if (decision !== "accept")
         return openBotToolFailure(
-          `The owner did not approve the first mail to ${plan.to}. Do not retry it or write to them another way.`,
+          manager.answer === "decline"
+            ? `${manager.byName} (your manager) did not approve the first mail to ${plan.to}: ${manager.note} Do not retry it or write to them another way.`
+            : `The owner did not approve the first mail to ${plan.to}. Do not retry it or write to them another way.`,
         );
     }
     const sent = yield* Effect.promise(() =>

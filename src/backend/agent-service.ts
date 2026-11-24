@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { join } from "node:path";
+import type { OwnerSummary } from "@openbot/contracts/agent-approvals";
 import {
   agentHasPlaybookRole,
   type ModelSavingsSnapshot,
@@ -281,6 +282,7 @@ import { AgentTaskStore } from "./agent-tasks/agent-task-store";
 import { AgentTasks } from "./agent-tasks/agent-tasks";
 import { AgentWaitStore } from "./agent-waits/agent-wait-store";
 import { AgentWaits } from "./agent-waits/agent-waits";
+import type { ApprovalRouter } from "./approvals/approval-router";
 import { automationRunCommand } from "./automation-command";
 import { toChannelOperationError } from "./channel-effects";
 import type { ChannelGateGeneration } from "./channel-gate";
@@ -384,6 +386,8 @@ export interface AgentServiceOptions {
   trust?: TrustService;
   /** Budgets, run breakers, the stuck watch, the injection monitor and the subscription failover. */
   guardrails?: GuardrailsService;
+  /** Tier 1 of `docs/approvals.md`: requests that the asking agent's manager answers. */
+  approvals?: ApprovalRouter;
   store: AgentStore;
   mailbox: MailboxStore;
   browser: AgentBrowserHost;
@@ -601,6 +605,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly settingsHistory: SettingsHistory;
   /** The nightly memory cleanup, the lessons of finished tasks and the knowledge of each space. */
   readonly learning: AgentLearning;
+  /**
+   * Whether a decision queue entry (`learning:<id>`, `playbook:<id>`, `review:<id>`) is with the
+   * agent's manager (`docs/approvals.md`): the owner's queue and inbox leave it out. Set by the host.
+   */
+  lessonWithManager: (queueId: string) => boolean = () => false;
   /** The skill library of the reviews, with each save in the settings history. Null without skill learning. */
   readonly #learnedSkills: (() => SkillLearner) | null;
   readonly #skillLibrary: (() => SkillLearner) | null;
@@ -1980,6 +1989,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       apiKeys: options.agentApiKeys ?? null,
       trust: options.trust ?? null,
       guardrails: options.guardrails ?? null,
+      approvals: options.approvals ?? null,
       hooks: {
         listAgents: () => this.listAgents(),
         listModels: () => this.listModels(),
@@ -2234,6 +2244,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       createdAt: string;
       asks?: TicketAsks | undefined;
       reason?: string | undefined;
+      plain?: OwnerSummary | undefined;
+      escalatedBy?: string | undefined;
+      escalationReason?: string | undefined;
     }[],
   ): void {
     const threads = new Map(this.listAgents().map((agent) => [agent.id, agent.threadId]));
@@ -2254,6 +2267,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             url: ticket.url,
             ...(ticket.asks ? { asks: ticket.asks } : {}),
             ...(ticket.reason ? { reason: ticket.reason.slice(0, AGENT_ATTENTION_TEXT_LIMIT) } : {}),
+            ...(ticket.plain ? { plain: ticket.plain } : {}),
+            ...(ticket.escalatedBy ? { escalatedBy: ticket.escalatedBy.slice(0, AGENT_ATTENTION_TEXT_LIMIT) } : {}),
+            ...(ticket.escalationReason
+              ? { escalationReason: ticket.escalationReason.slice(0, AGENT_ATTENTION_TEXT_LIMIT) }
+              : {}),
           },
         ];
       }),

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { ownerOnlyClassOf } from "@openbot/contracts/agent-approvals";
 import type { BrowserTab } from "@openbot/contracts/ipc";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { normalizeTrustPlatform } from "@openbot/contracts/trust-control";
@@ -14,6 +15,12 @@ import { z } from "zod";
 import type { PromptResponder, SurfacedUiBlock } from "../agent/attention-registry";
 import { openBotToolFailure, openBotToolResult } from "../agent/routine-tools";
 import type { AgentClient } from "../agent-client";
+import {
+  type ApprovalAnswer,
+  type ApprovalRouter,
+  escalationLine,
+  type ToOwnerReason,
+} from "../approvals/approval-router";
 import type { GuardrailsService } from "../guardrails/guardrails-service";
 import { MoneyApprovals, moneyDigest, moneyEffect } from "../guardrails/money-approvals";
 import { guardrailToolCall } from "../guardrails/tool-fingerprint";
@@ -27,7 +34,7 @@ import {
   trustCategory,
   trustSummary,
 } from "./trust-classifier";
-import type { TrustApprovalAnswer, TrustService, TrustSubject } from "./trust-service";
+import type { TrustApprovalAnswer, TrustApprovalResult, TrustService, TrustSubject } from "./trust-service";
 
 export { TRUST_CHECK_METHOD } from "./trust-classifier";
 
@@ -73,6 +80,15 @@ export interface TrustToolGateOptions {
   messagingThread(publicThreadId: string): boolean;
   /** The injection monitor and the expiry of money approvals. Null where no guardrails run. */
   guardrails?: GuardrailsService | null;
+  /** Tier 1 of `docs/approvals.md`: the asking agent's manager answers. Null: the owner answers all. */
+  approvals?: ApprovalRouter | null;
+}
+
+/** The owner's card text of a request that a manager escalated, or that no agent answered. */
+export function withEscalation(reason: string, why: ToOwnerReason | null): string {
+  const escalated = escalationLine(why);
+  if (escalated) return `${reason} ${sourceText("status.agent.escalatedBy", escalated)}`;
+  return why?.kind === "unanswered" ? `${reason} ${sourceText("status.agent.unansweredByManagers")}` : reason;
 }
 
 /** The guardrails' answer for one call: refuse it, or how the trust gate must treat it. */
@@ -89,6 +105,19 @@ function withoutSurface(action: TrustClassification): TrustClassification {
 }
 
 const OPTION_IDS: readonly string[] = ["option1", "option2", "option3"];
+
+/** The buttons of a decision card: its options, Change… while there is room, and No. */
+function decisionActions(input: z.infer<typeof requestDecisionToolSchema>): UiAction[] {
+  const actions: UiAction[] = input.options.map((option, index) => ({
+    id: OPTION_IDS[index] ?? "option1",
+    label: option.label,
+    ...(index === 0 ? { style: "primary" as const } : {}),
+  }));
+  if (input.options.length < 3)
+    actions.push({ id: REQUEST_DECISION_ACTIONS.change, label: input.changeLabel ?? "Change…" });
+  actions.push({ id: REQUEST_DECISION_ACTIONS.no, label: input.noLabel ?? "No", style: "ghost" });
+  return actions;
+}
 
 /**
  * Owns the router's half of trust and control: it turns a tool call into a classification, runs it
@@ -172,6 +201,43 @@ export class TrustToolGate {
     };
   }
 
+  /**
+   * Tier 1: the asking agent's manager answers the action, not the owner. It goes to the owner's card
+   * when no agent may answer it, when the manager escalates it, or when nobody answered up to the top.
+   */
+  #viaManager(
+    client: TrustClient,
+    request: AppServerRequest,
+    subject: Required<Pick<TrustSubject, "agentId" | "threadId" | "turnId">>,
+    action: TrustClassification,
+    reason: string,
+  ): Effect.Effect<TrustApprovalResult> {
+    const owner = (text: string) => this.#approve(client, request, subject, action)(text);
+    const approvals = this.#options.approvals;
+    if (!approvals) return owner(reason);
+    return approvals
+      .awaitAnswer({
+        id: `gate:${subject.agentId}:${String(request.id)}`,
+        source: "gate",
+        askerId: subject.agentId,
+        title: `${action.label}: ${action.summary}`,
+        reason,
+        evidence: action.summary,
+      })
+      .pipe(
+        Effect.flatMap((outcome) =>
+          outcome.answer === "owner"
+            ? owner(withEscalation(reason, outcome.why))
+            : Effect.succeed<TrustApprovalResult>({
+                answer: outcome.answer,
+                byName: outcome.byName,
+                byKind: "agent",
+                note: outcome.note,
+              }),
+        ),
+      );
+  }
+
   /** The guardrails' check of a call before the trust gate: the injection monitor. */
   #guard(agentId: string, turnId: string, name: string, input: unknown, action: TrustClassification | null) {
     const guardrails = this.#options.guardrails;
@@ -200,15 +266,13 @@ export class TrustToolGate {
     const gated = money && guard?.allowed && guard.tainted ? withoutSurface(action) : action;
     let accepted = false;
     const approve = (reason: string) =>
-      this.#approve(
-        client,
-        request,
-        subject,
-        gated,
-      )(reason).pipe(
-        Effect.tap((answer) =>
+      (this.#trust.approverFor(gated.action) === "manager"
+        ? this.#viaManager(client, request, subject, gated, reason)
+        : this.#approve(client, request, subject, gated)(reason)
+      ).pipe(
+        Effect.tap((result) =>
           Effect.sync(() => {
-            accepted = answer === "accept";
+            accepted = (typeof result === "string" ? result : result.answer) === "accept";
           }),
         ),
       );
@@ -230,7 +294,7 @@ export class TrustToolGate {
         threadId: subject.threadId,
         turnId: subject.turnId,
         outcome: answer === "accept" ? "approved" : "declined",
-        ...(answer === "cancel" ? {} : { answeredBy: "owner" }),
+        ...(answer === "cancel" ? {} : { answeredBy: "owner", answeredByKind: "owner" as const }),
       });
       if (answer !== "accept")
         return {
@@ -410,7 +474,12 @@ export class TrustToolGate {
     return result.allowed;
   });
 
-  /** Shows the decision card of `request_decision`. It answers the call when the person answers. */
+  /**
+   * `request_decision`. Tier 1 (`docs/approvals.md`): the asking agent's manager decides it and the
+   * call gets its answer. A decision about money or another owner-only class, one that no agent may
+   * answer, one a manager escalates and one nobody answered up to the top agent shows the owner's
+   * decision card, which answers the call when the person answers.
+   */
   requestDecision(client: TrustClient, request: AppServerRequest, params: DynamicToolCallParams): undefined {
     const refuse = (message: string): undefined => {
       client.respond(request.id, openBotToolFailure(message));
@@ -419,23 +488,184 @@ export class TrustToolGate {
     const agentId = this.#options.agentForThread(params.threadId);
     if (!agentId) return refuse("The calling Atelier agent is unknown.");
     const threadId = this.#options.publicThreadId(agentId, params.threadId);
+    const parsed = requestDecisionToolSchema.safeParse(params.arguments);
+    if (!parsed.success) return refuse(`${z.prettifyError(parsed.error)}\nCorrect the arguments and retry.`);
+    const input = parsed.data;
+    const ownerOnly =
+      input.concerns ??
+      (input.amount
+        ? "money"
+        : ownerOnlyClassOf(
+            [input.title, ...input.options.flatMap((option) => [option.label, option.consequence ?? ""])].join("\n"),
+          ));
+    const approvals = this.#options.approvals;
+    if (!ownerOnly && approvals) {
+      this.#decisionViaManager(approvals, client, request, params, agentId, threadId, input);
+      return undefined;
+    }
+    return this.#ownerDecision(client, request, params, agentId, threadId, input, null);
+  }
+
+  /** The manager decides a `request_decision`; it goes to the owner's card when it must. */
+  #decisionViaManager(
+    approvals: ApprovalRouter,
+    client: TrustClient,
+    request: AppServerRequest,
+    params: DynamicToolCallParams,
+    agentId: string,
+    threadId: string,
+    input: z.infer<typeof requestDecisionToolSchema>,
+  ): void {
+    const id = `decision:${agentId}:${String(request.id)}`;
+    let done = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const finish = () => {
+      done = true;
+      if (timer) clearTimeout(timer);
+      request.signal?.removeEventListener("abort", aborted);
+    };
+    const aborted = () => {
+      if (done) return;
+      finish();
+      void approvals.cancel(id);
+    };
+    const respond = (result: DynamicToolResult) => {
+      if (!request.signal?.aborted && client.running) client.respond(request.id, result);
+    };
+    const owner = (why: ToOwnerReason | null) => {
+      if (done) return;
+      finish();
+      if (request.signal?.aborted || !client.running) return;
+      this.#ownerDecision(client, request, params, agentId, threadId, input, why);
+    };
+    request.signal?.addEventListener("abort", aborted, { once: true });
+    const options = input.options.map((option) => option.label);
+    const defaultOption = input.defaultOption;
+    if (defaultOption !== undefined && input.timeoutMinutes) {
+      // The asker's own default after its timeout, as on the owner's card: it never approves money.
+      timer = setTimeout(() => {
+        if (done) return;
+        finish();
+        void approvals.cancel(id);
+        const actionId = defaultOption === 4 ? REQUEST_DECISION_ACTIONS.no : (OPTION_IDS[defaultOption - 1] ?? "");
+        respond(
+          this.#decided(
+            agentId,
+            threadId,
+            params.turnId,
+            input,
+            decisionActions(input),
+            { actionId },
+            {
+              privileged: false,
+              automatic: true,
+            },
+          ),
+        );
+      }, input.timeoutMinutes * 60_000);
+      timer.unref?.();
+    }
+    const evidence = [
+      ...input.options.map(
+        (option, index) => `${index + 1}. ${option.label}${option.consequence ? ` → ${option.consequence}` : ""}`,
+      ),
+      input.previewUrl ? `Preview: ${input.previewUrl}` : "",
+      input.preview ? `Preview text:\n${input.preview.slice(0, 2_000)}` : "",
+      input.goLive ? `Approving lets it publish the staged ${input.goLive} (sandbox go-live).` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    void approvals
+      .route(
+        {
+          id,
+          source: "decision",
+          askerId: agentId,
+          title: input.title,
+          reason: options.length === 1 ? `Yes or no: ${options[0]}` : `Pick one: ${options.join(" / ")}`,
+          evidence,
+          options,
+        },
+        {
+          settle: (_request, answer) => {
+            if (done) return;
+            finish();
+            respond(this.#decidedByManager(agentId, threadId, params.turnId, input, answer));
+          },
+          toOwner: (_request, why) => owner(why),
+        },
+      )
+      .then(
+        (result) => {
+          if (result.approver === "owner") owner(null);
+        },
+        () => owner(null),
+      );
+  }
+
+  /** A manager's answer to a `request_decision`, recorded with the go-live it grants. */
+  #decidedByManager(
+    agentId: string,
+    threadId: string,
+    turnId: string,
+    input: z.infer<typeof requestDecisionToolSchema>,
+    answer: ApprovalAnswer,
+  ): DynamicToolResult {
+    const approved = answer.verdict === "approve";
+    const option = approved ? (answer.option ?? 1) : null;
+    const label = option === null ? undefined : input.options[option - 1]?.label;
+    if (approved && input.goLive) this.#trust.grantGoLive(agentId, input.goLive);
+    const name = this.#trust.agentName(agentId);
+    this.#trust.record({
+      actor: { kind: "agent", id: agentId, ...(name ? { name } : {}) },
+      category: input.goLive ? "approval" : "decision",
+      action: input.goLive ? `request_decision (go-live ${input.goLive})` : "request_decision",
+      summary: trustSummary(
+        `${input.title} → ${label ?? "no"} (by ${answer.byName})${answer.note ? `: ${answer.note}` : ""}${input.previewUrl ? ` · ${input.previewUrl}` : ""}`,
+      ),
+      outcome: input.goLive ? (approved ? "approved" : "declined") : "answered",
+      agentId,
+      threadId,
+      turnId,
+      ...(input.ticket ? { ticket: input.ticket } : {}),
+      answeredBy: answer.byName,
+      answeredByKind: "agent",
+    });
+    return openBotToolResult({
+      status: "answered",
+      option: option ?? "no",
+      ...(label ? { label } : {}),
+      decidedBy: `${answer.byName} (your manager)`,
+      ...(answer.note ? { note: answer.note } : {}),
+      ...(approved && input.goLive ? { goLive: `approved: run the ${input.goLive} publish command now` } : {}),
+    });
+  }
+
+  /** The owner's decision card of a `request_decision`. */
+  #ownerDecision(
+    client: TrustClient,
+    request: AppServerRequest,
+    params: DynamicToolCallParams,
+    agentId: string,
+    threadId: string,
+    input: z.infer<typeof requestDecisionToolSchema>,
+    why: ToOwnerReason | null,
+  ): undefined {
+    const refuse = (message: string): undefined => {
+      client.respond(request.id, openBotToolFailure(message));
+      return undefined;
+    };
     if (this.#options.messagingThread(threadId))
       return refuse(
         "This chat is in Slack, Discord or Telegram and cannot show the decision card. Ask in your answer.",
       );
-    const parsed = requestDecisionToolSchema.safeParse(params.arguments);
-    if (!parsed.success) return refuse(`${z.prettifyError(parsed.error)}\nCorrect the arguments and retry.`);
-    const input = parsed.data;
     const single = input.options.length === 1;
-    const actions: UiAction[] = input.options.map((option, index) => ({
-      id: OPTION_IDS[index] ?? "option1",
-      label: option.label,
-      ...(index === 0 ? { style: "primary" as const } : {}),
-    }));
-    if (input.options.length < 3)
-      actions.push({ id: REQUEST_DECISION_ACTIONS.change, label: input.changeLabel ?? "Change…" });
-    actions.push({ id: REQUEST_DECISION_ACTIONS.no, label: input.noLabel ?? "No", style: "ghost" });
+    const actions = decisionActions(input);
     const fields: UiConfirmField[] = [];
+    const escalated = escalationLine(why);
+    if (escalated) fields.push({ label: "↑", value: sourceText("status.agent.escalatedBy", escalated).slice(0, 400) });
+    else if (why?.kind === "unanswered")
+      fields.push({ label: "↑", value: sourceText("status.agent.unansweredByManagers") });
     for (const option of input.options)
       if (option.consequence) fields.push({ label: single ? "→" : option.label, value: option.consequence });
     if (input.amount)
@@ -536,6 +766,7 @@ export class TrustToolGate {
       turnId,
       ...(input.ticket ? { ticket: input.ticket } : {}),
       answeredBy,
+      ...(automatic ? {} : { answeredByKind: "owner" as const }),
     });
     if (response === null) return openBotToolResult({ status: "skipped" });
     if (response.actionId === "_text")

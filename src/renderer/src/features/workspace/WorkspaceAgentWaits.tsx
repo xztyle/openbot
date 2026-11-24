@@ -14,6 +14,7 @@ import { Check, ExternalLink, Ticket, X } from "@openbot/ui/icons";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { useWorkspace } from "./workspace-context";
+import { ticketDetail } from "./workspace-decisions";
 import { answerTicket, ticketAnswers } from "./workspace-ticket-answer";
 
 export function WorkspaceAgentWaits(props: { agentId: string }) {
@@ -86,7 +87,7 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
             <div class="ws-agent-dm-wait-row">
               <Ticket class="ws-agent-dm-wait-icon" aria-hidden="true" />
               <span class="ws-agent-dm-wait-text">
-                {t("workspace.needsYou.banner.ticket", { ticket: item().summary ?? "" })}
+                {t("workspace.needsYou.banner.ticket", { ticket: item().plain?.asks ?? item().summary ?? "" })}
                 {failed() === key() ? ` · ${failure() || t("workspace.today.answerFailed")}` : ""}
               </span>
               <Show when={answers().primary}>
@@ -131,7 +132,16 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
                 {t("workspace.today.dismiss")}
               </Button>
             </div>
-            <Show when={item().reason}>{(reason) => <p class="ws-agent-dm-wait-reason">{reason()}</p>}</Show>
+            <Show when={ticketDetail(item(), t)}>{(detail) => <p class="ws-agent-dm-wait-reason">{detail()}</p>}</Show>
+            {/* The raw reason is technical: only the reader opens it. */}
+            <Show when={[item().summary, item().reason, item().escalationReason].filter(Boolean).join("\n")}>
+              {(technical) => (
+                <details class="ws-agent-dm-wait-technical">
+                  <summary>{t("workspace.today.technicalDetails")}</summary>
+                  <p>{technical()}</p>
+                </details>
+              )}
+            </Show>
             <Show when={noting() === key() ? answers().secondary : undefined}>
               {(secondary) => (
                 <form

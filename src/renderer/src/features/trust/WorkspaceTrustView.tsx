@@ -1,4 +1,6 @@
+import type { AgentApprovalsView, ApprovalWeek } from "@openbot/contracts/agent-approvals";
 import {
+  OWNER_ONLY_TRUST_ACTIONS,
   TRUST_ACTIONS,
   TRUST_AUDIT_CATEGORIES,
   TRUST_AUDIT_OUTCOMES,
@@ -76,6 +78,13 @@ export function WorkspaceTrustView() {
     }
   }
   onSettled(() => void load());
+  const [weeks, setWeeks] = createSignal<Pick<AgentApprovalsView, "week" | "previousWeek"> | null>(null);
+  onSettled(() => {
+    void calls()
+      ?.approvals()
+      .then((view) => setWeeks({ week: view.week, previousWeek: view.previousWeek }))
+      .catch(() => undefined);
+  });
 
   async function save() {
     const trust = calls();
@@ -184,6 +193,9 @@ export function WorkspaceTrustView() {
                     />
                   )}
                 </Show>
+                <Show when={weeks()}>
+                  {(value) => <TrustInterventions week={value().week} previousWeek={value().previousWeek} />}
+                </Show>
                 <section class="trust-section">
                   <SwitchField
                     size="default"
@@ -204,6 +216,7 @@ export function WorkspaceTrustView() {
                       <For each={TRUST_ROLES}>
                         {(role) => <span>{role === "lead" ? t("trust.role.lead") : t("trust.role.member")}</span>}
                       </For>
+                      <span>{t("trust.approverColumn")}</span>
                     </div>
                     <For each={TRUST_ACTIONS}>
                       {(action) => (
@@ -226,10 +239,29 @@ export function WorkspaceTrustView() {
                               </span>
                             )}
                           </For>
+                          <span>
+                            <NativeSelect
+                              size="sm"
+                              aria-label={`${t(TRUST_ACTION_LABEL[action])} · ${t("trust.approverColumn")}`}
+                              value={policy().approvers[action]}
+                              disabled={OWNER_ONLY_TRUST_ACTIONS.includes(action)}
+                              onChange={(event) => {
+                                const approver = event.currentTarget.value === "manager" ? "manager" : "owner";
+                                change((current) => ({
+                                  ...current,
+                                  approvers: { ...current.approvers, [action]: approver },
+                                }));
+                              }}
+                            >
+                              <option value="owner">{t("trust.approver.owner")}</option>
+                              <option value="manager">{t("trust.approver.manager")}</option>
+                            </NativeSelect>
+                          </span>
                         </div>
                       )}
                     </For>
                   </div>
+                  <p class="trust-muted">{t("trust.approversDescription")}</p>
                 </section>
                 <section class="trust-section" aria-labelledby="trust-sandbox-heading">
                   <h3 id="trust-sandbox-heading" class="trust-heading">
@@ -362,6 +394,31 @@ export function WorkspaceTrustView() {
           </div>
         </section>
       </Show>
+    </section>
+  );
+}
+
+/** The owner's interventions this week and the share of decisions the agents took (docs/approvals.md). */
+function TrustInterventions(props: { week: ApprovalWeek; previousWeek: ApprovalWeek }) {
+  const { t } = useText();
+  const total = () => props.week.owner + props.week.agents;
+  return (
+    <section class="trust-section" aria-labelledby="trust-interventions-heading">
+      <h3 id="trust-interventions-heading" class="trust-heading">
+        {t("trust.interventions.title")}
+      </h3>
+      <Show when={total() > 0} fallback={<p class="trust-muted">{t("trust.interventions.none")}</p>}>
+        <p>{t("trust.interventions.week", { owner: String(props.week.owner), agents: String(props.week.agents) })}</p>
+        <p class="trust-muted">
+          {t("trust.interventions.share", { share: String(Math.round((props.week.agents / total()) * 100)) })}
+        </p>
+      </Show>
+      <p class="trust-muted">
+        {t("trust.interventions.previous", {
+          owner: String(props.previousWeek.owner),
+          agents: String(props.previousWeek.agents),
+        })}
+      </p>
     </section>
   );
 }

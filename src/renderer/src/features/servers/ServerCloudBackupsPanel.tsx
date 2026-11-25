@@ -1,10 +1,11 @@
 import type {
+  CloudBrowseResult,
   CloudConnectInput,
   CloudConnectResult,
+  CloudFolderList,
   CloudGroup,
   CloudInterval,
   CloudPlan,
-  CloudProblem,
   CloudSnapshot,
   CloudSnapshotsResult,
   HostCloudBackupsOverview,
@@ -37,6 +38,8 @@ import {
 import { useText } from "@openbot/ui/text";
 import { createEffect, createSignal, createStore, For, onCleanup, Show, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
+import { GROUP_TEXT, PROBLEM_TEXT } from "./cloud-backups-text";
+import { CloudFolderDialog, CloudRestoreDialog } from "./ServerCloudBackupsDialogs";
 
 /** The `host-cloud-backups-v1` calls of one server's host. */
 export interface HostCloudBackupsCalls {
@@ -47,8 +50,21 @@ export interface HostCloudBackupsCalls {
   passwordSaved: (serverId: string) => Promise<HostCloudBackupsOverview>;
   run: (kind: "backup" | "test", serverId: string) => Promise<HostCloudBackupsOverview>;
   snapshots: (serverId: string) => Promise<CloudSnapshotsResult>;
-  restore: (snapshot: string, serverId: string) => Promise<HostCloudBackupsOverview>;
+  restore: (
+    snapshot: string,
+    pick: { groups?: CloudGroup[]; paths?: string[] },
+    serverId: string,
+  ) => Promise<HostCloudBackupsOverview>;
   prepareRestore: (restoreId: string, serverId: string) => Promise<{ backupId: string }>;
+  folders: (path: string, create: boolean, serverId: string) => Promise<CloudFolderList>;
+  changeFolder: (
+    folder: string,
+    mode: "move" | "use",
+    repositoryPassword: string | undefined,
+    serverId: string,
+  ) => Promise<CloudConnectResult>;
+  browse: (snapshot: string, path: string, serverId: string) => Promise<CloudBrowseResult>;
+  apply: (restoreId: string, serverId: string) => Promise<{ started: boolean; backupId: string }>;
 }
 
 type Ready = Extract<HostCloudBackupsOverview, { available: true }>;
@@ -56,37 +72,12 @@ type Ready = Extract<HostCloudBackupsOverview, { available: true }>;
 const BUSY_POLL_MS = 5000;
 const IDLE_POLL_MS = 60_000;
 
-const PROBLEM_TEXT = {
-  "two-factor": "backups.cloud.problem.twoFactor",
-  "mailbox-password": "backups.cloud.problem.mailboxPassword",
-  credentials: "backups.cloud.problem.credentials",
-  verification: "backups.cloud.problem.verification",
-  "rate-limited": "backups.cloud.problem.rateLimited",
-  relogin: "backups.cloud.problem.relogin",
-  "repository-password": "backups.cloud.problem.repositoryPassword",
-  "drive-full": "backups.cloud.problem.driveFull",
-  network: "backups.cloud.problem.network",
-  busy: "backups.cloud.problem.busy",
-  "restore-test": "backups.cloud.problem.restoreTest",
-  unavailable: "backups.cloud.problem.unavailable",
-  other: "backups.cloud.problem.other",
-} as const satisfies Record<CloudProblem, string>;
-
 const INTERVAL_TEXT = {
   "15m": "backups.cloud.interval.quarter",
   "1h": "backups.cloud.interval.hourly",
   "6h": "backups.cloud.interval.sixHours",
   daily: "backups.cloud.interval.daily",
 } as const satisfies Record<CloudInterval, string>;
-
-const GROUP_TEXT = {
-  database: ["backups.cloud.group.database", "backups.cloud.group.databaseHint"],
-  conversations: ["backups.cloud.group.conversations", "backups.cloud.group.conversationsHint"],
-  agents: ["backups.cloud.group.agents", "backups.cloud.group.agentsHint"],
-  settings: ["backups.cloud.group.settings", "backups.cloud.group.settingsHint"],
-  motion: ["backups.cloud.group.motion", "backups.cloud.group.motionHint"],
-  work: ["backups.cloud.group.work", "backups.cloud.group.workHint"],
-} as const satisfies Record<CloudGroup, readonly [string, string]>;
 
 const RETENTION_FIELDS = [
   ["allWithinHours", "backups.cloud.plan.keepAll"],
@@ -114,6 +105,8 @@ export function ServerCloudBackupsPanel(props: {
   actionsAvailable: boolean;
   /** A cloud copy became a local backup: the list above reads again. */
   onPrepared?: () => void;
+  /** The server's name, for the default drive folder "Atelier Backups/<name>". */
+  hostName?: string;
 }) {
   const { t, errorMessage, format } = useText();
   const [overview, setOverview] = createSignal<HostCloudBackupsOverview | null>(null);
@@ -133,7 +126,10 @@ export function ServerCloudBackupsPanel(props: {
   const [snapshots, setSnapshots] = createSignal<CloudSnapshot[] | null>(null);
   const [snapshotsError, setSnapshotsError] = createSignal<string | null>(null);
   const [restoring, setRestoring] = createSignal<CloudSnapshot | null>(null);
-  const [restoreError, setRestoreError] = createSignal<string | null>(null);
+  const [folderOpen, setFolderOpen] = createSignal(false);
+  const [applying, setApplying] = createSignal<{ id: string; finishedAt: string } | null>(null);
+  const [applyUnderstood, setApplyUnderstood] = createSignal(false);
+  const [applyError, setApplyError] = createSignal<string | null>(null);
   let generation = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -154,7 +150,13 @@ export function ServerCloudBackupsPanel(props: {
   }
 
   /** A dialog is open: the owner is typing or reading, so the host is not read until it closes. */
-  const dialogOpen = () => connectOpen() || password() !== null || disconnecting() || restoring() !== null;
+  const dialogOpen = () =>
+    connectOpen() ||
+    password() !== null ||
+    disconnecting() ||
+    restoring() !== null ||
+    folderOpen() ||
+    applying() !== null;
 
   async function read(): Promise<void> {
     const current = generation;
@@ -238,34 +240,26 @@ export function ServerCloudBackupsPanel(props: {
     }
   }
 
-  async function restore(): Promise<void> {
+  async function restore(pick: { groups?: CloudGroup[]; paths?: string[] }): Promise<void> {
     const snapshot = restoring();
     if (!snapshot) return;
-    setRestoreError(null);
-    try {
-      accept(await props.calls.restore(snapshot.id, props.serverId));
-      setRestoring(null);
-      actionToast.success(t("backups.cloud.restoreStarted"));
-      schedule();
-    } catch (error) {
-      setRestoreError(errorMessage(error, t("backups.cloud.problem.other")));
-    }
+    accept(await props.calls.restore(snapshot.id, pick, props.serverId));
+    setRestoring(null);
+    actionToast.success(t("backups.cloud.restoreStarted"));
+    schedule(true);
   }
 
-  async function prepare(restoreId: string): Promise<void> {
-    if (busy()) return;
-    setBusy(`prepare:${restoreId}`);
+  async function apply(): Promise<void> {
+    const target = applying();
+    if (!target || !applyUnderstood()) return;
+    setApplyError(null);
     try {
-      await props.calls.prepareRestore(restoreId, props.serverId);
-      actionToast.success(t("backups.cloud.prepared"));
+      await props.calls.apply(target.id, props.serverId);
+      setApplying(null);
+      actionToast.success(t("backups.cloud.applyStarted"));
       props.onPrepared?.();
-      void read();
     } catch (error) {
-      actionToast.error(t("backups.cloud.prepareFailed"), {
-        description: errorMessage(error, t("backups.cloud.prepareFailed")),
-      });
-    } finally {
-      setBusy(null);
+      setApplyError(errorMessage(error, t("backups.cloud.problem.other")));
     }
   }
 
@@ -404,9 +398,23 @@ export function ServerCloudBackupsPanel(props: {
                           )}
                         </Show>
                       </ItemDescription>
+                      <Show when={drive().folder}>
+                        {(folder) => (
+                          <ItemDescription>{t("backups.cloud.folder", { folder: folder() })}</ItemDescription>
+                        )}
+                      </Show>
                     </ItemContent>
                     <Show when={props.canManage}>
                       <ItemActions>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={manageDisabled() || value().running !== null || drive().status !== "ok"}
+                          onClick={() => setFolderOpen(true)}
+                        >
+                          {t("backups.cloud.changeFolder")}
+                        </Button>
                         <Show when={drive().status === "relogin"}>
                           <Button
                             type="button"
@@ -464,7 +472,9 @@ export function ServerCloudBackupsPanel(props: {
                               ? t("backups.cloud.running.test")
                               : job().kind === "restore"
                                 ? t("backups.cloud.running.restore")
-                                : t("backups.cloud.running.backup")}{" "}
+                                : job().kind === "move"
+                                  ? t("backups.cloud.running.move")
+                                  : t("backups.cloud.running.backup")}{" "}
                           </>
                         )}
                       </Show>
@@ -693,9 +703,11 @@ export function ServerCloudBackupsPanel(props: {
                     <Item class="settings-modal-row">
                       <ItemContent>
                         <ItemDescription>
-                          {row.status === "ok"
-                            ? t("backups.cloud.restoreReady", { when: when(row.finishedAt) })
-                            : t("backups.cloud.restoreFailedRow", { when: when(row.finishedAt) })}
+                          {row.status !== "ok"
+                            ? t("backups.cloud.restoreFailedRow", { when: when(row.finishedAt) })
+                            : row.partial
+                              ? t("backups.cloud.restorePartialReady", { when: when(row.finishedAt) })
+                              : t("backups.cloud.restoreReady", { when: when(row.finishedAt) })}
                         </ItemDescription>
                       </ItemContent>
                       <Show when={row.status === "ok" && props.canManage}>
@@ -708,11 +720,14 @@ export function ServerCloudBackupsPanel(props: {
                               type="button"
                               size="sm"
                               variant="outline"
-                              loading={busy() === `prepare:${row.id}`}
                               disabled={manageDisabled() || value().running !== null}
-                              onClick={() => void prepare(row.id)}
+                              onClick={() => {
+                                setApplyUnderstood(false);
+                                setApplyError(null);
+                                setApplying({ id: row.id, finishedAt: row.finishedAt });
+                              }}
                             >
-                              {t("backups.cloud.prepare")}
+                              {t("backups.cloud.apply")}
                             </Button>
                           </Show>
                         </ItemActions>
@@ -732,7 +747,14 @@ export function ServerCloudBackupsPanel(props: {
                     <Item class="settings-modal-row">
                       <ItemContent>
                         <ItemTitle>{when(snapshot.time)}</ItemTitle>
-                        <ItemDescription>{format.fileSize(snapshot.bytes)}</ItemDescription>
+                        <ItemDescription>
+                          {format.fileSize(snapshot.bytes)} ·{" "}
+                          {snapshot.groups.length
+                            ? t("backups.cloud.copyGroups", {
+                                groups: format.list(snapshot.groups.map((group) => t(GROUP_TEXT[group][0]))),
+                              })
+                            : t("backups.cloud.copyAll")}
+                        </ItemDescription>
                       </ItemContent>
                       <Show when={props.canManage}>
                         <ItemActions>
@@ -741,10 +763,7 @@ export function ServerCloudBackupsPanel(props: {
                             size="sm"
                             variant="outline"
                             disabled={manageDisabled() || value().running !== null}
-                            onClick={() => {
-                              setRestoreError(null);
-                              setRestoring(snapshot);
-                            }}
+                            onClick={() => setRestoring(snapshot)}
                           >
                             {t("backups.cloud.restore")}
                           </Button>
@@ -753,6 +772,14 @@ export function ServerCloudBackupsPanel(props: {
                     </Item>
                   )}
                 </For>
+                <Item class="settings-modal-row">
+                  <ItemContent>
+                    <ItemTitle>{t("backups.cloud.otherServerTitle")}</ItemTitle>
+                    <ItemDescription>
+                      {t("backups.cloud.otherServerDescription", { folder: value().destinations[0]?.folder ?? "" })}
+                    </ItemDescription>
+                  </ItemContent>
+                </Item>
               </ItemGroup>
             </Show>
           </SettingsSection>
@@ -763,6 +790,9 @@ export function ServerCloudBackupsPanel(props: {
         open={connectOpen()}
         serverId={props.serverId}
         account={ready()?.destinations[0]?.account ?? ""}
+        folder={
+          ready()?.destinations[0]?.folder || (props.hostName ? `Atelier Backups/${props.hostName}` : "Atelier Backups")
+        }
         onClose={() => setConnectOpen(false)}
         connect={(input) => props.calls.connect(input, props.serverId)}
         onConnected={(result) => {
@@ -831,22 +861,57 @@ export function ServerCloudBackupsPanel(props: {
         }}
       />
 
-      <ConfirmDialog
-        open={restoring() !== null}
-        onCancel={() => setRestoring(null)}
-        icon={<History />}
-        title={t("backups.cloud.restoreConfirmTitle", { when: when(restoring()?.time ?? "") })}
-        description={t("backups.cloud.restoreConfirmDescription")}
-        confirmLabel={t("backups.cloud.restoreConfirm")}
-        error={restoreError() ?? undefined}
-        onConfirm={() => restore()}
+      <CloudRestoreDialog
+        snapshot={restoring()}
+        when={when}
+        browse={(snapshot, path) => props.calls.browse(snapshot, path, props.serverId)}
+        restore={restore}
+        onClose={() => setRestoring(null)}
       />
+
+      <CloudFolderDialog
+        open={folderOpen()}
+        current={ready()?.destinations[0]?.folder ?? ""}
+        list={(path, create) => props.calls.folders(path, create, props.serverId)}
+        choose={(folder, mode, repositoryPassword) =>
+          props.calls.changeFolder(folder, mode, repositoryPassword, props.serverId)
+        }
+        onClose={() => setFolderOpen(false)}
+        onChanged={(result, mode) => {
+          setFolderOpen(false);
+          if (result.ok) accept(result.overview);
+          actionToast.success(mode === "move" ? t("backups.cloud.folderMoving") : t("backups.cloud.folderChanged"));
+          schedule(true);
+        }}
+      />
+
+      <ConfirmDialog
+        open={applying() !== null}
+        onCancel={() => setApplying(null)}
+        tone="destructive"
+        icon={<History />}
+        title={t("backups.cloud.applyTitle", { when: when(applying()?.finishedAt ?? "") })}
+        description={t("backups.cloud.applyDescription", { when: when(applying()?.finishedAt ?? "") })}
+        confirmLabel={t("backups.cloud.applyConfirm")}
+        error={applyError() ?? undefined}
+        onConfirm={() => apply()}
+      >
+        <div class="flex items-center gap-2">
+          <Checkbox
+            id="cloud-apply-understood"
+            checked={applyUnderstood()}
+            onChange={(event) => setApplyUnderstood(event.currentTarget.checked)}
+          />
+          <label for="cloud-apply-understood">{t("backups.cloud.applyUnderstand")}</label>
+        </div>
+      </ConfirmDialog>
     </>
   );
 }
 
 interface ConnectDraft {
   open: boolean;
+  folder: string;
   email: string;
   password: string;
   code: string;
@@ -864,6 +929,7 @@ interface ConnectDraft {
 const connectDrafts = new Map<string, ConnectDraft>();
 const emptyDraft = (): ConnectDraft => ({
   open: false,
+  folder: "",
   email: "",
   password: "",
   code: "",
@@ -888,6 +954,8 @@ function ProtonConnectDialog(props: {
   serverId: string;
   /** The connected account, as the email to start from. */
   account: string;
+  /** The drive folder to start from. */
+  folder: string;
   onClose: () => void;
   connect: (input: CloudConnectInput) => Promise<CloudConnectResult>;
   onConnected: (result: CloudConnectResult) => void;
@@ -924,6 +992,11 @@ function ProtonConnectDialog(props: {
     () => [props.open, props.account] as const,
     ([open, account]) => {
       if (open && !form.email && account) setEmail(account);
+      if (open && !form.folder)
+        set(
+          "folder",
+          untrack(() => props.folder),
+        );
     },
   );
   function clear(): void {
@@ -944,6 +1017,7 @@ function ProtonConnectDialog(props: {
         ...(code().trim() ? { twoFactorCode: code().trim() } : {}),
         ...(twoPasswords() && mailbox() ? { mailboxPassword: mailbox() } : {}),
         ...(repository().trim() ? { repositoryPassword: repository().trim() } : {}),
+        ...(form.folder.trim() ? { folder: form.folder.trim() } : {}),
       });
       if (result.ok) {
         clear();
@@ -989,6 +1063,9 @@ function ProtonConnectDialog(props: {
             value={password()}
             onInput={(event) => setPassword(event.currentTarget.value)}
           />
+        </Field>
+        <Field label={t("backups.cloud.connect.folder")} description={t("backups.cloud.connect.folderHint")}>
+          <Input value={form.folder} onValueChange={(value) => set("folder", value)} />
         </Field>
         <Field label={t("backups.cloud.connect.twoFactor")} description={t("backups.cloud.connect.twoFactorHint")}>
           <Input

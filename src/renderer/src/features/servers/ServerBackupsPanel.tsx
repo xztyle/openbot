@@ -419,6 +419,7 @@ export function ServerBackupsPanel(
             calls={cloud()}
             serverId={props.serverId}
             canManage={props.canRestore}
+            hostName={props.hostName}
             actionsAvailable={props.actionsAvailable}
             onPrepared={() => void read()}
           />

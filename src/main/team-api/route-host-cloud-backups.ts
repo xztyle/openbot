@@ -1,5 +1,6 @@
 import {
   type CloudConnectInput,
+  cloudGroupsOf,
   cloudPlanOf,
   HOST_CLOUD_BACKUPS_CAPABILITY,
   HOST_CLOUD_BACKUPS_ROUTES,
@@ -20,6 +21,9 @@ const OWNER_ONLY: ReadonlySet<string> = new Set([
   HOST_CLOUD_BACKUPS_ROUTES.passwordSaved,
   HOST_CLOUD_BACKUPS_ROUTES.restore,
   HOST_CLOUD_BACKUPS_ROUTES.restorePrepare,
+  HOST_CLOUD_BACKUPS_ROUTES.folders,
+  HOST_CLOUD_BACKUPS_ROUTES.changeFolder,
+  HOST_CLOUD_BACKUPS_ROUTES.apply,
 ]);
 
 const optional = (value: unknown): string | undefined => (typeof value === "string" && value ? value : undefined);
@@ -57,6 +61,7 @@ export async function routeHostCloudBackups(
           ...(twoFactorCode ? { twoFactorCode } : {}),
           ...(mailboxPassword ? { mailboxPassword } : {}),
           ...(repositoryPassword ? { repositoryPassword } : {}),
+          ...(optional(body.folder) ? { folder: optional(body.folder) } : {}),
         };
         return json(200, await cloud.connect(input));
       }
@@ -71,7 +76,28 @@ export async function routeHostCloudBackups(
       case HOST_CLOUD_BACKUPS_ROUTES.snapshots:
         return json(200, await cloud.snapshots());
       case HOST_CLOUD_BACKUPS_ROUTES.restore:
-        return json(200, await cloud.restore(optional(body.snapshot) ?? "", optional(body.confirm) ?? ""));
+        return json(
+          200,
+          await cloud.restore(optional(body.snapshot) ?? "", optional(body.confirm) ?? "", {
+            groups: cloudGroupsOf(body.groups),
+            paths: Array.isArray(body.paths) ? body.paths.filter((path) => typeof path === "string") : [],
+          }),
+        );
+      case HOST_CLOUD_BACKUPS_ROUTES.browse:
+        return json(200, await cloud.browse(optional(body.snapshot) ?? "", optional(body.path) ?? "/"));
+      case HOST_CLOUD_BACKUPS_ROUTES.folders:
+        return json(200, await cloud.folders(optional(body.path) ?? "", body.create === true));
+      case HOST_CLOUD_BACKUPS_ROUTES.changeFolder:
+        return json(
+          200,
+          await cloud.changeFolder(
+            optional(body.folder) ?? "",
+            body.mode === "move" ? "move" : "use",
+            optional(body.repositoryPassword),
+          ),
+        );
+      case HOST_CLOUD_BACKUPS_ROUTES.apply:
+        return json(200, await cloud.apply(optional(body.restore) ?? "", optional(body.confirm) ?? ""));
       default:
         return json(200, await cloud.prepareRestore(optional(body.restore) ?? ""));
     }

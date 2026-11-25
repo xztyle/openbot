@@ -162,6 +162,48 @@ try {
     await wide.close();
   }
   report.steps.push("form kept through outside clicks and polls, desktop and phone");
+
+  // Folder, restore of some parts, and putting a copy back, at phone width.
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const owner = await phone.newPage();
+  failurePage = owner;
+  await owner.goto(`${storybook}/iframe.html?id=servers-cloud-backups--connected&viewMode=story`);
+  await owner.getByText(t("backups.cloud.folder", { folder: "Atelier Backups/Delynith" })).waitFor();
+  await owner.getByRole("button", { name: t("backups.cloud.changeFolder") }).tap();
+  const folder = owner.getByRole("dialog", { name: t("backups.cloud.folderTitle") });
+  await folder.getByRole("button", { name: t("backups.cloud.browsePick", { name: "Atelier Delynith" }) }).tap();
+  await folder.getByText(t("backups.cloud.folderHasCopies")).waitFor();
+  await folder.getByRole("button", { name: t("backups.cloud.folderUse") }).tap();
+  await folder.waitFor({ state: "detached" });
+  await owner.getByText(t("backups.cloud.folder", { folder: "Atelier Backups/Atelier Delynith" })).waitFor();
+  report.steps.push("folder changed to one with copies");
+
+  await owner.getByRole("button", { name: t("backups.cloud.showCopies") }).tap();
+  await owner
+    .getByRole("button", { name: t("backups.cloud.restore") })
+    .first()
+    .tap();
+  const restoreForm = owner.getByRole("dialog");
+  await restoreForm.getByText(t("backups.cloud.restoreSome")).tap();
+  await restoreForm.getByText(t("backups.cloud.group.database"), { exact: true }).tap();
+  await restoreForm.getByRole("button", { name: t("backups.cloud.restoreConfirm") }).tap();
+  await restoreForm.waitFor({ state: "detached" });
+  report.steps.push("some parts of a copy restored");
+
+  await owner
+    .getByRole("button", { name: t("backups.cloud.apply") })
+    .first()
+    .tap();
+  const applyForm = owner.getByRole("alertdialog").or(owner.getByRole("dialog"));
+  await applyForm.getByText(t("backups.cloud.applyUnderstand")).tap();
+  await applyForm.getByRole("button", { name: t("backups.cloud.applyConfirm") }).tap();
+  await owner.waitForFunction(() => (window.cloudBackupCalls ?? []).some((call) => call.startsWith("apply:")));
+  const ownerCalls = await owner.evaluate(() => window.cloudBackupCalls ?? []);
+  assert.ok(ownerCalls.includes("folder:use:Atelier Backups/Atelier Delynith"), ownerCalls.join(" "));
+  assert.ok(ownerCalls.includes("restore:7ee1041943923f17:database:"), ownerCalls.join(" "));
+  await owner.screenshot({ path: resolve(OUT, "restore.png"), fullPage: true });
+  report.steps.push("copy put back after the owner confirmed");
+  await phone.close();
   report.passed = true;
 } finally {
   if (!report.passed) await failurePage?.screenshot({ path: resolve(OUT, "failure.png"), fullPage: true });

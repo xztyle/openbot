@@ -47,7 +47,10 @@ import {
   HOST_BACKUPS_ROUTES,
 } from "@openbot/contracts/team-protocol/host-backups-v1";
 import {
+  decodeCloudApplyStarted,
+  decodeCloudBrowseResult,
   decodeCloudConnectResult,
+  decodeCloudFolderList,
   decodeCloudRestorePrepared,
   decodeCloudSnapshotsResult,
   decodeHostCloudBackupsOverview,
@@ -1379,10 +1382,27 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.run, decodeHostCloudBackupsOverview, { kind }),
     snapshots: (serverId) =>
       hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.snapshots, decodeCloudSnapshotsResult, {}),
-    restore: (snapshot, serverId) =>
+    restore: (snapshot, pick, serverId) =>
       hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.restore, decodeHostCloudBackupsOverview, {
         snapshot,
         confirm: snapshot,
+        ...(pick.groups?.length ? { groups: [...pick.groups] } : {}),
+        ...(pick.paths?.length ? { paths: [...pick.paths] } : {}),
+      }),
+    folders: (path, create, serverId) =>
+      hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.folders, decodeCloudFolderList, { path, create }),
+    changeFolder: (folder, mode, repositoryPassword, serverId) =>
+      hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.changeFolder, decodeCloudConnectResult, {
+        folder,
+        mode,
+        ...(repositoryPassword ? { repositoryPassword } : {}),
+      }),
+    browse: (snapshot, path, serverId) =>
+      hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.browse, decodeCloudBrowseResult, { snapshot, path }),
+    apply: (restore, serverId) =>
+      hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.apply, decodeCloudApplyStarted, {
+        restore,
+        confirm: restore,
       }),
     prepareRestore: (restore, serverId) =>
       hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.restorePrepare, decodeCloudRestorePrepared, { restore }),

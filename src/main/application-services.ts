@@ -2758,6 +2758,7 @@ export async function createApplicationServices({
     isDraining: () => service.isDeployDraining(),
     alertOwner: (text) => webPush.notifyOwner({ kind: "alert", agentId: "", view: "activity", urgent: true, text }),
     log: (message) => logger.info(message),
+    serverName: () => teamStore.getIdentity()?.serverName ?? "",
   });
   if (cloudBackups.available()) {
     cloudBackups.start();

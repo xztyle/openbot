@@ -263,6 +263,7 @@ try {
     alertOwner: (text) => alerts.push(text(t).title),
     log: (line) => process.stdout.write(`  ${line}\n`),
     now: () => clock,
+    serverName: () => "Test Host",
   });
   const ready = async () => {
     const view = await cloud.overview();
@@ -297,7 +298,10 @@ try {
   assert.ok(connected.ok, `connect failed: ${JSON.stringify(connected)}`);
   const repositoryPassword = connected.repositoryPassword ?? "";
   check("the copies' password is answered once", repositoryPassword.length >= 30);
-  check("a new repository was made on the drive", existsSync(join(drive, "Atelier-Backups/config")));
+  check(
+    "a new repository was made in the default folder of the drive",
+    existsSync(join(drive, "Atelier Backups/Test Host/config")),
+  );
   const secretsFile = readFileSync(join(userData, "openbot-cloud-backups-secrets-v1.json"), "utf8");
   check(
     "the sign-in, session and password are only in the encrypted store",
@@ -348,8 +352,9 @@ try {
   check("the typical run is measured", (view.typical?.runs ?? 0) >= 1, JSON.stringify(view.typical));
   check("the session (no 2FA again) was used", !readFileSync(join(stub, "calls"), "utf8").split("\n").includes("2fa"));
 
+  let repoFolder = "Atelier Backups/Test Host";
   const restic = (...args: string[]) =>
-    must(tools.restic, ["-r", join(drive, "Atelier-Backups"), ...args], {
+    must(tools.restic, ["-r", join(drive, repoFolder), ...args], {
       env: { ...process.env, RESTIC_PASSWORD: repositoryPassword },
     });
   const listing = restic("ls", "latest");
@@ -476,6 +481,112 @@ try {
     local.ok && local.restore.includes("database") && local.restore.includes("files:.claude/projects"),
     JSON.stringify(local.restore),
   );
+  check(
+    "each copy says what it holds",
+    ["database", "conversations", "agents", "settings", "motion", "work"].every((group) =>
+      list.snapshots[0]?.groups.some((held) => held === group),
+    ),
+    JSON.stringify(list.snapshots[0]?.groups),
+  );
+
+  // ---- a part of a copy, and one file ------------------------------------------------------------------
+  const restoredFiles = (id: string | undefined) => walk(join(brokerRoot, "cloud-restores", id ?? "missing"));
+  await cloud.restore(newest, newest, { groups: ["conversations"] });
+  view = await settle();
+  const some = restoredFiles(view.restores.at(-1)?.id);
+  check(
+    "a restore of some parts takes only those parts",
+    view.restores.at(-1)?.partial === true &&
+      some.some((rel) => rel.endsWith("turn.jsonl")) &&
+      !some.some((rel) => rel.endsWith("Ana/notes.md") || rel.endsWith("openbot.db")),
+    some.join(", "),
+  );
+  const notes = join(data, "OpenBot/Agents/Ana/notes.md");
+  const browsed = await cloud.browse(newest, join(data, "OpenBot/Agents/Ana"));
+  check(
+    "a copy's folders can be browsed",
+    browsed.ok && browsed.entries.some((entry) => entry.path === notes),
+    JSON.stringify(browsed),
+  );
+  await cloud.restore(newest, newest, { paths: [notes] });
+  view = await settle();
+  const one = restoredFiles(view.restores.at(-1)?.id);
+  check("one file restores by itself", one.length === 1 && (one[0] ?? "").endsWith("Ana/notes.md"), one.join(", "));
+
+  // ---- round trip: back up, wipe a staging copy, restore, compare ------------------------------------------
+  const { createHash } = await import("node:crypto");
+  const kept = (rel: string) => !/node_modules|\/dist\/|Cache\/|launch\.mp4|Shared\/app\/|openbot\.db/u.test(rel);
+  const fingerprint = (dir: string) =>
+    new Map(
+      walk(dir)
+        .filter(kept)
+        .map((rel) => [
+          rel,
+          createHash("sha256")
+            .update(readFileSync(join(dir, rel)))
+            .digest("hex"),
+        ]),
+    );
+  await cloud.runNow("backup");
+  view = await settle();
+  const before = fingerprint(data);
+  const staging = join(root, "staging");
+  must("cp", ["-a", data, staging]);
+  rmSync(staging, { recursive: true, force: true });
+  mkdirSync(staging);
+  const latest = (await cloud.snapshots()).snapshots[0]?.id ?? "";
+  await cloud.restore(latest, latest);
+  view = await settle();
+  const full = join(brokerRoot, "cloud-restores", view.restores.at(-1)?.id ?? "missing");
+  must("cp", ["-a", `${join(full, data)}/.`, staging]);
+  const after = fingerprint(staging);
+  const differing = [...before].filter(([rel, hash]) => after.get(rel) !== hash).map(([rel]) => rel);
+  check(
+    "a full restore brings every file back equal",
+    before.size >= 5 && differing.length === 0,
+    `${before.size} files; differing: ${differing.join(", ")}`,
+  );
+  const rows = must("python3", [
+    "-I",
+    "-c",
+    "import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute('select count(*) from projection_agents').fetchone()[0])",
+    join(full, brokerRoot, "cloud-stage/db/openbot.db"),
+  ]).trim();
+  check("the restored database holds the same rows", rows === "50", rows);
+
+  // ---- the drive folder --------------------------------------------------------------------------------
+  const top = await cloud.folders("Atelier Backups", false);
+  check("the drive's folders are listed", top.ok && top.folders.includes("Test Host"), JSON.stringify(top));
+  check("a folder with copies is recognized", (await cloud.folders("Atelier Backups/Test Host", false)).hasCopies);
+  const made = await cloud.folders("Atelier Backups/Moved", true);
+  check("a folder can be made", made.ok && !made.hasCopies && existsSync(join(drive, "Atelier Backups/Moved")));
+  const moved = await cloud.changeFolder("Atelier Backups/Moved", "move");
+  view = await settle();
+  repoFolder = "Atelier Backups/Moved";
+  check(
+    "the copies move to another folder",
+    moved.ok &&
+      view.destinations[0]?.folder === "Atelier Backups/Moved" &&
+      existsSync(join(drive, "Atelier Backups/Moved/config")) &&
+      !existsSync(join(drive, "Atelier Backups/Test Host/config")),
+    JSON.stringify(view.destinations[0]),
+  );
+  const movedSnapshots: unknown[] = JSON.parse(restic("snapshots", "--json"));
+  const movedCount = movedSnapshots.length;
+  await cloud.runNow("backup");
+  view = await settle();
+  check("copies go on in the moved folder", view.lastBackup?.ok === true && movedCount >= 1);
+  const fresh = await cloud.changeFolder("Fresh start", "use");
+  check(
+    "another folder can start fresh",
+    fresh.ok && existsSync(join(drive, "Fresh start/config")),
+    JSON.stringify(fresh),
+  );
+  await cloud.runNow("backup");
+  view = await settle();
+  repoFolder = "Fresh start";
+  const freshCount: unknown[] = JSON.parse(restic("snapshots", "--json"));
+  check("the fresh folder keeps its own copies", view.lastBackup?.ok === true && freshCount.length === 1);
 } catch (error) {
   check("the run finished", false, error instanceof Error ? (error.stack ?? error.message) : String(error));
 } finally {

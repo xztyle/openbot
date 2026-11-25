@@ -19,6 +19,12 @@
 // - `.../restore` `{ snapshot, confirm }` (owner) restores the whole copy into its own folder on the
 //   server; live data is never touched. `.../restore-prepare` `{ restore }` (owner) turns that folder
 //   into a backup that Backups > Restore can put back, with its safety copy and typed confirmation.
+//   `restore` also takes `groups` or `paths` (files and folders picked with `.../browse`
+//   `{ snapshot, path }`). `.../apply` `{ restore, confirm }` (owner) prepares a restore and puts it
+//   back at once: a safety backup, the host drains, stops, restores and starts.
+// - `.../folders` `{ path, create? }` (owner) lists a drive folder; `.../change-folder`
+//   `{ folder, mode: "move" | "use", repositoryPassword? }` (owner) moves the copies to another folder,
+//   or uses that folder from now on (its copies, or new ones).
 //
 // A host built before these routes answers 404, and a client shows no cloud section there.
 // Widening any of it needs a new route.
@@ -51,6 +57,10 @@ export const HOST_CLOUD_BACKUPS_ROUTES = {
   snapshots: "/v1/admin/host/cloud-backups/snapshots",
   restore: "/v1/admin/host/cloud-backups/restore",
   restorePrepare: "/v1/admin/host/cloud-backups/restore-prepare",
+  folders: "/v1/admin/host/cloud-backups/folders",
+  changeFolder: "/v1/admin/host/cloud-backups/change-folder",
+  browse: "/v1/admin/host/cloud-backups/browse",
+  apply: "/v1/admin/host/cloud-backups/apply",
 } as const;
 
 /** The drives. Only `proton` connects today; the others are named so the wire needs no change. */
@@ -124,6 +134,8 @@ export interface CloudDestination {
   status: "ok" | "relogin";
   connectedAt: string;
   space: CloudSpace | null;
+  /** The folder in the drive that holds this server's copies. */
+  folder: string;
 }
 
 export interface CloudRun {
@@ -148,6 +160,8 @@ export interface CloudRestore {
   bytes: number;
   /** The backup that Backups > Restore can put back, once prepared. */
   preparedAs: string | null;
+  /** Only some groups, files or folders of the copy. */
+  partial: boolean;
 }
 
 export interface CloudSnapshot {
@@ -155,6 +169,36 @@ export interface CloudSnapshot {
   time: string;
   bytes: number;
   files: number;
+  /** What the copy holds; empty for a copy made before groups were recorded. */
+  groups: CloudGroup[];
+}
+
+export interface CloudFolderList {
+  ok: boolean;
+  path: string;
+  folders: string[];
+  /** The folder already holds Atelier copies. */
+  hasCopies: boolean;
+  problem?: CloudProblem;
+}
+
+export interface CloudEntry {
+  name: string;
+  path: string;
+  dir: boolean;
+  bytes: number;
+}
+
+export interface CloudBrowseResult {
+  ok: boolean;
+  entries: CloudEntry[];
+  problem?: CloudProblem;
+}
+
+export interface CloudRestoreInput {
+  snapshot: string;
+  groups?: CloudGroup[];
+  paths?: string[];
 }
 
 export type HostCloudBackupsOverview =
@@ -163,7 +207,7 @@ export type HostCloudBackupsOverview =
       available: true;
       destinations: CloudDestination[];
       plan: CloudPlan;
-      running: { kind: "backup" | "test" | "restore"; startedAt: string; phase: string } | null;
+      running: { kind: "backup" | "test" | "restore" | "move"; startedAt: string; phase: string } | null;
       lastBackup: CloudRun | null;
       lastSuccessAt: string | null;
       nextRunAt: string | null;
@@ -183,6 +227,8 @@ export interface CloudConnectInput {
   mailboxPassword?: string;
   /** The password of copies that already exist on the drive (a second server, or after a disconnect). */
   repositoryPassword?: string;
+  /** The folder in the drive; the default is "Atelier Backups/<server name>". */
+  folder?: string;
 }
 
 export type CloudConnectResult =
@@ -212,14 +258,17 @@ const space = fields({
   totalBytes: nullable(count),
   checkedAt: string(64),
 });
-const destination = fields({
-  id: identifier,
-  provider: oneOf(...CLOUD_PROVIDERS),
-  account: string(320),
-  status: oneOf("ok", "relogin"),
-  connectedAt: string(64),
-  space: nullable(space),
-});
+const destination = fields(
+  {
+    id: identifier,
+    provider: oneOf(...CLOUD_PROVIDERS),
+    account: string(320),
+    status: oneOf("ok", "relogin"),
+    connectedAt: string(64),
+    space: nullable(space),
+  },
+  { folder: string(400) },
+);
 const runRow = fields({
   startedAt: string(64),
   finishedAt: string(64),
@@ -230,22 +279,38 @@ const runRow = fields({
   problem: nullable(problem),
   detail: nullable(string(TEXT)),
 });
-const restoreRow = fields({
-  id: identifier,
-  snapshot: string(64),
-  status: oneOf("ok", "failed"),
-  finishedAt: string(64),
-  bytes: count,
-  preparedAs: nullable(identifier),
-});
-const snapshotRow = fields({ id: string(64), time: string(64), bytes: count, files: count });
+const restoreRow = fields(
+  {
+    id: identifier,
+    snapshot: string(64),
+    status: oneOf("ok", "failed"),
+    finishedAt: string(64),
+    bytes: count,
+    preparedAs: nullable(identifier),
+  },
+  { partial: boolean },
+);
+const snapshotRow = fields(
+  { id: string(64), time: string(64), bytes: count, files: count },
+  { groups: list(oneOf(...CLOUD_GROUPS), CLOUD_GROUPS.length) },
+);
+const folderList = fields(
+  { ok: boolean, path: string(400), folders: list(string(255), 2000), hasCopies: boolean },
+  { problem },
+);
+const browseResult = fields(
+  { ok: boolean, entries: list(fields({ name: string(255), path: string(4096), dir: boolean, bytes: count }), 1000) },
+  { problem },
+);
 const overview = (value: unknown): TeamProtocolV2Json => {
   if (isDynamicRecord(value) && value.available === false) return fields({ available: boolean })(value);
   return fields({
     available: boolean,
     destinations: list(destination, 10),
     plan,
-    running: nullable(fields({ kind: oneOf("backup", "test", "restore"), startedAt: string(64), phase: string(64) })),
+    running: nullable(
+      fields({ kind: oneOf("backup", "test", "restore", "move"), startedAt: string(64), phase: string(64) }),
+    ),
     lastBackup: nullable(runRow),
     lastSuccessAt: nullable(string(64)),
     nextRunAt: nullable(string(64)),
@@ -269,7 +334,12 @@ export const HOST_CLOUD_BACKUPS_CODECS: ReadonlyMap<string, OptionalRouteCodec> 
     adminRoute(
       fields(
         { provider: oneOf(...CLOUD_PROVIDERS), email: string(320), password: string(1024) },
-        { twoFactorCode: string(16), mailboxPassword: string(1024), repositoryPassword: string(256) },
+        {
+          twoFactorCode: string(16),
+          mailboxPassword: string(1024),
+          repositoryPassword: string(256),
+          folder: string(400),
+        },
       ),
       connectResult,
     ),
@@ -279,7 +349,32 @@ export const HOST_CLOUD_BACKUPS_CODECS: ReadonlyMap<string, OptionalRouteCodec> 
   [HOST_CLOUD_BACKUPS_ROUTES.passwordSaved, adminRoute(empty, overview)],
   [HOST_CLOUD_BACKUPS_ROUTES.run, adminRoute(fields({ kind: oneOf("backup", "test") }), overview)],
   [HOST_CLOUD_BACKUPS_ROUTES.snapshots, adminRoute(empty, snapshotsResult)],
-  [HOST_CLOUD_BACKUPS_ROUTES.restore, adminRoute(fields({ snapshot: string(64), confirm: string(64) }), overview)],
+  [
+    HOST_CLOUD_BACKUPS_ROUTES.restore,
+    adminRoute(
+      fields(
+        { snapshot: string(64), confirm: string(64) },
+        { groups: list(oneOf(...CLOUD_GROUPS), CLOUD_GROUPS.length), paths: list(string(4096), 200) },
+      ),
+      overview,
+    ),
+  ],
+  [HOST_CLOUD_BACKUPS_ROUTES.folders, adminRoute(fields({ path: string(400) }, { create: boolean }), folderList)],
+  [
+    HOST_CLOUD_BACKUPS_ROUTES.changeFolder,
+    adminRoute(
+      fields({ folder: string(400), mode: oneOf("move", "use") }, { repositoryPassword: string(256) }),
+      connectResult,
+    ),
+  ],
+  [HOST_CLOUD_BACKUPS_ROUTES.browse, adminRoute(fields({ snapshot: string(64), path: string(4096) }), browseResult)],
+  [
+    HOST_CLOUD_BACKUPS_ROUTES.apply,
+    adminRoute(
+      fields({ restore: identifier, confirm: identifier }),
+      fields({ started: boolean, backupId: identifier }),
+    ),
+  ],
   [
     HOST_CLOUD_BACKUPS_ROUTES.restorePrepare,
     adminRoute(fields({ restore: identifier }), fields({ backupId: identifier })),
@@ -378,12 +473,13 @@ export function hostCloudBackupsOverviewOf(value: unknown): HostCloudBackupsOver
         status: row.status === "relogin" ? ("relogin" as const) : ("ok" as const),
         connectedAt: text(row.connectedAt, 64),
         space: spaceOf(row.space),
+        folder: text(row.folder, 400),
       }))
       .filter((row) => row.id),
     plan: cloudPlanOf(value.plan),
     running: running
       ? {
-          kind: pick(running.kind, ["backup", "test", "restore"] as const, "backup"),
+          kind: pick(running.kind, ["backup", "test", "restore", "move"] as const, "backup"),
           startedAt: text(running.startedAt, 64),
           phase: text(running.phase, 64),
         }
@@ -411,6 +507,7 @@ export function hostCloudBackupsOverviewOf(value: unknown): HostCloudBackupsOver
         finishedAt: text(row.finishedAt, 64),
         bytes: whole(row.bytes),
         preparedAs: textOrNull(row.preparedAs, 128),
+        partial: row.partial === true,
       }))
       .filter((row) => row.id),
   };
@@ -437,6 +534,7 @@ export function decodeCloudSnapshotsResult(value: unknown): CloudSnapshotsResult
     time: text(row.time, 64),
     bytes: whole(row.bytes),
     files: whole(row.files),
+    groups: cloudGroupsOf(row.groups),
   }));
   return decoded.ok === true
     ? { ok: true, snapshots }
@@ -445,4 +543,43 @@ export function decodeCloudSnapshotsResult(value: unknown): CloudSnapshotsResult
 
 export function decodeCloudRestorePrepared(value: unknown): { backupId: string } {
   return { backupId: text(record(fields({ backupId: identifier })(value)).backupId, 128) };
+}
+
+export function cloudGroupsOf(value: unknown): CloudGroup[] {
+  return (Array.isArray(value) ? value : []).flatMap((item) => CLOUD_GROUPS.filter((group) => group === item));
+}
+
+function problemOrNone(value: unknown): { problem?: CloudProblem } {
+  const found = CLOUD_PROBLEMS.find((item) => item === value);
+  return found ? { problem: found } : {};
+}
+
+export function decodeCloudFolderList(value: unknown): CloudFolderList {
+  const row = record(folderList(value));
+  return {
+    ok: row.ok === true,
+    path: text(row.path, 400),
+    folders: (Array.isArray(row.folders) ? row.folders : []).map((item) => text(item, 255)),
+    hasCopies: row.hasCopies === true,
+    ...problemOrNone(row.problem),
+  };
+}
+
+export function decodeCloudBrowseResult(value: unknown): CloudBrowseResult {
+  const row = record(browseResult(value));
+  return {
+    ok: row.ok === true,
+    entries: records(row.entries).map((entry) => ({
+      name: text(entry.name, 255),
+      path: text(entry.path, 4096),
+      dir: entry.dir === true,
+      bytes: whole(entry.bytes),
+    })),
+    ...problemOrNone(row.problem),
+  };
+}
+
+export function decodeCloudApplyStarted(value: unknown): { started: boolean; backupId: string } {
+  const row = record(fields({ started: boolean, backupId: identifier })(value));
+  return { started: row.started === true, backupId: text(row.backupId, 128) };
 }

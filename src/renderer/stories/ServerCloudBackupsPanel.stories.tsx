@@ -46,6 +46,7 @@ const CONNECTED: Ready = {
       account: "owner@proton.me",
       status: "ok",
       connectedAt: "2026-11-25T08:00:00Z",
+      folder: "Atelier Backups/Delynith",
       space: { usedBytes: 6.2 * GB, freeBytes: 493 * GB, totalBytes: 500 * GB, checkedAt: "2026-11-25T14:00:00Z" },
     },
   ],
@@ -72,6 +73,17 @@ const CONNECTED: Ready = {
     detail: null,
   },
   typical: { seconds: 44, addedBytes: 21 * MB, runs: 24 },
+  restores: [
+    {
+      id: "cloud-restore-20261125-150000-a1b2c3",
+      snapshot: "7ee1041943923f17",
+      status: "ok",
+      finishedAt: "2026-11-25T15:05:00Z",
+      bytes: 11.2 * GB,
+      preparedAs: null,
+      partial: false,
+    },
+  ],
   sizes: [
     { group: "database", bytes: 2.3 * GB },
     { group: "conversations", bytes: 1.9 * GB },
@@ -132,11 +144,47 @@ function stubCalls(start: Ready): HostCloudBackupsCalls {
     },
     snapshots: async () => ({
       ok: true,
-      snapshots: [{ id: "7ee1041943923f17", time: "2026-11-25T14:00:00Z", bytes: 11.2 * GB, files: 182_000 }],
+      snapshots: [
+        {
+          id: "7ee1041943923f17",
+          time: "2026-11-25T14:00:00Z",
+          bytes: 11.2 * GB,
+          files: 182_000,
+          groups: ["database", "conversations", "agents", "settings", "motion", "work"],
+        },
+      ],
     }),
-    restore: async (snapshot) => {
-      record(`restore:${snapshot}`);
+    restore: async (snapshot, pick) => {
+      record(`restore:${snapshot}:${pick.groups?.join("+") ?? ""}:${pick.paths?.join("+") ?? ""}`);
       return overview;
+    },
+    folders: async (path, create) => {
+      record(`folders:${path}:${create}`);
+      return {
+        ok: true,
+        path,
+        folders: path ? ["Atelier Delynith"] : ["Atelier Backups", "Fotos"],
+        hasCopies: path.endsWith("Atelier Delynith"),
+      };
+    },
+    changeFolder: async (folder, mode) => {
+      record(`folder:${mode}:${folder}`);
+      overview = { ...overview, destinations: overview.destinations.map((drive) => ({ ...drive, folder })) };
+      return { ok: true, overview };
+    },
+    browse: async (_snapshot, path) => ({
+      ok: true,
+      entries:
+        path === "/"
+          ? [{ name: "opt", path: "/opt", dir: true, bytes: 0 }]
+          : [
+              { name: "Shared", path: `${path}/Shared`, dir: true, bytes: 0 },
+              { name: "notes.md", path: `${path}/notes.md`, dir: false, bytes: 2048 },
+            ],
+    }),
+    apply: async (restore) => {
+      record(`apply:${restore}`);
+      return { started: true, backupId: "2026-11-25-1500" };
     },
     prepareRestore: async () => ({ backupId: "2026-11-25-1500" }),
   };

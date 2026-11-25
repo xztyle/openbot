@@ -5,15 +5,18 @@ import { type DynamicRecord, isDynamicRecord } from "@openbot/contracts/runtime-
 import {
   CLOUD_GROUPS,
   CLOUD_PROBLEMS,
+  type CloudBrowseResult,
   type CloudConnectInput,
   type CloudConnectResult,
   type CloudDestination,
+  type CloudFolderList,
   type CloudGroup,
   type CloudPlan,
   type CloudProblem,
   type CloudRun,
   type CloudSnapshotsResult,
   type CloudWarning,
+  cloudGroupsOf,
   cloudPlanOf,
   DEFAULT_CLOUD_PLAN,
   type HostCloudBackupsOverview,
@@ -49,6 +52,8 @@ export interface CloudBackupsOptions {
   /** An urgent push to the owner, in the language of each of their devices. */
   alertOwner: (text: (t: AppTranslate) => { title: string; body: string }) => void;
   log: (message: string) => void;
+  /** The server's name, for the default folder "Atelier Backups/<name>". */
+  serverName?: () => string;
   now?: () => number;
 }
 
@@ -99,7 +104,7 @@ interface Settings {
   passwordShown: boolean;
   lastAttemptAt: string | null;
   lastTestAttemptAt: string | null;
-  pendingJob: { job: string; kind: "backup" | "test" | "restore"; at?: string } | null;
+  pendingJob: { job: string; kind: "backup" | "test" | "restore" | "move"; at?: string } | null;
   /** The problem the owner was last told about, so an hourly failure pushes once, not each hour. */
   alerted: { problem: string; at: string } | null;
   staleAlertedFor: string | null;
@@ -135,6 +140,16 @@ const stringMap = (value: unknown): Record<string, string> =>
   Object.fromEntries(
     Object.entries(record(value)).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
   );
+
+/** A drive folder as the broker takes it: a relative path with no empty or `..` part. */
+function cleanFolder(value: string | undefined): string {
+  return (value ?? "")
+    .split("/")
+    .map((part) => part.trim())
+    .filter((part) => part && part !== "." && part !== "..")
+    .join("/")
+    .slice(0, 400);
+}
 
 /** A long random password in groups of five, easy to copy into a password manager. */
 export function newRepositoryPassword(): string {
@@ -226,7 +241,8 @@ export class CloudBackups {
       const at = (field: unknown): string | null => (typeof field === "string" ? field.slice(0, 64) : null);
       const pending = record(value.pendingJob);
       const alerted = record(value.alerted);
-      const pendingKind = pending.kind === "test" || pending.kind === "restore" ? pending.kind : "backup";
+      const pendingKind =
+        pending.kind === "test" || pending.kind === "restore" || pending.kind === "move" ? pending.kind : "backup";
       return {
         destinations: decoded.available ? decoded.destinations : [],
         plan: cloudPlanOf(value.plan),
@@ -301,7 +317,16 @@ export class CloudBackups {
       password: secrets.password,
       ...(secrets.mailboxPassword ? { mailboxPassword: secrets.mailboxPassword } : {}),
       tokens: secrets.tokens,
+      folder: destination.folder || this.#defaultFolder(),
     };
+  }
+
+  #defaultFolder(): string {
+    const name = (this.#options.serverName?.() ?? "")
+      .replace(/[/\\\n\r]/gu, " ")
+      .trim()
+      .slice(0, 80);
+    return name ? `Atelier Backups/${name}` : "Atelier Backups";
   }
 
   #keepTokens(destinationId: string, tokens: unknown): void {
@@ -329,8 +354,10 @@ export class CloudBackups {
     const given = input.repositoryPassword?.trim();
     const repository = given || this.#secrets.repository || newRepositoryPassword();
     const fresh = !given && !this.#secrets.repository;
+    const folder = cleanFolder(input.folder) || this.#active()?.folder || this.#defaultFolder();
     const destination = {
       provider: "proton",
+      folder,
       email,
       password: input.password,
       ...(input.mailboxPassword ? { mailboxPassword: input.mailboxPassword } : {}),
@@ -366,6 +393,7 @@ export class CloudBackups {
         account: email,
         status: "ok",
         connectedAt: new Date(this.#now()).toISOString(),
+        folder,
         space:
           typeof about.usedBytes === "number"
             ? {
@@ -442,6 +470,7 @@ export class CloudBackups {
       time: text(row.time, 64),
       bytes: typeof row.bytes === "number" ? row.bytes : 0,
       files: typeof row.files === "number" ? row.files : 0,
+      groups: cloudGroupsOf(row.groups),
     }));
     if (answer.ok !== true) {
       const problem = problemOf(answer.problem);
@@ -451,13 +480,134 @@ export class CloudBackups {
     return { ok: true, snapshots };
   }
 
-  async restore(snapshot: string, confirm: string): Promise<HostCloudBackupsOverview> {
+  /** A whole copy, its chosen groups, or chosen files and folders, into its own folder on the server. */
+  async restore(
+    snapshot: string,
+    confirm: string,
+    pick: { groups?: CloudGroup[]; paths?: string[] } = {},
+  ): Promise<HostCloudBackupsOverview> {
     if (!/^[0-9a-f]{8,64}$/u.test(snapshot) || confirm !== snapshot)
       throw new CloudBackupError(sourceText("error.host.cloudConfirm"), 400);
     const destination = this.#active();
     if (!destination) throw new CloudBackupError(sourceText("error.host.cloudNotConnected"), 409);
-    await this.#start(destination, "restore", { snapshot });
+    await this.#start(destination, "restore", {
+      snapshot,
+      ...(pick.groups?.length ? { groups: pick.groups } : {}),
+      ...(pick.paths?.length ? { paths: pick.paths.slice(0, 200) } : {}),
+    });
     return this.overview();
+  }
+
+  /** One folder of a copy, to pick a file or folder to restore. */
+  async browse(snapshot: string, path: string): Promise<CloudBrowseResult> {
+    const destination = this.#active();
+    if (!destination) return { ok: false, entries: [], problem: "other" };
+    if (this.#settings.pendingJob) return { ok: false, entries: [], problem: "busy" };
+    const answer = record(
+      await this.#options.broker.request(
+        "POST",
+        "/v1/cloud/ls",
+        {
+          destination: this.#destinationBody(destination),
+          repositoryPassword: this.#secrets.repository ?? "",
+          snapshot,
+          path,
+        },
+        600_000,
+      ),
+    );
+    this.#keepTokens(destination.id, answer.tokens);
+    const entries = (Array.isArray(answer.entries) ? answer.entries : []).filter(isDynamicRecord).map((row) => ({
+      name: text(row.name, 255),
+      path: text(row.path, 4096),
+      dir: row.dir === true,
+      bytes: typeof row.bytes === "number" ? row.bytes : 0,
+    }));
+    return answer.ok === true ? { ok: true, entries } : { ok: false, entries, problem: problemOf(answer.problem) };
+  }
+
+  /** The subfolders of a drive folder, to choose where the copies go; `create` makes it first. */
+  async folders(path: string, create: boolean): Promise<CloudFolderList> {
+    const destination = this.#active();
+    const clean = cleanFolder(path);
+    if (!destination) return { ok: false, path: clean, folders: [], hasCopies: false, problem: "other" };
+    if (this.#settings.pendingJob) return { ok: false, path: clean, folders: [], hasCopies: false, problem: "busy" };
+    const answer = record(
+      await this.#options.broker.request(
+        "POST",
+        "/v1/cloud/folders",
+        { destination: this.#destinationBody(destination), path: clean, create },
+        180_000,
+      ),
+    );
+    this.#keepTokens(destination.id, answer.tokens);
+    return {
+      ok: answer.ok === true,
+      path: clean,
+      folders: (Array.isArray(answer.folders) ? answer.folders : []).map((item) => text(item, 255)).filter(Boolean),
+      hasCopies: answer.hasCopies === true,
+      ...(answer.ok === true ? {} : { problem: problemOf(answer.problem) }),
+    };
+  }
+
+  /**
+   * Another folder for the copies. `move` moves the copies there (a job; the folder changes when it
+   * ends). `use` uses that folder from now on: its copies if it has some (their password: the one
+   * kept, or `repositoryPassword`), or new ones; the copies in the old folder stay where they are.
+   */
+  async changeFolder(folder: string, mode: "move" | "use", repositoryPassword?: string): Promise<CloudConnectResult> {
+    const destination = this.#active();
+    const clean = cleanFolder(folder);
+    if (!destination) throw new CloudBackupError(sourceText("error.host.cloudNotConnected"), 409);
+    if (!clean) return { ok: false, problem: "other" };
+    if (mode === "move") {
+      await this.#start(destination, "move", { to: clean });
+      return { ok: true, overview: await this.overview() };
+    }
+    if (this.#settings.pendingJob) return { ok: false, problem: "busy" };
+    if (repositoryPassword && repositoryPassword.length >= 4) registerSecretValue(repositoryPassword);
+    const answer = record(
+      await this.#options.broker.request(
+        "POST",
+        "/v1/cloud/login",
+        {
+          destination: { ...this.#destinationBody(destination), folder: clean },
+          repositoryPassword: repositoryPassword?.trim() || this.#secrets.repository || "",
+        },
+        180_000,
+      ),
+    );
+    this.#keepTokens(destination.id, answer.tokens);
+    if (answer.ok !== true) return { ok: false, problem: problemOf(answer.problem) };
+    if (repositoryPassword?.trim()) {
+      this.#secrets.repository = repositoryPassword.trim();
+      this.#saveSecrets();
+    }
+    destination.folder = clean;
+    this.#saveSettings();
+    this.#options.log("Cloud copies: the drive folder changed.");
+    return { ok: true, overview: await this.overview() };
+  }
+
+  /**
+   * Puts a downloaded copy back on this server: it becomes a local backup, and the broker's restore
+   * takes a safety backup of now, holds new work, stops the host, restores and starts it again.
+   */
+  async apply(restoreId: string, confirm: string): Promise<{ started: boolean; backupId: string }> {
+    if (!restoreId || confirm !== restoreId) throw new CloudBackupError(sourceText("error.host.cloudConfirm"), 400);
+    if (this.#settings.pendingJob) throw new CloudBackupError(sourceText("error.host.cloudBusy"), 409);
+    const { backupId } = await this.prepareRestore(restoreId);
+    if (!backupId) throw new CloudBackupError(sourceText("error.host.cloudStartFailed"), 502);
+    const answer = record(
+      await this.#options.broker.request(
+        "POST",
+        `/v1/backups/${encodeURIComponent(backupId)}/restore`,
+        { confirm: backupId, spaces: true },
+        120_000,
+      ),
+    );
+    this.#options.log("Cloud copies: a downloaded copy is being put back.");
+    return { started: answer.started === true, backupId };
   }
 
   async prepareRestore(restoreId: string): Promise<{ backupId: string }> {
@@ -467,7 +617,7 @@ export class CloudBackups {
     return { backupId: text(answer.backupId, 128) };
   }
 
-  async #start(destination: CloudDestination, kind: "backup" | "test" | "restore", extra: DynamicRecord = {}) {
+  async #start(destination: CloudDestination, kind: "backup" | "test" | "restore" | "move", extra: DynamicRecord = {}) {
     // One job at a time: a run that comes while another goes is refused, never queued. A job that
     // never reported back for six hours no longer holds the next one.
     const pending = this.#settings.pendingJob;
@@ -545,11 +695,13 @@ export class CloudBackups {
         ? record(status.lastBackup)
         : pending.kind === "test"
           ? record(status.lastTest)
-          : record(
-              (Array.isArray(status.restores) ? status.restores : [])
-                .filter(isDynamicRecord)
-                .find((row) => row.id === pending.job),
-            );
+          : pending.kind === "move"
+            ? record(status.lastMove)
+            : record(
+                (Array.isArray(status.restores) ? status.restores : [])
+                  .filter(isDynamicRecord)
+                  .find((row) => row.id === pending.job),
+              );
     if (entry.job !== pending.job && entry.id !== pending.job) {
       // Not started or not finished yet. A job that never reports (the broker restarted) is dropped
       // after a day, so the schedule goes on.
@@ -567,6 +719,10 @@ export class CloudBackups {
     this.#settings.pendingJob = null;
     this.#saveSettings();
     const ok = entry.ok === true || entry.status === "ok";
+    if (ok && pending.kind === "move" && typeof entry.folder === "string") {
+      destination.folder = entry.folder;
+      this.#saveSettings();
+    }
     if (ok) {
       if (destination.status !== "ok" || this.#settings.alerted) {
         destination.status = "ok";
@@ -580,7 +736,11 @@ export class CloudBackups {
     this.#afterProblem(destination, problem, pending.kind);
   }
 
-  #afterProblem(destination: CloudDestination, problem: CloudProblem, kind: "backup" | "test" | "restore" = "backup") {
+  #afterProblem(
+    destination: CloudDestination,
+    problem: CloudProblem,
+    kind: "backup" | "test" | "restore" | "move" = "backup",
+  ) {
     if (problem === "busy") return;
     if (SIGN_IN_PROBLEMS.has(problem)) {
       if (destination.status !== "relogin") {
@@ -717,7 +877,14 @@ export class CloudBackups {
       plan,
       running: kind.startsWith("cloud-")
         ? {
-            kind: kind === "cloud-test" ? "test" : kind === "cloud-restore" ? "restore" : "backup",
+            kind:
+              kind === "cloud-test"
+                ? "test"
+                : kind === "cloud-restore"
+                  ? "restore"
+                  : kind === "cloud-move"
+                    ? "move"
+                    : "backup",
             startedAt: text(running.startedAt, 64),
             phase: text(running.phase, 64),
           }
@@ -748,6 +915,7 @@ export class CloudBackups {
           finishedAt: text(row.finishedAt, 64),
           bytes: typeof row.bytes === "number" ? row.bytes : 0,
           preparedAs: typeof row.importedAs === "string" ? row.importedAs : null,
+          partial: row.partial === true,
         })),
     };
   }

@@ -13,7 +13,7 @@ import {
 import { CLAUDE_API_KEY_ACCOUNT_ID } from "@openbot/contracts/team-protocol/claude-api-key-v1";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { Effect } from "effect";
-import { modelTier, tierModel } from "../agent/model-policy";
+import { modelTier } from "../agent/model-policy";
 import type { AgentClient, AgentProvider } from "../agent-client";
 import type { AgentStore } from "../agent-store";
 import type { MailboxStore } from "../mailbox-store";
@@ -213,10 +213,9 @@ export function guardrailsRuntime(options: GuardrailsRuntimeOptions): Guardrails
           choices.push({ provider: "codex", model });
         if (allowApiKey)
           choices.push({ provider: "claude", model: target.model, providerAccountId: CLAUDE_API_KEY_ACCOUNT_ID });
-      } else {
-        const sonnet = tierModel({ provider: "claude", model: "" }, "medium", models);
-        if (sonnet) choices.push({ provider: "claude", model: sonnet });
       }
+      // A Codex agent stays on Codex: Codex spends the account's credits by itself once the plan is used
+      // up, so its order is the Codex plan, then the Codex credits.
       return choices.filter((choice) => options.modelReady(choice));
     },
     changed: () => options.changed(),

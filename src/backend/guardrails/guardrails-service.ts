@@ -108,7 +108,10 @@ export interface GuardrailsRuntime {
   noteAgent(agentId: string, text: string): void;
   /** One line of the trust log. */
   recordTrust(entry: TrustAuditInput): void;
-  /** The model a failover moves an agent to: the other vendor, or the API key. Null: none is ready. */
+  /**
+   * The models a failover moves a Claude agent to, in order: Codex, then the Claude API key when
+   * allowed. Empty for a Codex agent, which stays on Codex and its credits.
+   */
   failoverTargets(agent: GuardrailAgent, allowApiKey: boolean): AgentModelChoice[];
   changed(): void;
 }

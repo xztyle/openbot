@@ -40,6 +40,14 @@ const OPUS: GuardrailAgent = {
   threadId: "thread-opus",
 };
 
+const CODEX_AGENT: GuardrailAgent = {
+  id: "agent-codex",
+  name: "Codex agent",
+  provider: "codex",
+  model: "gpt-6-luna",
+  threadId: "thread-codex",
+};
+
 function window(usedPercent: number) {
   return { usedPercent, windowDurationMins: 300, resetsAt: IN_THREE_HOURS };
 }
@@ -85,13 +93,18 @@ describe("the subscription failover", () => {
       },
     ];
     const runtime: GuardrailsRuntime = {
-      agents: () => [OPUS],
+      agents: () => [OPUS, CODEX_AGENT],
       spaceOf: () => "space",
       dailyTotals: () => [],
       turnTotals: () => null,
       costsSince: () => new Map(),
       meterAccounts,
-      agentAccount: (agentId) => (agentId === OPUS.id ? { provider: "claude", accountId: "default" } : null),
+      agentAccount: (agentId) =>
+        agentId === OPUS.id
+          ? { provider: "claude", accountId: "default" }
+          : agentId === CODEX_AGENT.id
+            ? { provider: "codex", accountId: "default" }
+            : null,
       turnTask: () => [],
       steer: () => Effect.succeed(false),
       interrupt: () => Effect.void,
@@ -127,7 +140,10 @@ describe("the subscription failover", () => {
     // The meter still shows room, so only the real limit moves the agent, not a forecast.
     expect(service.failoverChoice(OPUS)).toBeNull();
     expect(service.failoverChoice(OPUS, { limited: true })).toEqual({ provider: "codex", model: "gpt-5.6-terra" });
-    expect(service.view().steps).toEqual([{ agentId: OPUS.id, step: "claude" }]);
+    expect(service.view().steps).toEqual([
+      { agentId: OPUS.id, step: "claude" },
+      { agentId: CODEX_AGENT.id, step: "codex-plan" },
+    ]);
   });
 
   it("moves at 100% on the meter, and not before", async () => {
@@ -149,7 +165,12 @@ describe("the subscription failover", () => {
     const codex = service.view().meter.find((row) => row.provider === "codex");
     expect(codex).toMatchObject({ nearlyExhausted: false, onCredits: true, creditsLeft: true });
     expect(service.failoverChoice(OPUS, { limited: true })).toEqual({ provider: "codex", model: "gpt-5.6-terra" });
-    expect(service.view().steps).toEqual([{ agentId: OPUS.id, step: "codex-credits" }]);
+    // A Codex agent stays on Codex at its own limit and runs on the credits: it never moves to Claude.
+    expect(service.failoverChoice(CODEX_AGENT, { limited: true })).toBeNull();
+    expect(service.view().steps).toEqual([
+      { agentId: OPUS.id, step: "codex-credits" },
+      { agentId: CODEX_AGENT.id, step: "codex-credits" },
+    ]);
     expect(notices).toEqual([]);
   });
 
@@ -164,7 +185,10 @@ describe("the subscription failover", () => {
     expect(service.failoverChoice(OPUS, { limited: true })).toBeNull();
     expect(service.failoverChoice(OPUS, { limited: true })).toBeNull();
     expect(notices).toEqual(["Opus agent has no subscription left"]);
-    expect(service.view().steps).toEqual([{ agentId: OPUS.id, step: "none" }]);
+    expect(service.view().steps).toEqual([
+      { agentId: OPUS.id, step: "none" },
+      { agentId: CODEX_AGENT.id, step: "none" },
+    ]);
   });
 });
 

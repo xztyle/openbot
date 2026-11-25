@@ -149,6 +149,11 @@ export const messages = defineMessages("trust", {
   "trust.guardrails.step.none": "Nothing left: waiting for a reset",
   "trust.guardrails.stepEmpty": "No agents",
   "trust.guardrails.onCredits": "On credits",
+  "trust.guardrails.creditBalance": "Codex credits left: {balance}",
+  "trust.guardrails.resetCredits": {
+    one: "{count} unused usage reset. Atelier does not use it by itself.",
+    other: "{count} unused usage resets. Atelier does not use them by itself.",
+  },
   "trust.guardrails.failovers": "Moved to another model",
   "trust.guardrails.failoverRow": "{from} → {to}",
   "trust.guardrails.today": "Today",

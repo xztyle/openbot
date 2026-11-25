@@ -18,6 +18,10 @@ export interface MeterAccount {
   windows: readonly AccountUsageWindow[];
   /** Codex: the paid credits of the last reading, which Codex spends once the windows are used up. */
   credits?: AccountUsageCredits | null | undefined;
+  /** Codex: false once the plan's own usage is used up, whatever the windows show. */
+  ordinaryUsageAllowed?: boolean | undefined;
+  /** Codex: the unused usage resets, shown only; Atelier never spends one. */
+  resetCredits?: number | undefined;
   agents: number;
 }
 
@@ -68,7 +72,9 @@ export function meterRow(account: MeterAccount, threshold: number, nowSeconds: n
     exhaustsAt: forecastExhaustion(window, nowSeconds),
   }));
   // Codex spends the account's paid credits once the plan's windows are used up, so turns still run.
-  const windowsOut = account.windows.some((window) => windowNearlyExhausted(window, threshold, nowSeconds));
+  const windowsOut =
+    account.ordinaryUsageAllowed === false ||
+    account.windows.some((window) => windowNearlyExhausted(window, threshold, nowSeconds));
   const credits = creditsLeft(account.credits);
   return {
     provider: account.provider,
@@ -79,6 +85,10 @@ export function meterRow(account: MeterAccount, threshold: number, nowSeconds: n
     windows,
     nearlyExhausted: windowsOut && credits !== true,
     ...(credits === undefined ? {} : { onCredits: windowsOut && credits, creditsLeft: credits }),
+    ...(typeof account.credits?.balance === "number" && !account.credits.unlimited
+      ? { creditBalance: Math.max(0, Math.round(account.credits.balance)) }
+      : {}),
+    ...(account.resetCredits === undefined ? {} : { resetCredits: account.resetCredits }),
     agents: account.agents,
   };
 }

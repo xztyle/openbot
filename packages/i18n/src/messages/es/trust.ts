@@ -150,6 +150,11 @@ export const messages = {
   "trust.guardrails.step.none": "No queda nada: espera a que se renueve una ventana",
   "trust.guardrails.stepEmpty": "Ningún agente",
   "trust.guardrails.onCredits": "Usando créditos",
+  "trust.guardrails.creditBalance": "Créditos de Codex que quedan: {balance}",
+  "trust.guardrails.resetCredits": {
+    one: "{count} reinicio de uso sin usar. Atelier no lo usa por su cuenta.",
+    other: "{count} reinicios de uso sin usar. Atelier no los usa por su cuenta.",
+  },
   "trust.guardrails.failovers": "Movidos a otro modelo",
   "trust.guardrails.failoverRow": "{from} → {to}",
   "trust.guardrails.today": "Hoy",

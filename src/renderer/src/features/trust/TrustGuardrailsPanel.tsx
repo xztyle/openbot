@@ -234,6 +234,14 @@ export function TrustGuardrailsPanel(props: {
                     <span class="trust-muted">{t("trust.guardrails.agents", { count: account.agents })}</span>
                   </span>
                 </div>
+                <Show when={account.creditBalance !== undefined}>
+                  <p class="trust-muted">
+                    {t("trust.guardrails.creditBalance", { balance: format.number(account.creditBalance ?? 0) })}
+                  </p>
+                </Show>
+                <Show when={(account.resetCredits ?? 0) > 0}>
+                  <p class="trust-muted">{t("trust.guardrails.resetCredits", { count: account.resetCredits ?? 0 })}</p>
+                </Show>
                 <For each={account.windows}>
                   {(window) => (
                     <div class="guardrails-window">

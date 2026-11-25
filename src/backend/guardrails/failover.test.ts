@@ -56,6 +56,7 @@ interface Accounts {
   claudeUsed: number;
   codexUsed: number;
   codexCredits: { hasCredits: boolean; unlimited: boolean; balance: number | null } | null;
+  codexOrdinaryAllowed?: boolean;
 }
 
 describe("the subscription failover", () => {
@@ -89,6 +90,8 @@ describe("the subscription failover", () => {
         inUse: false,
         windows: [window(accounts.codexUsed)],
         credits: accounts.codexCredits,
+        ordinaryUsageAllowed: accounts.codexOrdinaryAllowed,
+        resetCredits: 1,
         agents: 0,
       },
     ];
@@ -116,10 +119,10 @@ describe("the subscription failover", () => {
       alertOwner: () => undefined,
       noteAgent: () => undefined,
       recordTrust: () => undefined,
-      // As the host builds them: every listed Codex model, strongest first for an Opus agent.
+      // As the host builds them: Codex's default model first, then the newest.
       failoverTargets: (agent): AgentModelChoice[] =>
         agent.provider === "claude"
-          ? codexFailoverModels("large", CODEX_MODELS).map((id) => ({ provider: "codex", model: id }))
+          ? codexFailoverModels(CODEX_MODELS).map((id) => ({ provider: "codex", model: id }))
           : [],
       changed: () => undefined,
     };
@@ -131,7 +134,7 @@ describe("the subscription failover", () => {
     rmSync(directory, { recursive: true, force: true });
   });
 
-  it("moves an Opus agent to Codex's strongest model after the Claude CLI's usage-limit error", () => {
+  it("moves an Opus agent to Codex's default model after the Claude CLI's usage-limit error", () => {
     // The Claude CLI's own words when the plan window is spent. The host holds the model on them.
     const cliError = "You've hit your session limit · resets 8:40pm";
     expect(isUsageLimitDiagnostic(cliError)).toBe(true);
@@ -139,7 +142,7 @@ describe("the subscription failover", () => {
 
     // The meter still shows room, so only the real limit moves the agent, not a forecast.
     expect(service.failoverChoice(OPUS)).toBeNull();
-    expect(service.failoverChoice(OPUS, { limited: true })).toEqual({ provider: "codex", model: "gpt-5.6-terra" });
+    expect(service.failoverChoice(OPUS, { limited: true })).toEqual({ provider: "codex", model: "gpt-6-luna" });
     expect(service.view().steps).toEqual([
       { agentId: OPUS.id, step: "claude" },
       { agentId: CODEX_AGENT.id, step: "codex-plan" },
@@ -153,18 +156,26 @@ describe("the subscription failover", () => {
     accounts.claudeUsed = 100;
     // A saved policy reads the meter again at once.
     await Effect.runPromise(service.savePolicy({ ...service.policy() }));
-    expect(service.failoverChoice(OPUS)).toEqual({ provider: "codex", model: "gpt-5.6-terra" });
+    expect(service.failoverChoice(OPUS)).toEqual({ provider: "codex", model: "gpt-6-luna" });
   });
 
   it("counts a Codex plan that is used up as usable while credits remain", async () => {
     accounts.claudeUsed = 100;
-    accounts.codexUsed = 100;
+    // As the live account reads: Codex says the plan's own usage is no longer allowed.
+    accounts.codexUsed = 60;
+    accounts.codexOrdinaryAllowed = false;
     accounts.codexCredits = { hasCredits: true, unlimited: false, balance: 62_424.27 };
     await Effect.runPromise(service.savePolicy({ ...service.policy() }));
 
     const codex = service.view().meter.find((row) => row.provider === "codex");
-    expect(codex).toMatchObject({ nearlyExhausted: false, onCredits: true, creditsLeft: true });
-    expect(service.failoverChoice(OPUS, { limited: true })).toEqual({ provider: "codex", model: "gpt-5.6-terra" });
+    expect(codex).toMatchObject({
+      nearlyExhausted: false,
+      onCredits: true,
+      creditsLeft: true,
+      creditBalance: 62_424,
+      resetCredits: 1,
+    });
+    expect(service.failoverChoice(OPUS, { limited: true })).toEqual({ provider: "codex", model: "gpt-6-luna" });
     // A Codex agent stays on Codex at its own limit and runs on the credits: it never moves to Claude.
     expect(service.failoverChoice(CODEX_AGENT, { limited: true })).toBeNull();
     expect(service.view().steps).toEqual([
@@ -193,11 +204,8 @@ describe("the subscription failover", () => {
 });
 
 describe("the Codex model of a failover", () => {
-  it("gives an Opus agent the strongest listed Codex model and others the default first", () => {
-    expect(codexFailoverModels("large", CODEX_MODELS)[0]).toBe("gpt-5.6-terra");
-    expect(codexFailoverModels("medium", CODEX_MODELS)[0]).toBe("gpt-6-luna");
-    expect(codexFailoverModels("large", [...CODEX_MODELS, model("gpt-6-sol", ["low", "medium", "high"])])[0]).toBe(
-      "gpt-6-sol",
-    );
+  it("is Codex's default model for every tier, else the newest listed model", () => {
+    expect(codexFailoverModels(CODEX_MODELS)[0]).toBe("gpt-6-luna");
+    expect(codexFailoverModels(CODEX_MODELS.filter((option) => option.id !== "gpt-6-luna"))[0]).toBe("gpt-5.6-terra");
   });
 });

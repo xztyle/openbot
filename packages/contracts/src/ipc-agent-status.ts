@@ -228,6 +228,10 @@ export interface AccountUsageLimit {
    * are used up, so the account still runs turns. Absent when the provider did not say.
    */
   credits?: AccountUsageCredits;
+  /** Codex only: false once the plan's own usage is used up; turns then run on `credits`. */
+  ordinaryUsageAllowed?: boolean;
+  /** Codex only: the unused usage resets of the account. Atelier never spends one by itself. */
+  resetCredits?: number;
 }
 
 /** The paid credits of an account. `balance` is in credits; null when the provider did not send it. */

@@ -21,7 +21,14 @@ export function normalizeAccountUsage(rateLimits: AccountRateLimitsReadResult | 
   // No model means the dock's account-wide reading: one bucket per provider, not every
   // Codex model window mixed into the same unlabeled list.
   const selectedEntries = model ? selectModelRateLimits(entries, model, fallback) : fallback ? [fallback] : entries;
-  const limits = selectedEntries.map(([id, limit]) => normalizeAccountLimit(id, limit));
+  // Codex: the plan's state and the unused usage resets belong to the account, so each bucket carries them.
+  const ordinaryUsageAllowed = rateLimits?.ordinaryUsageAllowed;
+  const resetCredits = rateLimits?.rateLimitResetCredits?.availableCount;
+  const limits = selectedEntries.map(([id, limit]) => ({
+    ...normalizeAccountLimit(id, limit),
+    ...(typeof ordinaryUsageAllowed === "boolean" ? { ordinaryUsageAllowed } : {}),
+    ...(resetCredits === undefined ? {} : { resetCredits }),
+  }));
   // Antigravity's groups belong to the one reading that it sends.
   const groups = rateLimits?.groups?.slice(0, MAX_USAGE_GROUPS).map(normalizeUsageGroup);
   if (groups?.length && limits.length === 1 && limits[0]) limits[0] = { ...limits[0], groups };

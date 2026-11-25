@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { ModelTier } from "@openbot/contracts/agent-efficiency";
 import {
   type AccountUsageLimit,
   AGENT_PROVIDERS,
@@ -13,7 +12,6 @@ import {
 import { CLAUDE_API_KEY_ACCOUNT_ID } from "@openbot/contracts/team-protocol/claude-api-key-v1";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { Effect } from "effect";
-import { modelTier } from "../agent/model-policy";
 import type { AgentClient, AgentProvider } from "../agent-client";
 import type { AgentStore } from "../agent-store";
 import type { MailboxStore } from "../mailbox-store";
@@ -50,44 +48,24 @@ export interface GuardrailsRuntimeOptions {
   changed(): void;
 }
 
-/** Codex model families from the weakest to the strongest; an unknown family counts as the middle one. */
-const CODEX_FAMILIES: ReadonlyArray<readonly [RegExp, number]> = [
-  [/\b(nano|mini|luna)\b/u, 1],
-  [/\bterra\b/u, 2],
-  [/\b(sol|astra|pro|max)\b/u, 3],
-];
-
-function codexFamilyRank(id: string): number {
-  const lower = id.toLowerCase();
-  return CODEX_FAMILIES.find(([pattern]) => pattern.test(lower))?.[1] ?? 2;
-}
-
 function codexVersion(id: string): number {
   const match = /(\d+(?:\.\d+)?)/u.exec(id);
   return match?.[1] ? Number(match[1]) : 0;
 }
 
 /**
- * The Codex models in the order that a failover tries them. An Opus-class (`large`) agent takes the
- * strongest listed model first: the strongest family (Sol over Terra over Luna, mini and nano), then
- * the newest version, then the most reasoning efforts. Another tier takes Codex's default model first.
+ * The Codex models in the order that a failover tries them, the same for every tier: Codex's default
+ * model, then the newest listed model.
  */
-export function codexFailoverModels(tier: ModelTier | null, models: readonly AgentModelOption[]): string[] {
-  const codex = models.filter((model) => model.provider === "codex" && !model.id.includes("["));
-  if (tier !== "large") {
-    const preferred = defaultProviderModel("codex");
-    return [...codex.filter((model) => model.id === preferred), ...codex.filter((model) => model.id !== preferred)].map(
-      (model) => model.id,
-    );
-  }
-  return [...codex]
+export function codexFailoverModels(models: readonly AgentModelOption[]): string[] {
+  const preferred = defaultProviderModel("codex");
+  return models
+    .filter((model) => model.provider === "codex" && !model.id.includes("["))
+    .map((model) => model.id)
     .sort(
       (left, right) =>
-        codexFamilyRank(right.id) - codexFamilyRank(left.id) ||
-        codexVersion(right.id) - codexVersion(left.id) ||
-        right.supportedReasoningEfforts.length - left.supportedReasoningEfforts.length,
-    )
-    .map((model) => model.id);
+        Number(right === preferred) - Number(left === preferred) || codexVersion(right) - codexVersion(left),
+    );
 }
 
 function accountOf(agent: AgentSummary): string {
@@ -134,6 +112,8 @@ export function guardrailsRuntime(options: GuardrailsRuntimeOptions): Guardrails
             inUse: pooled ? pool?.inUse === accountId : users > 0,
             windows,
             credits: limit?.credits ?? null,
+            ordinaryUsageAllowed: limit?.ordinaryUsageAllowed,
+            resetCredits: limit?.resetCredits,
             agents: users,
           });
         }
@@ -209,8 +189,7 @@ export function guardrailsRuntime(options: GuardrailsRuntimeOptions): Guardrails
       const models = options.models();
       const choices: AgentModelChoice[] = [];
       if (target.provider === "claude") {
-        for (const model of codexFailoverModels(modelTier(target.model), models))
-          choices.push({ provider: "codex", model });
+        for (const model of codexFailoverModels(models)) choices.push({ provider: "codex", model });
         if (allowApiKey)
           choices.push({ provider: "claude", model: target.model, providerAccountId: CLAUDE_API_KEY_ACCOUNT_ID });
       }

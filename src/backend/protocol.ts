@@ -142,7 +142,11 @@ export interface AccountRateLimitsReadResult {
   groups?: AccountRateLimitGroupResult[] | undefined;
   rateLimitsByLimitId?: Record<string, AccountRateLimitResult | undefined> | null | undefined;
   /** Codex only: the usage reset credits of the account. Null when Codex could not count them. */
-  rateLimitResetCredits?: { availableCount: number } | null | undefined;
+  rateLimitResetCredits?: { availableCount: number } | null | undefined /**
+   * Codex only: whether the plan's own usage is allowed now. False once the plan is used up; turns
+   * then run on paid credits when the account has them. Null when Codex could not tell.
+   */;
+  ordinaryUsageAllowed?: boolean | null | undefined;
 }
 
 export interface ThreadItem {
@@ -302,7 +306,12 @@ export function decodeAccountRateLimitsReadResult(value: unknown): AccountRateLi
   const rateLimitsByLimitId = decodeRateLimitsById(record.rateLimitsByLimitId);
   const rateLimitResetCredits = decodeRateLimitResetCredits(record.rateLimitResetCredits);
   const groups = decodeRateLimitGroups(record.groups);
+  const ordinaryUsageAllowed =
+    typeof record.ordinaryUsageAllowed === "boolean" || record.ordinaryUsageAllowed === null
+      ? record.ordinaryUsageAllowed
+      : undefined;
   return {
+    ...(ordinaryUsageAllowed === undefined ? {} : { ordinaryUsageAllowed }),
     ...(rateLimits === undefined ? {} : { rateLimits }),
     ...(rateLimitsByLimitId === undefined ? {} : { rateLimitsByLimitId }),
     ...(groups === undefined ? {} : { groups }),

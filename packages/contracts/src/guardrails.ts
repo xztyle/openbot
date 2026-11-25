@@ -248,6 +248,10 @@ export interface SubscriptionPoolMeter {
   onCredits?: boolean;
   /** Codex: whether paid credits remain. Absent when the provider did not say. */
   creditsLeft?: boolean;
+  /** Codex: the paid credits left, rounded. Absent when unknown or unlimited. */
+  creditBalance?: number;
+  /** Codex: the unused usage resets of the account. Atelier never spends one by itself. */
+  resetCredits?: number;
   /** Agents on this account now. */
   agents: number;
 }
@@ -482,6 +486,8 @@ function isMeter(value: unknown): value is SubscriptionPoolMeter {
     typeof value.nearlyExhausted === "boolean" &&
     (value.onCredits === undefined || typeof value.onCredits === "boolean") &&
     (value.creditsLeft === undefined || typeof value.creditsLeft === "boolean") &&
+    (value.creditBalance === undefined || finite(value.creditBalance, 1e12) !== null) &&
+    (value.resetCredits === undefined || finite(value.resetCredits, 1_000) !== null) &&
     finite(value.agents, 100_000) !== null
   );
 }

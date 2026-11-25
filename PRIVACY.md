@@ -803,6 +803,18 @@ Network traffic can also occur when:
 - a Discord server is connected. See [Discord connections](#discord-connections);
 - a Telegram chat is connected. See [Telegram connections](#telegram-connections).
 
+## Copies in your cloud drive
+
+Off by default. When the owner of a server connects a cloud drive in Server settings > Backups (Proton
+Drive today), the server's backup service sends copies of the server's data to that drive: the
+database, agent conversations, agent folders, settings, the Motion board, and the shared work of each
+space. The copies are encrypted on the server with restic before they leave it, with a password that
+only the owner keeps; the drive's operator cannot read them. The drive sign-in (email, password,
+mailbox password) and the drive's session tokens are kept encrypted on the server with the
+operating system's secret store and are sent only to the drive's own service, through rclone. A
+2FA code is used once and not kept. Disconnecting removes the sign-in; the copies on the drive stay
+until the owner deletes them there.
+
 ## Webhook routines
 
 An administrator can give a routine a webhook trigger. The routine then gets a public URL and a

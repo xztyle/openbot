@@ -17,6 +17,7 @@ import type { AgentTemplateService } from "../agent-template-service";
 import type { BrowserProfileService } from "../browser-profile-service";
 import type { ChatMcpService } from "../chat-mcp-service";
 import type { ClaudeContextPreferenceStore } from "../claude-context-preference-store";
+import type { CloudBackups } from "../cloud-backups";
 import type { ConnectorAccess } from "../connector-access";
 import type { PeerCustomProviderChanges } from "../custom-provider-changes";
 import type { HostBackups } from "../host-backups";
@@ -570,6 +571,8 @@ export interface TeamApiOptions {
   agentMailboxes?: AgentMail | undefined;
   /** `host-backups-v1` (`fork-host-v1`): the host's backup broker, for Server settings > Backups. */
   hostBackups?: HostBackups | undefined;
+  /** `host-cloud-backups-v1` (`fork-host-v1`): copies to the owner's cloud drive, through the broker. */
+  cloudBackups?: CloudBackups | undefined;
   /** `trust-control-v1` (`fork-host-v1`): the trust policy and the audit trail, for an owner or admin. */
   trust?: TrustService | undefined;
   /** `guardrails-v1` (`fork-host-v1`): budgets, pauses, the subscription meter and events, for an owner or admin. */

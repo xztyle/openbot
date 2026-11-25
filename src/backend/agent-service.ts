@@ -3009,6 +3009,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     return this.#turn.runningTurnActivity();
   });
 
+  /** Whether a deploy holds new work now (`drainForDeploy`). Background jobs wait for the restart. */
+  isDeployDraining(): boolean {
+    return this.#deployDrainUntil !== null && Date.now() < this.#deployDrainUntil;
+  }
+
   /** Ends the hold of `drainForDeploy`, and the queues start again. */
   endDeployDrain(): void {
     if (this.#deployDrainTimer) clearTimeout(this.#deployDrainTimer);

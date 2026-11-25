@@ -33,4 +33,12 @@ export const messages = defineMessages("error.host", {
     "Tenant health reports are missing or unhealthy after restart. Inspect tenant sessions before another update.",
   "error.host.backupRestoreOwnerOnly": "Only the owner of this server can restore a backup.",
   "error.host.backupConfirmMismatch": "Type the backup name exactly to confirm the restore.",
+  "error.host.cloudOwnerOnly": "Only the owner of this server can connect a drive, change the plan or restore.",
+  "error.host.cloudNotConnected": "Connect a drive first.",
+  "error.host.cloudUpdating": "The server is updating. Try again in a few minutes.",
+  "error.host.cloudConfirm": "Confirm the copy to restore.",
+  "error.host.cloudBusy": "Another copy or a restore is running. Try again when it ends.",
+  "error.host.cloudSignInMissing": "The drive's sign-in is missing. Connect it again.",
+  "error.host.cloudStartFailed": "The copy did not start.",
+  "error.host.cloudProviderSoon": "Only Proton Drive connects for now.",
 });

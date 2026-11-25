@@ -61,6 +61,11 @@ export class HostBackups {
     return { started: isDynamicRecord(answer) && answer.started === true };
   }
 
+  /** One raw call to the broker, for the cloud copies (`cloud-backups.ts`). */
+  request(method: "GET" | "POST", path: string, body?: DynamicRecord, timeoutMs = 30_000): Promise<unknown> {
+    return this.#call(method, path, body, timeoutMs);
+  }
+
   #call(method: "GET" | "POST", path: string, body?: DynamicRecord, timeoutMs = 30_000): Promise<unknown> {
     if (!this.available()) return Promise.reject(new HostBackupError("Backups are not set up on this server.", 404));
     const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body));

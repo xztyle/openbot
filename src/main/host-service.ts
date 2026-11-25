@@ -114,6 +114,7 @@ interface HostServiceOptions {
   connectorAccess?: ForwardedApiOptions["connectorAccess"];
   agentMailboxes?: ForwardedApiOptions["agentMailboxes"];
   hostBackups?: ForwardedApiOptions["hostBackups"];
+  cloudBackups?: ForwardedApiOptions["cloudBackups"];
   downloadTickets?: ForwardedApiOptions["downloadTickets"];
   attachmentPreviews?: ForwardedApiOptions["attachmentPreviews"];
   mcpToolRuntimePreparation?: ForwardedApiOptions["mcpToolRuntimePreparation"];
@@ -427,6 +428,7 @@ export class HostService extends EventEmitter<HostEvents> {
       ...(options.connectorAccess === undefined ? {} : { connectorAccess: options.connectorAccess }),
       ...(options.agentMailboxes === undefined ? {} : { agentMailboxes: options.agentMailboxes }),
       ...(options.hostBackups === undefined ? {} : { hostBackups: options.hostBackups }),
+      ...(options.cloudBackups === undefined ? {} : { cloudBackups: options.cloudBackups }),
       ...(options.downloadTickets === undefined ? {} : { downloadTickets: options.downloadTickets }),
       ...(options.attachmentPreviews === undefined ? {} : { attachmentPreviews: options.attachmentPreviews }),
       ...(options.mcpToolRuntimePreparation === undefined

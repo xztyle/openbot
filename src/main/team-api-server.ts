@@ -234,6 +234,7 @@ import { routeFocusUse } from "./team-api/route-focus-use";
 import { routeGuardrails } from "./team-api/route-guardrails";
 import { routeHostAdmin } from "./team-api/route-host-admin";
 import { routeHostBackups } from "./team-api/route-host-backups";
+import { routeHostCloudBackups } from "./team-api/route-host-cloud-backups";
 import { routeHostTimezone } from "./team-api/route-host-timezone";
 import { routeHostTurnLimits } from "./team-api/route-host-turn-limits";
 import { routeHostUpdate } from "./team-api/route-host-update";
@@ -1070,6 +1071,7 @@ export class TeamApiServer {
       if ((await routeConnectorAccess(context, this.#options.connectorAccess)) === "handled") return;
       if ((await routeAgentMailboxes(context, this.#options.agentMailboxes)) === "handled") return;
       if ((await routeHostBackups(context, this.#options.hostBackups)) === "handled") return;
+      if ((await routeHostCloudBackups(context, this.#options.cloudBackups)) === "handled") return;
       if ((await routePushNotifications(context, this.#options.pushNotifications)) === "handled") return;
       if (
         (await routeFocusUse(context, this.#options.focusUse ? (id) => this.#recordFocusUse(id) : undefined)) ===

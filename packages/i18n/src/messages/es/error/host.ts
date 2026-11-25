@@ -37,4 +37,13 @@ export const messages = {
     "Faltan informes de estado de los inquilinos o indican problemas tras el reinicio. Inspecciona las sesiones de los inquilinos antes de otra actualización.",
   "error.host.backupRestoreOwnerOnly": "Solo el propietario de este servidor puede restaurar una copia.",
   "error.host.backupConfirmMismatch": "Escribe el nombre exacto de la copia para confirmar la restauración.",
+  "error.host.cloudOwnerOnly":
+    "Solo el propietario de este servidor puede conectar una nube, cambiar el plan o restaurar.",
+  "error.host.cloudNotConnected": "Conecta primero una nube.",
+  "error.host.cloudUpdating": "El servidor se está actualizando. Inténtalo de nuevo en unos minutos.",
+  "error.host.cloudConfirm": "Confirma la copia que quieres restaurar.",
+  "error.host.cloudBusy": "Hay otra copia o una restauración en curso. Inténtalo cuando termine.",
+  "error.host.cloudSignInMissing": "Falta el inicio de sesión de la nube. Vuelve a conectarla.",
+  "error.host.cloudStartFailed": "La copia no empezó.",
+  "error.host.cloudProviderSoon": "Por ahora solo se puede conectar Proton Drive.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -188,6 +188,7 @@ import { BusyMessageModePreferenceStore } from "./busy-message-mode-preference-s
 import { CentralAuthManager, readCentralAuthApiUrl, readMobileConnectApiUrl } from "./central-auth-manager";
 import { ChatVisualPreviewer } from "./chat-visual-preview";
 import { ClaudeContextPreferenceStore } from "./claude-context-preference-store";
+import { CloudBackups } from "./cloud-backups";
 import { ComputerUseHighlightController } from "./computer-use-highlight-window";
 import { applicationBundlePath, applicationIconName } from "./computer-use-permission-app";
 import { ComputerUsePermissionHelpWindowController } from "./computer-use-permission-help-window";
@@ -2747,6 +2748,21 @@ export async function createApplicationServices({
   const providerHostSignIns = process.platform === "linux" ? providerSignIns : undefined;
   const pushNotificationStore = new PushNotificationStore(join(app.getPath("userData"), PUSH_NOTIFICATION_FILE));
   await runCauseEffect(pushNotificationStore.load());
+  // Server settings > Backups: the host's backup broker (`host-backups-v1`), and the copies to the
+  // owner's cloud drive (`host-cloud-backups-v1`) that it makes with the secrets this process keeps.
+  const hostBackups = new HostBackups();
+  const cloudBackups = new CloudBackups({
+    broker: hostBackups,
+    directory: app.getPath("userData"),
+    cipher: secretCipher,
+    isDraining: () => service.isDeployDraining(),
+    alertOwner: (text) => webPush.notifyOwner({ kind: "alert", agentId: "", view: "activity", urgent: true, text }),
+    log: (message) => logger.info(message),
+  });
+  if (cloudBackups.available()) {
+    cloudBackups.start();
+    teardown.push(TEARDOWN_ORDER.serverMode, "the cloud copy schedule", () => cloudBackups.stop());
+  }
   const host = new HostService({
     appVersion: app.getVersion(),
     store: teamStore,
@@ -2785,7 +2801,8 @@ export async function createApplicationServices({
     agentMailboxes: connectors.mail,
     // Server settings > Backups: the host's backup broker (`host-backups-v1`). Without its socket the
     // section says that backups are not set up.
-    hostBackups: new HostBackups(),
+    hostBackups,
+    cloudBackups,
     // Signed links for large downloads from the operator's download host. Without the address file the
     // route answers 400 and the browser keeps using the connection.
     downloadTickets,

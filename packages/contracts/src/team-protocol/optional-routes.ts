@@ -42,6 +42,7 @@ import { FOCUS_USE_CODECS } from "./focus-use-v1";
 import { GUARDRAILS_CODECS } from "./guardrails-v1";
 import { HOST_ADMIN_CODECS } from "./host-admin-v1";
 import { HOST_BACKUPS_CODECS } from "./host-backups-v1";
+import { HOST_CLOUD_BACKUPS_CODECS } from "./host-cloud-backups-v1";
 import { HOST_MEMBER_UPDATE_CODECS } from "./host-member-update-v1";
 import { HOST_RELEASE_CODECS } from "./host-release-v1";
 import { HOST_TIMEZONE_CODECS } from "./host-timezone-v1";
@@ -183,6 +184,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...CONNECTOR_ACCESS_CODECS,
   ...AGENT_MAILBOXES_CODECS,
   ...HOST_BACKUPS_CODECS,
+  ...HOST_CLOUD_BACKUPS_CODECS,
   ...WORKSPACE_LOOPS_CODECS,
   ...WORKSPACE_SIDEBAR_CODECS,
   ...WORKSPACE_SPACES_CODECS,

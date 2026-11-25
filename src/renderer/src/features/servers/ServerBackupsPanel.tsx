@@ -28,6 +28,7 @@ import {
 import { useText } from "@openbot/ui/text";
 import { createEffect, createSignal, For, onCleanup, Show, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
+import { type HostCloudBackupsCalls, ServerCloudBackupsPanel } from "./ServerCloudBackupsPanel";
 
 /** The `host-backups-v1` calls of one server's host. Only the web client passes them today. */
 export interface HostBackupsCalls {
@@ -39,6 +40,8 @@ export interface HostBackupsCalls {
 
 export interface ServerBackupsOptions {
   calls: HostBackupsCalls;
+  /** Copies to the owner's cloud drive (`host-cloud-backups-v1`), shown below the server's own backups. */
+  cloud?: HostCloudBackupsCalls | undefined;
   /** Only the owner restores; an admin lists, backs up and runs the check. */
   canRestore: boolean;
 }
@@ -195,219 +198,232 @@ export function ServerBackupsPanel(
   );
 
   return (
-    <SettingsSection
-      title={t("backups.title", { name: props.hostName })}
-      description={t("backups.description")}
-      actions={
-        <Show when={ready()}>
-          <Button
-            type="button"
-            size="sm"
-            loading={busy() === "create" || ready()?.running?.kind === "backup"}
-            disabled={!props.actionsAvailable || Boolean(busy()) || working()}
-            onClick={() => void backUpNow()}
-          >
-            {t("backups.backUpNow")}
-          </Button>
-        </Show>
-      }
-    >
-      <Show when={loadError()}>
-        {(error) => (
-          <Alert tone="danger" role="alert">
-            <AlertIcon>
-              <TriangleAlert />
-            </AlertIcon>
-            <AlertContent>
-              <AlertDescription>{error()}</AlertDescription>
-            </AlertContent>
-          </Alert>
-        )}
-      </Show>
-      <Show when={overview()?.available === false}>
-        <Alert tone="neutral" role="status">
-          <AlertIcon>
-            <Info />
-          </AlertIcon>
-          <AlertContent>
-            <AlertTitle>{t("backups.notSetUpTitle")}</AlertTitle>
-            <AlertDescription>{t("backups.notSetUpDescription")}</AlertDescription>
-          </AlertContent>
-        </Alert>
-      </Show>
-      <Show when={ready()}>
-        {(value) => (
-          <>
-            <Show when={value().lastRestore}>
-              {(last) => (
-                <Alert
-                  tone={last().status === "ok" ? "success" : last().status === "failed" ? "danger" : "neutral"}
-                  role="status"
-                >
-                  <AlertContent>
-                    <AlertTitle>
-                      {last().status === "ok"
-                        ? t("backups.lastRestoreOk", { id: last().id })
-                        : last().status === "failed"
-                          ? t("backups.lastRestoreFailed", { id: last().id })
-                          : t("backups.restoring", { id: last().id })}
-                    </AlertTitle>
-                    <AlertDescription>
-                      {last().steps.at(-1)?.text ?? ""}
-                      <Show when={last().safetyBackup}>
-                        {(safety) => <> {t("backups.safetyBackup", { id: safety() })}</>}
-                      </Show>
-                    </AlertDescription>
-                  </AlertContent>
-                </Alert>
-              )}
-            </Show>
-            <ItemGroup class="settings-modal-card">
-              <Item class="settings-modal-row">
-                <ItemContent>
-                  <ItemTitle>{t("backups.schedule", { time: value().nightly })}</ItemTitle>
-                  <ItemDescription>
-                    {t("backups.retention", { daily: value().retention.daily, weekly: value().retention.weekly })}{" "}
-                    {t("backups.disk", {
-                      free: format.fileSize(value().disk.freeBytes),
-                      total: format.fileSize(value().disk.totalBytes),
-                    })}{" "}
-                    {value().offsite ? t("backups.offsiteOn") : t("backups.offsiteOff")}
-                  </ItemDescription>
-                </ItemContent>
-              </Item>
-              {/* A restore shows in the notice above. */}
-              <Show when={value().running?.kind === "restore" ? null : value().running}>
-                {(job) => (
-                  <Item class="settings-modal-row">
-                    <ItemContent>
-                      <ItemTitle>
-                        {job().kind === "restore" ? t("backups.restoring", { id: job().id }) : t("backups.running")}
-                      </ItemTitle>
-                      <ItemDescription aria-live="polite">{job().phase}</ItemDescription>
-                    </ItemContent>
-                  </Item>
-                )}
-              </Show>
-              <Show when={value().backups.length === 0}>
-                <Item class="settings-modal-row">
-                  <ItemContent>
-                    <ItemDescription>{t("backups.empty")}</ItemDescription>
-                  </ItemContent>
-                </Item>
-              </Show>
-              <For each={value().backups}>
-                {(backup) => (
-                  <Item class="settings-modal-row">
-                    <ItemContent>
-                      <ItemTitle>
-                        {when(backup.createdAt)} {statusBadge(backup)}
-                      </ItemTitle>
-                      <ItemDescription>
-                        {backup.status === "failed"
-                          ? `${reasonLabel(backup)} · ${backup.error ?? t("backups.status.failed")}`
-                          : [
-                              t("backups.row", {
-                                reason: reasonLabel(backup),
-                                size: format.fileSize(backup.bytes),
-                                added: format.fileSize(backup.newBytes),
-                              }),
-                              ...(skipped(backup).length > 0
-                                ? [t("backups.skipped", { parts: format.list(skipped(backup)) })]
-                                : []),
-                            ].join(" · ")}
-                      </ItemDescription>
-                    </ItemContent>
-                    <Show when={props.canRestore && backup.status !== "failed" && backup.status !== "running"}>
-                      <ItemActions>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={!props.actionsAvailable || working()}
-                          onClick={() => openRestore(backup)}
-                        >
-                          {t("backups.restore")}
-                        </Button>
-                      </ItemActions>
-                    </Show>
-                  </Item>
-                )}
-              </For>
-            </ItemGroup>
-          </>
-        )}
-      </Show>
-      <ConfirmDialog
-        open={target() !== null}
-        onCancel={() => setTarget(null)}
-        // The check can take a while on a busy host; Cancel stays available.
-        dismissWhilePending
-        tone="destructive"
-        icon={<History />}
-        title={t("backups.restoreTitle", { name: props.hostName })}
-        description={t("backups.restoreDescription", { when: when(target()?.createdAt ?? "") })}
-        confirmLabel={t("backups.restoreConfirm")}
-        pendingLabel={t("backups.restoreStarting")}
-        pending={check() === null && checkError() === null}
-        error={restoreError() ?? checkError() ?? undefined}
-        onConfirm={() => {
-          if (!check()?.ok || typed().trim() !== check()?.confirm) {
-            setRestoreError(check()?.ok ? t("backups.typeToConfirm", { id: check()?.confirm ?? "" }) : null);
-            return;
-          }
-          return restore();
-        }}
+    <>
+      <SettingsSection
+        title={t("backups.title", { name: props.hostName })}
+        description={t("backups.description")}
+        actions={
+          <Show when={ready()}>
+            <Button
+              type="button"
+              size="sm"
+              loading={busy() === "create" || ready()?.running?.kind === "backup"}
+              disabled={!props.actionsAvailable || Boolean(busy()) || working()}
+              onClick={() => void backUpNow()}
+            >
+              {t("backups.backUpNow")}
+            </Button>
+          </Show>
+        }
       >
-        <Show when={check() === null && checkError() === null}>
-          <p>{t("backups.checking")}</p>
-        </Show>
-        <Show when={check()}>
-          {(result) => (
-            <div class="flex flex-col gap-2">
-              <For each={result().problems}>{(problem) => <p class="text-destructive">{problem}</p>}</For>
-              <For each={result().warnings}>{(warning) => <p class="text-muted-foreground">{warning}</p>}</For>
-              <Show when={result().counts.length > 0}>
-                <p class="text-muted-foreground">
-                  {format.list(
-                    result().counts.map((row) =>
-                      t("backups.countRow", {
-                        table: row.table.replace(/^projection_/u, "").replaceAll("_", " "),
-                        now: format.number(row.now),
-                        backup: format.number(row.backup),
-                      }),
-                    ),
-                  )}
-                </p>
-              </Show>
-              <div class="flex items-center gap-2">
-                <Checkbox
-                  id="server-backups-include-spaces"
-                  checked={spaces()}
-                  onChange={(event) => {
-                    const next = event.currentTarget.checked;
-                    setSpaces(next);
-                    const backup = target();
-                    if (backup) void runCheck(backup, next);
-                  }}
-                />
-                <label for="server-backups-include-spaces">{t("backups.includeSpaces")}</label>
-              </div>
-              <Show when={result().ok}>
-                <p>{t("backups.typeToConfirm", { id: result().confirm })}</p>
-                <Input
-                  size="sm"
-                  value={typed()}
-                  autocomplete="off"
-                  spellcheck={false}
-                  onValueChange={setTyped}
-                  aria-label={t("backups.typeToConfirm", { id: result().confirm })}
-                />
-              </Show>
-            </div>
+        <Show when={loadError()}>
+          {(error) => (
+            <Alert tone="danger" role="alert">
+              <AlertIcon>
+                <TriangleAlert />
+              </AlertIcon>
+              <AlertContent>
+                <AlertDescription>{error()}</AlertDescription>
+              </AlertContent>
+            </Alert>
           )}
         </Show>
-      </ConfirmDialog>
-    </SettingsSection>
+        <Show when={overview()?.available === false}>
+          <Alert tone="neutral" role="status">
+            <AlertIcon>
+              <Info />
+            </AlertIcon>
+            <AlertContent>
+              <AlertTitle>{t("backups.notSetUpTitle")}</AlertTitle>
+              <AlertDescription>{t("backups.notSetUpDescription")}</AlertDescription>
+            </AlertContent>
+          </Alert>
+        </Show>
+        <Show when={ready()}>
+          {(value) => (
+            <>
+              <Show when={value().lastRestore}>
+                {(last) => (
+                  <Alert
+                    tone={last().status === "ok" ? "success" : last().status === "failed" ? "danger" : "neutral"}
+                    role="status"
+                  >
+                    <AlertContent>
+                      <AlertTitle>
+                        {last().status === "ok"
+                          ? t("backups.lastRestoreOk", { id: last().id })
+                          : last().status === "failed"
+                            ? t("backups.lastRestoreFailed", { id: last().id })
+                            : t("backups.restoring", { id: last().id })}
+                      </AlertTitle>
+                      <AlertDescription>
+                        {last().steps.at(-1)?.text ?? ""}
+                        <Show when={last().safetyBackup}>
+                          {(safety) => <> {t("backups.safetyBackup", { id: safety() })}</>}
+                        </Show>
+                      </AlertDescription>
+                    </AlertContent>
+                  </Alert>
+                )}
+              </Show>
+              <ItemGroup class="settings-modal-card">
+                <Item class="settings-modal-row">
+                  <ItemContent>
+                    <ItemTitle>{t("backups.schedule", { time: value().nightly })}</ItemTitle>
+                    <ItemDescription>
+                      {t("backups.retention", { daily: value().retention.daily, weekly: value().retention.weekly })}{" "}
+                      {t("backups.disk", {
+                        free: format.fileSize(value().disk.freeBytes),
+                        total: format.fileSize(value().disk.totalBytes),
+                      })}{" "}
+                      {value().offsite ? t("backups.offsiteOn") : t("backups.offsiteOff")}
+                    </ItemDescription>
+                  </ItemContent>
+                </Item>
+                {/* A restore shows in the notice above. */}
+                <Show when={value().running?.kind === "restore" ? null : value().running}>
+                  {(job) => (
+                    <Item class="settings-modal-row">
+                      <ItemContent>
+                        <ItemTitle>
+                          {job().kind === "restore" ? t("backups.restoring", { id: job().id }) : t("backups.running")}
+                        </ItemTitle>
+                        <ItemDescription aria-live="polite">{job().phase}</ItemDescription>
+                      </ItemContent>
+                    </Item>
+                  )}
+                </Show>
+                <Show when={value().backups.length === 0}>
+                  <Item class="settings-modal-row">
+                    <ItemContent>
+                      <ItemDescription>{t("backups.empty")}</ItemDescription>
+                    </ItemContent>
+                  </Item>
+                </Show>
+                <For each={value().backups}>
+                  {(backup) => (
+                    <Item class="settings-modal-row">
+                      <ItemContent>
+                        <ItemTitle>
+                          {when(backup.createdAt)} {statusBadge(backup)}
+                        </ItemTitle>
+                        <ItemDescription>
+                          {backup.status === "failed"
+                            ? `${reasonLabel(backup)} · ${backup.error ?? t("backups.status.failed")}`
+                            : [
+                                t("backups.row", {
+                                  reason: reasonLabel(backup),
+                                  size: format.fileSize(backup.bytes),
+                                  added: format.fileSize(backup.newBytes),
+                                }),
+                                ...(skipped(backup).length > 0
+                                  ? [t("backups.skipped", { parts: format.list(skipped(backup)) })]
+                                  : []),
+                              ].join(" · ")}
+                        </ItemDescription>
+                      </ItemContent>
+                      <Show when={props.canRestore && backup.status !== "failed" && backup.status !== "running"}>
+                        <ItemActions>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={!props.actionsAvailable || working()}
+                            onClick={() => openRestore(backup)}
+                          >
+                            {t("backups.restore")}
+                          </Button>
+                        </ItemActions>
+                      </Show>
+                    </Item>
+                  )}
+                </For>
+              </ItemGroup>
+            </>
+          )}
+        </Show>
+        <ConfirmDialog
+          open={target() !== null}
+          onCancel={() => setTarget(null)}
+          // The check can take a while on a busy host; Cancel stays available.
+          dismissWhilePending
+          tone="destructive"
+          icon={<History />}
+          title={t("backups.restoreTitle", { name: props.hostName })}
+          description={t("backups.restoreDescription", { when: when(target()?.createdAt ?? "") })}
+          confirmLabel={t("backups.restoreConfirm")}
+          pendingLabel={t("backups.restoreStarting")}
+          pending={check() === null && checkError() === null}
+          error={restoreError() ?? checkError() ?? undefined}
+          onConfirm={() => {
+            if (!check()?.ok || typed().trim() !== check()?.confirm) {
+              setRestoreError(check()?.ok ? t("backups.typeToConfirm", { id: check()?.confirm ?? "" }) : null);
+              return;
+            }
+            return restore();
+          }}
+        >
+          <Show when={check() === null && checkError() === null}>
+            <p>{t("backups.checking")}</p>
+          </Show>
+          <Show when={check()}>
+            {(result) => (
+              <div class="flex flex-col gap-2">
+                <For each={result().problems}>{(problem) => <p class="text-destructive">{problem}</p>}</For>
+                <For each={result().warnings}>{(warning) => <p class="text-muted-foreground">{warning}</p>}</For>
+                <Show when={result().counts.length > 0}>
+                  <p class="text-muted-foreground">
+                    {format.list(
+                      result().counts.map((row) =>
+                        t("backups.countRow", {
+                          table: row.table.replace(/^projection_/u, "").replaceAll("_", " "),
+                          now: format.number(row.now),
+                          backup: format.number(row.backup),
+                        }),
+                      ),
+                    )}
+                  </p>
+                </Show>
+                <div class="flex items-center gap-2">
+                  <Checkbox
+                    id="server-backups-include-spaces"
+                    checked={spaces()}
+                    onChange={(event) => {
+                      const next = event.currentTarget.checked;
+                      setSpaces(next);
+                      const backup = target();
+                      if (backup) void runCheck(backup, next);
+                    }}
+                  />
+                  <label for="server-backups-include-spaces">{t("backups.includeSpaces")}</label>
+                </div>
+                <Show when={result().ok}>
+                  <p>{t("backups.typeToConfirm", { id: result().confirm })}</p>
+                  <Input
+                    size="sm"
+                    value={typed()}
+                    autocomplete="off"
+                    spellcheck={false}
+                    onValueChange={setTyped}
+                    aria-label={t("backups.typeToConfirm", { id: result().confirm })}
+                  />
+                </Show>
+              </div>
+            )}
+          </Show>
+        </ConfirmDialog>
+      </SettingsSection>
+      <Show when={props.cloud}>
+        {(cloud) => (
+          <ServerCloudBackupsPanel
+            calls={cloud()}
+            serverId={props.serverId}
+            canManage={props.canRestore}
+            actionsAvailable={props.actionsAvailable}
+            onPrepared={() => void read()}
+          />
+        )}
+      </Show>
+    </>
   );
 }

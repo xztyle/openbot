@@ -46,6 +46,13 @@ import {
   decodeHostRestoreStarted,
   HOST_BACKUPS_ROUTES,
 } from "@openbot/contracts/team-protocol/host-backups-v1";
+import {
+  decodeCloudConnectResult,
+  decodeCloudRestorePrepared,
+  decodeCloudSnapshotsResult,
+  decodeHostCloudBackupsOverview,
+  HOST_CLOUD_BACKUPS_ROUTES,
+} from "@openbot/contracts/team-protocol/host-cloud-backups-v1";
 import { HOST_RELEASE_CAPABILITY } from "@openbot/contracts/team-protocol/host-release-v1";
 import { HOST_TURN_LIMITS_ROUTES } from "@openbot/contracts/team-protocol/host-turn-limits-v1";
 import { HOSTED_SITES_CAPABILITY } from "@openbot/contracts/team-protocol/hosted-sites-v1";
@@ -233,6 +240,7 @@ import {
   routineMadeThisSession,
 } from "../servers/hosted-server-upsell-controller";
 import type { HostBackupsCalls } from "../servers/ServerBackupsPanel";
+import type { HostCloudBackupsCalls } from "../servers/ServerCloudBackupsPanel";
 import type { HostMemoryLimitCalls } from "../servers/ServerMemoryLimitSetting";
 import type { HostAgentAccessCalls } from "../servers/ServerRolesSection";
 import type { ServerHostedSitesOptions } from "../servers/ServerSettingsModal";
@@ -1345,6 +1353,40 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       runTeamEffect(setHostTimezone(hostRequest(serverId), timezone).pipe(Effect.mapError((error) => error.cause))),
   };
   // Server settings > Backups (`host-backups-v1`, `fork-host-v1`): the host's backup broker.
+  // Server settings > Backups > Copy in the cloud (`host-cloud-backups-v1`, `fork-host-v1`).
+  const hostCloudBackupsCalls: HostCloudBackupsCalls = {
+    overview: (serverId) =>
+      hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.overview, decodeHostCloudBackupsOverview, {}),
+    connect: (input, serverId) =>
+      hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.connect, decodeCloudConnectResult, { ...input }),
+    disconnect: (id, serverId) =>
+      hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.disconnect, decodeHostCloudBackupsOverview, { id }),
+    savePlan: (plan, serverId) =>
+      hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.plan, decodeHostCloudBackupsOverview, {
+        plan: {
+          enabled: plan.enabled,
+          interval: plan.interval,
+          dailyTime: plan.dailyTime,
+          timezone: plan.timezone,
+          groups: { ...plan.groups },
+          retention: { ...plan.retention },
+          largeFileMb: plan.largeFileMb,
+        },
+      }),
+    passwordSaved: (serverId) =>
+      hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.passwordSaved, decodeHostCloudBackupsOverview, {}),
+    run: (kind, serverId) =>
+      hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.run, decodeHostCloudBackupsOverview, { kind }),
+    snapshots: (serverId) =>
+      hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.snapshots, decodeCloudSnapshotsResult, {}),
+    restore: (snapshot, serverId) =>
+      hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.restore, decodeHostCloudBackupsOverview, {
+        snapshot,
+        confirm: snapshot,
+      }),
+    prepareRestore: (restore, serverId) =>
+      hostRequest(serverId)("POST", HOST_CLOUD_BACKUPS_ROUTES.restorePrepare, decodeCloudRestorePrepared, { restore }),
+  };
   const hostBackupsCalls: HostBackupsCalls = {
     overview: async (serverId) =>
       hostRequest(serverId)("POST", HOST_BACKUPS_ROUTES.overview, decodeHostBackupsOverview, {}),
@@ -3644,7 +3686,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       hostBackups={
                         canAdministerServer(workspace.state.host?.role) &&
                         workspace.state.capabilities.includes(FORK_HOST_CAPABILITY)
-                          ? { calls: hostBackupsCalls, canRestore: workspace.state.host?.role === "owner" }
+                          ? {
+                              calls: hostBackupsCalls,
+                              cloud: hostCloudBackupsCalls,
+                              canRestore: workspace.state.host?.role === "owner",
+                            }
                           : undefined
                       }
                       hostTimezone={{ calls: hostTimezoneCalls }}

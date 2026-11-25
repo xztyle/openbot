@@ -1,0 +1,179 @@
+// @vitest-environment node
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { AgentModelChoice, AgentModelOption, AgentReasoningEffort } from "@openbot/contracts/ipc";
+import { Effect } from "effect";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { isPlanLimitDiagnostic, isUsageLimitDiagnostic } from "../agent/provider-diagnostics";
+import { GuardrailEventLog } from "./guardrail-event-log";
+import { codexFailoverModels } from "./guardrails-runtime";
+import { type GuardrailAgent, type GuardrailsRuntime, GuardrailsService } from "./guardrails-service";
+import type { MeterAccount } from "./subscription-meter";
+
+const NOW = Date.UTC(2026, 10, 25, 12, 0, 0);
+const IN_THREE_HOURS = NOW / 1000 + 3 * 3600;
+
+function model(id: string, efforts: AgentReasoningEffort[]): AgentModelOption {
+  return {
+    provider: "codex",
+    id,
+    name: id,
+    description: "",
+    defaultReasoningEffort: "medium",
+    supportedReasoningEfforts: efforts,
+  };
+}
+
+/** The Codex models that the live host listed on 2026-11-25, in Codex's own order. */
+const CODEX_MODELS = [
+  model("gpt-6-luna", ["low", "medium", "high", "xhigh", "max"]),
+  model("gpt-5.6-terra", ["low", "medium", "high", "xhigh", "max"]),
+  model("gpt-5.6-luna", ["low", "medium", "high", "xhigh", "max"]),
+];
+
+const OPUS: GuardrailAgent = {
+  id: "agent-opus",
+  name: "Opus agent",
+  provider: "claude",
+  model: "claude-opus-5-5",
+  threadId: "thread-opus",
+};
+
+function window(usedPercent: number) {
+  return { usedPercent, windowDurationMins: 300, resetsAt: IN_THREE_HOURS };
+}
+
+interface Accounts {
+  claudeUsed: number;
+  codexUsed: number;
+  codexCredits: { hasCredits: boolean; unlimited: boolean; balance: number | null } | null;
+}
+
+describe("the subscription failover", () => {
+  let directory: string;
+  let service: GuardrailsService;
+  let accounts: Accounts;
+  let notices: string[];
+
+  beforeEach(() => {
+    directory = mkdtempSync(join(tmpdir(), "guardrails-failover-"));
+    accounts = { claudeUsed: 40, codexUsed: 10, codexCredits: null };
+    notices = [];
+    service = new GuardrailsService({
+      file: join(directory, "guardrails-v1.json"),
+      events: new GuardrailEventLog(join(directory, "events")),
+      now: () => NOW,
+    });
+    const meterAccounts = (): MeterAccount[] => [
+      {
+        provider: "claude",
+        accountId: "default",
+        pooled: false,
+        inUse: true,
+        windows: [window(accounts.claudeUsed)],
+        agents: 1,
+      },
+      {
+        provider: "codex",
+        accountId: "default",
+        pooled: false,
+        inUse: false,
+        windows: [window(accounts.codexUsed)],
+        credits: accounts.codexCredits,
+        agents: 0,
+      },
+    ];
+    const runtime: GuardrailsRuntime = {
+      agents: () => [OPUS],
+      spaceOf: () => "space",
+      dailyTotals: () => [],
+      turnTotals: () => null,
+      costsSince: () => new Map(),
+      meterAccounts,
+      agentAccount: (agentId) => (agentId === OPUS.id ? { provider: "claude", accountId: "default" } : null),
+      turnTask: () => [],
+      steer: () => Effect.succeed(false),
+      interrupt: () => Effect.void,
+      scheduleDrain: () => undefined,
+      generateCheap: () => Effect.succeed(""),
+      notifyOwner: (_agentId, title) => {
+        notices.push(title);
+      },
+      alertOwner: () => undefined,
+      noteAgent: () => undefined,
+      recordTrust: () => undefined,
+      // As the host builds them: every listed Codex model, strongest first for an Opus agent.
+      failoverTargets: (agent): AgentModelChoice[] =>
+        agent.provider === "claude"
+          ? codexFailoverModels("large", CODEX_MODELS).map((id) => ({ provider: "codex", model: id }))
+          : [],
+      changed: () => undefined,
+    };
+    service.connect(runtime);
+  });
+
+  afterEach(() => {
+    service.dispose();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  it("moves an Opus agent to Codex's strongest model after the Claude CLI's usage-limit error", () => {
+    // The Claude CLI's own words when the plan window is spent. The host holds the model on them.
+    const cliError = "You've hit your session limit · resets 8:40pm";
+    expect(isUsageLimitDiagnostic(cliError)).toBe(true);
+    expect(isPlanLimitDiagnostic(cliError)).toBe(true);
+
+    // The meter still shows room, so only the real limit moves the agent, not a forecast.
+    expect(service.failoverChoice(OPUS)).toBeNull();
+    expect(service.failoverChoice(OPUS, { limited: true })).toEqual({ provider: "codex", model: "gpt-5.6-terra" });
+    expect(service.view().steps).toEqual([{ agentId: OPUS.id, step: "claude" }]);
+  });
+
+  it("moves at 100% on the meter, and not before", async () => {
+    expect(service.policy().failover).toMatchObject({ thresholdPercent: 100, tiers: ["medium", "large"] });
+    accounts.claudeUsed = 99;
+    expect(service.failoverChoice(OPUS)).toBeNull();
+    accounts.claudeUsed = 100;
+    // A saved policy reads the meter again at once.
+    await Effect.runPromise(service.savePolicy({ ...service.policy() }));
+    expect(service.failoverChoice(OPUS)).toEqual({ provider: "codex", model: "gpt-5.6-terra" });
+  });
+
+  it("counts a Codex plan that is used up as usable while credits remain", async () => {
+    accounts.claudeUsed = 100;
+    accounts.codexUsed = 100;
+    accounts.codexCredits = { hasCredits: true, unlimited: false, balance: 62_424.27 };
+    await Effect.runPromise(service.savePolicy({ ...service.policy() }));
+
+    const codex = service.view().meter.find((row) => row.provider === "codex");
+    expect(codex).toMatchObject({ nearlyExhausted: false, onCredits: true, creditsLeft: true });
+    expect(service.failoverChoice(OPUS, { limited: true })).toEqual({ provider: "codex", model: "gpt-5.6-terra" });
+    expect(service.view().steps).toEqual([{ agentId: OPUS.id, step: "codex-credits" }]);
+    expect(notices).toEqual([]);
+  });
+
+  it("keeps the agent waiting and tells the owner once when nothing is left", async () => {
+    accounts.claudeUsed = 100;
+    accounts.codexUsed = 100;
+    accounts.codexCredits = { hasCredits: false, unlimited: false, balance: 0 };
+    await Effect.runPromise(service.savePolicy({ ...service.policy() }));
+
+    const codex = service.view().meter.find((row) => row.provider === "codex");
+    expect(codex).toMatchObject({ nearlyExhausted: true, onCredits: false, creditsLeft: false });
+    expect(service.failoverChoice(OPUS, { limited: true })).toBeNull();
+    expect(service.failoverChoice(OPUS, { limited: true })).toBeNull();
+    expect(notices).toEqual(["Opus agent has no subscription left"]);
+    expect(service.view().steps).toEqual([{ agentId: OPUS.id, step: "none" }]);
+  });
+});
+
+describe("the Codex model of a failover", () => {
+  it("gives an Opus agent the strongest listed Codex model and others the default first", () => {
+    expect(codexFailoverModels("large", CODEX_MODELS)[0]).toBe("gpt-5.6-terra");
+    expect(codexFailoverModels("medium", CODEX_MODELS)[0]).toBe("gpt-6-luna");
+    expect(codexFailoverModels("large", [...CODEX_MODELS, model("gpt-6-sol", ["low", "medium", "high"])])[0]).toBe(
+      "gpt-6-sol",
+    );
+  });
+});

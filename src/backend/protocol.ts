@@ -117,6 +117,15 @@ export interface AccountRateLimitResult {
   normalModelSlug?: string | null | undefined;
   primary?: AccountRateLimitWindowResult | null | undefined;
   secondary?: AccountRateLimitWindowResult | null | undefined;
+  /** Codex only: the paid credits of the account, which Codex spends once the plan's windows are used up. */
+  credits?: AccountRateLimitCreditsResult | null | undefined;
+}
+
+export interface AccountRateLimitCreditsResult {
+  hasCredits: boolean;
+  unlimited: boolean;
+  /** The balance in credits; null when Codex did not send one or it is not a number. */
+  balance: number | null;
 }
 
 /** One named quota of the plan and the model names it covers. Antigravity only. */
@@ -401,12 +410,30 @@ function decodeRateLimit(value: unknown): AccountRateLimitResult | null | undefi
   const normalModelSlug = optionalString(record, "normalModelSlug");
   const primary = decodeRateLimitWindow(record.primary);
   const secondary = decodeRateLimitWindow(record.secondary);
+  const credits = decodeRateLimitCredits(record.credits);
   return {
     ...(limitId === undefined ? {} : { limitId }),
     ...(limitName === undefined ? {} : { limitName }),
     ...(normalModelSlug === undefined ? {} : { normalModelSlug }),
     ...(primary === undefined ? {} : { primary }),
     ...(secondary === undefined ? {} : { secondary }),
+    ...(credits === undefined ? {} : { credits }),
+  };
+}
+
+/**
+ * Codex's `CreditsSnapshot`: `hasCredits`, `unlimited` and a decimal `balance` string. A snapshot it
+ * cannot read is unknown (null), so the usage reading that carries it still decodes.
+ */
+function decodeRateLimitCredits(value: unknown): AccountRateLimitResult["credits"] {
+  if (value === undefined || value === null) return value;
+  if (!isDynamicRecord(value) || typeof value.hasCredits !== "boolean" || typeof value.unlimited !== "boolean")
+    return null;
+  const balance = typeof value.balance === "string" ? Number(value.balance) : Number.NaN;
+  return {
+    hasCredits: value.hasCredits,
+    unlimited: value.unlimited,
+    balance: Number.isFinite(balance) ? balance : null,
   };
 }
 

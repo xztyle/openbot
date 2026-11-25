@@ -53,6 +53,7 @@ import { type ContextCompaction, compactsOnRequest } from "./context-compaction"
 import type { ConversationRuntime } from "./conversation-runtime";
 import type { DelegationFollowUp } from "./delegation-follow-up";
 import type { DeltaBuffer } from "./delta-buffer";
+import type { FailoverReason } from "./drain-scheduler";
 import type { FailureContext, FailureSignal } from "./failure-signal";
 import { readCapturedSteps } from "./handoff-tool-steps";
 import type { ImageGenRuntime } from "./image-gen-runtime";
@@ -153,8 +154,11 @@ export interface TurnHooks {
   observeContext?(agentId: string, threadId: string, tokens: number): void;
   /** The model this turn was started with, or null when the drain no longer knows it. */
   turnModel(agentId: string, turnId: string): string | null;
-  /** Whether a provider error moves this agent to a backup model: it switches without asking and has a ready one. */
-  mayFailOver(agentId: string): boolean;
+  /**
+   * Whether a usage limit (`limit`, the default) or a provider error (`error`) moves this agent to
+   * another model: a ready backup it switches to without asking, or, at a limit, the guardrails' failover.
+   */
+  mayFailOver(agentId: string, reason?: FailoverReason): boolean;
   /**
    * Gives a channel task back to its channel's queue after a spent plan refused its turn. False
    * when the delivery is not an active channel assignment that can go back.
@@ -866,7 +870,7 @@ export class TurnLifecycle {
           errorTurnId !== null &&
           this.#runningTurns.has(errorTurnId) &&
           FAILOVER_CAUSES.has(context.causeCode) &&
-          this.#hooks.mayFailOver(agentId)
+          this.#hooks.mayFailOver(agentId, "error")
         ) {
           this.#failoverTurns.set(errorTurnId, { message, context });
           return;
@@ -1087,7 +1091,7 @@ export class TurnLifecycle {
         !taskTurn &&
         !channelTurn &&
         deliveries.every(({ delivery }) => !this.#failoverRetries.get(delivery.id)?.has(failedKey)) &&
-        this.#hooks.mayFailOver(agentId);
+        this.#hooks.mayFailOver(agentId, "error");
       // A foreground subagent ends with its turn. A background one works on and reports later.
       const subagents = snapshot.messages.find((message) => message.id === `${turnId}:subagents`);
       stopRunningSubagents(subagents?.subagents, new Date().toISOString(), { background: false });

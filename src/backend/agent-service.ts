@@ -185,7 +185,7 @@ import { DelegationFollowUp } from "./agent/delegation-follow-up";
 import { agentNamesById, displayMessageReferences } from "./agent/delivery-content";
 import { DeltaBuffer } from "./agent/delta-buffer";
 import type { SectionTeammates } from "./agent/developer-instructions";
-import { DrainScheduler } from "./agent/drain-scheduler";
+import { DrainScheduler, type FailoverReason } from "./agent/drain-scheduler";
 import { DuplicationGate, toAgentDuplicationFailed } from "./agent/duplication-gate";
 import type { FailureContext, FailureSignal } from "./agent/failure-signal";
 import { GateGenerations } from "./agent/gate-generations";
@@ -1709,7 +1709,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         isDeployDraining: () => this.#deployDrainUntil !== null && Date.now() < this.#deployDrainUntil,
         servesModel: (model) => this.#endpoints.serves(model),
         requeueChannelDelivery: (deliveryId, continueWork) => this.#requeueChannelDelivery(deliveryId, continueWork),
-        mayFailOver: (agentId) => this.#usageLimitBackup(agentId) !== undefined || this.#poolBackup(agentId),
+        mayFailOver: (agentId, reason) =>
+          this.#usageLimitBackup(agentId, reason) !== undefined || this.#poolBackup(agentId),
         guardrailsHold: (agentId, headSender) => !(this.#guardrails?.mayDrain(agentId, headSender) ?? true),
         turnEnded: (turnId) => this.#turn.hasEnded(turnId),
         turnRestarting: (turnId) => this.#turn.forgetEnded(turnId),
@@ -1824,7 +1825,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           this.#guardrails?.observeTool(agentId, threadId, turnId, item, completed),
         observeContext: (agentId, threadId, tokens) => this.#guardrails?.observeContext(agentId, threadId, tokens),
         turnModel: (agentId, turnId) => this.#drain.modelForTurn(agentId, turnId),
-        mayFailOver: (agentId) => this.#usageLimitBackup(agentId) !== undefined || this.#poolBackup(agentId),
+        mayFailOver: (agentId, reason) =>
+          this.#usageLimitBackup(agentId, reason) !== undefined || this.#poolBackup(agentId),
         requeueChannelDelivery: (deliveryId, continueWork) => this.#requeueChannelDelivery(deliveryId, continueWork),
         quietRoutineDelivery: (deliveryId) => this.#routines.quietRunForDelivery(deliveryId),
         takeRoutinePreview: (deliveryId) => this.#routines.takePreviewBeforeRun(deliveryId),
@@ -4587,10 +4589,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         },
         move: "next-turn",
       };
-    // The guardrails' failover: a Sonnet-class agent whose subscription pool nearly ran out.
+    // The guardrails' failover: a Claude agent whose subscription is out. Its turn failed with the
+    // provider's usage limit, which holds its model now, or the meter shows its whole pool used up.
     const failover =
       !agent.usageLimitReturn && this.#hasWaitingWork(agentId)
-        ? (this.#guardrails?.failoverChoice(agent) ?? null)
+        ? (this.#guardrails?.failoverChoice(agent, { limited: !this.#usageLimits.mayDrain(agentId) }) ?? null)
         : null;
     if (!agent.usageLimitReturn && !agent.backupModels?.automatic && !failover) return null;
     if (this.#runsTurn(agentId) || this.#mailbox.hasStartedDelivery(agentId)) return null;
@@ -4622,7 +4625,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     if (!limited && !failed) return null;
     // A channel task that the limit refused went back to its channel, so the queue can be empty.
     if (!this.#hasWaitingWork(agentId)) return null;
-    const next = this.#usageLimitBackup(agentId);
+    const next = this.#usageLimitBackup(agentId, failed ? "error" : "limit");
     return next ? { input: { ...move(next), leaveUsageLimit: true }, move: failed ? "provider-error" : null } : null;
   }
 
@@ -4763,9 +4766,15 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   }
 
   /** The first ready backup model of an agent set to switch without asking, or undefined. */
-  #usageLimitBackup(agentId: string): AgentModelChoice | undefined {
+  #usageLimitBackup(agentId: string, reason: FailoverReason = "limit"): AgentModelChoice | undefined {
     const agent = this.#store.list().find((candidate) => candidate.id === agentId);
-    if (!agent?.backupModels?.automatic) return undefined;
+    if (!agent) return undefined;
+    // With no backup models of its own, the guardrails' failover takes an agent whose usage limit
+    // holds it to the next step of the order. A provider error does not move it.
+    if (!agent.backupModels?.automatic) {
+      if (reason !== "limit" || agent.usageLimitReturn) return undefined;
+      return this.#guardrails?.failoverChoice(agent, { limited: true }) ?? undefined;
+    }
     const current = agentModelChoice(agent);
     return agent.backupModels.order.find(
       (choice) => !sameAgentModelChoice(choice, current) && this.#usageLimitReady(choice),

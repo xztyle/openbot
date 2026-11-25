@@ -1,4 +1,6 @@
 import {
+  FAILOVER_STEPS,
+  type FailoverStep,
   GUARDRAIL_LIMIT_KEYS,
   type GuardrailEventKind,
   type GuardrailFullLimits,
@@ -28,6 +30,13 @@ const RUN_LABEL = {
   maxTokens: "trust.guardrails.limit.tokens",
   maxMinutes: "trust.guardrails.run.minutes",
 } as const satisfies Record<GuardrailRunKey, AppTextKey>;
+
+const STEP_LABEL = {
+  claude: "trust.guardrails.step.claude",
+  "codex-plan": "trust.guardrails.step.codexPlan",
+  "codex-credits": "trust.guardrails.step.codexCredits",
+  none: "trust.guardrails.step.none",
+} as const satisfies Record<FailoverStep, AppTextKey>;
 
 /** Token limits show in millions: a day of one agent is hundreds of millions. */
 const MILLION = 1_000_000;
@@ -216,6 +225,9 @@ export function TrustGuardrailsPanel(props: {
                     <Show when={account.nearlyExhausted}>
                       <Badge variant="destructive">{t("trust.guardrails.nearlyOut")}</Badge>
                     </Show>
+                    <Show when={account.onCredits}>
+                      <Badge variant="secondary">{t("trust.guardrails.onCredits")}</Badge>
+                    </Show>
                     <Show when={account.inUse}>
                       <Badge variant="secondary">{t("trust.guardrails.inUse")}</Badge>
                     </Show>
@@ -244,6 +256,35 @@ export function TrustGuardrailsPanel(props: {
               </div>
             )}
           </For>
+          <Show when={view()?.steps}>
+            {(steps) => (
+              <>
+                <h4 class="trust-muted">{t("trust.guardrails.order")}</h4>
+                <p class="trust-muted">{t("trust.guardrails.orderDescription")}</p>
+                <For each={FAILOVER_STEPS}>
+                  {(step, index) => {
+                    const agents = () => steps().filter((row) => row.step === step);
+                    return (
+                      <div class="guardrails-row">
+                        <span class="guardrails-row-main">
+                          <strong>
+                            {step === "none" ? t(STEP_LABEL[step]) : `${index() + 1}. ${t(STEP_LABEL[step])}`}
+                          </strong>
+                          <span class="trust-muted">
+                            {agents().length > 0
+                              ? agents()
+                                  .map((row) => props.name("agent", row.agentId))
+                                  .join(", ")
+                              : t("trust.guardrails.stepEmpty")}
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  }}
+                </For>
+              </>
+            )}
+          </Show>
           <Show when={(view()?.failovers ?? []).length > 0}>
             <h4 class="trust-muted">{t("trust.guardrails.failovers")}</h4>
             <For each={view()?.failovers ?? []}>

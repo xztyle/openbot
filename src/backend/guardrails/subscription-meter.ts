@@ -1,5 +1,5 @@
 import type { SubscriptionPoolMeter, SubscriptionWindowMeter } from "@openbot/contracts/guardrails";
-import type { AccountUsageWindow } from "@openbot/contracts/ipc";
+import type { AccountUsageCredits, AccountUsageWindow } from "@openbot/contracts/ipc";
 
 /** The longest window that counts as a short one, such as five hours: one day, as the pool counts it. */
 const SHORT_WINDOW_MINUTES = 24 * 60;
@@ -16,7 +16,16 @@ export interface MeterAccount {
   pooled: boolean;
   inUse: boolean;
   windows: readonly AccountUsageWindow[];
+  /** Codex: the paid credits of the last reading, which Codex spends once the windows are used up. */
+  credits?: AccountUsageCredits | null | undefined;
   agents: number;
+}
+
+/** Whether paid credits remain, or undefined when the reading did not say. */
+export function creditsLeft(credits: AccountUsageCredits | null | undefined): boolean | undefined {
+  if (!credits) return undefined;
+  if (credits.unlimited) return true;
+  return credits.hasCredits && (credits.balance === null || credits.balance > 0);
 }
 
 /** The percent used now: a window whose reset is past is empty until the next reading. */
@@ -58,6 +67,9 @@ export function meterRow(account: MeterAccount, threshold: number, nowSeconds: n
     resetsAt: window.resetsAt,
     exhaustsAt: forecastExhaustion(window, nowSeconds),
   }));
+  // Codex spends the account's paid credits once the plan's windows are used up, so turns still run.
+  const windowsOut = account.windows.some((window) => windowNearlyExhausted(window, threshold, nowSeconds));
+  const credits = creditsLeft(account.credits);
   return {
     provider: account.provider,
     accountId: account.accountId,
@@ -65,7 +77,8 @@ export function meterRow(account: MeterAccount, threshold: number, nowSeconds: n
     pooled: account.pooled,
     inUse: account.inUse,
     windows,
-    nearlyExhausted: account.windows.some((window) => windowNearlyExhausted(window, threshold, nowSeconds)),
+    nearlyExhausted: windowsOut && credits !== true,
+    ...(credits === undefined ? {} : { onCredits: windowsOut && credits, creditsLeft: credits }),
     agents: account.agents,
   };
 }

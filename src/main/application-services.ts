@@ -3590,6 +3590,10 @@ export async function createApplicationServices({
         restartInterrupted: () => service.restartInterruptedDeliveryIds(),
         database: () => store.database.connection,
         agentIds: () => service.listAgents().map((agent) => agent.id),
+        guardrailsPolicy: () => guardrails.policy(),
+        saveGuardrailsPolicy: async (policy) => {
+          await runCauseEffect(guardrails.savePolicy(policy));
+        },
         // As the owner types it in the app on this computer: the same sender, queue and steer rules.
         // A notice goes with no sender: it is OpenBot's own note, and the chat shows a marker.
         send: (input, notice) =>

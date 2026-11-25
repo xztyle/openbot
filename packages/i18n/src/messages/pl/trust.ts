@@ -133,7 +133,6 @@ export const messages = {
   "trust.guardrails.window.used": "użyto {percent}%",
   "trust.guardrails.window.resets": "reset {time}",
   "trust.guardrails.window.runsOut": "skończy się około {time}",
-  "trust.guardrails.nearlyOut": "Prawie wyczerpane",
   "trust.guardrails.inUse": "W użyciu",
   "trust.guardrails.agents": {
     one: "{count} agent",
@@ -170,8 +169,6 @@ export const messages = {
   "trust.guardrails.pingPong": "Wiadomości między dwoma agentami przed ponagleniem",
   "trust.guardrails.injection": "Sprawdzaj ryzykowne akcje po treściach z zewnątrz",
   "trust.guardrails.moneyHours": "Zatwierdzenia płatności wygasają po (godziny)",
-  "trust.guardrails.failover": "Przenoś agentów Sonnet do innego dostawcy, gdy ich subskrypcja jest prawie wyczerpana",
-  "trust.guardrails.failoverThreshold": "Prawie wyczerpane przy (%)",
   "trust.guardrails.allowApiKey": "Używaj też klucza API Claude (płatne za token)",
   "trust.guardrails.events": "Ostatnie zdarzenia",
   "trust.guardrails.eventsEmpty": "Brak zdarzeń.",

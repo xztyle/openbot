@@ -223,6 +223,18 @@ export interface AccountUsageLimit {
    * the model that was read, or the "Gemini Models" group. The Team API does not send this field.
    */
   groups?: AccountUsageGroup[];
+  /**
+   * Codex only: the paid credits of the account. Codex spends them by itself once the plan's windows
+   * are used up, so the account still runs turns. Absent when the provider did not say.
+   */
+  credits?: AccountUsageCredits;
+}
+
+/** The paid credits of an account. `balance` is in credits; null when the provider did not send it. */
+export interface AccountUsageCredits {
+  hasCredits: boolean;
+  unlimited: boolean;
+  balance: number | null;
 }
 
 export interface AccountUsage {

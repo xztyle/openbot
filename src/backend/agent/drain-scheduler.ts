@@ -40,6 +40,9 @@ import { TurnSlots } from "./turn-slots";
 import type { UsageLimitGate } from "./usage-limit-gate";
 import { codexSandboxPolicy, workspaceWritableRoots } from "./workspace-sandbox";
 
+/** Why an agent may leave its model: a usage limit, or a provider error. */
+export type FailoverReason = "limit" | "error";
+
 /** Shown to the user when a message names a model of an endpoint that was taken out. */
 export const REMOVED_ENDPOINT_MESSAGE = sourceText("error.agent.endpointRemoved");
 
@@ -98,8 +101,11 @@ export interface DrainHooks {
    * back. `continueWork` keeps the assignment for a ready backup instead.
    */
   requeueChannelDelivery(deliveryId: string, continueWork?: boolean): Effect.Effect<boolean>;
-  /** Whether a ready automatic backup can take this agent's work after a usage limit. */
-  mayFailOver(agentId: string): boolean;
+  /**
+   * Whether a ready automatic backup, or the guardrails' failover, can take this agent's work after a
+   * usage limit (`limit`, the default) or a provider error (`error`; the guardrails do not move it then).
+   */
+  mayFailOver(agentId: string, reason?: FailoverReason): boolean;
   /**
    * Whether a guardrails pause (a budget or a loop) holds this agent's next delivery. `headSender` is
    * the sender kind of that delivery: the owner's own messages are never held.

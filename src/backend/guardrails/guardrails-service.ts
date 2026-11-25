@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import {
   DEFAULT_GUARDRAIL_POLICY,
   effectiveGuardrailLimits,
+  type FailoverStep,
   GUARDRAIL_DETAIL_LIMIT,
   GUARDRAIL_LIMIT_KEYS,
   GUARDRAIL_PAUSE_REASON_LIMIT,
@@ -9,6 +10,7 @@ import {
   GUARDRAIL_VIEW_LIMITS,
   type GuardrailEventKind,
   type GuardrailFailoverRow,
+  type GuardrailFailoverStepRow,
   type GuardrailFullLimits,
   type GuardrailLimitKey,
   type GuardrailPause,
@@ -178,6 +180,8 @@ export class GuardrailsService {
   #day = "";
   #sharesReadAt = 0;
   #meterCache: { at: number; rows: SubscriptionPoolMeter[] } | null = null;
+  /** Agents whose owner heard that no step of the failover order has room; cleared when one has. */
+  readonly #noRoom = new Set<string>();
   #timer: ReturnType<typeof setInterval> | null = null;
   #saveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -809,37 +813,101 @@ export class GuardrailsService {
     return rows;
   }
 
-  /** True when every account that an agent on this provider could use is nearly run out. */
-  #poolNearlyExhausted(provider: string, accountId: string, meter: readonly SubscriptionPoolMeter[]): boolean {
+  /** The accounts that an agent on this provider and account could use: its pool, or the account alone. */
+  #pool(provider: string, accountId: string, meter: readonly SubscriptionPoolMeter[]): SubscriptionPoolMeter[] {
     const rows = meter.filter((row) => row.provider === provider);
     const own = rows.find((row) => row.accountId === accountId);
-    if (!own) return false;
-    const pool = own.pooled ? rows.filter((row) => row.pooled) : [own];
-    return pool.length > 0 && pool.every((row) => row.nearlyExhausted);
+    if (!own) return [];
+    return own.pooled ? rows.filter((row) => row.pooled) : [own];
   }
 
   /**
-   * Where the failover moves this agent now, or null. Only an agent of a moving tier, not pinned,
-   * with no backup models of its own, whose pool nearly ran out, and only to a model whose own pool
-   * has room.
+   * True when every account that an agent on this provider could use is out: a window at the
+   * threshold, and no paid credits that carry it (Codex spends its credits by itself).
    */
-  failoverChoice(agent: GuardrailAgent): AgentModelChoice | null {
+  #poolNearlyExhausted(provider: string, accountId: string, meter: readonly SubscriptionPoolMeter[]): boolean {
+    const pool = this.#pool(provider, accountId, meter);
+    return pool.length > 0 && pool.every((row) => row.nearlyExhausted);
+  }
+
+  /** True when the pool runs on paid credits: no account has plan usage left, and one has credits. */
+  #poolOnCredits(provider: string, accountId: string, meter: readonly SubscriptionPoolMeter[]): boolean {
+    const pool = this.#pool(provider, accountId, meter);
+    return (
+      pool.some((row) => row.onCredits === true) && pool.every((row) => row.onCredits === true || row.nearlyExhausted)
+    );
+  }
+
+  /** Whether the failover may move this agent at all: on, a moving tier, not pinned, no backups of its own. */
+  #movable(agent: GuardrailAgent): boolean {
     const policy = this.#state.policy;
-    const runtime = this.#runtime;
-    if (!runtime || !policy.enabled || !policy.failover.enabled) return null;
-    if (agent.backupModels?.automatic || policy.failover.pinnedAgentIds.includes(agent.id)) return null;
+    if (!policy.enabled || !policy.failover.enabled) return false;
+    if (agent.backupModels?.automatic || policy.failover.pinnedAgentIds.includes(agent.id)) return false;
     const tier = modelTier(agent.model);
-    if (!tier || !policy.failover.tiers.includes(tier)) return null;
+    return tier !== null && policy.failover.tiers.includes(tier);
+  }
+
+  /**
+   * Where the failover moves this agent now, or null. The agent's subscription must be out: `limited`
+   * (a turn failed with the provider's usage limit, so the agent service holds its model), or the meter
+   * shows its whole pool at the threshold. Only an agent of a moving tier, not pinned, with no backup
+   * models of its own, and only to a model whose own pool has room: a plan window, or paid credits.
+   * When nothing has room, the agent waits for the reset as before, and the owner gets one notice.
+   */
+  failoverChoice(agent: GuardrailAgent, options: { limited?: boolean } = {}): AgentModelChoice | null {
+    const runtime = this.#runtime;
+    if (!runtime || !this.#movable(agent)) return null;
     const account = runtime.agentAccount(agent.id);
     if (!account) return null;
     const meter = this.#meter();
-    if (!this.#poolNearlyExhausted(account.provider, account.accountId, meter)) return null;
-    return (
+    if (!options.limited && !this.#poolNearlyExhausted(account.provider, account.accountId, meter)) {
+      this.#noRoom.delete(agent.id);
+      return null;
+    }
+    const choice =
       runtime
-        .failoverTargets(agent, policy.failover.allowApiKey)
-        .find((choice) => !this.#poolNearlyExhausted(choice.provider, choice.providerAccountId ?? "default", meter)) ??
-      null
+        .failoverTargets(agent, this.#state.policy.failover.allowApiKey)
+        .find((target) => !this.#poolNearlyExhausted(target.provider, target.providerAccountId ?? "default", meter)) ??
+      null;
+    if (choice) this.#noRoom.delete(agent.id);
+    else this.#tellNoRoom(agent);
+    return choice;
+  }
+
+  /** Tells the owner once that an agent's subscription is out and no other step of the order has room. */
+  #tellNoRoom(agent: GuardrailAgent): void {
+    if (this.#noRoom.has(agent.id)) return;
+    this.#noRoom.add(agent.id);
+    this.#runtime?.notifyOwner(
+      agent.id,
+      `${agent.name} has no subscription left`,
+      "The Claude subscription, the Codex subscription and the Codex credits are all used up. The agent waits until a usage window resets, then continues by itself.",
     );
+  }
+
+  /**
+   * The step of the order that each Claude and Codex agent runs on now: the Claude subscription, the
+   * Codex subscription, the Codex credits, or none when no step has room.
+   */
+  #steps(meter: readonly SubscriptionPoolMeter[]): GuardrailFailoverStepRow[] {
+    const runtime = this.#runtime;
+    if (!runtime) return [];
+    const codexStep = (accountId: string): FailoverStep => {
+      if (this.#poolNearlyExhausted("codex", accountId, meter)) return "none";
+      return this.#poolOnCredits("codex", accountId, meter) ? "codex-credits" : "codex-plan";
+    };
+    const rows: GuardrailFailoverStepRow[] = [];
+    for (const agent of runtime.agents()) {
+      if (agent.provider !== "claude" && agent.provider !== "codex") continue;
+      const account = runtime.agentAccount(agent.id);
+      const accountId = account?.accountId ?? "default";
+      let step: FailoverStep;
+      if (agent.provider === "codex") step = codexStep(accountId);
+      else if (!this.#poolNearlyExhausted("claude", accountId, meter)) step = "claude";
+      else step = this.#movable(agent) ? codexStep("default") : "none";
+      rows.push({ agentId: agent.id, step });
+    }
+    return rows.slice(0, GUARDRAIL_VIEW_LIMITS.steps);
   }
 
   /** True while the pool that a failover left is still nearly run out: the agent stays on the other model. */
@@ -859,7 +927,7 @@ export class GuardrailsService {
     this.#record({
       kind: "failover",
       agentId,
-      summary: `${this.#agentName(agentId)} moved from ${from.provider}/${from.model} to ${to.provider}/${to.model}: its subscription pool nearly ran out.`,
+      summary: `${this.#agentName(agentId)} moved from ${from.provider}/${from.model} to ${to.provider}/${to.model}: its subscription is used up.`,
     });
     this.#changed();
   }
@@ -918,6 +986,7 @@ export class GuardrailsService {
       pauses: this.#state.pauses.slice(0, GUARDRAIL_VIEW_LIMITS.pauses),
       meter: this.#meter(),
       failovers: this.#state.failovers.slice(0, GUARDRAIL_VIEW_LIMITS.failovers),
+      steps: this.#steps(this.#meter()),
       events: this.#events.newest(GUARDRAIL_VIEW_LIMITS.events),
       kpis: this.#events.counts(new Date(this.#now() - WEEK_MS).toISOString()),
     };

@@ -10,7 +10,8 @@
  * - Injection defence: after a turn read content from the web, a browser, an email or a webhook, a
  *   cheap monitor model checks each high-impact action against the task before it runs.
  * - The subscription meter: the usage windows of each provider account, a forecast of when each runs
- *   out, and the automatic move of Sonnet-class agents to another vendor when their pool nearly runs out.
+ *   out, and the automatic move of Claude agents to Codex when their subscription is out: the order is
+ *   the Claude subscription, then the Codex subscription, then the Codex credits.
  *
  * The host enforces all of it; the owner reads and changes it on the Trust page.
  */
@@ -34,11 +35,14 @@ export const GUARDRAIL_MODEL_TIERS = ["small", "medium", "large"] as const;
 export type GuardrailModelTier = (typeof GUARDRAIL_MODEL_TIERS)[number];
 
 export interface GuardrailFailover {
-  /** Moves agents off a pool that nearly ran out. Off: only the agent's own backup models move it. */
+  /**
+   * Moves agents off a subscription that is out: a turn failed with the provider's usage limit, or the
+   * meter shows a window at `thresholdPercent`. Off: only the agent's own backup models move it.
+   */
   enabled: boolean;
-  /** A window used to this percent, in every account of the pool, counts as nearly run out. */
+  /** A window used to this percent, in every account of the pool, counts as out. 100 by default. */
   thresholdPercent: number;
-  /** The model tiers that move. Sonnet-class (`medium`) by default; an Opus agent stays. */
+  /** The model tiers that move: Sonnet-class (`medium`) and Opus-class (`large`) by default. */
   tiers: GuardrailModelTier[];
   /** Agents pinned to their model: they never move. */
   pinnedAgentIds: string[];
@@ -92,7 +96,13 @@ export const DEFAULT_GUARDRAIL_POLICY: GuardrailPolicy = {
   stuck: { enabled: true, repeats: 5, pingPong: 16 },
   injection: { enabled: true },
   moneyApprovalHours: 24,
-  failover: { enabled: true, thresholdPercent: 95, tiers: ["medium"], pinnedAgentIds: [], allowApiKey: false },
+  failover: {
+    enabled: true,
+    thresholdPercent: 100,
+    tiers: ["medium", "large"],
+    pinnedAgentIds: [],
+    allowApiKey: false,
+  },
 };
 
 export const GUARDRAIL_BOUNDS = {
@@ -229,10 +239,30 @@ export interface SubscriptionPoolMeter {
   /** The account that the pool, or the agents, use now. */
   inUse: boolean;
   windows: SubscriptionWindowMeter[];
-  /** A window is at the failover threshold. */
+  /** A window is at the failover threshold and no paid credits carry the account: it runs no turns. */
   nearlyExhausted: boolean;
+  /**
+   * Codex: the plan's windows are used up, and the account runs on its paid credits. Absent from an
+   * older host.
+   */
+  onCredits?: boolean;
+  /** Codex: whether paid credits remain. Absent when the provider did not say. */
+  creditsLeft?: boolean;
   /** Agents on this account now. */
   agents: number;
+}
+
+/**
+ * The steps of the failover, in order: the Claude subscription, the Codex subscription, the Codex
+ * credits. `none`: no step has room left, and the agent waits for a window to reset.
+ */
+export const FAILOVER_STEPS = ["claude", "codex-plan", "codex-credits", "none"] as const;
+export type FailoverStep = (typeof FAILOVER_STEPS)[number];
+
+/** The step that one agent runs on now. Only the agents of a provider in the order have one. */
+export interface GuardrailFailoverStepRow {
+  agentId: string;
+  step: FailoverStep;
 }
 
 /** An agent that the failover moved, and where it goes back to. */
@@ -251,13 +281,22 @@ export interface GuardrailsView {
   pauses: GuardrailPause[];
   meter: SubscriptionPoolMeter[];
   failovers: GuardrailFailoverRow[];
+  /** The failover step of each Claude and Codex agent. Absent from an older host. */
+  steps?: GuardrailFailoverStepRow[];
   /** The newest events, at most 100. */
   events: GuardrailEvent[];
   /** The events of the last seven days by kind: caught injections, stuck stops, pauses. */
   kpis: Partial<Record<GuardrailEventKind, number>>;
 }
 
-export const GUARDRAIL_VIEW_LIMITS = { usage: 1_000, pauses: 1_000, meter: 64, failovers: 500, events: 100 } as const;
+export const GUARDRAIL_VIEW_LIMITS = {
+  usage: 1_000,
+  pauses: 1_000,
+  meter: 64,
+  failovers: 500,
+  steps: 1_000,
+  events: 100,
+} as const;
 
 function finite(value: unknown, max: number): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max ? value : null;
@@ -441,6 +480,8 @@ function isMeter(value: unknown): value is SubscriptionPoolMeter {
     value.windows.length <= 8 &&
     value.windows.every(isWindow) &&
     typeof value.nearlyExhausted === "boolean" &&
+    (value.onCredits === undefined || typeof value.onCredits === "boolean") &&
+    (value.creditsLeft === undefined || typeof value.creditsLeft === "boolean") &&
     finite(value.agents, 100_000) !== null
   );
 }
@@ -457,6 +498,10 @@ function isFailoverRow(value: unknown): value is GuardrailFailoverRow {
     isModelRef(value.to) &&
     isBoundedString(value.since, 64)
   );
+}
+
+function isStepRow(value: unknown): value is GuardrailFailoverStepRow {
+  return isDynamicRecord(value) && isIdentifier(value.agentId) && isOneOf(FAILOVER_STEPS, value.step);
 }
 
 function readKpis(value: unknown): Partial<Record<GuardrailEventKind, number>> | null {
@@ -479,6 +524,11 @@ export function decodeGuardrailsView(value: unknown): GuardrailsView | null {
   if (!isDynamicRecord(value)) return null;
   const policy = normalizeGuardrailPolicy(value.policy);
   const kpis = readKpis(value.kpis);
+  let steps: GuardrailFailoverStepRow[] | undefined;
+  if (value.steps !== undefined) {
+    if (!bounded(value.steps, GUARDRAIL_VIEW_LIMITS.steps, isStepRow)) return null;
+    steps = value.steps;
+  }
   if (
     !policy ||
     !kpis ||
@@ -497,6 +547,7 @@ export function decodeGuardrailsView(value: unknown): GuardrailsView | null {
     pauses: value.pauses,
     meter: value.meter,
     failovers: value.failovers,
+    ...(steps === undefined ? {} : { steps }),
     events: value.events,
     kpis,
   };

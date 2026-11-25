@@ -16,6 +16,10 @@
  *   backing off to a two-minute wait. A deploy sends it before it stops the container. The drain sends
  *   `waiting` while it waits for turns. A notice that no restart follows ends after five minutes.
  *
+ * - `POST /v1/guardrails/failover` changes the failover part of the guardrails policy through the same
+ *   save as the Trust page: a JSON body with any of `enabled`, `thresholdPercent` and `tiers`. It
+ *   answers the failover policy that applies now.
+ *
  * A body is JSON or form fields. Every action is logged without the text. The resume route keeps the
  * deliveries it handled in a small file, so a second call, or a call after another restart, does not
  * send the note again.
@@ -23,6 +27,7 @@
 
 import { readFile, rename, writeFile } from "node:fs/promises";
 import type { DatabaseSync } from "node:sqlite";
+import { type GuardrailPolicy, normalizeGuardrailPolicy } from "@openbot/contracts/guardrails";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { QueuedMessageReceipt, SendMessageInput, SystemNoticeKind } from "@openbot/contracts/ipc";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
@@ -69,6 +74,9 @@ export interface ServerAgentOperationsDependencies {
   announceRestart?: (state: HostRestartState) => void;
   /** An urgent push to the owner's devices, for an operator alert such as a failed check after a deploy. */
   alertOwner?: (title: string, body: string) => void;
+  /** The guardrails policy now, and its save (`GuardrailsService.savePolicy`). */
+  guardrailsPolicy?: () => GuardrailPolicy;
+  saveGuardrailsPolicy?: (policy: GuardrailPolicy) => Promise<void>;
 }
 
 /** A restart notice that no restart followed ends after this long. */
@@ -175,6 +183,10 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
       dependencies.log(`Owner alert sent: ${title}`);
       return { status: 200, lines: { alert: "sent" } };
     }
+    if (path === "/v1/guardrails/failover") {
+      if (method !== "POST") return failure(405, "method_not_allowed");
+      return saveFailoverPolicy(rawBody);
+    }
     if (path === "/v1/resume-interrupted") {
       if (method !== "POST") return failure(405, "method_not_allowed");
       if (resuming) return failure(409, "resume_running");
@@ -187,6 +199,40 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
       }
     }
     return null;
+  }
+
+  async function saveFailoverPolicy(rawBody: string): Promise<ControlAnswer> {
+    const { guardrailsPolicy, saveGuardrailsPolicy } = dependencies;
+    if (!guardrailsPolicy || !saveGuardrailsPolicy) return failure(404, "not_found");
+    let body: unknown = null;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return failure(400, "json_required");
+    }
+    if (!isDynamicRecord(body)) return failure(400, "json_required");
+    const current = guardrailsPolicy();
+    // The same normalization as a saved file or a Trust page save: an invalid value keeps the default.
+    const next = normalizeGuardrailPolicy({
+      ...current,
+      failover: {
+        ...current.failover,
+        ...(body.enabled === undefined ? {} : { enabled: body.enabled }),
+        ...(body.thresholdPercent === undefined ? {} : { thresholdPercent: body.thresholdPercent }),
+        ...(body.tiers === undefined ? {} : { tiers: body.tiers }),
+      },
+    });
+    if (!next) return failure(400, "invalid_policy");
+    await saveGuardrailsPolicy(next);
+    dependencies.log("The guardrails failover policy changed.");
+    return {
+      status: 200,
+      lines: {
+        enabled: String(next.failover.enabled),
+        threshold_percent: next.failover.thresholdPercent,
+        tiers: next.failover.tiers.join(","),
+      },
+    };
   }
 
   async function sendOperatorMessage(agentId: string, fields: Fields): Promise<ControlAnswer> {

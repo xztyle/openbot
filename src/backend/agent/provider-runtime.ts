@@ -2616,11 +2616,13 @@ export class ProviderRuntime implements ProviderPort {
     const pushed = pushedUsageLimit(provider, params);
     if (!pushed) return;
     const kept = this.#lastUsage.get(provider);
+    const credits = pushed.credits ?? kept?.credits;
     const limit = {
       ...kept,
       id: provider,
       primary: pushed.primary ?? kept?.primary ?? null,
       secondary: pushed.secondary ?? kept?.secondary ?? null,
+      ...(credits ? { credits } : {}),
     };
     this.#usageUnreported.delete(provider);
     this.#lastUsage.set(provider, limit);

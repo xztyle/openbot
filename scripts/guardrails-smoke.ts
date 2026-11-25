@@ -64,7 +64,8 @@ try {
     ["leo-1", { turns: 10, tokens: 1_000_000, costUsd: 2 }],
   ]);
   const windows = [
-    // A five-hour window at 97% that resets in two hours, and a weekly window at 40%.
+    // A five-hour window at 97% that resets in two hours, and a weekly window at 40%. The failover
+    // checks set the five-hour window to 100%.
     { usedPercent: 97, windowDurationMins: 300, resetsAt: Math.round(nowSeconds() + 7_200) },
     { usedPercent: 40, windowDurationMins: 10_080, resetsAt: Math.round(nowSeconds() + 5 * 86_400) },
   ];
@@ -490,11 +491,22 @@ try {
   const sonnet = agents[0];
   const opus = agents[1];
   assert.ok(sonnet && opus);
+  // At 97% the subscription is not used up: nothing moves on a forecast.
+  await Effect.runPromise(guardrails.savePolicy(policy));
+  check("a Sonnet agent stays while its window has room", guardrails.failoverChoice(sonnet) === null);
   check(
-    "a Sonnet agent fails over when its pool nearly ran out",
+    "the provider's usage-limit error moves it to Codex",
+    guardrails.failoverChoice(sonnet, { limited: true })?.provider === "codex",
+  );
+  const claudeWindow = windows[0];
+  assert.ok(claudeWindow);
+  claudeWindow.usedPercent = 100;
+  await Effect.runPromise(guardrails.savePolicy(policy));
+  check(
+    "a Sonnet agent fails over when its window is used up",
     guardrails.failoverChoice(sonnet)?.provider === "codex",
   );
-  check("an Opus agent stays", guardrails.failoverChoice(opus) === null);
+  check("an Opus agent fails over too", guardrails.failoverChoice(opus)?.provider === "codex");
   await Effect.runPromise(
     guardrails.savePolicy({ ...policy, failover: { ...policy.failover, pinnedAgentIds: ["ana-1"] } }),
   );
@@ -505,7 +517,7 @@ try {
     { provider: "codex", model: "gpt-6-luna" },
   );
   check(
-    "the agent stays away while its pool is nearly out",
+    "the agent stays away while its subscription is used up",
     guardrails.holdsReturn("ana-1", { provider: "claude", model: "claude-sonnet-5-5" }),
   );
 
@@ -521,7 +533,7 @@ try {
     view.kpis,
   );
   check(
-    "the meter forecasts the claude window",
+    "the meter shows the claude window used up",
     view.meter.some((row) => row.provider === "claude" && row.nearlyExhausted),
   );
   check(

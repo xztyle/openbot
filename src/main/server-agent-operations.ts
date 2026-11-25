@@ -74,6 +74,8 @@ export interface ServerAgentOperationsDependencies {
   announceRestart?: (state: HostRestartState) => void;
   /** An urgent push to the owner's devices, for an operator alert such as a failed check after a deploy. */
   alertOwner?: (title: string, body: string) => void;
+  /** Starts the upload benchmark of the cloud copies (`POST /v1/cloud-backups/bench`); operator only. */
+  cloudBench?: () => Promise<string>;
   /** The guardrails policy now, and its save (`GuardrailsService.savePolicy`). */
   guardrailsPolicy?: () => GuardrailPolicy;
   saveGuardrailsPolicy?: (policy: GuardrailPolicy) => Promise<void>;
@@ -171,6 +173,15 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
       announce(state);
       dependencies.log(`Restart notice sent: ${state}.`);
       return { status: 200, lines: { restart_notice: state } };
+    }
+    if (path === "/v1/cloud-backups/bench") {
+      if (method !== "POST") return failure(405, "method_not_allowed");
+      if (!dependencies.cloudBench) return failure(404, "not_found");
+      try {
+        return { status: 200, lines: { bench: await dependencies.cloudBench() } };
+      } catch (error) {
+        return failure(409, error instanceof Error ? error.message.slice(0, 200) : "not_started");
+      }
     }
     if (path === "/v1/owner-alert") {
       if (method !== "POST") return failure(405, "method_not_allowed");

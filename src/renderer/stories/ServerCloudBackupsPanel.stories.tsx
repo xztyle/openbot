@@ -237,7 +237,12 @@ export const SignInAgainWhileCopying: Story = {
       ...CONNECTED,
       destinations: CONNECTED.destinations.map((drive) => ({ ...drive, status: "relogin" })),
       warnings: ["relogin"],
-      running: { kind: "backup", startedAt: "2026-11-25T15:00:00Z", phase: "upload" },
+      running: {
+        kind: "backup",
+        startedAt: "2026-11-25T15:00:00Z",
+        phase: "upload",
+        progress: { bytesDone: 6.4 * GB, totalBytes: 11.2 * GB, bytesPerSecond: 31 * MB, secondsRemaining: 160 },
+      },
     },
   },
 };

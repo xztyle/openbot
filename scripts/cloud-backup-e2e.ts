@@ -391,7 +391,10 @@ try {
   }
   check("a second run while one goes is refused, not queued", busy.length > 0, busy);
   await settle();
-  await cloud.setPlan({ ...(await ready()).plan, retention: { allWithinHours: 0, daily: 1, weekly: 0, monthly: 0 } });
+  await cloud.setPlan({
+    ...(await ready()).plan,
+    retention: { keepAll: false, allWithinHours: 0, daily: 1, weekly: 0, monthly: 0 },
+  });
   await cloud.runNow("backup");
   view = await settle();
   const snapshots: unknown[] = JSON.parse(restic("snapshots", "--json"));
@@ -402,7 +405,7 @@ try {
   );
   await cloud.setPlan({
     ...(await ready()).plan,
-    retention: { allWithinHours: 48, daily: 14, weekly: 8, monthly: 12 },
+    retention: { keepAll: true, allWithinHours: 48, daily: 14, weekly: 8, monthly: 12 },
   });
   await cloud.runNow("test");
   view = await settle();

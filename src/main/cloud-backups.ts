@@ -74,12 +74,15 @@ export const CLOUD_PROBLEM_TEXT = {
   other: "backups.cloud.problem.other",
 } as const satisfies Record<CloudProblem, string>;
 
+/** Where the first build kept every server's copies, before the owner could choose a folder. */
+const LEGACY_FOLDER = "Atelier-Backups";
+
 const SETTINGS_FILE = "openbot-cloud-backups-v1.json";
 const SECRETS_FILE = "openbot-cloud-backups-secrets-v1.json";
 const TICK_MS = 60_000;
 const WEEK_MS = 7 * 24 * 3_600_000;
 const INTERVAL_MS = { "15m": 15 * 60_000, "1h": 3_600_000, "6h": 6 * 3_600_000, daily: 24 * 3_600_000 } as const;
-/** A drive with less free space than this share of its size, or than 5 GB, is nearly full. */
+/** A drive with 90% of its space used, or less than 5 GB free, is nearly full. */
 const NEARLY_FULL_SHARE = 0.1;
 const NEARLY_FULL_BYTES = 5 * 1024 ** 3;
 const SIGN_IN_PROBLEMS: ReadonlySet<CloudProblem> = new Set([
@@ -104,7 +107,7 @@ interface Settings {
   passwordShown: boolean;
   lastAttemptAt: string | null;
   lastTestAttemptAt: string | null;
-  pendingJob: { job: string; kind: "backup" | "test" | "restore" | "move"; at?: string } | null;
+  pendingJob: { job: string; kind: "backup" | "test" | "restore" | "move" | "bench"; at?: string } | null;
   /** The problem the owner was last told about, so an hourly failure pushes once, not each hour. */
   alerted: { problem: string; at: string } | null;
   staleAlertedFor: string | null;
@@ -135,6 +138,8 @@ export class CloudBackupError extends Error {
 
 const record = (value: unknown): DynamicRecord => (isDynamicRecord(value) ? value : {});
 const text = (value: unknown, limit = 600): string => (typeof value === "string" ? value.slice(0, limit) : "");
+const whole = (value: unknown): number =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : 0;
 const problemOf = (value: unknown): CloudProblem => CLOUD_PROBLEMS.find((problem) => problem === value) ?? "other";
 const stringMap = (value: unknown): Record<string, string> =>
   Object.fromEntries(
@@ -242,9 +247,14 @@ export class CloudBackups {
       const pending = record(value.pendingJob);
       const alerted = record(value.alerted);
       const pendingKind =
-        pending.kind === "test" || pending.kind === "restore" || pending.kind === "move" ? pending.kind : "backup";
+        pending.kind === "test" || pending.kind === "restore" || pending.kind === "move" || pending.kind === "bench"
+          ? pending.kind
+          : "backup";
       return {
-        destinations: decoded.available ? decoded.destinations : [],
+        // A drive connected before folders could be chosen keeps its copies where they are.
+        destinations: decoded.available
+          ? decoded.destinations.map((row) => ({ ...row, folder: row.folder || LEGACY_FOLDER }))
+          : [],
         plan: cloudPlanOf(value.plan),
         passwordSavedAt: at(value.passwordSavedAt),
         passwordShown: value.passwordShown === true,
@@ -480,6 +490,14 @@ export class CloudBackups {
     return { ok: true, snapshots };
   }
 
+  /** The upload benchmark (operator): 1 GB for about a minute with each setting, into a scratch folder. */
+  async bench(): Promise<string> {
+    const destination = this.#active();
+    if (!destination) throw new CloudBackupError(sourceText("error.host.cloudNotConnected"), 409);
+    await this.#start(destination, "bench", {});
+    return this.#settings.pendingJob?.job ?? "";
+  }
+
   /** A whole copy, its chosen groups, or chosen files and folders, into its own folder on the server. */
   async restore(
     snapshot: string,
@@ -617,7 +635,11 @@ export class CloudBackups {
     return { backupId: text(answer.backupId, 128) };
   }
 
-  async #start(destination: CloudDestination, kind: "backup" | "test" | "restore" | "move", extra: DynamicRecord = {}) {
+  async #start(
+    destination: CloudDestination,
+    kind: "backup" | "test" | "restore" | "move" | "bench",
+    extra: DynamicRecord = {},
+  ) {
     // One job at a time: a run that comes while another goes is refused, never queued. A job that
     // never reported back for six hours no longer holds the next one.
     const pending = this.#settings.pendingJob;
@@ -697,11 +719,13 @@ export class CloudBackups {
           ? record(status.lastTest)
           : pending.kind === "move"
             ? record(status.lastMove)
-            : record(
-                (Array.isArray(status.restores) ? status.restores : [])
-                  .filter(isDynamicRecord)
-                  .find((row) => row.id === pending.job),
-              );
+            : pending.kind === "bench"
+              ? record(status.lastBenchJob)
+              : record(
+                  (Array.isArray(status.restores) ? status.restores : [])
+                    .filter(isDynamicRecord)
+                    .find((row) => row.id === pending.job),
+                );
     if (entry.job !== pending.job && entry.id !== pending.job) {
       // Not started or not finished yet. A job that never reports (the broker restarted) is dropped
       // after a day, so the schedule goes on.
@@ -739,7 +763,7 @@ export class CloudBackups {
   #afterProblem(
     destination: CloudDestination,
     problem: CloudProblem,
-    kind: "backup" | "test" | "restore" | "move" = "backup",
+    kind: "backup" | "test" | "restore" | "move" | "bench" = "backup",
   ) {
     if (problem === "busy") return;
     if (SIGN_IN_PROBLEMS.has(problem)) {
@@ -786,9 +810,10 @@ export class CloudBackups {
     if (now - last < 24 * 3_600_000) return;
     this.#settings.fullAlertedAt = new Date(now).toISOString();
     this.#saveSettings();
+    const saving = !this.#settings.plan.retention.keepAll;
     this.#options.alertOwner((t) => ({
       title: t("backups.cloud.push.fullTitle"),
-      body: t("backups.cloud.push.fullBody"),
+      body: saving ? t("backups.cloud.push.fullBody") : t("backups.cloud.push.fullSaveSpace"),
     }));
   }
 
@@ -796,7 +821,7 @@ export class CloudBackups {
     const space = destination.space;
     if (!space || space.freeBytes === null) return false;
     const total = space.totalBytes ?? space.usedBytes + space.freeBytes;
-    return space.freeBytes < NEARLY_FULL_BYTES || (total > 0 && space.freeBytes < total * NEARLY_FULL_SHARE);
+    return space.freeBytes < NEARLY_FULL_BYTES || (total > 0 && space.freeBytes <= total * NEARLY_FULL_SHARE);
   }
 
   // ---- overview ---------------------------------------------------------------------------------
@@ -885,6 +910,16 @@ export class CloudBackups {
                   : kind === "cloud-move"
                     ? "move"
                     : "backup",
+            ...(isDynamicRecord(status.progress)
+              ? {
+                  progress: {
+                    bytesDone: whole(status.progress.bytesDone),
+                    totalBytes: whole(status.progress.totalBytes),
+                    bytesPerSecond: whole(status.progress.bytesPerSecond),
+                    secondsRemaining: whole(status.progress.secondsRemaining),
+                  },
+                }
+              : {}),
             startedAt: text(running.startedAt, 64),
             phase: text(running.phase, 64),
           }

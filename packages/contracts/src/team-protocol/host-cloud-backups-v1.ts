@@ -100,6 +100,11 @@ export const CLOUD_WARNINGS = ["drive-nearly-full", "stale", "relogin", "passwor
 export type CloudWarning = (typeof CLOUD_WARNINGS)[number];
 
 export interface CloudRetention {
+  /**
+   * Keep every copy (the default). Copies share what did not change, so old ones cost little; the
+   * numbers below apply only when the owner turns on "save space".
+   */
+  keepAll: boolean;
   /** Every copy of the last hours is kept. */
   allWithinHours: number;
   daily: number;
@@ -207,7 +212,13 @@ export type HostCloudBackupsOverview =
       available: true;
       destinations: CloudDestination[];
       plan: CloudPlan;
-      running: { kind: "backup" | "test" | "restore" | "move"; startedAt: string; phase: string } | null;
+      running: {
+        kind: "backup" | "test" | "restore" | "move";
+        startedAt: string;
+        phase: string;
+        /** A copy's progress: what was read so far of the total, the speed and the time left. */
+        progress?: { bytesDone: number; totalBytes: number; bytesPerSecond: number; secondsRemaining: number };
+      } | null;
       lastBackup: CloudRun | null;
       lastSuccessAt: string | null;
       nextRunAt: string | null;
@@ -242,7 +253,7 @@ export type CloudSnapshotsResult =
 const TEXT = 600;
 const problem = oneOf(...CLOUD_PROBLEMS);
 const groupFlags = fields(Object.fromEntries(CLOUD_GROUPS.map((group) => [group, boolean])));
-const retention = fields({ allWithinHours: count, daily: count, weekly: count, monthly: count });
+const retention = fields({ allWithinHours: count, daily: count, weekly: count, monthly: count }, { keepAll: boolean });
 const plan = fields({
   enabled: boolean,
   interval: oneOf(...CLOUD_INTERVALS),
@@ -309,7 +320,12 @@ const overview = (value: unknown): TeamProtocolV2Json => {
     destinations: list(destination, 10),
     plan,
     running: nullable(
-      fields({ kind: oneOf("backup", "test", "restore", "move"), startedAt: string(64), phase: string(64) }),
+      fields(
+        { kind: oneOf("backup", "test", "restore", "move"), startedAt: string(64), phase: string(64) },
+        {
+          progress: fields({ bytesDone: count, totalBytes: count, bytesPerSecond: count, secondsRemaining: count }),
+        },
+      ),
     ),
     lastBackup: nullable(runRow),
     lastSuccessAt: nullable(string(64)),
@@ -400,7 +416,7 @@ export const DEFAULT_CLOUD_PLAN: CloudPlan = {
   dailyTime: "03:30",
   timezone: "America/Bogota",
   groups: { database: true, conversations: true, agents: true, settings: true, motion: true, work: true },
-  retention: { allWithinHours: 48, daily: 14, weekly: 8, monthly: 12 },
+  retention: { keepAll: true, allWithinHours: 48, daily: 14, weekly: 8, monthly: 12 },
   largeFileMb: 200,
 };
 
@@ -424,6 +440,7 @@ export function cloudPlanOf(value: unknown): CloudPlan {
       work: flag("work"),
     },
     retention: {
+      keepAll: kept.keepAll !== false,
       allWithinHours: Math.min(24 * 30, typeof kept.allWithinHours === "number" ? whole(kept.allWithinHours) : 48),
       daily: Math.min(365, typeof kept.daily === "number" ? whole(kept.daily) : 14),
       weekly: Math.min(260, typeof kept.weekly === "number" ? whole(kept.weekly) : 8),
@@ -482,6 +499,16 @@ export function hostCloudBackupsOverviewOf(value: unknown): HostCloudBackupsOver
           kind: pick(running.kind, ["backup", "test", "restore", "move"] as const, "backup"),
           startedAt: text(running.startedAt, 64),
           phase: text(running.phase, 64),
+          ...(isDynamicRecord(running.progress)
+            ? {
+                progress: {
+                  bytesDone: whole(running.progress.bytesDone),
+                  totalBytes: whole(running.progress.totalBytes),
+                  bytesPerSecond: whole(running.progress.bytesPerSecond),
+                  secondsRemaining: whole(running.progress.secondsRemaining),
+                },
+              }
+            : {}),
         }
       : null,
     lastBackup: runOf(value.lastBackup),

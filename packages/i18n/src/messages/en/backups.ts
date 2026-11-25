@@ -237,4 +237,15 @@ export const messages = defineMessages("backups", {
   "backups.cloud.otherServerTitle": "Restore on another server",
   "backups.cloud.otherServerDescription":
     "On the new server, open Settings › Backups › Copy in the cloud, connect the same Proton account, type this server's folder ({folder}) and the password of your copies. Then pick a copy and put it back.",
+  "backups.cloud.push.fullSaveSpace":
+    "Your Proton Drive is 90% full. Turn on “Save space” in Settings › Backups so old copies are thinned out, or get more storage.",
+  "backups.cloud.incremental":
+    "All copies live in one folder of your Proton Drive. The first copy uploads everything; after that each copy only adds what changed, so keeping every copy costs little.",
+  "backups.cloud.plan.saveSpace": "Save space",
+  "backups.cloud.plan.saveSpaceHint":
+    "Off: every copy is kept and nothing is deleted. On: older copies are thinned out as set below.",
+  "backups.cloud.progress": "{done} of {total} · {speed}/s · about {left} left",
+  "backups.cloud.progressNoTotal": "{done} · {speed}/s",
+  "backups.cloud.warning.fullSaveSpace":
+    "Your Proton Drive is almost full. Turn on “Save space” in the plan below, or get more storage.",
 });

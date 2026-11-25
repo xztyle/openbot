@@ -3623,6 +3623,7 @@ export async function createApplicationServices({
         drain: (timeoutMs) => Effect.runPromise(service.drainForDeploy(timeoutMs)),
         endDrain: () => service.endDeployDrain(),
         announceRestart: (state) => host.announceRestart(state, null),
+        cloudBench: () => cloudBackups.bench(),
         alertOwner: (title, body) =>
           webPush.notifyOwner({
             kind: "alert",

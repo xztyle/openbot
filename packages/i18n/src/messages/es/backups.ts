@@ -240,4 +240,15 @@ export const messages = {
   "backups.cloud.otherServerTitle": "Restaurar en otro servidor",
   "backups.cloud.otherServerDescription":
     "En el servidor nuevo, abre Ajustes › Copias de seguridad › Copia en la nube, conecta la misma cuenta de Proton, escribe la carpeta de este servidor ({folder}) y la contraseña de tus copias. Después elige una copia y aplícala.",
+  "backups.cloud.push.fullSaveSpace":
+    "Tu Proton Drive está al 90 %. Activa «Ahorrar espacio» en Ajustes › Copias de seguridad para ir quitando copias viejas, o consigue más almacenamiento.",
+  "backups.cloud.incremental":
+    "Todas las copias viven en una sola carpeta de tu Proton Drive. La primera copia sube todo; después cada copia solo agrega lo que cambió, así que guardar todas las copias cuesta poco.",
+  "backups.cloud.plan.saveSpace": "Ahorrar espacio",
+  "backups.cloud.plan.saveSpaceHint":
+    "Apagado: se guardan todas las copias y nunca se borra nada. Encendido: las copias viejas se van quitando según lo que elijas abajo.",
+  "backups.cloud.progress": "{done} de {total} · {speed}/s · faltan unos {left}",
+  "backups.cloud.progressNoTotal": "{done} · {speed}/s",
+  "backups.cloud.warning.fullSaveSpace":
+    "Tu Proton Drive está casi lleno. Activa «Ahorrar espacio» en el plan de abajo, o consigue más almacenamiento.",
 } as const satisfies PartialTranslation<typeof source>;

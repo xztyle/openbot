@@ -31,6 +31,7 @@ import {
   ItemGroup,
   ItemTitle,
   NativeSelect,
+  Progress,
   SettingsSection,
   SwitchField,
   TriangleAlert,
@@ -333,7 +334,9 @@ export function ServerCloudBackupsPanel(props: {
                       {warning === "stale"
                         ? t("backups.cloud.warning.stale")
                         : warning === "drive-nearly-full"
-                          ? t("backups.cloud.warning.full")
+                          ? value().plan.retention.keepAll
+                            ? t("backups.cloud.warning.fullSaveSpace")
+                            : t("backups.cloud.warning.full")
                           : t("backups.cloud.warning.testFailed")}
                     </AlertDescription>
                   </AlertContent>
@@ -505,6 +508,31 @@ export function ServerCloudBackupsPanel(props: {
                           : ""
                         : t("backups.cloud.paused")}
                     </ItemDescription>
+                    <Show when={value().running?.progress}>
+                      {(progress) => (
+                        <>
+                          <Progress
+                            value={progress().bytesDone}
+                            maxValue={Math.max(progress().totalBytes, progress().bytesDone, 1)}
+                            aria-label={t("backups.cloud.running.backup")}
+                          />
+                          <ItemDescription aria-live="polite">
+                            {progress().totalBytes > 0
+                              ? t("backups.cloud.progress", {
+                                  done: format.fileSize(progress().bytesDone),
+                                  total: format.fileSize(progress().totalBytes),
+                                  speed: format.fileSize(progress().bytesPerSecond),
+                                  left: duration(progress().secondsRemaining),
+                                })
+                              : t("backups.cloud.progressNoTotal", {
+                                  done: format.fileSize(progress().bytesDone),
+                                  speed: format.fileSize(progress().bytesPerSecond),
+                                })}
+                          </ItemDescription>
+                        </>
+                      )}
+                    </Show>
+                    <ItemDescription>{t("backups.cloud.incremental")}</ItemDescription>
                     <Show when={value().typical}>
                       {(typical) => (
                         <ItemDescription>
@@ -613,8 +641,15 @@ export function ServerCloudBackupsPanel(props: {
                           )}
                         </For>
                         <ItemTitle>{t("backups.cloud.plan.keep")}</ItemTitle>
+                        <SwitchField
+                          label={t("backups.cloud.plan.saveSpace")}
+                          description={t("backups.cloud.plan.saveSpaceHint")}
+                          checked={!draft().retention.keepAll}
+                          disabled={manageDisabled()}
+                          onChange={(checked: boolean) => editPlan((next) => (next.retention.keepAll = !checked))}
+                        />
                         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          <For each={RETENTION_FIELDS}>
+                          <For each={draft().retention.keepAll ? [] : RETENTION_FIELDS}>
                             {([key, label]) => (
                               <Field label={t(label)}>
                                 <Input

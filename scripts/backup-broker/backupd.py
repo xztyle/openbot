@@ -1164,7 +1164,13 @@ CLOUD_SETTINGS_SKIP = ["openbot.db", "openbot.db-wal", "openbot.db-shm", "openbo
                        "Singleton*", "*.tmp", "logs"]
 CLOUD_DEFAULTS = {
     "folder": "Atelier-Backups",
+    # Proton answers too many API calls with 429 and a one-hour wait (seen at 4/s after ~8.5 GB): start
+    # at 4/s, halve after a 429, add 2 after each clean run, up to 12.
     "tpslimit": 4,
+    "tpslimit_max": 12,
+    "pack_size": 128,        # MiB (restic's largest): fewer, larger files on the drive, fewer API calls per GB
+    "connections": 6,        # restic's parallel uploads through `rclone serve restic`
+    "caching": True,         # rclone's Proton metadata cache (only Atelier writes the folder)
     "rclone": None,           # a path overrides the pinned download (tests)
     "restic": None,
     "allow_test_providers": False,
@@ -1284,6 +1290,7 @@ class CloudSession:
         self.destination = destination
         self.provider = provider
         self.repo_password = repo_password
+        self.tuning = cloud_tuning()
         self.dir = Path(tempfile.mkdtemp(prefix="cloud-", dir=secrets_dir()))
         os.chmod(self.dir, 0o700)
         self.conf = self.dir / "rclone.conf"
@@ -1310,7 +1317,8 @@ class CloudSession:
         else:
             lines += [f"type = {CLOUD_PROVIDERS[self.provider]}", f"username = {single_line(d.get('email'))}",
                       f"password = {self._obscure(str(d.get('password') or ''))}",
-                      "replace_existing_draft = true", "enable_caching = false"]
+                      "replace_existing_draft = true",
+                      f"enable_caching = {'true' if self.tuning.get('caching', True) else 'false'}"]
             if d.get("mailboxPassword"):
                 lines.append(f"mailbox_password = {self._obscure(str(d['mailboxPassword']))}")
             if d.get("twoFactorCode"):
@@ -1358,13 +1366,18 @@ class CloudSession:
             raise CloudFailure(cloud_problem(detail), detail)
         return result
 
-    def restic(self, *args, timeout=None, ok_codes=(0,), json_lines=False, low=True):
+    def restic_cmd(self, *args, tuning=None, remote=None):
+        tune = {**self.tuning, **(tuning or {})}
         rclone_args = "serve restic --stdio"
         if self.provider != "local":
-            rclone_args += f" --tpslimit {int(cloud_cfg()['tpslimit'])} --low-level-retries 10"
-        cmd = [cloud_tool("restic"), "--repo", f"rclone:{self.remote()}", "--cache-dir", str(cloud_dir() / "cache"),
-               "-o", f"rclone.program={cloud_tool('rclone')}", "-o", f"rclone.args={rclone_args}",
-               "--retry-lock", "2m", *args]
+            rclone_args += f" --tpslimit {int(tune['tpslimit'])} --low-level-retries 10"
+        return [cloud_tool("restic"), "--repo", f"rclone:{remote or self.remote()}",
+                "--cache-dir", str(cloud_dir() / "cache"),
+                "-o", f"rclone.program={cloud_tool('rclone')}", "-o", f"rclone.args={rclone_args}",
+                "-o", f"rclone.connections={int(tune['connections'])}", "--retry-lock", "2m", *args]
+
+    def restic(self, *args, timeout=None, ok_codes=(0,), json_lines=False, low=True):
+        cmd = self.restic_cmd(*args)
         if json_lines:
             cmd.insert(1, "--json")
         try:
@@ -1446,6 +1459,71 @@ def single_line(value):
 
 # -- state ------------------------------------------------------------------------------------------
 
+def cloud_tuning():
+    """The upload settings in use: the configured ones, with the API rate the last runs settled on."""
+    c = cloud_cfg()
+    tuning = {"tpslimit": int(c["tpslimit"]), "pack_size": int(c["pack_size"]),
+              "connections": int(c["connections"]), "caching": bool(c["caching"])}
+    learned = (read_json(cloud_dir() / "status.json", {}) or {}).get("tuning") or {}
+    if isinstance(learned.get("tpslimit"), int):
+        tuning["tpslimit"] = max(2, min(int(c["tpslimit_max"]), learned["tpslimit"]))
+    return tuning
+
+
+def cloud_adapt(throttled):
+    """Backs off after Proton said "too many requests", and speeds up again after clean runs."""
+    c = cloud_cfg()
+    current = cloud_tuning()["tpslimit"]
+    nxt = max(2, current // 2) if throttled else min(int(c["tpslimit_max"]), current + 2)
+    cloud_update(tuning={"tpslimit": nxt, "at": now_iso(), "throttled": bool(throttled)})
+    return nxt
+
+
+THROTTLE_RE = re.compile(r"code=2011|code=85131|too many requests|status=429|\b429\b", re.I)
+
+
+def restic_stream(session, args, progress_path=None, tuning=None, remote=None, stop_after=None):
+    """Runs restic with --json, writing its progress for the app as it goes. Answers the summary,
+    the exit code, the error output and whether Proton throttled. `stop_after` (seconds) interrupts it
+    cleanly, for a benchmark."""
+    import signal
+    cmd = low_priority(session.restic_cmd("--json", *args, tuning=tuning, remote=remote))
+    errors = tempfile.TemporaryFile(mode="w+", dir=session.dir)
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=errors, text=True, env=session.env())
+    summary, last_write, started = {}, 0.0, time.monotonic()
+    timer = None
+    if stop_after:
+        timer = threading.Timer(stop_after, lambda: process.poll() is None and process.send_signal(signal.SIGINT))
+        timer.start()
+    try:
+        for line in process.stdout:
+            try:
+                message = json.loads(line)
+            except ValueError:
+                continue
+            kind = message.get("message_type")
+            if kind == "summary":
+                summary = message
+            elif kind == "status" and progress_path and time.monotonic() - last_write > 2:
+                last_write = time.monotonic()
+                elapsed = max(0.001, float(message.get("seconds_elapsed") or (time.monotonic() - started)))
+                done = int(message.get("bytes_done") or 0)
+                write_json(progress_path, {"bytesDone": done, "totalBytes": int(message.get("total_bytes") or 0),
+                                           "bytesPerSecond": int(done / elapsed),
+                                           "secondsRemaining": int(message.get("seconds_remaining") or 0),
+                                           "at": now_iso()})
+        process.wait()
+    finally:
+        if timer:
+            timer.cancel()
+        if process.poll() is None:
+            process.kill()
+    errors.seek(0)
+    stderr = errors.read()[-20000:]
+    errors.close()
+    return summary, process.returncode, scrub(stderr, session.secret_values), bool(THROTTLE_RE.search(stderr))
+
+
 def cloud_status_path():
     return cloud_dir() / "status.json"
 
@@ -1476,6 +1554,9 @@ def cloud_overview():
     history = status.get("history") or []
     return {
         "running": cloud_running,
+        "progress": read_json(cloud_dir() / "progress.json") if cloud_running else None,
+        "tuning": cloud_tuning(),
+        "lastBench": status.get("lastBench"),
         "busy": running is not None,
         "lastBackup": status.get("lastBackup"),
         "lastSuccess": status.get("lastSuccess"),
@@ -1682,27 +1763,30 @@ def cloud_backup_run(job, params, session):
     files_from = session.dir / "paths"
     files_from.write_text("\n".join(paths) + "\n")
     set_current("cloud-backup", job, "upload")
-    result = session.restic("backup", "--files-from-verbatim", str(files_from), "--exclude-file", str(exclude_file),
-                            "--tag", "atelier", "--host", "atelier", "--pack-size", "32", "--no-scan",
-                            *[arg for name in CLOUD_GROUPS if groups[name] for arg in ("--tag", f"group:{name}")],
-                            ok_codes=(0, 3), json_lines=True)
-    summary = {}
-    for line in result.stdout.splitlines():
-        try:
-            message = json.loads(line)
-        except ValueError:
-            continue
-        if message.get("message_type") == "summary":
-            summary = message
-    set_current("cloud-backup", job, "retention")
-    session.restic("forget", "--tag", "atelier", "--host", "atelier", "--group-by", "host",
-                   *retention_args(plan.get("retention")),
-                   timeout=1800)
+    progress = cloud_dir() / "progress.json"
+    progress.unlink(missing_ok=True)
+    summary, code, stderr, throttled = restic_stream(
+        session, ["backup", "--files-from-verbatim", str(files_from), "--exclude-file", str(exclude_file),
+                  "--tag", "atelier", "--host", "atelier", "--pack-size", str(session.tuning["pack_size"]),
+                  *[arg for name in CLOUD_GROUPS if groups[name] for arg in ("--tag", f"group:{name}")]],
+        progress_path=progress)
+    progress.unlink(missing_ok=True)
+    tps = cloud_adapt(throttled)
+    if code not in (0, 3):
+        raise CloudFailure(cloud_problem(stderr), stderr[-600:])
+    # Every copy is kept unless the owner turned on "save space": dedup makes old copies cheap.
+    if not (plan.get("retention") or {}).get("keepAll", True):
+        set_current("cloud-backup", job, "retention")
+        session.restic("forget", "--tag", "atelier", "--host", "atelier", "--group-by", "host",
+                       *retention_args(plan.get("retention")), timeout=1800)
+    result_code = code
     return {"snapshot": (summary.get("snapshot_id") or "")[:16],
             "addedBytes": int(summary.get("data_added_packed") or summary.get("data_added") or 0),
             "totalBytes": int(summary.get("total_bytes_processed") or 0),
             "files": int(summary.get("total_files_processed") or 0),
-            "incomplete": result.returncode == 3, "sizes": sizes, "repos": len(repos)}
+            "incomplete": result_code == 3, "sizes": sizes, "repos": len(repos),
+            "tpslimit": tps, "throttled": throttled, "packSize": session.tuning["pack_size"],
+            "connections": session.tuning["connections"]}
 
 
 def cloud_test_run(job, params, session):
@@ -1879,6 +1963,62 @@ def cloud_move_run(job, params, session):
     return {"folder": target}
 
 
+BENCH_SETTINGS = [
+    {"pack_size": 16, "connections": 5, "tpslimit": 4, "caching": False},
+    {"pack_size": 64, "connections": 8, "tpslimit": 8, "caching": True},
+    {"pack_size": 128, "connections": 8, "tpslimit": 12, "caching": True},
+    {"pack_size": 128, "connections": 12, "tpslimit": 16, "caching": True},
+    {"pack_size": 128, "connections": 16, "tpslimit": 0, "caching": True},
+]
+
+
+def cloud_bench_run(job, params, session):
+    """Uploads 1 GB of random data for about 60 s with each setting into scratch repositories in a scratch
+    folder of the drive, measures what reached the drive, and removes the scratch folder."""
+    seconds = max(20, min(300, int(params.get("seconds") or 60)))
+    settings = params.get("settings") if isinstance(params.get("settings"), list) else BENCH_SETTINGS
+    scratch = f"Atelier-Bench-{job[-6:]}"
+    data = Path(tempfile.mkdtemp(prefix="cloud-bench-", dir="/var/tmp"))
+    results = []
+    try:
+        set_current("cloud-bench", job, "data")
+        with open(data / "bench.bin", "wb") as handle:
+            for _ in range(1024):
+                handle.write(os.urandom(1 << 20))
+        for index, setting in enumerate(settings[:8]):
+            tune = {**session.tuning, **{k: v for k, v in setting.items() if k in session.tuning}}
+            if not tune["tpslimit"]:
+                tune["tpslimit"] = 1000
+            remote = session.remote_path(f"{scratch}/{index}")
+            set_current("cloud-bench", job, f"setting {index + 1}")
+            session.rclone("mkdir", remote, timeout=120)
+            init = run(session.restic_cmd("init", tuning=tune, remote=remote), check=False, timeout=300,
+                       env=session.env())
+            if init.returncode != 0:
+                results.append({**setting, "error": scrub(init.stderr, session.secret_values)[-300:]})
+                continue
+            started = time.monotonic()
+            _summary, _code, stderr, throttled = restic_stream(
+                session, ["backup", str(data / "bench.bin"), "--pack-size", str(tune["pack_size"])],
+                tuning=tune, remote=remote, stop_after=seconds)
+            elapsed = time.monotonic() - started
+            size = session.rclone("size", f"{remote}/data", "--json", timeout=300, check=False)
+            try:
+                stored = int(json.loads(size.stdout).get("bytes") or 0)
+            except ValueError:
+                stored = 0
+            results.append({**setting, "seconds": round(elapsed, 1), "bytes": stored,
+                            "mbPerSecond": round(stored / elapsed / 1e6, 2), "throttled": throttled,
+                            **({"error": stderr[-300:]} if _code not in (0, 130, 3) and not stored else {})})
+            say(f"bench {setting}: {results[-1].get('mbPerSecond')} MB/s throttled={throttled}")
+    finally:
+        shutil.rmtree(data, ignore_errors=True)
+        session.rclone("purge", session.remote_path(scratch), timeout=1800, check=False)
+    entry = {"at": now_iso(), "results": results}
+    cloud_update(lastBench=entry)
+    return {"bench": results}
+
+
 def cloud_import(restore_id):
     """Turns a cloud restore into a local backup, so the usual Restore (safety copy first, typed
     confirmation, only the owner) can put it back. Nothing live changes here."""
@@ -1973,13 +2113,13 @@ def cloud_job_id(kind):
 def cloud_start(kind, body):
     """Starts a backup, restore test or restore outside the service. Refused while anything runs: a run
     that is due while the previous one still goes is skipped, never queued."""
-    if kind not in ("backup", "test", "restore", "move"):
+    if kind not in ("backup", "test", "restore", "move", "bench"):
         raise Refused("Unknown job.")
     if running_job():
         raise Refused("A backup or restore is already running.", 409)
     job = cloud_job_id(kind)
     params = {k: body.get(k) for k in ("destination", "repositoryPassword", "plan", "snapshot", "readSubset",
-                                       "groups", "paths", "to")}
+                                       "groups", "paths", "to", "settings", "seconds")}
     path = secrets_dir() / f"{job}.json"
     write_json(path, params)
     spawn(["cloud-job", job, kind], f"atelier-{job}")
@@ -2005,6 +2145,8 @@ def cloud_job(job, kind):
                             entry.update(cloud_test_run(job, params, session))
                         elif kind == "move":
                             entry.update(cloud_move_run(job, params, session))
+                        elif kind == "bench":
+                            entry.update(cloud_bench_run(job, params, session))
                         else:
                             entry["snapshot"] = str(params.get("snapshot") or "")[:16]
                             entry.update(cloud_restore_run(job, params, session))
@@ -2043,6 +2185,8 @@ def cloud_job(job, kind):
         cloud_update(lastTest=entry)
     elif kind == "move":
         cloud_update(lastMove=entry)
+    elif kind == "bench":
+        cloud_update(lastBenchJob={k: entry.get(k) for k in ("job", "ok", "problem", "detail", "finishedAt")})
     else:
         restores = (read_json(cloud_dir() / "restores.json", []) or [])[-19:]
         restores.append({"id": job, "snapshot": entry.get("snapshot"), "status": "ok" if entry.get("ok") else "failed",
@@ -2142,7 +2286,7 @@ def cloud_route(method, segs, body):
         return cloud_login(body)
     if action == "snapshots":
         return cloud_snapshots(body)
-    if action in ("backup", "test", "restore", "move"):
+    if action in ("backup", "test", "restore", "move", "bench"):
         return cloud_start(action, body)
     if action == "ls":
         return cloud_ls(body)

@@ -167,6 +167,18 @@ copies list shows the old server's copies; restore one and put it back.
 `/snapshots`, `/ls`, `/folders`, `/backup`, `/test`, `/restore`, `/move`, `/collect`, `/import`,
 `/measure`.
 
+**Speed (2026-11-25).** The server uploads ~84 MB/s with 4 parallel streams (Cloudflare speed test;
+21-37 MB/s on one stream). The first copy to Proton ran at ~5 MB/s with `--tpslimit 4`, 16 MiB packs and
+5 connections, then stopped after ~8.6 GB: Proton answered 429 and rclone waits its one-hour Retry-After
+(no sockets, no CPU, no writes while it waits). The limit is Proton's API rate, not the link or the CPU
+(restic used 6 CPU-minutes in 37). Defaults now: 128 MiB packs, 6 connections, Proton metadata cache on,
+`--tpslimit` from 4, halved after a 429 and raised by 2 after each clean run up to 12 (`cloud.tpslimit`,
+`cloud.tpslimit_max`, `cloud.pack_size`, `cloud.connections`, `cloud.caching` in `config.json`). A copy
+reports its progress (read bytes, total, speed, time left) from restic's `--json` status. After the
+first copy each run only adds what changed. `cloud-job <id> bench` (control socket
+`POST /v1/cloud-backups/bench`) uploads 1 GB for 60 s with each setting of `BENCH_SETTINGS` into a scratch
+folder and records MB/s and throttling in `status.json` (`lastBench`); run it when no copy runs.
+
 **Proton limits seen.** Proton answers sign-ins from datacenter addresses with `429` (code 2011,
 "retry after 3600 s") or a human check (code 9001) at times; rclone cannot solve the human check. The
 app tells the owner to wait an hour, or to sign in once at proton.me and try again. rclone's Proton

@@ -1337,8 +1337,8 @@ class CloudSession:
                "--contimeout", "20s", "--timeout", "60s", *args]
         try:
             result = run(cmd, check=False, timeout=timeout, env=self.env())
-        except subprocess.TimeoutExpired:
-            raise CloudFailure("network", "The drive did not answer in time.") from None
+        except subprocess.TimeoutExpired as error:
+            raise self._timed_out(error) from None
         if check and result.returncode != 0:
             detail = scrub(result.stderr or result.stdout, self.secret_values)
             raise CloudFailure(cloud_problem(detail), detail)
@@ -1355,12 +1355,22 @@ class CloudSession:
             cmd.insert(1, "--json")
         try:
             result = run(low_priority(cmd) if low else cmd, check=False, timeout=timeout, env=self.env())
-        except subprocess.TimeoutExpired:
-            raise CloudFailure("network", "The copy did not finish in time.") from None
+        except subprocess.TimeoutExpired as error:
+            raise self._timed_out(error) from None
         if result.returncode not in ok_codes:
             detail = scrub(result.stderr or result.stdout, self.secret_values)
             raise CloudFailure(cloud_problem(detail), detail)
         return result
+
+    def _timed_out(self, error):
+        """A command that did not end in time. Proton's "too many requests" makes rclone wait an hour,
+        so what it printed so far says more than the timeout."""
+        partial = error.stderr or error.output or ""
+        if isinstance(partial, bytes):
+            partial = partial.decode("utf8", "replace")
+        detail = scrub(partial, self.secret_values) or "The drive did not answer in time."
+        problem = cloud_problem(partial)
+        return CloudFailure("network" if problem == "other" else problem, detail)
 
     def tokens(self):
         """rclone's session tokens after a command: it writes refreshed ones into the config."""
@@ -1924,7 +1934,7 @@ def cloud_login(body):
     try:
         with CloudSession(destination, password) as session:
             try:
-                session.rclone("mkdir", session.remote(), timeout=120)
+                session.rclone("mkdir", session.remote(), timeout=75)
                 about = session.about()
                 exists = session.rclone("lsf", session.remote(), "--max-depth", "1", timeout=120)
                 if "config" in [name.strip("/") for name in exists.stdout.split()]:

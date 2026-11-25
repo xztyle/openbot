@@ -15,6 +15,9 @@ and a restore through a unix socket that only the main process may use (SO_PEERC
   backupd.py offsite <id>                 upload one backup to the off-site target
   backupd.py staging up [--from <id>] [--image <tag>] [--fresh-db] [--no-view] [--json]
   backupd.py staging down | status
+  backupd.py cloud-tools                  download the pinned rclone and restic (checked by SHA-256)
+  backupd.py cloud-job <job> <kind>       one cloud backup, restore test or restore (started by the socket)
+  backupd.py cloud-measure                the size of each group of a cloud copy
   backupd.py install                      copy to the backup root, write units, enable the timer
 
 A snapshot is a folder `<root>/snapshots/<id>/`: `manifest.json`, `openbot.db.zst` (SQLite backup
@@ -180,11 +183,13 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def run(cmd, check=True, timeout=None, user=None, capture=True, ok_codes=(0,), stdin=None):
+def run(cmd, check=True, timeout=None, user=None, capture=True, ok_codes=(0,), stdin=None, env=None):
     """Runs a command; `user` (a uid) drops root first, so SQLite and agent files are never root's."""
     kwargs = {}
     if user is not None and os.geteuid() == 0 and user != 0:
         kwargs.update(user=user, group=user, extra_groups=[])
+    if env is not None:
+        kwargs["env"] = env
     result = subprocess.run(cmd, text=True, timeout=timeout, capture_output=capture, input=stdin, **kwargs)
     if check and result.returncode not in ok_codes:
         detail = (result.stderr or result.stdout or "").strip()[-800:] if capture else ""
@@ -755,6 +760,12 @@ def restore(ident, confirm, spaces=False):
                         else "OpenBot/Spaces/" + name.split(":", 1)[1]
                     step(f"Restoring {rel} (files newer than the backup stay).")
                     rsync(files / "data" / rel, data / rel, excludes=TREE_EXCLUDES, delete=False)
+                elif name.startswith("files:"):
+                    rel = name.split(":", 1)[1]
+                    if rel.startswith("/") or ".." in Path(rel).parts:
+                        continue
+                    step(f"Restoring {rel} (files newer than the backup stay).")
+                    rsync(files / "data" / rel, data / rel, delete=False)
                 elif name == "motion":
                     step("Restoring the Motion board.")
                     restore_db(path / manifest["motion"]["file"], Path(motion["dir"]) / "data/motion.db", motion["uid"])
@@ -1118,6 +1129,879 @@ def staging_up(from_id=None, image=None, fresh_db=False, view=True, wait=True):
             clear_current()
 
 
+# ---- cloud copies (restic over rclone: Proton Drive; Google Drive and OneDrive later) -------------
+#
+# OpenBot's main process holds every secret of a cloud copy (the drive sign-in, rclone's session
+# tokens and the restic repository password) in its encrypted secret store. It sends them with each
+# call. The broker writes them only to a private folder on a tmpfs (`/run/atelier-backup`) for the life
+# of one command, and hands refreshed session tokens back once (`/v1/cloud/collect`). Nothing secret is
+# kept in the broker's state or written to a log.
+
+CLOUD_TOOLS = {
+    "rclone": {"version": "1.76.0",
+               "url": "https://github.com/rclone/rclone/releases/download/v1.76.0/rclone-v1.76.0-linux-amd64.zip",
+               "sha256": "b00f00b3266c3764413afe599d3ec316f6f43b3e0ea8a0bc1d186d2133e46df7",
+               "member": "rclone-v1.76.0-linux-amd64/rclone"},
+    "restic": {"version": "0.19.1",
+               "url": "https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_linux_amd64.bz2",
+               "sha256": "f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c"},
+}
+CLOUD_GROUPS = ("database", "conversations", "agents", "settings", "motion", "work")
+CLOUD_PROVIDERS = {"proton": "protondrive"}
+# rclone's names for the session of a Proton sign-in. Kept by OpenBot, so the 2FA code is asked once.
+PROTON_TOKEN_KEYS = ("client_uid", "client_access_token", "client_refresh_token", "client_salted_key_pass")
+# Build output and caches: never "finished work". Matched as a name anywhere in a backed-up tree.
+CLOUD_SKIP_NAMES = ("node_modules", "target", ".godot", "dist", "__pycache__", ".venv", ".next", ".turbo",
+                    ".gradle", ".cache", ".pytest_cache", ".mypy_cache", ".parcel-cache", ".svelte-kit")
+CLOUD_SETTINGS_SKIP = ["openbot.db", "openbot.db-wal", "openbot.db-shm", "openbot.db-journal", "Cache", "Code Cache",
+                       "GPUCache", "DawnGraphiteCache", "DawnWebGPUCache", "GPUPersistentCache", "Crashpad",
+                       "blob_storage", "Shared Dictionary", "provider-runtimes", "Service Worker", "CacheStorage",
+                       "Singleton*", "*.tmp", "logs"]
+CLOUD_DEFAULTS = {
+    "folder": "Atelier-Backups",
+    "tpslimit": 4,
+    "rclone": None,           # a path overrides the pinned download (tests)
+    "restic": None,
+    "allow_test_providers": False,
+    "tools_dir": None,
+    "secrets_dir": None,
+}
+CLOUD_HISTORY = 400
+
+
+def cloud_cfg():
+    return merge(CLOUD_DEFAULTS, cfg().get("cloud") or {})
+
+
+def cloud_dir():
+    path = state_dir() / "cloud"
+    path.mkdir(parents=True, exist_ok=True)
+    os.chmod(path, 0o700)
+    return path
+
+
+def secrets_dir():
+    configured = cloud_cfg().get("secrets_dir")
+    path = Path(configured) if configured else (Path("/run/atelier-backup") if os.geteuid() == 0
+                                                 else cloud_dir() / "secrets")
+    path.mkdir(parents=True, exist_ok=True)
+    os.chmod(path, 0o700)
+    return path
+
+
+def tools_dir():
+    configured = os.environ.get("ATELIER_CLOUD_TOOLS_DIR") or cloud_cfg().get("tools_dir")
+    return Path(configured) if configured else ROOT / "tools"
+
+
+def cloud_tool(name):
+    """The pinned binary, downloaded and checked against its SHA-256 the first time."""
+    override = cloud_cfg().get(name)
+    if override:
+        return str(override)
+    spec = CLOUD_TOOLS[name]
+    target = tools_dir() / f"{name}-{spec['version']}" / name
+    if target.is_file():
+        return str(target)
+    import urllib.request
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with urllib.request.urlopen(spec["url"], timeout=300) as response:  # noqa: S310 - a pinned https URL
+        blob = response.read()
+    if hashlib.sha256(blob).hexdigest() != spec["sha256"]:
+        raise Refused(f"The {name} download does not match its pinned checksum.", 502)
+    if spec["url"].endswith(".zip"):
+        import io
+        import zipfile
+        blob = zipfile.ZipFile(io.BytesIO(blob)).read(spec["member"])
+    elif spec["url"].endswith(".bz2"):
+        import bz2
+        blob = bz2.decompress(blob)
+    tmp = target.with_name(f".{name}.tmp")
+    tmp.write_bytes(blob)
+    os.chmod(tmp, 0o755)
+    os.replace(tmp, target)
+    return str(target)
+
+
+def low_priority(cmd):
+    return ["nice", "-n", "15", "ionice", "-c", "3", *cmd]
+
+
+# -- errors in the owner's terms ---------------------------------------------------------------------
+
+def cloud_problem(text):
+    """What went wrong, as one of the codes the app explains in plain words."""
+    lower = (text or "").lower()
+    if re.search(r"2fa|two.factor|totp|second factor", lower):
+        return "two-factor"
+    if re.search(r"mailbox password|salted key|unlock (the )?(user|address)? ?keys?", lower):
+        return "mailbox-password"
+    if re.search(r"code=9001|human verification|captcha", lower):
+        return "verification"
+    if re.search(r"code=2011|code=85131|too many requests|status=429|\b429\b", lower):
+        return "rate-limited"
+    if re.search(r"code=8002|incorrect login credentials|invalid (user ?name|password)", lower):
+        return "credentials"
+    if re.search(r"code=10013|refresh token|invalid access token|status=401|\b401\b|unauthori[sz]ed|session expired",
+                 lower):
+        return "relogin"
+    if re.search(r"dial tcp|no such host|i/o timeout|connection refused|network is unreachable|tls handshake|"
+                 r"timed out|deadline exceeded|connection reset", lower):
+        return "network"
+    if re.search(r"quota|storage (limit|full)|insufficient storage|not enough space|code=200501|code=2500", lower):
+        return "drive-full"
+    if re.search(r"wrong password or no key found", lower):
+        return "repository-password"
+    return "other"
+
+
+def scrub(text, secrets):
+    out = text or ""
+    for value in secrets:
+        if value and len(value) >= 4:
+            out = out.replace(value, "***")
+    return out[-600:]
+
+
+# -- one destination: rclone config and restic environment, in a private folder ----------------------
+
+class CloudSession:
+    """The rclone config and restic password of one command, in a private folder removed at the end."""
+
+    def __init__(self, destination, repo_password=None):
+        if not isinstance(destination, dict):
+            raise Refused("No drive was given.")
+        provider = destination.get("provider")
+        if provider == "local" and not cloud_cfg().get("allow_test_providers"):
+            raise Refused("Unknown drive.")
+        if provider not in CLOUD_PROVIDERS and provider != "local":
+            raise Refused("This drive is not supported yet.")
+        self.destination = destination
+        self.provider = provider
+        self.repo_password = repo_password
+        self.dir = Path(tempfile.mkdtemp(prefix="cloud-", dir=secrets_dir()))
+        os.chmod(self.dir, 0o700)
+        self.conf = self.dir / "rclone.conf"
+        self.secret_values = [str(destination.get(key) or "") for key in ("password", "mailboxPassword",
+                                                                         "twoFactorCode")]
+        self.secret_values += [str(v) for v in (destination.get("tokens") or {}).values()]
+        if repo_password:
+            self.secret_values.append(repo_password)
+        self._write_conf()
+        if repo_password:
+            self.password_file = self.dir / "repo-password"
+            self.password_file.write_text(repo_password)
+            os.chmod(self.password_file, 0o600)
+
+    def _obscure(self, value):
+        result = run([cloud_tool("rclone"), "obscure", "-"], stdin=value, timeout=30)
+        return result.stdout.strip()
+
+    def _write_conf(self):
+        d = self.destination
+        lines = ["[drive]"]
+        if self.provider == "local":
+            lines.append("type = local")
+        else:
+            lines += [f"type = {CLOUD_PROVIDERS[self.provider]}", f"username = {single_line(d.get('email'))}",
+                      f"password = {self._obscure(str(d.get('password') or ''))}",
+                      "replace_existing_draft = true", "enable_caching = false"]
+            if d.get("mailboxPassword"):
+                lines.append(f"mailbox_password = {self._obscure(str(d['mailboxPassword']))}")
+            if d.get("twoFactorCode"):
+                lines.append(f"2fa = {single_line(d['twoFactorCode'])}")
+            for key in PROTON_TOKEN_KEYS:
+                value = (d.get("tokens") or {}).get(key)
+                if value:
+                    lines.append(f"{key} = {single_line(value)}")
+        self.conf.write_text("\n".join(lines) + "\n")
+        os.chmod(self.conf, 0o600)
+
+    def remote(self, sub=""):
+        folder = cloud_cfg()["folder"]
+        if self.provider == "local":
+            base = f"drive:{Path(str(self.destination.get('path') or '/nonexistent')) / folder}"
+        else:
+            base = f"drive:{folder}"
+        return f"{base}/{sub}" if sub else base
+
+    def env(self):
+        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(self.dir), "RCLONE_CONFIG": str(self.conf),
+               "TMPDIR": str(self.dir)}
+        if self.repo_password:
+            env["RESTIC_PASSWORD_FILE"] = str(self.password_file)
+        return env
+
+    def rclone(self, *args, timeout=120, check=True):
+        cmd = [cloud_tool("rclone"), "--config", str(self.conf), "--low-level-retries", "2", "--retries", "1",
+               "--contimeout", "20s", "--timeout", "60s", *args]
+        try:
+            result = run(cmd, check=False, timeout=timeout, env=self.env())
+        except subprocess.TimeoutExpired:
+            raise CloudFailure("network", "The drive did not answer in time.") from None
+        if check and result.returncode != 0:
+            detail = scrub(result.stderr or result.stdout, self.secret_values)
+            raise CloudFailure(cloud_problem(detail), detail)
+        return result
+
+    def restic(self, *args, timeout=None, ok_codes=(0,), json_lines=False, low=True):
+        rclone_args = "serve restic --stdio"
+        if self.provider != "local":
+            rclone_args += f" --tpslimit {int(cloud_cfg()['tpslimit'])} --low-level-retries 10"
+        cmd = [cloud_tool("restic"), "--repo", f"rclone:{self.remote()}", "--cache-dir", str(cloud_dir() / "cache"),
+               "-o", f"rclone.program={cloud_tool('rclone')}", "-o", f"rclone.args={rclone_args}",
+               "--retry-lock", "2m", *args]
+        if json_lines:
+            cmd.insert(1, "--json")
+        try:
+            result = run(low_priority(cmd) if low else cmd, check=False, timeout=timeout, env=self.env())
+        except subprocess.TimeoutExpired:
+            raise CloudFailure("network", "The copy did not finish in time.") from None
+        if result.returncode not in ok_codes:
+            detail = scrub(result.stderr or result.stdout, self.secret_values)
+            raise CloudFailure(cloud_problem(detail), detail)
+        return result
+
+    def tokens(self):
+        """rclone's session tokens after a command: it writes refreshed ones into the config."""
+        found = {}
+        try:
+            for line in self.conf.read_text().splitlines():
+                key, _, value = line.partition("=")
+                if key.strip() in PROTON_TOKEN_KEYS and value.strip():
+                    found[key.strip()] = value.strip()
+        except OSError:
+            pass
+        return found
+
+    def about(self):
+        result = self.rclone("about", "drive:", "--json", timeout=90, check=False)
+        if result.returncode != 0:
+            return None
+        try:
+            value = json.loads(result.stdout)
+        except ValueError:
+            return None
+        return {"usedBytes": int(value.get("used") or 0),
+                "freeBytes": int(value["free"]) if value.get("free") is not None else None,
+                "totalBytes": int(value["total"]) if value.get("total") is not None else None,
+                "checkedAt": now_iso()}
+
+    def close(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+
+class CloudFailure(Exception):
+    def __init__(self, problem, detail=""):
+        super().__init__(detail or problem)
+        self.problem = problem
+        self.detail = detail
+
+
+def single_line(value):
+    text = str(value or "")
+    if "\n" in text or "\r" in text:
+        raise Refused("A value has a line break.")
+    return text
+
+
+# -- state ------------------------------------------------------------------------------------------
+
+def cloud_status_path():
+    return cloud_dir() / "status.json"
+
+
+def cloud_status():
+    return read_json(cloud_status_path(), {}) or {}
+
+
+def cloud_update(**changes):
+    status = cloud_status()
+    status.update(changes)
+    write_json(cloud_status_path(), status)
+    return status
+
+
+def cloud_history_add(entry):
+    status = cloud_status()
+    history = (status.get("history") or [])[-(CLOUD_HISTORY - 1):]
+    history.append(entry)
+    status["history"] = history
+    write_json(cloud_status_path(), status)
+
+
+def cloud_overview():
+    status = cloud_status()
+    running = running_job()
+    cloud_running = running if running and str(running.get("kind", "")).startswith("cloud") else None
+    history = status.get("history") or []
+    return {
+        "running": cloud_running,
+        "busy": running is not None,
+        "lastBackup": status.get("lastBackup"),
+        "lastSuccess": status.get("lastSuccess"),
+        "lastTest": status.get("lastTest"),
+        "about": status.get("about"),
+        "sizes": status.get("sizes"),
+        "history": history[-60:],
+        "restores": (read_json(cloud_dir() / "restores.json", []) or [])[-10:],
+        "tools": {name: spec["version"] for name, spec in CLOUD_TOOLS.items()},
+    }
+
+
+# -- what goes in a copy ----------------------------------------------------------------------------
+
+def cloud_sources(groups):
+    """The host folders of each group: (group, path, skip_names_for_this_tree)."""
+    c = cfg()
+    data = Path(c["data_dir"])
+    out = []
+    if groups.get("conversations"):
+        for rel in (".claude/projects", ".codex/sessions", ".codex/archived_sessions"):
+            out.append(("conversations", data / rel))
+    if groups.get("agents"):
+        out.append(("agents", data / "OpenBot" / "Agents"))
+    if groups.get("settings"):
+        out.append(("settings", data / ".config" / "OpenBot"))
+    if groups.get("motion") and c["motion"].get("enabled"):
+        out.append(("motion", Path(c["motion"]["dir"]) / "data"))
+    if groups.get("work"):
+        spaces = data / "OpenBot" / "Spaces"
+        if spaces.is_dir():
+            for entry in sorted(spaces.iterdir()):
+                if entry.is_dir() and not entry.is_symlink() and (entry / "Shared").is_dir():
+                    out.append(("work", entry / "Shared"))
+    return [(group, path) for group, path in out if path.exists()]
+
+
+def git_remotes(repo, uid):
+    result = run(["git", "-C", str(repo), "remote", "-v"], check=False, timeout=60, user=uid,
+                 env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": "/tmp", "GIT_CONFIG_NOSYSTEM": "1"})
+    remotes = {}
+    for line in (result.stdout or "").splitlines():
+        parts = line.split()
+        if len(parts) >= 2:
+            remotes[parts[0]] = parts[1]
+    return remotes
+
+
+def scan_tree(group, root, large_bytes, uid, repos):
+    """Walks one tree: its size after the filters, the paths to leave out (clones with a remote, very
+    large files in finished work), and the clones themselves."""
+    excludes, total, files = [], 0, 0
+    skip = set(CLOUD_SKIP_NAMES) if group in ("agents", "work") else set()
+    if group == "settings":
+        skip = {name for name in CLOUD_SETTINGS_SKIP if "*" not in name}
+    if group == "motion":
+        skip = {"motion.db", "motion.db-wal", "motion.db-shm", "motion.db-journal"}
+    for current, dirs, names in os.walk(root, followlinks=False):
+        here = Path(current)
+        if group in ("agents", "work") and (".git" in dirs or ".git" in names):
+            remotes = git_remotes(here, uid)
+            if remotes:
+                repos.append({"group": group, "path": str(here), "remotes": remotes})
+                excludes.append(str(here))
+                dirs[:] = []
+                continue
+        dirs[:] = [name for name in dirs if name not in skip and not (here / name).is_symlink()]
+        for name in names:
+            if name in skip:
+                continue
+            path = here / name
+            try:
+                info = path.lstat()
+            except OSError:
+                continue
+            if not stat_is_file(info):
+                continue
+            if group in ("agents", "work") and large_bytes and info.st_size > large_bytes:
+                excludes.append(str(path))
+                continue
+            total += info.st_size
+            files += 1
+    return total, files, excludes
+
+
+def stat_is_file(info):
+    import stat as stat_module
+    return stat_module.S_ISREG(info.st_mode)
+
+
+def restic_pattern(path):
+    """An absolute path as a restic exclude pattern: glob characters escaped."""
+    return re.sub(r"([*?\[\]\\])", r"\\\1", path)
+
+
+def bundle_repo(repo, out_dir, uid):
+    """The commits a clone has that no remote has, as a git bundle, and its uncommitted changes."""
+    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": "/tmp", "GIT_CONFIG_NOSYSTEM": "1"}
+    work = Path(tempfile.mkdtemp(prefix="atelier-git-", dir="/var/tmp"))
+    os.chmod(work, 0o700)
+    if os.geteuid() == 0:
+        os.chown(work, uid, uid)
+    saved = {}
+    try:
+        result = run(["git", "-C", repo, "bundle", "create", str(work / "unpushed.bundle"), "--branches", "--tags",
+                      "--not", "--remotes"], check=False, timeout=600, user=uid, env=env)
+        if result.returncode == 0 and (work / "unpushed.bundle").is_file():
+            saved["bundle"] = "unpushed.bundle"
+        diff = run(["git", "-C", repo, "diff", "HEAD", "--binary"], check=False, timeout=300, user=uid, env=env)
+        if diff.returncode == 0 and diff.stdout.strip() and len(diff.stdout) < (50 << 20):
+            (out_dir / "uncommitted.patch").write_text(diff.stdout)
+            saved["patch"] = "uncommitted.patch"
+        if saved.get("bundle"):
+            shutil.move(str(work / "unpushed.bundle"), out_dir / "unpushed.bundle")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    return saved
+
+
+def stage_dir():
+    path = ROOT / "cloud-stage"
+    path.mkdir(parents=True, exist_ok=True)
+    os.chmod(path, 0o700)
+    return path
+
+
+def stage_database(name, src, uid, target_dir):
+    """A consistent copy of a live SQLite database (backup API, as its owner), checked, in the stage."""
+    work = Path(tempfile.mkdtemp(prefix=f"atelier-cloud-{name}-", dir="/var/tmp"))
+    os.chmod(work, 0o700)
+    if os.geteuid() == 0:
+        os.chown(work, uid, uid)
+    try:
+        info = sqlite_helper(["copy", str(src), str(work / f"{name}.db"), "projection_" if name == "openbot" else ""],
+                             uid)
+        if info["integrity"] != "ok":
+            raise CloudFailure("other", f"The copy of {name}.db failed its integrity check.")
+        shutil.move(str(work / f"{name}.db"), target_dir / f"{name}.db")
+        return {"schema": info.get("schema"), "bytes": (target_dir / f"{name}.db").stat().st_size}
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def retention_args(retention):
+    r = retention or {}
+    args = ["--keep-within", f"{max(0, int(r.get('allWithinHours', 48)))}h",
+            "--keep-daily", str(max(0, int(r.get("daily", 14)))),
+            "--keep-weekly", str(max(0, int(r.get("weekly", 8)))),
+            "--keep-monthly", str(max(0, int(r.get("monthly", 12))))]
+    if int(r.get("allWithinHours", 48)) <= 0:
+        args = args[2:]
+    return args
+
+
+def cloud_backup_run(job, params, session):
+    plan = params.get("plan") or {}
+    groups = {name: bool((plan.get("groups") or {}).get(name)) for name in CLOUD_GROUPS}
+    c = cfg()
+    uid = c["data_uid"]
+    stage = stage_dir()
+    for child in stage.iterdir():
+        shutil.rmtree(child, ignore_errors=True) if child.is_dir() else child.unlink(missing_ok=True)
+    (stage / "db").mkdir()
+    (stage / "git").mkdir()
+    manifest = {"format": "atelier-cloud", "formatVersion": 1, "createdAt": now_iso(), "groups": groups,
+                "dataDir": c["data_dir"], "motionDir": c["motion"]["dir"], "repos": [], "databases": {}}
+    data = Path(c["data_dir"])
+    if groups["database"]:
+        set_current("cloud-backup", job, "database")
+        manifest["databases"]["openbot"] = stage_database("openbot", data / ".config/OpenBot/openbot.db", uid,
+                                                          stage / "db")
+    motion = c["motion"]
+    motion_db = Path(motion["dir"]) / "data" / "motion.db"
+    if groups["motion"] and motion.get("enabled") and motion_db.exists():
+        set_current("cloud-backup", job, "motion")
+        manifest["databases"]["motion"] = stage_database("motion", motion_db, motion["uid"], stage / "db")
+    set_current("cloud-backup", job, "scan")
+    large = int(plan.get("largeFileMb") or 0) << 20
+    sizes = {name: 0 for name in CLOUD_GROUPS}
+    sizes["database"] = (manifest["databases"].get("openbot") or {}).get("bytes", 0)
+    sizes["motion"] = (manifest["databases"].get("motion") or {}).get("bytes", 0)
+    excludes, repos, paths = [], [], [str(stage)]
+    for group, path in cloud_sources(groups):
+        total, _files, skipped = scan_tree(group, path, large, uid, repos)
+        sizes[group] += total
+        excludes += skipped
+        paths.append(str(path))
+    for index, repo in enumerate(repos):
+        out = stage / "git" / f"{index:04d}"
+        out.mkdir()
+        if os.geteuid() == 0:
+            os.chown(out, uid, uid)
+        saved = bundle_repo(repo["path"], out, uid)
+        manifest["repos"].append({**repo, "folder": f"git/{index:04d}", **saved})
+    write_json(stage / "manifest.json", manifest)
+    exclude_file = session.dir / "excludes"
+    lines = [restic_pattern(path) for path in excludes]
+    lines += [name for name in CLOUD_SKIP_NAMES]
+    lines += [restic_pattern(str(data / ".config/OpenBot" / name)) if "*" not in name else name
+              for name in CLOUD_SETTINGS_SKIP]
+    lines += [restic_pattern(str(motion_db)) + suffix for suffix in ("", "-wal", "-shm", "-journal")]
+    exclude_file.write_text("\n".join(lines) + "\n")
+    files_from = session.dir / "paths"
+    files_from.write_text("\n".join(paths) + "\n")
+    set_current("cloud-backup", job, "upload")
+    result = session.restic("backup", "--files-from-verbatim", str(files_from), "--exclude-file", str(exclude_file),
+                            "--tag", "atelier", "--host", "atelier", "--pack-size", "32", "--no-scan",
+                            ok_codes=(0, 3), json_lines=True)
+    summary = {}
+    for line in result.stdout.splitlines():
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if message.get("message_type") == "summary":
+            summary = message
+    set_current("cloud-backup", job, "retention")
+    session.restic("forget", "--tag", "atelier", "--host", "atelier", *retention_args(plan.get("retention")),
+                   timeout=1800)
+    return {"snapshot": (summary.get("snapshot_id") or "")[:16],
+            "addedBytes": int(summary.get("data_added_packed") or summary.get("data_added") or 0),
+            "totalBytes": int(summary.get("total_bytes_processed") or 0),
+            "files": int(summary.get("total_files_processed") or 0),
+            "incomplete": result.returncode == 3, "sizes": sizes, "repos": len(repos)}
+
+
+def cloud_test_run(job, params, session):
+    """The weekly restore test: the repository's structure and a share of its data, then a real restore
+    of a sample (the databases and some files) into a scratch folder, checked and removed."""
+    set_current("cloud-test", job, "check")
+    session.restic("check", "--read-data-subset", str(params.get("readSubset") or "2%"), timeout=6 * 3600)
+    set_current("cloud-test", job, "sample")
+    listing = session.restic("ls", "latest", "--json", "--tag", "atelier", timeout=1800, json_lines=False)
+    entries = []
+    for line in listing.stdout.splitlines():
+        try:
+            item = json.loads(line)
+        except ValueError:
+            continue
+        if item.get("type") == "file" and item.get("path"):
+            entries.append(item)
+    if not entries:
+        raise CloudFailure("other", "The newest copy holds no files.")
+    stage = str(stage_dir())
+    dbs = [item for item in entries if item["path"].startswith(stage + "/db/") and item["path"].endswith(".db")]
+    import random
+    others = [item for item in entries if not item["path"].startswith(stage) and int(item.get("size") or 0) < (20 << 20)]
+    sample = dbs + random.sample(others, min(12, len(others)))
+    target = Path(tempfile.mkdtemp(prefix="cloud-test-", dir=cloud_dir()))
+    try:
+        include = session.dir / "sample"
+        include.write_text("\n".join(restic_pattern(item["path"]) for item in sample) + "\n")
+        session.restic("restore", "latest", "--tag", "atelier", "--target", str(target), "--include-file",
+                       str(include), timeout=6 * 3600)
+        checked, problems = 0, []
+        for item in sample:
+            restored = target / item["path"].lstrip("/")
+            if not restored.is_file() or restored.stat().st_size != int(item.get("size") or 0):
+                problems.append(f"{item['path']} did not come back whole.")
+                continue
+            checked += 1
+            if restored.suffix == ".db":
+                info = sqlite_info(str(restored), "", full=False)
+                if info["integrity"] != "ok":
+                    problems.append(f"{restored.name} came back damaged.")
+        if problems:
+            raise CloudFailure("restore-test", " ".join(problems)[:500])
+    finally:
+        shutil.rmtree(target, ignore_errors=True)
+    set_current("cloud-test", job, "tidy")
+    session.restic("prune", "--max-unused", "10%", timeout=6 * 3600)
+    return {"files": checked, "databases": len(dbs)}
+
+
+def cloud_restore_run(job, params, session):
+    """A whole copy (or some groups of it) into its own folder. Live data is never touched."""
+    snapshot = str(params.get("snapshot") or "")
+    if not re.match(r"^[0-9a-f]{8,64}$", snapshot):
+        raise Refused("Unknown copy.", 404)
+    base = ROOT / "cloud-restores"
+    base.mkdir(parents=True, exist_ok=True)
+    os.chmod(base, 0o700)
+    target = base / job
+    target.mkdir()
+    set_current("cloud-restore", job, "download")
+    session.restic("restore", snapshot, "--target", str(target), timeout=24 * 3600)
+    size = sum(path.stat().st_size for path in target.rglob("*") if path.is_file() and not path.is_symlink())
+    return {"folder": str(target), "bytes": size}
+
+
+def cloud_import(restore_id):
+    """Turns a cloud restore into a local backup, so the usual Restore (safety copy first, typed
+    confirmation, only the owner) can put it back. Nothing live changes here."""
+    restores = read_json(cloud_dir() / "restores.json", []) or []
+    entry = next((item for item in restores if item.get("id") == restore_id and item.get("status") == "ok"), None)
+    if not entry:
+        raise Refused("Unknown restore.", 404)
+    folder = Path(entry["folder"])
+    stage = folder / str(stage_dir()).lstrip("/")
+    manifest_in = read_json(stage / "manifest.json") or {}
+    if not (stage / "db" / "openbot.db").is_file():
+        raise Refused("This copy has no database, so it can't become a restorable backup. Its files are in "
+                      "the restore folder.", 409)
+    c = cfg()
+    with Lock():
+        snapshots_dir().mkdir(parents=True, exist_ok=True)
+        ident = new_id()
+        partial = snapshots_dir() / f".partial-{ident}"
+        partial.mkdir(mode=0o700)
+        manifest = {"format": "atelier-backup", "formatVersion": 1, "id": ident, "createdAt": now_iso(),
+                    "reason": "cloud", "status": "running", "image": compose_image(), "host": socket.gethostname(),
+                    "components": [], "cloudSnapshot": entry.get("snapshot"), "cloudCreatedAt": entry.get("snapshotTime")}
+        try:
+            uid = c["data_uid"]
+            work = ROOT / "work" / ident
+            work.mkdir(parents=True, exist_ok=True)
+            os.chmod(work, 0o711)
+            if os.geteuid() == 0:
+                os.chown(work, uid, uid)
+            raw = work / "openbot.db"
+            shutil.copy2(stage / "db" / "openbot.db", raw)
+            if os.geteuid() == 0:
+                os.chown(raw, uid, uid)
+            info = sqlite_helper(["info", str(raw), "projection_"], uid)
+            target = partial / "openbot.db.zst"
+            run(["zstd", "-q", "-T0", "-6", "--rm", "-f", "-o", str(target), str(raw)], timeout=3600)
+            manifest["database"] = {"file": target.name, "bytes": target.stat().st_size, "sha256": sha256(target),
+                                    "integrity": info["integrity"], "schema": info["schema"], "counts": info["counts"]}
+            manifest["schema"] = info["schema"]
+            if (stage / "db" / "motion.db").is_file():
+                raw = work / "motion.db"
+                shutil.copy2(stage / "db" / "motion.db", raw)
+                target = partial / "motion.db.zst"
+                run(["zstd", "-q", "-T0", "-6", "--rm", "-f", "-o", str(target), str(raw)], timeout=3600)
+                manifest["motion"] = {"file": target.name, "bytes": target.stat().st_size, "sha256": sha256(target)}
+            shutil.rmtree(work, ignore_errors=True)
+            data_src = folder / str(manifest_in.get("dataDir") or c["data_dir"]).lstrip("/")
+            files = partial / "files"
+            if data_src.is_dir():
+                files.mkdir()
+                shutil.move(str(data_src), files / "data")
+                for rel in (".claude/projects", ".codex/sessions", ".codex/archived_sessions", ".config/OpenBot"):
+                    if (files / "data" / rel).is_dir():
+                        manifest["components"].append({"name": f"files:{rel}", "status": "ok"})
+                if (files / "data/OpenBot/Agents").is_dir():
+                    manifest["components"].append({"name": "workspace:Agents", "status": "ok"})
+                spaces = files / "data/OpenBot/Spaces"
+                if spaces.is_dir():
+                    for space in sorted(spaces.iterdir()):
+                        if space.is_dir():
+                            manifest["components"].append({"name": f"space:{space.name}", "status": "ok"})
+            motion_src = folder / str(manifest_in.get("motionDir") or c["motion"]["dir"]).lstrip("/") / "data"
+            if motion_src.is_dir():
+                (files / "motion").mkdir(parents=True, exist_ok=True)
+                shutil.move(str(motion_src), files / "motion" / "data")
+                manifest["components"].append({"name": "motion-files", "status": "ok"})
+            manifest["status"] = "ok"
+        except Exception as error:  # noqa: BLE001
+            manifest["status"] = "failed"
+            manifest["error"] = str(error)[:500]
+        manifest["finishedAt"] = now_iso()
+        manifest["bytes"] = sum(p.stat().st_size for p in partial.rglob("*") if p.is_file())
+        manifest["newBytes"] = manifest["bytes"]
+        manifest["seconds"] = 0
+        write_json(partial / "manifest.json", manifest)
+        os.rename(partial, snapshots_dir() / ident)
+        pins = read_json(state_dir() / "pins.json", {}) or {}
+        pins["cloud-import"] = ident
+        write_json(state_dir() / "pins.json", pins)
+    if manifest["status"] != "ok":
+        raise Refused(f"The copy could not be prepared: {manifest.get('error')}", 500)
+    entry["importedAs"] = ident
+    write_json(cloud_dir() / "restores.json", restores)
+    return {"backupId": ident}
+
+
+# -- jobs ---------------------------------------------------------------------------------------------
+
+def cloud_job_id(kind):
+    return f"cloud-{kind}-{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%d-%H%M%S')}-{os.urandom(3).hex()}"
+
+
+def cloud_start(kind, body):
+    """Starts a backup, restore test or restore outside the service. Refused while anything runs: a run
+    that is due while the previous one still goes is skipped, never queued."""
+    if kind not in ("backup", "test", "restore"):
+        raise Refused("Unknown job.")
+    if running_job():
+        raise Refused("A backup or restore is already running.", 409)
+    job = cloud_job_id(kind)
+    params = {k: body.get(k) for k in ("destination", "repositoryPassword", "plan", "snapshot", "readSubset")}
+    path = secrets_dir() / f"{job}.json"
+    write_json(path, params)
+    spawn(["cloud-job", job, kind], f"atelier-{job}")
+    return {"started": True, "job": job}
+
+
+def cloud_job(job, kind):
+    path = secrets_dir() / f"{job}.json"
+    params = read_json(path, {}) or {}
+    path.unlink(missing_ok=True)
+    started = time.monotonic()
+    entry = {"job": job, "kind": kind, "startedAt": now_iso()}
+    tokens_path = secrets_dir() / f"{job}.tokens.json"
+    try:
+        with Lock():
+            set_current(f"cloud-{kind}", job, "starting")
+            try:
+                with CloudSession(params.get("destination"), params.get("repositoryPassword")) as session:
+                    try:
+                        if kind == "backup":
+                            entry.update(cloud_backup_run(job, params, session))
+                        elif kind == "test":
+                            entry.update(cloud_test_run(job, params, session))
+                        else:
+                            entry["snapshot"] = str(params.get("snapshot") or "")[:16]
+                            entry.update(cloud_restore_run(job, params, session))
+                        entry["ok"] = True
+                    finally:
+                        tokens = session.tokens()
+                        if tokens:
+                            write_json(tokens_path, tokens)
+                        about = session.about() if kind == "backup" else None
+                        if about:
+                            cloud_update(about=about)
+            except CloudFailure as error:
+                entry.update(ok=False, problem=error.problem, detail=str(error.detail or error)[:500])
+            except Refused as error:
+                entry.update(ok=False, problem="other", detail=str(error)[:500])
+            except Exception as error:  # noqa: BLE001 - reported, never raised silently
+                traceback.print_exc()
+                entry.update(ok=False, problem="other", detail=str(error)[:500])
+            finally:
+                clear_current()
+    except Refused as error:  # the lock: another job runs
+        entry.update(ok=False, problem="busy", detail=str(error))
+    entry["finishedAt"] = now_iso()
+    entry["seconds"] = round(time.monotonic() - started, 1)
+    if kind == "backup":
+        sizes = entry.pop("sizes", None)
+        changes = {"lastBackup": entry}
+        if sizes:
+            changes["sizes"] = {"at": now_iso(), "bytes": sizes}
+        if entry.get("ok"):
+            changes["lastSuccess"] = entry
+        cloud_update(**changes)
+        cloud_history_add({k: entry.get(k) for k in ("startedAt", "seconds", "addedBytes", "totalBytes", "ok",
+                                                      "problem")})
+    elif kind == "test":
+        cloud_update(lastTest=entry)
+    else:
+        restores = (read_json(cloud_dir() / "restores.json", []) or [])[-19:]
+        restores.append({"id": job, "snapshot": entry.get("snapshot"), "status": "ok" if entry.get("ok") else "failed",
+                         "startedAt": entry["startedAt"], "finishedAt": entry["finishedAt"],
+                         "folder": entry.get("folder"), "bytes": entry.get("bytes"),
+                         "problem": entry.get("problem")})
+        write_json(cloud_dir() / "restores.json", restores)
+    say(f"cloud {kind} {job}: {'ok' if entry.get('ok') else entry.get('problem')} in {entry['seconds']} s")
+    return entry
+
+
+def cloud_collect(job):
+    """Hands the refreshed session tokens of a finished job to OpenBot once, then forgets them."""
+    if not re.match(r"^cloud-[a-z]+-\d{8}-\d{6}-[0-9a-f]{6}$", str(job or "")):
+        raise Refused("Unknown job.", 404)
+    path = secrets_dir() / f"{job}.tokens.json"
+    tokens = read_json(path)
+    path.unlink(missing_ok=True)
+    return {"tokens": tokens or {}}
+
+
+def cloud_login(body):
+    """Signs in to the drive and makes (or opens) the encrypted repository. Answers the session tokens
+    for OpenBot's secret store, and the space of the drive."""
+    destination = body.get("destination")
+    password = body.get("repositoryPassword")
+    if not isinstance(password, str) or len(password) < 16:
+        raise Refused("A repository password is needed.")
+    try:
+        with CloudSession(destination, password) as session:
+            try:
+                session.rclone("mkdir", session.remote(), timeout=120)
+                about = session.about()
+                exists = session.rclone("lsf", session.remote(), "--max-depth", "1", timeout=120)
+                if "config" in [name.strip("/") for name in exists.stdout.split()]:
+                    session.restic("cat", "config", timeout=300, low=False)
+                    created = False
+                else:
+                    session.restic("init", timeout=300, low=False)
+                    created = True
+            finally:
+                tokens = session.tokens()
+            if about:
+                cloud_update(about=about)
+            return {"ok": True, "created": created, "tokens": tokens, "about": about}
+    except CloudFailure as error:
+        return {"ok": False, "problem": error.problem, "detail": str(error.detail or error)[:500]}
+
+
+def cloud_snapshots(body):
+    try:
+        with CloudSession(body.get("destination"), body.get("repositoryPassword")) as session:
+            try:
+                result = session.restic("snapshots", "--tag", "atelier", "--json", timeout=300, low=False)
+            finally:
+                tokens = session.tokens()
+        rows = json.loads(result.stdout or "[]") or []
+        snapshots = [{"id": row.get("id", "")[:64], "shortId": row.get("short_id", ""), "time": row.get("time", ""),
+                      "bytes": int((row.get("summary") or {}).get("total_bytes_processed") or 0),
+                      "files": int((row.get("summary") or {}).get("total_files_processed") or 0)} for row in rows]
+        snapshots.sort(key=lambda row: row["time"], reverse=True)
+        return {"ok": True, "snapshots": snapshots[:500], "tokens": tokens}
+    except CloudFailure as error:
+        return {"ok": False, "problem": error.problem, "detail": str(error.detail or error)[:500]}
+
+
+def cloud_measure():
+    """The size of each group after the filters, without copying anything (no secrets needed)."""
+    c = cfg()
+    plan_groups = {name: True for name in CLOUD_GROUPS}
+    sizes = {name: 0 for name in CLOUD_GROUPS}
+    db = Path(c["data_dir"]) / ".config/OpenBot/openbot.db"
+    sizes["database"] = db.stat().st_size if db.exists() else 0
+    motion_db = Path(c["motion"]["dir"]) / "data" / "motion.db"
+    sizes["motion"] = motion_db.stat().st_size if motion_db.exists() else 0
+    large = int((read_json(cloud_dir() / "measure-plan.json", {}) or {}).get("largeFileMb") or 200) << 20
+    repos = []
+    for group, path in cloud_sources(plan_groups):
+        total, _files, _skipped = scan_tree(group, path, large, c["data_uid"], repos)
+        sizes[group] += total
+    cloud_update(sizes={"at": now_iso(), "bytes": sizes})
+    return sizes
+
+
+def cloud_route(method, segs, body):
+    if segs == ["v1", "cloud", "status"] and method == "GET":
+        return cloud_overview()
+    if method != "POST":
+        raise Refused("Not found.", 404)
+    action = segs[2] if len(segs) == 3 else None
+    if action == "login":
+        if running_job():
+            raise Refused("A backup or restore is already running.", 409)
+        return cloud_login(body)
+    if action == "snapshots":
+        return cloud_snapshots(body)
+    if action in ("backup", "test", "restore"):
+        return cloud_start(action, body)
+    if action == "collect":
+        return cloud_collect(body.get("job"))
+    if action == "import":
+        return cloud_import(str(body.get("restore") or ""))
+    if action == "measure":
+        write_json(cloud_dir() / "measure-plan.json", {"largeFileMb": int(body.get("largeFileMb") or 200)})
+        spawn(["cloud-measure"], "atelier-cloud-measure")
+        return {"started": True}
+    raise Refused("Not found.", 404)
+
+
 # ---- socket API -----------------------------------------------------------------------------------
 
 def overview():
@@ -1221,6 +2105,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def route(method, segs, body):
+    if len(segs) >= 3 and segs[:2] == ["v1", "cloud"]:
+        return cloud_route(method, segs, body)
     if segs == ["v1", "overview"] and method == "GET":
         return overview()
     if segs == ["v1", "backups"] and method == "POST":
@@ -1257,6 +2143,13 @@ def serve():
     os.chmod(client, 0o755)
     sock = client / "backupd.sock"
     sock.unlink(missing_ok=True)
+    # Sign-in folders of commands that a crash or restart cut off: nothing secret outlives its command.
+    if running_job() is None:
+        for entry in secrets_dir().glob("cloud-*"):
+            if entry.is_dir():
+                shutil.rmtree(entry, ignore_errors=True)
+            elif entry.name.endswith(".json") and not entry.name.endswith(".tokens.json"):
+                entry.unlink(missing_ok=True)
     # Bound by a relative name: a long backup root would pass the 108-byte AF_UNIX limit.
     os.chdir(client)
     server = Server("backupd.sock", Handler)
@@ -1326,6 +2219,10 @@ def install():
     (units / "atelier-backup.service").write_text(SERVICE_UNIT.format(root=ROOT, script=script))
     (units / "atelier-backup-run.service").write_text(RUN_UNIT.format(root=ROOT, script=script))
     (units / "atelier-backup-run.timer").write_text(TIMER_UNIT.format(time=cfg()["nightly"]))
+    try:
+        say(f"cloud tools: {json.dumps({name: cloud_tool(name) for name in CLOUD_TOOLS})}")
+    except Exception as error:  # noqa: BLE001 - fetched again at the first cloud copy
+        say(f"the cloud tools were not fetched now ({error}); the first cloud copy fetches them")
     subprocess.run(["systemctl", "daemon-reload"], check=True)
     subprocess.run(["systemctl", "enable", "--now", "atelier-backup.service", "atelier-backup-run.timer"], check=True)
     subprocess.run(["systemctl", "restart", "atelier-backup.service"], check=True)
@@ -1375,6 +2272,14 @@ def main():
             result = restore(args[1], option("--confirm"), spaces)
             print(json.dumps(result, indent=2))
             sys.exit(0 if result["status"] == "ok" else 1)
+        elif command == "cloud-job":
+            entry = cloud_job(args[1], args[2])
+            print(json.dumps({k: entry.get(k) for k in ("job", "kind", "ok", "problem", "seconds")}))
+            sys.exit(0 if entry.get("ok") else 1)
+        elif command == "cloud-measure":
+            print(json.dumps(cloud_measure()))
+        elif command == "cloud-tools":
+            print(json.dumps({name: cloud_tool(name) for name in CLOUD_TOOLS}))
         elif command == "prune":
             with Lock():
                 print(json.dumps(prune()))

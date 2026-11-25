@@ -100,6 +100,60 @@ setup:
    `gpg -d atelier-<id>.tar.gpg | tar -x -C /opt/openbot/backups/atelier/snapshots/<id>`. Then run
    `check` and `restore` as usual.
 
+## Copies in the owner's cloud drive (Proton Drive)
+
+Atelier's **Server settings → Backups → Copy in the cloud** drives this. The owner connects Proton
+Drive there; nothing is set up on the host by hand. The broker runs pinned **restic 0.19.1** over
+pinned **rclone 1.76.0** (`protondrive` backend). `install` (or the first cloud command) downloads both
+into `<root>/tools/` and checks each against its SHA-256 (`CLOUD_TOOLS` in `backupd.py`;
+`backupd.py cloud-tools` fetches them by hand).
+
+**Secrets.** OpenBot's main process keeps the Proton sign-in, rclone's session tokens and the restic
+password in its encrypted store and sends them with each call. The broker writes them only to a private
+folder on the tmpfs `/run/atelier-backup` for the life of one command, and hands refreshed session
+tokens back once (`POST /v1/cloud/collect`): Proton turns a used refresh token invalid. Nothing secret
+is in the broker's state or logs.
+
+**A copy** (`cloud-job <id> backup`, spawned with `Nice=10`, idle I/O, and `nice`/`ionice -c3` on
+restic) holds the groups that the plan picks:
+
+| Group | What |
+| --- | --- |
+| database | `openbot.db` through the SQLite backup API as uid 1000, checked, in `<root>/cloud-stage/db` |
+| conversations | `.claude/projects`, `.codex/sessions`, `.codex/archived_sessions` |
+| agents | `OpenBot/Agents` |
+| settings | `.config/OpenBot` without the database, caches and `provider-runtimes` |
+| motion | `motion.db` through the backup API as uid 10001, and Motion's `data/` |
+| work | `OpenBot/Spaces/*/Shared` |
+
+Agents and work leave out `node_modules`, `target`, `.godot`, `dist`, `__pycache__`, `.venv` and
+caches, and files over the plan's size limit (200 MB). A git clone with a remote is left out; its
+remote URLs, a bundle of the commits no remote has (`git bundle --branches --tags --not --remotes`) and
+an `uncommitted.patch` go in `cloud-stage/git/` instead. The repository is `rclone:drive:Atelier-Backups`,
+encrypted by restic (client side, always). After each copy: `restic forget` with the plan's
+retention (default `--keep-within 48h --keep-daily 14 --keep-weekly 8 --keep-monthly 12`), and
+`rclone about` for the drive's space.
+
+**Schedule.** OpenBot decides when a copy is due (every 15 min, 1 h, 6 h or daily; default hourly),
+never while a deploy drains the host, and skips (never queues) a run while another job holds the
+broker's lock. Each week it runs `cloud-job <id> test`: `restic check --read-data-subset 2%`, a real
+restore of the databases and a random sample of files into a scratch folder (sizes and
+`PRAGMA quick_check` checked), then `restic prune --max-unused 10%`.
+
+**Restore** never touches live data: `cloud-job <id> restore` puts a whole copy in
+`<root>/cloud-restores/<id>/`. "Prepare to put back" (`POST /v1/cloud/import`) turns it into a normal
+local backup (reason `cloud`, pinned against pruning) with `files:<path>` parts, so the usual Restore
+(safety backup first, typed confirmation, owner only) puts it back. Git bundles stay in the restore
+folder.
+
+**Socket routes** (main process only, as the others): `GET /v1/cloud/status`, `POST /v1/cloud/login`,
+`/snapshots`, `/backup`, `/test`, `/restore`, `/collect`, `/import`, `/measure`.
+
+**Proton limits seen.** Proton answers sign-ins from datacenter addresses with `429` (code 2011,
+"retry after 3600 s") or a human check (code 9001) at times; rclone cannot solve the human check. The
+app tells the owner to wait an hour, or to sign in once at proton.me and try again. rclone's Proton
+backend is unofficial and slow with many small files; restic's 32 MB packs keep the file count low.
+
 ## Staging copy
 
 ```bash

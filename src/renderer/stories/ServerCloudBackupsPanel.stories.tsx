@@ -15,6 +15,8 @@ declare global {
   interface Window {
     /** What the stubbed Proton backend of these stories was asked, for `scripts/web-cloud-backup-connect-e2e.ts`. */
     cloudBackupCalls?: string[];
+    /** How many times the panel read the host. */
+    cloudBackupReads?: number;
   }
 }
 
@@ -100,7 +102,11 @@ function stubCalls(start: Ready): HostCloudBackupsCalls {
     return { ok: true, overview, repositoryPassword: "Abcde-Fghij-Kmnop-Qrstu-Vwxyz-23456" };
   };
   return {
-    overview: async () => overview,
+    // A fresh object on each read, as the host answers each poll.
+    overview: async (): Promise<Ready> => {
+      window.cloudBackupReads = (window.cloudBackupReads ?? 0) + 1;
+      return JSON.parse(JSON.stringify(overview));
+    },
     connect,
     disconnect: async () => {
       record("disconnect");
@@ -172,6 +178,18 @@ export const SignInAgain: Story = {
         problem: "relogin",
         detail: "401 POST https://drive-api.proton.me/auth/v4/refresh: Invalid refresh token (Code=10013)",
       },
+    },
+  },
+};
+/** A copy runs, so the panel reads the host every few seconds while the owner signs in again. */
+export const SignInAgainWhileCopying: Story = {
+  args: {
+    canManage: true,
+    overview: {
+      ...CONNECTED,
+      destinations: CONNECTED.destinations.map((drive) => ({ ...drive, status: "relogin" })),
+      warnings: ["relogin"],
+      running: { kind: "backup", startedAt: "2026-11-25T15:00:00Z", phase: "upload" },
     },
   },
 };

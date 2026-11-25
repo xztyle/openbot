@@ -4,6 +4,9 @@
 // backend (the story's calls), so no Proton account is used:
 // `bun scripts/web-cloud-backup-connect-e2e.ts --storybook=http://localhost:6006`.
 // `--browser-executable=<path>` picks a Chromium build; Playwright's own is the default.
+// It also checks, at desktop and phone width, that the half-filled form survives a click outside it (a
+// password manager's autofill popup) and the panel's status polling: nothing it typed is lost, the
+// focus stays, polling waits while the form is open and starts again when it closes.
 // Writes .openbot-build/web-cloud-backup-connect-e2e/report.json and a screenshot of each step.
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -14,6 +17,7 @@ import { chromium } from "playwright-core";
 declare global {
   interface Window {
     cloudBackupCalls?: string[];
+    cloudBackupReads?: number;
   }
 }
 
@@ -27,6 +31,16 @@ const browserExecutable = process.argv
 
 interface Report {
   steps: string[];
+  keeps?: {
+    width: number;
+    open: boolean;
+    email: string;
+    password: string;
+    mailbox: string;
+    code: string;
+    focused: boolean;
+    readsWhileOpen: number;
+  }[];
   calls?: string[];
   passed: boolean;
 }
@@ -89,6 +103,65 @@ try {
   report.calls = await page.evaluate(() => window.cloudBackupCalls ?? []);
   assert.deepEqual(report.calls, ["connect:no-code", "connect:no-code", "connect:code", "password-saved"]);
   await page.screenshot({ path: resolve(OUT, "connected.png"), fullPage: true });
+  await context.close();
+
+  // The form keeps what was typed through outside clicks and polls (every 5 s while a copy runs).
+  report.keeps = [];
+  for (const [width, height, touch] of [
+    [1400, 900, false],
+    [390, 844, true],
+  ] as const) {
+    const wide = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
+    const view = await wide.newPage();
+    failurePage = view;
+    await view.goto(`${storybook}/iframe.html?id=servers-cloud-backups--sign-in-again-while-copying&viewMode=story`);
+    const relogin = view.getByRole("button", { name: t("backups.cloud.relogin") }).first();
+    await relogin.waitFor();
+    await relogin.click();
+    const form = view.getByRole("dialog", { name: t("backups.cloud.connect.title") });
+    await form.waitFor();
+    await form.getByLabel(t("backups.cloud.connect.password"), { exact: true }).fill("correct horse");
+    await form.getByText(t("backups.cloud.connect.twoPasswords")).click();
+    await form.getByLabel(t("backups.cloud.connect.mailboxPassword"), { exact: true }).fill("mailbox pass");
+    const code = form.getByLabel(t("backups.cloud.connect.twoFactor"), { exact: true });
+    await code.fill("12");
+    // A click in the page outside the form, as on an autofill popup.
+    await view.mouse.click(5, 5);
+    await code.focus();
+    const readsOpen = await view.evaluate(() => window.cloudBackupReads ?? 0);
+    // Three poll intervals: the panel must not read the host, redraw or close the form meanwhile.
+    await view.waitForTimeout(16_000);
+    const kept = {
+      width,
+      open: await form.isVisible(),
+      email: await form.getByLabel(t("backups.cloud.connect.email"), { exact: true }).inputValue(),
+      password: await form.getByLabel(t("backups.cloud.connect.password"), { exact: true }).inputValue(),
+      mailbox: await form.getByLabel(t("backups.cloud.connect.mailboxPassword"), { exact: true }).inputValue(),
+      code: await code.inputValue(),
+      focused: await code.evaluate((element) => element === document.activeElement),
+      readsWhileOpen: (await view.evaluate(() => window.cloudBackupReads ?? 0)) - readsOpen,
+    };
+    report.keeps.push(kept);
+    assert.deepEqual(
+      kept,
+      {
+        width,
+        open: true,
+        email: "owner@proton.me",
+        password: "correct horse",
+        mailbox: "mailbox pass",
+        code: "12",
+        focused: true,
+        readsWhileOpen: 0,
+      },
+      `The sign-in form lost what was typed at ${width}px.`,
+    );
+    await view.keyboard.press("Escape");
+    await form.waitFor({ state: "detached" });
+    await view.waitForFunction((before) => (window.cloudBackupReads ?? 0) > before, readsOpen);
+    await wide.close();
+  }
+  report.steps.push("form kept through outside clicks and polls, desktop and phone");
   report.passed = true;
 } finally {
   if (!report.passed) await failurePage?.screenshot({ path: resolve(OUT, "failure.png"), fullPage: true });

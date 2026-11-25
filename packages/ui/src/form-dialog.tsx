@@ -51,6 +51,12 @@ export interface FormDialogProps {
   onCloseAutoFocus?: ((event: Event) => void) | undefined;
   /** The element that takes the focus when the dialog opens. By default the first field of the body. */
   initialFocus?: () => HTMLElement | null | undefined;
+  /**
+   * False keeps the dialog open on a click or focus outside it, for a form the user types into: a
+   * password manager's autofill popup sits outside the dialog. Escape, Cancel and the close button
+   * still close it.
+   */
+  dismissible?: boolean;
   class?: string;
   children: JSX.Element;
 }
@@ -104,6 +110,9 @@ export function FormDialog(props: FormDialogProps): JSX.Element {
             data-size={props.size ?? "md"}
             aria-busy={props.busy ? "true" : undefined}
             onCloseAutoFocus={(event: Event) => props.onCloseAutoFocus?.(event)}
+            onInteractOutside={(event: Event) => {
+              if (props.dismissible === false) event.preventDefault();
+            }}
             onOpenAutoFocus={(event: Event) => {
               // The first field takes the focus, not the close button in the corner.
               event.preventDefault();

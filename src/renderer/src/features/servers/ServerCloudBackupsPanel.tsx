@@ -35,7 +35,7 @@ import {
   TriangleAlert,
 } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createSignal, For, onCleanup, Show, untrack } from "solid-js";
+import { createEffect, createSignal, createStore, For, onCleanup, Show, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
 
 /** The `host-cloud-backups-v1` calls of one server's host. */
@@ -121,7 +121,12 @@ export function ServerCloudBackupsPanel(props: {
   const [busy, setBusy] = createSignal<string | null>(null);
   const [plan, setPlan] = createSignal<CloudPlan | null>(null);
   const [planDirty, setPlanDirty] = createSignal(false);
-  const [connectOpen, setConnectOpen] = createSignal(false);
+  // The sign-in form outlives a redraw or a remount of this panel (`connectDrafts`).
+  const [connectOpen, setConnectOpenState] = createSignal(untrack(() => connectDraft(props.serverId).open));
+  const setConnectOpen = (open: boolean) => {
+    connectDraft(props.serverId).open = open;
+    setConnectOpenState(open);
+  };
   const [password, setPassword] = createSignal<string | null>(null);
   const [passwordKept, setPasswordKept] = createSignal(false);
   const [disconnecting, setDisconnecting] = createSignal(false);
@@ -142,23 +147,29 @@ export function ServerCloudBackupsPanel(props: {
     if (next.available && !planDirty()) setPlan(copyPlan(next.plan));
   }
 
-  function schedule(): void {
+  /** `busy` comes from the answer just read: a signal written now still reads its old value. */
+  function schedule(busy = Boolean(untrack(ready)?.running || untrack(loadError))): void {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => void read(), ready()?.running || loadError() ? BUSY_POLL_MS : IDLE_POLL_MS);
+    timer = setTimeout(() => void read(), busy ? BUSY_POLL_MS : IDLE_POLL_MS);
   }
+
+  /** A dialog is open: the owner is typing or reading, so the host is not read until it closes. */
+  const dialogOpen = () => connectOpen() || password() !== null || disconnecting() || restoring() !== null;
 
   async function read(): Promise<void> {
     const current = generation;
+    if (untrack(dialogOpen)) return schedule();
     try {
       const next = await props.calls.overview(props.serverId);
       if (current !== generation) return;
       accept(next);
       setLoadError(null);
+      schedule(next.available && next.running !== null);
     } catch (error) {
       if (current !== generation) return;
       setLoadError(errorMessage(error, t("backups.cloud.loadFailed")));
+      schedule(true);
     }
-    if (current === generation) schedule();
   }
 
   createEffect(
@@ -180,9 +191,11 @@ export function ServerCloudBackupsPanel(props: {
     if (busy()) return;
     setBusy(name);
     try {
-      accept(await run());
+      const next = await run();
+      accept(next);
       if (done) actionToast.success(done);
-      schedule();
+      // A job just started: read again soon.
+      schedule(true);
     } catch (error) {
       actionToast.error(t("backups.cloud.startFailed"), {
         description: errorMessage(error, t("backups.cloud.problem.other")),
@@ -268,591 +281,656 @@ export function ServerCloudBackupsPanel(props: {
   const manageDisabled = () => disabled() || !props.canManage;
 
   return (
-    <Show when={ready()}>
-      {(value) => (
-        <SettingsSection title={t("backups.cloud.title")} description={t("backups.cloud.description")}>
-          <Show when={loadError()}>
-            {(error) => (
-              <Alert tone="danger" role="alert">
-                <AlertIcon>
-                  <TriangleAlert />
-                </AlertIcon>
-                <AlertContent>
-                  <AlertDescription>{error()}</AlertDescription>
-                </AlertContent>
-              </Alert>
-            )}
-          </Show>
-          <Show when={value().warnings.includes("password-not-saved")}>
-            <Alert tone="warning" role="status">
-              <AlertContent>
-                <AlertDescription>{t("backups.cloud.warning.passwordNotSaved")}</AlertDescription>
-              </AlertContent>
-              <Show when={props.canManage}>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={disabled()}
-                  onClick={() => void act("saved", () => props.calls.passwordSaved(props.serverId))}
-                >
-                  {t("backups.cloud.warning.passwordSaved")}
-                </Button>
-              </Show>
-            </Alert>
-          </Show>
-          <Show when={value().warnings.includes("relogin")}>
-            <Alert tone="danger" role="alert">
-              <AlertContent>
-                <AlertDescription>{t("backups.cloud.problem.relogin")}</AlertDescription>
-              </AlertContent>
-              <Show when={props.canManage}>
-                <Button type="button" size="sm" disabled={disabled()} onClick={() => setConnectOpen(true)}>
-                  {t("backups.cloud.relogin")}
-                </Button>
-              </Show>
-            </Alert>
-          </Show>
-          <For
-            each={value().warnings.filter(
-              (warning) => warning === "stale" || warning === "drive-nearly-full" || warning === "test-failed",
-            )}
-          >
-            {(warning) => (
+    <>
+      <Show when={ready()}>
+        {(value) => (
+          <SettingsSection title={t("backups.cloud.title")} description={t("backups.cloud.description")}>
+            <Show when={loadError()}>
+              {(error) => (
+                <Alert tone="danger" role="alert">
+                  <AlertIcon>
+                    <TriangleAlert />
+                  </AlertIcon>
+                  <AlertContent>
+                    <AlertDescription>{error()}</AlertDescription>
+                  </AlertContent>
+                </Alert>
+              )}
+            </Show>
+            <Show when={value().warnings.includes("password-not-saved")}>
               <Alert tone="warning" role="status">
                 <AlertContent>
-                  <AlertDescription>
-                    {warning === "stale"
-                      ? t("backups.cloud.warning.stale")
-                      : warning === "drive-nearly-full"
-                        ? t("backups.cloud.warning.full")
-                        : t("backups.cloud.warning.testFailed")}
-                  </AlertDescription>
+                  <AlertDescription>{t("backups.cloud.warning.passwordNotSaved")}</AlertDescription>
                 </AlertContent>
-              </Alert>
-            )}
-          </For>
-
-          <ItemGroup class="settings-modal-card" aria-label={t("backups.cloud.destinations")}>
-            <Item class="settings-modal-row">
-              <ItemContent>
-                <ItemTitle>{t("backups.cloud.destinations")}</ItemTitle>
-                <Show when={!props.canManage}>
-                  <ItemDescription>{t("backups.cloud.ownerOnly")}</ItemDescription>
+                <Show when={props.canManage}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={disabled()}
+                    onClick={() => void act("saved", () => props.calls.passwordSaved(props.serverId))}
+                  >
+                    {t("backups.cloud.warning.passwordSaved")}
+                  </Button>
                 </Show>
-              </ItemContent>
-            </Item>
-            <Show
-              when={value().destinations[0]}
-              fallback={
-                <Item class="settings-modal-row">
-                  <ItemContent>
-                    <ItemTitle>{t("backups.cloud.provider.proton")}</ItemTitle>
-                    <ItemDescription>{t("backups.cloud.notConnected")}</ItemDescription>
-                  </ItemContent>
-                  <Show when={props.canManage}>
-                    <ItemActions>
-                      <Button type="button" size="sm" disabled={manageDisabled()} onClick={() => setConnectOpen(true)}>
-                        {t("backups.cloud.connectProton")}
-                      </Button>
-                    </ItemActions>
-                  </Show>
-                </Item>
-              }
-            >
-              {(drive) => (
-                <Item class="settings-modal-row">
-                  <ItemContent>
-                    <ItemTitle>
-                      {t("backups.cloud.provider.proton")}{" "}
-                      <Show when={drive().status === "relogin"}>
-                        <Badge variant="destructive-light">{t("backups.cloud.relogin")}</Badge>
-                      </Show>
-                    </ItemTitle>
-                    <ItemDescription>
-                      {drive().account}
-                      <Show when={drive().space}>
-                        {(space) => (
-                          <>
-                            {" · "}
-                            {space().freeBytes === null
-                              ? t("backups.cloud.spaceUsed", { used: format.fileSize(space().usedBytes) })
-                              : t("backups.cloud.space", {
-                                  used: format.fileSize(space().usedBytes),
-                                  free: format.fileSize(space().freeBytes ?? 0),
-                                })}
-                          </>
-                        )}
-                      </Show>
-                    </ItemDescription>
-                  </ItemContent>
-                  <Show when={props.canManage}>
-                    <ItemActions>
-                      <Show when={drive().status === "relogin"}>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={manageDisabled()}
-                          onClick={() => setConnectOpen(true)}
-                        >
-                          {t("backups.cloud.relogin")}
-                        </Button>
-                      </Show>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={manageDisabled()}
-                        onClick={() => setDisconnecting(true)}
-                      >
-                        {t("backups.cloud.disconnect")}
-                      </Button>
-                    </ItemActions>
-                  </Show>
-                </Item>
-              )}
+              </Alert>
             </Show>
-            <For each={["googleDrive", "onedrive"] as const}>
-              {(provider) => (
-                <Item class="settings-modal-row">
-                  <ItemContent>
-                    <ItemTitle>
-                      {provider === "googleDrive"
-                        ? t("backups.cloud.provider.googleDrive")
-                        : t("backups.cloud.provider.onedrive")}{" "}
-                      <Badge variant="secondary">{t("backups.cloud.soon")}</Badge>
-                    </ItemTitle>
-                  </ItemContent>
-                </Item>
+            <Show when={value().warnings.includes("relogin")}>
+              <Alert tone="danger" role="alert">
+                <AlertContent>
+                  <AlertDescription>{t("backups.cloud.problem.relogin")}</AlertDescription>
+                </AlertContent>
+                <Show when={props.canManage}>
+                  <Button type="button" size="sm" disabled={disabled()} onClick={() => setConnectOpen(true)}>
+                    {t("backups.cloud.relogin")}
+                  </Button>
+                </Show>
+              </Alert>
+            </Show>
+            <For
+              each={value().warnings.filter(
+                (warning) => warning === "stale" || warning === "drive-nearly-full" || warning === "test-failed",
+              )}
+            >
+              {(warning) => (
+                <Alert tone="warning" role="status">
+                  <AlertContent>
+                    <AlertDescription>
+                      {warning === "stale"
+                        ? t("backups.cloud.warning.stale")
+                        : warning === "drive-nearly-full"
+                          ? t("backups.cloud.warning.full")
+                          : t("backups.cloud.warning.testFailed")}
+                    </AlertDescription>
+                  </AlertContent>
+                </Alert>
               )}
             </For>
-          </ItemGroup>
 
-          <Show when={value().destinations[0]}>
-            <ItemGroup class="settings-modal-card" aria-label={t("backups.cloud.status")}>
+            <ItemGroup class="settings-modal-card" aria-label={t("backups.cloud.destinations")}>
               <Item class="settings-modal-row">
                 <ItemContent>
-                  <ItemTitle>
-                    {value().lastSuccessAt
-                      ? t("backups.cloud.lastCopy", { ago: ago(value().lastSuccessAt) })
-                      : t("backups.cloud.never")}
-                  </ItemTitle>
-                  <ItemDescription aria-live="polite">
-                    <Show when={value().running}>
-                      {(job) => (
-                        <>
-                          {job().kind === "test"
-                            ? t("backups.cloud.running.test")
-                            : job().kind === "restore"
-                              ? t("backups.cloud.running.restore")
-                              : t("backups.cloud.running.backup")}{" "}
-                        </>
-                      )}
-                    </Show>
-                    <Show when={value().lastBackup?.ok ? value().lastBackup : null}>
-                      {(run) => (
-                        <>
-                          {t("backups.cloud.lastCopyDetail", {
-                            size: format.fileSize(run().totalBytes),
-                            added: format.fileSize(run().addedBytes),
-                            duration: duration(run().seconds),
-                          })}{" "}
-                        </>
-                      )}
-                    </Show>
-                    <Show when={value().lastBackup && !value().lastBackup?.ok ? value().lastBackup : null}>
-                      {(run) => (
-                        <>
-                          {t("backups.cloud.lastFailed", { ago: ago(run().finishedAt) })}{" "}
-                          {t(PROBLEM_TEXT[run().problem ?? "other"])}{" "}
-                        </>
-                      )}
-                    </Show>
-                    {value().plan.enabled
-                      ? value().nextRunAt
-                        ? t("backups.cloud.next", {
-                            time: format.date(new Date(value().nextRunAt ?? ""), { timeStyle: "short" }),
-                          })
-                        : ""
-                      : t("backups.cloud.paused")}
-                  </ItemDescription>
-                  <Show when={value().typical}>
-                    {(typical) => (
-                      <ItemDescription>
-                        {t("backups.cloud.typical", {
-                          duration: duration(typical().seconds),
-                          size: format.fileSize(typical().addedBytes),
-                        })}
-                      </ItemDescription>
-                    )}
-                  </Show>
-                  <ItemDescription>
-                    {value().lastTest
-                      ? value().lastTest?.ok
-                        ? t("backups.cloud.testOk", { ago: ago(value().lastTest?.finishedAt) })
-                        : `${t("backups.cloud.testFailed", { ago: ago(value().lastTest?.finishedAt) })} ${t(PROBLEM_TEXT[value().lastTest?.problem ?? "other"])}`
-                      : t("backups.cloud.testNever")}
-                  </ItemDescription>
-                  <Show when={[value().lastBackup, value().lastTest].find((run) => run?.detail)?.detail}>
-                    {(detail) => (
-                      <details>
-                        <summary>{t("backups.cloud.technical")}</summary>
-                        <p class="text-muted-foreground">{detail()}</p>
-                      </details>
-                    )}
+                  <ItemTitle>{t("backups.cloud.destinations")}</ItemTitle>
+                  <Show when={!props.canManage}>
+                    <ItemDescription>{t("backups.cloud.ownerOnly")}</ItemDescription>
                   </Show>
                 </ItemContent>
-                <ItemActions>
-                  <Button
-                    type="button"
-                    size="sm"
-                    loading={busy() === "backup" || value().running?.kind === "backup"}
-                    disabled={disabled() || value().running !== null}
-                    onClick={() =>
-                      void act("backup", () => props.calls.run("backup", props.serverId), t("backups.cloud.started"))
-                    }
-                  >
-                    {t("backups.backUpNow")}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    loading={busy() === "test" || value().running?.kind === "test"}
-                    disabled={disabled() || value().running !== null}
-                    onClick={() =>
-                      void act("test", () => props.calls.run("test", props.serverId), t("backups.cloud.testStarted"))
-                    }
-                  >
-                    {t("backups.cloud.testNow")}
-                  </Button>
-                </ItemActions>
               </Item>
-            </ItemGroup>
-
-            <Show when={plan()}>
-              {(draft) => (
-                <ItemGroup class="settings-modal-card" aria-label={t("backups.cloud.plan")}>
-                  <Item class="settings-modal-row">
-                    <ItemContent class="flex flex-col gap-3">
-                      <ItemTitle>{t("backups.cloud.plan")}</ItemTitle>
-                      <SwitchField
-                        label={t("backups.cloud.plan.enabled")}
-                        checked={draft().enabled}
-                        disabled={manageDisabled()}
-                        onChange={(checked: boolean) => editPlan((next) => (next.enabled = checked))}
-                      />
-                      <Field label={t("backups.cloud.plan.frequency")}>
-                        <NativeSelect
-                          value={draft().interval}
-                          disabled={manageDisabled()}
-                          onChange={(event) => {
-                            const interval = CLOUD_INTERVALS.find((item) => item === event.currentTarget.value);
-                            if (interval) editPlan((next) => (next.interval = interval));
-                          }}
-                        >
-                          <For each={["15m", "1h", "6h", "daily"] as const}>
-                            {(interval) => <option value={interval}>{t(INTERVAL_TEXT[interval])}</option>}
-                          </For>
-                        </NativeSelect>
-                      </Field>
-                      <Show when={draft().interval === "daily"}>
-                        <Field label={t("backups.cloud.plan.time", { zone: draft().timezone })}>
-                          <Input
-                            type="time"
-                            size="sm"
-                            value={draft().dailyTime}
-                            disabled={manageDisabled()}
-                            onValueChange={(time) => editPlan((next) => (next.dailyTime = time))}
-                          />
-                        </Field>
-                      </Show>
-                      <ItemTitle>{t("backups.cloud.plan.what")}</ItemTitle>
-                      <For each={CLOUD_GROUPS}>
-                        {(group) => (
-                          <SwitchField
-                            label={t(GROUP_TEXT[group][0])}
-                            description={`${t(GROUP_TEXT[group][1])} ${
-                              sizeOf(group) === null
-                                ? t("backups.cloud.sizeUnknown")
-                                : t("backups.cloud.groupSize", { size: format.fileSize(sizeOf(group) ?? 0) })
-                            }`}
-                            checked={draft().groups[group]}
-                            disabled={manageDisabled()}
-                            onChange={(checked: boolean) => editPlan((next) => (next.groups[group] = checked))}
-                          />
-                        )}
-                      </For>
-                      <ItemTitle>{t("backups.cloud.plan.keep")}</ItemTitle>
-                      <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <For each={RETENTION_FIELDS}>
-                          {([key, label]) => (
-                            <Field label={t(label)}>
-                              <Input
-                                type="number"
-                                size="sm"
-                                inputmode="numeric"
-                                min="0"
-                                value={String(draft().retention[key])}
-                                disabled={manageDisabled()}
-                                onValueChange={(raw) =>
-                                  editPlan((next) => (next.retention[key] = Math.max(0, Math.round(Number(raw) || 0))))
-                                }
-                              />
-                            </Field>
-                          )}
-                        </For>
-                        <Field label={t("backups.cloud.plan.largeFiles")}>
-                          <Input
-                            type="number"
-                            size="sm"
-                            inputmode="numeric"
-                            min="0"
-                            value={String(draft().largeFileMb)}
-                            disabled={manageDisabled()}
-                            onValueChange={(raw) =>
-                              editPlan((next) => (next.largeFileMb = Math.max(0, Math.round(Number(raw) || 0))))
-                            }
-                          />
-                        </Field>
-                      </div>
-                      <Show when={props.canManage}>
-                        <div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            loading={busy() === "plan"}
-                            disabled={manageDisabled() || !planDirty()}
-                            onClick={() =>
-                              void act(
-                                "plan",
-                                async () => {
-                                  const next = await props.calls.savePlan(draft(), props.serverId);
-                                  setPlanDirty(false);
-                                  return next;
-                                },
-                                t("backups.cloud.plan.saved"),
-                              )
-                            }
-                          >
-                            {t("backups.cloud.plan.save")}
-                          </Button>
-                        </div>
-                      </Show>
-                    </ItemContent>
-                  </Item>
-                </ItemGroup>
-              )}
-            </Show>
-
-            <ItemGroup class="settings-modal-card" aria-label={t("backups.cloud.restoreTitle")}>
-              <Item class="settings-modal-row">
-                <ItemContent>
-                  <ItemTitle>{t("backups.cloud.restoreTitle")}</ItemTitle>
-                  <ItemDescription>{t("backups.cloud.restoreDescription")}</ItemDescription>
-                  <Show when={snapshotsError()}>
-                    {(error) => <ItemDescription class="text-destructive">{error()}</ItemDescription>}
-                  </Show>
-                </ItemContent>
-                <ItemActions>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    loading={busy() === "snapshots"}
-                    disabled={disabled()}
-                    onClick={() => void loadSnapshots()}
-                  >
-                    {t("backups.cloud.showCopies")}
-                  </Button>
-                </ItemActions>
-              </Item>
-              <For each={value().restores.slice().reverse()}>
-                {(row) => (
+              <Show
+                when={value().destinations[0]}
+                fallback={
                   <Item class="settings-modal-row">
                     <ItemContent>
-                      <ItemDescription>
-                        {row.status === "ok"
-                          ? t("backups.cloud.restoreReady", { when: when(row.finishedAt) })
-                          : t("backups.cloud.restoreFailedRow", { when: when(row.finishedAt) })}
-                      </ItemDescription>
-                    </ItemContent>
-                    <Show when={row.status === "ok" && props.canManage}>
-                      <ItemActions>
-                        <Show
-                          when={!row.preparedAs}
-                          fallback={<Badge variant="success-light">{t("backups.cloud.preparedBadge")}</Badge>}
-                        >
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            loading={busy() === `prepare:${row.id}`}
-                            disabled={manageDisabled() || value().running !== null}
-                            onClick={() => void prepare(row.id)}
-                          >
-                            {t("backups.cloud.prepare")}
-                          </Button>
-                        </Show>
-                      </ItemActions>
-                    </Show>
-                  </Item>
-                )}
-              </For>
-              <Show when={snapshots()?.length === 0 && !snapshotsError()}>
-                <Item class="settings-modal-row">
-                  <ItemContent>
-                    <ItemDescription>{t("backups.cloud.noCopies")}</ItemDescription>
-                  </ItemContent>
-                </Item>
-              </Show>
-              <For each={snapshots() ?? []}>
-                {(snapshot) => (
-                  <Item class="settings-modal-row">
-                    <ItemContent>
-                      <ItemTitle>{when(snapshot.time)}</ItemTitle>
-                      <ItemDescription>{format.fileSize(snapshot.bytes)}</ItemDescription>
+                      <ItemTitle>{t("backups.cloud.provider.proton")}</ItemTitle>
+                      <ItemDescription>{t("backups.cloud.notConnected")}</ItemDescription>
                     </ItemContent>
                     <Show when={props.canManage}>
                       <ItemActions>
                         <Button
                           type="button"
                           size="sm"
-                          variant="outline"
-                          disabled={manageDisabled() || value().running !== null}
-                          onClick={() => {
-                            setRestoreError(null);
-                            setRestoring(snapshot);
-                          }}
+                          disabled={manageDisabled()}
+                          onClick={() => setConnectOpen(true)}
                         >
-                          {t("backups.cloud.restore")}
+                          {t("backups.cloud.connectProton")}
+                        </Button>
+                      </ItemActions>
+                    </Show>
+                  </Item>
+                }
+              >
+                {(drive) => (
+                  <Item class="settings-modal-row">
+                    <ItemContent>
+                      <ItemTitle>
+                        {t("backups.cloud.provider.proton")}{" "}
+                        <Show when={drive().status === "relogin"}>
+                          <Badge variant="destructive-light">{t("backups.cloud.relogin")}</Badge>
+                        </Show>
+                      </ItemTitle>
+                      <ItemDescription>
+                        {drive().account}
+                        <Show when={drive().space}>
+                          {(space) => (
+                            <>
+                              {" · "}
+                              {space().freeBytes === null
+                                ? t("backups.cloud.spaceUsed", { used: format.fileSize(space().usedBytes) })
+                                : t("backups.cloud.space", {
+                                    used: format.fileSize(space().usedBytes),
+                                    free: format.fileSize(space().freeBytes ?? 0),
+                                  })}
+                            </>
+                          )}
+                        </Show>
+                      </ItemDescription>
+                    </ItemContent>
+                    <Show when={props.canManage}>
+                      <ItemActions>
+                        <Show when={drive().status === "relogin"}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={manageDisabled()}
+                            onClick={() => setConnectOpen(true)}
+                          >
+                            {t("backups.cloud.relogin")}
+                          </Button>
+                        </Show>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={manageDisabled()}
+                          onClick={() => setDisconnecting(true)}
+                        >
+                          {t("backups.cloud.disconnect")}
                         </Button>
                       </ItemActions>
                     </Show>
                   </Item>
                 )}
+              </Show>
+              <For each={["googleDrive", "onedrive"] as const}>
+                {(provider) => (
+                  <Item class="settings-modal-row">
+                    <ItemContent>
+                      <ItemTitle>
+                        {provider === "googleDrive"
+                          ? t("backups.cloud.provider.googleDrive")
+                          : t("backups.cloud.provider.onedrive")}{" "}
+                        <Badge variant="secondary">{t("backups.cloud.soon")}</Badge>
+                      </ItemTitle>
+                    </ItemContent>
+                  </Item>
+                )}
               </For>
             </ItemGroup>
-          </Show>
 
-          <ProtonConnectDialog
-            open={connectOpen()}
-            email={value().destinations[0]?.account ?? ""}
-            onClose={() => setConnectOpen(false)}
-            connect={(input) => props.calls.connect(input, props.serverId)}
-            onConnected={(result) => {
-              setConnectOpen(false);
-              if (!result.ok) return;
-              accept(result.overview);
-              actionToast.success(t("backups.cloud.connected"));
-              if (result.repositoryPassword) {
-                setPasswordKept(false);
-                setPassword(result.repositoryPassword);
-              }
-            }}
-          />
+            <Show when={value().destinations[0]}>
+              <ItemGroup class="settings-modal-card" aria-label={t("backups.cloud.status")}>
+                <Item class="settings-modal-row">
+                  <ItemContent>
+                    <ItemTitle>
+                      {value().lastSuccessAt
+                        ? t("backups.cloud.lastCopy", { ago: ago(value().lastSuccessAt) })
+                        : t("backups.cloud.never")}
+                    </ItemTitle>
+                    <ItemDescription aria-live="polite">
+                      <Show when={value().running}>
+                        {(job) => (
+                          <>
+                            {job().kind === "test"
+                              ? t("backups.cloud.running.test")
+                              : job().kind === "restore"
+                                ? t("backups.cloud.running.restore")
+                                : t("backups.cloud.running.backup")}{" "}
+                          </>
+                        )}
+                      </Show>
+                      <Show when={value().lastBackup?.ok ? value().lastBackup : null}>
+                        {(run) => (
+                          <>
+                            {t("backups.cloud.lastCopyDetail", {
+                              size: format.fileSize(run().totalBytes),
+                              added: format.fileSize(run().addedBytes),
+                              duration: duration(run().seconds),
+                            })}{" "}
+                          </>
+                        )}
+                      </Show>
+                      <Show when={value().lastBackup && !value().lastBackup?.ok ? value().lastBackup : null}>
+                        {(run) => (
+                          <>
+                            {t("backups.cloud.lastFailed", { ago: ago(run().finishedAt) })}{" "}
+                            {t(PROBLEM_TEXT[run().problem ?? "other"])}{" "}
+                          </>
+                        )}
+                      </Show>
+                      {value().plan.enabled
+                        ? value().nextRunAt
+                          ? t("backups.cloud.next", {
+                              time: format.date(new Date(value().nextRunAt ?? ""), { timeStyle: "short" }),
+                            })
+                          : ""
+                        : t("backups.cloud.paused")}
+                    </ItemDescription>
+                    <Show when={value().typical}>
+                      {(typical) => (
+                        <ItemDescription>
+                          {t("backups.cloud.typical", {
+                            duration: duration(typical().seconds),
+                            size: format.fileSize(typical().addedBytes),
+                          })}
+                        </ItemDescription>
+                      )}
+                    </Show>
+                    <ItemDescription>
+                      {value().lastTest
+                        ? value().lastTest?.ok
+                          ? t("backups.cloud.testOk", { ago: ago(value().lastTest?.finishedAt) })
+                          : `${t("backups.cloud.testFailed", { ago: ago(value().lastTest?.finishedAt) })} ${t(PROBLEM_TEXT[value().lastTest?.problem ?? "other"])}`
+                        : t("backups.cloud.testNever")}
+                    </ItemDescription>
+                    <Show when={[value().lastBackup, value().lastTest].find((run) => run?.detail)?.detail}>
+                      {(detail) => (
+                        <details>
+                          <summary>{t("backups.cloud.technical")}</summary>
+                          <p class="text-muted-foreground">{detail()}</p>
+                        </details>
+                      )}
+                    </Show>
+                  </ItemContent>
+                  <ItemActions>
+                    <Button
+                      type="button"
+                      size="sm"
+                      loading={busy() === "backup" || value().running?.kind === "backup"}
+                      disabled={disabled() || value().running !== null}
+                      onClick={() =>
+                        void act("backup", () => props.calls.run("backup", props.serverId), t("backups.cloud.started"))
+                      }
+                    >
+                      {t("backups.backUpNow")}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      loading={busy() === "test" || value().running?.kind === "test"}
+                      disabled={disabled() || value().running !== null}
+                      onClick={() =>
+                        void act("test", () => props.calls.run("test", props.serverId), t("backups.cloud.testStarted"))
+                      }
+                    >
+                      {t("backups.cloud.testNow")}
+                    </Button>
+                  </ItemActions>
+                </Item>
+              </ItemGroup>
 
-          <FormDialog
-            open={password() !== null}
-            onOpenChange={() => undefined}
-            title={t("backups.cloud.password.title")}
-            description={t("backups.cloud.password.description")}
-            submitLabel={t("backups.cloud.password.done")}
-            submitDisabled={!passwordKept()}
-            hideSecondary
-            onSubmit={() => {
-              setPassword(null);
-              void act("saved", () => props.calls.passwordSaved(props.serverId));
-            }}
-          >
-            <div class="flex flex-col gap-3">
-              <Input size="sm" readonly value={password() ?? ""} aria-label={t("backups.cloud.password.title")} />
-              <div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    void navigator.clipboard
-                      ?.writeText(password() ?? "")
-                      .then(() => actionToast.success(t("backups.cloud.password.copied")));
-                  }}
-                >
-                  {t("backups.cloud.password.copy")}
-                </Button>
-              </div>
-              <div class="flex items-center gap-2">
-                <Checkbox
-                  id="cloud-backups-password-kept"
-                  checked={passwordKept()}
-                  onChange={(event) => setPasswordKept(event.currentTarget.checked)}
-                />
-                <label for="cloud-backups-password-kept">{t("backups.cloud.password.confirm")}</label>
-              </div>
-            </div>
-          </FormDialog>
+              <Show when={plan()}>
+                {(draft) => (
+                  <ItemGroup class="settings-modal-card" aria-label={t("backups.cloud.plan")}>
+                    <Item class="settings-modal-row">
+                      <ItemContent class="flex flex-col gap-3">
+                        <ItemTitle>{t("backups.cloud.plan")}</ItemTitle>
+                        <SwitchField
+                          label={t("backups.cloud.plan.enabled")}
+                          checked={draft().enabled}
+                          disabled={manageDisabled()}
+                          onChange={(checked: boolean) => editPlan((next) => (next.enabled = checked))}
+                        />
+                        <Field label={t("backups.cloud.plan.frequency")}>
+                          <NativeSelect
+                            value={draft().interval}
+                            disabled={manageDisabled()}
+                            onChange={(event) => {
+                              const interval = CLOUD_INTERVALS.find((item) => item === event.currentTarget.value);
+                              if (interval) editPlan((next) => (next.interval = interval));
+                            }}
+                          >
+                            <For each={["15m", "1h", "6h", "daily"] as const}>
+                              {(interval) => <option value={interval}>{t(INTERVAL_TEXT[interval])}</option>}
+                            </For>
+                          </NativeSelect>
+                        </Field>
+                        <Show when={draft().interval === "daily"}>
+                          <Field label={t("backups.cloud.plan.time", { zone: draft().timezone })}>
+                            <Input
+                              type="time"
+                              size="sm"
+                              value={draft().dailyTime}
+                              disabled={manageDisabled()}
+                              onValueChange={(time) => editPlan((next) => (next.dailyTime = time))}
+                            />
+                          </Field>
+                        </Show>
+                        <ItemTitle>{t("backups.cloud.plan.what")}</ItemTitle>
+                        <For each={CLOUD_GROUPS}>
+                          {(group) => (
+                            <SwitchField
+                              label={t(GROUP_TEXT[group][0])}
+                              description={`${t(GROUP_TEXT[group][1])} ${
+                                sizeOf(group) === null
+                                  ? t("backups.cloud.sizeUnknown")
+                                  : t("backups.cloud.groupSize", { size: format.fileSize(sizeOf(group) ?? 0) })
+                              }`}
+                              checked={draft().groups[group]}
+                              disabled={manageDisabled()}
+                              onChange={(checked: boolean) => editPlan((next) => (next.groups[group] = checked))}
+                            />
+                          )}
+                        </For>
+                        <ItemTitle>{t("backups.cloud.plan.keep")}</ItemTitle>
+                        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <For each={RETENTION_FIELDS}>
+                            {([key, label]) => (
+                              <Field label={t(label)}>
+                                <Input
+                                  type="number"
+                                  size="sm"
+                                  inputmode="numeric"
+                                  min="0"
+                                  value={String(draft().retention[key])}
+                                  disabled={manageDisabled()}
+                                  onValueChange={(raw) =>
+                                    editPlan(
+                                      (next) => (next.retention[key] = Math.max(0, Math.round(Number(raw) || 0))),
+                                    )
+                                  }
+                                />
+                              </Field>
+                            )}
+                          </For>
+                          <Field label={t("backups.cloud.plan.largeFiles")}>
+                            <Input
+                              type="number"
+                              size="sm"
+                              inputmode="numeric"
+                              min="0"
+                              value={String(draft().largeFileMb)}
+                              disabled={manageDisabled()}
+                              onValueChange={(raw) =>
+                                editPlan((next) => (next.largeFileMb = Math.max(0, Math.round(Number(raw) || 0))))
+                              }
+                            />
+                          </Field>
+                        </div>
+                        <Show when={props.canManage}>
+                          <div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              loading={busy() === "plan"}
+                              disabled={manageDisabled() || !planDirty()}
+                              onClick={() =>
+                                void act(
+                                  "plan",
+                                  async () => {
+                                    const next = await props.calls.savePlan(draft(), props.serverId);
+                                    setPlanDirty(false);
+                                    return next;
+                                  },
+                                  t("backups.cloud.plan.saved"),
+                                )
+                              }
+                            >
+                              {t("backups.cloud.plan.save")}
+                            </Button>
+                          </div>
+                        </Show>
+                      </ItemContent>
+                    </Item>
+                  </ItemGroup>
+                )}
+              </Show>
 
-          <ConfirmDialog
-            open={disconnecting()}
-            onCancel={() => setDisconnecting(false)}
-            tone="destructive"
-            title={t("backups.cloud.disconnectTitle")}
-            description={t("backups.cloud.disconnectDescription")}
-            confirmLabel={t("backups.cloud.disconnect")}
-            onConfirm={async () => {
-              const id = value().destinations[0]?.id;
-              setDisconnecting(false);
-              if (id) await act("disconnect", () => props.calls.disconnect(id, props.serverId));
-            }}
-          />
+              <ItemGroup class="settings-modal-card" aria-label={t("backups.cloud.restoreTitle")}>
+                <Item class="settings-modal-row">
+                  <ItemContent>
+                    <ItemTitle>{t("backups.cloud.restoreTitle")}</ItemTitle>
+                    <ItemDescription>{t("backups.cloud.restoreDescription")}</ItemDescription>
+                    <Show when={snapshotsError()}>
+                      {(error) => <ItemDescription class="text-destructive">{error()}</ItemDescription>}
+                    </Show>
+                  </ItemContent>
+                  <ItemActions>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      loading={busy() === "snapshots"}
+                      disabled={disabled()}
+                      onClick={() => void loadSnapshots()}
+                    >
+                      {t("backups.cloud.showCopies")}
+                    </Button>
+                  </ItemActions>
+                </Item>
+                <For each={value().restores.slice().reverse()}>
+                  {(row) => (
+                    <Item class="settings-modal-row">
+                      <ItemContent>
+                        <ItemDescription>
+                          {row.status === "ok"
+                            ? t("backups.cloud.restoreReady", { when: when(row.finishedAt) })
+                            : t("backups.cloud.restoreFailedRow", { when: when(row.finishedAt) })}
+                        </ItemDescription>
+                      </ItemContent>
+                      <Show when={row.status === "ok" && props.canManage}>
+                        <ItemActions>
+                          <Show
+                            when={!row.preparedAs}
+                            fallback={<Badge variant="success-light">{t("backups.cloud.preparedBadge")}</Badge>}
+                          >
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              loading={busy() === `prepare:${row.id}`}
+                              disabled={manageDisabled() || value().running !== null}
+                              onClick={() => void prepare(row.id)}
+                            >
+                              {t("backups.cloud.prepare")}
+                            </Button>
+                          </Show>
+                        </ItemActions>
+                      </Show>
+                    </Item>
+                  )}
+                </For>
+                <Show when={snapshots()?.length === 0 && !snapshotsError()}>
+                  <Item class="settings-modal-row">
+                    <ItemContent>
+                      <ItemDescription>{t("backups.cloud.noCopies")}</ItemDescription>
+                    </ItemContent>
+                  </Item>
+                </Show>
+                <For each={snapshots() ?? []}>
+                  {(snapshot) => (
+                    <Item class="settings-modal-row">
+                      <ItemContent>
+                        <ItemTitle>{when(snapshot.time)}</ItemTitle>
+                        <ItemDescription>{format.fileSize(snapshot.bytes)}</ItemDescription>
+                      </ItemContent>
+                      <Show when={props.canManage}>
+                        <ItemActions>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={manageDisabled() || value().running !== null}
+                            onClick={() => {
+                              setRestoreError(null);
+                              setRestoring(snapshot);
+                            }}
+                          >
+                            {t("backups.cloud.restore")}
+                          </Button>
+                        </ItemActions>
+                      </Show>
+                    </Item>
+                  )}
+                </For>
+              </ItemGroup>
+            </Show>
+          </SettingsSection>
+        )}
+      </Show>
+      {/* The dialogs live outside the section that each poll redraws. */}
+      <ProtonConnectDialog
+        open={connectOpen()}
+        serverId={props.serverId}
+        account={ready()?.destinations[0]?.account ?? ""}
+        onClose={() => setConnectOpen(false)}
+        connect={(input) => props.calls.connect(input, props.serverId)}
+        onConnected={(result) => {
+          setConnectOpen(false);
+          if (!result.ok) return;
+          accept(result.overview);
+          actionToast.success(t("backups.cloud.connected"));
+          if (result.repositoryPassword) {
+            setPasswordKept(false);
+            setPassword(result.repositoryPassword);
+          }
+        }}
+      />
 
-          <ConfirmDialog
-            open={restoring() !== null}
-            onCancel={() => setRestoring(null)}
-            icon={<History />}
-            title={t("backups.cloud.restoreConfirmTitle", { when: when(restoring()?.time ?? "") })}
-            description={t("backups.cloud.restoreConfirmDescription")}
-            confirmLabel={t("backups.cloud.restoreConfirm")}
-            error={restoreError() ?? undefined}
-            onConfirm={() => restore()}
-          />
-        </SettingsSection>
-      )}
-    </Show>
+      <FormDialog
+        open={password() !== null}
+        onOpenChange={() => undefined}
+        title={t("backups.cloud.password.title")}
+        description={t("backups.cloud.password.description")}
+        submitLabel={t("backups.cloud.password.done")}
+        submitDisabled={!passwordKept()}
+        hideSecondary
+        onSubmit={() => {
+          setPassword(null);
+          void act("saved", () => props.calls.passwordSaved(props.serverId));
+        }}
+      >
+        <div class="flex flex-col gap-3">
+          <Input size="sm" readonly value={password() ?? ""} aria-label={t("backups.cloud.password.title")} />
+          <div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                void navigator.clipboard
+                  ?.writeText(password() ?? "")
+                  .then(() => actionToast.success(t("backups.cloud.password.copied")));
+              }}
+            >
+              {t("backups.cloud.password.copy")}
+            </Button>
+          </div>
+          <div class="flex items-center gap-2">
+            <Checkbox
+              id="cloud-backups-password-kept"
+              checked={passwordKept()}
+              onChange={(event) => setPasswordKept(event.currentTarget.checked)}
+            />
+            <label for="cloud-backups-password-kept">{t("backups.cloud.password.confirm")}</label>
+          </div>
+        </div>
+      </FormDialog>
+
+      <ConfirmDialog
+        open={disconnecting()}
+        onCancel={() => setDisconnecting(false)}
+        tone="destructive"
+        title={t("backups.cloud.disconnectTitle")}
+        description={t("backups.cloud.disconnectDescription")}
+        confirmLabel={t("backups.cloud.disconnect")}
+        onConfirm={async () => {
+          const id = ready()?.destinations[0]?.id;
+          setDisconnecting(false);
+          if (id) await act("disconnect", () => props.calls.disconnect(id, props.serverId));
+        }}
+      />
+
+      <ConfirmDialog
+        open={restoring() !== null}
+        onCancel={() => setRestoring(null)}
+        icon={<History />}
+        title={t("backups.cloud.restoreConfirmTitle", { when: when(restoring()?.time ?? "") })}
+        description={t("backups.cloud.restoreConfirmDescription")}
+        confirmLabel={t("backups.cloud.restoreConfirm")}
+        error={restoreError() ?? undefined}
+        onConfirm={() => restore()}
+      />
+    </>
   );
+}
+
+interface ConnectDraft {
+  open: boolean;
+  email: string;
+  password: string;
+  code: string;
+  twoPasswords: boolean;
+  mailbox: string;
+  repository: string;
+  askRepository: boolean;
+  problem: string | null;
+}
+
+/**
+ * The sign-in form of each server, outside any component: a redraw or a remount of the settings page
+ * (each poll, a reconnect) keeps what the owner typed. It is cleared after a sign-in and on Cancel.
+ */
+const connectDrafts = new Map<string, ConnectDraft>();
+const emptyDraft = (): ConnectDraft => ({
+  open: false,
+  email: "",
+  password: "",
+  code: "",
+  twoPasswords: false,
+  mailbox: "",
+  repository: "",
+  askRepository: false,
+  problem: null,
+});
+function connectDraft(serverId: string): ConnectDraft {
+  let draft = connectDrafts.get(serverId);
+  if (!draft) {
+    draft = emptyDraft();
+    connectDrafts.set(serverId, draft);
+  }
+  return draft;
 }
 
 /** Sign in to Proton: email and password, the 2FA code once, and the mailbox password of two-password accounts. */
 function ProtonConnectDialog(props: {
   open: boolean;
-  email: string;
+  serverId: string;
+  /** The connected account, as the email to start from. */
+  account: string;
   onClose: () => void;
   connect: (input: CloudConnectInput) => Promise<CloudConnectResult>;
   onConnected: (result: CloudConnectResult) => void;
 }) {
   const { t, errorMessage } = useText();
-  const [email, setEmail] = createSignal("");
-  const [password, setPassword] = createSignal("");
-  const [code, setCode] = createSignal("");
-  const [twoPasswords, setTwoPasswords] = createSignal(false);
-  const [mailbox, setMailbox] = createSignal("");
-  const [repository, setRepository] = createSignal("");
-  const [askRepository, setAskRepository] = createSignal(false);
-  const [problem, setProblem] = createSignal<string | null>(null);
+  const [form, setForm] = createStore<ConnectDraft>({ ...untrack(() => connectDraft(props.serverId)) });
   const [pending, setPending] = createSignal(false);
+  /** One field changed: the store redraws it, and the draft keeps it. */
+  function set<K extends keyof ConnectDraft>(key: K, value: ConnectDraft[K]): void {
+    setForm((state) => {
+      state[key] = value;
+    });
+    connectDraft(props.serverId)[key] = value;
+  }
+  const email = () => form.email;
+  const password = () => form.password;
+  const code = () => form.code;
+  const twoPasswords = () => form.twoPasswords;
+  const mailbox = () => form.mailbox;
+  const repository = () => form.repository;
+  const askRepository = () => form.askRepository;
+  const problem = () => form.problem;
+  const setEmail = (value: string) => set("email", value);
+  const setPassword = (value: string) => set("password", value);
+  const setCode = (value: string) => set("code", value);
+  const setTwoPasswords = (value: boolean) => set("twoPasswords", value);
+  const setMailbox = (value: string) => set("mailbox", value);
+  const setRepository = (value: string) => set("repository", value);
+  const setAskRepository = (value: boolean) => set("askRepository", value);
+  const setProblem = (value: string | null) => set("problem", value);
 
+  // Opening starts from the connected account's email, unless the owner already typed one.
   createEffect(
-    () => props.open,
-    (open) => {
-      if (!open) return;
-      setEmail(props.email);
-      setPassword("");
-      setCode("");
-      setMailbox("");
-      setRepository("");
-      setProblem(null);
+    () => [props.open, props.account] as const,
+    ([open, account]) => {
+      if (open && !form.email && account) setEmail(account);
     },
   );
+  function clear(): void {
+    const keep = connectDraft(props.serverId).open;
+    connectDrafts.set(props.serverId, { ...emptyDraft(), open: keep });
+    setForm(() => ({ ...emptyDraft(), open: keep }));
+  }
 
   async function submit(): Promise<void> {
     if (pending() || !email().trim() || !password()) return;
@@ -868,6 +946,7 @@ function ProtonConnectDialog(props: {
         ...(repository().trim() ? { repositoryPassword: repository().trim() } : {}),
       });
       if (result.ok) {
+        clear();
         props.onConnected(result);
         return;
       }
@@ -885,8 +964,12 @@ function ProtonConnectDialog(props: {
     <FormDialog
       open={props.open}
       onOpenChange={(open) => {
-        if (!open && !pending()) props.onClose();
+        if (open || pending()) return;
+        clear();
+        props.onClose();
       }}
+      // A password manager's autofill popup is outside the dialog: a click on it must not close the form.
+      dismissible={false}
       title={t("backups.cloud.connect.title")}
       description={t("backups.cloud.connect.description")}
       submitLabel={pending() ? t("backups.cloud.connect.busy") : t("backups.cloud.connect.submit")}

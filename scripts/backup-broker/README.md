@@ -129,7 +129,7 @@ restic) holds the groups that the plan picks:
 Agents and work leave out `node_modules`, `target`, `.godot`, `dist`, `__pycache__`, `.venv` and
 caches, and files over the plan's size limit (200 MB). A git clone with a remote is left out; its
 remote URLs, a bundle of the commits no remote has (`git bundle --branches --tags --not --remotes`) and
-an `uncommitted.patch` go in `cloud-stage/git/` instead. The repository is `rclone:drive:Atelier-Backups`,
+an `uncommitted.patch` go in `cloud-stage/git/` instead. The repository is `rclone:drive:<folder>`,
 encrypted by restic (client side, always). After each copy: `restic forget` with the plan's
 retention (default `--keep-within 48h --keep-daily 14 --keep-weekly 8 --keep-monthly 12`), and
 `rclone about` for the drive's space.
@@ -146,8 +146,26 @@ local backup (reason `cloud`, pinned against pruning) with `files:<path>` parts,
 (safety backup first, typed confirmation, owner only) puts it back. Git bundles stay in the restore
 folder.
 
+**Folder.** Each server's copies go to its own drive folder, `Atelier Backups/<server name>` by
+default. The owner browses or makes folders (`/v1/cloud/folders`), and later either moves the
+repository (`cloud-job <id> move`: `rclone move`, then the old folder is removed) or uses another folder
+from then on (its copies, or new ones with the same password; the old copies stay where they were).
+
+**Restore from the drive.** Each copy is tagged with its groups (`group:database`, ...), shown in the
+list. A restore takes the whole copy, chosen groups, or files and folders picked with `/v1/cloud/ls`,
+into `cloud-restores/<id>/`. "Put this copy back" imports it as a local backup and starts the usual
+restore: a safety backup, `POST /v1/drain` on the host (running turns end), stop, restore (the parts
+the copy holds, without deleting newer files except the database), start, check. A copy without the
+database puts back only its files.
+
+**Restore on another server.** Install the broker on the new server, deploy Atelier, then in Settings
+› Backups › Copy in the cloud connect the same Proton account with the old server's folder (for example
+`Atelier Backups/Delynith`) and the copies' password (the recovery password the owner saved). The
+copies list shows the old server's copies; restore one and put it back.
+
 **Socket routes** (main process only, as the others): `GET /v1/cloud/status`, `POST /v1/cloud/login`,
-`/snapshots`, `/backup`, `/test`, `/restore`, `/collect`, `/import`, `/measure`.
+`/snapshots`, `/ls`, `/folders`, `/backup`, `/test`, `/restore`, `/move`, `/collect`, `/import`,
+`/measure`.
 
 **Proton limits seen.** Proton answers sign-ins from datacenter addresses with `429` (code 2011,
 "retry after 3600 s") or a human check (code 9001) at times; rclone cannot solve the human check. The

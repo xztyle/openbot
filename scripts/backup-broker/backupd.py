@@ -615,7 +615,7 @@ def snapshot_path(ident):
 
 
 def restore_plan(manifest, spaces):
-    plan = ["database"]
+    plan = ["database"] if (manifest.get("database") or {}).get("file") else []
     if manifest.get("motion", {}).get("file"):
         plan.append("motion")
     for item in manifest.get("components", []):
@@ -638,7 +638,7 @@ def check(ident, spaces=False):
     db = manifest.get("database") or {}
     for entry, label in ((db, "openbot.db"), (manifest.get("motion") or {}, "motion.db")):
         if not entry.get("file"):
-            if label == "openbot.db":
+            if label == "openbot.db" and manifest.get("reason") != "cloud":
                 problems.append("The backup has no database.")
             continue
         file = path / entry["file"]
@@ -674,7 +674,7 @@ def check(ident, spaces=False):
     if running:
         problems.append(f"A {running.get('kind')} is running.")
     diff = []
-    if current:
+    if current and db.get("counts"):
         before, after = current.get("counts", {}), db.get("counts", {})
         for name in ("projection_agents", "projection_threads", "projection_thread_messages",
                      "projection_channel_messages", "projection_agent_routines", "projection_agent_memories"):
@@ -741,6 +741,10 @@ def restore(ident, confirm, spaces=False):
         motion = c["motion"]
         restore_motion = "motion" in result["restore"]
         try:
+            step("Holding new work and letting running turns end.")
+            docker("exec", c["container"], "curl", "--silent", "--max-time", "330", "--unix-socket",
+                   "/run/openbot/control.sock", "-X", "POST", "http://openbot/v1/drain?timeout=300",
+                   check=False, timeout=360)
             step("Stopping OpenBot.")
             docker("compose", "-f", c["compose_file"], "stop", "-t", "60", c["service"], timeout=180)
             if restore_motion:
@@ -749,8 +753,9 @@ def restore(ident, confirm, spaces=False):
             set_current("restore", ident, "files")
             files = path / "files"
             core_excludes = list(CORE_EXCLUDES) + ([] if c["include_browser_profiles"] else [BROWSER_PROFILES])
-            step("Restoring the database.")
-            restore_db(path / manifest["database"]["file"], data / ".config/OpenBot/openbot.db", c["data_uid"])
+            if "database" in result["restore"]:
+                step("Restoring the database.")
+                restore_db(path / manifest["database"]["file"], data / ".config/OpenBot/openbot.db", c["data_uid"])
             for name in result["restore"]:
                 if name == "core":
                     step("Restoring settings, keys, vault and provider accounts.")
@@ -1318,12 +1323,21 @@ class CloudSession:
         os.chmod(self.conf, 0o600)
 
     def remote(self, sub=""):
-        folder = cloud_cfg()["folder"]
+        folder = drive_folder(self.destination.get("folder"))
         if self.provider == "local":
             base = f"drive:{Path(str(self.destination.get('path') or '/nonexistent')) / folder}"
         else:
             base = f"drive:{folder}"
         return f"{base}/{sub}" if sub else base
+
+    def remote_path(self, folder):
+        """Another folder of the same drive (for picking or moving the repository)."""
+        clean = str(folder or "").strip().strip("/")
+        if ".." in clean.split("/"):
+            raise Refused("Unknown folder.")
+        if self.provider == "local":
+            return f"drive:{Path(str(self.destination.get('path') or '/nonexistent')) / clean}"
+        return f"drive:{clean}"
 
     def env(self):
         env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(self.dir), "RCLONE_CONFIG": str(self.conf),
@@ -1414,6 +1428,15 @@ class CloudFailure(Exception):
         self.detail = detail
 
 
+def drive_folder(value):
+    """The repository's folder in the drive: a relative path with no `..`."""
+    text = str(value or cloud_cfg()["folder"]).strip().strip("/")
+    parts = [part for part in text.split("/") if part]
+    if not parts or any(part in (".", "..") or "\n" in part or "\r" in part for part in parts) or len(text) > 400:
+        raise Refused("That folder name can't be used.")
+    return "/".join(parts)
+
+
 def single_line(value):
     text = str(value or "")
     if "\n" in text or "\r" in text:
@@ -1461,6 +1484,7 @@ def cloud_overview():
         "sizes": status.get("sizes"),
         "history": history[-60:],
         "restores": (read_json(cloud_dir() / "restores.json", []) or [])[-10:],
+        "lastMove": status.get("lastMove"),
         "tools": {name: spec["version"] for name, spec in CLOUD_TOOLS.items()},
     }
 
@@ -1660,6 +1684,7 @@ def cloud_backup_run(job, params, session):
     set_current("cloud-backup", job, "upload")
     result = session.restic("backup", "--files-from-verbatim", str(files_from), "--exclude-file", str(exclude_file),
                             "--tag", "atelier", "--host", "atelier", "--pack-size", "32", "--no-scan",
+                            *[arg for name in CLOUD_GROUPS if groups[name] for arg in ("--tag", f"group:{name}")],
                             ok_codes=(0, 3), json_lines=True)
     summary = {}
     for line in result.stdout.splitlines():
@@ -1670,7 +1695,8 @@ def cloud_backup_run(job, params, session):
         if message.get("message_type") == "summary":
             summary = message
     set_current("cloud-backup", job, "retention")
-    session.restic("forget", "--tag", "atelier", "--host", "atelier", *retention_args(plan.get("retention")),
+    session.restic("forget", "--tag", "atelier", "--host", "atelier", "--group-by", "host",
+                   *retention_args(plan.get("retention")),
                    timeout=1800)
     return {"snapshot": (summary.get("snapshot_id") or "")[:16],
             "addedBytes": int(summary.get("data_added_packed") or summary.get("data_added") or 0),
@@ -1738,9 +1764,119 @@ def cloud_restore_run(job, params, session):
     target = base / job
     target.mkdir()
     set_current("cloud-restore", job, "download")
-    session.restic("restore", snapshot, "--target", str(target), timeout=24 * 3600)
+    includes = cloud_restore_includes(params.get("groups"), params.get("paths"))
+    extra = []
+    if includes:
+        include_file = session.dir / "include"
+        include_file.write_text("\n".join(restic_pattern(path) for path in includes) + "\n")
+        extra = ["--include-file", str(include_file)]
+    session.restic("restore", snapshot, "--target", str(target), *extra, timeout=24 * 3600)
     size = sum(path.stat().st_size for path in target.rglob("*") if path.is_file() and not path.is_symlink())
     return {"folder": str(target), "bytes": size}
+
+
+def cloud_group_paths(group):
+    """The host paths one group of a copy holds, as `cloud_sources` and the stage put them."""
+    c = cfg()
+    data = Path(c["data_dir"])
+    stage = stage_dir()
+    paths = {
+        "database": [stage / "db" / "openbot.db"],
+        "conversations": [data / ".claude/projects", data / ".codex/sessions", data / ".codex/archived_sessions"],
+        "agents": [data / "OpenBot" / "Agents"],
+        "settings": [data / ".config" / "OpenBot"],
+        "motion": [stage / "db" / "motion.db", Path(c["motion"]["dir"]) / "data"],
+        "work": [data / "OpenBot" / "Spaces", stage / "git"],
+    }.get(group, [])
+    return [str(path) for path in paths]
+
+
+def cloud_restore_includes(groups, paths):
+    """What a partial restore takes: whole groups, or files and folders picked in the copy. Empty: all."""
+    out = []
+    if isinstance(groups, list):
+        for group in groups:
+            if group in CLOUD_GROUPS:
+                out += cloud_group_paths(group)
+        if out:
+            out.append(str(stage_dir() / "manifest.json"))
+    if isinstance(paths, list):
+        for path in paths[:200]:
+            text = str(path or "")
+            if not text.startswith("/") or ".." in Path(text).parts or "\n" in text:
+                raise Refused("That file can't be restored.")
+            out.append(text)
+    return out
+
+
+def cloud_ls(body):
+    """One folder of a copy: its files and subfolders, for picking what to restore."""
+    snapshot = str(body.get("snapshot") or "")
+    if not re.match(r"^[0-9a-f]{8,64}$", snapshot):
+        raise Refused("Unknown copy.", 404)
+    path = str(body.get("path") or "/")
+    if not path.startswith("/") or ".." in Path(path).parts:
+        raise Refused("Unknown folder.")
+    try:
+        with CloudSession(body.get("destination"), body.get("repositoryPassword")) as session:
+            try:
+                result = session.restic("ls", snapshot, path, "--json", timeout=600, low=False)
+            finally:
+                tokens = session.tokens()
+    except CloudFailure as error:
+        return {"ok": False, "problem": error.problem, "entries": []}
+    entries = []
+    base = path.rstrip("/") or "/"
+    for line in result.stdout.splitlines():
+        try:
+            item = json.loads(line)
+        except ValueError:
+            continue
+        item_path = item.get("path") or ""
+        if item.get("struct_type") != "node" or item_path == base:
+            continue
+        if str(Path(item_path).parent) != base:
+            continue
+        entries.append({"name": item.get("name", ""), "path": item_path, "dir": item.get("type") == "dir",
+                        "bytes": int(item.get("size") or 0)})
+    entries.sort(key=lambda row: (not row["dir"], row["name"].lower()))
+    return {"ok": True, "entries": entries[:1000], "tokens": tokens}
+
+
+def cloud_folders(body):
+    """The subfolders of one folder of the drive, and whether it already holds Atelier copies."""
+    path = str(body.get("path") or "").strip().strip("/")
+    if ".." in path.split("/"):
+        raise Refused("Unknown folder.")
+    try:
+        with CloudSession(body.get("destination")) as session:
+            try:
+                if body.get("create") and path:
+                    session.rclone("mkdir", session.remote_path(path), timeout=120)
+                listing = session.rclone("lsf", session.remote_path(path), "--max-depth", "1", timeout=120,
+                                         check=False)
+            finally:
+                tokens = session.tokens()
+    except CloudFailure as error:
+        return {"ok": False, "problem": error.problem, "folders": []}
+    names = [line.strip() for line in listing.stdout.splitlines() if line.strip()]
+    return {"ok": True, "path": path, "folders": sorted(name.rstrip("/") for name in names if name.endswith("/")),
+            "hasCopies": "config" in names and "keys/" in names, "tokens": tokens}
+
+
+def cloud_move_run(job, params, session):
+    """Moves the repository to another folder of the same drive."""
+    target = drive_folder(params.get("to"))
+    source = session.remote()
+    if drive_folder(session.destination.get("folder")) == target:
+        raise Refused("That is already the folder.")
+    listing = session.rclone("lsf", session.remote_path(target), "--max-depth", "1", timeout=120, check=False)
+    if "config" in listing.stdout.split():
+        raise CloudFailure("other", "The new folder already holds copies.")
+    set_current("cloud-move", job, "move")
+    session.rclone("move", source, session.remote_path(target), "--delete-empty-src-dirs", timeout=24 * 3600)
+    session.rclone("rmdirs", source, "--leave-root", timeout=600, check=False)
+    return {"folder": target}
 
 
 def cloud_import(restore_id):
@@ -1753,9 +1889,6 @@ def cloud_import(restore_id):
     folder = Path(entry["folder"])
     stage = folder / str(stage_dir()).lstrip("/")
     manifest_in = read_json(stage / "manifest.json") or {}
-    if not (stage / "db" / "openbot.db").is_file():
-        raise Refused("This copy has no database, so it can't become a restorable backup. Its files are in "
-                      "the restore folder.", 409)
     c = cfg()
     with Lock():
         snapshots_dir().mkdir(parents=True, exist_ok=True)
@@ -1772,16 +1905,18 @@ def cloud_import(restore_id):
             os.chmod(work, 0o711)
             if os.geteuid() == 0:
                 os.chown(work, uid, uid)
-            raw = work / "openbot.db"
-            shutil.copy2(stage / "db" / "openbot.db", raw)
-            if os.geteuid() == 0:
-                os.chown(raw, uid, uid)
-            info = sqlite_helper(["info", str(raw), "projection_"], uid)
-            target = partial / "openbot.db.zst"
-            run(["zstd", "-q", "-T0", "-6", "--rm", "-f", "-o", str(target), str(raw)], timeout=3600)
-            manifest["database"] = {"file": target.name, "bytes": target.stat().st_size, "sha256": sha256(target),
-                                    "integrity": info["integrity"], "schema": info["schema"], "counts": info["counts"]}
-            manifest["schema"] = info["schema"]
+            if (stage / "db" / "openbot.db").is_file():
+                raw = work / "openbot.db"
+                shutil.copy2(stage / "db" / "openbot.db", raw)
+                if os.geteuid() == 0:
+                    os.chown(raw, uid, uid)
+                info = sqlite_helper(["info", str(raw), "projection_"], uid)
+                target = partial / "openbot.db.zst"
+                run(["zstd", "-q", "-T0", "-6", "--rm", "-f", "-o", str(target), str(raw)], timeout=3600)
+                manifest["database"] = {"file": target.name, "bytes": target.stat().st_size, "sha256": sha256(target),
+                                        "integrity": info["integrity"], "schema": info["schema"],
+                                        "counts": info["counts"]}
+                manifest["schema"] = info["schema"]
             if (stage / "db" / "motion.db").is_file():
                 raw = work / "motion.db"
                 shutil.copy2(stage / "db" / "motion.db", raw)
@@ -1838,12 +1973,13 @@ def cloud_job_id(kind):
 def cloud_start(kind, body):
     """Starts a backup, restore test or restore outside the service. Refused while anything runs: a run
     that is due while the previous one still goes is skipped, never queued."""
-    if kind not in ("backup", "test", "restore"):
+    if kind not in ("backup", "test", "restore", "move"):
         raise Refused("Unknown job.")
     if running_job():
         raise Refused("A backup or restore is already running.", 409)
     job = cloud_job_id(kind)
-    params = {k: body.get(k) for k in ("destination", "repositoryPassword", "plan", "snapshot", "readSubset")}
+    params = {k: body.get(k) for k in ("destination", "repositoryPassword", "plan", "snapshot", "readSubset",
+                                       "groups", "paths", "to")}
     path = secrets_dir() / f"{job}.json"
     write_json(path, params)
     spawn(["cloud-job", job, kind], f"atelier-{job}")
@@ -1867,6 +2003,8 @@ def cloud_job(job, kind):
                             entry.update(cloud_backup_run(job, params, session))
                         elif kind == "test":
                             entry.update(cloud_test_run(job, params, session))
+                        elif kind == "move":
+                            entry.update(cloud_move_run(job, params, session))
                         else:
                             entry["snapshot"] = str(params.get("snapshot") or "")[:16]
                             entry.update(cloud_restore_run(job, params, session))
@@ -1903,11 +2041,14 @@ def cloud_job(job, kind):
                                                       "problem")})
     elif kind == "test":
         cloud_update(lastTest=entry)
+    elif kind == "move":
+        cloud_update(lastMove=entry)
     else:
         restores = (read_json(cloud_dir() / "restores.json", []) or [])[-19:]
         restores.append({"id": job, "snapshot": entry.get("snapshot"), "status": "ok" if entry.get("ok") else "failed",
                          "startedAt": entry["startedAt"], "finishedAt": entry["finishedAt"],
                          "folder": entry.get("folder"), "bytes": entry.get("bytes"),
+                         "partial": bool(params.get("groups") or params.get("paths")),
                          "problem": entry.get("problem")})
         write_json(cloud_dir() / "restores.json", restores)
     say(f"cloud {kind} {job}: {'ok' if entry.get('ok') else entry.get('problem')} in {entry['seconds']} s")
@@ -1962,7 +2103,9 @@ def cloud_snapshots(body):
         rows = json.loads(result.stdout or "[]") or []
         snapshots = [{"id": row.get("id", "")[:64], "shortId": row.get("short_id", ""), "time": row.get("time", ""),
                       "bytes": int((row.get("summary") or {}).get("total_bytes_processed") or 0),
-                      "files": int((row.get("summary") or {}).get("total_files_processed") or 0)} for row in rows]
+                      "files": int((row.get("summary") or {}).get("total_files_processed") or 0),
+                      "groups": [tag[6:] for tag in row.get("tags") or [] if tag.startswith("group:")]}
+                     for row in rows]
         snapshots.sort(key=lambda row: row["time"], reverse=True)
         return {"ok": True, "snapshots": snapshots[:500], "tokens": tokens}
     except CloudFailure as error:
@@ -1999,8 +2142,12 @@ def cloud_route(method, segs, body):
         return cloud_login(body)
     if action == "snapshots":
         return cloud_snapshots(body)
-    if action in ("backup", "test", "restore"):
+    if action in ("backup", "test", "restore", "move"):
         return cloud_start(action, body)
+    if action == "ls":
+        return cloud_ls(body)
+    if action == "folders":
+        return cloud_folders(body)
     if action == "collect":
         return cloud_collect(body.get("job"))
     if action == "import":

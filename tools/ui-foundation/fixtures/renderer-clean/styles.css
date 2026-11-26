@@ -7,6 +7,8 @@
   --openbot-layer-overlay: 1;
   --openbot-layer-dropdown: 1;
   --openbot-space-3: 1em;
+  --openbot-weight-medium: inherit;
+  --openbot-tracking-normal: 0;
 }
 
 .panel {

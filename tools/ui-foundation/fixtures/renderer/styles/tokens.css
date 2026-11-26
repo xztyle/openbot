@@ -12,6 +12,9 @@
   --openbot-layer-dialog: 1;
   --openbot-layer-dropdown: 1;
   --openbot-space-2: 1em;
+  --openbot-weight-medium: inherit;
+  --openbot-leading-sm: 1;
+  --openbot-tracking-snug: 0;
 }
 
 /* The neighbour each budget must leave alone: a token is not a literal, and the two

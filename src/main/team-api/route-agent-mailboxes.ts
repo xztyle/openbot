@@ -32,7 +32,7 @@ export async function routeAgentMailboxes(
       case AGENT_MAILBOXES_ROUTES.state:
         return json(200, mail.state());
       case AGENT_MAILBOXES_ROUTES.save: {
-        const { id, address, agentId, mode, displayName } = body;
+        const { id, address, agentId, mode, displayName, ownerApprovesEverySend } = body;
         if (!isString(address) || !isString(agentId) || !isOneOf(AGENT_MAILBOX_MODES, mode))
           throw new HttpError(400, sourceText("error.team.requestFailed"));
         return json(
@@ -43,6 +43,7 @@ export async function routeAgentMailboxes(
             mode,
             ...(isString(id) ? { id } : {}),
             ...(isString(displayName) ? { displayName } : {}),
+            ...(typeof ownerApprovesEverySend === "boolean" ? { ownerApprovesEverySend } : {}),
           }),
         );
       }

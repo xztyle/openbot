@@ -706,6 +706,10 @@ export const messages = {
   "workspace.mailboxes.modeReplyHint": "Ajan gelen e-postaları hemen yanıtlar. Asla ilk yazmaz.",
   "workspace.mailboxes.modeWriteFirstHint":
     "Ajan yeni kişilere de yazabilir, günde en fazla 10. Her ilk e-posta onayınızı bekler ve abonelikten çıkma satırıyla biter.",
+  "workspace.mailboxes.ownerApprovesEverySend": "Her e-postadan önce bana sor",
+  "workspace.mailboxes.ownerApprovesEverySendHint":
+    "Bu adresten giden her e-posta, yanıtlar da, onayınızı bekler. Onaysız hiçbir şey gitmez.",
+  "workspace.mailboxes.modeWithOwnerApproval": "{mode} · her e-postadan önce sorar",
   "workspace.mailboxes.displayName": "Gönderen adı",
   "workspace.mailboxes.displayNamePlaceholder": "Aprendivo'dan Lucía",
   "workspace.mailboxes.line": "{agent} · {mode}",

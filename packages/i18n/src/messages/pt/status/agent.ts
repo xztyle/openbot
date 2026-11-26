@@ -39,4 +39,6 @@ export const messages = {
     "{agent} leu conteúdo externo (uma página, um e-mail ou um webhook) neste turno, e a verificação de segurança não pôde validar este pagamento. Você decide.",
   "status.agent.mailFirstRecipient":
     "Primeiro e-mail para {address}. Aprove para enviar; os próximos para essa pessoa não precisam do seu OK.",
+  "status.agent.mailOwnerApprovesEverySend":
+    "{from} quer enviar este e-mail para {address}. Todo e-mail deste endereço espera o seu OK: nada sai sem a sua aprovação.",
 } as const satisfies PartialTranslation<typeof source>;

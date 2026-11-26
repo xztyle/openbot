@@ -100,4 +100,6 @@ export const messages = defineMessages("status.agent", {
   "status.agent.decisionCard.perDay": "{amount} a day",
   "status.agent.mailFirstRecipient":
     "First mail to {address}. Approve it to send it; later mails to this person need no OK.",
+  "status.agent.mailOwnerApprovesEverySend":
+    "{from} wants to send this mail to {address}. Every mail from this address waits for your OK: nothing leaves unless you approve it.",
 });

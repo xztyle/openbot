@@ -107,6 +107,7 @@ import {
   SIGNED_OUT_CHANNEL_MEMBER_ID,
 } from "@openbot/contracts/ipc";
 import { decodeRecord, requiredString } from "@openbot/contracts/ipc-decoding";
+import { isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { REMOTE_ACCOUNT_CHECK_INTERVAL_MS } from "@openbot/team-client";
@@ -349,6 +350,7 @@ import { spawnStorageHygieneHost } from "./storage-hygiene-host-process";
 import { createStorageHygieneSettingsStore, type StorageHygieneSettingsStore } from "./storage-hygiene-settings-store";
 import { HttpError } from "./team-api/http-error";
 import { hiddenProviderAgentIds } from "./team-api/provider-visibility";
+import { agentCreate } from "./team-api/request-helpers";
 import { TeamStore } from "./team-store";
 import { TeamWebRtcBridge } from "./team-webrtc-bridge";
 import { TeamWebRtcClientTransport } from "./team-webrtc-client-transport";
@@ -3654,6 +3656,27 @@ export async function createApplicationServices({
         announceRestart: (state) => host.announceRestart(state, null),
         cloudBench: () => cloudBackups.bench(),
         mailboxes: () => connectorsReady?.mail ?? null,
+        // The same parse and create as the Team API agent route, as the signed-in owner.
+        createAgent: async (body) => {
+          const { spaceId, reportsToAgentId } = body;
+          if (spaceId !== undefined && !isString(spaceId)) throw new HttpError(400, "spaceId must be a string.");
+          if (reportsToAgentId !== undefined && !isString(reportsToAgentId))
+            throw new HttpError(400, "reportsToAgentId must be a string.");
+          if (reportsToAgentId !== undefined && !service.listAgents().some((agent) => agent.id === reportsToAgentId))
+            throw new HttpError(404, "reportsToAgentId names no agent.");
+          const input = agentCreate({ avatarSeed: `agent-${randomUUID()}`, avatarHue: null, ...body });
+          let agent = await runCauseEffect(
+            service.createAgent(
+              { ...input, ...(spaceId === undefined ? {} : { spaceId }) },
+              undefined,
+              undefined,
+              host.conversationSender(),
+            ),
+          );
+          if (reportsToAgentId !== undefined)
+            agent = await runCauseEffect(service.updateAgent({ agentId: agent.id, reportsToAgentId }));
+          return { agentId: agent.id, name: agent.name };
+        },
         // The same parse and update as the Team API routine route.
         updateRoutine: (agentId, routineId, body) =>
           service.updateRoutine(parseUpdateRoutine({ ...body, agentId, routineId })).name,

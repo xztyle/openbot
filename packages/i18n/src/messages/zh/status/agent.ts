@@ -46,4 +46,6 @@ export const messages = {
   "status.agent.trustAskAfterUntrusted":
     "{agent} 在本轮读取了外部内容（网页、邮件或 Webhook），安全检查无法确认这笔付款。请你决定。",
   "status.agent.mailFirstRecipient": "这是发给 {address} 的第一封邮件。批准后发送；之后发给此人的邮件无需再批准。",
+  "status.agent.mailOwnerApprovesEverySend":
+    "{from} 想把这封邮件发给 {address}。此地址发出的每封邮件都要等你批准：未经批准不会发出。",
 } as const satisfies PartialTranslation<typeof source>;

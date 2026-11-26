@@ -9,8 +9,11 @@
 //   lastMailAt (epoch ms or null), lastStatus (count or null), mailboxes }`. `mailboxes` holds at
 //   most 64 items `{ id (128), address (254), displayName (120), agentId (128), agentName (200),
 //   spaceId (128), mode: "reply" | "write-first", createdAt (epoch ms), lastMailAt (epoch ms or
-//   null), received (count), sentToday (count) }`.
-// - `/v1/owner/mailboxes/save` `{ id? (128), address (254), agentId (128), mode, displayName? (120) }`,
+//   null), received (count), sentToday (count), ownerApprovesEverySend? (boolean) }`.
+// - `/v1/owner/mailboxes/save` `{ id? (128), address (254), agentId (128), mode, displayName? (120),
+//   ownerApprovesEverySend? (boolean) }`. `ownerApprovesEverySend` (added after the first release, so
+//   optional both ways) makes every mail from the address wait for the owner's own OK; a save without
+//   it keeps the address's current value, so an older client never turns it off.
 //   `/v1/owner/mailboxes/remove` `{ id }` and `/v1/owner/mailboxes/worker` `{ workerUrl (2048) }`
 //   answer the state. An empty `workerUrl` clears it.
 // - `/v1/owner/mailboxes/secret` `{}` makes a new mail secret and answers `{ state, secret (128) }`:
@@ -63,6 +66,8 @@ export interface AgentMailbox {
   lastMailAt: number | null;
   received: number;
   sentToday: number;
+  /** Every mail from this address, a reply too, waits for the owner's own OK (tier 2). */
+  ownerApprovesEverySend: boolean;
 }
 
 export interface AgentMailboxesState {
@@ -81,21 +86,26 @@ export interface AgentMailboxInput {
   agentId: string;
   mode: AgentMailboxMode;
   displayName?: string;
+  /** Absent keeps the address's current value. */
+  ownerApprovesEverySend?: boolean;
 }
 
-const mailbox = fields({
-  id: identifier,
-  address: string(254),
-  displayName: string(AGENT_MAILBOX_NAME_LIMIT),
-  agentId: identifier,
-  agentName: string(200),
-  spaceId: identifier,
-  mode: oneOf(...AGENT_MAILBOX_MODES),
-  createdAt: count,
-  lastMailAt: nullable(count),
-  received: count,
-  sentToday: count,
-});
+const mailbox = fields(
+  {
+    id: identifier,
+    address: string(254),
+    displayName: string(AGENT_MAILBOX_NAME_LIMIT),
+    agentId: identifier,
+    agentName: string(200),
+    spaceId: identifier,
+    mode: oneOf(...AGENT_MAILBOX_MODES),
+    createdAt: count,
+    lastMailAt: nullable(count),
+    received: count,
+    sentToday: count,
+  },
+  { ownerApprovesEverySend: boolean },
+);
 const state = fields({
   gateway: fields({ listening: boolean, publicUrl: nullable(string(2_048)) }),
   inboxUrl: nullable(string(2_048)),
@@ -113,7 +123,7 @@ export const AGENT_MAILBOXES_CODECS: ReadonlyMap<string, OptionalRouteCodec> = n
     adminRoute(
       fields(
         { address: string(254), agentId: identifier, mode: oneOf(...AGENT_MAILBOX_MODES) },
-        { id: identifier, displayName: string(AGENT_MAILBOX_NAME_LIMIT) },
+        { id: identifier, displayName: string(AGENT_MAILBOX_NAME_LIMIT), ownerApprovesEverySend: boolean },
       ),
       state,
     ),
@@ -154,6 +164,7 @@ export function decodeAgentMailboxesState(value: unknown): AgentMailboxesState {
       lastMailAt: finite(item.lastMailAt),
       received: finite(item.received) ?? 0,
       sentToday: finite(item.sentToday) ?? 0,
+      ownerApprovesEverySend: item.ownerApprovesEverySend === true,
     })),
   };
 }

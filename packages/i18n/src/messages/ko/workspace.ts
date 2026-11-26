@@ -692,6 +692,10 @@ export const messages = {
   "workspace.mailboxes.modeReplyHint": "에이전트는 받은 메일에 바로 답합니다. 먼저 보내지는 않습니다.",
   "workspace.mailboxes.modeWriteFirstHint":
     "에이전트는 새 사람에게도 하루 최대 10통까지 보낼 수 있습니다. 첫 메일마다 승인을 기다리며 수신 거부 안내로 끝납니다.",
+  "workspace.mailboxes.ownerApprovesEverySend": "메일마다 먼저 묻기",
+  "workspace.mailboxes.ownerApprovesEverySendHint":
+    "이 주소의 모든 메일은 답장도 포함해 승인을 기다립니다. 승인 없이는 보내지지 않습니다.",
+  "workspace.mailboxes.modeWithOwnerApproval": "{mode} · 메일마다 확인",
   "workspace.mailboxes.displayName": "보낸 사람 이름",
   "workspace.mailboxes.displayNamePlaceholder": "Aprendivo의 Lucía",
   "workspace.mailboxes.line": "{agent} · {mode}",

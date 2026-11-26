@@ -65,6 +65,11 @@ at 390 and 800 px.
 - A reply (`email_reply`) to someone who wrote to the address sends at once. Only a first contact
   (`email_send` to someone who never wrote) waits for the owner's approval card in Needs you; Full
   access does not answer it. Later mails to that person need no OK.
+- An address with **Ask me before every mail** (`ownerApprovesEverySend`) holds every mail from it,
+  a reply too, for the owner's own approval card in Needs you, with the draft on the card. It is tier
+  2: no manager answers it, full access does not skip it, and each OK covers one mail. The host
+  refuses the send without that OK, whatever the agent's instructions say. Use it for an inbox that
+  only notifies the owner, such as `privacidad@`.
 - Each agent sends at most 20 mails an hour and 100 a day, and writes first to at most 10 new people
   a day.
 - `email_send` works only from an address set to **May write first**. A first contact ends with an
@@ -90,7 +95,8 @@ Do these once per business domain, in the Cloudflare dashboard (the host's token
    destination `atelier-mail`. Repeat for each address, or set the **Catch-all** rule to the same
    Worker; unknown addresses then bounce from the host.
 5. In Atelier, **Secrets → Agent mailboxes → Add address**: the address, the agent, the mode (**Reply
-   only** is the default) and the sender name.
+   only** is the default), the sender name, and **Ask me before every mail** when nothing may leave
+   the address without the owner's OK.
 
 ## Operator steps
 
@@ -118,7 +124,7 @@ Do these once per business domain, in the Cloudflare dashboard (the host's token
 
 From the server itself, the control socket does steps 2 and 4 and adds addresses (operator only):
 `POST /v1/mailboxes` answers the state, `/v1/mailboxes/save` takes `{ address, agentId, mode,
-displayName? }`, `/v1/mailboxes/worker` takes `{ workerUrl }`, and `/v1/mailboxes/secret` answers a
+displayName?, ownerApprovesEverySend? }` (absent keeps the current value), `/v1/mailboxes/worker` takes `{ workerUrl }`, and `/v1/mailboxes/secret` answers a
 new `secret=` line once; pipe it straight into `wrangler secret put MAIL_SECRET`.
 
 A new mail secret stops the old one at once: put it in the Worker right away with `wrangler secret

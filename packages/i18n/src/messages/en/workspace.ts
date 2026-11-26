@@ -1316,6 +1316,10 @@ export const messages = defineMessages("workspace", {
   "workspace.mailboxes.modeReplyHint": "The agent answers mail it gets, at once. It never writes first.",
   "workspace.mailboxes.modeWriteFirstHint":
     "The agent may also write to new people, at most 10 a day. Each first mail waits for your OK and ends with an opt-out line.",
+  "workspace.mailboxes.ownerApprovesEverySend": "Ask me before every mail",
+  "workspace.mailboxes.ownerApprovesEverySendHint":
+    "Every mail from this address, replies too, waits for your OK. Nothing leaves without it.",
+  "workspace.mailboxes.modeWithOwnerApproval": "{mode} · asks you before each mail",
   "workspace.mailboxes.displayName": "Sender name",
   "workspace.mailboxes.displayNamePlaceholder": "Lucía from Aprendivo",
   "workspace.mailboxes.line": "{agent} · {mode}",

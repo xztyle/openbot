@@ -53,6 +53,8 @@ interface StoredMailbox {
   displayName: string;
   agentId: string;
   mode: AgentMailboxMode;
+  /** Every mail from the address, a reply too, waits for the owner's own OK. */
+  ownerApprovesEverySend: boolean;
   createdAt: number;
   lastMailAt: number | null;
   received: number;
@@ -134,6 +136,7 @@ function decodeFile(value: unknown): StoredFile | null {
               displayName: isString(item.displayName) ? item.displayName : "",
               agentId: item.agentId,
               mode: item.mode === "write-first" ? "write-first" : "reply",
+              ownerApprovesEverySend: item.ownerApprovesEverySend === true,
               createdAt: numberOrNull(item.createdAt) ?? 0,
               lastMailAt: numberOrNull(item.lastMailAt),
               received: numberOrNull(item.received) ?? 0,
@@ -293,6 +296,7 @@ export class AgentMail {
           lastMailAt: mailbox.lastMailAt,
           received: mailbox.received,
           sentToday: this.#state.sends.filter((send) => send.mailboxId === mailbox.id && send.at > dayAgo).length,
+          ownerApprovesEverySend: mailbox.ownerApprovesEverySend,
         };
       }),
     };
@@ -317,6 +321,8 @@ export class AgentMail {
         .slice(0, AGENT_MAILBOX_NAME_LIMIT),
       agentId: input.agentId,
       mode: input.mode,
+      // A save that does not name it (an older client) keeps it: only an explicit false turns it off.
+      ownerApprovesEverySend: input.ownerApprovesEverySend ?? existing?.ownerApprovesEverySend ?? false,
       createdAt: existing?.createdAt ?? this.#now(),
       lastMailAt: existing?.lastMailAt ?? null,
       received: existing?.received ?? 0,
@@ -575,9 +581,16 @@ export class AgentMail {
       return {
         message: `You wrote first to ${AGENT_MAIL_RATE.firstContactsPerDay} new people today, the limit. Write to the rest tomorrow.`,
       };
-    // Only a first contact asks the owner: a reply goes to someone who wrote to this address first.
-    const needsApproval = firstContact && !this.#contact(mailbox.id, to)?.approvedAt;
-    return { plan: { from: mailbox.address, to, subject, needsApproval }, mailbox, thread, firstContact };
+    // An address set to ask the owner for every mail asks for each one, a reply too, and only the
+    // owner answers it. Otherwise only a first contact asks: a reply goes to someone who wrote first.
+    const ownerOnly = mailbox.ownerApprovesEverySend;
+    const needsApproval = ownerOnly || (firstContact && !this.#contact(mailbox.id, to)?.approvedAt);
+    return {
+      plan: { from: mailbox.address, to, subject, needsApproval, ownerOnly },
+      mailbox,
+      thread,
+      firstContact,
+    };
   }
 
   async #send(
@@ -591,7 +604,12 @@ export class AgentMail {
     if ("message" in resolved) return { ok: false, message: resolved.message };
     const { plan, mailbox, thread, firstContact } = resolved;
     if (plan.needsApproval && !options.approved)
-      return { ok: false, message: `The first mail to ${plan.to} needs the owner's OK.` };
+      return {
+        ok: false,
+        message: plan.ownerOnly
+          ? `Every mail from ${plan.from} needs the owner's OK.`
+          : `The first mail to ${plan.to} needs the owner's OK.`,
+      };
     const secret = this.#secret();
     const workerUrl = this.#state.workerUrl;
     if (!secret || !workerUrl) return { ok: false, message: "Mail cannot leave yet. Tell the owner." };

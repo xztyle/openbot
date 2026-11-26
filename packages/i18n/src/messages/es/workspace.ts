@@ -1305,6 +1305,10 @@ export const messages = {
   "workspace.mailboxes.modeReplyHint": "El agente responde al momento el correo que recibe. Nunca escribe primero.",
   "workspace.mailboxes.modeWriteFirstHint":
     "El agente también puede escribir a personas nuevas, como máximo 10 al día. Cada primer correo espera tu OK y termina con una línea para darse de baja.",
+  "workspace.mailboxes.ownerApprovesEverySend": "Pedirme permiso antes de cada correo",
+  "workspace.mailboxes.ownerApprovesEverySendHint":
+    "Cada correo de esta dirección, también las respuestas, espera tu OK. No sale nada sin él.",
+  "workspace.mailboxes.modeWithOwnerApproval": "{mode} · te pide permiso antes de cada correo",
   "workspace.mailboxes.displayName": "Nombre del remitente",
   "workspace.mailboxes.displayNamePlaceholder": "Lucía de Aprendivo",
   "workspace.mailboxes.line": "{agent} · {mode}",

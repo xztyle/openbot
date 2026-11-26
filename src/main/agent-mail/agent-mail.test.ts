@@ -200,7 +200,13 @@ describe("AgentMail outbound", () => {
     const first = mail.port.plan("lucia", reply(threadId));
     expect(first).toEqual({
       ok: true,
-      plan: { from: "ventas@aprendivo.com", to: "ana@example.org", subject: "Re: ¿Certificado?", needsApproval: false },
+      plan: {
+        from: "ventas@aprendivo.com",
+        to: "ana@example.org",
+        subject: "Re: ¿Certificado?",
+        needsApproval: false,
+        ownerOnly: false,
+      },
     });
     const done = await mail.port.send("lucia", reply(threadId), { approved: false, key: "t:2" });
     expect(done.ok).toBe(true);
@@ -217,6 +223,33 @@ describe("AgentMail outbound", () => {
     // The same tool call sends once.
     await mail.port.send("lucia", reply(threadId), { approved: false, key: "t:2" });
     expect(sent).toHaveLength(1);
+  });
+
+  it("holds every mail of an address that asks the owner, a reply too, until the owner's OK", async () => {
+    const threadId = await threadOfFirstMail();
+    const id = mail.state().mailboxes[0]?.id ?? "";
+    await mail.saveMailbox({
+      id,
+      address: "ventas@aprendivo.com",
+      agentId: "lucia",
+      mode: "reply",
+      ownerApprovesEverySend: true,
+    });
+    // A save that does not name the flag, as an older client sends it, keeps it on.
+    await mail.saveMailbox({ id, address: "ventas@aprendivo.com", agentId: "lucia", mode: "reply" });
+    expect(mail.state().mailboxes[0]?.ownerApprovesEverySend).toBe(true);
+    const planned = mail.port.plan("lucia", reply(threadId));
+    expect(planned).toMatchObject({ ok: true, plan: { needsApproval: true, ownerOnly: true } });
+    expect(await mail.port.send("lucia", reply(threadId), { approved: false, key: "o:1" })).toEqual({
+      ok: false,
+      message: "Every mail from ventas@aprendivo.com needs the owner's OK.",
+    });
+    expect(sent).toHaveLength(0);
+    expect((await mail.port.send("lucia", reply(threadId), { approved: true, key: "o:2" })).ok).toBe(true);
+    expect(sent).toHaveLength(1);
+    // An OK covers one mail: the next one asks again.
+    const next = mail.port.plan("lucia", reply(threadId));
+    expect(next.ok && next.plan.needsApproval).toBe(true);
   });
 
   it("refuses a thread of another agent and email_send from a reply-only address", async () => {

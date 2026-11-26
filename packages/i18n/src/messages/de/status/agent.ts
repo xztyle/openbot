@@ -40,4 +40,6 @@ export const messages = {
     "{agent} hat in diesem Schritt externe Inhalte gelesen (eine Webseite, eine E-Mail oder einen Webhook), und die Sicherheitsprüfung konnte diese Zahlung nicht freigeben. Du entscheidest.",
   "status.agent.mailFirstRecipient":
     "Erste Mail an {address}. Gib sie frei, damit sie rausgeht; spätere Mails an diese Person brauchen kein OK.",
+  "status.agent.mailOwnerApprovesEverySend":
+    "{from} möchte diese E-Mail an {address} senden. Jede E-Mail von dieser Adresse wartet auf dein OK: Ohne deine Zustimmung geht nichts raus.",
 } as const satisfies PartialTranslation<typeof source>;

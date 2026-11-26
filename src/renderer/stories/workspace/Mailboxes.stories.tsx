@@ -33,6 +33,7 @@ export const MAILBOXES: AgentMailboxesState = {
       lastMailAt: NOW - HOUR,
       received: 14,
       sentToday: 3,
+      ownerApprovesEverySend: false,
     },
     {
       id: "m2",
@@ -46,6 +47,7 @@ export const MAILBOXES: AgentMailboxesState = {
       lastMailAt: null,
       received: 0,
       sentToday: 0,
+      ownerApprovesEverySend: true,
     },
   ],
 };

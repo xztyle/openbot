@@ -105,4 +105,6 @@ export const messages = {
   "status.agent.decisionCard.perDay": "{amount} al día",
   "status.agent.mailFirstRecipient":
     "Primer correo a {address}. Apruébalo para enviarlo; los siguientes a esta persona no necesitan tu OK.",
+  "status.agent.mailOwnerApprovesEverySend":
+    "{from} quiere enviar este correo a {address}. Cada correo de esta dirección espera tu OK: no sale nada sin tu aprobación.",
 } as const satisfies PartialTranslation<typeof source>;

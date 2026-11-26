@@ -369,6 +369,17 @@ describe("operator mailbox routes", () => {
     const body = JSON.stringify({ address: "cso@example.com", agentId: "agent-a", mode: "write-first" });
     expect((await route("POST", "/v1/mailboxes/save", body))?.status).toBe(200);
     expect(saved).toEqual([{ address: "cso@example.com", agentId: "agent-a", mode: "write-first" }]);
+    const strict = {
+      address: "privacidad@example.com",
+      agentId: "agent-a",
+      mode: "reply",
+      ownerApprovesEverySend: true,
+    };
+    expect((await route("POST", "/v1/mailboxes/save", JSON.stringify(strict)))?.status).toBe(200);
+    expect(saved.at(-1)).toEqual(strict);
+    expect(
+      (await route("POST", "/v1/mailboxes/save", JSON.stringify({ ...strict, ownerApprovesEverySend: "yes" })))?.status,
+    ).toBe(400);
     expect((await route("POST", "/v1/mailboxes/save", '{"address":"a@b.c"}'))?.status).toBe(400);
     expect(
       (await route("POST", "/v1/mailboxes/worker", '{"workerUrl":"https://w.example.workers.dev"}'))?.lines,
@@ -400,5 +411,33 @@ describe("operator routine route", () => {
     expect(answer).toEqual({ status: 200, lines: { routine: "r-1", name: "Report" } });
     expect(calls).toEqual([["agent-a", "r-1", { instruction: "Do it" }]]);
     expect((await route("POST", "/v1/agents/agent-x/routines/r-1", "{}"))?.status).toBe(404);
+  });
+});
+
+describe("operator agent creation route", () => {
+  it("passes the body to the shared create and answers the new agent", async () => {
+    const bodies: DynamicRecord[] = [];
+    const { route } = createServerAgentOperations({
+      restartInterrupted: () => new Set(),
+      database: () => database().db,
+      agentIds: () => [],
+      send: () => Effect.die("unused"),
+      markerFile: join(mkdtempSync(join(tmpdir(), "openbot-resume-")), "resumes.json"),
+      log: () => {},
+      createAgent: async (body) => {
+        bodies.push(body);
+        if (body.name === "") throw Object.assign(new Error("name is required"), { status: 400 });
+        return { agentId: "agent-new", name: String(body.name) };
+      },
+    });
+    const body = { name: "Buzón", description: "Solo avisa", initialMessage: "Hola", reportsToAgentId: "agent-a" };
+    expect(await route("POST", "/v1/agents", JSON.stringify(body))).toEqual({
+      status: 201,
+      lines: { agent: "agent-new", name: "Buzón" },
+    });
+    expect(bodies).toEqual([body]);
+    expect((await route("POST", "/v1/agents", '{"name":""}'))?.status).toBe(400);
+    expect((await route("POST", "/v1/agents", "not json"))?.status).toBe(400);
+    expect((await route("GET", "/v1/agents", ""))?.status).toBe(405);
   });
 });

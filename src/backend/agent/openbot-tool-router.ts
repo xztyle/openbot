@@ -1928,27 +1928,39 @@ export class OpenBotToolRouter {
           },
           { alwaysAsk: true, ownerOnly: true },
         );
-      const reason = sourceText("status.agent.mailFirstRecipient", { address: plan.to });
-      // Tier 1 (docs/approvals.md): the agent's manager answers a first contact; the owner only when
-      // no agent may, a manager escalates it, or nobody answered up to the top.
-      const manager = this.#approvals
-        ? yield* this.#approvals.awaitAnswer({
-            id: `gate:${agentId}:${String(request.id)}`,
-            source: "gate",
-            askerId: agentId,
-            title: `First mail to ${plan.to}: ${plan.subject}`,
-            reason: `A first mail from ${plan.from} to a new address, within the mail rate caps.`,
-            evidence: body,
-          })
-        : ({ answer: "owner", why: null } as const);
-      const decision =
-        manager.answer === "owner" ? yield* ownerCard(withEscalation(reason, manager.why)) : manager.answer;
-      if (decision !== "accept")
-        return openBotToolFailure(
-          manager.answer === "decline"
-            ? `${manager.byName} (your manager) did not approve the first mail to ${plan.to}: ${manager.note} Do not retry it or write to them another way.`
-            : `The owner did not approve the first mail to ${plan.to}. Do not retry it or write to them another way.`,
+      if (plan.ownerOnly) {
+        // Tier 2 (docs/approvals.md): an address that asks the owner for every mail goes to the
+        // owner at once, with the draft on the card; no manager answers it.
+        const decision = yield* ownerCard(
+          sourceText("status.agent.mailOwnerApprovesEverySend", { from: plan.from, address: plan.to }),
         );
+        if (decision !== "accept")
+          return openBotToolFailure(
+            `The owner did not approve this mail from ${plan.from} to ${plan.to}. It was not sent. Do not retry it or send it another way.`,
+          );
+      } else {
+        const reason = sourceText("status.agent.mailFirstRecipient", { address: plan.to });
+        // Tier 1 (docs/approvals.md): the agent's manager answers a first contact; the owner only when
+        // no agent may, a manager escalates it, or nobody answered up to the top.
+        const manager = this.#approvals
+          ? yield* this.#approvals.awaitAnswer({
+              id: `gate:${agentId}:${String(request.id)}`,
+              source: "gate",
+              askerId: agentId,
+              title: `First mail to ${plan.to}: ${plan.subject}`,
+              reason: `A first mail from ${plan.from} to a new address, within the mail rate caps.`,
+              evidence: body,
+            })
+          : ({ answer: "owner", why: null } as const);
+        const decision =
+          manager.answer === "owner" ? yield* ownerCard(withEscalation(reason, manager.why)) : manager.answer;
+        if (decision !== "accept")
+          return openBotToolFailure(
+            manager.answer === "decline"
+              ? `${manager.byName} (your manager) did not approve the first mail to ${plan.to}: ${manager.note} Do not retry it or write to them another way.`
+              : `The owner did not approve the first mail to ${plan.to}. Do not retry it or write to them another way.`,
+          );
+      }
     }
     const sent = yield* Effect.promise(() =>
       port

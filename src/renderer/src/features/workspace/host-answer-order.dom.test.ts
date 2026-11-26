@@ -77,6 +77,7 @@ const mailboxes = (ids: readonly string[]): AgentMailboxesState => ({
     lastMailAt: null,
     received: 0,
     sentToday: 0,
+    ownerApprovesEverySend: false,
   })),
 });
 

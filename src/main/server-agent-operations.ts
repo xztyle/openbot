@@ -37,8 +37,14 @@
  * - `POST /v1/agents/<agentId>/routines/<routineId>` changes a routine's `name`, `instruction` or
  *   `active` (a JSON body) through the same parse and update as the Team API routine route.
  *
+ * - `POST /v1/agents` creates an agent (a JSON body: `name`, `description`, `initialMessage`,
+ *   `provider?`, `model?`, `reasoningEffort?`, `avatarSeed?`, `spaceId?`, `reportsToAgentId?`) through
+ *   the same parse and create as the Team API agent route, with the signed-in owner as the sender of
+ *   the first message; `reportsToAgentId` then places it in the org chart through the agent update.
+ *
  * - `POST /v1/mailboxes` answers the agent mailboxes state (`agent-mailboxes-v1.ts`), and
- *   `/v1/mailboxes/save` (`{ address, agentId, mode, displayName?, id? }`), `/v1/mailboxes/worker`
+ *   `/v1/mailboxes/save` (`{ address, agentId, mode, displayName?, id?, ownerApprovesEverySend? }`),
+ *   `/v1/mailboxes/worker`
  *   (`{ workerUrl }`) and `/v1/mailboxes/secret` (`{}`) make the same changes as Secrets › Agent
  *   mailboxes, for an operator who sets up the mail Worker from the server. The secret answer is the
  *   only time the new secret leaves the host; the old one stops at once.
@@ -127,6 +133,11 @@ export interface ServerAgentOperationsDependencies {
   resumeGuardrailPause?: (scope: "agent" | "space", id: string) => void;
   /** `parseUpdateRoutine` and the agent service's `updateRoutine`; it answers the routine's name. */
   updateRoutine?: (agentId: string, routineId: string, body: DynamicRecord) => string;
+  /**
+   * `agentCreate` and the agent service's `createAgent`, as the Team API agent route, then the org
+   * chart parent through `updateAgent`. It answers the new agent's id and name.
+   */
+  createAgent?: (body: DynamicRecord) => Promise<{ agentId: string; name: string }>;
   /** The agent mailboxes (`AgentMail`), as the Secrets page changes them; null before the connectors start. */
   mailboxes?: () => OperatorMailboxes | null;
 }
@@ -187,6 +198,10 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
   }
 
   async function route(method: string | undefined, path: string, rawBody: string): Promise<ControlAnswer | null> {
+    if (path === "/v1/agents") {
+      if (method !== "POST") return failure(405, "method_not_allowed");
+      return createAgent(rawBody);
+    }
     const message = path.match(/^\/v1\/agents\/([^/]+)\/message$/u);
     if (message?.[1] !== undefined) {
       if (method !== "POST") return failure(405, "method_not_allowed");
@@ -353,6 +368,28 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
     }
   }
 
+  async function createAgent(rawBody: string): Promise<ControlAnswer> {
+    if (!dependencies.createAgent) return failure(404, "not_found");
+    let body: unknown = null;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      body = null;
+    }
+    if (!isDynamicRecord(body)) return failure(400, "invalid_body", "The body must be a JSON object.");
+    try {
+      const created = await dependencies.createAgent(body);
+      dependencies.log(`Operator created the agent ${created.agentId}.`);
+      return { status: 201, lines: { agent: created.agentId, name: created.name } };
+    } catch (error) {
+      const status =
+        isDynamicRecord(error) && typeof error.status === "number" && error.status >= 400 && error.status < 600
+          ? error.status
+          : 409;
+      return failure(status, "create_refused", errorMessage(error));
+    }
+  }
+
   async function routeMailboxes(path: string, rawBody: string): Promise<ControlAnswer> {
     const mail = dependencies.mailboxes?.();
     if (!mail) return failure(404, "not_found");
@@ -368,15 +405,18 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
     try {
       if (path === "/v1/mailboxes") return mailboxLines(mail.state());
       if (path === "/v1/mailboxes/save") {
-        const { id, address, agentId, mode, displayName } = body;
+        const { id, address, agentId, mode, displayName, ownerApprovesEverySend } = body;
         if (!isString(address) || !isString(agentId) || !AGENT_MAILBOX_MODES.some((item) => item === mode))
           return failure(400, "invalid_body", "Give address, agentId and mode (reply or write-first).");
+        if (ownerApprovesEverySend !== undefined && typeof ownerApprovesEverySend !== "boolean")
+          return failure(400, "invalid_body", "ownerApprovesEverySend is true or false.");
         const state = await mail.saveMailbox({
           address,
           agentId,
           mode: mode === "write-first" ? "write-first" : "reply",
           ...(isString(id) ? { id } : {}),
           ...(isString(displayName) ? { displayName } : {}),
+          ...(ownerApprovesEverySend === undefined ? {} : { ownerApprovesEverySend }),
         });
         dependencies.log(`Operator saved the mailbox ${address} for agent ${agentId}.`);
         return mailboxLines(state);
@@ -734,7 +774,7 @@ function mailboxLines(state: AgentMailboxesState): ControlAnswer {
       ...Object.fromEntries(
         state.mailboxes.map((item, index) => [
           `mailbox${index + 1}`,
-          `${item.id} ${item.address} agent=${item.agentId} mode=${item.mode} sent_today=${item.sentToday}`,
+          `${item.id} ${item.address} agent=${item.agentId} mode=${item.mode}${item.ownerApprovesEverySend ? " owner_approves_every_send=yes" : ""} sent_today=${item.sentToday}`,
         ]),
       ),
     },

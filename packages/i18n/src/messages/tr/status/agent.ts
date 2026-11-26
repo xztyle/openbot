@@ -39,4 +39,6 @@ export const messages = {
     "{agent} bu turda dış içerik okudu (bir web sayfası, e-posta veya webhook) ve güvenlik kontrolü bu ödemeyi onaylayamadı. Karar sizin.",
   "status.agent.mailFirstRecipient":
     "{address} adresine ilk e-posta. Göndermek için onaylayın; bu kişiye sonraki e-postalar onay gerektirmez.",
+  "status.agent.mailOwnerApprovesEverySend":
+    "{from} bu e-postayı {address} adresine göndermek istiyor. Bu adresten giden her e-posta onayınızı bekler: onaylamadıkça hiçbir şey gönderilmez.",
 } as const satisfies PartialTranslation<typeof source>;

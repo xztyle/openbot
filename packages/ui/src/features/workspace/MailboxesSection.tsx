@@ -14,6 +14,7 @@ import { ConfirmDialog } from "../../confirm-dialog";
 import { Field, Input } from "../../form";
 import { FormDialog } from "../../form-dialog";
 import { Copy, Pencil, Trash2 } from "../../icons";
+import { SwitchField } from "../../switch";
 import { useText } from "../../text";
 import { WorkspaceList, WorkspaceListRow } from "./WorkspaceList";
 import { PaneHeaderAction } from "./WorkspacePaneHeader";
@@ -47,6 +48,7 @@ interface Draft {
   agentId: string;
   mode: AgentMailboxMode;
   displayName: string;
+  ownerApprovesEverySend: boolean;
 }
 
 /**
@@ -170,6 +172,7 @@ export function MailboxesSection(props: MailboxesSectionProps): JSX.Element {
                             agentId: mailbox().agentId,
                             mode: mailbox().mode,
                             displayName: mailbox().displayName,
+                            ownerApprovesEverySend: mailbox().ownerApprovesEverySend,
                           });
                         }}
                       >
@@ -192,7 +195,9 @@ export function MailboxesSection(props: MailboxesSectionProps): JSX.Element {
                   <span class="ws-muted">
                     {t("workspace.mailboxes.line", {
                       agent: mailbox().agentName,
-                      mode: t(MODE_LABEL[mailbox().mode]),
+                      mode: mailbox().ownerApprovesEverySend
+                        ? t("workspace.mailboxes.modeWithOwnerApproval", { mode: t(MODE_LABEL[mailbox().mode]) })
+                        : t(MODE_LABEL[mailbox().mode]),
                     })}
                   </span>
                   <span class="ws-muted">
@@ -211,7 +216,13 @@ export function MailboxesSection(props: MailboxesSectionProps): JSX.Element {
             label={t("workspace.mailboxes.add")}
             onClick={() => {
               setError(null);
-              setDraft({ address: "", agentId: props.agents[0]?.id ?? "", mode: "reply", displayName: "" });
+              setDraft({
+                address: "",
+                agentId: props.agents[0]?.id ?? "",
+                mode: "reply",
+                displayName: "",
+                ownerApprovesEverySend: false,
+              });
             }}
           />
         </Show>
@@ -239,6 +250,7 @@ export function MailboxesSection(props: MailboxesSectionProps): JSX.Element {
               address: current.address.trim(),
               agentId: current.agentId,
               mode: current.mode,
+              ownerApprovesEverySend: current.ownerApprovesEverySend,
               ...(current.displayName.trim() ? { displayName: current.displayName.trim() } : {}),
             });
             setDraft(null);
@@ -271,6 +283,12 @@ export function MailboxesSection(props: MailboxesSectionProps): JSX.Element {
           />
         </Field>
         <p class="ws-muted">{t(MODE_HINT[draft()?.mode ?? "reply"])}</p>
+        <SwitchField
+          checked={draft()?.ownerApprovesEverySend ?? false}
+          onChange={(ownerApprovesEverySend: boolean) => update({ ownerApprovesEverySend })}
+          label={t("workspace.mailboxes.ownerApprovesEverySend")}
+          description={t("workspace.mailboxes.ownerApprovesEverySendHint")}
+        />
         <Field label={t("workspace.mailboxes.displayName")}>
           <Input
             value={draft()?.displayName ?? ""}

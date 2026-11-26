@@ -41,4 +41,6 @@ export const messages = {
     "{agent} прочитал внешний контент (веб-страницу, письмо или вебхук) в этом ходе, и проверка безопасности не смогла одобрить этот платёж. Решать вам.",
   "status.agent.mailFirstRecipient":
     "Первое письмо на {address}. Одобрите его, чтобы отправить; следующие письма этому человеку не требуют одобрения.",
+  "status.agent.mailOwnerApprovesEverySend":
+    "{from} хочет отправить это письмо на {address}. Каждое письмо с этого адреса ждёт вашего одобрения: без него ничего не уходит.",
 } as const satisfies PartialTranslation<typeof source>;

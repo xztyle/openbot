@@ -41,4 +41,6 @@ export const messages = {
     "{agent} przeczytał w tej turze treść z zewnątrz (stronę, e-mail lub webhook), a kontrola bezpieczeństwa nie mogła zatwierdzić tej płatności. Ty decydujesz.",
   "status.agent.mailFirstRecipient":
     "Pierwszy e-mail do {address}. Zatwierdź, aby go wysłać; kolejne do tej osoby nie wymagają zgody.",
+  "status.agent.mailOwnerApprovesEverySend":
+    "{from} chce wysłać ten e-mail do {address}. Każdy e-mail z tego adresu czeka na Twoją zgodę: bez niej nic nie wychodzi.",
 } as const satisfies PartialTranslation<typeof source>;

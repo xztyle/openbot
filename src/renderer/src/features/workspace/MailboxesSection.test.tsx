@@ -23,6 +23,7 @@ const STATE: AgentMailboxesState = {
       lastMailAt: null,
       received: 3,
       sentToday: 1,
+      ownerApprovesEverySend: false,
     },
     {
       id: "m2",
@@ -36,6 +37,7 @@ const STATE: AgentMailboxesState = {
       lastMailAt: null,
       received: 0,
       sentToday: 0,
+      ownerApprovesEverySend: false,
     },
   ],
 };
@@ -87,7 +89,12 @@ describe("MailboxesSection", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).not.toBeDisabled());
     fireEvent.submit(form);
     await waitFor(() =>
-      expect(props.onSave).toHaveBeenCalledWith({ address: "soporte@aprendivo.com", agentId: "lucia", mode: "reply" }),
+      expect(props.onSave).toHaveBeenCalledWith({
+        address: "soporte@aprendivo.com",
+        agentId: "lucia",
+        mode: "reply",
+        ownerApprovesEverySend: false,
+      }),
     );
   });
 

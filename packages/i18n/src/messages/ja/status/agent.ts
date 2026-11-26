@@ -37,4 +37,6 @@ export const messages = {
     "{agent} はこのターンで外部コンテンツ（Web ページ、メール、Webhook）を読みました。セキュリティチェックはこの支払いを確認できませんでした。判断してください。",
   "status.agent.mailFirstRecipient":
     "{address} への最初のメールです。承認すると送信されます。この相手への以降のメールに承認は不要です。",
+  "status.agent.mailOwnerApprovesEverySend":
+    "{from} がこのメールを {address} に送ろうとしています。このアドレスからのメールはすべてあなたの承認を待ちます。承認しない限り送信されません。",
 } as const satisfies PartialTranslation<typeof source>;

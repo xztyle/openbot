@@ -46,4 +46,6 @@ export const messages = {
     "{agent}이(가) 이번 턴에 외부 콘텐츠(웹 페이지, 이메일 또는 웹훅)를 읽었고 보안 검사가 이 결제를 확인하지 못했습니다. 결정해 주세요.",
   "status.agent.mailFirstRecipient":
     "{address}에 보내는 첫 메일입니다. 승인하면 보내지며, 이후 이 사람에게 보내는 메일은 승인이 필요 없습니다.",
+  "status.agent.mailOwnerApprovesEverySend":
+    "{from}에서 이 메일을 {address}(으)로 보내려고 합니다. 이 주소의 모든 메일은 승인을 기다리며, 승인하지 않으면 아무것도 보내지지 않습니다.",
 } as const satisfies PartialTranslation<typeof source>;

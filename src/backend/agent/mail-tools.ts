@@ -60,6 +60,11 @@ export interface MailCallPlan {
   subject: string;
   /** A first contact (`email_send` to someone new) that the owner has not approved yet: ask first. */
   needsApproval: boolean;
+  /**
+   * The address asks the owner for every mail (`ownerApprovesEverySend`): tier 2, so no manager
+   * answers it and full access does not skip it. `needsApproval` is then true for every call.
+   */
+  ownerOnly: boolean;
 }
 
 /**
@@ -73,6 +78,7 @@ export interface AgentMailPort {
   send(
     agentId: string,
     call: MailToolCall,
+    /** `approved` is the OK that `plan` asked for: the owner's, or for a first contact the manager's. */
     options: { approved: boolean; key: string },
   ): Promise<{ ok: true; result: Record<string, string> } | { ok: false; message: string }>;
 }

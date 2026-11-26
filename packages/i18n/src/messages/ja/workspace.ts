@@ -697,6 +697,10 @@ export const messages = {
   "workspace.mailboxes.modeReplyHint": "エージェントは届いたメールにすぐ返信します。先に送ることはありません。",
   "workspace.mailboxes.modeWriteFirstHint":
     "エージェントは新しい相手にも 1 日最大 10 件まで送れます。最初のメールはそれぞれ承認を待ち、配信停止の一文で終わります。",
+  "workspace.mailboxes.ownerApprovesEverySend": "メールごとに確認する",
+  "workspace.mailboxes.ownerApprovesEverySendHint":
+    "このアドレスからのメールは返信も含めすべてあなたの承認を待ちます。承認なしでは送信されません。",
+  "workspace.mailboxes.modeWithOwnerApproval": "{mode} · メールごとに確認",
   "workspace.mailboxes.displayName": "送信者名",
   "workspace.mailboxes.displayNamePlaceholder": "Aprendivo の Lucía",
   "workspace.mailboxes.line": "{agent} · {mode}",

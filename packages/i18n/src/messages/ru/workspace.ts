@@ -881,6 +881,10 @@ export const messages = {
   "workspace.mailboxes.modeReplyHint": "Агент сразу отвечает на полученные письма. Сам первым не пишет.",
   "workspace.mailboxes.modeWriteFirstHint":
     "Агент может писать и новым людям, не больше 10 в день. Каждое первое письмо ждёт вашего одобрения и заканчивается строкой об отписке.",
+  "workspace.mailboxes.ownerApprovesEverySend": "Спрашивать меня перед каждым письмом",
+  "workspace.mailboxes.ownerApprovesEverySendHint":
+    "Каждое письмо с этого адреса, включая ответы, ждёт вашего одобрения. Без него ничего не уходит.",
+  "workspace.mailboxes.modeWithOwnerApproval": "{mode} · спрашивает перед каждым письмом",
   "workspace.mailboxes.displayName": "Имя отправителя",
   "workspace.mailboxes.displayNamePlaceholder": "Лусия из Aprendivo",
   "workspace.mailboxes.line": "{agent} · {mode}",

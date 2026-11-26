@@ -78,6 +78,8 @@ create-agent default to `manager`. Pay, ad launches and deletions are always `ow
 - Credentials, secrets and sign-in codes for accounts.
 - Legal or identity commitments in the owner's name: contracts, terms with fees, KYC and ID checks.
 - Security blocks: injection blocks and "Allow once".
+- Every mail from an agent mailbox set to **Ask me before every mail** (`ownerApprovesEverySend`),
+  replies too: an owner-only card with the draft, one OK per mail.
 - Anything a manager escalates with a reason.
 
 `request_decision` takes `concerns` for these classes. Without it, an amount or the words of the

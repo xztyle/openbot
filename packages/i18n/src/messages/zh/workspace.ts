@@ -679,6 +679,9 @@ export const messages = {
   "workspace.mailboxes.modeReplyHint": "智能体会立即回复收到的邮件，从不主动发信。",
   "workspace.mailboxes.modeWriteFirstHint":
     "智能体也可以给新联系人写信，每天最多 10 封。每封首次邮件都需你批准，并以退订说明结尾。",
+  "workspace.mailboxes.ownerApprovesEverySend": "每封邮件前先问我",
+  "workspace.mailboxes.ownerApprovesEverySendHint": "此地址发出的每封邮件（包括回复）都要等你批准，未经批准不会发出。",
+  "workspace.mailboxes.modeWithOwnerApproval": "{mode} · 每封邮件前先问你",
   "workspace.mailboxes.displayName": "发件人名称",
   "workspace.mailboxes.displayNamePlaceholder": "Aprendivo 的 Lucía",
   "workspace.mailboxes.line": "{agent} · {mode}",

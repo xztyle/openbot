@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { TRUST_CONTROL_CODECS, TRUST_CONTROL_ROUTES } from "@openbot/contracts/team-protocol/trust-control-v1";
 import { DEFAULT_TRUST_POLICY, type TrustPolicy, trustAuditCsv } from "@openbot/contracts/trust-control";
 import { Effect } from "effect";
@@ -42,14 +43,18 @@ try {
     budgets: [{ id: "meta-day", scope: "all", platform: "meta", perDay: 7, currency: "USD" }],
   };
   const defaults = DEFAULT_TRUST_POLICY.roles;
+  // docs/approvals.md: money and the deletion of crucial things wait for the owner; the rest runs.
   check(
-    "defaults ask only for money",
+    "defaults ask only for money and deletions",
     (["lead", "member"] as const).every(
       (role) =>
-        defaults[role].pay === "ask" &&
-        defaults[role].launch_ads === "ask" &&
-        (["publish", "email", "create_agent", "delete"] as const).every((action) => defaults[role][action] === "allow"),
-    ) && !Object.values(DEFAULT_TRUST_POLICY.sandbox).some(Boolean),
+        (["pay", "launch_ads", "delete"] as const).every((action) => defaults[role][action] === "ask") &&
+        (["publish", "email", "create_agent"] as const).every((action) => defaults[role][action] === "allow"),
+    ) &&
+      (["pay", "launch_ads", "delete"] as const).every(
+        (action) => DEFAULT_TRUST_POLICY.approvers[action] === "owner",
+      ) &&
+      !Object.values(DEFAULT_TRUST_POLICY.sandbox).some(Boolean),
   );
   await Effect.runPromise(trust.savePolicy(policy, { id: "owner", name: "Owner" }));
   check("policy file written 0600", (statSync(join(dir, "trust-policy.json")).mode & 0o777) === 0o600);
@@ -231,7 +236,8 @@ try {
   const view = trust.view();
   const policyCodec = TRUST_CONTROL_CODECS.get(TRUST_CONTROL_ROUTES.policy);
   const auditCodec = TRUST_CONTROL_CODECS.get(TRUST_CONTROL_ROUTES.audit);
-  check("policy view decodes", JSON.stringify(policyCodec?.response(200, view)) === JSON.stringify(view));
+  // The codec reads the policy back field by field, so the keys may come in another order.
+  check("policy view decodes", isDeepStrictEqual(policyCodec?.response(200, view), view));
   check("audit page decodes", Boolean(auditCodec?.response(200, { entries: trust.audit.query({ limit: 50 }) })));
   check(
     "spend rows sum the counted spend",

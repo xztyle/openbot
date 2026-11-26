@@ -196,8 +196,13 @@ async function display(browser: Browser, viewport: ViewportName): Promise<void> 
     assert.equal(await page.getByText("No pude dejar la nota en MAS-30.").count(), 0, "a wake's answer shows");
   });
   await step(page, viewport, "the owner's exchange and the message to the owner show as messages", async () => {
-    await page.getByText("¿Cómo va la campaña?").first().waitFor({ timeout: UI_WAIT_MS });
-    await page.getByText("Necesito tu OK para lanzar Peluquería.").first().waitFor({ timeout: UI_WAIT_MS });
+    // The chat's scroll rail names the owner's messages too, hidden until it opens: the message counts.
+    await page.getByText("¿Cómo va la campaña?").filter({ visible: true }).first().waitFor({ timeout: UI_WAIT_MS });
+    await page
+      .getByText("Necesito tu OK para lanzar Peluquería.")
+      .filter({ visible: true })
+      .first()
+      .waitFor({ timeout: UI_WAIT_MS });
     // The image that the agent passed on with its message to the owner shows with it.
     const image = page.locator('img[src^="blob:"]').first();
     await image.waitFor({ timeout: UI_WAIT_MS });

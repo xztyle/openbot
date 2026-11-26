@@ -353,7 +353,9 @@ try {
       key: "EVE-20",
       title: "Globos para fiestas",
       url: "https://motion.example.com/EVE-20",
-      createdAt: new Date().toISOString(),
+      // The ticket has waited a while: the host counts the owner's messages after it, by the
+      // millisecond, and a message in the same millisecond as the ticket is not after it.
+      createdAt: new Date(Date.now() - 1_000).toISOString(),
       asks: "approval",
     },
   ]);

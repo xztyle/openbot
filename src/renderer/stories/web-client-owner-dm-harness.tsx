@@ -40,17 +40,13 @@ function person(id: string, turnId: string, time: string, text: string): Convers
     senderMember: { id: WEB_PREVIEW_MEMBER_ID, name: "Preview User" },
   };
 }
-/** A 1 × 1 orange PNG, the turkey image of the relay, served as the host serves a file: a blob URL. */
+/** A 1 × 1 orange PNG, the turkey image of the relay. */
+const PAVO_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP4+5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
+const PAVO_ID = "attachment-pavo";
+/* The desktop's preview address. The web client drops it and reads the file through the host
+   connection (`download`), as the runtime below answers it. */
 const PAVO_IMAGE = URL.createObjectURL(
-  new Blob(
-    [
-      Uint8Array.from(
-        atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP4+5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="),
-        (character) => character.charCodeAt(0),
-      ),
-    ],
-    { type: "image/png" },
-  ),
+  new Blob([Uint8Array.from(atob(PAVO_BASE64), (character) => character.charCodeAt(0))], { type: "image/png" }),
 );
 
 function answer(
@@ -129,7 +125,7 @@ export const OWNER_DM_TURNS: { turnId: string; activity: boolean; messages: Conv
         // The image a teammate made, passed on to the owner with `message_owner`.
         attachments: [
           {
-            id: "attachment-pavo",
+            id: PAVO_ID,
             name: "pavo.png",
             size: 2048,
             kind: "image",
@@ -248,7 +244,12 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
       return turn.turnId;
     },
   };
-  return mockWebRuntimeFor(mock, events);
+  const web = mockWebRuntimeFor(mock, events);
+  // The host sends the turkey image's bytes, as it sends any file of a message.
+  const download = web.download.bind(web);
+  web.download = async (id) =>
+    id === PAVO_ID ? { name: "pavo.png", mimeType: "image/png", base64: PAVO_BASE64 } : download(id);
+  return web;
 };
 
 const root = document.getElementById("root");

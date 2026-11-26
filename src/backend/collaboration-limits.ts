@@ -16,11 +16,11 @@ export const AGENT_MESSAGE_WINDOW_MS = 10 * 60_000;
 export const ANSWER_HOLD_LIMIT_MS = 20 * 60_000;
 
 /**
- * How long a new message from a teammate waits before it starts a turn, so that the messages of a
+ * How long a new message from a teammate waits before it starts a turn (15 s, owner choice 2026-11-26), so that the messages of a
  * burst start one turn together: each wake of a large idle agent reads its whole context again.
  * A message from a person never waits, and a turn that starts for another reason takes them along.
  */
-export const AGENT_WAKE_COALESCE_MS = 2 * 60_000;
+export const AGENT_WAKE_COALESCE_MS = 15_000;
 
 /**
  * The most teammates one message that wakes them may go to. A message to more of them is an

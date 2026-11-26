@@ -1046,8 +1046,8 @@ textarea {
 }
 
 .sidebar-toggle-icon {
-  width: 17px;
-  height: 17px;
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
   fill: none;
   stroke: currentcolor;
   stroke-linecap: round;
@@ -1370,7 +1370,7 @@ textarea {
   min-width: 0;
   overflow: hidden;
   font-size: var(--openbot-text-sm);
-  font-weight: 400;
+  font-weight: var(--openbot-weight-regular);
   line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1433,7 +1433,7 @@ textarea {
   padding: 0 7px;
   color: var(--openbot-text-readable);
   font-size: var(--openbot-text-sm);
-  font-weight: 400;
+  font-weight: var(--openbot-weight-regular);
   line-height: 16px;
   white-space: nowrap;
 }
@@ -1448,7 +1448,7 @@ textarea {
   padding: 0 var(--openbot-space-1);
   color: var(--openbot-bg-sidebar);
   font-size: var(--openbot-text-sm);
-  font-weight: 650;
+  font-weight: var(--openbot-weight-semibold);
 }
 
 .sidebar-hidden-group-count {
@@ -1721,7 +1721,7 @@ textarea {
   overflow: hidden;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
-  font-weight: 450;
+  font-weight: var(--openbot-weight-regular);
   line-height: 16px;
   text-align: center;
   text-overflow: ellipsis;
@@ -1740,7 +1740,7 @@ textarea {
   background: var(--openbot-hover);
   padding: 0 var(--openbot-space-1);
   color: var(--openbot-text-readable);
-  font-weight: 400;
+  font-weight: var(--openbot-weight-regular);
 }
 
 .sidebar-pinned-title > span {
@@ -1786,7 +1786,7 @@ textarea {
   border-radius: var(--openbot-radius-md);
   color: var(--openbot-success);
   font-size: var(--openbot-text-sm);
-  font-weight: 680;
+  font-weight: var(--openbot-weight-bold);
   letter-spacing: 0.02em;
 }
 
@@ -1829,7 +1829,7 @@ textarea {
   padding: 0 3px;
   color: var(--openbot-bg-sidebar);
   font-size: var(--openbot-text-sm);
-  font-weight: 680;
+  font-weight: var(--openbot-weight-bold);
 }
 
 .agent-row {
@@ -1958,7 +1958,7 @@ textarea {
   padding: 0 3px;
   color: var(--openbot-bg-sidebar);
   font-size: var(--openbot-text-sm);
-  font-weight: 650;
+  font-weight: var(--openbot-weight-semibold);
   line-height: 12px;
 }
 
@@ -2258,7 +2258,7 @@ textarea {
   padding: 7px 10px 3px 13px;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 590;
+  font-weight: var(--openbot-weight-medium);
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
@@ -2281,7 +2281,7 @@ textarea {
   padding: 0 9px;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 540;
+  font-weight: var(--openbot-weight-medium);
   transition-property: scale, background-color, color;
   transition-duration: var(--openbot-duration-normal), var(--openbot-duration-hover), var(--openbot-duration-hover);
   transition-timing-function: ease-out;
@@ -2372,7 +2372,7 @@ textarea {
 .avatar-image-upload strong {
   margin-bottom: 3px;
   font-size: var(--openbot-text-sm);
-  font-weight: 580;
+  font-weight: var(--openbot-weight-medium);
 }
 
 .avatar-image-upload small {
@@ -2463,7 +2463,7 @@ textarea {
   box-shadow: none;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 650;
+  font-weight: var(--openbot-weight-semibold);
 }
 
 .conversation-title .agent-avatar {
@@ -2535,7 +2535,7 @@ textarea {
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-lg);
   line-height: 20px;
-  font-weight: 500;
+  font-weight: var(--openbot-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2554,7 +2554,7 @@ textarea {
   padding: var(--openbot-space-0-5) var(--openbot-space-1);
   color: var(--openbot-text-readable);
   font-size: var(--openbot-text-sm);
-  font-weight: 400;
+  font-weight: var(--openbot-weight-regular);
   line-height: 16px;
   white-space: nowrap;
 }

@@ -271,6 +271,17 @@ export function checkUiFoundation(
     ["data-testid hooks in renderer markup", matches(testHookSource, /data-testid\s*=/gu), 0],
     ["colour literals outside the palette", colorLiteralCount, 0],
     ["untokenized font-size", matches(legacyStyles, /font-size:(?!\s*(?:var\(|inherit\b))\s*[^;]+/gu), 0],
+    // The four weight tokens are the whole scale. A 550 or a 620 on a variable font reads as a
+    // fifth and a sixth weight beside them, and the Atelier themes swap the face under the tokens.
+    ["untokenized font-weight", matches(legacyStyles, /font-weight:(?!\s*(?:var\(|inherit\b))\s*[^;]+/gu), 0],
+    // `size-[14px]` and `bg-[#fff]` are the stylesheet literals one layer up: Tailwind writes the
+    // value into a class, so the CSS scans above never see it. Only a value in square brackets
+    // counts; `size-4` and `fill-current` come from the theme.
+    [
+      "Tailwind arbitrary values in class names",
+      matches(testHookSource, /\b[a-z][a-z-]*-\[(?:#[\da-f]{3,8}|rgba?\(|hsla?\(|\d+(?:\.\d+)?(?:px|rem|em|%))\]/giu),
+      0,
+    ],
     [
       "untokenized border-radius",
       matches(legacyStyles, /border-radius:(?!\s*(?:var\(|0(?:\s|;)|inherit\b))\s*[^;]+/gu),

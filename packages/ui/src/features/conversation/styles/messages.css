@@ -229,15 +229,10 @@
 }
 
 .message-action-button svg {
-  width: 17px;
-  height: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  /* No stroke-width: every icon in this row is hand-drawn on a 20-unit grid and carries
-   * its own scaled weight from .ui-glyph-20. Setting it here outranks that class and
-   * paints them a fifth heavier than the grid they were drawn for. */
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
+  flex: 0 0 auto;
+  stroke-width: var(--openbot-icon-stroke);
 }
 
 /*
@@ -1306,7 +1301,7 @@ button.chat-action-target:active,
   background-clip: text;
   color: transparent;
   font-size: var(--openbot-text-lg);
-  font-weight: 550;
+  font-weight: var(--openbot-weight-medium);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -1380,7 +1375,7 @@ button.chat-action-target:active,
   backdrop-filter: blur(12px) saturate(1.15);
   -webkit-backdrop-filter: blur(12px) saturate(1.15);
   font-size: var(--openbot-text-sm);
-  font-weight: 650;
+  font-weight: var(--openbot-weight-semibold);
   opacity: 0;
   pointer-events: none;
   transform: translateY(4px);
@@ -1393,8 +1388,8 @@ button.chat-action-target:active,
 }
 
 .image-generation-download-icon {
-  width: 14px;
-  height: 14px;
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
   flex: 0 0 auto;
 }
 

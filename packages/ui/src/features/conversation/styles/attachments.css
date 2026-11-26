@@ -85,7 +85,7 @@
   overflow: hidden;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-md);
-  font-weight: 560;
+  font-weight: var(--openbot-weight-medium);
   line-height: 17px;
   text-overflow: ellipsis;
   white-space: nowrap;

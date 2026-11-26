@@ -314,7 +314,7 @@
   padding: 0 10px 0 11px;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
-  font-weight: 400;
+  font-weight: var(--openbot-weight-regular);
   line-height: 28px;
   outline: 0;
 }
@@ -411,7 +411,7 @@
   padding: 0 9px;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 430;
+  font-weight: var(--openbot-weight-regular);
   white-space: nowrap;
 }
 
@@ -888,7 +888,7 @@
 
 .message-data-table thead {
   color: var(--openbot-data-table-header-text);
-  font-weight: 500;
+  font-weight: var(--openbot-weight-medium);
 }
 
 .message-data-table tbody {
@@ -947,7 +947,7 @@
 .message-link {
   border-radius: var(--openbot-radius-xs);
   color: inherit;
-  font-weight: 560;
+  font-weight: var(--openbot-weight-medium);
   text-decoration-color: var(--openbot-text-muted);
   text-decoration-line: underline;
   text-decoration-thickness: 1px;
@@ -971,8 +971,8 @@
 
 .message-link-icon img,
 .message-link-fallback {
-  width: 14px;
-  height: 14px;
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
 }
 
 .message-link-icon img {
@@ -1014,7 +1014,7 @@
   padding: 0;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 600;
+  font-weight: var(--openbot-weight-semibold);
   line-height: 1;
   text-decoration: none;
   vertical-align: 4px;
@@ -1046,7 +1046,7 @@
   padding: var(--openbot-space-1-5) var(--openbot-space-2);
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
-  font-weight: 500;
+  font-weight: var(--openbot-weight-medium);
   line-height: 15px;
   overflow-wrap: anywhere;
   pointer-events: none;
@@ -1097,7 +1097,7 @@
   gap: var(--openbot-space-1-5);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  font-weight: 425;
+  font-weight: var(--openbot-weight-regular);
   line-height: 18px;
   text-decoration: none;
 }
@@ -1110,7 +1110,7 @@
 .message-citation-ref-label {
   overflow: hidden;
   color: var(--openbot-text-primary);
-  font-weight: 550;
+  font-weight: var(--openbot-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1204,7 +1204,7 @@
   display: block;
   margin-bottom: 1px;
   font-size: var(--openbot-text-sm);
-  font-weight: 550;
+  font-weight: var(--openbot-weight-medium);
   line-height: 14px;
 }
 
@@ -1377,7 +1377,7 @@
   padding: 1px 6px 1px 3px;
   color: var(--file-reference-color);
   font: inherit;
-  font-weight: 550;
+  font-weight: var(--openbot-weight-medium);
   line-height: 20px;
   vertical-align: middle;
   white-space: nowrap;
@@ -1521,7 +1521,7 @@
 
 .attachment-reference-visual > span {
   font-size: var(--openbot-glyph-sm);
-  font-weight: 750;
+  font-weight: var(--openbot-weight-bold);
   letter-spacing: -0.2px;
   line-height: 1;
 }

@@ -15,6 +15,7 @@
   z-index: var(--openbot-layer-overlay);
   color: var(--openbot-text);
   font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-medium);
   border-radius: 0;
   transition: none;
 }

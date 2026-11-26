@@ -44,7 +44,7 @@
   margin: 0;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-md);
-  font-weight: 600;
+  font-weight: var(--openbot-weight-semibold);
   line-height: 18px;
   text-align: center;
 }

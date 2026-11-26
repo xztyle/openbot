@@ -64,7 +64,7 @@
 .voice-panel-name {
   margin: 0;
   font-size: var(--openbot-text-md);
-  font-weight: 600;
+  font-weight: var(--openbot-weight-semibold);
 }
 
 .voice-panel-phase {

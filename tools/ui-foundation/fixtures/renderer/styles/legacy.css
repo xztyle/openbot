@@ -3,6 +3,7 @@
 .legacy {
   color: #ff0000;
   font-size: 14px;
+  font-weight: 550;
   border-radius: 6px;
   transition: opacity 200ms ease;
   border-color: red;

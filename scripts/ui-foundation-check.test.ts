@@ -84,6 +84,11 @@ describe("ui foundation check", () => {
         // reads 7 and the word boundaries have gone.
         budget("colour literals outside the palette", 6),
         budget("untokenized font-size", 1),
+        // One, in .legacy. The token and the `inherit` in tokens.css must stay uncounted.
+        budget("untokenized font-weight", 1),
+        // One, the `size-[14px]` in branches/TailwindArbitrary.tsx. The theme classes beside it,
+        // `size-4` and `fill-current`, must stay uncounted.
+        budget("Tailwind arbitrary values in class names", 1),
         budget("untokenized border-radius", 1),
         budget("untokenized transition durations", 2),
         // One, in .legacy-scrim. The clean tree's `calc()` on the dropdown layer must stay uncounted.

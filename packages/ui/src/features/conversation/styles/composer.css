@@ -93,7 +93,7 @@
   display: block;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  font-weight: 550;
+  font-weight: var(--openbot-weight-medium);
   line-height: 14px;
 }
 
@@ -461,8 +461,8 @@
 .composer-button svg,
 .dictation-button svg,
 .voice-button svg {
-  width: 16px;
-  height: 16px;
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
 }
 
 .composer-spinner {
@@ -877,7 +877,7 @@
   flex: 0 1 auto;
   overflow: hidden;
   font-size: var(--openbot-text-lg);
-  font-weight: 500;
+  font-weight: var(--openbot-weight-medium);
   line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -995,7 +995,7 @@
 .composer-attachment-copy strong {
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
-  font-weight: 500;
+  font-weight: var(--openbot-weight-medium);
   line-height: 16px;
 }
 
@@ -1016,7 +1016,7 @@
   background: var(--file-reference-soft, var(--openbot-hover));
   color: var(--file-reference-color, var(--openbot-text-muted));
   font-size: var(--openbot-text-sm);
-  font-weight: 700;
+  font-weight: var(--openbot-weight-bold);
   line-height: 1;
 }
 

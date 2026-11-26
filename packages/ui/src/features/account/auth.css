@@ -44,7 +44,7 @@
 .account-login-wordmark {
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-display);
-  font-weight: 620;
+  font-weight: var(--openbot-weight-semibold);
   letter-spacing: -0.015em;
   line-height: var(--openbot-leading-display);
 }
@@ -61,7 +61,7 @@
   margin: 0;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-3xl);
-  font-weight: 580;
+  font-weight: var(--openbot-weight-medium);
   letter-spacing: -0.035em;
   line-height: 30px;
 }
@@ -75,7 +75,7 @@
 
 .account-login-description strong {
   color: var(--openbot-text-primary);
-  font-weight: 560;
+  font-weight: var(--openbot-weight-medium);
 }
 
 .account-login-error {
@@ -129,7 +129,7 @@
   background: var(--openbot-surface-light);
   color: var(--openbot-text-on-light);
   font-size: var(--openbot-text-md);
-  font-weight: 650;
+  font-weight: var(--openbot-weight-semibold);
   transition:
     background-color var(--openbot-duration-hover) ease,
     border-color var(--openbot-duration-hover) ease,
@@ -359,7 +359,7 @@
   margin: 0 0 9px;
   color: var(--text-muted);
   font-size: var(--openbot-text-sm);
-  font-weight: 600;
+  font-weight: var(--openbot-weight-semibold);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -368,7 +368,7 @@
   margin: 0;
   color: var(--text-primary);
   font-size: var(--openbot-text-display);
-  font-weight: 560;
+  font-weight: var(--openbot-weight-medium);
   letter-spacing: -0.035em;
   line-height: 1.1;
 }
@@ -462,7 +462,7 @@
 
 .setup-route-copy strong {
   font-size: var(--openbot-text-lg);
-  font-weight: 600;
+  font-weight: var(--openbot-weight-semibold);
 }
 
 .setup-route-copy small {
@@ -499,7 +499,7 @@
   gap: 7px;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 560;
+  font-weight: var(--openbot-weight-medium);
 }
 
 .setup-remote-form input,
@@ -571,7 +571,7 @@
   padding: 0;
   color: var(--text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 560;
+  font-weight: var(--openbot-weight-medium);
 }
 
 .provider-picker-heading {
@@ -734,7 +734,7 @@
 
 .provider-picker-name {
   font-size: var(--openbot-text-md);
-  font-weight: 530;
+  font-weight: var(--openbot-weight-medium);
   line-height: 18px;
 }
 
@@ -1065,7 +1065,7 @@
   border-radius: var(--openbot-radius-md);
   padding: 12px 18px;
   font-size: var(--openbot-text-md);
-  font-weight: 620;
+  font-weight: var(--openbot-weight-semibold);
 }
 
 .initial-setup-save {

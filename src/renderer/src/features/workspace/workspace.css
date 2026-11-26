@@ -1371,7 +1371,7 @@
   margin: 0;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 600;
+  font-weight: var(--openbot-weight-semibold);
 }
 
 .ws-learned-row {

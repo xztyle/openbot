@@ -923,7 +923,7 @@
 .ws-ticket-chip-key {
   flex: none;
   font-family: var(--openbot-font-mono);
-  font-weight: 600;
+  font-weight: var(--openbot-weight-semibold);
 }
 
 .ws-ticket-chip-title {

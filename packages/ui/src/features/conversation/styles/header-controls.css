@@ -21,7 +21,7 @@
   margin: 0;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-md);
-  font-weight: 400;
+  font-weight: var(--openbot-weight-regular);
   line-height: 18px;
   letter-spacing: 0;
 }
@@ -115,7 +115,7 @@
   min-width: 0;
   white-space: nowrap;
   font-size: var(--openbot-text-md);
-  font-weight: 470;
+  font-weight: var(--openbot-weight-regular);
   line-height: 18px;
 }
 
@@ -241,7 +241,7 @@
   flex: 0 0 auto;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 400;
+  font-weight: var(--openbot-weight-regular);
   line-height: 17px;
 }
 
@@ -535,7 +535,7 @@
 .provider-model-heading strong {
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-lg);
-  font-weight: 620;
+  font-weight: var(--openbot-weight-semibold);
   line-height: 20px;
 }
 
@@ -782,7 +782,7 @@
   padding: 1px var(--openbot-space-1-5);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  font-weight: 500;
+  font-weight: var(--openbot-weight-medium);
   line-height: 15px;
 }
 

@@ -771,7 +771,7 @@
 .marketplace-install-title {
   margin: 0;
   font-size: var(--openbot-text-lg);
-  font-weight: 600;
+  font-weight: var(--openbot-weight-semibold);
 }
 
 .marketplace-install-description {
@@ -827,7 +827,7 @@
 .marketplace-install-optional {
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  font-weight: 400;
+  font-weight: var(--openbot-weight-regular);
 }
 
 .marketplace-install-created {

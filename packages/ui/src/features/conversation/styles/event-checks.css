@@ -275,13 +275,13 @@
   margin: 0 0 var(--openbot-space-2) var(--openbot-space-2);
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-md);
-  font-weight: 600;
+  font-weight: var(--openbot-weight-semibold);
   line-height: var(--openbot-leading-md);
 }
 
 .event-check-card h4 {
   margin: 0 0 var(--openbot-space-1);
-  font-weight: 500;
+  font-weight: var(--openbot-weight-medium);
 }
 
 .event-check-card .event-check-help {
@@ -436,7 +436,7 @@
   margin: 0;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 600;
+  font-weight: var(--openbot-weight-semibold);
 }
 
 .event-check-picker-list {

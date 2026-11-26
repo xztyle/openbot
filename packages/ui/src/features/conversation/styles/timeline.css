@@ -168,7 +168,7 @@
 
 .scroll-to-latest-count {
   font-size: var(--openbot-text-sm);
-  font-weight: 620;
+  font-weight: var(--openbot-weight-semibold);
   white-space: nowrap;
 }
 
@@ -298,7 +298,7 @@
   padding: 0 var(--openbot-space-3);
   color: var(--openbot-unread-text);
   font-size: var(--openbot-text-sm);
-  font-weight: 620;
+  font-weight: var(--openbot-weight-semibold);
   line-height: 16px;
   transition: background-color var(--openbot-duration-hover) var(--openbot-ease-out);
 }
@@ -316,7 +316,7 @@
   width: 100%;
   padding: 0 var(--openbot-space-3);
   font-size: var(--openbot-text-sm);
-  font-weight: 620;
+  font-weight: var(--openbot-weight-semibold);
   line-height: 16px;
   text-align: left;
 }
@@ -327,7 +327,7 @@
   margin-left: auto;
   padding: 0;
   font-size: var(--openbot-text-sm);
-  font-weight: 680;
+  font-weight: var(--openbot-weight-bold);
   line-height: 14px;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -380,7 +380,7 @@
   margin: var(--openbot-space-1) 0 var(--openbot-space-2);
   color: var(--openbot-unread-surface);
   font-size: var(--openbot-text-sm);
-  font-weight: 720;
+  font-weight: var(--openbot-weight-bold);
   letter-spacing: 0.08em;
   line-height: 12px;
 }

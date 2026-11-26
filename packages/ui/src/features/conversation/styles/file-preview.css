@@ -40,7 +40,7 @@
   margin: 0;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
-  font-weight: 600;
+  font-weight: var(--openbot-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -223,7 +223,7 @@
 
 .file-preview-spreadsheet-table th {
   background: var(--openbot-bg-control);
-  font-weight: 600;
+  font-weight: var(--openbot-weight-semibold);
 }
 
 .file-preview-spreadsheet-table td:last-child,

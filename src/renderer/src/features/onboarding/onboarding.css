@@ -494,7 +494,7 @@
 
 .provider-picker-callout-title {
   font-size: var(--openbot-text-md);
-  font-weight: 620;
+  font-weight: var(--openbot-weight-semibold);
   line-height: 18px;
 }
 

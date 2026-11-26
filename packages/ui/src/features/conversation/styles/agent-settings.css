@@ -125,7 +125,7 @@
 .agent-routine-row strong {
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-md);
-  font-weight: 500;
+  font-weight: var(--openbot-weight-medium);
 }
 
 .agent-routine-row small,
@@ -1469,7 +1469,7 @@
 .agent-settings-notifications strong {
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-md);
-  font-weight: 500;
+  font-weight: var(--openbot-weight-medium);
   line-height: 18px;
 }
 

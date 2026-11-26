@@ -151,8 +151,8 @@
 }
 
 .agent-queue-icon svg {
-  width: 15px;
-  height: 15px;
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -184,8 +184,8 @@
 
 .agent-queue-steer svg,
 .agent-queue-icon-button svg {
-  width: 16px;
-  height: 16px;
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;

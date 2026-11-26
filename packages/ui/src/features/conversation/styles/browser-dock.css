@@ -376,7 +376,7 @@ body:has(.browser-dock-surface),
 /* The person has the page: the bar says so plainly, and Hand back is the one strong button. */
 .browser-dock-island-activity:not([data-control="agent"]) .browser-dock-status {
   color: var(--openbot-text-primary);
-  font-weight: 500;
+  font-weight: var(--openbot-weight-medium);
 }
 
 .browser-dock-island-activity:not([data-control="agent"]) .browser-dock-status svg {

@@ -1,3 +1,4 @@
+import { parseTrustApprovalCard } from "@openbot/contracts/agent-approvals";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
   AgentApproval,
@@ -210,6 +211,17 @@ export function ApprovalCard(props: {
   const { t, errorMessage, sourceText } = useText();
   const [submitting, setSubmitting] = createSignal(false);
   const [confirmingAlways, setConfirmingAlways] = createSignal(false);
+  // A trust card: what the agent wants and why, the fixed action line, the amount, and the raw call
+  // behind the technical details. Each line of the host's text is translated on its own.
+  const card = createMemo(() =>
+    props.approval.kind === "permissions" ? parseTrustApprovalCard(props.approval.command) : null,
+  );
+  const reasonLines = createMemo(() =>
+    (props.approval.reason ?? "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
   let alwaysAllowButton: HTMLButtonElement | undefined;
   const submit = async (decision: "accept" | "decline") => {
     if (submitting()) return;
@@ -262,31 +274,77 @@ export function ApprovalCard(props: {
               </span>
             )}
           </Show>
-          <strong>{t(approvalTitle(props.approval))}</strong>
+          <strong>{card() ? t("prompt.approval.title.trust") : t(approvalTitle(props.approval))}</strong>
         </div>
         <Badge variant="warning-light" class="conversation-interaction-status" role="status">
           <LoaderCircle class="conversation-interaction-spinner" data-icon="inline-start" aria-hidden="true" />
           {t("prompt.approval.badge")}
         </Badge>
       </header>
-      <Show when={props.approval.reason}>{(reason) => <p class="approval-reason">{sourceText(reason())}</p>}</Show>
+      <Show
+        when={card()}
+        fallback={<For each={reasonLines()}>{(line) => <p class="approval-reason">{sourceText(line)}</p>}</For>}
+      >
+        {(trust) => (
+          <div class="approval-trust">
+            <Show when={trust().purpose}>
+              {(purpose) => (
+                <p class="approval-purpose">
+                  <Show when={trust().purposeBy === "atelier"}>
+                    <span class="approval-purpose-source">{t("prompt.approval.atelierSummary")}</span>
+                  </Show>
+                  {purpose()}
+                </p>
+              )}
+            </Show>
+            <For each={trust().action}>{(line) => <p class="approval-action-line">{sourceText(line)}</p>}</For>
+            <Show when={trust().amount}>
+              {(amount) => (
+                <p class="approval-amount">
+                  <span class="approval-detail-label">{t("prompt.approval.amount")}</span> <strong>{amount()}</strong>
+                </p>
+              )}
+            </Show>
+            <For each={reasonLines()}>{(line) => <p class="approval-reason-note">{sourceText(line)}</p>}</For>
+          </div>
+        )}
+      </Show>
       <div class="approval-card-content">
-        <Show when={props.approval.command}>
-          {(command) => (
-            <div class="approval-command-block">
-              <Show when={props.approval.cwd}>
-                <div class="approval-cwd">{props.approval.cwd}</div>
-              </Show>
-              <code>
-                {props.approval.kind === "permissions"
-                  ? // A trust card's lines are source text from the host, such as a money card's effect.
-                    command()
-                      .split("\n")
-                      .map((line) => sourceText(line))
-                      .join("\n")
-                  : command()}
-              </code>
-            </div>
+        <Show
+          when={card()}
+          fallback={
+            <Show when={props.approval.command}>
+              {(command) => (
+                <div class="approval-command-block">
+                  <Show when={props.approval.cwd}>
+                    <div class="approval-cwd">{props.approval.cwd}</div>
+                  </Show>
+                  <code>
+                    {props.approval.kind === "permissions"
+                      ? // A trust card's lines are source text from the host, such as a money card's effect.
+                        command()
+                          .split("\n")
+                          .map((line) => sourceText(line))
+                          .join("\n")
+                      : command()}
+                  </code>
+                </div>
+              )}
+            </Show>
+          }
+        >
+          {(trust) => (
+            <Show when={trust().details}>
+              {(details) => (
+                // Opt-in only: the owner opens it when they want the raw call; it never opens by itself.
+                <details class="approval-technical">
+                  <summary>{t("prompt.approval.technical")}</summary>
+                  <div class="approval-command-block">
+                    <code>{details()}</code>
+                  </div>
+                </details>
+              )}
+            </Show>
           )}
         </Show>
         <Show when={props.approval.kind === "file-change"}>

@@ -252,8 +252,8 @@ export class TrustService {
     return false;
   }
 
-  #grant(agentId: string, key: string): void {
-    const minutes = this.#policy.approvalPassMinutes;
+  #grant(agentId: string, key: string, passMinutes?: number): void {
+    const minutes = passMinutes ?? this.#policy.approvalPassMinutes;
     if (minutes > 0) this.#passes.set(this.#passKey(agentId, key), this.#now() + minutes * 60_000);
   }
 
@@ -367,7 +367,7 @@ export class TrustService {
                   agent,
                   site: action.browser.site,
                   what: action.browser.what,
-                  minutes: String(policy.approvalPassMinutes),
+                  minutes: String(action.passMinutes ?? policy.approvalPassMinutes),
                 })
               : sourceText("status.agent.trustAskCheckout", {
                   agent,
@@ -404,14 +404,14 @@ export class TrustService {
     }
     if (verdict.kind === "allow") {
       this.#audit.record({ ...base, outcome: "allowed" });
-      if (action.surface) this.#grant(subject.agentId, action.surface);
+      if (action.surface) this.#grant(subject.agentId, action.surface, action.passMinutes);
       return { allowed: true };
     }
     const { answer, byName, byKind, note } = answerOf(yield* approve(verdict.reason));
     const by = { answeredBy: byName, answeredByKind: byKind };
     if (answer === "accept") {
       this.#audit.record({ ...base, outcome: "approved", ...by });
-      if (action.surface) this.#grant(subject.agentId, action.surface);
+      if (action.surface) this.#grant(subject.agentId, action.surface, action.passMinutes);
       return { allowed: true };
     }
     this.#audit.record({ ...base, outcome: "declined", ...(answer === "decline" ? by : {}) });

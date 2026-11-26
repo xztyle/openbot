@@ -655,6 +655,11 @@ export class BrowserCdpEngine {
   readonly #uploadDocumentIds = new Set<string>();
   readonly #targetSessions = new Map<string, { sessionId: string; url: string }>();
 
+  /** The page as the last snapshot read it, for the trust gate's look at what a step targets. */
+  lastSnapshot(): BrowserSnapshot | null {
+    return this.#lastSnapshot;
+  }
+
   constructor(contents: WebContents) {
     this.#contents = contents;
     contents.once("close", () => {

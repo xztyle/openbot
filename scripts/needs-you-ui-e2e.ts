@@ -10,6 +10,10 @@
 // done" answers it once, and every mark goes. iPhone: the Today tab counts it; the card's Take over
 // opens the chat with the card in view; "I'm done" clears Today.
 //
+// Money approval, on the computer and the phone: the trust card of a Meta ads call shows the agent's
+// purpose first, then the fixed action line and the amount; the raw call stays behind the collapsed
+// technical details.
+//
 // `bun scripts/needs-you-ui-e2e.ts [--browser-executable=<path>] [--headed]`
 // Writes .openbot-build/needs-you-ui-e2e/report.json and a screenshot of each checked screen.
 import assert from "node:assert/strict";
@@ -458,6 +462,60 @@ async function stalledSecret(browser: Browser, origin: string): Promise<void> {
   await context.close();
 }
 
+const MONEY_PURPOSE = "Quiero aprobación para revisar los topes de la campaña y modificarlos si superan los 7 USD.";
+const MONEY_RAW = "--daily-budget 7";
+
+/**
+ * A money approval of the trust gate: the chat card (computer) and Today's card (phone) show what the
+ * agent wants first, then the fixed action line and the amount, and the raw call only on request.
+ */
+async function moneyApproval(browser: Browser, origin: string, viewport: ViewportName): Promise<void> {
+  const context = await browser.newContext(VIEWPORTS[viewport]);
+  const page = await context.newPage();
+  watch(page, viewport);
+  await step(page, viewport, "a money approval shows the agent's purpose, the action and the amount", async () => {
+    await load(
+      page,
+      origin,
+      viewport === "phone" ? "/app/general" : "/app/general/dm/sales",
+      viewport === "phone" ? todayTab(page, 0) : page.locator("[data-ws-conversation]").first(),
+    );
+    await page.waitForFunction(() => document.documentElement.dataset.needsYouReady !== undefined, null, {
+      timeout: UI_WAIT_MS,
+    });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("needs-you-harness", { detail: "money-approval" })));
+    const cardOf =
+      viewport === "phone"
+        ? todayCard(page, english("workspace.needsYou.action.approval"))
+        : page.getByRole("region", { name: english("prompt.approval.label") });
+    const moneyCard = cardOf.first();
+    await moneyCard.waitFor({ timeout: UI_WAIT_MS });
+    const purpose = moneyCard.getByText(MONEY_PURPOSE, { exact: false });
+    await purpose.waitFor({ timeout: UI_WAIT_MS });
+    await moneyCard.getByText("Meta ads · meta-ads create-campaign", { exact: false }).first().waitFor({
+      timeout: UI_WAIT_MS,
+    });
+    await moneyCard.getByText("7 USD", { exact: false }).first().waitFor({ timeout: UI_WAIT_MS });
+    if (viewport === "desktop")
+      await moneyCard.getByText(english("prompt.approval.title.trust")).waitFor({ timeout: UI_WAIT_MS });
+    // The purpose comes before the action line, and the raw call stays hidden until asked for.
+    const text = (await moneyCard.innerText()).replace(/\s+/gu, " ");
+    assert.ok(
+      text.indexOf(MONEY_PURPOSE) >= 0 && text.indexOf(MONEY_PURPOSE) < text.indexOf("meta-ads create-campaign"),
+      `The purpose does not lead the card: ${text.slice(0, 400)}`,
+    );
+    const raw = moneyCard.getByText(MONEY_RAW, { exact: false });
+    assert.equal(await raw.isVisible(), false, "The raw call shows without being asked for.");
+    const technical = moneyCard.getByText(
+      viewport === "phone" ? english("workspace.today.technicalDetails") : english("prompt.approval.technical"),
+    );
+    await (viewport === "phone" ? technical.tap() : technical.click());
+    await raw.waitFor({ state: "visible", timeout: UI_WAIT_MS });
+    await shot(page, `${viewport}-money-approval`);
+  });
+  await context.close();
+}
+
 function watch(page: Page, viewport: ViewportName): void {
   page.on("pageerror", (error) => report.pageErrors.push(`${viewport}: ${error.stack ?? error.message}`));
   page.on("console", (message) => {
@@ -504,6 +562,8 @@ try {
   await stalledSecret(browser, origin);
   await ticketApproval(browser, origin);
   await ticketReview(browser, origin);
+  await moneyApproval(browser, origin, "desktop");
+  await moneyApproval(browser, origin, "phone");
   report.passed =
     report.steps.length > 0 &&
     report.steps.every((item) => item.passed) &&

@@ -46,6 +46,7 @@ import {
   type ThreadItem,
 } from "../protocol";
 import { boundedReasoningText, REASONING_TEXT_LIMIT } from "../reasoning-text";
+import type { BrowserPageFacts } from "../trust/trust-classifier";
 import type { AgentMemories } from "./agent-memories";
 import type { AttentionBrowserHost, AttentionRegistry } from "./attention-registry";
 import type { BrowserUploadTarget } from "./browser-uploads";
@@ -112,6 +113,8 @@ interface HeldProviderError {
 }
 
 export interface AgentBrowserHost extends AttentionBrowserHost, BrowserUploadTarget {
+  /** What the last snapshot of a tab says of its page, for the trust gate; absent where none is kept. */
+  pageFacts?(tabId: string): BrowserPageFacts | null;
   onChanged(listener: (tabs: BrowserTab[], activeTabId: string | null) => void): () => void;
   onControlChanged(listener: (state: BrowserControlState) => void): () => void;
   /**

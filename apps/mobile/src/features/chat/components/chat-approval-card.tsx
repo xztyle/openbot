@@ -1,9 +1,10 @@
+import { parseTrustApprovalCard } from "@openbot/contracts/agent-approvals";
 import { Button, Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
 import Folder from "lucide-react-native/icons/folder";
 import ShieldAlert from "lucide-react-native/icons/shield-alert";
 import { useState } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useCSSVariable } from "uniwind";
 import { showWarningAlert } from "@/features/analytics/failure-reports";
 import {
@@ -25,6 +26,8 @@ const SHELL_WRAPPER = /^(?:\/(?:usr\/)?bin\/)?(?:ba|z)?sh -l?c (?:'([^']*)'|"([^
 const HOME_FOLDER = /^(?:\/Users|\/home)\/[^/]+(?=\/|$)/u;
 
 export function approvalTitle(approval: PendingApproval, t: MobileText["t"]): string {
+  if (approval.kind === "permissions" && parseTrustApprovalCard(approval.command))
+    return t("mobile.chat.approval.title.trust");
   if (approval.kind === "command") return t("mobile.chat.approval.title.command");
   if (approval.kind === "file-change") return t("mobile.chat.approval.title.fileChange");
   return t("mobile.chat.approval.title.permissions");
@@ -65,6 +68,14 @@ export function ChatApprovalCard({
   const [warningText] = useCSSVariable(["--openbot-warning-text"]);
   const [pending, setPending] = useState<ApprovalDecision | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const [technical, setTechnical] = useState(false);
+  // A trust card: the agent's purpose, the fixed action line, the amount, and the raw call behind
+  // the technical details, as on the desktop and the web.
+  const trust = approval.kind === "permissions" ? parseTrustApprovalCard(approval.command) : null;
+  const reasonLines = (approval.reason ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
   const partial = approvalIsPartial(approval);
   const disabled = !canAnswer || pending !== null;
   const permissions = approval.kind === "permissions" ? approval.permissions : null;
@@ -83,7 +94,8 @@ export function ChatApprovalCard({
       : approval.kind === "file-change"
         ? t("mobile.chat.approval.effect.fileChange", names)
         : t("mobile.chat.approval.effect.permissions", names);
-  const hasDetails = Boolean(approval.command) || approval.kind === "file-change" || permissionDetails.length > 0;
+  const hasDetails =
+    (!trust && Boolean(approval.command)) || approval.kind === "file-change" || permissionDetails.length > 0;
 
   async function answer(decision: ApprovalDecision) {
     if (disabled) return;
@@ -128,12 +140,65 @@ export function ChatApprovalCard({
               {approvalTitle(approval, t)}
             </Typography.Paragraph>
           </View>
-          {approval.reason ? <Typography.Paragraph>{sourceText(approval.reason)}</Typography.Paragraph> : null}
+          {trust?.purpose ? (
+            <View className="gap-0.5">
+              {trust.purposeBy === "atelier" ? (
+                <Typography.Paragraph type="body-xs" className="text-muted">
+                  {t("mobile.chat.approval.atelierSummary")}
+                </Typography.Paragraph>
+              ) : null}
+              <Typography.Paragraph>{trust.purpose}</Typography.Paragraph>
+            </View>
+          ) : null}
+          {trust?.action.map((line) => (
+            <Typography.Paragraph key={line} type="body-sm" className="text-text-secondary">
+              {sourceText(line)}
+            </Typography.Paragraph>
+          ))}
+          {trust?.amount ? (
+            <Typography.Paragraph type="body-sm" weight="medium">
+              {t("mobile.chat.approval.amount", { amount: trust.amount })}
+            </Typography.Paragraph>
+          ) : null}
+          {reasonLines.map((line) =>
+            trust ? (
+              <Typography.Paragraph key={line} type="body-xs" className="text-muted">
+                {sourceText(line)}
+              </Typography.Paragraph>
+            ) : (
+              <Typography.Paragraph key={line}>{sourceText(line)}</Typography.Paragraph>
+            ),
+          )}
         </View>
+
+        {trust?.details ? (
+          <View className="gap-1.5">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: technical }}
+              onPress={() => setTechnical((open) => !open)}
+            >
+              <Typography.Paragraph type="body-xs" className="text-muted">
+                {t("mobile.chat.approval.technical")}
+              </Typography.Paragraph>
+            </Pressable>
+            {technical ? (
+              <View className="rounded-[18px] bg-control px-3 py-2.5" style={{ borderCurve: "continuous" }}>
+                <Typography.Code
+                  selectable
+                  className="bg-transparent p-0"
+                  style={{ color: foreground, fontSize: 13, lineHeight: 19 }}
+                >
+                  {trust.details}
+                </Typography.Code>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
 
         {hasDetails ? (
           <View className="gap-2 rounded-[18px] bg-control px-3 py-2.5" style={{ borderCurve: "continuous" }}>
-            {approval.command ? (
+            {approval.command && !trust ? (
               <Typography.Code
                 selectable
                 className="bg-transparent p-0"

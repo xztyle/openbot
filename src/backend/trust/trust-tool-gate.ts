@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ownerOnlyClassOf } from "@openbot/contracts/agent-approvals";
+import { ownerOnlyClassOf, TRUST_CARD_PURPOSE_LIMIT } from "@openbot/contracts/agent-approvals";
 import type { BrowserTab } from "@openbot/contracts/ipc";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { normalizeTrustPlatform } from "@openbot/contracts/trust-control";
@@ -26,11 +26,14 @@ import { MoneyApprovals, moneyDigest, moneyEffect } from "../guardrails/money-ap
 import { guardrailToolCall } from "../guardrails/tool-fingerprint";
 import { REQUEST_DECISION_ACTIONS, requestDecisionToolSchema } from "../openbot-tools";
 import type { AppServerRequest, DynamicToolCallParams, DynamicToolResult } from "../protocol";
+import { approvalPurposePrompt, generatedPurpose, purposeLine, toolInputPurpose } from "./approval-purpose";
 import {
+  type BrowserPageFacts,
   classifyBrowserCall,
   classifyCommand,
   classifyOpenBotTool,
   classifyToolUse,
+  isBrowserStepBlock,
   type TrustClassification,
   trustCategory,
   trustSummary,
@@ -83,13 +86,66 @@ export interface TrustToolGateOptions {
   guardrails?: GuardrailsService | null;
   /** Tier 1 of `docs/approvals.md`: the asking agent's manager answers. Null: the owner answers all. */
   approvals?: ApprovalRouter | null;
+  /** What the last snapshot of a tab says of its page, to tell a checkout's buy step from a country picker. */
+  pageFacts?(tabId: string): BrowserPageFacts | null;
+  /** The agent's latest words in the turn, the purpose of a call that carries none. */
+  agentWords?(agentId: string, turnId: string): string | null;
+  /**
+   * One plain line in the owner's language about a call the agent did not explain, from the cheap
+   * review model. Null when it cannot.
+   */
+  summarizePurpose?(agentId: string, prompt: string): Promise<string | null>;
+  /** The language the owner reads, such as "Spanish". */
+  ownerLanguage?(): string;
+}
+
+function cardLine(text: string, limit: number): string {
+  const line = text.replace(/\s+/gu, " ").trim();
+  return line.length > limit ? `${line.slice(0, limit - 1)}…` : line;
+}
+
+/**
+ * The command text of a trust card, one part a line (`parseTrustApprovalCard` reads it back): the
+ * purpose, the action lines, the amount, then the raw call under the technical details.
+ */
+function trustCardText(card: {
+  purpose: { text: string; by: "agent" | "atelier" } | null;
+  action: readonly string[];
+  amount: string | null;
+  details: string;
+}): string {
+  const lines: string[] = [];
+  const purpose = card.purpose ? cardLine(card.purpose.text, TRUST_CARD_PURPOSE_LIMIT) : "";
+  if (purpose)
+    lines.push(
+      card.purpose?.by === "atelier"
+        ? sourceText("status.agent.approvalCard.summary", { purpose })
+        : sourceText("status.agent.approvalCard.purpose", { purpose }),
+    );
+  for (const action of card.action) {
+    const line = cardLine(action, 400);
+    if (line) lines.push(sourceText("status.agent.approvalCard.action", { action: line }));
+  }
+  if (card.amount) lines.push(sourceText("status.agent.approvalCard.amount", { amount: cardLine(card.amount, 80) }));
+  if (card.details.trim()) lines.push(sourceText("status.agent.approvalCard.details"), card.details.trim());
+  return lines.join("\n");
+}
+
+/** The longest wait for Atelier's summary of a call before the card shows without it. */
+const PURPOSE_SUMMARY_TIMEOUT_MS = 10_000;
+
+/** The fixed action line of a card: the platform and the action, such as "Meta ads · meta-ads create-campaign". */
+export function trustActionLine(action: TrustClassification): string {
+  const platform = action.platform ? action.platform.charAt(0).toUpperCase() + action.platform.slice(1) : "";
+  const place = action.action === "launch_ads" && platform ? `${platform} ads` : platform;
+  return place ? `${place} · ${action.label}` : action.label;
 }
 
 /** The owner's card text of a request that a manager escalated, or that no agent answered. */
 export function withEscalation(reason: string, why: ToOwnerReason | null): string {
   const escalated = escalationLine(why);
-  if (escalated) return `${reason} ${sourceText("status.agent.escalatedBy", escalated)}`;
-  return why?.kind === "unanswered" ? `${reason} ${sourceText("status.agent.unansweredByManagers")}` : reason;
+  if (escalated) return `${reason}\n${sourceText("status.agent.escalatedBy", escalated)}`;
+  return why?.kind === "unanswered" ? `${reason}\n${sourceText("status.agent.unansweredByManagers")}` : reason;
 }
 
 /** The guardrails' answer for one call: refuse it, or how the trust gate must treat it. */
@@ -149,57 +205,110 @@ export class TrustToolGate {
     request: AppServerRequest,
     subject: Required<Pick<TrustSubject, "agentId" | "threadId" | "turnId">>,
     action: TrustClassification,
+    purpose: string | null,
   ) {
-    return (reason: string) => {
-      const money = isMoney(action);
-      const effect = money ? moneyEffect(action, this.#trust.audit) : null;
-      const policy = this.#options.guardrails?.policy();
-      const hours = money && policy?.enabled ? policy.moneyApprovalHours : null;
-      let expired = false;
-      const timer =
-        hours === null
-          ? null
-          : setTimeout(() => {
-              expired = true;
-              this.#attention.cancelRequest(client, request.id);
-            }, hours * 3_600_000);
-      timer?.unref?.();
-      const command = effect
-        ? [effect.headline, effect.payByHand].filter(Boolean).join("\n")
-        : action.amount === undefined
-          ? action.summary
-          : `${action.summary} (${action.amount} ${action.currency ?? "USD"})`;
-      return this.#attention
-        .awaitToolApproval(
-          client,
-          request,
-          {
-            requestId: request.id,
-            agentId: subject.agentId,
-            threadId: subject.threadId,
-            turnId: subject.turnId,
-            kind: "permissions",
-            command,
-            cwd: null,
-            reason:
-              hours === null
-                ? reason
-                : `${reason} ${sourceText("status.agent.moneyApprovalExpires", { hours: String(hours) })}`,
-            grantRoot: null,
-            permissions: null,
-          },
-          // Full access does not answer it, and only the owner can: the money and the name are theirs.
-          { alwaysAsk: true, ownerOnly: true },
-        )
-        .pipe(
-          Effect.ensuring(Effect.sync(() => timer && clearTimeout(timer))),
-          Effect.tap(() =>
-            Effect.sync(() => {
-              if (expired) this.#options.guardrails?.moneyExpired(subject.agentId, subject.turnId, action.summary);
-            }),
-          ),
-        );
-    };
+    return (reason: string) =>
+      this.#purposeFor(subject, action, purpose).pipe(
+        Effect.flatMap((stated) => this.#ownerCard(client, request, subject, action, reason, stated)),
+      );
+  }
+
+  /**
+   * The purpose line of a card that goes to the owner: the agent's own, or else one line that Atelier
+   * writes from the call and the agent's latest words, marked as its summary. None when that fails.
+   */
+  #purposeFor(
+    subject: Required<Pick<TrustSubject, "agentId" | "threadId" | "turnId">>,
+    action: TrustClassification,
+    purpose: string | null,
+  ): Effect.Effect<{ text: string; by: "agent" | "atelier" } | null> {
+    if (purpose) return Effect.succeed({ text: purpose, by: "agent" });
+    const summarize = this.#options.summarizePurpose;
+    if (!summarize) return Effect.succeed(null);
+    const prompt = approvalPurposePrompt({
+      language: this.#options.ownerLanguage?.() ?? "Spanish",
+      action: trustActionLine(action),
+      call: action.summary,
+      agentWords: this.#options.agentWords?.(subject.agentId, subject.turnId) ?? null,
+    });
+    return Effect.promise(async () => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), PURPOSE_SUMMARY_TIMEOUT_MS);
+        timer.unref?.();
+      });
+      try {
+        const text = await Promise.race([summarize(subject.agentId, prompt).catch(() => null), timeout]);
+        const line = text ? generatedPurpose(text) : null;
+        return line ? { text: line, by: "atelier" as const } : null;
+      } finally {
+        clearTimeout(timer);
+      }
+    });
+  }
+
+  #ownerCard(
+    client: TrustClient,
+    request: AppServerRequest,
+    subject: Required<Pick<TrustSubject, "agentId" | "threadId" | "turnId">>,
+    action: TrustClassification,
+    reason: string,
+    purpose: { text: string; by: "agent" | "atelier" } | null,
+  ) {
+    const money = isMoney(action);
+    const effect = money ? moneyEffect(action, this.#trust.audit) : null;
+    const policy = this.#options.guardrails?.policy();
+    const hours = money && policy?.enabled ? policy.moneyApprovalHours : null;
+    let expired = false;
+    const timer =
+      hours === null
+        ? null
+        : setTimeout(() => {
+            expired = true;
+            this.#attention.cancelRequest(client, request.id);
+          }, hours * 3_600_000);
+    timer?.unref?.();
+    // The card: the agent's purpose, the fixed action line (a money card's effect), the amount, and
+    // the raw call behind the technical details.
+    const command = trustCardText({
+      purpose,
+      action: [trustActionLine(action), effect?.headline ?? "", effect?.payByHand ?? ""].filter(
+        (line, index, lines) => line !== "" && lines.indexOf(line) === index,
+      ),
+      amount: action.amount === undefined ? null : `${action.amount} ${action.currency ?? "USD"}`,
+      details: `${action.label}: ${action.summary}`,
+    });
+    return this.#attention
+      .awaitToolApproval(
+        client,
+        request,
+        {
+          requestId: request.id,
+          agentId: subject.agentId,
+          threadId: subject.threadId,
+          turnId: subject.turnId,
+          kind: "permissions",
+          command,
+          cwd: null,
+          // One sentence a line, so each reader sees each one in their own language.
+          reason:
+            hours === null
+              ? reason
+              : `${reason}\n${sourceText("status.agent.moneyApprovalExpires", { hours: String(hours) })}`,
+          grantRoot: null,
+          permissions: null,
+        },
+        // Full access does not answer it, and only the owner can: the money and the name are theirs.
+        { alwaysAsk: true, ownerOnly: true },
+      )
+      .pipe(
+        Effect.ensuring(Effect.sync(() => timer && clearTimeout(timer))),
+        Effect.tap(() =>
+          Effect.sync(() => {
+            if (expired) this.#options.guardrails?.moneyExpired(subject.agentId, subject.turnId, action.summary);
+          }),
+        ),
+      );
   }
 
   /**
@@ -212,8 +321,9 @@ export class TrustToolGate {
     subject: Required<Pick<TrustSubject, "agentId" | "threadId" | "turnId">>,
     action: TrustClassification,
     reason: string,
+    purpose: string | null,
   ): Effect.Effect<TrustApprovalResult> {
-    const owner = (text: string) => this.#approve(client, request, subject, action)(text);
+    const owner = (text: string) => this.#approve(client, request, subject, action, purpose)(text);
     const approvals = this.#options.approvals;
     if (!approvals) return owner(reason);
     return approvals
@@ -222,7 +332,7 @@ export class TrustToolGate {
         source: "gate",
         askerId: subject.agentId,
         title: `${action.label}: ${action.summary}`,
-        reason,
+        reason: purpose ? `${reason}\n${purpose}` : reason,
         evidence: action.summary,
       })
       .pipe(
@@ -260,6 +370,7 @@ export class TrustToolGate {
     subject: Required<Pick<TrustSubject, "agentId" | "threadId" | "turnId">>,
     action: TrustClassification,
     guard: GuardCheck | null,
+    purpose: string | null,
   ) {
     const money = isMoney(action);
     const digest = money ? moneyDigest(action) : null;
@@ -268,8 +379,8 @@ export class TrustToolGate {
     let accepted = false;
     const approve = (reason: string) =>
       (this.#trust.approverFor(gated) === "manager"
-        ? this.#viaManager(client, request, subject, gated, reason)
-        : this.#approve(client, request, subject, gated)(reason)
+        ? this.#viaManager(client, request, subject, gated, reason, purpose)
+        : this.#approve(client, request, subject, gated, purpose)(reason)
       ).pipe(
         Effect.tap((result) =>
           Effect.sync(() => {
@@ -324,7 +435,16 @@ export class TrustToolGate {
     const args = isDynamicRecord(params.arguments) ? params.arguments : {};
     const tabId = isString(args.tabId) ? args.tabId : undefined;
     const tab = tabId ? this.#options.listTabs().find((candidate) => candidate.id === tabId) : undefined;
-    const action = classifyBrowserCall(params.tool, params.arguments, tab?.url);
+    const found = classifyBrowserCall(
+      params.tool,
+      params.arguments,
+      tab?.url,
+      tabId ? (this.#options.pageFacts?.(tabId) ?? null) : null,
+    );
+    // A step on a checkout page that may be the pay button: the agent reads the page or names the
+    // element. The owner never sees it.
+    if (isBrowserStepBlock(found)) return openBotToolFailure(found.blocked);
+    const action = found;
     const guard = yield* this.#guard(
       agentId,
       params.turnId,
@@ -335,7 +455,7 @@ export class TrustToolGate {
     if (guard && !guard.allowed) return openBotToolFailure(guard.message);
     if (!action) return null;
     const subject = { agentId, threadId: params.threadId, turnId: params.turnId };
-    const result = yield* this.#gate(client, request, subject, action, guard);
+    const result = yield* this.#gate(client, request, subject, action, guard, this.#agentWords(agentId, params.turnId));
     return result.allowed ? null : openBotToolFailure(result.message);
   });
 
@@ -392,9 +512,14 @@ export class TrustToolGate {
       threadId: this.#options.publicThreadId(agentId, params.threadId),
       turnId: params.turnId,
     };
-    const result = yield* this.#gate(client, request, subject, action, guard);
+    const result = yield* this.#gate(client, request, subject, action, guard, this.#agentWords(agentId, params.turnId));
     return result.allowed ? null : openBotToolFailure(result.message);
   });
+
+  /** The agent's latest words in the turn, as the purpose of a call that states none. */
+  #agentWords(agentId: string, turnId: string): string | null {
+    return purposeLine(this.#options.agentWords?.(agentId, turnId) ?? null);
+  }
 
   /**
    * `openbot/trust-check`: the Claude hook asks before Bash or an MCP tool runs. `phase: "check"`
@@ -431,7 +556,9 @@ export class TrustToolGate {
         return answer("ask");
       }
     }
-    const result = yield* this.#gate(client, request, subject, action, guard);
+    // Claude's Bash says why in its description; an MCP call takes the agent's latest words.
+    const purpose = toolInputPurpose(params.toolName, params.toolInput) ?? this.#agentWords(agentId, turnId);
+    const result = yield* this.#gate(client, request, subject, action, guard, purpose);
     return result.allowed ? answer("allow") : answer("deny", result.message);
   });
 
@@ -463,7 +590,12 @@ export class TrustToolGate {
     if (guard && !guard.allowed) return false;
     if (!action || (action.action !== "pay" && action.action !== "launch_ads")) return null;
     const subject = { agentId, threadId: this.#options.publicThreadId(agentId, threadId), turnId };
-    const result = yield* this.#gate(client, request, subject, action, guard);
+    // Codex says why it runs a command in the approval's `reason` (its justification).
+    const purpose =
+      purposeLine(
+        isString(params.reason) ? params.reason : isString(params.justification) ? params.justification : null,
+      ) ?? this.#agentWords(agentId, turnId);
+    const result = yield* this.#gate(client, request, subject, action, guard, purpose);
     return result.allowed;
   });
 

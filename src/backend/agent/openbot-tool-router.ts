@@ -338,7 +338,22 @@ export interface OpenBotToolRouterOptions {
   guardrails?: GuardrailsService | null | undefined;
   /** Tier 1 of `docs/approvals.md`: requests that the asking agent's manager answers. */
   approvals?: ApprovalRouter | null | undefined;
+  /** Atelier's one plain line about a call that the agent did not explain, for its approval card. */
+  summarizePurpose?: ((agentId: string, prompt: string) => Promise<string | null>) | undefined;
+  /** The language the owner reads, such as "Spanish". */
+  ownerLanguage?: (() => string) | undefined;
   hooks: OpenBotToolRouterHooks;
+}
+
+/** The agent's latest words in a turn: the last text it wrote there, from the working snapshot. */
+function latestAgentWords(conversation: ConversationRuntime, agentId: string, turnId: string): string | null {
+  const messages = conversation.snapshot(agentId)?.messages ?? [];
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.turnId !== turnId) continue;
+    if ((message.author === "assistant" || message.author === "agent") && message.text.trim()) return message.text;
+  }
+  return null;
 }
 
 /** Tools that take an `agentId` and change that agent's profile, instructions or skills. */
@@ -472,6 +487,10 @@ export class OpenBotToolRouter {
           messagingThread: (threadId) => options.messaging.linkForThread(threadId) !== null,
           guardrails: options.guardrails ?? null,
           approvals: options.approvals ?? null,
+          pageFacts: (tabId) => options.browser.pageFacts?.(tabId) ?? null,
+          agentWords: (agentId, turnId) => latestAgentWords(options.conversation, agentId, turnId),
+          ...(options.summarizePurpose ? { summarizePurpose: options.summarizePurpose } : {}),
+          ...(options.ownerLanguage ? { ownerLanguage: options.ownerLanguage } : {}),
         })
       : null;
     this.#guardrails = options.guardrails ?? null;

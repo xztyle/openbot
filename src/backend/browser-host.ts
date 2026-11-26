@@ -157,6 +157,7 @@ import {
 } from "./model-text-limit";
 import type { DynamicToolCallParams, DynamicToolResult } from "./protocol";
 import { isRecord } from "./protocol";
+import type { BrowserPageFacts } from "./trust/trust-classifier";
 import type { VaultCardSecret } from "./vault-items";
 
 interface BrowserHostEvents {
@@ -809,6 +810,18 @@ export class BrowserHost {
     return (
       [...this.#tabs.values()].findLast((tab) => tab.privateSession === privateSession && !tab.closing)?.id ?? null
     );
+  }
+
+  /** What the last snapshot of a tab says of its page: an element by its ref, and the focus. */
+  pageFacts(tabId: string): BrowserPageFacts | null {
+    const tab = this.#tabs.get(tabId);
+    if (!tab || tab.closing) return null;
+    const snapshot = tab.engine.lastSnapshot();
+    if (!snapshot) return null;
+    return {
+      element: (ref) => snapshot.elements.find((element) => element.ref === ref) ?? null,
+      focus: () => snapshot.focus,
+    };
   }
 
   listTabs(): BrowserTab[] {

@@ -38,6 +38,8 @@ export interface TrustClassification {
    * surface for the policy's pass time, so a person approves a session, not each click.
    */
   surface?: string;
+  /** How long the pass of `surface` lasts after an approval; absent: the policy's pass time. */
+  passMinutes?: number;
   /**
    * A browser action on a payment or ads page: the site and what the call does, such as
    * `pay.hotmart.com` and `click "Comprar"`. The approval card says this instead of an amount.
@@ -130,18 +132,139 @@ const STAGING_SITE = /^[a-z0-9-]*-(preview|staging|draft|test)$/u;
  * skill's loop that finds `meta-ads.mjs`, or the helper by its own name. `domain add` keeps both words.
  */
 function helperCommand(segment: string, helper: string, mentioned: boolean): string | null {
+  return helperCall(segment, helper, mentioned)?.sub ?? null;
+}
+
+/** `helperCommand` and the arguments after the subcommand, which the helper itself parses. */
+function helperCall(segment: string, helper: string, mentioned: boolean): { sub: string; rest: string } | null {
   if (!mentioned) return null;
+  const trimmed = segment.trim();
   const match = new RegExp(
     `^(?:[A-Za-z_][A-Za-z0-9_]*=\\S*\\s+)*(?:node\\s+"?\\$\\{?[A-Za-z_]+\\}?"?|node\\s+\\S*${helper}\\.mjs"?|\\S*${helper}(?:\\.mjs)?)\\s+([a-z][a-z-]*)(?:\\s+([a-z][a-z-]*))?`,
-    "u",
-  ).exec(segment.trim());
+    "du",
+  ).exec(trimmed);
   if (!match?.[1]) return null;
-  return match[1] === "domain" && match[2] ? `domain ${match[2]}` : match[1];
+  const sub = match[1] === "domain" && match[2] ? `domain ${match[2]}` : match[1];
+  const end = (sub === match[1] ? match.indices?.[1]?.[1] : match.indices?.[2]?.[1]) ?? trimmed.length;
+  return { sub, rest: trimmed.slice(end) };
+}
+
+/**
+ * The meta-ads subcommands that only read: setup, lists, reports, the launch kit and the audit log.
+ * They never change an ad, a budget or a bid, whatever flags they carry (`reach-estimate --budgets`
+ * only estimates).
+ */
+const META_ADS_READS = new Set([
+  "help",
+  "whoami",
+  "accounts",
+  "account",
+  "campaigns",
+  "adsets",
+  "ads",
+  "creatives",
+  "get",
+  "insights",
+  "review",
+  "audiences",
+  "lead-forms",
+  "leads",
+  "audit",
+  "readiness",
+  "reach-estimate",
+  "targeting-search",
+  "preview",
+  "pixel-check",
+  "validate",
+]);
+
+/** The flags that each helper reads with no value (its `BOOLEAN_FLAGS`): any other `--flag` takes the next word. */
+const HELPER_BOOLEAN_FLAGS: Record<"meta-ads" | "hotmart", ReadonlySet<string>> = {
+  "meta-ads": new Set([
+    "approved",
+    "activate",
+    "dry-run",
+    "validate",
+    "deep",
+    "raw",
+    "help",
+    "all",
+    "budget-sharing",
+    "no-budget-sharing",
+    "include-archived",
+  ]),
+  hotmart: new Set([
+    "approved",
+    "dry-run",
+    "raw",
+    "help",
+    "sandbox",
+    "production",
+    "full",
+    "send-mail",
+    "charge",
+    "any-status",
+    "no-token-cache",
+  ]),
+};
+
+/** The words of a shell segment, with quotes taken off as the shell does; null for an unclosed quote. */
+function shellWords(segment: string): string[] | null {
+  const words: string[] = [];
+  const pattern = /"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+?)(?=\s|"|'|$)|(\s+)/gu;
+  let current: string | null = null;
+  let consumed = 0;
+  for (const match of segment.matchAll(pattern)) {
+    if (match.index !== consumed) return null;
+    consumed = match.index + match[0].length;
+    if (match[4] !== undefined) {
+      if (current !== null) words.push(current);
+      current = null;
+      continue;
+    }
+    current = (current ?? "") + (match[1] ?? match[2] ?? match[3] ?? "");
+  }
+  if (consumed !== segment.length) return null;
+  if (current !== null) words.push(current);
+  return words;
+}
+
+/**
+ * Whether a helper call only checks a change, read as the helper's own argument parser reads it:
+ * `--dry-run` shows the request and sends nothing, and (meta-ads only) `--validate` asks Meta to check
+ * it with `validate_only`, which saves nothing. A flag that is the value of the option before it
+ * (`--name --validate`), that has a value (`--validate=1`, a string, not the flag), or that follows
+ * `--` does not count, and neither does a segment with an unquoted expansion that could add words.
+ */
+function onlyChecks(segment: string, helper: "meta-ads" | "hotmart"): boolean {
+  // An unquoted expansion can split into more words, such as a value that eats the flag.
+  // A background `&` starts another command in the same segment.
+  if (/[`$&]/u.test(segment.replace(/"(?:[^"\\`]|\\.)*"|'[^']*'/gu, "").replace(/\d*>&\d+/gu, ""))) return false;
+  const words = shellWords(segment.trim());
+  if (!words) return false;
+  const booleans = HELPER_BOOLEAN_FLAGS[helper];
+  const checks = helper === "meta-ads" ? ["dry-run", "validate"] : ["dry-run"];
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index] ?? "";
+    if (word === "--") return false;
+    // What a pipe feeds is another program: only this helper's own words count.
+    if (word === "|" || word.startsWith("|")) return false;
+    if (!word.startsWith("--") || word.includes("=")) continue;
+    const name = word.slice(2);
+    if (checks.includes(name)) return true;
+    // An option with a value takes the next word, whatever it looks like.
+    if (!booleans.has(name)) index += 1;
+  }
+  return false;
 }
 
 function classifyMetaAds(segment: string, mentioned: boolean): TrustClassification | null {
-  const sub = helperCommand(segment, "meta-ads", mentioned);
-  if (!sub) return null;
+  const call = helperCall(segment, "meta-ads", mentioned);
+  if (!call) return null;
+  const { sub } = call;
+  // `config show` reads; `config set` of a weaker spend guard needs --approved and stays gated below.
+  if (META_ADS_READS.has(sub) || (sub === "config" && !/\bconfig\s+set\b/u.test(segment))) return null;
+  if (onlyChecks(call.rest, "meta-ads")) return null;
   const activates = sub === "resume" || /--activate\b/u.test(segment) || /"status"\s*:\s*"ACTIVE"/u.test(segment);
   const amount =
     amountOf(segment, /--daily(?:-budget)?[= ]["']?(\d+(?:[.,]\d+)?)/u) ??
@@ -164,8 +287,11 @@ function classifyMetaAds(segment: string, mentioned: boolean): TrustClassificati
 }
 
 function classifyHotmart(segment: string, mentioned: boolean): TrustClassification | null {
-  const sub = helperCommand(segment, "hotmart", mentioned);
-  if (!sub) return null;
+  const call = helperCall(segment, "hotmart", mentioned);
+  if (!call) return null;
+  const { sub } = call;
+  // Every hotmart change honours --dry-run: it shows the request and sends nothing.
+  if (onlyChecks(call.rest, "hotmart")) return null;
   const base = {
     label: `hotmart ${sub}`,
     summary: trustSummary(segment.slice(segment.indexOf(sub))),
@@ -1071,12 +1197,178 @@ function browserCallWords(tool: string, record: DynamicRecord): string {
   return target ? `${tool} ${target}` : tool;
 }
 
-/** A browser tool call, with the address of the tab it acts on. */
+/**
+ * What the trust gate knows of a tab's page from its last snapshot: the element of a ref, and the
+ * element that has the focus. Both are null when the snapshot is gone or does not hold it.
+ */
+export interface BrowserPageFacts {
+  element(ref: string): { role: string | null; name: string; description: string; tag: string } | null;
+  focus(): { role: string | null; name: string; tag: string; editable: boolean } | null;
+}
+
+/** A browser call on a checkout page that the gate refuses without a card: it cannot tell what the step hits. */
+export interface BrowserStepBlock {
+  blocked: string;
+}
+
+export function isBrowserStepBlock(value: TrustClassification | BrowserStepBlock | null): value is BrowserStepBlock {
+  return value !== null && "blocked" in value;
+}
+
+/** The agent's message when the gate cannot tell a click on a checkout page from the pay button. */
+export const CHECKOUT_UNKNOWN_CLICK =
+  "No puedo confirmar que ese clic no sea el de pagar; usa snapshot para leer o elige el elemento por su texto.";
+/** The same for text typed where the gate cannot tell a payment field from another. */
+export const CHECKOUT_UNKNOWN_FIELD =
+  "No puedo confirmar que ese campo no sea de pago; usa snapshot para leer o elige el campo por su texto.";
+
+/** How long one owner approval on a checkout page covers the agent's steps on that site. */
+export const CHECKOUT_PASS_MINUTES = 30;
+
+/**
+ * A payment field: card number, expiry, security code, cardholder, a tax or identity document,
+ * billing data, or PIX and boleto. Agents never type into these without the owner.
+ */
+const PAYMENT_FIELD =
+  /card|tarjeta|cart[aã]o|cc-?(?:number|num|exp|csc|name)|cvv|cvc|\bcsc\b|security.?code|c[oó]digo de seguran[cç]a|c[oó]digo de seguridad|expir|vencim|validade|\bmm\s*\/\s*(?:aa|yy)|cardholder|titular|name on card|nombre en la tarjeta|nome no cart|document|\bcpf\b|\bcnpj\b|\bdni\b|\brut\b|\bcuit\b|\bnit\b|c[eé]dula|tax.?id|billing|facturaci|\bpix\b|boleto/iu;
+/** The buy or submit control of a checkout. */
+const BUY_CONTROL =
+  /comprar|pagar|finalizar|confirmar|\bbuy\b|\bpay\b|place.?order|subscribe|suscrib|assinar|checkout.?submit|submit/iu;
+/** A CSS selector of a button that says nothing of which button it is. */
+const ANONYMOUS_BUTTON = /button|\bbtn|\[type\s*=|input\[/iu;
+/** Typed text that looks like a card number, whatever field it goes to. */
+const CARD_NUMBER_TEXT = /(?:\d[ -]?){13,19}/u;
+
+type StepClass = "free" | "money" | "card" | "unknown-click" | "unknown-field";
+
+interface TargetFacts {
+  /** The target's words: role, name, text, selector. Empty when nothing names it. */
+  words: string;
+  /** Whether the words say what the element is. */
+  known: boolean;
+  /** A button or link with no name, or a point: the gate cannot tell which control it is. */
+  anonymous: boolean;
+}
+
+function factsOf(target: unknown, page: BrowserPageFacts | null): TargetFacts {
+  if (target === undefined) {
+    const focus = page?.focus() ?? null;
+    if (!focus) return { words: "", known: false, anonymous: true };
+    const words = [focus.role ?? "", focus.name, focus.tag].join(" ").trim();
+    return { words, known: focus.name.trim() !== "", anonymous: focus.name.trim() === "" };
+  }
+  if (!isDynamicRecord(target)) return { words: "", known: false, anonymous: true };
+  const text = (key: string) => (typeof target[key] === "string" ? target[key] : "");
+  switch (target.kind) {
+    case "ref": {
+      const element = page?.element(text("ref")) ?? null;
+      if (!element) return { words: "", known: false, anonymous: true };
+      const words = [element.role ?? "", element.name, element.description, element.tag].join(" ").trim();
+      const named = `${element.name}${element.description}`.trim() !== "";
+      return { words, known: named, anonymous: !named };
+    }
+    case "role": {
+      const words = `${text("role")} ${text("name")}`.trim();
+      return { words, known: text("name").trim() !== "", anonymous: text("name").trim() === "" };
+    }
+    case "text":
+      return { words: text("text"), known: true, anonymous: false };
+    case "css": {
+      const selector = text("selector");
+      return { words: selector, known: true, anonymous: ANONYMOUS_BUTTON.test(selector) };
+    }
+    default:
+      return { words: "", known: false, anonymous: true };
+  }
+}
+
+function clickClass(target: unknown, page: BrowserPageFacts | null): "money" | "unknown-click" | "free" {
+  const facts = factsOf(target, page);
+  if (BUY_CONTROL.test(facts.words)) return "money";
+  if (!facts.known || facts.anonymous) return "unknown-click";
+  return "free";
+}
+
+function typeClass(target: unknown, text: unknown, submit: boolean, page: BrowserPageFacts | null): StepClass {
+  const facts = factsOf(target, page);
+  if (PAYMENT_FIELD.test(facts.words) || (typeof text === "string" && CARD_NUMBER_TEXT.test(text))) return "card";
+  if (!facts.known) return "unknown-field";
+  // Enter in a field sends its form: on a checkout page that is the payment.
+  return submit ? "money" : "free";
+}
+
+function pressClass(key: unknown, target: unknown, page: BrowserPageFacts | null): StepClass {
+  const name = typeof key === "string" ? key.toLowerCase() : "";
+  if (/(^|\+)(enter|numpadenter|return)$/u.test(name)) return "money";
+  if (name === " " || name === "space") return clickClass(target, page);
+  return "free";
+}
+
+/** The class of one step of a browser call on a checkout page. */
+function stepClass(action: string, step: DynamicRecord, page: BrowserPageFacts | null): StepClass {
+  switch (action) {
+    case "click":
+      return clickClass(step.target, page);
+    case "type":
+      return typeClass(step.target, step.text, step.submit === true, page);
+    case "press":
+      return pressClass(step.key, step.target, page);
+    case "fill_fields": {
+      const fields = Array.isArray(step.fields) ? step.fields : [];
+      return worst(
+        fields.map((field) =>
+          isDynamicRecord(field)
+            ? typeClass({ kind: "ref", ref: field.ref }, field.text, false, page)
+            : ("unknown-field" as const),
+        ),
+      );
+    }
+    case "evaluate":
+      return typeof step.expression === "string" && isReadOnlyPageScript(step.expression) ? "free" : "money";
+    case "act": {
+      const legacy = isDynamicRecord(step.action) ? step.action : {};
+      const ref = typeof legacy.ref === "string" ? { kind: "ref", ref: legacy.ref } : undefined;
+      if (legacy.type === "click") return clickClass(ref, page);
+      if (legacy.type === "type") return typeClass(ref, legacy.text, legacy.submit === true, page);
+      if (legacy.type === "key") return pressClass(legacy.key, undefined, page);
+      return "free";
+    }
+    // Choosing a country, a language or the installments shown, scrolling, waiting, moving to
+    // another address and reading pay nothing.
+    default:
+      return "free";
+  }
+}
+
+const STEP_ORDER: readonly StepClass[] = ["card", "money", "unknown-click", "unknown-field", "free"];
+
+function worst(classes: readonly StepClass[]): StepClass {
+  return STEP_ORDER.find((candidate) => classes.includes(candidate)) ?? "free";
+}
+
+/** The class of a whole browser call on a checkout page: its worst step. */
+function checkoutCallClass(tool: string, record: DynamicRecord, page: BrowserPageFacts | null): StepClass {
+  if (tool !== "run_steps") return stepClass(tool, record, page);
+  const steps = Array.isArray(record.steps) ? record.steps : [];
+  return worst(
+    steps.map((step) =>
+      isDynamicRecord(step) && typeof step.action === "string" ? stepClass(step.action, step, page) : "unknown-click",
+    ),
+  );
+}
+
+/**
+ * A browser tool call, with the address of the tab it acts on and what its last snapshot says of the
+ * page. On a checkout page only real payment steps are money: a card fill, text in a payment field,
+ * the buy or submit control, Enter, or a script that writes. A step whose target the gate cannot
+ * tell is refused with a message to the agent (`BrowserStepBlock`); the owner never sees it.
+ */
 export function classifyBrowserCall(
   tool: string,
   args: unknown,
   tabUrl: string | undefined,
-): TrustClassification | null {
+  page: BrowserPageFacts | null = null,
+): TrustClassification | BrowserStepBlock | null {
   const url = parsedUrl(tabUrl);
   const record = isDynamicRecord(args) ? args : {};
   if (tool === "fill_card") {
@@ -1105,16 +1397,31 @@ export function classifyBrowserCall(
   if (!url || !ACTING_BROWSER_TOOLS.has(tool)) return null;
   const surface = BROWSER_SURFACES.find((candidate) => candidate.test(url));
   if (!surface) return null;
+  const what = browserCallWords(tool, record);
+  if (surface.surface === "pay:checkout") {
+    const found = checkoutCallClass(tool, record, page);
+    if (found === "free") return null;
+    if (found === "unknown-click") return { blocked: CHECKOUT_UNKNOWN_CLICK };
+    if (found === "unknown-field") return { blocked: CHECKOUT_UNKNOWN_FIELD };
+    return {
+      action: "pay",
+      label: `openbot_browser.${tool}`,
+      summary: trustSummary(`Acts on ${url.hostname}${url.pathname}: ${what}`),
+      platform: surfacePlatform(url),
+      // Card data is the owner's every time; a buy step's approval covers this site for a while.
+      ...(found === "money" ? { surface: `pay:checkout:${url.hostname}`, passMinutes: CHECKOUT_PASS_MINUTES } : {}),
+      browser: { site: url.hostname, what: trustSummary(what) },
+    };
+  }
   // A script that only reads, such as the offer in the address or the page title, cannot pay or
   // publish. Every other script, and every click, key or typed text, is the surface's action.
   if (tool === "evaluate" && typeof record.expression === "string" && isReadOnlyPageScript(record.expression))
     return null;
-  const what = browserCallWords(tool, record);
   return {
     action: surface.action,
     label: `openbot_browser.${tool}`,
     summary: trustSummary(`Acts on ${url.hostname}${url.pathname}: ${what}`),
-    platform: surface.platform === "checkout" ? surfacePlatform(url) : surface.platform,
+    platform: surface.platform,
     surface: surface.surface,
     browser: { site: url.hostname, what: trustSummary(what) },
   };

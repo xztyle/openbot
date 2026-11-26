@@ -4,9 +4,12 @@ import { describe, expect, it } from "vitest";
 import { impactOf, monitorPrompt } from "../guardrails/injection-guard";
 import { moneyEffect } from "../guardrails/money-approvals";
 import {
+  type BrowserPageFacts,
+  CHECKOUT_UNKNOWN_CLICK,
   classifyBrowserCall,
   classifyCommand,
   expandCommand,
+  isBrowserStepBlock,
   isReadOnlyPageScript,
   pushesOnlyReviewBranches,
 } from "./trust-classifier";
@@ -116,8 +119,26 @@ describe("the injection monitor's prompt", () => {
 // payment of "? USD" on each read; or a script that clicks Buy passes as a read and pays unasked.
 describe("browser calls on a checkout page", () => {
   const checkout = "https://pay.hotmart.com/A1234567B?off=xyz789&checkoutMode=10";
-  const browserAction = (tool: string, args: DynamicRecord, url = checkout) =>
-    classifyBrowserCall(tool, { tabId: "tab-1", ...args }, url)?.action ?? null;
+  /** The checkout page of the Hotmart scout, as its last snapshot read it. */
+  const page: BrowserPageFacts = {
+    element: (ref) =>
+      ({
+        e1: { role: "combobox", name: "País", description: "", tag: "select" },
+        e2: { role: "textbox", name: "Email", description: "", tag: "input" },
+        e3: { role: "textbox", name: "Número de la tarjeta", description: "", tag: "input" },
+        e4: { role: "button", name: "Comprar ahora", description: "", tag: "button" },
+        e5: { role: "tab", name: "Pix", description: "", tag: "button" },
+        e6: { role: "button", name: "", description: "", tag: "button" },
+      })[ref] ?? null,
+    focus: () => null,
+  };
+  const classified = (tool: string, args: DynamicRecord, url = checkout) =>
+    classifyBrowserCall(tool, { tabId: "tab-1", ...args }, url, page);
+  const browserAction = (tool: string, args: DynamicRecord, url = checkout) => {
+    const found = classified(tool, args, url);
+    return isBrowserStepBlock(found) ? "blocked" : (found?.action ?? null);
+  };
+  const ref = (name: string) => ({ kind: "ref", ref: name, revision: 1 });
   const evaluate = (expression: string, url = checkout) => browserAction("evaluate", { expression }, url);
 
   it("lets a read-only evaluate run with no payment approval", () => {
@@ -156,19 +177,66 @@ describe("browser calls on a checkout page", () => {
     expect(evaluate("x".repeat(5_000))).toBe("pay");
   });
 
-  it("keeps a card fill and every click, key and typed text on checkout a payment", () => {
-    expect(
-      browserAction("fill_card", { cardId: "card-1", targets: { number: { kind: "ref", ref: "e1", revision: 1 } } }),
-    ).toBe("pay");
+  it("asks the owner only for real payment steps", () => {
+    expect(browserAction("fill_card", { cardId: "card-1", targets: { number: ref("e3") } })).toBe("pay");
+    // Typing a card number, into the card field or anywhere else.
+    expect(browserAction("type", { target: ref("e3"), text: "4111" })).toBe("pay");
+    expect(browserAction("type", { target: ref("e2"), text: "4111 1111 1111 1111" })).toBe("pay");
+    // The buy control, by its text, its role or its ref.
     expect(browserAction("click", { target: { kind: "role", role: "button", name: "Comprar ahora" } })).toBe("pay");
+    expect(browserAction("click", { target: { kind: "text", text: "Comprar ahora" } })).toBe("pay");
+    expect(browserAction("click", { target: ref("e4") })).toBe("pay");
     expect(browserAction("press", { key: "Enter" })).toBe("pay");
-    expect(browserAction("type", { target: { kind: "ref", ref: "e4", revision: 1 }, text: "4111" })).toBe("pay");
-    expect(browserAction("run_steps", { steps: [{ action: "click", target: { kind: "ref", ref: "e9" } }] })).toBe(
-      "pay",
-    );
     expect(
-      browserAction("click", { target: { kind: "ref", ref: "e2" } }, "https://checkout.stripe.com/c/pay/cs_1"),
+      browserAction("run_steps", {
+        steps: [
+          { action: "click", target: ref("e1") },
+          { action: "click", target: ref("e4") },
+        ],
+      }),
     ).toBe("pay");
+  });
+
+  it("lets the scout change the country and read the offer with no card", () => {
+    expect(browserAction("click", { target: ref("e1") })).toBeNull();
+    expect(browserAction("select_option", { target: ref("e1"), values: ["BR"] })).toBeNull();
+    expect(browserAction("type", { target: ref("e2"), text: "scout@example.com" })).toBeNull();
+    expect(browserAction("click", { target: ref("e5") })).toBeNull();
+    expect(
+      browserAction("run_steps", {
+        steps: [
+          { action: "click", target: ref("e1") },
+          { action: "type", target: { kind: "role", role: "searchbox", name: "Buscar país" }, text: "Brasil" },
+          { action: "click", target: { kind: "role", role: "option", name: "Brasil" } },
+          { action: "wait_for", text: "R$" },
+          { action: "scroll", deltaY: 600 },
+        ],
+      }),
+    ).toBeNull();
+    expect(browserAction("navigate", { url: "https://pay.hotmart.com/B999?off=abc" })).toBeNull();
+  });
+
+  it("blocks a step it cannot read, with a message to the agent and no card", () => {
+    expect(browserAction("click", { target: ref("e6") })).toBe("blocked");
+    expect(browserAction("click", { target: ref("e99") })).toBe("blocked");
+    expect(browserAction("click", { target: { kind: "point", x: 10, y: 10 } })).toBe("blocked");
+    expect(browserAction("click", { target: { kind: "css", selector: "button.primary" } })).toBe("blocked");
+    expect(classified("click", { target: ref("e6") })).toEqual({ blocked: CHECKOUT_UNKNOWN_CLICK });
+  });
+
+  it("lets one buy-step approval cover the site for the task, and never a card field", () => {
+    const buy = classified("click", { target: ref("e4") });
+    const card = classified("type", { target: ref("e3"), text: "4111" });
+    if (isBrowserStepBlock(buy) || isBrowserStepBlock(card)) throw new Error("Both are money.");
+    expect(buy?.surface).toBe("pay:checkout:pay.hotmart.com");
+    expect(buy?.passMinutes).toBe(30);
+    expect(card?.surface).toBeUndefined();
+  });
+
+  it("keeps every click on an ads page the surface's action", () => {
+    expect(
+      browserAction("click", { target: ref("e2") }, "https://adsmanager.facebook.com/adsmanager/manage/campaigns"),
+    ).toBe("launch_ads");
   });
 
   it("leaves reads and pages that are not checkouts alone", () => {
@@ -180,11 +248,8 @@ describe("browser calls on a checkout page", () => {
   });
 
   it("says plainly what the call does on the card, with no question mark for the amount", () => {
-    const click = classifyBrowserCall(
-      "click",
-      { tabId: "tab-1", target: { kind: "role", role: "button", name: "Comprar ahora" } },
-      checkout,
-    );
+    const found = classified("click", { target: { kind: "role", role: "button", name: "Comprar ahora" } });
+    const click = isBrowserStepBlock(found) ? null : found;
     expect(click?.browser).toEqual({ site: "pay.hotmart.com", what: 'click button "Comprar ahora"' });
     if (!click) throw new Error("A click on checkout is a payment.");
     const effect = moneyEffect(click, null);

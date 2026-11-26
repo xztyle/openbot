@@ -88,6 +88,11 @@ export const messages = defineMessages("status.agent", {
   "status.agent.moneyCard.payByHand": "After you approve: pay {amount} by hand at {where}.",
   "status.agent.moneyCard.payByHandUnknown": "After you approve: pay by hand at {where}. The amount is unknown.",
   "status.agent.moneyApprovalExpires": "It expires in {hours} h if nobody answers, and the call does not run.",
+  "status.agent.approvalCard.purpose": "Purpose: {purpose}",
+  "status.agent.approvalCard.summary": "Atelier's summary: {purpose}",
+  "status.agent.approvalCard.action": "Action: {action}",
+  "status.agent.approvalCard.amount": "Amount: {amount}",
+  "status.agent.approvalCard.details": "Technical details:",
   "status.agent.trustAskAfterUntrusted":
     "{agent} read outside content (a web page, an email or a webhook) in this turn, and the security check could not clear this payment. You decide.",
   "status.agent.escalatedBy": "{by} sent this to you: {reason}",

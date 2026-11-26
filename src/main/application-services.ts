@@ -2054,6 +2054,8 @@ export async function createApplicationServices({
       }),
     tables,
   });
+  // Approval cards say in the owner's language what an agent wants, when the agent did not say it.
+  service.ownerLanguage = ownerLanguage;
   hostTurnLimits.onChange(() => service.turnLimitsChanged());
   teardown.push(TEARDOWN_ORDER.service, "the agent service", () => runCauseEffect(service.stop()));
   const agentMemoryLimitSetting = reloadingAgentMemoryLimit(agentMemoryLimit, service);

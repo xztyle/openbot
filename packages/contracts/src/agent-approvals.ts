@@ -249,3 +249,65 @@ export function decodeAgentApprovalsView(value: unknown): AgentApprovalsView {
     throw new Error("Invalid agent approvals.");
   return { pending: value.pending, decided: value.decided, week: value.week, previousWeek: value.previousWeek };
 }
+
+// ---------------------------------------------------------------------------------------------------
+// The text of a trust approval card: the agent's purpose, the fixed action line, the amount and the
+// raw call.
+
+/**
+ * The line prefixes of a trust approval's `command`. The approval travels in released wire shapes
+ * that carry no other field, so the parts ride in its command text, one per line. The host writes
+ * each line with a `status.agent.approvalCard.*` source key whose English starts with the prefix, so
+ * a client of before shows the lines in the reader's language; a current client lays them out
+ * (`parseTrustApprovalCard`).
+ */
+export const TRUST_CARD_PREFIX = {
+  purpose: "Purpose: ",
+  summary: "Atelier's summary: ",
+  action: "Action: ",
+  amount: "Amount: ",
+  details: "Technical details:",
+} as const;
+
+/** The longest purpose line of a card. */
+export const TRUST_CARD_PURPOSE_LIMIT = 300;
+
+export interface TrustApprovalCard {
+  /** What the agent wants to do and why, in plain words. */
+  purpose: string | null;
+  /** `agent`: the agent wrote it. `atelier`: Atelier summed the call up because the agent gave none. */
+  purposeBy: "agent" | "atelier" | null;
+  /** The fixed action lines: the platform and the action, a money effect. Source text. */
+  action: string[];
+  /** The amount, such as `7 USD`, when it is known. */
+  amount: string | null;
+  /** The raw call, for the collapsed technical details only. */
+  details: string;
+}
+
+/** The parts of a trust approval's command, or null for a command in another shape. */
+export function parseTrustApprovalCard(command: string | null | undefined): TrustApprovalCard | null {
+  if (!command) return null;
+  const card: TrustApprovalCard = { purpose: null, purposeBy: null, action: [], amount: null, details: "" };
+  const lines = command.split("\n");
+  let known = false;
+  for (const [index, line] of lines.entries()) {
+    if (line === TRUST_CARD_PREFIX.details) {
+      card.details = lines.slice(index + 1).join("\n");
+      known = true;
+      break;
+    }
+    if (line.startsWith(TRUST_CARD_PREFIX.purpose)) {
+      card.purpose = line.slice(TRUST_CARD_PREFIX.purpose.length);
+      card.purposeBy = "agent";
+    } else if (line.startsWith(TRUST_CARD_PREFIX.summary)) {
+      card.purpose = line.slice(TRUST_CARD_PREFIX.summary.length);
+      card.purposeBy = "atelier";
+    } else if (line.startsWith(TRUST_CARD_PREFIX.action)) card.action.push(line.slice(TRUST_CARD_PREFIX.action.length));
+    else if (line.startsWith(TRUST_CARD_PREFIX.amount)) card.amount = line.slice(TRUST_CARD_PREFIX.amount.length);
+    else if (line.trim()) return null;
+    else continue;
+    known = true;
+  }
+  return known ? card : null;
+}

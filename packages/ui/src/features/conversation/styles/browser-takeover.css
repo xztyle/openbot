@@ -766,6 +766,57 @@
   overflow-wrap: anywhere;
 }
 
+/* A trust card: the agent's purpose leads; the fixed action line, the amount and the policy's notes follow. */
+.approval-trust {
+  display: grid;
+  gap: var(--openbot-space-1);
+  min-width: 0;
+}
+
+.approval-purpose {
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-lg);
+  line-height: var(--openbot-leading-lg);
+  overflow-wrap: anywhere;
+}
+
+.approval-purpose-source {
+  display: block;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.approval-action-line,
+.approval-amount {
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.approval-amount strong {
+  color: var(--openbot-text-primary);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.approval-reason-note {
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.approval-technical summary {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  cursor: pointer;
+}
+
+.approval-technical .approval-command-block {
+  margin-top: var(--openbot-space-2);
+}
+
 .approval-reason {
   margin: calc(-1 * var(--openbot-space-2)) 0 0;
   color: var(--openbot-text-muted);

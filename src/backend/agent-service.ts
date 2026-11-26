@@ -1996,6 +1996,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       trust: options.trust ?? null,
       guardrails: options.guardrails ?? null,
       approvals: options.approvals ?? null,
+      summarizePurpose: async (agentId, prompt) =>
+        (await Effect.runPromise(this.generateReviewText({ agentId, important: false, prompt }))).text,
+      ownerLanguage: () => this.ownerLanguage(),
       hooks: {
         listAgents: () => this.listAgents(),
         listModels: () => this.listModels(),
@@ -2356,6 +2359,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
    * fresh context without tools: the workspace's cheap model, or for an important ticket a model of
    * the other vendor (`reviewJudgeCandidates`). Its usage counts under the agent as a `grader` session.
    */
+  /** The language the owner reads, for text the host writes for them; the host sets it at start. */
+  ownerLanguage: () => string = () => process.env.OPENBOT_OWNER_LANGUAGE?.trim() || "Spanish";
+
   generateReviewText(input: { agentId: string; important: boolean; prompt: string }) {
     return Effect.suspend(() => {
       const agent = this.#store.list().find((candidate) => candidate.id === input.agentId);

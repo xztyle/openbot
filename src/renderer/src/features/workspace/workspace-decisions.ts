@@ -5,6 +5,7 @@
  * shows and names how many wait in the others, so a request of another space is never missed and
  * never counted as this one's.
  */
+import { parseTrustApprovalCard } from "@openbot/contracts/agent-approvals";
 import type { DecisionQueueSource } from "@openbot/contracts/agent-learning";
 import {
   type AgentAttentionItem,
@@ -203,7 +204,30 @@ export function useDecisionQueue() {
               (entry) => entry.agentId === item.agentId && String(entry.requestId) === String(item.requestId),
             )
           : undefined;
-      const effect = held?.command?.trim() || undefined;
+      // A trust card: the agent's purpose leads, then the fixed action line and the amount; the raw
+      // call stays behind the technical details. Each line of the host's text is translated on its own.
+      const trust = held?.kind === "permissions" ? parseTrustApprovalCard(held.command) : null;
+      const effect = trust ? undefined : held?.command?.trim() || undefined;
+      const lines = (text: string | null | undefined) =>
+        (text ?? "")
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => sourceText(line));
+      const trustSummary = !trust?.purpose
+        ? undefined
+        : trust.purposeBy === "atelier"
+          ? `${trust.purpose} (${t("prompt.approval.atelierSummary")})`
+          : trust.purpose;
+      const trustDetail = trust
+        ? [
+            ...trust.action.map((line) => sourceText(line)),
+            trust.amount ? `${t("prompt.approval.amount")}: ${trust.amount}` : "",
+            ...lines(held?.reason),
+          ]
+            .filter(Boolean)
+            .join("\n")
+        : undefined;
       // A waiting Motion ticket has no turn: an answer of it takes it off the list, in Motion it stays.
       const dismissTicket = ticket
         ? () => ws.channels.port().agent.respondToPrompt({ requestId: item.requestId, answers: {} })
@@ -227,21 +251,31 @@ export function useDecisionQueue() {
         // The effect lines are source text from the host; the amount reads the host's English. A ticket
         // shows its plain summary for an owner with no technical background; its raw text stays behind
         // the collapsed technical details.
-        summary: effect
-          ? effect
-              .split("\n")
-              .map((line) => sourceText(line))
-              .join("\n")
-          : ticket && item.plain
-            ? item.plain.asks
-            : item.summary,
-        detail: effect ? (held?.reason ?? undefined) : ticket ? ticketDetail(item, t) : undefined,
+        summary: trust
+          ? (trustSummary ?? trust.action.map((line) => sourceText(line)).join("\n"))
+          : effect
+            ? effect
+                .split("\n")
+                .map((line) => sourceText(line))
+                .join("\n")
+            : ticket && item.plain
+              ? item.plain.asks
+              : item.summary,
+        detail: trust
+          ? trustDetail || undefined
+          : effect
+            ? lines(held?.reason).join("\n") || undefined
+            : ticket
+              ? ticketDetail(item, t)
+              : undefined,
         ...(ticket
           ? {
               technical: [item.summary, item.reason, item.escalationReason].filter(Boolean).join("\n") || undefined,
             }
-          : {}),
-        amountUsd: effect ? amountIn(effect) : undefined,
+          : trust?.details
+            ? { technical: trust.details }
+            : {}),
+        amountUsd: trust ? amountIn(trust.amount ?? trust.action.join(" ")) : effect ? amountIn(effect) : undefined,
         where: where(
           spaceId,
           channel ? t("workspace.activity.in", { channel: channel.name }) : t("workspace.activity.directMessage"),

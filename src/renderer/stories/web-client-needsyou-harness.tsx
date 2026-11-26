@@ -8,7 +8,10 @@
  * takeover answers it sent to `data-needs-you-answered`. "ticket-review" makes a Motion ticket whose
  * review the grader escalated. "ticket" makes a Motion ticket that asks the
  * reader for an approval wait on Sales Outbound; the page writes the messages it sent to an agent to
- * `data-needs-you-sent` and the ticket answers to `data-needs-you-ticket`.
+ * `data-needs-you-sent` and the ticket answers to `data-needs-you-ticket`. "money-approval" makes Sales
+ * Outbound wait for the owner's OK of a Meta ads call, with the trust card that a real host sends: its
+ * purpose, the fixed action line, the amount and the raw call; the page writes the answer to
+ * `data-needs-you-approval`.
  */
 import {
   type AgentAttentionItem,
@@ -92,6 +95,38 @@ const REVIEW_TICKET: AgentAttentionItem = {
   escalationReason: "The owner set the course list.",
 };
 
+/** The purpose that the agent wrote for the call, which the card shows first. */
+const MONEY_PURPOSE = "Quiero aprobación para revisar los topes de la campaña y modificarlos si superan los 7 USD.";
+
+/** A trust card as the host's gate writes it (`trust-tool-gate.ts`), in its English source text. */
+const MONEY_APPROVAL = {
+  requestId: "approval-meta-ads",
+  agentId: REQUEST.agentId,
+  threadId: REQUEST.threadId,
+  turnId: "turn-sales-meta",
+  kind: "permissions",
+  command: [
+    `Purpose: ${MONEY_PURPOSE}`,
+    "Action: Meta ads · meta-ads create-campaign",
+    "Amount: 7 USD",
+    "Technical details:",
+    'meta-ads create-campaign: create-campaign --name "Prueba" --objective OUTCOME_SALES --daily-budget 7',
+  ].join("\n"),
+  cwd: null,
+  reason: "Sales Outbound wants to launch or fund ads. The trust policy asks you first.",
+  grantRoot: null,
+  permissions: null,
+} as const;
+
+const MONEY_ITEM: AgentAttentionItem = {
+  kind: "approval",
+  requestId: MONEY_APPROVAL.requestId,
+  agentId: MONEY_APPROVAL.agentId,
+  threadId: MONEY_APPROVAL.threadId,
+  turnId: MONEY_APPROVAL.turnId,
+  createdAt: new Date().toISOString(),
+};
+
 const CONDENSED_MESSAGE = "message-agent-2";
 const CONDENSED_ORIGINAL =
   "I paused: the page is not made and the cap is not set.\n\nSo far I only read the account through the API.\n\nAlejandro signs in when the browser view works, so I do not ask again.\n\nI sent the CSO the result in three lines.";
@@ -151,6 +186,10 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     if (detail === "resolve") resolve();
     if (detail === "ticket") emit({ type: "agent-attention-changed", items: [TICKET] });
     if (detail === "ticket-review") emit({ type: "agent-attention-changed", items: [REVIEW_TICKET] });
+    if (detail === "money-approval") {
+      emit({ type: "approval", approval: { ...MONEY_APPROVAL } });
+      emit({ type: "agent-attention-changed", items: [MONEY_ITEM] });
+    }
   });
   document.documentElement.dataset.needsYouReady = "";
   // The reader wrote to Chief only: the other agents have no DM row until one needs them.

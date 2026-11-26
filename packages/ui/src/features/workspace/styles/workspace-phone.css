@@ -504,8 +504,4 @@
   .ws-reaction-add {
     min-width: var(--openbot-touch-target);
   }
-
-  .ws-view-toolbar .ui-sliding-tabs-trigger {
-    min-height: var(--openbot-touch-target);
-  }
 }

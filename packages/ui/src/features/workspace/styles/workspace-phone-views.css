@@ -140,11 +140,6 @@
     grid-auto-flow: column;
   }
 
-  .ws-view-toolbar .ui-sliding-tabs-trigger,
-  .ws-view-toolbar .ui-sliding-tabs-pill {
-    height: calc(var(--openbot-touch-target) - 6px);
-  }
-
   .ws-view-toolbar .ui-sliding-tabs-trigger {
     min-width: 0;
     overflow: hidden;
@@ -181,11 +176,6 @@
 
   .ws-view-tabs .ui-sliding-tabs-trigger {
     flex: 1 0 auto;
-  }
-
-  .ws-view-tabs .ui-sliding-tabs-trigger,
-  .ws-view-tabs .ui-sliding-tabs-pill {
-    height: calc(var(--openbot-touch-target) - 6px);
   }
 
   .ws-view-search {

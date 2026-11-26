@@ -12,7 +12,8 @@
      family. The outline is an inset shadow because Kobalte places the pill from the trigger's
      offset, which a real border would shift. */
   box-shadow: inset 0 0 0 1px var(--openbot-border);
-  padding: var(--openbot-space-1);
+  --sliding-tabs-inset: var(--openbot-space-1);
+  padding: var(--sliding-tabs-inset);
 }
 
 .ui-sliding-tabs-trigger {
@@ -51,7 +52,7 @@
 
 .ui-sliding-tabs-pill {
   position: absolute;
-  top: var(--openbot-space-1);
+  top: var(--sliding-tabs-inset);
   left: 0;
   z-index: 0;
   width: 0;
@@ -104,6 +105,16 @@
     filter var(--sliding-tabs-content-duration) ease-in-out,
     opacity var(--sliding-tabs-content-duration) ease-in-out,
     visibility 0s linear;
+}
+
+/* A touch phone: every tab bar is one touch target (44px) high, the tabs less the bar's own inset,
+   wherever the bar sits. Without this a bar outside a toolbar read the touch control size (40px)
+   and stood taller than the toolbar's, two sizes of the same control on one screen. */
+@media (max-width: 720px) and (pointer: coarse), (max-height: 520px) and (pointer: coarse) {
+  .ui-sliding-tabs-trigger,
+  .ui-sliding-tabs-pill {
+    height: calc(var(--openbot-touch-target) - 2 * var(--sliding-tabs-inset));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

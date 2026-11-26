@@ -157,6 +157,7 @@ export const messages = {
   "settings.tab.hostedServers.title": "Barındırılan sunucular",
   "settings.tab.hostedServers.description": "Bu bilgisayar kapalıyken çalışan Atelier sunucuları oluşturun.",
   "settings.sections.label": "Ayar bölümleri",
+  "settings.deviceOnly": "Yalnızca bu cihazda",
   "settings.panel.resize": "Sağ paneli yeniden boyutlandır",
   "settings.preferences.loadFailed": "Ayarlarınız yüklenemedi.",
   "settings.preferences.saveFailed": "Bu ayar kaydedilemedi. Tekrar deneyin.",

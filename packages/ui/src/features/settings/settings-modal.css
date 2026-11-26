@@ -215,18 +215,25 @@
 }
 
 .settings-modal-card > .ui-switch-field,
-.settings-modal-card > .ui-item {
-  padding: var(--openbot-space-3) var(--openbot-space-4);
+.settings-modal-card > .ui-item,
+.settings-modal-card > .ui-settings-row {
+  padding: var(--openbot-space-4) var(--openbot-space-5);
 }
 
-.settings-modal-row {
-  min-height: 64px;
+.settings-modal-row,
+.settings-modal-card > .ui-switch-field,
+.settings-modal-card > .ui-settings-row {
+  min-height: 60px;
 }
 
 .settings-modal-card > .ui-switch-field {
   width: 100%;
   justify-content: space-between;
-  padding: var(--openbot-space-3) var(--openbot-space-4);
+  gap: var(--openbot-space-6);
+}
+
+.settings-modal-card > .ui-switch-field > .ui-switch {
+  flex: 0 0 auto;
 }
 
 .settings-modal-card > :not(:first-child) {
@@ -237,8 +244,8 @@
 .settings-modal-card > :not(:first-child)::before {
   position: absolute;
   top: 0;
-  right: var(--openbot-space-4);
-  left: var(--openbot-space-4);
+  right: var(--openbot-space-5);
+  left: var(--openbot-space-5);
   height: 1px;
   background: var(--openbot-border);
   pointer-events: none;
@@ -249,7 +256,162 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--openbot-space-6);
+}
+
+/* The row of the settings design system: label and description left, the control right. */
+.ui-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-6);
+}
+
+.ui-settings-row-copy {
+  min-width: 0;
+  display: grid;
+  flex: 1 1 auto;
+  gap: var(--openbot-space-0-5);
+}
+
+.ui-settings-row-label {
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-lg);
+  font-weight: var(--openbot-weight-medium);
+  line-height: var(--openbot-leading-lg);
+}
+
+label.ui-settings-row-label {
+  cursor: pointer;
+}
+
+.ui-settings-row-description {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-md);
+  line-height: var(--openbot-leading-md);
+  text-wrap: pretty;
+}
+
+.ui-settings-row-help {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+}
+
+.ui-settings-row-help[data-tone="danger"] {
+  color: var(--openbot-danger);
+}
+
+/* The control keeps its own width and never squeezes the label below readability. */
+.ui-settings-row-control {
+  display: flex;
+  min-width: 0;
+  max-width: min(60%, 360px);
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--openbot-space-2);
+}
+
+.ui-settings-row-control > :is(.ui-input, .ui-native-select, .ui-select, .settings-modal-select) {
+  width: 100%;
+  min-width: 168px;
+}
+
+/* A number with a unit in its label needs no more than five digits of room. */
+.ui-settings-row-control > .settings-cloud-number {
+  width: 120px;
+  min-width: 0;
+}
+
+/* A control that is long at any width goes under its label. */
+.ui-settings-row[data-layout="stack"] {
+  align-items: stretch;
+  flex-direction: column;
+  gap: var(--openbot-space-3);
+}
+
+.ui-settings-row[data-layout="stack"] > .ui-settings-row-control {
+  max-width: none;
+  justify-content: flex-start;
+}
+
+/* A group: a small title over one card of rows. */
+.ui-settings-group {
+  display: grid;
+  gap: var(--openbot-space-2);
+}
+
+.ui-settings-group-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: var(--openbot-space-4);
+  padding: 0 var(--openbot-space-1);
+}
+
+.ui-settings-group-copy {
+  min-width: 0;
+  display: grid;
+  gap: var(--openbot-space-0-5);
+}
+
+.ui-settings-group-heading {
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-semibold);
+  line-height: var(--openbot-leading-md);
+}
+
+.ui-settings-group-description {
+  max-width: 64ch;
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+}
+
+.ui-settings-group-actions {
+  flex: 0 0 auto;
+}
+
+.ui-settings-group-card {
+  display: grid;
+}
+
+.ui-settings-divider {
+  margin: var(--openbot-space-2) 0;
+  border: 0;
+  border-top: 1px solid var(--openbot-border);
+}
+
+.ui-settings-help {
+  padding: 0 var(--openbot-space-1);
+  text-wrap: pretty;
+}
+
+/* "Only on this device": the note on a setting that this browser or computer keeps for itself. */
+.ui-settings-device-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-regular);
+  line-height: var(--openbot-leading-sm);
+}
+
+.ui-settings-device-note > svg {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+  stroke-width: var(--openbot-icon-stroke);
+}
+
+/* A save row at the end of a group that saves with one button: the note, then Reset and Save. */
+.settings-modal-card > .settings-modal-save-bar {
+  min-height: 0;
+  border-top: 0;
+  background: transparent;
+  padding: var(--openbot-space-3) var(--openbot-space-5);
 }
 
 .settings-modal-row-title {
@@ -371,16 +533,41 @@
 }
 
 :is(.app-settings-modal-shell, .server-settings-modal-shell) .ui-settings-section {
-  gap: var(--openbot-space-2);
+  gap: var(--openbot-space-4);
 }
 
 :is(.app-settings-modal-shell, .server-settings-modal-shell) .ui-settings-section-header {
   padding-inline: 0;
 }
 
+/*
+ * The hierarchy of a settings page: the page title (2xl), a section title (lg, semibold), a group
+ * title (md, semibold), and the rows (md labels). Each level is a size apart, so a section
+ * title never reads as the label of the row under it.
+ */
 :is(.app-settings-modal-shell, .server-settings-modal-shell) .ui-settings-section-heading {
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-lg);
+  font-weight: var(--openbot-weight-semibold);
+  line-height: var(--openbot-leading-lg);
+}
+
+:is(.app-settings-modal-shell, .server-settings-modal-shell) .ui-settings-section-description {
+  max-width: 64ch;
+  margin-top: var(--openbot-space-1);
   font-size: var(--openbot-text-md);
   line-height: var(--openbot-leading-md);
+  text-wrap: pretty;
+}
+
+/* A section holds groups and cards one after another; between them, a step of the scale. */
+:is(.app-settings-modal-shell, .server-settings-modal-shell) .ui-settings-section > * + * {
+  margin-top: 0;
+}
+
+/* Between two sections: two steps, so the eye finds the next title. */
+:is(.app-settings-modal-shell, .server-settings-modal-shell) .settings-modal-tab-panel {
+  gap: var(--openbot-space-8);
 }
 
 .provider-picker-embedded {
@@ -797,16 +984,43 @@
   }
 
   /* Every settings page (app, server, web account): on a phone the control goes under its label. */
-  .settings-modal-row.ui-item {
-    align-items: flex-start;
+  .settings-modal-row.ui-item,
+  .ui-settings-row:not([data-layout="inline"]) {
+    align-items: stretch;
     flex-direction: column;
+    gap: var(--openbot-space-3);
     /* A row that wraps (the sound cards) would start a new column to the right, off the screen. */
     flex-wrap: nowrap;
   }
 
   .settings-modal-row .ui-item-actions,
+  .ui-settings-row:not([data-layout="inline"]) > .ui-settings-row-control,
   :is(.settings-modal-select, .settings-modal-update-track-select) {
     width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  .ui-settings-row:not([data-layout="inline"]) > .ui-settings-row-control > .ui-button {
+    margin-left: auto;
+  }
+
+  /* A finger needs the whole row height: the switch rows are at least the touch target tall. */
+  .settings-modal-card > .ui-switch-field,
+  .settings-modal-card > .ui-settings-row {
+    min-height: var(--openbot-touch-target);
+    padding: var(--openbot-space-4);
+  }
+
+  .settings-modal-card > :not(:first-child)::before {
+    right: var(--openbot-space-4);
+    left: var(--openbot-space-4);
+  }
+
+  .ui-settings-group-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--openbot-space-2);
   }
 
   .app-settings-modal-shell .settings-modal-update-actions {

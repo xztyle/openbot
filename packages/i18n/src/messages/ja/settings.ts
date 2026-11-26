@@ -155,6 +155,7 @@ export const messages = {
   "settings.tab.hostedServers.description":
     "このコンピューターの電源が切れているときも動作する Atelier サーバーを作成します。",
   "settings.sections.label": "設定のセクション",
+  "settings.deviceOnly": "このデバイスのみ",
   "settings.panel.resize": "右パネルのサイズを変更",
   "settings.preferences.loadFailed": "設定を読み込めませんでした。",
   "settings.preferences.saveFailed": "この設定を保存できませんでした。もう一度お試しください。",

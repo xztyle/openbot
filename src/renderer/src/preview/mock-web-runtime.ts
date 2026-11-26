@@ -1,8 +1,9 @@
+import type { TeamRole } from "@openbot/contracts/ipc";
 import { CHANNEL_CHATS_CAPABILITY } from "@openbot/contracts/ipc";
 import { ROUTINE_FLOWS_CAPABILITY } from "@openbot/contracts/team-protocol/routine-flows-v1";
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import type { WebRuntimeFactory } from "../features/web-client/web-client-context";
-import type { WebRuntimeEvents, WebWorkspaceRuntime } from "../features/web-client/web-runtime";
+import type { WebAdminRuntime, WebRuntimeEvents, WebWorkspaceRuntime } from "../features/web-client/web-runtime";
 import { createMockOpenBot, type MockOpenBotControls } from "./mock-openbot";
 
 /** Use the desktop preview's data and actions for the browser composition too. */
@@ -12,8 +13,21 @@ export const createMockWebRuntime: WebRuntimeFactory = (_accountId, events) =>
 /** The member the browser preview signs in as. The mock channels write as them. */
 export const WEB_PREVIEW_MEMBER_ID = "preview";
 
+export interface MockWebRuntimeOptions {
+  /** The role the preview signs in with. An owner, unless a fixture shows a member's view. */
+  role?: TeamRole;
+  /** The admin requests of the host, for a fixture that shows the server settings. */
+  admin?: WebAdminRuntime;
+  /** Capabilities the host offers besides the preview's own. */
+  capabilities?: readonly string[];
+}
+
 /** The browser composition over a given mock host, for a fixture that also drives that host. */
-export function mockWebRuntimeFor(mock: MockOpenBotControls, events: WebRuntimeEvents): WebWorkspaceRuntime {
+export function mockWebRuntimeFor(
+  mock: MockOpenBotControls,
+  events: WebRuntimeEvents,
+  options: MockWebRuntimeOptions = {},
+): WebWorkspaceRuntime {
   const agent = mock.api.agent;
   const host = {
     hostId: "preview-host",
@@ -21,11 +35,12 @@ export function mockWebRuntimeFor(mock: MockOpenBotControls, events: WebRuntimeE
     logoKey: null,
     devicePublicKey: "preview-key",
     membershipId: "preview-member",
-    role: "owner" as const,
+    role: options.role ?? ("owner" as const),
   };
   let removed = false;
   const unsubscribe = agent.onEvent((event) => events.event(host.hostId, event));
   return {
+    ...(options.admin ? { admin: options.admin } : {}),
     browser: mock.api.browser,
     browserTabs: () => mock.api.browser.listTabs(),
     openBrowserTab: (input) => mock.api.browser.open(input),
@@ -64,6 +79,7 @@ export function mockWebRuntimeFor(mock: MockOpenBotControls, events: WebRuntimeE
         CHANNEL_CHATS_CAPABILITY,
         ROUTINE_FLOWS_CAPABILITY,
         WORKSPACE_CAPABILITY,
+        ...(options.capabilities ?? []),
       ];
     },
     disconnect: async () => {

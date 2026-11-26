@@ -156,6 +156,7 @@ export const messages = {
   "settings.tab.hostedServers.title": "Server ospitati",
   "settings.tab.hostedServers.description": "Crea server Atelier che funzionano anche quando questo computer è spento.",
   "settings.sections.label": "Sezioni delle impostazioni",
+  "settings.deviceOnly": "Solo su questo dispositivo",
   "settings.panel.resize": "Ridimensiona il pannello destro",
   "settings.preferences.loadFailed": "Impossibile caricare le tue impostazioni.",
   "settings.preferences.saveFailed": "Impossibile salvare questa impostazione. Riprova.",

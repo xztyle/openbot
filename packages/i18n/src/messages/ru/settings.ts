@@ -157,6 +157,7 @@ export const messages = {
   "settings.tab.hostedServers.title": "Облачные серверы",
   "settings.tab.hostedServers.description": "Серверы Atelier, которые работают, даже когда этот компьютер выключен.",
   "settings.sections.label": "Разделы настроек",
+  "settings.deviceOnly": "Только на этом устройстве",
   "settings.panel.resize": "Изменить размер правой панели",
   "settings.preferences.loadFailed": "Не удалось загрузить настройки.",
   "settings.preferences.saveFailed": "Не удалось сохранить эту настройку. Повторите попытку.",

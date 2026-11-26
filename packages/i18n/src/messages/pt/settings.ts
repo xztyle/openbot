@@ -159,6 +159,7 @@ export const messages = {
   "settings.tab.hostedServers.description":
     "Crie servidores Atelier que funcionam quando este computador está desligado.",
   "settings.sections.label": "Seções das configurações",
+  "settings.deviceOnly": "Só neste dispositivo",
   "settings.panel.resize": "Redimensionar painel direito",
   "settings.preferences.loadFailed": "Não foi possível carregar suas configurações.",
   "settings.preferences.saveFailed": "Não foi possível salvar esta configuração. Tente de novo.",

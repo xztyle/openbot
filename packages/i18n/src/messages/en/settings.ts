@@ -186,6 +186,7 @@ export const messages = defineMessages("settings", {
   "settings.tab.hostedServers.title": "Hosted servers",
   "settings.tab.hostedServers.description": "Create Atelier servers that run when this computer is off.",
   "settings.sections.label": "Settings sections",
+  "settings.deviceOnly": "Only on this device",
   "settings.panel.resize": "Resize right panel",
   // A failed read or save of the app preferences on the General, Notifications, Dynamic Island and Updates tabs.
   "settings.preferences.loadFailed": "Could not load your settings.",

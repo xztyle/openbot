@@ -170,6 +170,7 @@ export const messages = {
   "settings.tab.hostedServers.description":
     "Créer des serveurs Atelier qui fonctionnent quand cet ordinateur est éteint.",
   "settings.sections.label": "Sections des réglages",
+  "settings.deviceOnly": "Seulement sur cet appareil",
   "settings.panel.resize": "Redimensionner le panneau de droite",
   "settings.preferences.loadFailed": "Impossible de charger vos réglages.",
   "settings.preferences.saveFailed": "Impossible d’enregistrer ce réglage. Réessayez.",

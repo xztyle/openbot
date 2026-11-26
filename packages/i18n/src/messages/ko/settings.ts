@@ -169,6 +169,7 @@ export const messages = {
   "settings.tab.hostedServers.title": "호스팅 서버",
   "settings.tab.hostedServers.description": "이 컴퓨터가 꺼져 있어도 실행되는 Atelier 서버를 만들어요.",
   "settings.sections.label": "설정 섹션",
+  "settings.deviceOnly": "이 기기에서만",
   "settings.panel.resize": "오른쪽 패널 크기 조절",
   "settings.preferences.loadFailed": "설정을 불러올 수 없어요.",
   "settings.preferences.saveFailed": "이 설정을 저장할 수 없어요. 다시 시도해 주세요.",

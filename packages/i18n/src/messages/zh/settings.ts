@@ -168,6 +168,7 @@ export const messages = {
   "settings.tab.hostedServers.title": "托管服务器",
   "settings.tab.hostedServers.description": "创建即使这台电脑关机也能运行的 Atelier 服务器。",
   "settings.sections.label": "设置分区",
+  "settings.deviceOnly": "仅在此设备上",
   "settings.panel.resize": "调整右侧面板宽度",
   // A failed read or save of the app preferences on the General, Notifications, Dynamic Island and Updates tabs.
   "settings.preferences.loadFailed": "无法加载你的设置。",

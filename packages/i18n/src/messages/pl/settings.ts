@@ -152,6 +152,7 @@ export const messages = {
   "settings.tab.hostedServers.title": "Hostowane serwery",
   "settings.tab.hostedServers.description": "Twórz serwery Atelier, które działają, gdy ten komputer jest wyłączony.",
   "settings.sections.label": "Sekcje ustawień",
+  "settings.deviceOnly": "Tylko na tym urządzeniu",
   "settings.panel.resize": "Zmień rozmiar prawego panelu",
   "settings.preferences.loadFailed": "Nie udało się wczytać ustawień.",
   "settings.preferences.saveFailed": "Nie udało się zapisać tego ustawienia. Spróbuj ponownie.",

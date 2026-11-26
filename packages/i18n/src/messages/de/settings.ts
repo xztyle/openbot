@@ -161,6 +161,7 @@ export const messages = {
   "settings.tab.hostedServers.title": "Gehostete Server",
   "settings.tab.hostedServers.description": "Erstelle Atelier-Server, die auch bei ausgeschaltetem Computer laufen.",
   "settings.sections.label": "Einstellungsbereiche",
+  "settings.deviceOnly": "Nur auf diesem Gerät",
   "settings.panel.resize": "Größe des rechten Bereichs ändern",
   "settings.preferences.loadFailed": "Deine Einstellungen konnten nicht geladen werden.",
   "settings.preferences.saveFailed": "Diese Einstellung konnte nicht gespeichert werden. Versuche es erneut.",

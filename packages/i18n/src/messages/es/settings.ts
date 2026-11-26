@@ -186,6 +186,7 @@ export const messages = {
   "settings.tab.hostedServers.title": "Servidores alojados",
   "settings.tab.hostedServers.description": "Crea servidores de Atelier que funcionen con este equipo apagado.",
   "settings.sections.label": "Secciones de ajustes",
+  "settings.deviceOnly": "Solo en este dispositivo",
   "settings.panel.resize": "Cambiar el tamaño del panel derecho",
   "settings.preferences.loadFailed": "No se pudieron cargar tus ajustes.",
   "settings.preferences.saveFailed": "No se pudo guardar este ajuste. Inténtalo de nuevo.",

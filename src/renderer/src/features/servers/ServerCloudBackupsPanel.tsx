@@ -32,12 +32,15 @@ import {
   ItemTitle,
   NativeSelect,
   Progress,
+  SettingsGroup,
+  SettingsRow,
   SettingsSection,
   SwitchField,
   TriangleAlert,
 } from "@openbot/ui";
+import { SettingsSaveBar } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createSignal, createStore, For, onCleanup, Show, untrack } from "solid-js";
+import { createEffect, createSignal, createStore, createUniqueId, For, onCleanup, Show, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { GROUP_TEXT, PROBLEM_TEXT } from "./cloud-backups-text";
 import { CloudFolderDialog, CloudRestoreDialog } from "./ServerCloudBackupsDialogs";
@@ -109,6 +112,8 @@ export function ServerCloudBackupsPanel(props: {
   /** The server's name, for the default drive folder "Atelier Backups/<name>". */
   hostName?: string;
 }) {
+  /** The prefix of the ids that tie each plan row's label to its field. */
+  const ids = createUniqueId();
   const { t, errorMessage, format } = useText();
   const [overview, setOverview] = createSignal<HostCloudBackupsOverview | null>(null);
   const [loadError, setLoadError] = createSignal<string | null>(null);
@@ -589,125 +594,131 @@ export function ServerCloudBackupsPanel(props: {
 
               <Show when={plan()}>
                 {(draft) => (
-                  <ItemGroup class="settings-modal-card" aria-label={t("backups.cloud.plan")}>
-                    <Item class="settings-modal-row">
-                      <ItemContent class="flex flex-col gap-3">
-                        <ItemTitle>{t("backups.cloud.plan")}</ItemTitle>
-                        <SwitchField
-                          label={t("backups.cloud.plan.enabled")}
-                          checked={draft().enabled}
+                  <>
+                    <SettingsGroup title={t("backups.cloud.plan")}>
+                      <SwitchField
+                        label={t("backups.cloud.plan.enabled")}
+                        checked={draft().enabled}
+                        disabled={manageDisabled()}
+                        onChange={(checked: boolean) => editPlan((next) => (next.enabled = checked))}
+                      />
+                      <SettingsRow label={t("backups.cloud.plan.frequency")} controlId={`${ids}-frequency`}>
+                        <NativeSelect
+                          id={`${ids}-frequency`}
+                          value={draft().interval}
                           disabled={manageDisabled()}
-                          onChange={(checked: boolean) => editPlan((next) => (next.enabled = checked))}
-                        />
-                        <Field label={t("backups.cloud.plan.frequency")}>
-                          <NativeSelect
-                            value={draft().interval}
-                            disabled={manageDisabled()}
-                            onChange={(event) => {
-                              const interval = CLOUD_INTERVALS.find((item) => item === event.currentTarget.value);
-                              if (interval) editPlan((next) => (next.interval = interval));
-                            }}
-                          >
-                            <For each={["15m", "1h", "6h", "daily"] as const}>
-                              {(interval) => <option value={interval}>{t(INTERVAL_TEXT[interval])}</option>}
-                            </For>
-                          </NativeSelect>
-                        </Field>
-                        <Show when={draft().interval === "daily"}>
-                          <Field label={t("backups.cloud.plan.time", { zone: draft().timezone })}>
-                            <Input
-                              type="time"
-                              size="sm"
-                              value={draft().dailyTime}
-                              disabled={manageDisabled()}
-                              onValueChange={(time) => editPlan((next) => (next.dailyTime = time))}
-                            />
-                          </Field>
-                        </Show>
-                        <ItemTitle>{t("backups.cloud.plan.what")}</ItemTitle>
-                        <For each={CLOUD_GROUPS}>
-                          {(group) => (
-                            <SwitchField
-                              label={t(GROUP_TEXT[group][0])}
-                              description={`${t(GROUP_TEXT[group][1])} ${
-                                sizeOf(group) === null
-                                  ? t("backups.cloud.sizeUnknown")
-                                  : t("backups.cloud.groupSize", { size: format.fileSize(sizeOf(group) ?? 0) })
-                              }`}
-                              checked={draft().groups[group]}
-                              disabled={manageDisabled()}
-                              onChange={(checked: boolean) => editPlan((next) => (next.groups[group] = checked))}
-                            />
-                          )}
-                        </For>
-                        <ItemTitle>{t("backups.cloud.plan.keep")}</ItemTitle>
-                        <SwitchField
-                          label={t("backups.cloud.plan.saveSpace")}
-                          description={t("backups.cloud.plan.saveSpaceHint")}
-                          checked={!draft().retention.keepAll}
-                          disabled={manageDisabled()}
-                          onChange={(checked: boolean) => editPlan((next) => (next.retention.keepAll = !checked))}
-                        />
-                        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          <For each={draft().retention.keepAll ? [] : RETENTION_FIELDS}>
-                            {([key, label]) => (
-                              <Field label={t(label)}>
-                                <Input
-                                  type="number"
-                                  size="sm"
-                                  inputmode="numeric"
-                                  min="0"
-                                  value={String(draft().retention[key])}
-                                  disabled={manageDisabled()}
-                                  onValueChange={(raw) =>
-                                    editPlan(
-                                      (next) => (next.retention[key] = Math.max(0, Math.round(Number(raw) || 0))),
-                                    )
-                                  }
-                                />
-                              </Field>
-                            )}
+                          onChange={(event) => {
+                            const interval = CLOUD_INTERVALS.find((item) => item === event.currentTarget.value);
+                            if (interval) editPlan((next) => (next.interval = interval));
+                          }}
+                        >
+                          <For each={["15m", "1h", "6h", "daily"] as const}>
+                            {(interval) => <option value={interval}>{t(INTERVAL_TEXT[interval])}</option>}
                           </For>
-                          <Field label={t("backups.cloud.plan.largeFiles")}>
+                        </NativeSelect>
+                      </SettingsRow>
+                      <Show when={draft().interval === "daily"}>
+                        <SettingsRow
+                          label={t("backups.cloud.plan.time", { zone: draft().timezone })}
+                          controlId={`${ids}-time`}
+                        >
+                          <Input
+                            id={`${ids}-time`}
+                            type="time"
+                            size="sm"
+                            value={draft().dailyTime}
+                            disabled={manageDisabled()}
+                            onValueChange={(time) => editPlan((next) => (next.dailyTime = time))}
+                          />
+                        </SettingsRow>
+                      </Show>
+                    </SettingsGroup>
+                    <SettingsGroup title={t("backups.cloud.plan.what")}>
+                      <For each={CLOUD_GROUPS}>
+                        {(group) => (
+                          <SwitchField
+                            label={t(GROUP_TEXT[group][0])}
+                            description={`${t(GROUP_TEXT[group][1])} ${
+                              sizeOf(group) === null
+                                ? t("backups.cloud.sizeUnknown")
+                                : t("backups.cloud.groupSize", { size: format.fileSize(sizeOf(group) ?? 0) })
+                            }`}
+                            checked={draft().groups[group]}
+                            disabled={manageDisabled()}
+                            onChange={(checked: boolean) => editPlan((next) => (next.groups[group] = checked))}
+                          />
+                        )}
+                      </For>
+                    </SettingsGroup>
+                    <SettingsGroup title={t("backups.cloud.plan.keep")}>
+                      <SwitchField
+                        label={t("backups.cloud.plan.saveSpace")}
+                        description={t("backups.cloud.plan.saveSpaceHint")}
+                        checked={!draft().retention.keepAll}
+                        disabled={manageDisabled()}
+                        onChange={(checked: boolean) => editPlan((next) => (next.retention.keepAll = !checked))}
+                      />
+                      <For each={draft().retention.keepAll ? [] : RETENTION_FIELDS}>
+                        {([key, label]) => (
+                          <SettingsRow label={t(label)} controlId={`${ids}-${key}`}>
                             <Input
+                              id={`${ids}-${key}`}
+                              class="settings-cloud-number"
                               type="number"
                               size="sm"
                               inputmode="numeric"
                               min="0"
-                              value={String(draft().largeFileMb)}
+                              value={String(draft().retention[key])}
                               disabled={manageDisabled()}
                               onValueChange={(raw) =>
-                                editPlan((next) => (next.largeFileMb = Math.max(0, Math.round(Number(raw) || 0))))
+                                editPlan((next) => (next.retention[key] = Math.max(0, Math.round(Number(raw) || 0))))
                               }
                             />
-                          </Field>
-                        </div>
-                        <Show when={props.canManage}>
-                          <div>
-                            <Button
-                              type="button"
-                              size="sm"
-                              loading={busy() === "plan"}
-                              disabled={manageDisabled() || !planDirty()}
-                              onClick={() =>
-                                void act(
-                                  "plan",
-                                  async () => {
-                                    const next = await props.calls.savePlan(draft(), props.serverId);
-                                    setPlanDirty(false);
-                                    return next;
-                                  },
-                                  t("backups.cloud.plan.saved"),
-                                )
-                              }
-                            >
-                              {t("backups.cloud.plan.save")}
-                            </Button>
-                          </div>
-                        </Show>
-                      </ItemContent>
-                    </Item>
-                  </ItemGroup>
+                          </SettingsRow>
+                        )}
+                      </For>
+                      <SettingsRow label={t("backups.cloud.plan.largeFiles")} controlId={`${ids}-large`}>
+                        <Input
+                          id={`${ids}-large`}
+                          class="settings-cloud-number"
+                          type="number"
+                          size="sm"
+                          inputmode="numeric"
+                          min="0"
+                          value={String(draft().largeFileMb)}
+                          disabled={manageDisabled()}
+                          onValueChange={(raw) =>
+                            editPlan((next) => (next.largeFileMb = Math.max(0, Math.round(Number(raw) || 0))))
+                          }
+                        />
+                      </SettingsRow>
+                      <Show when={props.canManage && planDirty()}>
+                        <SettingsSaveBar
+                          label={t("backups.cloud.plan")}
+                          saving={busy() === "plan"}
+                          saveDisabled={manageDisabled()}
+                          resetDisabled={Boolean(busy())}
+                          onReset={() => {
+                            const current = ready();
+                            if (!current) return;
+                            setPlan(copyPlan(current.plan));
+                            setPlanDirty(false);
+                          }}
+                          onSave={() =>
+                            void act(
+                              "plan",
+                              async () => {
+                                const next = await props.calls.savePlan(draft(), props.serverId);
+                                setPlanDirty(false);
+                                return next;
+                              },
+                              t("backups.cloud.plan.saved"),
+                            )
+                          }
+                        />
+                      </Show>
+                    </SettingsGroup>
+                  </>
                 )}
               </Show>
 

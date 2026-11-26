@@ -446,6 +446,11 @@
     flex-basis: var(--openbot-touch-target);
   }
 
+  .first-agent-avatar-fieldset .first-agent-face-choice .agent-avatar {
+    width: var(--openbot-space-8);
+    height: var(--openbot-space-8);
+  }
+
   /* The open and download controls on an attachment card. */
   .attachment-open-button {
     width: var(--openbot-touch-target);

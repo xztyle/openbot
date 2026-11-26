@@ -439,8 +439,8 @@
   }
 
   /* The face and colour choices of the first agent's form: a grid of taps. */
-  .ui-button.first-agent-face-choice,
-  .ui-button.first-agent-color-choice {
+  .first-agent-avatar-fieldset .ui-button.first-agent-face-choice,
+  .first-agent-avatar-fieldset .ui-button.first-agent-color-choice {
     width: var(--openbot-touch-target);
     height: var(--openbot-touch-target);
     flex-basis: var(--openbot-touch-target);

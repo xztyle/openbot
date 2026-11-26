@@ -2,13 +2,13 @@
   display: flex;
   height: var(--openbot-control-sm);
   align-items: center;
-  gap: 6px;
+  gap: var(--openbot-space-1-5);
   border-radius: var(--openbot-radius-sm);
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
-  padding: 2px 4px;
+  padding: var(--openbot-space-0-5) var(--openbot-space-1);
   text-align: left;
   transition: background var(--openbot-duration-hover) ease;
 }
@@ -41,13 +41,13 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 6px;
+  gap: var(--openbot-space-1-5);
 }
 
 /* The model change that waits for the running turn to end. */
 .conversation-model-pending {
   flex: none;
-  gap: 4px;
+  gap: var(--openbot-space-1);
 }
 
 .conversation-model-pending svg {
@@ -67,7 +67,7 @@
   max-width: 240px;
   height: 28px;
   align-items: center;
-  gap: 6px;
+  gap: var(--openbot-space-1-5);
   border: 1px solid var(--openbot-border);
   border-radius: var(--openbot-radius-pill);
   background: var(--openbot-bg-overlay);
@@ -107,7 +107,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 6px;
+  gap: var(--openbot-space-1-5);
 }
 
 .provider-model-trigger-name {
@@ -223,7 +223,7 @@
   width: 100%;
   max-width: none;
   height: 44px;
-  gap: 8px;
+  gap: var(--openbot-space-2);
   border: 0;
   border-radius: 0;
   background: var(--openbot-hover);
@@ -484,7 +484,7 @@
 .provider-model-heading-text {
   flex: 1 1 auto;
   min-width: 0;
-  padding-right: 4px;
+  padding-right: var(--openbot-space-1);
 }
 
 /* The icons are raw lucide exports with no intrinsic size, and only the icon-only button sizes
@@ -715,7 +715,7 @@
   width: 100%;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--openbot-space-2);
   border: 0;
   border-radius: var(--ui-menu-item-radius);
   background: transparent;

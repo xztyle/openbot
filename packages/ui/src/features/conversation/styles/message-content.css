@@ -254,7 +254,7 @@
   border: 1px solid var(--openbot-border-strong);
   border-radius: var(--openbot-radius-pill);
   background: var(--openbot-bg-surface-raised);
-  padding: 4px;
+  padding: var(--openbot-space-1);
   box-shadow:
     0 14px 34px var(--openbot-shadow-popover-ambient),
     0 3px 10px var(--openbot-shadow-popover-ambient),
@@ -275,7 +275,7 @@
 .selection-actions-content {
   height: 28px;
   flex: 0 0 auto;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .selection-actions-form-shell {
@@ -329,7 +329,7 @@
 
 .selection-actions-presets {
   max-width: 224px;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   overflow: hidden;
   opacity: 1;
   transform: translateX(0);
@@ -348,7 +348,7 @@
 
 .selection-actions-more-presets {
   max-width: 0;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   margin-left: 0;
   overflow: hidden;
   opacity: 0;
@@ -360,7 +360,7 @@
 
 .selection-actions-presets-expanded .selection-actions-more-presets {
   max-width: 262px;
-  margin-left: 2px;
+  margin-left: var(--openbot-space-0-5);
   opacity: 1;
 }
 
@@ -405,7 +405,7 @@
 }
 
 .selection-actions-control {
-  gap: 4px;
+  gap: var(--openbot-space-1);
   border: 1px solid transparent;
   background: transparent;
   padding: 0 9px;
@@ -472,7 +472,7 @@
   height: 28px;
   align-items: center;
   gap: 7px;
-  padding: 0 10px;
+  padding: 0 var(--openbot-space-2-5);
   font-size: var(--openbot-text-sm);
   white-space: nowrap;
 }
@@ -502,7 +502,7 @@
   border-left: 2px solid var(--openbot-accent);
   border-radius: 0 var(--openbot-radius-sm) var(--openbot-radius-sm) 0;
   background: var(--openbot-bg-control);
-  padding: 6px 8px;
+  padding: var(--openbot-space-1-5) var(--openbot-space-2);
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
   line-height: 17px;
@@ -579,7 +579,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
-  gap: 10px;
+  gap: var(--openbot-space-2-5);
 }
 
 .message-content-resize {
@@ -639,14 +639,14 @@
   gap: var(--openbot-space-2);
   border-bottom: 1px solid var(--openbot-border);
   background: var(--openbot-bg-control);
-  padding: 4px 6px 4px 10px;
+  padding: var(--openbot-space-1) var(--openbot-space-1-5) var(--openbot-space-1) var(--openbot-space-2-5);
 }
 
 .message-code-heading {
   min-width: 0;
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--openbot-space-1-5);
 }
 
 .message-code-filename {
@@ -664,7 +664,7 @@
   flex: none;
   border-radius: var(--openbot-radius-pill);
   background: var(--openbot-border);
-  padding: 1px 6px;
+  padding: 1px var(--openbot-space-1-5);
   color: var(--openbot-text-readable);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
@@ -751,7 +751,7 @@
   overflow: auto;
   margin: 0;
   background: var(--openbot-bg-sidebar);
-  padding-block: 8px 10px;
+  padding-block: var(--openbot-space-2) var(--openbot-space-2-5);
   color: var(--openbot-text-secondary);
   font-family: var(--openbot-font-mono);
   font-size: var(--openbot-text-sm);
@@ -783,7 +783,7 @@
 .message-code-line-number {
   width: 40px;
   flex: none;
-  padding-right: 8px;
+  padding-right: var(--openbot-space-2);
   color: var(--openbot-text-dim);
   font-size: var(--openbot-text-sm);
   text-align: right;
@@ -792,7 +792,7 @@
 
 .message-code-line-source {
   min-width: 0;
-  padding-right: 12px;
+  padding-right: var(--openbot-space-3);
   white-space: pre;
 }
 
@@ -800,7 +800,7 @@
   width: 2px;
   height: 13px;
   display: inline-block;
-  margin-left: 2px;
+  margin-left: var(--openbot-space-0-5);
   border-radius: var(--openbot-radius-pill);
   background: var(--openbot-accent);
   transform: translateY(2px);
@@ -964,7 +964,7 @@
   height: 14px;
   align-items: center;
   justify-content: center;
-  margin-right: 4px;
+  margin-right: var(--openbot-space-1);
   color: currentColor;
   vertical-align: -2px;
 }
@@ -1007,7 +1007,7 @@
   height: 18px;
   align-items: center;
   justify-content: center;
-  margin: 0 2px;
+  margin: 0 var(--openbot-space-0-5);
   border: 0;
   border-radius: var(--openbot-radius-xs);
   background: var(--openbot-bg-control-hover);
@@ -1043,7 +1043,7 @@
   border: 1px solid var(--openbot-border-strong);
   border-radius: var(--openbot-radius-md);
   background: var(--openbot-bg-surface-raised);
-  padding: 6px 8px;
+  padding: var(--openbot-space-1-5) var(--openbot-space-2);
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
   font-weight: 500;
@@ -1084,17 +1084,17 @@
 
 .message-citation-footer {
   display: grid;
-  gap: 6px;
-  margin-top: 12px;
+  gap: var(--openbot-space-1-5);
+  margin-top: var(--openbot-space-3);
   border-top: 1px solid var(--openbot-border);
-  padding-top: 10px;
+  padding-top: var(--openbot-space-2-5);
 }
 
 .message-citation-ref {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 6px;
+  gap: var(--openbot-space-1-5);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   font-weight: 425;
@@ -1196,7 +1196,7 @@
   max-width: 360px;
   margin: -1px 0 7px;
   border-left: 2px solid var(--openbot-text-dim);
-  padding-left: 8px;
+  padding-left: var(--openbot-space-2);
   color: var(--openbot-text-secondary);
 }
 
@@ -1340,12 +1340,12 @@
   display: inline-flex;
   height: 22px;
   align-items: center;
-  gap: 4px;
+  gap: var(--openbot-space-1);
   margin: 0 1px;
   border: 1px dashed var(--openbot-border-strong);
   border-radius: var(--openbot-radius-sm);
   background: transparent;
-  padding: 0 6px;
+  padding: 0 var(--openbot-space-1-5);
   color: var(--openbot-text-muted);
   font: inherit;
   line-height: 20px;
@@ -1369,7 +1369,7 @@
   min-width: 0;
   max-width: min(240px, calc(100% - 8px));
   align-items: center;
-  gap: 4px;
+  gap: var(--openbot-space-1);
   margin: 0 1px;
   border: 0;
   border-radius: var(--openbot-radius-sm);

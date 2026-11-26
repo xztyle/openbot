@@ -333,6 +333,17 @@ renderer `data-testid` attributes separately, with a budget of zero.
 about 1,400 lines of unused CSS. A dynamic `prefix-${value}` counts as a use only inside a class
 attribute; the same template in an ID must not keep unrelated CSS alive.
 
+`check:ui` fails a static `var(--openbot-*)` read, in a stylesheet or a style object, of a token that
+no stylesheet in reach declares. The palette is `packages/brand/src` (the `tokenRoots` argument);
+a `setProperty("--openbot-*")` call and a `"--openbot-*":` style key count as declarations, and a
+family built at runtime (`--openbot-file-${color}`) is not read. The browser treats an undeclared
+token as a dropped declaration, so `gap: var(--openbot-space-5)` painted a gap of 0 and two cards on
+Today touched for weeks while every check was green. The same change added the `untokenized spacing`
+budget: a `margin`, `padding`, `gap` or `inset` declaration that writes pixels of 2px or more
+instead of a `--openbot-space-*` step. `0`, `1px`, a negative value, a `calc()` and a `var()` are
+not counted. Every declaration whose pixels sat on the scale was rewritten to the token; the budget
+holds what is off the scale (7px, 14px, 28px...) and only goes down.
+
 Errors cover prohibited syntax. Warnings ask for judgment, such as an `object` parameter or a
 module mock. Making correct boundary code worse to remove a warning defeats the check. A spy call
 can synchronize an async test; the assertions after that wait must prove behavior.

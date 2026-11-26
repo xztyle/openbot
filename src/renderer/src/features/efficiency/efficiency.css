@@ -92,7 +92,7 @@
   border-radius: var(--openbot-radius-md);
   background: var(--openbot-bg-control);
   font-family: var(--openbot-font-mono);
-  font-size: var(--openbot-text-xs);
+  font-size: var(--openbot-text-sm);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   max-height: 240px;

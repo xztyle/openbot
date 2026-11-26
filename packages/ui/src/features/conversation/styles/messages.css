@@ -139,7 +139,7 @@
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--openbot-duration-hover) ease;
@@ -273,7 +273,7 @@
 .reaction-picker-more {
   margin-top: 3px;
   border-top: 1px solid var(--openbot-border);
-  padding-top: 4px;
+  padding-top: var(--openbot-space-1);
 }
 
 .reaction-picker-more .reaction-picker-options {
@@ -346,18 +346,18 @@
 }
 
 .message-reaction-anchor .message-reaction-pill {
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   margin: 0;
   border-radius: inherit;
 }
 
 .ui-bubble-reactions.message-reaction-anchor {
-  padding: 2px 6px;
+  padding: var(--openbot-space-0-5) var(--openbot-space-1-5);
 }
 
 .ui-bubble-reactions.message-reaction-anchor:has(> .message-reaction-pill:only-child) {
   width: var(--openbot-control-xs);
-  padding-inline: 2px;
+  padding-inline: var(--openbot-space-0-5);
 }
 
 .ui-bubble-reactions.message-reaction-anchor:has(> .message-reaction-pill:only-child) > .message-reaction-pill {
@@ -366,7 +366,7 @@
 }
 
 .message-reaction-anchor .ui-bubble-reaction-overflow {
-  padding-right: 6px;
+  padding-right: var(--openbot-space-1-5);
 }
 
 .message-reaction-pill:hover {
@@ -463,9 +463,9 @@
   min-height: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--openbot-space-2);
   overflow: hidden;
-  padding: 4px 0 8px 8px;
+  padding: var(--openbot-space-1) 0 var(--openbot-space-2) var(--openbot-space-2);
   opacity: 1;
   filter: blur(0);
   transform: translateY(0);
@@ -1160,7 +1160,7 @@ button.chat-action-target:active,
 .message-image-attachments {
   display: grid;
   min-width: 0;
-  gap: 10px;
+  gap: var(--openbot-space-2-5);
 }
 
 .image-generation-stage {
@@ -1211,7 +1211,7 @@ button.chat-action-target:active,
 
 .image-generation-dots {
   position: absolute;
-  inset: 2px;
+  inset: var(--openbot-space-0-5);
   background-image: radial-gradient(circle, var(--openbot-text-muted) 0.7px, transparent 1.3px);
   background-repeat: space;
   background-size: 11px 11px;
@@ -1240,7 +1240,7 @@ button.chat-action-target:active,
 
 .image-generation-glow {
   position: absolute;
-  inset: 2px;
+  inset: var(--openbot-space-0-5);
   background-image: radial-gradient(circle, var(--openbot-text-primary) 1.1px, transparent 1.6px);
   background-repeat: space;
   background-size: 11px 11px;
@@ -1288,7 +1288,7 @@ button.chat-action-target:active,
   width: min(100%, 420px);
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   text-align: left;
 }
 
@@ -1368,7 +1368,7 @@ button.chat-action-target:active,
   z-index: 2;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--openbot-space-1-5);
   right: 10px;
   bottom: 10px;
   border: 1px solid var(--openbot-border-strong);
@@ -1524,7 +1524,7 @@ button.chat-action-target:active,
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   line-height: var(--openbot-leading-sm);

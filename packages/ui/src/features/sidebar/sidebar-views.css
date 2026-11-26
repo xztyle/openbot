@@ -1,7 +1,7 @@
 /* The switch over the sidebar list, and the rows of the diagrams view. */
 
 .sidebar-view-switch {
-  padding: 2px 12px 6px;
+  padding: var(--openbot-space-0-5) var(--openbot-space-3) var(--openbot-space-1-5);
 }
 
 .sidebar-view-tabs.ui-sliding-tabs {

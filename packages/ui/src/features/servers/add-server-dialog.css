@@ -400,7 +400,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .add-server-custom-text .ui-text {

@@ -5,7 +5,7 @@
   align-items: center;
   justify-content: space-between;
   border-bottom: 0;
-  padding: 0 12px 0 8px;
+  padding: 0 var(--openbot-space-3) 0 var(--openbot-space-2);
   background: transparent;
 }
 
@@ -46,7 +46,7 @@
   flex: 1;
   border: 0;
   background: transparent;
-  padding: 0 8px;
+  padding: 0 var(--openbot-space-2);
   box-shadow: none;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-lg);

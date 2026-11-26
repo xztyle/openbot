@@ -141,7 +141,7 @@
   width: var(--openbot-icon-xs);
   height: var(--openbot-icon-xs);
   flex: none;
-  margin-top: 2px;
+  margin-top: var(--openbot-space-0-5);
 }
 
 @media (max-width: 640px) {

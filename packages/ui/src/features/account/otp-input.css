@@ -1,6 +1,6 @@
 .otp-input {
   display: grid;
-  gap: 10px;
+  gap: var(--openbot-space-2-5);
   justify-items: center;
 }
 

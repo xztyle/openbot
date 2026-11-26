@@ -223,7 +223,7 @@
 .voice-player-bars {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   height: 24px;
 }
 

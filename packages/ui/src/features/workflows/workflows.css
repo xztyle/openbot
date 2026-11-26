@@ -169,7 +169,7 @@
   position: absolute;
   z-index: 3;
   display: flex;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   align-items: center;
   height: calc(var(--openbot-control-md) + var(--openbot-space-2));
   padding: var(--openbot-space-1);
@@ -794,7 +794,7 @@
 .wfn-zoom-presets {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .wfn-zoom-menu.ui-action-menu .wfn-zoom-presets .wfn-zoom-preset {
@@ -895,7 +895,7 @@
 
 .wfn-search-results {
   display: grid;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   max-height: 320px;
   margin: 0;
   padding: var(--openbot-space-1) 0 0;
@@ -942,7 +942,7 @@
 
 .wfn-drop-list {
   display: grid;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   margin: 0;
   padding: 0;
   list-style: none;

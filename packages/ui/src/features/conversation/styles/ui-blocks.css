@@ -512,7 +512,7 @@
 
 .chat-card-cell dt {
   color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-xs);
+  font-size: var(--openbot-text-sm);
 }
 
 .chat-card-cell[data-first] dt {

@@ -149,7 +149,7 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .custom-provider-preset-title {

@@ -67,6 +67,13 @@ describe("ui foundation check", () => {
         // region would silently spare every identifier-* rule in the tree.
         "styles/unreachable.css: .identifier-panel is not reachable from any markup; delete the rule",
         "styles/unreachable.css: .unreachable-panel is not reachable from any markup; delete the rule",
+        // Once per file and name: .legacy-stack reads --openbot-space-5 twice. The tokens the tree
+        // does declare, in styles/tokens.css, are read by three files and produce no line; a
+        // declaration taken from the palette outside the tree would hide this one.
+        "styles/legacy.css: var(--openbot-space-5) is not a declared token; use a step of the scale",
+        // The same check in a style object. The `--openbot-file-${color}` family in that file is
+        // built at runtime and must stay unreported, or every file-colour read in the tree fails.
+        "components/branches/UndeclaredToken.tsx: var(--openbot-space-7) is not a declared token; use a step of the scale",
         budget("hand-rolled composite ARIA roles", 9),
         // Six, one per value form the pattern names: a hex, a named colour, an hsl(), an
         // rgba() and an hsla() in styles/legacy.css, and an rgb() in preview/preview.css.
@@ -81,6 +88,10 @@ describe("ui foundation check", () => {
         budget("untokenized transition durations", 2),
         // One, in .legacy-scrim. The clean tree's `calc()` on the dropdown layer must stay uncounted.
         budget("z-index arithmetic on the overlay layer", 1),
+        // Two, both in .legacy-stack: a shorthand and a side. The five spacing forms the scale
+        // cannot spell, in .tokenised, must stay uncounted: a step, `0 1px`, a negative, a
+        // `calc()` and a sub-pixel value.
+        budget("untokenized spacing", 2),
         // Three in styles/legacy.css: a max-width, a min-width and a ws-layout container query
         // without the clause of a touch phone on its side. The clean tree's forms stay uncounted.
         budget("phone media queries that leave out a phone on its side", 3),

@@ -1228,7 +1228,7 @@
 }
 
 .ui-dynamic-island-identity-copy {
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .ui-dynamic-island-identity-title {
@@ -1271,7 +1271,7 @@
 
 .ui-dynamic-island-identity-trailing {
   align-self: start;
-  padding-top: 2px;
+  padding-top: var(--openbot-space-0-5);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   font-variant-numeric: tabular-nums;
@@ -1700,7 +1700,7 @@
 
 .ui-error-reference-code {
   font-family: var(--openbot-font-mono);
-  font-size: var(--openbot-text-xs);
+  font-size: var(--openbot-text-sm);
   line-height: var(--openbot-leading-sm);
   user-select: text;
   overflow-wrap: anywhere;
@@ -2453,7 +2453,7 @@
   overflow: hidden;
   border: 1px solid transparent;
   border-radius: var(--openbot-radius-bubble);
-  padding: 8px 12px;
+  padding: var(--openbot-space-2) var(--openbot-space-3);
   font-size: var(--openbot-text-lg);
   line-height: 1.625;
   overflow-wrap: anywhere;
@@ -2547,7 +2547,7 @@ button.ui-bubble-content {
   border: 0;
   border-radius: var(--openbot-radius-pill);
   background: var(--openbot-bg-surface);
-  padding: 2px 6px;
+  padding: var(--openbot-space-0-5) var(--openbot-space-1-5);
   box-shadow: 0 0 0 3px var(--openbot-bg-canvas);
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-lg);

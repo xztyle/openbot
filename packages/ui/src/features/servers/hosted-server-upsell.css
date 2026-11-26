@@ -87,7 +87,7 @@
 
 .hosted-upsell-beam-glow > span {
   inset: var(--openbot-space-3);
-  padding: 2px;
+  padding: var(--openbot-space-0-5);
   background: conic-gradient(
     from var(--hosted-upsell-beam-angle),
     transparent 0deg,
@@ -189,7 +189,7 @@
 .hosted-upsell-modal .hosted-upsell-laptop-lid {
   width: 88px;
   height: 58px;
-  padding: 4px;
+  padding: var(--openbot-space-1);
   border: 2px solid var(--openbot-border-strong);
   border-bottom: 0;
   border-radius: var(--openbot-radius-sm) var(--openbot-radius-sm) 0 0;
@@ -223,7 +223,7 @@
 .hosted-upsell-modal .hosted-upsell-rack {
   width: 64px;
   display: grid;
-  gap: 4px;
+  gap: var(--openbot-space-1);
 }
 
 .hosted-upsell-modal .hosted-upsell-rack span {

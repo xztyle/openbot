@@ -37,7 +37,7 @@
   grid-template-columns: 32px 1fr 32px;
   align-items: center;
   border-bottom: 1px solid var(--openbot-border);
-  padding: 0 10px;
+  padding: 0 var(--openbot-space-2-5);
 }
 
 .settings-panel-header h2 {
@@ -116,7 +116,7 @@
 
 .settings-field > span {
   display: block;
-  margin: 0 0 6px 8px;
+  margin: 0 0 var(--openbot-space-1-5) var(--openbot-space-2);
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-md);
   line-height: 18px;
@@ -165,7 +165,7 @@
   background-size:
     5px 5px,
     5px 5px;
-  padding-right: 32px;
+  padding-right: var(--openbot-space-8);
 }
 
 .settings-field select option {

@@ -11,7 +11,7 @@
 }
 
 .account-login-screen {
-  padding: 32px 24px;
+  padding: var(--openbot-space-8) var(--openbot-space-6);
   background: var(--openbot-bg-canvas);
 }
 
@@ -31,7 +31,7 @@
   display: inline-flex;
   align-items: center;
   align-self: center;
-  gap: 24px;
+  gap: var(--openbot-space-6);
   margin-bottom: 42px;
 }
 
@@ -67,7 +67,7 @@
 }
 
 .account-login-description {
-  margin: 8px 0 0;
+  margin: var(--openbot-space-2) 0 0;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-lg);
   line-height: 21px;
@@ -123,7 +123,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--openbot-space-2);
   border: 1px solid var(--openbot-border-strong);
   border-radius: var(--openbot-radius-md);
   background: var(--openbot-surface-light);
@@ -149,12 +149,12 @@
 .account-login-form {
   width: 100%;
   display: grid;
-  gap: 12px;
-  margin-top: 24px;
+  gap: var(--openbot-space-3);
+  margin-top: var(--openbot-space-6);
 }
 
 .account-login-local-data {
-  margin: 4px 0 0;
+  margin: var(--openbot-space-1) 0 0;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   line-height: 17px;
@@ -165,13 +165,13 @@
 /* Inline, so the lock stays beside the first word when the sentence wraps. */
 .account-login-local-data svg {
   display: inline-block;
-  margin-right: 6px;
+  margin-right: var(--openbot-space-1-5);
   vertical-align: -2px;
 }
 
 .account-login-email-field {
   display: grid;
-  gap: 12px;
+  gap: var(--openbot-space-3);
 }
 
 .account-login-form input:not(.otp-input-native) {
@@ -181,7 +181,7 @@
   border-radius: var(--openbot-radius-md);
   outline: 0;
   background: var(--openbot-bg-control);
-  padding: 0 12px;
+  padding: 0 var(--openbot-space-3);
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-lg);
   transition:
@@ -233,7 +233,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--openbot-space-4);
 }
 
 .account-login-code-action {
@@ -289,7 +289,7 @@
   min-height: 28px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--openbot-space-2);
   margin-bottom: 28px;
 }
 
@@ -322,7 +322,7 @@
 }
 
 .initial-setup-signout {
-  margin-left: 2px;
+  margin-left: var(--openbot-space-0-5);
   padding: 5px 7px;
   font-size: var(--openbot-text-sm);
 }
@@ -375,7 +375,7 @@
 
 .initial-setup-intro {
   max-width: 540px;
-  margin: 12px 0 0;
+  margin: var(--openbot-space-3) 0 0;
   color: var(--text-secondary);
   font-size: var(--openbot-text-lg);
   line-height: 1.55;
@@ -383,7 +383,7 @@
 
 .setup-route-list {
   display: grid;
-  gap: 10px;
+  gap: var(--openbot-space-2-5);
   margin-top: 30px;
   padding: 0;
   list-style: none;
@@ -457,7 +457,7 @@
 
 .setup-route-copy {
   display: grid;
-  gap: 4px;
+  gap: var(--openbot-space-1);
 }
 
 .setup-route-copy strong {
@@ -559,7 +559,7 @@
 }
 
 .provider-picker-standalone {
-  margin-top: 24px;
+  margin-top: var(--openbot-space-6);
 }
 
 .setup-local-content .provider-picker-standalone {
@@ -611,7 +611,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: var(--openbot-space-2-5);
   color: var(--text-primary);
 }
 
@@ -621,8 +621,8 @@
   display: grid;
   grid-template-columns: 16px 18px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 8px 0 8px 12px;
+  gap: var(--openbot-space-2-5);
+  padding: var(--openbot-space-2) 0 var(--openbot-space-2) var(--openbot-space-3);
   cursor: pointer;
 }
 
@@ -674,7 +674,7 @@
 .ui-button.provider-picker-install {
   min-width: 58px;
   min-height: 28px;
-  margin-right: 8px;
+  margin-right: var(--openbot-space-2);
   border-radius: var(--openbot-radius-md);
   padding-inline: 9px;
 }
@@ -785,7 +785,7 @@
 .provider-picker-accounts {
   grid-column: 1 / -1;
   display: grid;
-  gap: 4px;
+  gap: var(--openbot-space-1);
   margin-top: -6px;
   padding: 0 0 8px 66px;
 }
@@ -801,8 +801,8 @@
   min-height: 48px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 0;
+  gap: var(--openbot-space-2-5);
+  padding: var(--openbot-space-1-5) 0;
 }
 
 .provider-picker-account + .provider-picker-account {
@@ -813,7 +813,7 @@
   min-width: 0;
   flex: 1 1 auto;
   display: grid;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .provider-picker-account .provider-picker-check-error {
@@ -831,7 +831,7 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--openbot-space-2);
 }
 
 /* The installed version. Muted, because it answers a question a user asks once and then stops
@@ -854,7 +854,7 @@
 .provider-picker-status {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--openbot-space-1-5);
   color: var(--text-muted);
   font-size: var(--openbot-text-sm);
   line-height: 16px;
@@ -874,7 +874,7 @@
    and sits with the row's other actions, so it needs their margin and the button's own specificity. */
 .ui-button.provider-picker-custom-count {
   min-height: 28px;
-  margin-right: 8px;
+  margin-right: var(--openbot-space-2);
   border-radius: var(--openbot-radius-md);
   padding-inline: 9px;
   color: var(--text-muted);
@@ -1046,7 +1046,7 @@
 }
 
 .initial-setup-error {
-  margin: 12px 2px 0;
+  margin: var(--openbot-space-3) var(--openbot-space-0-5) 0;
   color: var(--openbot-danger);
   font-size: var(--openbot-text-md);
   line-height: 1.45;
@@ -1056,7 +1056,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 9px;
-  margin-top: 20px;
+  margin-top: var(--openbot-space-5);
 }
 
 .initial-setup-save {
@@ -1111,7 +1111,7 @@
 
   .setup-route-button {
     grid-template-columns: 42px minmax(0, 1fr) 18px;
-    gap: 12px;
+    gap: var(--openbot-space-3);
     padding-inline: 13px;
   }
 
@@ -1131,7 +1131,7 @@
   }
 
   .account-login-brand-lockup {
-    margin-bottom: 24px;
+    margin-bottom: var(--openbot-space-6);
   }
 }
 

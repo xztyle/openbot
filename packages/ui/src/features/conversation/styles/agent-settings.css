@@ -83,7 +83,7 @@
 .agent-routine-list-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px;
+  gap: var(--openbot-space-1);
   align-items: center;
 }
 
@@ -112,7 +112,7 @@
 .agent-routine-row > span:nth-child(2) {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .agent-routine-row strong,
@@ -170,9 +170,9 @@
 .agent-routine-editor-actions {
   display: grid;
   gap: 11px;
-  margin-bottom: 20px;
+  margin-bottom: var(--openbot-space-5);
   border-bottom: 1px solid var(--openbot-border);
-  padding-bottom: 16px;
+  padding-bottom: var(--openbot-space-4);
 }
 
 .agent-routine-active-toggle,
@@ -188,7 +188,7 @@
 
 .agent-routine-active-toggle > span {
   display: grid;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .agent-routine-active-toggle strong {
@@ -209,7 +209,7 @@
 .agent-routine-action-buttons button {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--openbot-space-1-5);
   border: 1px solid var(--openbot-border);
   border-radius: var(--openbot-radius-md);
   background: var(--openbot-bg-control);
@@ -225,16 +225,16 @@
 
 .agent-routine-when,
 .agent-routine-history {
-  margin-top: 24px;
+  margin-top: var(--openbot-space-6);
 }
 
 .agent-routine-history {
   border-top: 1px solid var(--openbot-border);
-  padding-top: 20px;
+  padding-top: var(--openbot-space-5);
 }
 
 .agent-routine-run-list {
-  margin-top: 10px;
+  margin-top: var(--openbot-space-2-5);
 }
 
 .agent-routine-run-row {
@@ -297,7 +297,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--openbot-space-3);
   margin: 0;
   border: 0;
   padding: 0;
@@ -307,7 +307,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: var(--openbot-space-2);
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
 }
@@ -371,7 +371,7 @@
 }
 
 .agent-routine-history {
-  margin-top: 2px;
+  margin-top: var(--openbot-space-0-5);
 }
 
 .agent-routine-when {
@@ -436,7 +436,7 @@
   min-height: 32px;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--openbot-space-3);
   border: 0;
   border-radius: var(--openbot-radius-sm);
   padding: 5px var(--openbot-space-2);
@@ -482,7 +482,7 @@
   min-height: 28px;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--openbot-space-3);
   padding: 0 var(--openbot-space-2) 5px;
   font-size: var(--openbot-text-sm);
 }
@@ -1117,7 +1117,7 @@
 .agent-skill-rows {
   display: grid;
   align-content: start;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .agent-skill-row {
@@ -1181,7 +1181,7 @@
 .agent-skill-copy {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .agent-skill-title {
@@ -1420,7 +1420,7 @@
 
 .agent-settings-runtime-path {
   display: grid;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   padding: 11px var(--openbot-space-3);
 }
 
@@ -1450,7 +1450,7 @@
   min-height: 70px;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--openbot-space-3);
   margin: 0;
   border-radius: var(--openbot-radius-lg);
   background: var(--openbot-border);
@@ -1475,7 +1475,7 @@
 
 .agent-settings-notifications div > span {
   max-width: 194px;
-  margin-top: 2px;
+  margin-top: var(--openbot-space-0-5);
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
   line-height: 15px;

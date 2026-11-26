@@ -68,7 +68,7 @@
     height: 48px;
     flex: 0 0 48px;
     margin: 0;
-    padding: 6px;
+    padding: var(--openbot-space-1-5);
   }
 
   .openbot-playground-root .sidebar-compact .agent-row-avatar {

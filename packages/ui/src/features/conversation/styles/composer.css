@@ -7,7 +7,7 @@
 .team-typing-dots {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .team-typing-dots i {
@@ -75,12 +75,12 @@
   display: flex;
   min-height: 42px;
   align-items: center;
-  gap: 10px;
-  margin: 0 10px 6px;
+  gap: var(--openbot-space-2-5);
+  margin: 0 var(--openbot-space-2-5) var(--openbot-space-1-5);
   border: 1px solid var(--openbot-border);
   border-radius: var(--openbot-radius-lg);
   background: var(--openbot-bg-control);
-  padding: 6px 8px 6px 12px;
+  padding: var(--openbot-space-1-5) var(--openbot-space-2) var(--openbot-space-1-5) var(--openbot-space-3);
   box-shadow: 0 7px 22px var(--openbot-shadow-popover-ambient);
 }
 
@@ -125,12 +125,12 @@
   display: grid;
   max-width: none;
   min-height: 96px;
-  gap: 4px;
+  gap: var(--openbot-space-1);
   margin: 0 auto;
   border: 0.5px solid var(--openbot-border);
   border-radius: var(--openbot-radius-lg);
   background: var(--openbot-bg-surface);
-  padding: 10px;
+  padding: var(--openbot-space-2-5);
   box-shadow: none;
   transition:
     border-color var(--openbot-duration-hover) var(--openbot-ease-out),
@@ -141,8 +141,8 @@
   grid-template-columns: 28px minmax(0, 1fr) auto;
   min-height: 48px;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-2) var(--openbot-space-2-5);
 }
 
 .composer:focus-within {
@@ -188,7 +188,7 @@
 .composer-primary-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--openbot-space-1-5);
 }
 
 .voice-model-progress {
@@ -234,7 +234,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--openbot-space-1-5);
 }
 
 .voice-morph-filter {
@@ -333,7 +333,7 @@
   min-width: 0;
   height: 28px;
   align-items: center;
-  gap: 4px;
+  gap: var(--openbot-space-1);
   margin: 0;
   border: 0;
   overflow: hidden;
@@ -506,7 +506,7 @@
   min-height: 28px;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--openbot-space-2);
 }
 
 .composer[data-compact] .composer-input-label {
@@ -535,7 +535,7 @@
 }
 
 .composer[data-compact] .composer-editor-surface {
-  padding: 4px 0;
+  padding: var(--openbot-space-1) 0;
 }
 
 .composer[data-compact] .composer-editor-placeholder {
@@ -550,7 +550,7 @@
 }
 
 .composer[data-has-attachments] .composer-editor-surface {
-  padding: 4px;
+  padding: var(--openbot-space-1);
 }
 
 .composer[data-has-attachments] .composer-editor-placeholder {
@@ -581,7 +581,7 @@
   border: 0;
   outline: 0;
   background: transparent;
-  padding: 2px 4px 8px;
+  padding: var(--openbot-space-0-5) var(--openbot-space-1) var(--openbot-space-2);
   caret-color: var(--openbot-text-primary);
   color: var(--openbot-text-primary);
   cursor: text;
@@ -605,7 +605,7 @@
   border: 1px solid var(--openbot-border);
   border-radius: var(--openbot-radius-md);
   background: var(--openbot-bg-surface);
-  padding: 2px 8px;
+  padding: var(--openbot-space-0-5) var(--openbot-space-2);
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
   line-height: 16px;
@@ -642,7 +642,7 @@
   display: inline-block;
   width: 2px;
   height: 16px;
-  margin-left: 2px;
+  margin-left: var(--openbot-space-0-5);
   border-radius: var(--openbot-radius-pill);
   background: var(--openbot-accent);
   vertical-align: -3px;
@@ -692,7 +692,7 @@
 }
 
 .composer-editor-root[data-size="compact"] .composer-editor-surface {
-  padding: 4px 0;
+  padding: var(--openbot-space-1) 0;
 }
 
 .composer-editor-root[data-size="compact"] .composer-editor-placeholder {
@@ -813,7 +813,7 @@
   border: 0;
   border-radius: var(--openbot-radius-md);
   background: transparent;
-  padding: 0 8px;
+  padding: 0 var(--openbot-space-2);
   color: var(--openbot-queue-text);
   text-align: left;
 }
@@ -929,8 +929,8 @@
   min-width: 0;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin: 2px 0 4px;
+  gap: var(--openbot-space-2);
+  margin: var(--openbot-space-0-5) 0 var(--openbot-space-1);
 }
 
 .composer-attachment {
@@ -954,7 +954,7 @@
   width: 220px;
   max-width: 100%;
   height: 52px;
-  gap: 10px;
+  gap: var(--openbot-space-2-5);
   border: 1px solid var(--openbot-border);
   border-radius: var(--openbot-radius-lg);
   background: var(--openbot-bg-control);

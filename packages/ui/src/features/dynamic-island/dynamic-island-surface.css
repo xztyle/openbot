@@ -460,12 +460,12 @@ body:has(.dynamic-island-surface),
 
 .dynamic-island-surface-panel {
   display: grid;
-  gap: 10px;
+  gap: var(--openbot-space-2-5);
 }
 
 .dynamic-island-surface-list {
   display: grid;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .dynamic-island-surface-row {
@@ -642,7 +642,7 @@ body:has(.dynamic-island-surface),
 }
 
 .dynamic-island-surface-question-step .dynamic-island-reply {
-  margin-top: 6px;
+  margin-top: var(--openbot-space-1-5);
 }
 
 .dynamic-island-surface-request-copy {
@@ -657,7 +657,7 @@ body:has(.dynamic-island-surface),
   display: grid;
   gap: 3px;
   border-left: 1px solid var(--openbot-warning);
-  padding: 2px 0 2px 10px;
+  padding: var(--openbot-space-0-5) 0 var(--openbot-space-0-5) var(--openbot-space-2-5);
 }
 
 .dynamic-island-surface-command-meta {
@@ -724,7 +724,7 @@ div.dynamic-island-surface-context-line span {
 .dynamic-island-surface-question-options {
   min-width: 0;
   display: grid;
-  gap: 6px;
+  gap: var(--openbot-space-1-5);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -848,13 +848,13 @@ div.dynamic-island-surface-context-line span {
 }
 
 .dynamic-island-surface-question-panel {
-  gap: 10px;
+  gap: var(--openbot-space-2-5);
 }
 
 .dynamic-island-surface-question-progress {
   display: inline-flex;
   align-items: baseline;
-  padding-top: 2px;
+  padding-top: var(--openbot-space-0-5);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   font-variant-numeric: tabular-nums;

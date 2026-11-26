@@ -1,5 +1,16 @@
-/* A stylesheet in the widened scan's reach that spends none of the budget. */
+/* A stylesheet in the widened scan's reach that spends none of the budget. The :root block is
+   the tree's palette: every token a file in this tree reads is declared here. */
+:root {
+  --openbot-text: inherit;
+  --openbot-text-sm: 1em;
+  --openbot-transition: none;
+  --openbot-layer-overlay: 1;
+  --openbot-layer-dropdown: 1;
+  --openbot-space-3: 1em;
+}
+
 .panel {
+  gap: var(--openbot-space-3);
   /* A portaled surface takes the overlay layer as it is; an in-page one may step off dropdown. */
   z-index: var(--openbot-layer-overlay);
   color: var(--openbot-text);

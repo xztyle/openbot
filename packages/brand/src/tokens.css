@@ -312,12 +312,19 @@
   --openbot-tracking-tight: -0.1px;
   --openbot-tracking-normal: 0;
   --openbot-tracking-wide: 0.02em;
+  /* The spacing scale: the 4px scale, named as Tailwind names it (a step is its value in 4px
+   * units). Every gap, padding and margin between and around boxes reads a step; `check:ui`
+   * fails a `var(--openbot-space-*)` that is not declared here, because a missing step is not an
+   * error in CSS: the declaration is dropped and the gap becomes 0, so cards touch. Add a step
+   * here when a layout needs one; do not write the pixels at the use site. */
   --openbot-space-0-5: 2px;
   --openbot-space-1: 4px;
   --openbot-space-1-5: 6px;
   --openbot-space-2: 8px;
+  --openbot-space-2-5: 10px;
   --openbot-space-3: 12px;
   --openbot-space-4: 16px;
+  --openbot-space-5: 20px;
   --openbot-space-6: 24px;
   --openbot-space-8: 32px;
   --openbot-scrollbar-size: 8px;

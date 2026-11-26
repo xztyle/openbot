@@ -28,7 +28,7 @@
   height: 39px;
   flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
+  gap: var(--openbot-space-2);
   border-bottom: 1px solid var(--openbot-border);
   padding: 0 7px 0 11px;
 }
@@ -121,7 +121,7 @@
 .file-preview-image-wrap {
   display: grid;
   min-height: 100%;
-  padding: 20px;
+  padding: var(--openbot-space-5);
   place-items: center;
 }
 
@@ -143,7 +143,7 @@
 .file-preview-audio {
   display: block;
   width: calc(100% - 40px);
-  margin: 20px;
+  margin: var(--openbot-space-5);
 }
 
 .file-preview-video {
@@ -157,7 +157,7 @@
 .file-preview-spreadsheet {
   min-width: 0;
   min-height: 100%;
-  padding: 20px;
+  padding: var(--openbot-space-5);
   color: var(--openbot-text-primary);
 }
 
@@ -170,8 +170,8 @@
 
 .file-preview-spreadsheet-tabs {
   display: flex;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: var(--openbot-space-1-5);
+  margin-bottom: var(--openbot-space-3);
   overflow-x: auto;
 }
 
@@ -179,7 +179,7 @@
   border: 1px solid var(--openbot-border);
   border-radius: var(--openbot-radius-sm);
   background: var(--openbot-bg-control);
-  padding: 6px 10px;
+  padding: var(--openbot-space-1-5) var(--openbot-space-2-5);
   color: var(--openbot-text-muted);
   white-space: nowrap;
 }
@@ -206,7 +206,7 @@
 }
 
 .file-preview-spreadsheet-table caption {
-  padding: 10px 12px;
+  padding: var(--openbot-space-2-5) var(--openbot-space-3);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   text-align: left;
@@ -216,7 +216,7 @@
 .file-preview-spreadsheet-table td {
   border-top: 1px solid var(--openbot-border);
   border-right: 1px solid var(--openbot-border);
-  padding: 8px 12px;
+  padding: var(--openbot-space-2) var(--openbot-space-3);
   text-align: left;
   white-space: pre;
 }
@@ -232,7 +232,7 @@
 }
 
 .file-preview-spreadsheet-note {
-  margin: 10px 0 0;
+  margin: var(--openbot-space-2-5) 0 0;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
 }
@@ -241,8 +241,8 @@
   min-height: 100%;
   place-content: center;
   justify-items: center;
-  gap: 8px;
-  padding: 24px;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-6);
   color: var(--openbot-text-muted);
   text-align: center;
 }
@@ -250,7 +250,7 @@
 .file-preview-unsupported > svg {
   width: 28px;
   height: 28px;
-  margin-bottom: 4px;
+  margin-bottom: var(--openbot-space-1);
 }
 
 .file-preview-unsupported strong {
@@ -265,7 +265,7 @@
 }
 
 .file-preview-unsupported button {
-  margin-top: 6px;
+  margin-top: var(--openbot-space-1-5);
 }
 
 .file-preview-truncated {
@@ -295,7 +295,7 @@
 .file-preview-folder {
   display: grid;
   margin: 0;
-  padding: 8px;
+  padding: var(--openbot-space-2);
   list-style: none;
 }
 
@@ -304,9 +304,9 @@
   width: 100%;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 10px;
+  gap: var(--openbot-space-2-5);
   justify-content: stretch;
-  padding: 6px 10px;
+  padding: var(--openbot-space-1-5) var(--openbot-space-2-5);
   font-size: var(--openbot-text-sm);
   text-align: left;
 }
@@ -326,7 +326,7 @@
 
 .file-preview-folder-empty {
   margin: 0;
-  padding: 24px;
+  padding: var(--openbot-space-6);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   text-align: center;

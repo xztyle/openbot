@@ -285,7 +285,7 @@
   display: block;
   overflow: hidden;
   height: 0.375rem;
-  border-radius: var(--openbot-radius-full);
+  border-radius: var(--openbot-radius-pill);
   background: var(--openbot-bg-control);
 }
 

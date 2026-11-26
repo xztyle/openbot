@@ -6,7 +6,7 @@
   margin: 0;
   padding: 0;
   border: 0;
-  gap: 4px;
+  gap: var(--openbot-space-1);
 }
 
 .logo-color-choice {

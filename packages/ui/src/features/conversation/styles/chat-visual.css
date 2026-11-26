@@ -23,7 +23,7 @@
 .chat-visual-frame-fill {
   box-sizing: border-box;
   height: 100%;
-  padding: 12px 16px;
+  padding: var(--openbot-space-3) var(--openbot-space-4);
 }
 
 /* The box of a page that loads or that the app cannot get. */
@@ -33,7 +33,7 @@
   justify-content: center;
   min-width: 0;
   color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-xs);
+  font-size: var(--openbot-text-sm);
 }
 
 /*

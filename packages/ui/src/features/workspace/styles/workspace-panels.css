@@ -757,7 +757,7 @@
     min-width: var(--openbot-touch-target);
     height: var(--openbot-touch-target);
     padding-inline: var(--openbot-space-3);
-    font-size: var(--openbot-text-base);
+    font-size: var(--openbot-touch-text-md);
   }
 
   .ws-typing-stop.ui-button::after {

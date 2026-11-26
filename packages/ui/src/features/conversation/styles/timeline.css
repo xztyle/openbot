@@ -91,7 +91,7 @@
   min-height: 32px;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--openbot-space-2);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
 }
@@ -295,7 +295,7 @@
   justify-content: space-between;
   border-radius: 0 0 var(--openbot-radius-md) var(--openbot-radius-md);
   background: var(--openbot-unread-surface);
-  padding: 0 12px;
+  padding: 0 var(--openbot-space-3);
   color: var(--openbot-unread-text);
   font-size: var(--openbot-text-sm);
   font-weight: 620;
@@ -314,7 +314,7 @@
   position: absolute;
   inset: 0;
   width: 100%;
-  padding: 0 12px;
+  padding: 0 var(--openbot-space-3);
   font-size: var(--openbot-text-sm);
   font-weight: 620;
   line-height: 16px;
@@ -376,7 +376,7 @@
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 8px;
+  gap: var(--openbot-space-2);
   margin: var(--openbot-space-1) 0 var(--openbot-space-2);
   color: var(--openbot-unread-surface);
   font-size: var(--openbot-text-sm);
@@ -404,7 +404,7 @@
   max-width: 656px;
   height: 24px;
   margin: 0 auto;
-  padding: 4px 0;
+  padding: var(--openbot-space-1) 0;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   line-height: 16px;

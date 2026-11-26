@@ -172,7 +172,7 @@
 }
 
 .dynamic-island:not(.dynamic-island-external):not(.dynamic-island-status) .dynamic-island-ear-leading {
-  padding-right: 6px;
+  padding-right: var(--openbot-space-1-5);
 }
 
 .dynamic-island-ear-content {
@@ -409,12 +409,12 @@
 .dynamic-island-status:not(.dynamic-island-external) .dynamic-island-ear-leading {
   justify-content: flex-start;
   padding-right: 0;
-  padding-left: 12px;
+  padding-left: var(--openbot-space-3);
 }
 
 .dynamic-island-status:not(.dynamic-island-external) .dynamic-island-ear-trailing {
   justify-content: flex-end;
-  padding-right: 12px;
+  padding-right: var(--openbot-space-3);
   padding-left: 0;
 }
 

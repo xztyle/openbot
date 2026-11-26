@@ -872,7 +872,7 @@ textarea {
   height: calc(var(--left-header-height) + 36px);
   align-items: flex-end;
   justify-content: center;
-  padding: 0 0 2px;
+  padding: 0 0 var(--openbot-space-0-5);
 }
 
 .app-frame-platform-darwin:not(.app-frame-with-server-rail, .web-app-frame) .sidebar-compact .sidebar-server-name,
@@ -1088,7 +1088,7 @@ textarea {
 
 .sidebar-search-wrap {
   position: relative;
-  padding: 8px 12px 6px;
+  padding: var(--openbot-space-2) var(--openbot-space-3) var(--openbot-space-1-5);
 }
 
 /* The field opens the global search, so it is a button drawn as the search field. */
@@ -1113,7 +1113,7 @@ textarea {
 
 .sidebar-compact-search {
   position: absolute;
-  inset: 8px 12px 6px;
+  inset: var(--openbot-space-2) var(--openbot-space-3) var(--openbot-space-1-5);
   display: grid;
   height: 32px;
   place-items: center;
@@ -1145,7 +1145,7 @@ textarea {
   display: flex;
   height: 32px;
   align-items: center;
-  gap: 8px;
+  gap: var(--openbot-space-2);
   border: 0.5px solid var(--openbot-border);
   border-radius: var(--openbot-radius-sm);
   background: var(--openbot-hover);
@@ -1193,7 +1193,7 @@ textarea {
   flex-direction: column;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 4px 12px 0;
+  padding: var(--openbot-space-1) var(--openbot-space-3) 0;
   scrollbar-width: none;
 }
 
@@ -1211,7 +1211,7 @@ textarea {
 }
 
 .sidebar-chat-group + .sidebar-chat-group {
-  margin-top: 6px;
+  margin-top: var(--openbot-space-1-5);
   transition: margin-top var(--panel-resize-duration, var(--openbot-duration-overlay)) cubic-bezier(0.32, 0.72, 0, 1);
 }
 
@@ -1342,7 +1342,7 @@ textarea {
   height: 32px;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--openbot-space-2);
   border-radius: var(--openbot-radius-md);
   padding: 0 7px;
   background: transparent;
@@ -1445,7 +1445,7 @@ textarea {
   place-items: center;
   border-radius: var(--openbot-radius-pill);
   background: var(--openbot-warning);
-  padding: 0 4px;
+  padding: 0 var(--openbot-space-1);
   color: var(--openbot-bg-sidebar);
   font-size: var(--openbot-text-sm);
   font-weight: 650;
@@ -1465,7 +1465,7 @@ textarea {
   height: 36px;
   border-color: var(--openbot-border-focus);
   border-radius: var(--openbot-radius-md);
-  padding: 0 32px 0 8px;
+  padding: 0 var(--openbot-space-8) 0 var(--openbot-space-2);
   background: var(--openbot-bg-control);
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
@@ -1539,7 +1539,7 @@ textarea {
 }
 
 .sidebar-agent-item + .sidebar-agent-item {
-  margin-top: 4px;
+  margin-top: var(--openbot-space-1);
 }
 
 .sidebar-agent-item-dragging {
@@ -1581,7 +1581,7 @@ textarea {
 }
 
 .sidebar-person-item + .sidebar-person-item {
-  margin-top: 4px;
+  margin-top: var(--openbot-space-1);
 }
 
 .sidebar-person-item-dragging {
@@ -1615,7 +1615,7 @@ textarea {
 .sidebar-pinned-group-empty-target .sidebar-pinned-list {
   width: 100%;
   min-height: 0;
-  padding: 4px 0 2px;
+  padding: var(--openbot-space-1) 0 var(--openbot-space-0-5);
   overflow: hidden;
 }
 
@@ -1650,7 +1650,7 @@ textarea {
 }
 
 .sidebar-pinned-group {
-  padding: 4px 0 2px;
+  padding: var(--openbot-space-1) 0 var(--openbot-space-0-5);
 }
 
 .sidebar-pinned-list {
@@ -1661,9 +1661,9 @@ textarea {
   align-content: flex-start;
   justify-content: center;
   margin: 0 auto;
-  gap: 8px;
+  gap: var(--openbot-space-2);
   list-style: none;
-  padding: 2px;
+  padding: var(--openbot-space-0-5);
 }
 
 .sidebar-pinned-item {
@@ -1681,8 +1681,8 @@ textarea {
   min-height: 94px;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 4px;
-  padding: 4px 2px;
+  gap: var(--openbot-space-1);
+  padding: var(--openbot-space-1) var(--openbot-space-0-5);
   cursor: grab;
   text-align: center;
 }
@@ -1711,7 +1711,7 @@ textarea {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .sidebar-pinned-name {
@@ -1838,11 +1838,11 @@ textarea {
   height: 54px;
   min-height: 54px;
   align-items: center;
-  gap: 8px;
+  gap: var(--openbot-space-2);
   border: 0;
   border-radius: var(--openbot-radius-md);
   background: transparent;
-  padding: 8px;
+  padding: var(--openbot-space-2);
   color: inherit;
   text-align: left;
   transition:
@@ -1852,7 +1852,7 @@ textarea {
 }
 
 .agent-row + .agent-row {
-  margin-top: 4px;
+  margin-top: var(--openbot-space-1);
 }
 
 .agent-row:hover {
@@ -1912,7 +1912,7 @@ textarea {
 .agent-row-thinking-dots {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .agent-row-thinking-dots i {
@@ -2026,7 +2026,7 @@ textarea {
   z-index: var(--openbot-layer-tooltip);
   display: grid;
   max-width: min(260px, calc(100vw - 16px));
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   border: 1px solid var(--openbot-border-strong);
   border-radius: var(--openbot-radius-sm);
   background: var(--openbot-bg-surface-raised);
@@ -2254,7 +2254,7 @@ textarea {
   min-height: 40px;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--openbot-space-2-5);
   padding: 7px 10px 3px 13px;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
@@ -2270,7 +2270,7 @@ textarea {
 .avatar-editor-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .avatar-editor-actions button {
@@ -2308,7 +2308,7 @@ textarea {
   width: calc(100% - 20px);
   min-height: 64px;
   align-items: center;
-  margin: 4px 10px 12px;
+  margin: var(--openbot-space-1) var(--openbot-space-2-5) var(--openbot-space-3);
   border: 1px dashed var(--openbot-border-strong);
   border-radius: var(--openbot-radius-lg);
   background: var(--openbot-hover);
@@ -2393,7 +2393,7 @@ textarea {
   margin: 0;
   border: 0;
   grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  gap: var(--openbot-space-1-5);
   padding: 7px 10px 12px;
 }
 
@@ -2439,7 +2439,7 @@ textarea {
   border: 0;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 5px;
-  padding: 4px 10px 12px;
+  padding: var(--openbot-space-1) var(--openbot-space-2-5) var(--openbot-space-3);
 }
 
 .avatar-color-choice {
@@ -2488,7 +2488,7 @@ textarea {
   min-width: 0;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--openbot-space-2);
 }
 
 .agent-row-title {
@@ -2551,7 +2551,7 @@ textarea {
   border: 0.5px solid var(--openbot-border);
   border-radius: var(--openbot-radius-xs);
   background: var(--openbot-hover);
-  padding: 2px 4px;
+  padding: var(--openbot-space-0-5) var(--openbot-space-1);
   color: var(--openbot-text-readable);
   font-size: var(--openbot-text-sm);
   font-weight: 400;
@@ -2627,7 +2627,7 @@ textarea {
 }
 
 .empty-search {
-  margin: 32px 0;
+  margin: var(--openbot-space-8) 0;
   color: var(--openbot-text-readable);
   font-size: var(--openbot-text-md);
   text-align: center;
@@ -2879,7 +2879,7 @@ textarea {
 }
 
 .sidebar-compact .sidebar-topbar {
-  padding-inline: 12px;
+  padding-inline: var(--openbot-space-3);
 }
 
 .sidebar-compact .sidebar-server-name {
@@ -2902,7 +2902,7 @@ textarea {
 }
 
 .sidebar-compact .sidebar-search-wrap {
-  padding-inline: 12px;
+  padding-inline: var(--openbot-space-3);
 }
 
 .sidebar-compact .search-field {
@@ -2919,7 +2919,7 @@ textarea {
 }
 
 .sidebar-compact .agent-list {
-  padding-inline: 12px;
+  padding-inline: var(--openbot-space-3);
 }
 
 .sidebar-compact .sidebar-chat-group {
@@ -2927,7 +2927,7 @@ textarea {
 }
 
 .sidebar-compact .sidebar-chat-group + .sidebar-chat-group {
-  margin-top: 4px;
+  margin-top: var(--openbot-space-1);
 }
 
 .sidebar-compact .sidebar-chat-group > header {
@@ -2939,7 +2939,7 @@ textarea {
 }
 
 .sidebar-compact .agent-row {
-  padding-inline: 8px;
+  padding-inline: var(--openbot-space-2);
 }
 
 .sidebar-compact .agent-row-avatar {
@@ -2950,7 +2950,7 @@ textarea {
   width: 60px;
   height: 60px;
   min-height: 60px;
-  padding: 6px;
+  padding: var(--openbot-space-1-5);
 }
 
 .sidebar-compact .sidebar-pinned-item {

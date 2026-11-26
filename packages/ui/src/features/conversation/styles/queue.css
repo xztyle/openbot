@@ -131,7 +131,7 @@
 
 .agent-queue-editing-badge {
   flex: none;
-  padding: 0 6px;
+  padding: 0 var(--openbot-space-1-5);
   border-radius: var(--openbot-radius-xs);
   background: var(--openbot-bg-surface-raised);
   color: var(--openbot-text-muted);
@@ -206,7 +206,7 @@
 .agent-queue-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--openbot-space-1);
   color: var(--openbot-queue-action);
 }
 
@@ -216,11 +216,11 @@
   height: 26px;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: var(--openbot-space-1);
   border: 0;
   border-radius: var(--openbot-radius-md);
   background: transparent;
-  padding: 0 4px;
+  padding: 0 var(--openbot-space-1);
   color: inherit;
   font-size: var(--openbot-text-lg);
   line-height: 18px;

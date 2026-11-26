@@ -277,7 +277,7 @@ body:has(.browser-full-view) .app-frame {
   place-items: center;
   border-radius: var(--openbot-radius-sm);
   color: var(--openbot-text-on-accent);
-  font-size: var(--openbot-text-xs);
+  font-size: var(--openbot-text-sm);
   font-weight: 700;
   line-height: 1;
 }

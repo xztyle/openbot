@@ -20,7 +20,7 @@
   /* The trailing button carries its own side padding, so the end inset is smaller than the start. */
   padding: var(--notice-inset) var(--notice-inset) calc(var(--notice-inset) + var(--notice-composer-overlap)) 12px;
   align-items: center;
-  gap: 10px;
+  gap: var(--openbot-space-2-5);
   border: none;
   /*
    * Concentric with the button it holds: the card radius is the button's 8px plus the 6px inset.
@@ -47,7 +47,7 @@
 .composer-notice:not(:has(.ui-button)) {
   --notice-inset: 8px;
 
-  padding-right: 12px;
+  padding-right: var(--openbot-space-3);
 }
 
 .composer-notice-icon {

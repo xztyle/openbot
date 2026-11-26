@@ -151,7 +151,7 @@
 .attachment-drop-overlay {
   position: absolute;
   z-index: 60;
-  inset: 12px;
+  inset: var(--openbot-space-3);
   display: grid;
   place-items: center;
   border: 1px dashed color-mix(in srgb, var(--accent) 70%, var(--openbot-text-primary));

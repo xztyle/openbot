@@ -41,7 +41,7 @@
   justify-content: flex-start;
   overflow: hidden;
   border-bottom: 1px solid var(--openbot-border);
-  padding: 0 8px 0 0;
+  padding: 0 var(--openbot-space-2) 0 0;
   background: var(--openbot-bg-sidebar);
 }
 
@@ -55,7 +55,7 @@
   align-items: center;
   flex: 0 1 auto;
   justify-content: flex-end;
-  gap: 4px;
+  gap: var(--openbot-space-1);
   margin-left: auto;
   white-space: nowrap;
 }
@@ -119,7 +119,7 @@
   flex-direction: column;
   gap: 7px;
   background: var(--openbot-bg-overlay);
-  padding: 24px;
+  padding: var(--openbot-space-6);
   text-align: center;
 }
 

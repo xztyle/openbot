@@ -890,7 +890,7 @@ button.ws-profile-trigger.ws-message-author:hover {
 
 .ws-typing-dots {
   display: inline-flex;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
 }
 
 .ws-typing-dots > i {

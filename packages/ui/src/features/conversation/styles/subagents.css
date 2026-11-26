@@ -23,7 +23,7 @@
   width: var(--openbot-icon-xs);
   height: var(--openbot-icon-xs);
   flex: 0 0 auto;
-  margin-top: 2px;
+  margin-top: var(--openbot-space-0-5);
 }
 
 .subagents-live-text {
@@ -202,7 +202,7 @@
   width: var(--openbot-icon-xs);
   height: var(--openbot-icon-xs);
   flex: 0 0 auto;
-  margin-top: 4px;
+  margin-top: var(--openbot-space-1);
   color: var(--openbot-text-muted);
   opacity: 0;
   transition: opacity var(--openbot-duration-fast) var(--openbot-ease-out);
@@ -265,7 +265,7 @@
 .subagents-prompt {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   margin: 0;
   border-left: 2px solid var(--openbot-border-strong);
   padding-left: var(--openbot-space-2);
@@ -304,7 +304,7 @@
   width: var(--openbot-icon-xs);
   height: var(--openbot-icon-xs);
   flex: 0 0 auto;
-  margin-top: 2px;
+  margin-top: var(--openbot-space-0-5);
   color: var(--openbot-text-muted);
 }
 
@@ -335,7 +335,7 @@
   width: var(--openbot-icon-xs);
   height: var(--openbot-icon-xs);
   flex: 0 0 auto;
-  margin-top: 2px;
+  margin-top: var(--openbot-space-0-5);
 }
 
 /* Status icons: the same icons and colours as the chat action markers. */

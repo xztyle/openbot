@@ -2,7 +2,7 @@
   display: grid;
   width: min(100%, 256px);
   gap: 7px;
-  margin-top: 10px;
+  margin-top: var(--openbot-space-2-5);
 }
 
 .message-attachment {
@@ -11,7 +11,7 @@
   min-width: 0;
   min-height: 56px;
   align-items: center;
-  gap: 6px;
+  gap: var(--openbot-space-1-5);
   border: 1px solid var(--openbot-border);
   border-radius: var(--openbot-radius-lg);
   background: var(--openbot-bg-surface-raised);
@@ -57,7 +57,7 @@
   min-width: 0;
   align-items: center;
   justify-content: flex-start;
-  gap: 10px;
+  gap: var(--openbot-space-2-5);
   border: 0;
   background: transparent;
   padding: 0;

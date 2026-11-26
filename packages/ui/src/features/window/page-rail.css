@@ -24,7 +24,7 @@
   height: var(--left-header-height, 38px);
   align-items: center;
   justify-content: center;
-  padding-top: 2px;
+  padding-top: var(--openbot-space-0-5);
 }
 
 .window-rail-logo .app-logo {

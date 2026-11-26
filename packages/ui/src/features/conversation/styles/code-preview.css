@@ -91,7 +91,7 @@
   padding: var(--openbot-space-2) var(--openbot-space-3);
   border-bottom: 1px solid var(--openbot-border);
   color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-xs);
+  font-size: var(--openbot-text-sm);
 }
 
 /* Mermaid points at the error with a caret line, which lines up only in a monospace font. */

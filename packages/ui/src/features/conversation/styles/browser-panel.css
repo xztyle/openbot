@@ -10,8 +10,8 @@
   height: 100%;
   align-items: center;
   justify-content: flex-end;
-  gap: 2px;
-  padding: 4px;
+  gap: var(--openbot-space-0-5);
+  padding: var(--openbot-space-1);
   opacity: 0;
   transition: opacity var(--openbot-duration-fast) ease;
   -webkit-app-region: drag;
@@ -96,7 +96,7 @@
   height: 24px;
   flex: 0 0 auto;
   align-items: center;
-  gap: 4px;
+  gap: var(--openbot-space-1);
   border-radius: var(--openbot-radius-sm);
   padding: 0 5px;
   font-size: var(--openbot-text-sm);

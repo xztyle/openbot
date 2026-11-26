@@ -103,11 +103,32 @@ function declaredClasses(source: string): Set<string> {
   return names;
 }
 
+/** A static `var(--openbot-…)` read. A name cut short by `${` is a family built at runtime. */
+const TOKEN_READ = /var\(\s*(--openbot-[a-z0-9-]+)(?![a-z0-9-]|\$\{)/gu;
+/** A declaration of a `--openbot-*` custom property, in a stylesheet or a style object. */
+const TOKEN_DECLARATION = /(--openbot-[a-z0-9-]+)\s*["']?\s*:/gu;
+/** A `setProperty("--openbot-…")` call: the renderer paints a few tokens from JavaScript. */
+const TOKEN_SET = /setProperty\(\s*["'](--openbot-[a-z0-9-]+)["']/gu;
+
+/**
+ * A spacing declaration (margin, padding, gap, inset and their sides) that writes pixels of its
+ * own instead of a step of the scale. `0` and the 1px of an optical nudge stay, as does a negative
+ * value, a `calc()` and a `var()`: the scale cannot spell those.
+ */
+const SPACING_LITERAL =
+  /(?:^|[;{\s])(?:margin|padding|gap|row-gap|column-gap|inset)(?:-(?:top|right|bottom|left|inline|block)(?:-(?:start|end))?)?\s*:(?![^;}]*(?:var\(|calc\())[^;}]*(?<![\d.-])(?:[2-9]|\d{2,})px/gu;
+
 export function checkUiFoundation(
   rendererRoot: string,
   labelRoot: string,
   reachableRoots: readonly string[] = [rendererRoot],
   uiRoot = resolve(rendererRoot, "components/ui"),
+  tokenRoots: readonly string[] = [],
+  /**
+   * How many spacing declarations may still write pixels off the scale. The CLI holds the
+   * repository's remaining count; a fixture tree, like every other budget, runs at zero.
+   */
+  spacingBudget = 0,
 ): UiFoundationReport {
   const sourceFiles = [...new Set([...filesUnder(rendererRoot), ...filesUnder(uiRoot)])];
   // Compared with a separator appended, or components/ui-kit and components/uiLegacy read
@@ -216,6 +237,29 @@ export function checkUiFoundation(
       failures.push(`${relative(labelRoot, path)}: .${name} is not reachable from any markup; delete the rule`);
     }
   }
+  // A `var()` of a token nobody declares is not an error to the browser: the declaration is
+  // dropped, a gap becomes 0 and two cards touch. The palette lives in `tokenRoots`
+  // (@openbot/brand) and a stylesheet or a style object may declare a token of its own, so
+  // every declaration in reach counts, and every static read outside that set is a failure.
+  const declaredTokens = new Set<string>();
+  const tokenSources = [...new Set([...sourceFiles, ...tokenRoots.flatMap(filesUnder)])].filter((path) =>
+    /\.(?:css|tsx?)$/u.test(path),
+  );
+  for (const path of tokenSources) {
+    const source = readFileSync(path, "utf8");
+    for (const [, name] of source.matchAll(TOKEN_DECLARATION)) if (name !== undefined) declaredTokens.add(name);
+    for (const [, name] of source.matchAll(TOKEN_SET)) if (name !== undefined) declaredTokens.add(name);
+  }
+  for (const path of sourceFiles.filter((file) => /\.(?:css|tsx?)$/u.test(file) && !/\.test\.tsx?$/u.test(file))) {
+    const source = readFileSync(path, "utf8");
+    const missing = new Set<string>();
+    for (const [, name] of source.matchAll(TOKEN_READ)) {
+      if (name !== undefined && !name.endsWith("-") && !declaredTokens.has(name)) missing.add(name);
+    }
+    for (const name of [...missing].sort()) {
+      failures.push(`${relative(labelRoot, path)}: var(${name}) is not a declared token; use a step of the scale`);
+    }
+  }
   const colorLiteralCount =
     matches(legacyStyles, /#[\da-f]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)/giu) +
     matches(legacyStyles, /(?<![-\w])(?:white|black|red|blue|green|yellow|purple|orange|gray|grey|pink)(?![-\w])/giu);
@@ -258,6 +302,11 @@ export function checkUiFoundation(
       matches(legacyStyles, /transition(?:-duration)?:(?![^;]*var\()(?!\s*(?:none|0\.01ms))[^;]*\b\d+m?s\b[^;]*/gu),
       0,
     ],
+    // Spacing between and around boxes reads `--openbot-space-*`. Every declaration whose pixels
+    // sat on the scale was rewritten to it in 2026-11; what remains is off the scale (7px, 14px,
+    // 28px...) in the sign-in screens, the app shell and the conversation styles, and each one is
+    // a design decision to take when that screen is next touched. A new one is not allowed.
+    ["untokenized spacing", matches(legacyStyles, SPACING_LITERAL), spacingBudget],
   ] as const;
 
   for (const [label, actual, maximum] of debtBudgets) {
@@ -276,6 +325,8 @@ if (import.meta.main) {
     projectRoot,
     [resolve(projectRoot, "src"), resolve(projectRoot, "apps"), resolve(projectRoot, "packages/ui/src")],
     resolve(projectRoot, "packages/ui/src"),
+    [resolve(projectRoot, "packages/brand/src")],
+    147,
   );
 
   if (failures.length > 0) {

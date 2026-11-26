@@ -378,7 +378,9 @@
   display: grid;
   gap: var(--openbot-space-3);
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  margin: 0;
+  /* Block only: the Money strip is a child of the stack, whose `margin-inline: auto` centres
+     it with the cards. A `margin: 0` here won that cascade and left the strip at the edge. */
+  margin-block: 0;
 }
 
 .ws-today-figures dt,
@@ -611,7 +613,7 @@
   display: flex;
   height: 96px;
   align-items: flex-end;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   margin: 0;
   border-bottom: 1px solid var(--openbot-border);
   padding: 0;

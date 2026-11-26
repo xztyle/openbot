@@ -16,6 +16,16 @@
   transition-duration: 300ms;
 }
 
+/* A step nobody declared: the browser drops the gap and the cards touch. Reported once per
+   file and name, so the second read of the same name adds no line. Beside it, two units of
+   the spacing budget: pixels off the scale in a shorthand and in a side. */
+.legacy-stack {
+  gap: var(--openbot-space-5);
+  row-gap: var(--openbot-space-5);
+  padding: 7px;
+  margin-bottom: 14px;
+}
+
 .legacy-scrim {
   z-index: calc(var(--openbot-layer-dialog) + 1);
   background: rgba(0, 0, 0, 0.5);

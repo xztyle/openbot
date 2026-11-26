@@ -1,3 +1,19 @@
+/* The palette of the fixture tree: every token a file here reads. In the repository this block
+   is @openbot/brand (`tokenRoots`); here it sits in the walked tree, which the check also reads,
+   so a stylesheet or a style object may declare a token of its own. The values are not colours
+   on purpose: a colour literal here would spend the colour budget. */
+:root {
+  --openbot-text: inherit;
+  --openbot-red-500: currentColor;
+  --openbot-text-sm: 1em;
+  --openbot-radius-md: 0;
+  --openbot-transition: none;
+  --openbot-layer-overlay: 1;
+  --openbot-layer-dialog: 1;
+  --openbot-layer-dropdown: 1;
+  --openbot-space-2: 1em;
+}
+
 /* The neighbour each budget must leave alone: a token is not a literal, and the two
    values the ratchet exempts by hand are a zero radius and a disabled transition. The
    token naming a colour is the boundary case - the named-colour pattern must not see a
@@ -8,4 +24,10 @@
   font-size: var(--openbot-text-sm);
   border-radius: 0;
   transition: none;
+  /* Spacing the budget leaves alone: a step, a zero, a 1px nudge, a negative, a calc(). */
+  gap: var(--openbot-space-2);
+  padding: 0 1px;
+  margin: -2px auto 0;
+  margin-top: calc(var(--openbot-space-2) * 2);
+  padding-inline-start: 0.5px;
 }

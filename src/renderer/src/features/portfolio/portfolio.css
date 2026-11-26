@@ -136,7 +136,7 @@
 .portfolio-trend {
   display: flex;
   align-items: flex-end;
-  gap: 2px;
+  gap: var(--openbot-space-0-5);
   height: var(--openbot-control-sm);
 }
 

@@ -108,7 +108,8 @@ try {
         JSON.stringify(resumed) === '["agent:ana-1"]',
         JSON.stringify(resumed),
       );
-      const turns = page.getByRole("group", { name: "Each agent, per day" }).getByLabel("Turns");
+      // A settings group is a titled section: a region named by its title.
+      const turns = page.getByRole("region", { name: "Each agent, per day" }).getByLabel("Turns");
       await turns.fill("300");
       await page.getByRole("button", { name: "Save" }).click();
       await page.waitForFunction(() => (document.body.dataset.guardrailsCalls ?? "").includes('"saved":[{'));

@@ -4,7 +4,8 @@
 // ZIP and a TAR.GZ list their files and give one back. A second run of the same file comes from the
 // cache, keyed by the file's content.
 //
-// The tools are in the host image. On a computer without them, run it in the image:
+// The tools are in the host image, so the deploy tests run it there (deploy-tests: in the host image).
+// On a computer without them, run it in the image:
 // `sudo docker run --rm -v "$PWD:/wt" -v /opt/openbot/build-tools:/bt -w /wt --entrypoint /bt/bun <image> scripts/file-renditions-e2e.ts`
 // `--out=<dir>` also writes every rendition there, as the web viewer e2e serves them.
 // Writes .openbot-build/file-renditions-e2e/report.json.

@@ -15,7 +15,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { homedir } from "node:os";
-import { extname, join, normalize } from "node:path";
+import { dirname, extname, join, normalize } from "node:path";
 
 interface Test {
   name: string;
@@ -131,6 +131,18 @@ function headlessChromium(): string | null {
 }
 const browserExecutable = headlessChromium();
 
+/**
+ * The image of the live host, for a script that needs the tools only that image has (LibreOffice,
+ * Poppler, FFmpeg). Such a script says so in its header: `deploy-tests: in the host image`.
+ */
+function hostImage(): string | null {
+  const inspect = spawnSync("sudo", ["-n", "docker", "inspect", "openbot", "--format", "{{.Config.Image}}"], {
+    encoding: "utf8",
+    timeout: 30_000,
+  });
+  return inspect.status === 0 && inspect.stdout.trim() ? inspect.stdout.trim() : null;
+}
+
 function standaloneE2e(): Test[] {
   const critical = new Set(CRITICAL.map((test) => test.name));
   return readdirSync(join(root, "scripts"))
@@ -148,6 +160,19 @@ function standaloneE2e(): Test[] {
       };
       const setup = NEEDS_SETUP.find(([pattern]) => pattern.test(head));
       if (setup) return { ...test, setup: setup[1] };
+      if (head.includes("deploy-tests: in the host image")) {
+        const image = hostImage();
+        if (!image) return { ...test, setup: "the host image (Docker)" };
+        // This checkout and Bun in the image, as this user, so the files it writes stay removable.
+        return Object.assign(test, {
+          program: "sudo",
+          args: [
+            ...["-n", "docker", "run", "--rm", "--user", `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`],
+            ...["-e", "HOME=/tmp", "-v", `${root}:/wt`, "-v", `${dirname(bun)}:/bt`, "-w", "/wt"],
+            ...["--entrypoint", "/bt/bun", image, `scripts/${file}`],
+          ],
+        });
+      }
       // A script that needs Node's inspector or `node:sqlite` says how it runs.
       if (head.includes(`node --import tsx scripts/${file}`))
         Object.assign(test, {

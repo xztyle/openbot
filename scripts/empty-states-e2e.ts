@@ -241,7 +241,8 @@ try {
   await step(viewsPage, "an import clears the name and shows its validation score on the tab", async () => {
     await viewsPage.goto(`${origin}/app/general/portfolio`, COMMIT);
     await viewsPage
-      .getByRole("button", { name: english("portfolio.tab.templates"), exact: true })
+      // The Portfolio views are sliding tabs.
+      .getByRole("tab", { name: english("portfolio.tab.templates"), exact: true })
       .tap({ timeout: FIRST_LOAD_MS });
     const name = viewsPage.getByPlaceholder(english("portfolio.templates.namePlaceholder"));
     await name.fill("Bakery");

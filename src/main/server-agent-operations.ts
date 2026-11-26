@@ -25,6 +25,10 @@
  *   save as the Trust page: a JSON body with any of `enabled`, `thresholdPercent` and `tiers`. It
  *   answers the failover policy that applies now.
  *
+ * - `POST /v1/motion/human-backfill` starts the backfill of Motion human views for one workspace
+ *   (`workspaceName`, `days`, default 7) in the background and answers its state; `GET` answers the
+ *   state and the report file (`motion-human-backfill.ts`).
+ *
  * A body is JSON or form fields. Every action is logged without the text. The resume route keeps the
  * deliveries it handled in a small file, so a second call, or a call after another restart, does not
  * send the note again.
@@ -38,6 +42,7 @@ import type { QueuedMessageReceipt, SendMessageInput, SystemNoticeKind } from "@
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import type { HostRestartState } from "@openbot/contracts/team-protocol/host-update-v1";
 import { Effect, Result } from "effect";
+import type { HumanBackfillReport } from "./motion-events/motion-human-backfill";
 
 /** The reason that boot recovery writes on a delivery that the previous run left unfinished. */
 export const RESTART_INTERRUPTION_REASON = "OpenBot restarted before this delivery reached a confirmed terminal state.";
@@ -79,6 +84,14 @@ export interface ServerAgentOperationsDependencies {
   announceRestart?: (state: HostRestartState) => void;
   /** An urgent push to the owner's devices, for an operator alert such as a failed check after a deploy. */
   alertOwner?: (title: string, body: string) => void;
+  /**
+   * The backfill of Motion human views (`POST /v1/motion/human-backfill` starts it with
+   * `workspaceName` and `days`; `GET` answers its report). Operator only.
+   */
+  humanBackfill?: {
+    start(input: { workspaceName: string; days?: number | undefined }): HumanBackfillReport;
+    status(): HumanBackfillReport | null;
+  };
   /** Starts the upload benchmark of the cloud copies (`POST /v1/cloud-backups/bench`); operator only. */
   cloudBench?: () => Promise<string>;
   /**
@@ -189,6 +202,20 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
       announce(state);
       dependencies.log(`Restart notice sent: ${state}.`);
       return { status: 200, lines: { restart_notice: state } };
+    }
+    if (path === "/v1/motion/human-backfill") {
+      const backfill = dependencies.humanBackfill;
+      if (!backfill) return failure(404, "not_found");
+      if (method === "GET") return { status: 200, lines: backfillLines(backfill.status()) };
+      if (method !== "POST") return failure(405, "method_not_allowed");
+      const fields = readFields(rawBody);
+      const workspaceName = fields.workspaceName?.trim();
+      if (!workspaceName) return failure(400, "invalid_body", "Give workspaceName.");
+      const days = fields.days === undefined ? undefined : Number(fields.days);
+      if (days !== undefined && !Number.isFinite(days)) return failure(400, "invalid_body", "days must be a number.");
+      const started = backfill.start({ workspaceName, days });
+      dependencies.log(`Operator started the human views backfill of ${workspaceName}.`);
+      return { status: 202, lines: backfillLines(started) };
     }
     if (path === "/v1/cloud-backups/bench") {
       if (method !== "POST") return failure(405, "method_not_allowed");
@@ -472,6 +499,9 @@ interface Fields {
   state: string | undefined;
   /** The title of `POST /v1/owner-alert`; its body is `text`. */
   title: string | undefined;
+  /** The workspace and the days of `POST /v1/motion/human-backfill`. */
+  workspaceName: string | undefined;
+  days: string | undefined;
 }
 
 /** A JSON object, or form fields (`delivery` may repeat). */
@@ -495,6 +525,8 @@ function readFields(rawBody: string): Fields {
       system: record.system === true,
       state: isString(record.state) ? record.state : undefined,
       title: isString(record.title) ? record.title : undefined,
+      workspaceName: isString(record.workspaceName) ? record.workspaceName : undefined,
+      days: typeof record.days === "number" || isString(record.days) ? String(record.days) : undefined,
     };
   }
   const form = new URLSearchParams(trimmed);
@@ -512,6 +544,8 @@ function readFields(rawBody: string): Fields {
     system: form.get("system") === "1" || form.get("system") === "yes" || form.get("system") === "true",
     state: form.get("state") ?? undefined,
     title: form.get("title") ?? undefined,
+    workspaceName: form.get("workspaceName") ?? undefined,
+    days: form.get("days") ?? undefined,
   };
 }
 
@@ -537,4 +571,19 @@ function failure(status: number, error: string, message: string | null = null): 
 
 function errorMessage(cause: unknown): string | null {
   return cause instanceof Error ? cause.message : null;
+}
+
+/** The lines of a backfill report: its state and counts, and the file with every outcome. */
+function backfillLines(report: HumanBackfillReport | null): Record<string, string> {
+  if (!report) return { state: "none" };
+  return {
+    state: report.state,
+    workspace: report.workspaceName,
+    days: String(report.days),
+    selected: String(report.selected),
+    done: String(report.done),
+    counts: JSON.stringify(report.counts),
+    report: report.file,
+    ...(report.error ? { error: report.error } : {}),
+  };
 }

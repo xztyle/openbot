@@ -24,6 +24,7 @@ import { startMotionEventsServer } from "./motion-events-server";
 import { type MotionEventsAgent, MotionEventsService, type WaitingTicket } from "./motion-events-service";
 import { readDeliverableFiles } from "./motion-files";
 import { MotionGrader } from "./motion-grader";
+import { MotionHumanViews } from "./motion-human-views";
 import { MotionOrders } from "./motion-orders";
 import { type MotionStartInput, MotionTickets } from "./motion-tickets";
 import { fallbackReason, parseWaitingAsks, waitingAsksPrompt, waitingComments } from "./motion-waiting-asks";
@@ -64,7 +65,12 @@ export interface MotionEventsHostOptions {
   /** The agent's recent chat, the evidence the grader reads. */
   evidence: (agentId: string) => readonly ConversationMessage[];
   /** One answer of the grader's judge, in a fresh context (`AgentService.generateReviewText`). */
-  judge: (input: { agentId: string; important: boolean; prompt: string }) => Promise<{ text: string; model: string }>;
+  judge: (input: {
+    agentId: string;
+    important: boolean;
+    prompt: string;
+    timeoutMs?: number | undefined;
+  }) => Promise<{ text: string; model: string }>;
   /** Whether the chat app proxy reports the agents' Motion calls to `observeToolCall`. */
   observesToolCalls: boolean;
   /** Tier 1 of `docs/approvals.md`: a waiting ticket goes to its agent's manager. Absent: the owner answers all. */
@@ -107,11 +113,48 @@ function motionCaller(options: MotionEventsHostOptions) {
   };
 }
 
+/** The headers that make a gateway call act as an agent or in one workspace; the owner's call sends none. */
+const AGENT_HEADERS = /^x-motion-(agent|agent-name|workspace-key|workspace-name)$/iu;
+
+/**
+ * Calls one Motion operation as the owner: the `motion` row's gateway token without the agent and
+ * workspace headers, so Motion sees the person who owns the gateway (`docs/agents.md`). The human
+ * versions are written this way: agents may not read or save them.
+ */
+function motionOwnerCaller(options: MotionEventsHostOptions) {
+  return async (operation: string, body: DynamicRecord): Promise<unknown> => {
+    const stored = motionServer(options.mcpServers());
+    if (!stored) throw new Error("No motion MCP server.");
+    const agentId = options.agents()[0]?.id;
+    const config = options.personalMcpServer(stored, agentId ? options.mcpAgent(agentId) : null);
+    if (config?.transport !== "http") throw new Error("The motion MCP server is not filled.");
+    const headers = Object.fromEntries(
+      config.headers.filter((header) => !AGENT_HEADERS.test(header.key)).map((header) => [header.key, header.value]),
+    );
+    const response = await fetch(
+      motionOperationUrl(config.url, operation, options.environment.OPENBOT_MOTION_API_URL),
+      {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json", "accept-language": "es" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(CALL_TIMEOUT_MS * 2),
+      },
+    );
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Motion answered ${response.status} to ${operation}: ${detail.slice(0, 200)}`);
+    }
+    return response.json();
+  };
+}
+
 export interface MotionEventsHost {
   tickets: MotionTickets;
   events: MotionEventsService;
   grader: MotionGrader;
   orders: MotionOrders;
+  /** The human versions of the content that is for the owner (`motion-human-views.ts`). */
+  human: MotionHumanViews;
   /** A Motion tool call of an agent's turn, after it answered. */
   observeToolCall(agentId: string, tool: string, args: unknown): void;
   /**
@@ -140,12 +183,29 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
     log: (message) => logger.info(message),
   });
   await tickets.load();
+  const motion = new MotionClient(options);
+  const human = new MotionHumanViews({
+    call: motionOwnerCaller(options),
+    generate: async ({ agentId, prompt, timeoutMs }) =>
+      (await options.judge({ agentId, important: false, prompt, timeoutMs })).text,
+    agentId: () => options.agents()[0]?.id ?? null,
+    language: () => options.ownerLanguage?.() ?? "Spanish",
+    available: () => motion.available(),
+    stateFile: join(options.userData, "motion-human-views-v1.json"),
+    log: (message, details) => logger.info(message, details),
+  });
+  await human.load();
   const events = new MotionEventsService({
     settings: () => options.settings() ?? DEFAULT_WORKSPACE_MOTION_EVENTS,
     agents: options.agents,
     deliver: ({ agentId, text, fyi, clientMessageId }) =>
       Effect.runPromise(options.send({ agentId, text, clientMessageId }, fyi)).then(() => undefined),
-    showWaiting: options.showWaiting,
+    // A ticket in Needs you is linked to the owner: it gets a human version.
+    showWaiting: (waiting) => {
+      options.showWaiting(waiting);
+      for (const ticket of waiting)
+        if (ticket.approver === "owner") human.noteOwnerText(`${ticket.url} ${ticket.key} ${ticket.reason ?? ""}`);
+    },
     stopped: (issueId) => void options.approvals?.cancel(ticketApprovalId(issueId)),
     classify: (ticket) => void classify(ticket),
     notifyOwner: options.notifyOwner,
@@ -153,7 +213,6 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
     stateFile: join(options.userData, "motion-events-v1.json"),
     log: (message) => logger.info(message),
   });
-  const motion = new MotionClient(options);
   /** Reads why a ticket waits on the owner (its comments, through a judge) and records it. */
   const classifying = new Set<string>();
   async function classify(ticket: WaitingTicket): Promise<void> {
@@ -381,11 +440,13 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
     });
     if (server) logger.info("The Motion events route listens.", { listen });
   }
+  human.start();
   return {
     tickets,
     events,
     grader,
     orders,
+    human,
     observeToolCall: (agentId, name, args) => {
       tickets.observeToolCall(agentId, name, args);
       grader.observeToolCall(agentId, name, args);
@@ -426,6 +487,7 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
       await events.dismissWaiting(issueId);
     },
     close: async () => {
+      human.dispose();
       events.dispose();
       orders.dispose();
       const open = server;

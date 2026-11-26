@@ -274,6 +274,16 @@ printf '%s' '{"system":true,"text":"Continue."}' | sudo docker exec -i openbot \
   --data-binary @- http://openbot/v1/agents/<agentId>/message
 ```
 
+The backfill of the Motion human views ([Human view of Motion content](motion-human-view.md)) is an
+operator route too:
+
+```sh
+printf '%s' '{"workspaceName":"Universidad Online","days":7}' | sudo docker exec -i openbot \
+  curl -s --unix-socket /run/openbot/control.sock -H 'content-type: application/json' \
+  --data-binary @- http://openbot/v1/motion/human-backfill
+sudo docker exec openbot curl -s --unix-socket /run/openbot/control.sock http://openbot/v1/motion/human-backfill
+```
+
 The check is not a jail: an agent still runs as the service user. The [agent jail](#agent-jail) keeps
 a jailed agent out of that user's other files.
 

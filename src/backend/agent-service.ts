@@ -193,6 +193,7 @@ import { DuplicationGate, toAgentDuplicationFailed } from "./agent/duplication-g
 import type { FailureContext, FailureSignal } from "./agent/failure-signal";
 import { GateGenerations } from "./agent/gate-generations";
 import { type AgentHostedSites, HostedSiteCoordinator } from "./agent/hosted-site-coordinator";
+import type { MotionPagePreview } from "./agent/human-view-preview";
 import { ImageGenRuntime } from "./agent/image-gen-runtime";
 import { InputEscalations } from "./agent/input-escalations";
 import type { AgentMailPort } from "./agent/mail-tools";
@@ -538,6 +539,13 @@ export interface AgentServiceOptions {
   ownerAway?: OwnerAwayService | null;
   /** Draws the pages of `share_preview`. Omitted or null, a url preview tells the agent to send the link. */
   sharePreviews?: SharePreviewDrawer | null;
+  /**
+   * Text that an agent sent the owner (an owner-started answer, `message_owner`, a held request, a
+   * preview): the Motion pages it links get a human version (`motion-human-views.ts`).
+   */
+  ownerText?: ((agentId: string, text: string) => void) | null;
+  /** The human version of a Motion page link, for the chat preview of `share_preview`. */
+  motionPreview?: MotionPagePreview | null;
 }
 
 /** How long a user send's `clientMessageId` answers a retry. A retry follows a lost reply, not a day. */
@@ -1841,6 +1849,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         answerFinished: (answer) => {
           this.#condenseLater(answer);
           this.#scoreAnswerLater(answer);
+          this.#noteOwnerAnswer(answer, options.ownerText ?? null);
         },
         routineAnswered: (agentId, deliveryId, answer) => {
           const agent = this.#store.list().find((item) => item.id === agentId);
@@ -1992,6 +2001,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       ...(options.visualPreview === undefined ? {} : { visualPreview: options.visualPreview }),
       ownerAway: options.ownerAway ?? null,
       sharePreviews: options.sharePreviews ?? null,
+      ownerText: options.ownerText ?? null,
+      motionPreview: options.motionPreview ?? null,
       ...(options.screenCapture === undefined ? {} : { screenCapture: options.screenCapture }),
       mcpServers: mcpServersFromGateway(this.#mcp, options.prepareMcpTest),
       apiKeys: options.agentApiKeys ?? null,
@@ -2369,7 +2380,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   /** The language the owner reads, for text the host writes for them; the host sets it at start. */
   ownerLanguage: () => string = () => process.env.OPENBOT_OWNER_LANGUAGE?.trim() || "Spanish";
 
-  generateReviewText(input: { agentId: string; important: boolean; prompt: string }) {
+  generateReviewText(input: { agentId: string; important: boolean; prompt: string; timeoutMs?: number | undefined }) {
     return Effect.suspend(() => {
       const agent = this.#store.list().find((candidate) => candidate.id === input.agentId);
       const gate = this.#workspaceSettings().gate;
@@ -2382,6 +2393,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       return this.#backgroundGeneration(candidates, input.agentId, input.prompt, {
         kind: "grader",
         lowEffort: !input.important,
+        ...(input.timeoutMs ? { timeoutMs: input.timeoutMs } : {}),
       });
     });
   }
@@ -3410,6 +3422,19 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       });
       return { result: undefined, snapshot };
     });
+  }
+
+  /** An answer to a turn the owner started: its Motion links are for the owner. */
+  #noteOwnerAnswer(answer: FinishedAnswer, ownerText: ((agentId: string, text: string) => void) | null): void {
+    if (!ownerText || answer.channel || !answer.senders.some((sender) => sender.kind === "user")) return;
+    try {
+      const text = this.#conversation
+        .loadedSnapshot(answer.agentId)
+        ?.messages.find((message) => message.id === answer.messageId)?.text;
+      if (text) ownerText(answer.agentId, text);
+    } catch (cause) {
+      logger.warn("Could not read the Motion links of an answer.", { agentId: answer.agentId, cause });
+    }
   }
 
   /** Gives a finished answer to a person to the live score, which samples a few of them. */

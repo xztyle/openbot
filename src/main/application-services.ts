@@ -274,6 +274,8 @@ import {
 import { McpOAuthStore } from "./mcp-oauth-store";
 import { MessagingCredentialStore } from "./messaging-credential-store";
 import { type MotionEventsHost, motionServer, startMotionEventsHost } from "./motion-events/motion-events-host";
+import { createHumanBackfill } from "./motion-events/motion-human-backfill";
+import { motionPageOfUrl } from "./motion-events/motion-human-text";
 import { NotificationPreferenceStore } from "./notification-preference-store";
 import { OnePasswordConnectorService } from "./onepassword-connector-service";
 import { OnePasswordConnectorStore } from "./onepassword-connector-store";
@@ -1876,6 +1878,12 @@ export async function createApplicationServices({
     workspaceArtifactsPath: join(app.getPath("userData"), WORKSPACE_ARTIFACTS_FILE),
     workspaceThumbnails,
     sharePreviews: { drawNow: (url, revision) => workspaceThumbnails.drawNow(url, revision) },
+    // The human view of Motion content: links sent to the owner, and the previews of Motion pages.
+    ownerText: (_agentId, text) => motionEvents?.human.noteOwnerText(text),
+    motionPreview: {
+      isMotionPage: (url) => motionPageOfUrl(url) !== null,
+      humanVersion: async (url) => (motionEvents ? motionEvents.human.preview(url) : null),
+    },
     ownerAway,
     visualPreview: new ChatVisualPreviewer(),
     prepareMcpTest: (config) =>
@@ -2661,6 +2669,10 @@ export async function createApplicationServices({
   service.lessonWithManager = lessons.withManager;
   teardown.push(TEARDOWN_ORDER.motionEvents, "the lesson approvals", () => lessons.dispose());
   const motion = motionEvents;
+  // Approvals and Needs you items that reach the owner: the Motion pages they link are for the owner.
+  service.on("event", (event) => {
+    if (event.type === "agent-attention-changed") motion.human.noteOwnerText(JSON.stringify(event.items));
+  });
   service.setCurrentTickets((agentId) => motion.tickets.current(agentId));
   service.onWaitingTicketDismissed((issueId, answer, verdict) =>
     answer === null
@@ -3634,6 +3646,15 @@ export async function createApplicationServices({
         endDrain: () => service.endDeployDrain(),
         announceRestart: (state) => host.announceRestart(state, null),
         cloudBench: () => cloudBackups.bench(),
+        humanBackfill: motionEvents
+          ? createHumanBackfill({
+              human: motionEvents.human,
+              database: () => store.database.connection,
+              ownerThreads: () => service.listAgents().flatMap((agent) => (agent.threadId ? [agent.threadId] : [])),
+              reportDirectory: app.getPath("userData"),
+              log: (message) => logger.info(message),
+            })
+          : undefined,
         alertOwner: (title, body) =>
           webPush.notifyOwner({
             kind: "alert",

@@ -107,6 +107,7 @@ import { handleEventCheckTool } from "./event-check-tools";
 import { HistoryTools } from "./history-tools";
 import type { HostedSiteCoordinator } from "./hosted-site-coordinator";
 import { isHostedSiteMutationTool } from "./hosted-site-events";
+import type { MotionPagePreview } from "./human-view-preview";
 import { handleLoopTool } from "./loop-tools";
 import { type AgentMailPort, MAIL_TOOLS, parseMailToolCall } from "./mail-tools";
 import type { MailboxSync } from "./mailbox-sync";
@@ -332,6 +333,10 @@ export interface OpenBotToolRouterOptions {
   ownerAway?: OwnerAwayService | null | undefined;
   /** Draws the pages of `share_preview`; null where no window can draw one. */
   sharePreviews?: SharePreviewDrawer | null | undefined;
+  /** What an agent sends the owner: the Motion pages it links get a human version. */
+  ownerText?: ((agentId: string, text: string) => void) | null | undefined;
+  /** The human version of a Motion page link, which `share_preview` draws. */
+  motionPreview?: MotionPagePreview | null | undefined;
   /** The trust policy and audit trail; null where nothing enforces one. */
   trust?: TrustService | null | undefined;
   /** The guardrails: the injection monitor and money approval expiry. Null where none run. */
@@ -457,6 +462,8 @@ export class OpenBotToolRouter {
     this.#ownerTools = new OwnerTools({
       ownerAway: options.ownerAway ?? null,
       thumbnails: options.sharePreviews ?? null,
+      ownerText: options.ownerText ?? null,
+      motionPreview: options.motionPreview ?? null,
       visualPreview: options.visualPreview ?? null,
       attachments: options.attachments,
       mailbox: options.mailbox,

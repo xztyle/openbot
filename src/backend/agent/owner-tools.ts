@@ -18,6 +18,7 @@ import type { SharePreviewDrawer } from "../workspace-thumbnails";
 import type { AttachmentGateway } from "./attachment-gateway";
 import type { ChatVisualPreviewHost } from "./chat-visual-preview";
 import type { ConversationRuntime } from "./conversation-runtime";
+import { humanViewHtml, type MotionPagePreview } from "./human-view-preview";
 import { type OpenBotToolResponse, openBotToolFailure, openBotToolResult } from "./routine-tools";
 import { csvPreviewHtml } from "./share-preview";
 import { toToolOperationFailed } from "./tool-operation";
@@ -63,6 +64,10 @@ export interface OwnerToolsOptions {
    * one with its id already. True when it added it. Absent: `message_owner` answers that this host has none.
    */
   postToOwner?: (agentId: string, message: ConversationMessage) => boolean;
+  /** What an agent sends the owner: the Motion pages it links get a human version. */
+  ownerText?: ((agentId: string, text: string) => void) | null;
+  /** The human version of a Motion page link: `share_preview` draws it instead of the page. */
+  motionPreview?: MotionPagePreview | null;
 }
 
 function failure(error: z.ZodError): OpenBotToolResponse {
@@ -115,6 +120,13 @@ export class OwnerTools {
     agentId: string,
     executionThreadId: string,
   ) {
+    if (
+      params.tool === "hold_for_owner" ||
+      params.tool === "message_owner" ||
+      params.tool === "share_preview" ||
+      params.tool === "alert_owner"
+    )
+      this.#options.ownerText?.(agentId, JSON.stringify(params.arguments ?? null));
     if (params.tool === "hold_for_owner") return this.#hold(params, agentId);
     if (params.tool === "alert_owner") return this.#alert(params, agentId);
     if (params.tool === "message_owner") return this.#message(params, agentId, executionThreadId);
@@ -204,7 +216,13 @@ export class OwnerTools {
     if (this.#options.conversation.ensureSnapshot(agentId, threadId).messages.some(({ id }) => id === messageId))
       return openBotToolResult({ status: "shown", messageId });
     const files: PreviewFile[] = [];
-    if (url) {
+    const motionPage = url && this.#options.motionPreview?.isMotionPage(url) ? this.#options.motionPreview : null;
+    if (url && motionPage) {
+      // A Motion page: the owner sees its human version, drawn here (Motion is not public).
+      const drawn = yield* this.#drawMotionPage(motionPage, url);
+      if (typeof drawn === "string") return openBotToolFailure(drawn);
+      files.push(drawn);
+    } else if (url) {
       const thumbnails = this.#options.thumbnails;
       if (!thumbnails) return openBotToolFailure("This Atelier cannot draw pages. Send the link in your answer.");
       const image = yield* thumbnails.drawNow(url, revision ?? "");
@@ -231,6 +249,28 @@ export class OwnerTools {
       attachments: attachments.map((attachment) => attachment.name),
       note: "The owner sees the preview card now. Do not describe what it shows; add only what they must decide or do.",
     });
+  });
+
+  /** The picture of a Motion page's human version, or the sentence for the agent when it cannot be drawn. */
+  readonly #drawMotionPage = Effect.fn("OwnerTools.drawMotionPage")(function* (
+    this: OwnerTools,
+    motionPage: MotionPagePreview,
+    url: string,
+  ) {
+    const version = yield* Effect.promise(() => motionPage.humanVersion(url).catch(() => null));
+    if (!version) return "The Motion page could not be read for the owner. Send the link in your answer.";
+    const preview = this.#options.visualPreview;
+    if (!preview) return "This Atelier cannot draw pages. Send the link in your answer.";
+    const drawn = yield* Effect.result(
+      preview.capture({
+        html: humanViewHtml(version.title, version.markdown),
+        width: PREVIEW_WIDTH,
+        appearance: "light",
+      }),
+    );
+    const bytes = Result.isSuccess(drawn) ? dataUrlBytes(drawn.success.imageUrl) : null;
+    if (!bytes) return "The Motion page could not be drawn. Send the link in your answer.";
+    return { bytes, name: "motion.png", mimeType: "image/png" } satisfies PreviewFile;
   });
 
   /** The images of the files, or the sentence for the agent when one cannot be shown. */

@@ -691,6 +691,12 @@
   font-weight: var(--openbot-weight-semibold);
 }
 
+/* The name wraps instead of ending in "…" beside the row's buttons: who needs the owner is the point. */
+.ws-needs-you-row .ws-row-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .ws-needs-you-open {
   border-radius: var(--openbot-radius-pill);
   background: var(--openbot-warning);

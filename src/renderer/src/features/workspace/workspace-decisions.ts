@@ -5,7 +5,7 @@
  * shows and names how many wait in the others, so a request of another space is never missed and
  * never counted as this one's.
  */
-import { parseTrustApprovalCard } from "@openbot/contracts/agent-approvals";
+import { parseTrustApprovalCard, plainTrustAction } from "@openbot/contracts/agent-approvals";
 import type { DecisionQueueSource } from "@openbot/contracts/agent-learning";
 import {
   type AgentAttentionItem,
@@ -224,7 +224,7 @@ export function useDecisionQueue() {
           : trust.purpose;
       const trustDetail = trust
         ? [
-            ...trust.action.map((line) => sourceText(line)),
+            ...trust.action.map((line) => sourceText(plainTrustAction(line).shown)),
             trust.amount ? `${t("prompt.approval.amount")}: ${trust.amount}` : "",
             ...lines(held?.reason),
           ]
@@ -269,7 +269,7 @@ export function useDecisionQueue() {
         // shows its plain summary for an owner with no technical background; its raw text stays behind
         // the collapsed technical details.
         summary: trust
-          ? (trustSummary ?? trust.action.map((line) => sourceText(line)).join("\n"))
+          ? (trustSummary ?? trust.action.map((line) => sourceText(plainTrustAction(line).shown)).join("\n"))
           : effect
             ? effect
                 .split("\n")
@@ -289,8 +289,13 @@ export function useDecisionQueue() {
           ? {
               technical: [item.summary, item.reason, item.escalationReason].filter(Boolean).join("\n") || undefined,
             }
-          : trust?.details
-            ? { technical: trust.details }
+          : trust
+            ? {
+                technical:
+                  [...trust.action.map((line) => plainTrustAction(line).technical ?? ""), trust.details]
+                    .filter(Boolean)
+                    .join("\n") || undefined,
+              }
             : {}),
         amountUsd: trust ? amountIn(trust.amount ?? trust.action.join(" ")) : effect ? amountIn(effect) : undefined,
         where: where(

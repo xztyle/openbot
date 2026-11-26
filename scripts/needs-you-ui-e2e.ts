@@ -498,18 +498,18 @@ async function moneyApproval(browser: Browser, origin: string, viewport: Viewpor
     await moneyCard.waitFor({ timeout: UI_WAIT_MS });
     const purpose = moneyCard.getByText(MONEY_PURPOSE, { exact: false });
     await purpose.waitFor({ timeout: UI_WAIT_MS });
-    await moneyCard.getByText("Meta ads · meta-ads create-campaign", { exact: false }).first().waitFor({
-      timeout: UI_WAIT_MS,
-    });
+    // The action line names the place in words; the tool's own name is technical and stays hidden.
+    await moneyCard.getByText("Meta ads", { exact: false }).first().waitFor({ timeout: UI_WAIT_MS });
     await moneyCard.getByText("7 USD", { exact: false }).first().waitFor({ timeout: UI_WAIT_MS });
     if (viewport === "desktop")
       await moneyCard.getByText(english("prompt.approval.title.trust")).waitFor({ timeout: UI_WAIT_MS });
     // The purpose comes before the action line, and the raw call stays hidden until asked for.
     const text = (await moneyCard.innerText()).replace(/\s+/gu, " ");
     assert.ok(
-      text.indexOf(MONEY_PURPOSE) >= 0 && text.indexOf(MONEY_PURPOSE) < text.indexOf("meta-ads create-campaign"),
+      text.indexOf(MONEY_PURPOSE) >= 0 && text.indexOf(MONEY_PURPOSE) < text.indexOf("Meta ads"),
       `The purpose does not lead the card: ${text.slice(0, 400)}`,
     );
+    assert.ok(!text.includes("meta-ads create-campaign"), `The tool's name shows on the card: ${text.slice(0, 400)}`);
     const raw = moneyCard.getByText(MONEY_RAW, { exact: false });
     assert.equal(await raw.isVisible(), false, "The raw call shows without being asked for.");
     const technical = moneyCard.getByText(

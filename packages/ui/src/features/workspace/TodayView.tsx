@@ -403,6 +403,16 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
   const [note, setNote] = createSignal("");
   const decision = () => props.decision;
   let card: HTMLElement | undefined;
+  // Whether the clamped detail cuts text off: a measurement, made again when the text or the width changes.
+  const [clamped, setClamped] = createSignal(false);
+  let detailElement: HTMLElement | undefined;
+  function measureDetail(): void {
+    if (!detailElement || expanded()) return;
+    setClamped(detailElement.scrollHeight > detailElement.clientHeight + 1);
+  }
+  // The box stops growing at its clamp, so a change of the text or the width shows on the element itself.
+  const detailObserver = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measureDetail);
+  onCleanup(() => detailObserver?.disconnect());
   async function run(action: () => Promise<void>) {
     if (busy()) return;
     setBusy(true);
@@ -448,20 +458,32 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
           <Show when={decision().detail}>
             {(detail) => (
               <>
-                <p class="ws-today-decision-detail" data-expanded={expanded() ? "" : undefined}>
+                <p
+                  ref={(element) => {
+                    detailElement = element;
+                    detailObserver?.observe(element);
+                    measureDetail();
+                  }}
+                  class="ws-today-decision-detail"
+                  data-expanded={expanded() ? "" : undefined}
+                >
                   {detail()}
                 </p>
-                <Button
-                  variant="link"
-                  size="xs"
-                  class="ws-today-decision-more"
-                  aria-expanded={expanded() ? "true" : "false"}
-                  onClick={() => {
-                    setExpanded(!expanded());
-                  }}
-                >
-                  {expanded() ? t("workspace.today.lessDetail") : t("workspace.today.moreDetail")}
-                </Button>
+                {/* The button shows only when the text is cut off: a short detail needs no "Show details". */}
+                <Show when={clamped() || expanded()}>
+                  <Button
+                    variant="link"
+                    size="xs"
+                    class="ws-today-decision-more"
+                    aria-expanded={expanded() ? "true" : "false"}
+                    onClick={() => {
+                      setExpanded(!expanded());
+                      queueMicrotask(measureDetail);
+                    }}
+                  >
+                    {expanded() ? t("workspace.today.lessDetail") : t("workspace.today.moreDetail")}
+                  </Button>
+                </Show>
               </>
             )}
           </Show>

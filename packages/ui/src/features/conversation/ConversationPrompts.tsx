@@ -1,4 +1,4 @@
-import { parseTrustApprovalCard } from "@openbot/contracts/agent-approvals";
+import { parseTrustApprovalCard, plainTrustAction } from "@openbot/contracts/agent-approvals";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
   AgentApproval,
@@ -189,6 +189,13 @@ export function TeammateRequestCard(props: {
   );
 }
 
+/** The technical text of a trust card: the tool names of its action lines, then the raw call. */
+function technicalText(trust: { action: string[]; details: string }): string {
+  return [...trust.action.map((line) => plainTrustAction(line).technical ?? ""), trust.details]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function ApprovalCard(props: {
   approval: AgentApproval;
   onApprove: () => Promise<boolean>;
@@ -297,7 +304,9 @@ export function ApprovalCard(props: {
                 </p>
               )}
             </Show>
-            <For each={trust().action}>{(line) => <p class="approval-action-line">{sourceText(line)}</p>}</For>
+            <For each={trust().action}>
+              {(line) => <p class="approval-action-line">{sourceText(plainTrustAction(line).shown)}</p>}
+            </For>
             <Show when={trust().amount}>
               {(amount) => (
                 <p class="approval-amount">
@@ -334,7 +343,7 @@ export function ApprovalCard(props: {
           }
         >
           {(trust) => (
-            <Show when={trust().details}>
+            <Show when={technicalText(trust())}>
               {(details) => (
                 // Opt-in only: the owner opens it when they want the raw call; it never opens by itself.
                 <details class="approval-technical">

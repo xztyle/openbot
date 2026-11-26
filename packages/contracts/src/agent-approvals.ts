@@ -286,6 +286,22 @@ export interface TrustApprovalCard {
 }
 
 /** The parts of a trust approval's command, or null for a command in another shape. */
+/**
+ * A trust card's action line as the owner reads it. The host writes "Meta ads · meta-ads
+ * create-campaign": the place in words, then the tool's own name. The owner sees the place; the
+ * tool's name is technical and goes behind the technical details. A line with no such tail stays.
+ */
+export function plainTrustAction(line: string): { shown: string; technical: string | null } {
+  const separator = line.indexOf(" · ");
+  if (separator <= 0) return { shown: line, technical: null };
+  const place = line.slice(0, separator).trim();
+  const tail = line.slice(separator + 3).trim();
+  // A tool name: lowercase words with hyphens, dots or underscores, such as "meta-ads create-campaign".
+  return /^[a-z0-9][a-z0-9._-]*(?: [a-z0-9][a-z0-9._-]*)*$/u.test(tail) && /[-._]/u.test(tail)
+    ? { shown: place, technical: line }
+    : { shown: line, technical: null };
+}
+
 export function parseTrustApprovalCard(command: string | null | undefined): TrustApprovalCard | null {
   if (!command) return null;
   const card: TrustApprovalCard = { purpose: null, purposeBy: null, action: [], amount: null, details: "" };

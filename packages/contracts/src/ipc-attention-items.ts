@@ -83,6 +83,30 @@ export interface AgentAttentionItem {
   ownerAsked?: true;
   /** A `form` that is a decision card (`request_decision`): the owner chooses an option, not a form. */
   decision?: true;
+  /**
+   * The buttons of a decision card, so a list such as Today takes the owner's choice in place: the
+   * answer is the label under `UI_CONFIRM_ACTION_QUESTION_ID`. A choice the agent recommends says so;
+   * the No of the card is `decline`. Change… stays in the chat.
+   */
+  options?: AgentAttentionOption[];
+}
+
+export interface AgentAttentionOption {
+  label: string;
+  recommended?: true;
+  decline?: true;
+}
+
+/** The most buttons a listed decision carries: up to three options and the No. */
+export const AGENT_ATTENTION_OPTIONS_LIMIT = 4;
+
+export function isAgentAttentionOption(value: unknown): value is AgentAttentionOption {
+  return (
+    isDynamicRecord(value) &&
+    isBoundedString(value.label, AGENT_ATTENTION_TEXT_LIMIT) &&
+    (value.recommended === undefined || value.recommended === true) &&
+    (value.decline === undefined || value.decline === true)
+  );
 }
 
 /** The `turnId` of a Motion ticket that waits on the user. */
@@ -150,7 +174,11 @@ export function isAgentAttentionItem(value: unknown): value is AgentAttentionIte
     (value.escalatedBy === undefined || isBoundedString(value.escalatedBy, AGENT_ATTENTION_TEXT_LIMIT)) &&
     (value.escalationReason === undefined || isBoundedString(value.escalationReason, AGENT_ATTENTION_TEXT_LIMIT)) &&
     (value.ownerAsked === undefined || value.ownerAsked === true) &&
-    (value.decision === undefined || value.decision === true)
+    (value.decision === undefined || value.decision === true) &&
+    (value.options === undefined ||
+      (Array.isArray(value.options) &&
+        value.options.length <= AGENT_ATTENTION_OPTIONS_LIMIT &&
+        value.options.every(isAgentAttentionOption)))
   );
 }
 

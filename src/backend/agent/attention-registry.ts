@@ -17,9 +17,11 @@ import type {
 } from "@openbot/contracts/ipc";
 import {
   AGENT_ATTENTION_ITEMS_LIMIT,
+  AGENT_ATTENTION_OPTIONS_LIMIT,
   AGENT_ATTENTION_TEXT_LIMIT,
   AGENT_RUNTIME_ATTENTION_LIMIT,
   type AgentAttentionItem,
+  type AgentAttentionOption,
   BROWSER_TAKEOVER_REASONS,
   sameTicketKey,
   TICKET_ANSWER_FIELD,
@@ -36,6 +38,7 @@ import { parseTwoStepKey, twoStepCode } from "@openbot/contracts/two-step-code";
 import {
   type ConversationUiBlock,
   normalizeConversationUiBlock,
+  ownerDecisionView,
   pastDecisionBlockId,
   pastDecisionRequestId,
   UI_BLOCK_TEXT_ACTION_ID,
@@ -710,7 +713,7 @@ export class AttentionRegistry {
         turnId: pending.turnId,
         createdAt: listedAt(pending),
         ...optionalText("summary", attentionLine(summary)),
-        ...(pending.uiBlock?.card ? { decision: true as const } : {}),
+        ...(pending.uiBlock?.card ? { decision: true as const, ...decisionOptions(pending.uiBlock.spec) } : {}),
       });
     }
     for (const pending of this.#approvals.values()) {
@@ -756,6 +759,7 @@ export class AttentionRegistry {
         createdAt: decision.createdAt,
         ...optionalText("summary", attentionLine(decision.spec.title)),
         decision: true,
+        ...decisionOptions(decision.spec),
       });
     return items.sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(0, AGENT_ATTENTION_ITEMS_LIMIT);
   }
@@ -2626,6 +2630,19 @@ export class AttentionRegistry {
  * that only showed the questions. Throws when the answer does not fit, or when a member who is not the
  * owner or an admin takes a privileged action.
  */
+/** The buttons of a decision card for a list that answers in place: its options and its No, not Change…. */
+function decisionOptions(spec: UiBlockSpec): { options?: AgentAttentionOption[] } {
+  if (spec.type !== "confirm") return {};
+  const view = ownerDecisionView(spec);
+  const options: AgentAttentionOption[] = view.options.map((option) => ({
+    label: option.action.label.slice(0, AGENT_ATTENTION_TEXT_LIMIT),
+    ...(option.recommended ? { recommended: true as const } : {}),
+  }));
+  const no = view.others.find((action) => action.id === "no");
+  if (no) options.push({ label: no.label.slice(0, AGENT_ATTENTION_TEXT_LIMIT), decline: true });
+  return options.length > 0 && options.length <= AGENT_ATTENTION_OPTIONS_LIMIT ? { options } : {};
+}
+
 function uiBlockAnswer(
   spec: UiBlockSpec,
   answers: Readonly<Record<string, readonly string[]>>,

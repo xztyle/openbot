@@ -259,6 +259,24 @@ async function needsYou(browser: Browser, origin: string, viewport: ViewportName
       today,
     );
     await shot(page, `today-${viewport}-${theme}`);
+    // The decision answers from Today: the recommended option is one tap, and the answer is the card's.
+    const choice = page.locator(".ws-today-decision-choice").first();
+    const label = (await choice.innerText()).replace(/\s+/gu, " ");
+    check(
+      `${viewport} ${theme}: the recommended option leads the decision's buttons`,
+      label.includes("125 USD"),
+      label,
+    );
+    await choice.tap();
+    await page.waitForFunction(() => document.documentElement.dataset.needsYouDecision !== undefined, null, {
+      timeout: UI_WAIT_MS,
+    });
+    const answered = await page.locator("html").getAttribute("data-needs-you-decision");
+    check(
+      `${viewport} ${theme}: the tap answers the decision card with the option`,
+      answered === JSON.stringify({ action: ["125 USD: 3/día y luego 7"] }),
+      answered,
+    );
     await page.goto(`${origin}/app/general/dm/sales?appearance=${theme}`, { waitUntil: "commit" });
     await ready();
     await emit("everything");

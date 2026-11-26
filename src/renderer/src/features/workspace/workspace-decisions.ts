@@ -15,6 +15,7 @@ import {
   type TicketDecision,
   type TicketVerdict,
 } from "@openbot/contracts/ipc";
+import { UI_CONFIRM_ACTION_QUESTION_ID } from "@openbot/contracts/ui-blocks";
 import type { NeedsYouRow } from "@openbot/ui/features/workspace/NeedsYou";
 import type { TodayDecision } from "@openbot/ui/features/workspace/TodayView";
 import { useText } from "@openbot/ui/text";
@@ -241,6 +242,20 @@ export function useDecisionQueue() {
         const message = t("workspace.needsYou.ticket.message", { ticket: item.summary ?? "", answer });
         await answerTicket(ws.channels.port(), item, message, answer, verdict, decision);
       };
+      // A decision card: its buttons answer in place, through the prompt route the card itself uses.
+      const choices = item.decision
+        ? item.options?.map((option) => ({
+            label: option.label,
+            recommended: option.recommended === true,
+            decline: option.decline === true,
+            send: async () => {
+              await ws.channels.port().agent.respondToPrompt({
+                requestId: item.requestId,
+                answers: { [UI_CONFIRM_ACTION_QUESTION_ID]: [option.label] },
+              });
+            },
+          }))
+        : undefined;
       const primary = answers.primary;
       const secondary = answers.secondary;
       const approveTicket = primary ? answerWith(primary.answer, primary.verdict, primary.decision) : undefined;
@@ -298,6 +313,7 @@ export function useDecisionQueue() {
             }
           : {}),
         ...(writtenAnswer ? { answer: writtenAnswer } : {}),
+        ...(choices?.length ? { choices } : {}),
         openLabel: browser
           ? t("workspace.today.takeOver")
           : ticket || item.kind === "question" || item.kind === "form"

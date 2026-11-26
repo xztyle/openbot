@@ -137,6 +137,11 @@ const DECISION_ITEM: AgentAttentionItem = {
   createdAt: new Date().toISOString(),
   summary: "Campaña navideña: ¿cuánto gastamos como máximo en total?",
   decision: true,
+  options: [
+    { label: "125 USD: 3/día y luego 7", recommended: true },
+    { label: "161 USD: 7/día siempre" },
+    { label: "No", decline: true },
+  ],
 };
 
 const CONDENSED_MESSAGE = "message-agent-2";
@@ -256,6 +261,11 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
       return web.send(...args);
     },
     answer: async (input: Parameters<typeof web.answer>[0]) => {
+      if (String(input.requestId) === DECISION_ITEM.requestId) {
+        document.documentElement.dataset.needsYouDecision = JSON.stringify(input.answers);
+        emit({ type: "agent-attention-changed", items: [] });
+        return;
+      }
       if (String(input.requestId) === TICKET.requestId || String(input.requestId) === REVIEW_TICKET.requestId) {
         document.documentElement.dataset.needsYouTicket = JSON.stringify(input.answers);
         emit({ type: "agent-attention-changed", items: [] });

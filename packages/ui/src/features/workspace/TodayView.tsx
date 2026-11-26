@@ -79,9 +79,19 @@ export interface TodayDecision {
   rejectNoteRequired?: boolean | undefined;
   /** A written answer, such as for a loop question. */
   answer?: ((text: string) => Promise<void>) | undefined;
+  /** The buttons of a decision card, answered in place: each option, the recommended one marked, and the No. */
+  choices?: TodayChoice[] | undefined;
   /** The label of `open`: "Open", "Answer", "Take over". */
   openLabel: string;
   open: () => void;
+}
+
+/** One button of a decision card in Today. */
+export interface TodayChoice {
+  label: string;
+  recommended?: boolean | undefined;
+  decline?: boolean | undefined;
+  send: () => Promise<void>;
 }
 
 /** An agent that works now. */
@@ -499,6 +509,25 @@ export function TodayDecisionCard(props: { decision: TodayDecision; compact?: bo
               </Button>
             </form>
           )}
+        </Show>
+        <Show when={decision().choices?.length}>
+          <div class="ws-today-decision-choices">
+            <For each={decision().choices ?? []}>
+              {(choice) => (
+                <Button
+                  variant={choice.recommended ? "default" : choice.decline ? "ghost" : "outline"}
+                  class="ws-today-decision-choice"
+                  disabled={busy()}
+                  onClick={() => void run(choice.send)}
+                >
+                  {choice.label}
+                  <Show when={choice.recommended}>
+                    <span class="ws-today-decision-recommended">{t("uiBlock.decision.recommended")}</span>
+                  </Show>
+                </Button>
+              )}
+            </For>
+          </div>
         </Show>
         <div class="ws-today-decision-actions">
           <Show when={decision().approve}>

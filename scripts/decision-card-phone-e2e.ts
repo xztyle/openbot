@@ -4,13 +4,16 @@
 // and drives it in Chromium with an iPhone viewport and touch. The card must say who asks and what
 // happens after the choice, show each option as a button with its consequence and the recommended one
 // marked, keep the ticket key and the raw address behind the technical details, offer "Responder igual"
-// although the agent's call ended, and send the tapped option as the answer of that card.
+// although the agent's call ended, and send the tapped option as the answer of that card. A card the host
+// made before the lasting ids (emoji rows, a bare link in the preview, a plain UUID) draws the same way,
+// and its "Responder igual" sends the owner's choice to the agent as a message.
 //
 // `bun scripts/decision-card-phone-e2e.ts [--headed]`
 // Writes .openbot-build/decision-card-phone-e2e/report.json and a screenshot before and after the tap.
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { pastDecisionRequestId } from "@openbot/contracts/ui-blocks";
 import { translateFor } from "@openbot/i18n";
 import solidPlugin from "@solidjs/vite-plugin";
@@ -34,6 +37,16 @@ const HARNESS = `<!doctype html>
     <script type="module" src="/src/renderer/stories/decision-card-harness.tsx"></script>
   </body>
 </html>`;
+
+/** The messages the harness recorded, as the page wrote them. */
+function sentMessages(value: unknown): { agentId: string; text: string }[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) =>
+    isDynamicRecord(entry) && isString(entry.agentId) && isString(entry.text)
+      ? [{ agentId: entry.agentId, text: entry.text }]
+      : [],
+  );
+}
 
 function harnessPages(): Plugin {
   return {
@@ -86,10 +99,15 @@ try {
   const page = await context.newPage();
   page.setDefaultTimeout(30_000);
   await page.goto(`${origin}/app/general/dm/chief`, { waitUntil: "commit" });
-  const card = page.locator("article.ui-block-decision");
-  await card.waitFor({ state: "visible", timeout: 120_000 });
+  const cards = page.locator("article.ui-block-decision");
+  await cards.first().waitFor({ state: "visible", timeout: 120_000 });
+  // The chat ends with the new card; the legacy card is the one above it.
+  const card = cards.last();
+  const legacyCard = cards.first();
+  check("two decision cards, the legacy one too", (await cards.count()) === 2, await cards.count());
   await card.scrollIntoViewIfNeeded();
   await card.evaluate((element) => element.scrollIntoView({ block: "start" }));
+  await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: resolve(OUT, "before-top.png") });
   await card.evaluate((element) => element.scrollIntoView({ block: "end" }));
   await page.screenshot({ path: resolve(OUT, "before-bottom.png") });
@@ -179,6 +197,61 @@ try {
     opened.some((url) => url.startsWith("https://adsmanager.facebook.com/")),
     opened,
   );
+
+  // The legacy card: the same layout, and an answer that goes as a message.
+  await legacyCard.evaluate((element) => element.scrollIntoView({ block: "start" }));
+  // A row far from the view is not drawn until it is in it: its text reads as empty before that.
+  await legacyCard.locator("button.ui-decision-option").first().waitFor({ state: "visible" });
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: resolve(OUT, "legacy-before.png") });
+  const legacyText = (await legacyCard.innerText()).replace(/\s+/gu, " ");
+  check(
+    "legacy: no emoji, arrow or # rows",
+    !/[💰⏱→]/u.test(legacyText) && !/(^|\s)#(\s|:)/u.test(legacyText),
+    legacyText,
+  );
+  check("legacy: the amount shows", legacyText.includes("125 USD"), legacyText);
+  check(
+    "legacy: says who asks",
+    legacyText.includes(spanish("uiBlock.decision.askedBy", { name: "Chief" })),
+    legacyText,
+  );
+  check("legacy: the option shows its consequence", legacyText.includes("La cuenta queda lista"), legacyText);
+  check(
+    "legacy: no raw ticket key or address outside the details",
+    !legacyText.includes("EVE-40") && !legacyText.includes("adsmanager"),
+  );
+  check("legacy: offers Responder igual", legacyText.includes(spanish("uiBlock.decision.answerAnyway")));
+  const legacyLink = legacyCard.locator("button.ui-decision-link");
+  check(
+    "legacy: the bare link is a labelled button",
+    (await legacyLink.innerText()).trim() === "Ver campaña en Meta",
+    await legacyLink.innerText(),
+  );
+  const legacyDetails = legacyCard.locator("details.ui-decision-technical");
+  check("legacy: technical details are closed", (await legacyDetails.getAttribute("open")) === null);
+  await legacyDetails.locator("summary").tap();
+  check("legacy: the details hold the ticket", (await legacyDetails.innerText()).includes("EVE-40"));
+  await legacyCard.locator("button.ui-decision-option").first().tap();
+  await page.waitForFunction(() => document.documentElement.dataset.decisionMessages !== undefined, null, {
+    timeout: 15_000,
+  });
+  const messages = sentMessages(
+    JSON.parse((await page.locator("html").getAttribute("data-decision-messages")) ?? "[]"),
+  );
+  check(
+    "legacy: the tap sends the decision to the asking agent as a message",
+    messages.length === 1 &&
+      messages[0]?.agentId === "chief" &&
+      messages[0].text ===
+        spanish("uiBlock.decision.lateMessage", {
+          title: "¿Acepto las condiciones de Meta para «Moño y Confeti»?",
+          answer: "Aceptar y crear",
+        }),
+    messages,
+  );
+  await legacyCard.locator(".ui-block-outcome[data-status='answered']").waitFor({ state: "visible" });
+  await page.screenshot({ path: resolve(OUT, "legacy-after.png") });
   await context.close();
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);

@@ -8,6 +8,7 @@ import { currentText } from "@openbot/ui/text";
 import { classifyUserError } from "@openbot/user-errors";
 import { flush, onSettled } from "solid-js";
 import { withoutAgent } from "../../app-message-projection";
+import { playAttentionSoundForAgentEvent } from "../../attention-sound";
 import { playCompletionSoundForAgentEvent } from "../../completion-sound";
 import { usePlatform } from "../../platform";
 import { useProviders } from "../../providers";
@@ -106,6 +107,10 @@ export function AgentEventBridge() {
   const playAgentEventSound = createAgentEventSounds(
     (agentId) => soundLevel() !== "nothing" && agentList().some((agent) => agent.id === agentId && agent.notifications),
   );
+  /** The cue of a card that needs the owner, under the same mute and level as the other sounds. */
+  const playNeedsYouSound = (event: AgentEvent) => {
+    if (soundLevel() !== "nothing" && !platform.chatWindow) playAttentionSoundForAgentEvent(event, agentList());
+  };
   let readRefresh = 0;
   let modelRefresh = 0;
 
@@ -266,6 +271,7 @@ export function AgentEventBridge() {
         setPendingPrompts((current) => ({ ...current, [event.agentId]: event }));
         setPresentedPromptResolutions((current) => ({ ...current, [event.agentId]: undefined }));
         setSubmittedPromptRequests((current) => ({ ...current, [event.agentId]: undefined }));
+        playNeedsYouSound(event);
         return;
       case "agent-input-resolved":
         if (event.kind === "prompt") {
@@ -288,6 +294,7 @@ export function AgentEventBridge() {
           ),
           event.approval,
         ]);
+        playNeedsYouSound(event);
         return;
       case "agent-input-escalations-changed":
         setInputEscalations(event.escalations);
@@ -304,6 +311,7 @@ export function AgentEventBridge() {
           ...current,
           [event.request.agentId]: event,
         }));
+        playNeedsYouSound(event);
         return;
       case "browser-takeover-resolved":
         setPendingPrompts((current) => {

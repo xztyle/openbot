@@ -25,7 +25,7 @@ import { useWorkspace } from "./workspace-context";
 import { useGuardrails, useLearningQueue } from "./workspace-host-feeds";
 import { insightAlerts, pollInsightAlerts, setInsightAlerts } from "./workspace-insight-alerts";
 import { memberById } from "./workspace-model";
-import { answerTicket, ticketAnswers } from "./workspace-ticket-answer";
+import { answerTicket, ticketAnswers, ticketTitle } from "./workspace-ticket-answer";
 
 /** The loop decision that Today opened, for the Loops view to show first and scroll to. */
 const [loopFocus, setLoopFocus] = createSignal<{ loopId: string; decisionId: string } | null>(null, {
@@ -260,8 +260,8 @@ export function useDecisionQueue() {
                 .split("\n")
                 .map((line) => sourceText(line))
                 .join("\n")
-            : ticket && item.plain
-              ? item.plain.asks
+            : ticket
+              ? ticketTitle(item)
               : item.summary,
         detail: trust
           ? trustDetail || undefined

@@ -19,16 +19,28 @@
   color: var(--openbot-text-muted);
 }
 
+/* An answered card settles once; its outcome line rises in. A card of the history does not replay it. */
+.ui-block-card[data-status="answered"] {
+  animation: interaction-card-settled 1.2s var(--openbot-ease-out) both;
+}
+
+.ui-block-card[data-status="answered"] .ui-block-outcome {
+  animation: interaction-outcome-in var(--openbot-duration-slow) var(--openbot-ease-out) both;
+}
+
+/* The title keeps room for about 14 characters a line beside the status; on a phone the status wraps under it. */
 .ui-block-header {
   display: flex;
   min-width: 0;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--openbot-space-3);
+  gap: var(--openbot-space-2) var(--openbot-space-3);
 }
 
 .ui-block-heading {
   min-width: 0;
+  flex: 1 1 14em;
 }
 
 .ui-block-title {
@@ -445,6 +457,11 @@
   .ui-block-option,
   .ui-block-hold-fill {
     transition: none;
+  }
+
+  .ui-block-card[data-status="answered"],
+  .ui-block-card[data-status="answered"] .ui-block-outcome {
+    animation: none;
   }
 }
 

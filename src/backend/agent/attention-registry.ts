@@ -710,6 +710,7 @@ export class AttentionRegistry {
         turnId: pending.turnId,
         createdAt: listedAt(pending),
         ...optionalText("summary", attentionLine(summary)),
+        ...(pending.uiBlock?.card ? { decision: true as const } : {}),
       });
     }
     for (const pending of this.#approvals.values()) {
@@ -754,6 +755,7 @@ export class AttentionRegistry {
         turnId: decision.turnId,
         createdAt: decision.createdAt,
         ...optionalText("summary", attentionLine(decision.spec.title)),
+        decision: true,
       });
     return items.sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(0, AGENT_ATTENTION_ITEMS_LIMIT);
   }

@@ -93,6 +93,9 @@ export const messages = {
   "settings.sounds.title": "Sesler",
   "settings.taskSound.title": "Bir görev bittiğinde ses çal",
   "settings.taskSound.description": "Tamamlanan görevler için kısa bir ses kullanın.",
+  "settings.attentionSound.title": "Bir şey sizi beklediğinde ses çal",
+  "settings.attentionSound.description":
+    "Bir ajan karar vermenizi, onaylamanızı veya bir adımı tamamlamanızı istediğinde kısa bir uyarı sesi.",
   "settings.soundFeedback.title": "İşlem sesleri",
   "settings.soundFeedback.description": "Mesaj göndermek gibi işlemleri onaylamak için kısa sesler kullanın.",
   "settings.soundTheme.label": "Ses teması",

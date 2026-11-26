@@ -12,6 +12,7 @@ import { isActionSoundEnabled, readActionSoundTheme, setActionSoundChoice } from
 import { actionToast } from "../../action-toast";
 import { readShowAgentSteps, setShowAgentSteps, useShowAgentSteps } from "../../agent-steps-preference";
 import { desktopAnalytics } from "../../analytics";
+import { isAttentionSoundEnabled, setAttentionSoundEnabled } from "../../attention-sound";
 import {
   readShowAgentMessages,
   readShowAgentReasoning,
@@ -109,6 +110,7 @@ const Settings = createSimpleContext({
     const [generalSettings, setGeneralSettings] = createSignal<GeneralSettingsValue>({
       ...DEFAULT_GENERAL_SETTINGS,
       taskCompletionSound: isCompletionSoundEnabled(),
+      attentionSound: isAttentionSoundEnabled(),
       sendShortcut: readSendShortcutMode(),
       showAgentReasoning: readShowAgentReasoning(),
       showAgentMessages: readShowAgentMessages(),
@@ -226,6 +228,9 @@ const Settings = createSimpleContext({
       setGeneralSettings(value);
       if (previous.taskCompletionSound !== value.taskCompletionSound) {
         setCompletionSoundEnabled(value.taskCompletionSound);
+      }
+      if (previous.attentionSound !== value.attentionSound) {
+        setAttentionSoundEnabled(value.attentionSound);
       }
       if (previous.sendShortcut !== value.sendShortcut) {
         setSendShortcutMode(value.sendShortcut);

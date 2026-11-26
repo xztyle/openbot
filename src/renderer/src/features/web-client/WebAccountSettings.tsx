@@ -35,6 +35,7 @@ import { usesTouchLayout } from "@openbot/ui/utils";
 import { createEffect, createSignal, For, onCleanup, Show, untrack } from "solid-js";
 import { readActionSoundChoice, replayActionSoundChoice, setActionSoundChoice } from "../../action-sounds";
 import { setShowAgentSteps, useShowAgentSteps } from "../../agent-steps-preference";
+import { isAttentionSoundEnabled, setAttentionSoundEnabled } from "../../attention-sound";
 import {
   setShowAgentMessages,
   setShowAgentReasoning,
@@ -140,6 +141,7 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
     },
   );
   const [completionSound, setCompletionSound] = createSignal(isCompletionSoundEnabled());
+  const [attentionSound, setAttentionSound] = createSignal(isAttentionSoundEnabled());
   const [notificationText, setNotificationText] = createSignal(isNotificationTextEnabled());
   const sendShortcutMode = useSendShortcutMode();
   const showAgentSteps = useShowAgentSteps();
@@ -149,6 +151,7 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
   const [soundChoice, setSoundChoice] = createSignal(readActionSoundChoice());
   const readSoundSettings = () => {
     setCompletionSound(isCompletionSoundEnabled());
+    setAttentionSound(isAttentionSoundEnabled());
     setNotificationText(isNotificationTextEnabled());
     setSoundChoice(readActionSoundChoice());
   };
@@ -353,6 +356,15 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
                 }}
                 label={t("settings.taskSound.title")}
                 description={t("settings.taskSound.description")}
+              />
+              <SwitchField
+                checked={attentionSound()}
+                onChange={(checked) => {
+                  setAttentionSound(checked);
+                  setAttentionSoundEnabled(checked);
+                }}
+                label={t("settings.attentionSound.title")}
+                description={t("settings.attentionSound.description")}
               />
               <Show when={props.push}>
                 {(push) => (

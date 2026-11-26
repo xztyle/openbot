@@ -94,6 +94,8 @@ export const messages = {
   "settings.sounds.title": "Звуки",
   "settings.taskSound.title": "Воспроизводить звук, когда задача завершена",
   "settings.taskSound.description": "Короткий звук для завершённых задач.",
+  "settings.attentionSound.title": "Звук, когда нужно ваше участие",
+  "settings.attentionSound.description": "Короткий сигнал, когда агент просит решить, одобрить или завершить шаг.",
   "settings.soundFeedback.title": "Звуки действий",
   "settings.soundFeedback.description": "Короткие звуки подтверждают ваши действия, например отправку сообщения.",
   "settings.soundTheme.label": "Звуковая тема",

@@ -1120,12 +1120,46 @@ export const OWNER_DECISION_FIELD = {
   escalated: "↑",
 } as const;
 
+/**
+ * The field labels of the decision cards the host made before the fixed labels above: a card stored
+ * in a chat keeps them. A client reads them into the same view, so an old card draws as a new one.
+ */
+export const LEGACY_DECISION_FIELD = {
+  amount: "💰",
+  ticket: "#",
+  /** The consequence of a card with one option. */
+  consequence: "→",
+  /** The timer of a card that answered itself: of no use to the reader. */
+  timer: "⏱",
+} as const;
+
 /** The `respondToPrompt` request id that answers an owner decision card after its call ended. */
 const PAST_DECISION_REQUEST_PREFIX = "past-decision:";
 
 export function isOwnerDecisionBlock(block: Pick<ConversationUiBlock, "blockId" | "spec">): boolean {
   return block.blockId.startsWith(OWNER_DECISION_BLOCK_PREFIX) && block.spec.type === "confirm";
 }
+
+/**
+ * A decision card the host made before `OWNER_DECISION_BLOCK_PREFIX`: a confirm with the options of
+ * `request_decision` (`option1`…) and a No, or one of the legacy labels. Its id is a plain UUID, so a
+ * client that knows the shape draws it as a decision; it has no lasting id to answer after its call.
+ */
+export function isLegacyDecisionSpec(spec: UiBlockSpec): spec is UiConfirmBlock {
+  if (spec.type !== "confirm") return false;
+  const ids = new Set(spec.actions.map((action) => action.id));
+  if (!ids.has("option1")) return false;
+  const legacyLabels = new Set<string>(Object.values(LEGACY_DECISION_FIELD));
+  return ids.has("no") || (spec.fields ?? []).some((field) => legacyLabels.has(field.label));
+}
+
+/** A decision card of either generation: the owner reads it as a decision, not as a form. */
+export function isDecisionCardBlock(block: Pick<ConversationUiBlock, "blockId" | "spec">): boolean {
+  return isOwnerDecisionBlock(block) || isLegacyDecisionSpec(block.spec);
+}
+
+/** A preview that starts with a bare link ("[url](url)" or "<url>"), as the host wrote it before `Link`. */
+const LEADING_PREVIEW_LINK = /^(?:\[(https?:\/\/\S+)\]\(\1\)|<(https?:\/\/\S+)>)(?:\n+|$)/u;
 
 /**
  * The request id that answers the owner decision card `blockId` through the released prompt route,
@@ -1162,17 +1196,25 @@ export interface OwnerDecisionView {
   amount?: string;
   link?: string;
   ticket?: string;
+  /** The preview to draw: `spec.preview` without a leading bare link, which `link` holds. */
+  preview?: string;
 }
 
 const OWNER_DECISION_OPTION_ID = /^option[1-3]$/u;
 
+/**
+ * Reads a decision card of either generation: the fixed labels, and the legacy ones (`💰` amount, `#`
+ * ticket, `→` the single option's consequence, a bare link at the top of the preview). The timer row
+ * of a card that answered itself is left out.
+ */
 export function ownerDecisionView(spec: UiConfirmBlock): OwnerDecisionView {
   const values = new Map<string, string>();
   for (const field of spec.fields ?? []) if (!("select" in field)) values.set(field.label, field.value);
   const choices = spec.actions.filter((action) => OWNER_DECISION_OPTION_ID.test(action.id));
+  const single = values.get(LEGACY_DECISION_FIELD.consequence);
   // A single option is the yes of a yes/no decision: its button is primary, not a recommendation.
   const options = choices.map((action) => {
-    const consequence = values.get(action.label);
+    const consequence = values.get(action.label) ?? (choices.length === 1 ? single : undefined);
     return {
       action,
       ...(consequence ? { consequence } : {}),
@@ -1187,11 +1229,19 @@ export function ownerDecisionView(spec: UiConfirmBlock): OwnerDecisionView {
   if (askedBy) view.askedBy = askedBy;
   const escalated = values.get(OWNER_DECISION_FIELD.escalated);
   if (escalated) view.escalated = escalated;
-  const amount = values.get(OWNER_DECISION_FIELD.amount);
+  // A legacy amount carried the platform after a separator ("125 USD · meta"): the amount alone reads.
+  const amount = values.get(OWNER_DECISION_FIELD.amount) ?? values.get(LEGACY_DECISION_FIELD.amount)?.split(" · ")[0];
   if (amount) view.amount = amount;
   const link = values.get(OWNER_DECISION_FIELD.link);
   if (link && /^https?:\/\/\S+$/u.test(link)) view.link = link;
-  const ticket = values.get(OWNER_DECISION_FIELD.ticket);
+  const ticket = values.get(OWNER_DECISION_FIELD.ticket) ?? values.get(LEGACY_DECISION_FIELD.ticket);
   if (ticket) view.ticket = ticket;
+  if (spec.preview) {
+    const leading = LEADING_PREVIEW_LINK.exec(spec.preview);
+    const bare = leading?.[1] ?? leading?.[2];
+    if (bare && !view.link) view.link = bare;
+    const rest = leading ? spec.preview.slice(leading[0].length).trim() : spec.preview;
+    if (rest) view.preview = rest;
+  }
   return view;
 }

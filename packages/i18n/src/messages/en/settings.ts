@@ -120,6 +120,8 @@ export const messages = defineMessages("settings", {
   "settings.sounds.title": "Sounds",
   "settings.taskSound.title": "Play a sound when a task finishes",
   "settings.taskSound.description": "Use a short sound for completed tasks.",
+  "settings.attentionSound.title": "Play a sound when something needs you",
+  "settings.attentionSound.description": "A short chime when an agent asks you to decide, approve or finish a step.",
   "settings.soundFeedback.title": "Action sounds",
   "settings.soundFeedback.description": "Use short sounds to confirm what you do, such as sending a message.",
   "settings.soundTheme.label": "Sound theme",

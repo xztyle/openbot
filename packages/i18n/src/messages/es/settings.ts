@@ -118,6 +118,9 @@ export const messages = {
   "settings.sounds.title": "Sonidos",
   "settings.taskSound.title": "Reproducir un sonido al terminar una tarea",
   "settings.taskSound.description": "Usar un sonido breve para las tareas completadas.",
+  "settings.attentionSound.title": "Reproducir un sonido cuando algo te necesita",
+  "settings.attentionSound.description":
+    "Un aviso breve cuando un agente te pide decidir, aprobar o completar un paso.",
   "settings.soundFeedback.title": "Sonidos de acciones",
   "settings.soundFeedback.description": "Usar sonidos breves para confirmar acciones, como enviar un mensaje.",
   "settings.soundTheme.label": "Tema de sonidos",

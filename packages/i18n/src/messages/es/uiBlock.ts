@@ -35,6 +35,7 @@ export const messages = {
   "uiBlock.decision.answerAnyway": "Responder igual",
   "uiBlock.decision.lateNote":
     "{name} dejó de esperar en esta tarjeta (por ejemplo, tras un reinicio). Sigue abierta: tu respuesta le llega a {name} como mensaje y el trabajo sigue desde ahí.",
+  "uiBlock.decision.lateMessage": "Mi decisión sobre «{title}»: {answer}.",
   "uiBlock.decision.recommended": "Recomendada",
   "uiBlock.decision.amount": "Importe",
   "uiBlock.decision.after": "Cuando elijas, {name} recibe tu respuesta y sigue. No pasa nada antes de que elijas.",

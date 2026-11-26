@@ -104,6 +104,8 @@ export const messages = {
   "settings.sounds.title": "소리",
   "settings.taskSound.title": "작업이 끝나면 소리 재생",
   "settings.taskSound.description": "완료된 작업에 짧은 소리를 사용해요.",
+  "settings.attentionSound.title": "내 확인이 필요할 때 소리 재생",
+  "settings.attentionSound.description": "에이전트가 결정, 승인 또는 단계 완료를 요청할 때 짧은 알림음을 재생해요.",
   "settings.soundFeedback.title": "동작 소리",
   "settings.soundFeedback.description": "메시지 전송 같은 동작을 짧은 소리로 알려줘요.",
   "settings.soundTheme.label": "사운드 테마",

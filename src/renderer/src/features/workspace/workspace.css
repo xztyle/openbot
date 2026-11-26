@@ -638,17 +638,73 @@
   flex-direction: column;
 }
 
+/*
+ * A Motion ticket that waits on the reader, pinned above the chat: the same card as the decisions of
+ * Today and the chat, with the amber edge of "needs you". Who asks is the chat's agent; the title is
+ * what the ticket asks in plain words; the buttons answer it; Motion is one labelled button away.
+ */
 .ws-agent-dm-wait {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
   align-items: stretch;
-  gap: var(--openbot-space-2);
+  gap: var(--openbot-space-3);
   margin: var(--openbot-space-2) var(--openbot-space-4) 0;
-  padding: var(--openbot-space-2) var(--openbot-space-3);
-  border: 1px solid color-mix(in oklab, var(--openbot-warning) 45%, transparent);
-  border-radius: var(--openbot-radius-md);
-  background: color-mix(in oklab, var(--openbot-warning) 12%, transparent);
+  padding: var(--openbot-space-3) var(--openbot-space-4);
+  border: 1px solid var(--openbot-border-strong);
+  border-left: 4px solid var(--openbot-warning);
+  border-radius: var(--openbot-radius-card);
+  background: var(--openbot-bg-surface);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+  animation: ws-agent-dm-wait-in var(--openbot-duration-slow) var(--openbot-ease-out) both;
+}
+
+@keyframes ws-agent-dm-wait-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ws-agent-dm-wait-head {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: var(--openbot-space-3);
+}
+
+.ws-agent-dm-wait-heading {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-0-5);
+}
+
+.ws-agent-dm-wait-eyebrow {
+  color: var(--openbot-warning-text);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-agent-dm-wait-title {
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-lg);
+  font-weight: var(--openbot-weight-semibold);
+  line-height: var(--openbot-leading-lg);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.ws-agent-dm-wait-error {
+  margin: 0;
+  color: var(--openbot-danger-text);
   font-size: var(--openbot-text-sm);
 }
 
@@ -671,17 +727,8 @@
   font: inherit;
 }
 
-.ws-agent-dm-wait-link {
-  display: inline-flex;
-  align-self: flex-start;
-  align-items: center;
-  gap: var(--openbot-space-1);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-sm);
-  cursor: pointer;
+.ws-agent-dm-wait-row > .ws-agent-dm-wait-link {
+  margin-inline-start: auto;
 }
 
 .ws-agent-dm-wait-link svg {
@@ -690,20 +737,32 @@
 }
 
 .ws-agent-dm-wait-icon {
+  display: inline-flex;
   flex: 0 0 auto;
+  width: var(--openbot-control-md);
+  height: var(--openbot-control-md);
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-warning-soft);
+  color: var(--openbot-warning-text);
+}
+
+.ws-agent-dm-wait-icon svg {
   width: var(--openbot-icon-sm);
   height: var(--openbot-icon-sm);
 }
 
-.ws-agent-dm-wait-text {
-  flex: 1 1 12rem;
-  min-width: 0;
+/* The owner asked the agent something: the card stays, softer, until the decision is answered. */
+.ws-agent-dm-wait[data-asked="true"] {
+  border-left-style: dashed;
+  background: var(--openbot-bg-canvas);
 }
 
-/* The owner asked the agent something: the strip stays, softer, until the decision is answered. */
-.ws-agent-dm-wait[data-asked="true"] {
-  border-style: dashed;
-  background: color-mix(in oklab, var(--openbot-warning) 6%, transparent);
+@media (prefers-reduced-motion: reduce) {
+  .ws-agent-dm-wait {
+    animation: none;
+  }
 }
 
 .ws-agent-dm-wait-asked {

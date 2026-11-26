@@ -106,6 +106,13 @@ export function SettingsNotificationsTab(props: SettingsNotificationsTabProps) {
             label={i18n.t("settings.taskSound.title")}
             description={i18n.t("settings.taskSound.description")}
           />
+          <SwitchField
+            data-settings-row="settings.attentionSound.title"
+            checked={props.value.attentionSound}
+            onChange={(checked) => props.onUpdateSetting("attentionSound", checked)}
+            label={i18n.t("settings.attentionSound.title")}
+            description={i18n.t("settings.attentionSound.description")}
+          />
           <Item data-settings-row="settings.soundFeedback.title" class="settings-modal-row settings-sound-theme-row">
             <ItemContent>
               <ItemTitle>{i18n.t("settings.soundFeedback.title")}</ItemTitle>

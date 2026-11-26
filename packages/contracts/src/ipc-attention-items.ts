@@ -81,6 +81,8 @@ export interface AgentAttentionItem {
    * asked something instead of deciding. A question decides nothing, so the request stays.
    */
   ownerAsked?: true;
+  /** A `form` that is a decision card (`request_decision`): the owner chooses an option, not a form. */
+  decision?: true;
 }
 
 /** The `turnId` of a Motion ticket that waits on the user. */
@@ -147,7 +149,8 @@ export function isAgentAttentionItem(value: unknown): value is AgentAttentionIte
     (value.plain === undefined || isOwnerSummary(value.plain)) &&
     (value.escalatedBy === undefined || isBoundedString(value.escalatedBy, AGENT_ATTENTION_TEXT_LIMIT)) &&
     (value.escalationReason === undefined || isBoundedString(value.escalationReason, AGENT_ATTENTION_TEXT_LIMIT)) &&
-    (value.ownerAsked === undefined || value.ownerAsked === true)
+    (value.ownerAsked === undefined || value.ownerAsked === true) &&
+    (value.decision === undefined || value.decision === true)
   );
 }
 

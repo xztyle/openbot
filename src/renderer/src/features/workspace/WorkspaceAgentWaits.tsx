@@ -23,7 +23,7 @@ import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { useWorkspace } from "./workspace-context";
 import { ticketDetail } from "./workspace-decisions";
-import { answerTicket, ticketAnswers } from "./workspace-ticket-answer";
+import { answerTicket, ticketAnswers, ticketTitle } from "./workspace-ticket-answer";
 
 /** How long the strip says "you asked" on its own, before the host's list says it. */
 const ASKED_LOCAL_MS = 60_000;
@@ -139,14 +139,36 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
         const answers = () => ticketAnswers(item(), t);
         /** A ticket that waits for a decision: a reply to it is a question, not the answer. */
         const decides = () => answers().primary !== undefined;
+        const title = () => ticketTitle(item());
         return (
-          <div class="ws-agent-dm-wait" role="status" data-asked={asked(item()) ? "true" : undefined}>
-            <div class="ws-agent-dm-wait-row">
-              <Ticket class="ws-agent-dm-wait-icon" aria-hidden="true" />
-              <span class="ws-agent-dm-wait-text">
-                {t("workspace.needsYou.banner.ticket", { ticket: item().plain?.asks ?? item().summary ?? "" })}
-                {failed() === key() ? ` · ${failure() || t("workspace.today.answerFailed")}` : ""}
+          <section
+            class="ws-agent-dm-wait"
+            role="status"
+            aria-label={t("workspace.needsYou.banner.waitsInMotion")}
+            data-asked={asked(item()) ? "true" : undefined}
+          >
+            <header class="ws-agent-dm-wait-head">
+              <span class="ws-agent-dm-wait-icon" aria-hidden="true">
+                <Ticket />
               </span>
+              <div class="ws-agent-dm-wait-heading">
+                <span class="ws-agent-dm-wait-eyebrow">{t("workspace.needsYou.banner.waitsInMotion")}</span>
+                <strong class="ws-agent-dm-wait-title">{title()}</strong>
+              </div>
+            </header>
+            <Show when={failed() === key()}>
+              <p class="ws-agent-dm-wait-error" role="alert">
+                {failure() || t("workspace.today.answerFailed")}
+              </p>
+            </Show>
+            <Show when={asked(item())}>
+              <p class="ws-agent-dm-wait-asked">
+                <strong>{t("workspace.needsYou.ticket.asked")}</strong>
+                <span>{t("workspace.needsYou.ticket.askedNote")}</span>
+              </p>
+            </Show>
+            <Show when={ticketDetail(item(), t)}>{(detail) => <p class="ws-agent-dm-wait-reason">{detail()}</p>}</Show>
+            <div class="ws-agent-dm-wait-row">
               <Show when={answers().primary}>
                 {(primary) => (
                   <Button
@@ -192,23 +214,19 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
               <Button variant="ghost" size="sm" onClick={() => void dismiss(item().requestId)}>
                 {t("workspace.today.dismiss")}
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                class="ws-agent-dm-wait-link"
+                onClick={() => {
+                  const url = item().url;
+                  if (url) void ws.channels.port().openUrl(url);
+                }}
+              >
+                <ExternalLink data-icon="inline-start" aria-hidden="true" />
+                {t("workspace.needsYou.banner.openTicket")}
+              </Button>
             </div>
-            <Show when={asked(item())}>
-              <p class="ws-agent-dm-wait-asked">
-                <strong>{t("workspace.needsYou.ticket.asked")}</strong>
-                <span>{t("workspace.needsYou.ticket.askedNote")}</span>
-              </p>
-            </Show>
-            <Show when={ticketDetail(item(), t)}>{(detail) => <p class="ws-agent-dm-wait-reason">{detail()}</p>}</Show>
-            {/* The raw reason is technical: only the reader opens it. */}
-            <Show when={[item().summary, item().reason, item().escalationReason].filter(Boolean).join("\n")}>
-              {(technical) => (
-                <details class="ws-agent-dm-wait-technical">
-                  <summary>{t("workspace.today.technicalDetails")}</summary>
-                  <p>{technical()}</p>
-                </details>
-              )}
-            </Show>
             <Show when={noting() === key() ? answers().secondary : undefined}>
               {(secondary) => (
                 <form
@@ -270,19 +288,16 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
                 </Button>
               </form>
             </Show>
-            <Button
-              variant="link"
-              size="xs"
-              class="ws-agent-dm-wait-link"
-              onClick={() => {
-                const url = item().url;
-                if (url) void ws.channels.port().openUrl(url);
-              }}
-            >
-              {t("workspace.needsYou.banner.openTicket")}
-              <ExternalLink aria-hidden="true" />
-            </Button>
-          </div>
+            {/* The raw reason and the ticket key are technical: only the reader opens them. */}
+            <Show when={[item().summary, item().reason, item().escalationReason].filter(Boolean).join("\n")}>
+              {(technical) => (
+                <details class="ws-agent-dm-wait-technical">
+                  <summary>{t("workspace.today.technicalDetails")}</summary>
+                  <p>{technical()}</p>
+                </details>
+              )}
+            </Show>
+          </section>
         );
       }}
     </For>

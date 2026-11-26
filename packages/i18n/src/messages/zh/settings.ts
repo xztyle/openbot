@@ -105,6 +105,8 @@ export const messages = {
   "settings.sounds.title": "声音",
   "settings.taskSound.title": "任务完成时播放声音",
   "settings.taskSound.description": "任务完成时使用一段短音效。",
+  "settings.attentionSound.title": "有事需要你时播放提示音",
+  "settings.attentionSound.description": "当智能体请你决定、批准或完成某一步时播放一段短提示音。",
   "settings.soundFeedback.title": "操作音效",
   "settings.soundFeedback.description": "用短音效确认你的操作，例如发送消息。",
   "settings.soundTheme.label": "音效主题",

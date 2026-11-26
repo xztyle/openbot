@@ -47,6 +47,8 @@ export interface GeneralSettingsValue {
   /** Whether the island shows a server with no choice of its own, such as a server added later. */
   macBookNotchNewServers: boolean;
   taskCompletionSound: boolean;
+  /** A short cue when a card that needs the owner appears: a question, an approval or a browser step. */
+  attentionSound: boolean;
   /** How the user sends a message: plain Enter, or the platform modifier with Enter. */
   sendShortcut: SendShortcutMode;
   /** Draw what the model thought: a Thinking row after a turn, and the open activity line. */
@@ -94,6 +96,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettingsValue = {
   macBookNotchServers: {},
   macBookNotchNewServers: true,
   taskCompletionSound: true,
+  attentionSound: true,
   sendShortcut: "enter",
   showAgentReasoning: true,
   showAgentMessages: true,

@@ -90,6 +90,40 @@
   border-radius: var(--atelier-radius-card, var(--openbot-radius-lg));
   background: var(--openbot-bg-surface);
   padding: var(--openbot-space-3) var(--openbot-space-4);
+  /* The same rise as a card in the chat; each one in the list a beat after the one above. */
+  animation: ws-today-decision-in var(--openbot-duration-slow) var(--openbot-ease-out) both;
+  transition: opacity var(--openbot-duration-slow) var(--openbot-ease-out);
+}
+
+.ws-today-decisions > li:nth-child(2) > .ws-today-decision {
+  animation-delay: 60ms;
+}
+
+.ws-today-decisions > li:nth-child(3) > .ws-today-decision {
+  animation-delay: 120ms;
+}
+
+.ws-today-decisions > li:nth-child(n + 4) > .ws-today-decision {
+  animation-delay: 180ms;
+}
+
+@keyframes ws-today-decision-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-today-decision {
+    animation: none;
+    transition: none;
+  }
 }
 
 /* What stops an agent's work has the amber edge of "needs you". */

@@ -59,11 +59,66 @@ const block = normalizeConversationUiBlock({
   state: { status: "expired" },
 });
 
+/**
+ * A card the host made before the lasting ids (a plain UUID, the emoji rows, the bare link in the
+ * preview), expired with its call: the CSO's Christmas budget card as the owner saw it on the phone.
+ */
+export const LEGACY_BLOCK_ID = "3f0b2a7e-5c9d-4e1a-9b6f-2d8c4a1e7f30";
+const legacy = normalizeConversationUiBlock({
+  version: UI_BLOCK_VERSION,
+  blockId: LEGACY_BLOCK_ID,
+  spec: {
+    type: "confirm",
+    title: "¿Acepto las condiciones de Meta para «Moño y Confeti»?",
+    fields: [
+      { label: "→", value: "La cuenta queda lista y creo la campaña en pausa." },
+      { label: "💰", value: "125 USD · meta" },
+      { label: "#", value: "EVE-40" },
+    ],
+    preview:
+      "[https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1666106438553775](https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1666106438553775)\n\nSin aceptar las condiciones no se puede anunciar en Meta.",
+    actions: [
+      { id: "option1", label: "Aceptar y crear", style: "primary" },
+      { id: "change", label: "Cambiar…" },
+      { id: "no", label: "No", style: "ghost" },
+    ],
+  },
+  state: { status: "expired" },
+});
+
 /** The answers the page sent, for the script: on the root element, as JSON. */
 const answers: RespondToPromptInput[] = [];
+/** The messages the page sent to an agent, for the script: a legacy card answers as a message. */
+const sent: { agentId: string; text: string }[] = [];
 
 const runtime: WebRuntimeFactory = (_accountId, events) => {
   const mock = createMockOpenBot({ channels: seeds(WEB_PREVIEW_MEMBER_ID), channelMemberId: WEB_PREVIEW_MEMBER_ID });
+  if (legacy) {
+    const turnId = "turn-meta-terms";
+    mock.updateConversationSnapshot("chief", (snapshot) => {
+      snapshot.messages.push({
+        id: `question-prompt:${turnId}:req-0`,
+        turnId,
+        author: "assistant",
+        source: "assistant",
+        text: "Question",
+        createdAt: new Date(Date.now() - 60_000).toISOString(),
+        status: "completed",
+        itemType: "question_prompt",
+        questionPrompt: {
+          requestId: "req-0",
+          questions: uiBlockFallbackQuestions(legacy.spec),
+          resolution: { status: "expired" },
+        },
+        uiBlock: legacy,
+      });
+    });
+  }
+  mock.onMessageSent((message) => {
+    sent.push({ agentId: message.agentId, text: message.text });
+    document.documentElement.dataset.decisionMessages = JSON.stringify(sent);
+    return true;
+  });
   if (block) {
     const turnId = "turn-christmas";
     const questions = uiBlockFallbackQuestions(block.spec);
@@ -112,6 +167,10 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
   return mockWebRuntimeFor(mock, events);
 };
 
+/** `?appearance=light` draws the light theme, for the screenshots of both; the dark one is the default. */
+const appearance = new URLSearchParams(window.location.search).get("appearance") === "light" ? "light" : "dark";
+// The app sets the palette on the root element; the harness does the same for its screenshots.
+document.documentElement.setAttribute("data-openbot-color-scheme", appearance);
 const root = document.getElementById("root");
 if (root)
   render(
@@ -129,7 +188,7 @@ if (root)
             createRuntime={runtime}
             language="es"
             onChangeLanguage={() => {}}
-            appearance="dark"
+            appearance={appearance}
             onChangeAppearance={() => {}}
           />
         </div>

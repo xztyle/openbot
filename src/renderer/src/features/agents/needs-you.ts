@@ -124,10 +124,11 @@ const ACTION_AT_KEY = {
 
 /** What the user does for a request, in a few words: "Sign in on accounts.google.com", "Answer a question". */
 export function needsYouAction(
-  item: Pick<AgentAttentionItem, "kind" | "origin" | "turnId" | "url">,
+  item: Pick<AgentAttentionItem, "kind" | "origin" | "turnId" | "url" | "decision">,
   t: TextValue["t"],
 ): string {
   if (isTicketAttention(item)) return t("workspace.needsYou.action.ticket");
+  if (item.decision) return t("workspace.needsYou.action.decision");
   if (item.origin && (item.kind === "browser-takeover" || item.kind === "sign-in" || item.kind === "secret"))
     return t(ACTION_AT_KEY[item.kind], { site: item.origin });
   return t(ACTION_KEY[item.kind]);

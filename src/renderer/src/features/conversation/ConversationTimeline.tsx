@@ -404,6 +404,12 @@ export function ConversationTimeline() {
     : desktopChatCardCalls(() => props.server?.id ?? "local");
   /** The agent that asks in a card: in a channel, the working agent whose card shows. */
   const interactionAgentName = () => (channel ? channel.interactionAgentName() : props.agent?.name);
+  /** A decision card from before the lasting ids, answered after its call: the answer is the owner's message. */
+  const answerAsMessage = async (text: string): Promise<boolean> => {
+    const result = await props.onSendMessage(text, [], null);
+    if ("error" in result) throw new Error(result.error);
+    return true;
+  };
   /**
    * The other person who wrote a message. The reader's own message, an agent message, and a message
    * from before senders were kept have none, so a chat with one person looks as it always did.
@@ -1675,9 +1681,11 @@ export function ConversationTimeline() {
                                 <UiBlockPrompt
                                   block={block()}
                                   agents={props.agents}
+                                  askerName={interactionAgentName()}
                                   onSelectAgent={props.onSelectAgent}
                                   onOpenLink={(url) => void openExternalMessageUrl(url)}
                                   onAnswerPast={props.onAnswerPastPrompt}
+                                  onAnswerAsMessage={answerAsMessage}
                                 />
                               </article>
                             )}
@@ -1764,6 +1772,7 @@ export function ConversationTimeline() {
                         <UiBlockPrompt
                           block={block()}
                           agents={props.agents}
+                          askerName={interactionAgentName()}
                           onSelectAgent={props.onSelectAgent}
                           onOpenLink={(url) => void openExternalMessageUrl(url)}
                           elementRef={setRequiredInteractionElement}

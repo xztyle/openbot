@@ -34,6 +34,7 @@ export const messages = defineMessages("uiBlock", {
   "uiBlock.decision.answerAnyway": "Answer anyway",
   "uiBlock.decision.lateNote":
     "{name} stopped waiting on this card (for example, after a restart). It is still open: your answer goes to {name} as a message, and the work continues from there.",
+  "uiBlock.decision.lateMessage": "My decision on “{title}”: {answer}.",
   "uiBlock.decision.recommended": "Recommended",
   "uiBlock.decision.amount": "Amount",
   "uiBlock.decision.after":

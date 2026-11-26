@@ -17,6 +17,8 @@ export interface UiDecisionBlockProps extends UiBlockProps<UiConfirmSpec> {
    * answer goes to the agent as a message. The card says so and keeps its buttons.
    */
   lateAnswer?: boolean | undefined;
+  /** Who asks, when the card does not say it: the agent of the chat the card is in. */
+  askerName?: string | undefined;
 }
 
 /** The place a link opens, in a word: Meta, Google, or the site's host. */
@@ -53,7 +55,8 @@ export function UiDecisionBlock(props: UiDecisionBlockProps) {
   const open = () => stored().status === "pending" || (props.lateAnswer === true && stored().status === "expired");
   const status = () => (open() ? "pending" : stored().status);
   const locked = () => !open() || props.disabled === true || props.busy === true;
-  const asker = () => view().askedBy ?? t("uiBlock.decision.theAgent");
+  const askedBy = () => view().askedBy ?? props.askerName;
+  const asker = () => askedBy() ?? t("uiBlock.decision.theAgent");
 
   function respond(action: UiAction): void {
     if (locked()) return;
@@ -64,7 +67,7 @@ export function UiDecisionBlock(props: UiDecisionBlockProps) {
     <UiBlockCard
       class={cx("ui-block-decision", props.class)}
       title={props.spec.title}
-      subtitle={view().askedBy ? t("uiBlock.decision.askedBy", { name: view().askedBy ?? "" }) : undefined}
+      subtitle={askedBy() ? t("uiBlock.decision.askedBy", { name: askedBy() ?? "" }) : undefined}
       status={status()}
       outcome={stored().outcome}
       busy={props.busy}
@@ -86,7 +89,7 @@ export function UiDecisionBlock(props: UiDecisionBlockProps) {
           </p>
         )}
       </Show>
-      <Show when={props.spec.preview}>
+      <Show when={view().preview}>
         {(preview) => (
           <div class="ui-decision-preview">
             <Show when={props.renderPreview} fallback={<p class="ui-block-preview-text">{preview()}</p>}>

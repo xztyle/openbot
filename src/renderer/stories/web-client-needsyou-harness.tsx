@@ -127,6 +127,18 @@ const MONEY_ITEM: AgentAttentionItem = {
   createdAt: new Date().toISOString(),
 };
 
+/** A decision card of Sales Outbound that waits for the owner, as the host lists it: a decision, not a form. */
+const DECISION_ITEM: AgentAttentionItem = {
+  kind: "form",
+  requestId: "decision-christmas",
+  agentId: REQUEST.agentId,
+  threadId: REQUEST.threadId,
+  turnId: "turn-sales-decision",
+  createdAt: new Date().toISOString(),
+  summary: "Campaña navideña: ¿cuánto gastamos como máximo en total?",
+  decision: true,
+};
+
 const CONDENSED_MESSAGE = "message-agent-2";
 const CONDENSED_ORIGINAL =
   "I paused: the page is not made and the cap is not set.\n\nSo far I only read the account through the API.\n\nAlejandro signs in when the browser view works, so I do not ask again.\n\nI sent the CSO the result in three lines.";
@@ -189,6 +201,15 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     if (detail === "money-approval") {
       emit({ type: "approval", approval: { ...MONEY_APPROVAL } });
       emit({ type: "agent-attention-changed", items: [MONEY_ITEM] });
+    }
+    // Everything at once, for the screenshots of Today and the list: a decision, a ticket, a payment, a code.
+    if (detail === "everything") {
+      emit({ type: "approval", approval: { ...MONEY_APPROVAL } });
+      emit({ type: "browser-takeover-requested", request: { ...REQUEST, secret: SECRET } });
+      emit({
+        type: "agent-attention-changed",
+        items: [DECISION_ITEM, TICKET, MONEY_ITEM, { ...ITEM, kind: "secret" }],
+      });
     }
   });
   document.documentElement.dataset.needsYouReady = "";
@@ -259,6 +280,10 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
   };
 };
 
+/** `?appearance=light` draws the light theme, for the screenshots of both; the dark one is the default. */
+const appearance = new URLSearchParams(window.location.search).get("appearance") === "light" ? "light" : "dark";
+// The app sets the palette on the root element; the harness does the same for its screenshots.
+document.documentElement.setAttribute("data-openbot-color-scheme", appearance);
 const root = document.getElementById("root");
 if (root)
   render(
@@ -276,7 +301,7 @@ if (root)
             createRuntime={runtime}
             language="system"
             onChangeLanguage={() => {}}
-            appearance="dark"
+            appearance={appearance}
             onChangeAppearance={() => {}}
           />
         </div>

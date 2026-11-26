@@ -14,6 +14,7 @@ import { channelReplyNotifications } from "@openbot/team-client/channel-notifica
 import type { TextValue } from "@openbot/ui/text";
 import { onCleanup, untrack } from "solid-js";
 import { startActionSounds } from "../../action-sounds";
+import { playAttentionSoundForAgentEvent } from "../../attention-sound";
 import { playCompletionSoundForAgentEvent, unlockCompletionSound } from "../../completion-sound";
 import { createAgentEventSounds } from "../agents/agent-event-sounds";
 import type { WebWorkspace } from "./web-client-context";
@@ -67,6 +68,8 @@ export function createWebNotificationRouting(options: {
     // the agent's thread is unknown for a reply, so the DM's level decides.
     if (event.type === "turn-completed" && quietConversation(hostId, `agent:${event.agentId}`)) return;
     if (event.type === "turn-completed" && level === "all") playCompletionSoundForAgentEvent(event, agents);
+    // A card that needs the owner has its own cue, also on a phone where the page shows no notification.
+    playAttentionSoundForAgentEvent(event, agents);
     // The push message already tells the user, also on a phone where a page cannot show a notification.
     if (options.pushes?.(hostId)) return;
     const threadId = agentEventRequestThread(event);

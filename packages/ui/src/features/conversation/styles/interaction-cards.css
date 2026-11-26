@@ -1,3 +1,8 @@
+/*
+ * One card for everything that asks the owner for something: an approval, a decision, a question, a
+ * password or a browser step. Each card arrives with the same short rise, and one that was answered
+ * settles with a brief success edge, so the eye knows what changed without reading it twice.
+ */
 .conversation-interaction-card {
   box-sizing: border-box;
   min-width: 0;
@@ -6,6 +11,51 @@
   background: var(--openbot-bg-canvas);
   color: var(--openbot-text-primary);
   padding: var(--openbot-space-4);
+  animation: interaction-card-in var(--openbot-duration-slow) var(--openbot-ease-out) both;
+}
+
+@keyframes interaction-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* The moment a card is answered: its edge takes the success colour once, then rests. */
+@keyframes interaction-card-settled {
+  0% {
+    border-color: var(--openbot-success);
+    box-shadow: 0 0 0 3px var(--openbot-success-soft);
+  }
+
+  100% {
+    border-color: var(--openbot-border-strong);
+    box-shadow: 0 0 0 0 var(--openbot-success-soft);
+  }
+}
+
+/* The line that says what was answered rises into place under the card. */
+@keyframes interaction-outcome-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conversation-interaction-card {
+    animation: none;
+  }
 }
 
 /*

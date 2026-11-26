@@ -34,6 +34,18 @@ export interface TicketAnswers {
   };
 }
 
+/**
+ * What a waiting ticket asks, as the owner reads it: its plain summary when the host has read it,
+ * else its title without the key ("EVE-40 · Title" gives "Title"). The key stays in the technical details.
+ */
+export function ticketTitle(item: Pick<AgentAttentionItem, "plain" | "summary">): string {
+  const plain = item.plain?.asks;
+  if (plain) return plain;
+  const summary = item.summary ?? "";
+  const parts = summary.split(" · ");
+  return parts.length > 1 ? parts.slice(1).join(" · ") : summary;
+}
+
 export function ticketAnswers(item: Pick<AgentAttentionItem, "asks">, t: AppTranslate): TicketAnswers {
   if (item.asks === "approval")
     return {

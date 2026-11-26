@@ -92,6 +92,8 @@ export const messages = {
   "settings.sounds.title": "サウンド",
   "settings.taskSound.title": "タスクの完了時に音を鳴らす",
   "settings.taskSound.description": "完了したタスクに短い音を使います。",
+  "settings.attentionSound.title": "対応が必要なときに音を鳴らす",
+  "settings.attentionSound.description": "エージェントが決定、承認、または手順の完了を求めたときに短い音を鳴らします。",
   "settings.soundFeedback.title": "操作音",
   "settings.soundFeedback.description": "メッセージの送信などの操作を短い音でお知らせします。",
   "settings.soundTheme.label": "サウンドテーマ",

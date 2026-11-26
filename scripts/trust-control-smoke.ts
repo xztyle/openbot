@@ -135,6 +135,12 @@ try {
   });
   const block = captured.block;
   check("decision card surfaced as a card", block?.card === true && block.spec.type === "confirm", block?.spec);
+  // The card and the ticket's waiting item are one request: the ticket's Approve presses the option, Decline presses No.
+  check(
+    "decision card is linked to its ticket",
+    JSON.stringify(block?.ticket) === JSON.stringify({ key: "UO-42", approve: "option1", decline: "no" }),
+    block?.ticket,
+  );
   const result = block?.onAnswer?.(
     { actionId: "option1" },
     { privileged: true, sender: { id: "owner", name: "Owner" } },

@@ -21,10 +21,15 @@ import {
   AGENT_RUNTIME_ATTENTION_LIMIT,
   type AgentAttentionItem,
   BROWSER_TAKEOVER_REASONS,
+  sameTicketKey,
   TICKET_ANSWER_FIELD,
+  TICKET_DECISION_FIELD,
+  TICKET_DECISIONS,
   TICKET_VERDICT_FIELD,
   TICKET_VERDICTS,
+  type TicketDecision,
   type TicketVerdict,
+  ticketKeyOf,
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isOneOf } from "@openbot/contracts/runtime-values";
 import { parseTwoStepKey, twoStepCode } from "@openbot/contracts/two-step-code";
@@ -140,6 +145,13 @@ export interface SurfacedUiBlock {
    * owner's answer then goes to the agent as a message (`PastDecisions`).
    */
   ownerDecision?: OwnerDecisionMeta;
+  /**
+   * The Motion ticket this decision is about, by key. The ticket's waiting item and this card are one
+   * request: while the card is open the list leaves the ticket out, the card's answer goes on the
+   * ticket as the owner's, and an answer or a dismissal of the ticket answers or closes the card.
+   * `approve` and `decline` are the card's actions that the ticket's two buttons press.
+   */
+  ticket?: { key: string; approve: string; decline?: string };
   /**
    * Sees the answer before the agent does, such as a decision that grants a go-live. A result it
    * returns replaces the block's own. A skipped block gives `null`.
@@ -731,7 +743,8 @@ export class AttentionRegistry {
         ...(channelId ? { channelId } : {}),
       });
     }
-    items.push(...this.#tickets);
+    // A ticket whose decision card is open shows as the card alone: one request, one answer.
+    items.push(...this.#tickets.filter((ticket) => !this.#decisionCardOf(ticket) && !this.#pastDecisionOf(ticket)));
     for (const decision of this.#waitingPastDecisions())
       items.push({
         kind: "form",
@@ -744,6 +757,101 @@ export class AttentionRegistry {
       });
     return items.sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(0, AGENT_ATTENTION_ITEMS_LIMIT);
   }
+
+  /** The open decision card of a waiting ticket, by the ticket's key. */
+  #decisionCardOf(ticket: Pick<AgentAttentionItem, "summary">): PendingPrompt | undefined {
+    const key = ticketKeyOf(ticket.summary);
+    if (!key) return undefined;
+    return [...this.#prompts.values()].find((pending) => sameTicketKey(pending.uiBlock?.ticket?.key, key));
+  }
+
+  /** The decision card of a waiting ticket whose call ended and that still waits for the owner. */
+  #pastDecisionOf(ticket: Pick<AgentAttentionItem, "summary">): PastDecision | undefined {
+    const key = ticketKeyOf(ticket.summary);
+    if (!key) return undefined;
+    return this.#waitingPastDecisions().find((decision) => sameTicketKey(decision.meta.ticket, key));
+  }
+
+  /** The waiting ticket of a decision card, by the card's key. */
+  #ticketOfKey(key: string | undefined): AgentAttentionItem | undefined {
+    return key ? this.#tickets.find((ticket) => sameTicketKey(ticketKeyOf(ticket.summary), key)) : undefined;
+  }
+
+  /** The tickets whose answer is going to their card now, so the card's answer does not go back to the ticket. */
+  readonly #ticketsAnswering = new Set<string>();
+
+  /**
+   * The owner answered or dismissed a waiting ticket: its open decision card follows. An approval
+   * presses the card's approve action, a decline its decline action, and a dismissal closes the card
+   * without an answer. A written answer with no decision decides nothing: the card stays open.
+   */
+  readonly #answerTicketCard: (
+    ticket: AgentAttentionItem,
+    decision: TicketDecision | "dismiss" | null,
+    responder: PromptResponder | undefined,
+  ) => Effect.Effect<void, AttentionOperationFailed> = Effect.fn("AttentionRegistry.answerTicketCard")(function* (
+    this: AttentionRegistry,
+    ticket: AgentAttentionItem,
+    decision: TicketDecision | "dismiss" | null,
+    responder: PromptResponder | undefined,
+  ) {
+    if (decision === null) return;
+    const card = this.#decisionCardOf(ticket);
+    const past = card ? undefined : this.#pastDecisionOf(ticket);
+    const block = card?.uiBlock;
+    const spec = block?.spec ?? past?.spec;
+    if (!spec) return;
+    // A card whose call ended has no link: its approve is the primary option, its decline the No.
+    const actionsOf = spec.type === "confirm" ? spec.actions : [];
+    const approve =
+      block?.ticket?.approve ?? (actionsOf.find((action) => action.style === "primary") ?? actionsOf[0])?.id;
+    const decline = block?.ticket?.decline ?? actionsOf.find((action) => action.id === "no")?.id;
+    const actionId = decision === "approve" ? approve : decision === "decline" ? decline : undefined;
+    if (decision !== "dismiss" && !actionId) return;
+    const answers = actionId ? uiBlockAnswersFromResponse(spec, { actionId }) : {};
+    const cardRequestId = card ? card.id : past ? pastDecisionRequestId(past.blockId) : undefined;
+    if (cardRequestId === undefined) return;
+    const requestId = String(ticket.requestId);
+    this.#ticketsAnswering.add(requestId);
+    try {
+      yield* this.respondToPrompt({ requestId: cardRequestId, answers }, responder);
+    } finally {
+      this.#ticketsAnswering.delete(requestId);
+    }
+  }).bind(this);
+
+  /**
+   * The owner answered or closed a decision card that is about a waiting ticket: the ticket follows.
+   * A chosen option or a No goes on the ticket as the owner's answer, in the card's words; an answer
+   * in words goes as it is; a closed card dismisses the ticket. The ticket leaves the list at once.
+   */
+  readonly #answerCardTicket = Effect.fn("AttentionRegistry.answerCardTicket")(function* (
+    this: AttentionRegistry,
+    key: string | undefined,
+    spec: UiBlockSpec,
+    response: UiBlockResponse | null,
+  ) {
+    const ticket = this.#ticketOfKey(key);
+    if (!ticket || this.#ticketsAnswering.has(String(ticket.requestId))) return;
+    const chosen =
+      spec.type === "confirm" ? spec.actions.find((action) => action.id === response?.actionId) : undefined;
+    const title = spec.title ?? "";
+    const answer =
+      response === null
+        ? null
+        : response.actionId === UI_BLOCK_TEXT_ACTION_ID
+          ? response.text?.trim() || null
+          : [chosen?.label ?? response.actionId, title].filter(Boolean).join(" · ");
+    const requestId = String(ticket.requestId);
+    this.#tickets = this.#tickets.filter((item) => item.requestId !== ticket.requestId);
+    yield* attentionIo(() => this.#ticketDismissed(requestId, answer, null)).pipe(
+      Effect.catch((failure) =>
+        Effect.sync(() =>
+          logger.warn("A decision card's answer did not reach its Motion ticket", { error: toLogValue(failure) }),
+        ),
+      ),
+    );
+  }).bind(this);
 
   /** The Motion tickets that wait on the user now, the whole list. */
   setTickets(items: readonly AgentAttentionItem[]): void {
@@ -922,14 +1030,28 @@ export class AttentionRegistry {
       // An escalated review's verdict: the host closes or reopens the ticket with the answer.
       const given = input.answers[TICKET_VERDICT_FIELD]?.[0];
       const verdict = answer && isOneOf(TICKET_VERDICTS, given) ? given : null;
-      return yield* attentionIo(() => this.#ticketDismissed(requestId, answer, verdict));
+      // What the answer decides, for the ticket's open decision card: the client's decision field, or
+      // the verdict's side; a dismissal closes the card; a written answer alone leaves it open.
+      const decided = input.answers[TICKET_DECISION_FIELD]?.[0];
+      const decision: TicketDecision | "dismiss" | null =
+        answer === null
+          ? "dismiss"
+          : isOneOf(TICKET_DECISIONS, decided)
+            ? decided
+            : verdict === "accept"
+              ? "approve"
+              : verdict === "send-back"
+                ? "decline"
+                : null;
+      yield* attentionIo(() => this.#ticketDismissed(requestId, answer, verdict));
+      return yield* this.#answerTicketCard(ticket, decision, responder);
     }
     if (pastBlockId !== null && !live) return yield* this.#answerPastDecision(pastBlockId, input.answers, responder);
     const saved = yield* this.#saveApiKeyAnswer(input, responder);
-    yield* attentionStep(() => {
+    const answered = yield* attentionStep(() => {
       const pending = this.#prompts.get(input.requestId);
       // The turn ended while the key was written. The key stays saved, and the agent can list it.
-      if (saved && pending !== saved.pending) return;
+      if (saved && pending !== saved.pending) return null;
       if (!pending) throw new InactiveAttentionRequest(sourceText("error.backend.promptInactive"));
       const questionIds = new Set(pending.questions.map((question) => question.id));
       if (Object.keys(input.answers).some((id) => !questionIds.has(id))) {
@@ -982,7 +1104,12 @@ export class AttentionRegistry {
         this.#emitError("prompt_persistence_failed", error, pending.agentId);
       }
       this.#emitRuntimeSnapshot();
+      return pending.uiBlock?.ticket
+        ? { key: pending.uiBlock.ticket.key, spec: pending.uiBlock.spec, response: uiBlockResponse }
+        : null;
     });
+    // A decision card about a waiting ticket: the ticket gets the owner's answer too.
+    if (answered) yield* this.#answerCardTicket(answered.key, answered.spec, answered.response);
   }).bind(this);
 
   /**
@@ -2417,9 +2544,9 @@ export class AttentionRegistry {
         Effect.mapError((cause) => new AttentionOperationFailed({ cause })),
       );
     }
-    yield* attentionStep(() => {
+    const frozen = yield* attentionStep(() => {
       // Another answer took it while the message went out.
-      if (!this.#pastDecisions?.get(blockId)) return;
+      if (!this.#pastDecisions?.get(blockId)) return false;
       this.#pastDecisions.remove(blockId);
       try {
         this.#freezePastDecision(decision, answers, response, responder);
@@ -2427,7 +2554,10 @@ export class AttentionRegistry {
         this.#emitError("prompt_persistence_failed", error, decision.agentId);
       }
       this.#emitRuntimeSnapshot();
+      return true;
     });
+    // A decision card about a waiting ticket: the ticket gets the owner's answer too.
+    if (frozen) yield* this.#answerCardTicket(decision.meta.ticket, decision.spec, response);
   }).bind(this);
 
   /** Shows the owner's answer on a decision card whose call had ended. */

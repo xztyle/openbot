@@ -836,11 +836,19 @@ export class TrustToolGate {
     const blockId = `${OWNER_DECISION_BLOCK_PREFIX}${randomUUID()}`;
     const onAnswer = (response: UiBlockResponse | null, responder: PromptResponder | undefined) =>
       this.#decided(agentId, threadId, params.turnId, input, actions, response, responder);
+    // The card and the ticket's waiting item are one request: the ticket's Approve presses the
+    // primary option, its Decline presses No (`AttentionRegistry`).
+    const approve = actions.find((action) => action.style === "primary") ?? actions[0];
+    const ticket =
+      input.ticket && approve
+        ? { ticket: { key: input.ticket, approve: approve.id, decline: REQUEST_DECISION_ACTIONS.no } }
+        : {};
     this.#attention.surfaceUiBlock(client, request, {
       blockId,
       spec,
       card: true,
       onAnswer,
+      ...ticket,
       ownerDecision: {
         ...(input.goLive ? { goLive: input.goLive } : {}),
         ...(input.amount

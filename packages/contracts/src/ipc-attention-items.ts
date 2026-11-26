@@ -101,6 +101,27 @@ export const TICKET_VERDICT_FIELD = "verdict";
 export const TICKET_VERDICTS = ["accept", "send-back"] as const;
 export type TicketVerdict = (typeof TICKET_VERDICTS)[number];
 
+/**
+ * The optional decision field of the same `respondToPrompt`: what the owner's answer decides, when it
+ * is one of the ticket's two buttons (Approve / Decline, Accept as is / Send back). A decision card
+ * that asks the same thing (`request_decision` with the ticket's key) is one request with the ticket:
+ * the host answers the card with the decision, and a written answer with no decision leaves it open.
+ */
+export const TICKET_DECISION_FIELD = "decision";
+export const TICKET_DECISIONS = ["approve", "decline"] as const;
+export type TicketDecision = (typeof TICKET_DECISIONS)[number];
+
+/** The key of a waiting ticket from its summary, "EVE-40 · Title": the text before the separator. */
+export function ticketKeyOf(summary: string | undefined): string | undefined {
+  const key = summary?.split(" · ")[0]?.trim();
+  return key ? key : undefined;
+}
+
+/** Whether two ticket keys name one ticket. Motion writes keys in capitals; a tool argument may not. */
+export function sameTicketKey(left: string | undefined, right: string | undefined): boolean {
+  return left !== undefined && right !== undefined && left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
 /** A Motion ticket that waits on the user, which opens at its `url`, not in a chat. */
 export function isTicketAttention(item: Pick<AgentAttentionItem, "turnId" | "url">): item is AgentAttentionItem & {
   url: string;

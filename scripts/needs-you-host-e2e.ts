@@ -20,6 +20,9 @@
 // 7. (docs/approvals.md) A Motion ticket of the publisher that asks for an OK goes to its manager, the
 //    orchestrator, as a wake, never to the owner's Needs you; the manager approves it and the publisher
 //    hears it. A ticket that needs money stays in the owner's Needs you, with its plain summary.
+// 8. A `request_decision` card about a waiting ticket (its key) and the ticket are one request: the
+//    list shows the card alone; the card's answer goes on the ticket as the owner's; an approval or a
+//    dismissal of the ticket answers or closes the card, once.
 //
 // `bun scripts/needs-you-host-e2e.ts`. Writes .openbot-build/needs-you-host-e2e/report.json.
 import assert from "node:assert/strict";
@@ -123,6 +126,8 @@ const { WebPushStore } = await import("../src/main/web-push-store");
 const { webPushWorkspace } = await import("../src/main/web-push-workspace");
 const { WorkspaceSidebarStore } = await import("../src/main/workspace-sidebar-store");
 const { AGENT_PROVIDERS } = await import("@openbot/contracts/ipc");
+const { TrustService } = await import("../src/backend/trust/trust-service");
+const { TrustAuditLog } = await import("../src/backend/trust/trust-audit-log");
 
 /** The real Codex client; the answers to the tool calls of this script stay here, as a provider keeps them. */
 class CodexStandIn extends CodexAppServerClient {
@@ -204,6 +209,8 @@ const pushService: typeof fetch = Object.assign(
 // ---------------------------------------------------------------- host
 
 const clients: CodexStandIn[] = [];
+/** The agents of the host, for the trust gate's directory, once the host runs. */
+let trustAgents: () => readonly { id: string; name: string }[] = () => [];
 const e2e = await startWorkspaceE2e(
   "needs-you-host-e2e",
   [
@@ -216,6 +223,12 @@ const e2e = await startWorkspaceE2e(
       browser,
       preferredProvider: "codex",
       offProviders: AGENT_PROVIDERS.filter((provider) => provider !== "codex"),
+      // The trust gate shows the owner's decision card of `request_decision` (step 8).
+      trust: new TrustService({
+        file: join(root, "trust-policy.json"),
+        audit: new TrustAuditLog(join(root, "trust-audit")),
+        directory: { agents: () => trustAgents(), spaceOf: () => "space" },
+      }),
       clientFactory: (_provider, cli) => {
         const client = new CodexStandIn(cli.executable, 30_000);
         clients.push(client);
@@ -249,6 +262,7 @@ const e2e = await startWorkspaceE2e(
 );
 const { owner, step } = e2e;
 const service = () => e2e.host().agents;
+trustAgents = () => service().listAgents();
 
 /** Waits for a state of the host. */
 async function waitFor<T>(label: string, read: () => T | null | undefined | false, timeoutMs = 20_000): Promise<T> {
@@ -662,6 +676,11 @@ try {
         assert.equal(router.isPending("ticket:issue-pay"), false, "A money ticket went to a manager.");
         assert.equal(paid.plain?.asks, "¿Pagamos 70 dólares en anuncios?");
         assert.equal(ownerPushes.length, 1);
+        await decisionCardSteps({
+          waiting,
+          tickets,
+          dismissWaiting: (issueId) => motion.events.dismissWaiting(issueId),
+        });
         return { manager: request.approverId, decided: router.decided().length, ownerTicket: paid.summary };
       } finally {
         await motion.close();
@@ -675,3 +694,98 @@ try {
   await e2e.finish();
 }
 process.exit(e2e.report.passed ? 0 : 1);
+
+/**
+ * Step 8: a `request_decision` card about a waiting ticket and the ticket are one request. The
+ * publisher's held turn makes the calls; the owner answers through the Team API, as a client does.
+ */
+async function decisionCardSteps(motion: {
+  waiting: (id: string, key: string, title: string) => Promise<unknown>;
+  tickets: () => AgentAttentionItem[];
+  dismissWaiting: (issueId: string) => Promise<void>;
+}): Promise<void> {
+  const publisher = service()
+    .listAgents()
+    .find((agent) => agent.name === "GTA 6 - Publisher");
+  assert.ok(publisher, "The publisher exists.");
+  const publisherTurn = await providerTurn("case:publisher");
+  const dismissed: { issueId: string; answer: string | null; verdict: string | null }[] = [];
+  service().onWaitingTicketDismissed(async (issueId, answer, verdict) => {
+    dismissed.push({ issueId, answer, verdict });
+    await motion.dismissWaiting(issueId);
+  });
+  const decisionCard = (ticket: string, title: string) =>
+    callTool(publisherTurn, "openbot", "request_decision", {
+      title,
+      options: [{ label: "Pagar", consequence: "Los anuncios salen hoy." }],
+      amount: { value: 70, currency: "USD" },
+      ticket,
+    });
+  const cardItem = (title: string) =>
+    service()
+      .attentionItems()
+      .find((entry) => entry.kind === "form" && entry.summary === title);
+  const answerPrompt = (requestId: string, answers: Record<string, string[]>) =>
+    e2e.call("POST", TEAM_API_ROUTES.respond.prompt, { token: owner.token, body: { requestId, answers } });
+
+  await step("A decision card about a waiting ticket is one request; its answer goes on the ticket", async () => {
+    const title = "¿Pagamos los anuncios de Navidad?";
+    const card = decisionCard("EVE-24", title);
+    const item = await waitFor("the decision card in Needs you", () => cardItem(title));
+    assert.deepEqual(motion.tickets(), [], "The ticket shows beside its decision card.");
+    await waitFor("the owner's list with the card alone", () => {
+      const items = attentionItems();
+      return (
+        items?.some((entry) => entry.requestId === item.requestId) && items.every((entry) => entry.turnId !== "motion")
+      );
+    });
+    const response = await answerPrompt(String(item.requestId), { action: ["Pagar"] });
+    assert.equal(response.status, 204, `The answer returned ${response.status}.`);
+    const answer = JSON.parse(answerText(await card.answer()));
+    assert.equal(answer.status, "answered");
+    assert.equal(answer.option, 1);
+    await waitFor("the ticket's answer", () => dismissed.some((entry) => entry.issueId === "issue-pay"));
+    assert.deepEqual(dismissed, [{ issueId: "issue-pay", answer: `Pagar · ${title}`, verdict: null }]);
+    await waitFor("nothing waits", () => motion.tickets().length === 0 && !cardItem(title));
+    return answer;
+  });
+
+  await step("An approval of the ticket answers its decision card; a dismissal closes it", async () => {
+    await motion.waiting("issue-pay-2", "EVE-25", "Pay for the January ads");
+    await waitFor("the second money ticket", () =>
+      motion.tickets().some((entry) => entry.requestId === "motion:issue-pay-2"),
+    );
+    const january = "¿Pagamos los anuncios de enero?";
+    const approved = decisionCard("EVE-25", january);
+    await waitFor("the second card", () => cardItem(january));
+    const approve = await answerPrompt("motion:issue-pay-2", { answer: ["Aprobado"], decision: ["approve"] });
+    assert.equal(approve.status, 204, `The approval returned ${approve.status}.`);
+    const approvedAnswer = JSON.parse(answerText(await approved.answer()));
+    assert.equal(approvedAnswer.option, 1, "The ticket's approval did not press the card's option.");
+    assert.deepEqual(dismissed.at(-1), { issueId: "issue-pay-2", answer: "Aprobado", verdict: null });
+    assert.equal(dismissed.length, 2, "The card's answer went back to the ticket.");
+
+    await motion.waiting("issue-pay-3", "EVE-26", "Pay for the February ads");
+    await waitFor("the third money ticket", () =>
+      motion.tickets().some((entry) => entry.requestId === "motion:issue-pay-3"),
+    );
+    const february = "¿Pagamos los anuncios de febrero?";
+    const closed = decisionCard("EVE-26", february);
+    await waitFor("the third card", () => cardItem(february));
+    const dismiss = await answerPrompt("motion:issue-pay-3", {});
+    assert.equal(dismiss.status, 204, `The dismissal returned ${dismiss.status}.`);
+    const closedAnswer = JSON.parse(answerText(await closed.answer()));
+    assert.equal(closedAnswer.status, "skipped", "A dismissal recorded an answer on the card.");
+    assert.deepEqual(dismissed.at(-1), { issueId: "issue-pay-3", answer: null, verdict: null });
+    assert.equal(dismissed.length, 3);
+    await waitFor(
+      "nothing waits",
+      () =>
+        motion.tickets().length === 0 &&
+        service()
+          .attentionItems()
+          .every((entry) => entry.kind !== "form"),
+    );
+    return { approved: approvedAnswer, closed: closedAnswer };
+  });
+}

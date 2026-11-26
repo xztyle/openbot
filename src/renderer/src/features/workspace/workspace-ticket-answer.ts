@@ -6,7 +6,9 @@
 import {
   type AgentAttentionItem,
   TICKET_ANSWER_FIELD,
+  TICKET_DECISION_FIELD,
   TICKET_VERDICT_FIELD,
+  type TicketDecision,
   type TicketVerdict,
 } from "@openbot/contracts/ipc";
 import type { AppTranslate } from "@openbot/i18n";
@@ -18,17 +20,28 @@ import type { ChannelsPort } from "../channels/channels-port";
  * - an escalated review: Accept as is, and Send back with a note it needs;
  * - anything else, or a ticket the host has not read yet: only a written answer.
  * Each answer is the text that goes to the agent and on the ticket. An escalated review's answers also
- * carry a verdict: the host closes or reopens the ticket in Motion itself, so no agent has to.
+ * carry a verdict: the host closes or reopens the ticket in Motion itself, so no agent has to. Each
+ * button also says what it decides, so the host answers the ticket's decision card the same way.
  */
 export interface TicketAnswers {
-  primary?: { label: string; answer: string; verdict?: TicketVerdict };
-  secondary?: { label: string; answer: (note: string) => string; noteRequired: boolean; verdict?: TicketVerdict };
+  primary?: { label: string; answer: string; verdict?: TicketVerdict; decision: TicketDecision };
+  secondary?: {
+    label: string;
+    answer: (note: string) => string;
+    noteRequired: boolean;
+    verdict?: TicketVerdict;
+    decision: TicketDecision;
+  };
 }
 
 export function ticketAnswers(item: Pick<AgentAttentionItem, "asks">, t: AppTranslate): TicketAnswers {
   if (item.asks === "approval")
     return {
-      primary: { label: t("workspace.needsYou.ticket.approve"), answer: t("workspace.needsYou.ticket.approved") },
+      primary: {
+        label: t("workspace.needsYou.ticket.approve"),
+        answer: t("workspace.needsYou.ticket.approved"),
+        decision: "approve",
+      },
       secondary: {
         label: t("workspace.needsYou.ticket.decline"),
         answer: (note) =>
@@ -36,6 +49,7 @@ export function ticketAnswers(item: Pick<AgentAttentionItem, "asks">, t: AppTran
             ? t("workspace.needsYou.ticket.declinedNote", { note: note.trim() })
             : t("workspace.needsYou.ticket.declined"),
         noteRequired: false,
+        decision: "decline",
       },
     };
   if (item.asks === "review-escalated")
@@ -44,12 +58,14 @@ export function ticketAnswers(item: Pick<AgentAttentionItem, "asks">, t: AppTran
         label: t("workspace.needsYou.ticket.acceptAsIs"),
         answer: t("workspace.needsYou.ticket.acceptedAsIs"),
         verdict: "accept",
+        decision: "approve",
       },
       secondary: {
         label: t("workspace.needsYou.ticket.sendBack"),
         answer: (note) => t("workspace.needsYou.ticket.sentBack", { note: note.trim() }),
         noteRequired: true,
         verdict: "send-back",
+        decision: "decline",
       },
     };
   return {};
@@ -65,11 +81,16 @@ export async function answerTicket(
   message: string,
   answer: string,
   verdict?: TicketVerdict,
+  decision?: TicketDecision,
 ): Promise<{ commented: boolean }> {
   // The channels port reaches the host on the desktop and in the browser alike; `window.openbot` is the
   // desktop's preload only, and the browser client has none.
   await port.sendAgentMessage({ agentId: item.agentId, text: message, clientMessageId: crypto.randomUUID() });
-  const answers = { [TICKET_ANSWER_FIELD]: [answer], ...(verdict ? { [TICKET_VERDICT_FIELD]: [verdict] } : {}) };
+  const answers = {
+    [TICKET_ANSWER_FIELD]: [answer],
+    ...(verdict ? { [TICKET_VERDICT_FIELD]: [verdict] } : {}),
+    ...(decision ? { [TICKET_DECISION_FIELD]: [decision] } : {}),
+  };
   return port.agent.respondToPrompt({ requestId: item.requestId, answers }).then(
     () => ({ commented: true }),
     () => ({ commented: false }),

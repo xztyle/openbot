@@ -352,6 +352,7 @@
     .ui-confirm-dialog,
     .ui-select-content,
     .ws-secrets,
+    .ws-view,
     .schedule-pane,
     .agent-usage,
     .tasks-page
@@ -437,11 +438,15 @@
     .ws-reaction.ui-button,
     .ws-reaction-add.ui-button,
     .ws-fleet-money-link.ui-button,
-    .message-copy .message-link
+    .message-copy .message-link,
+    .ui-button-variant-link,
+    details > summary
   ) {
     position: relative;
   }
 
+  /* A link button ("Show details") and a fold's summary ("Technical details") are a line of text
+     wherever they are; the finger gets the line's full height. */
   :is(
     .message-copy .reference-chip,
     .ws-fold-toggle.ui-button,
@@ -452,7 +457,9 @@
     .ws-reaction.ui-button,
     .ws-reaction-add.ui-button,
     .ws-fleet-money-link.ui-button,
-    .message-copy .message-link
+    .message-copy .message-link,
+    .ui-button-variant-link,
+    details > summary
   )::after {
     position: absolute;
     inset: calc((100% - var(--openbot-touch-target)) / 2) 0;

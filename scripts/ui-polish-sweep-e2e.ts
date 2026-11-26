@@ -328,6 +328,8 @@ function measure([phone, scale, weights]: readonly [boolean, readonly number[], 
     for (const control of controls) {
       if (!visible(control) || control.closest(".ui-toast-layer")) continue;
       const box = control.getBoundingClientRect();
+      // A 1px input behind a switch or a check box is not what the finger hits; its label is.
+      if (box.width < 4 || box.height < 4) continue;
       // A link in running text is as tall as its line; the line is the target.
       if (control.tagName === "A" && getComputedStyle(control).display === "inline") continue;
       // An inline control may carry an invisible `::after` that widens what the finger hits

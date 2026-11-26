@@ -343,6 +343,11 @@
   aspect-ratio: 3 / 2;
 }
 
+/* A slide is wide: the whole first slide shows. */
+.attachment-page-button[data-view="slides"] {
+  aspect-ratio: 16 / 9;
+}
+
 .attachment-page-button .attachment-rendition {
   object-fit: cover;
   object-position: top;

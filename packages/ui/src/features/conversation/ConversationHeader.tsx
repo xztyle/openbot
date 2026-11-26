@@ -134,7 +134,7 @@ export function ConversationHeader(props: ConversationHeaderProps) {
               onClick={() => props.onOpenSearch?.()}
               data-cuelume-tap="open"
             >
-              <Search aria-hidden="true" class="size-[14px]" />
+              <Search aria-hidden="true" class="ui-icon-sm" />
             </LabelTooltipTrigger>
           </LabelTooltip>
         </Show>
@@ -150,7 +150,7 @@ export function ConversationHeader(props: ConversationHeaderProps) {
                   class={`${buttonVariants({ variant: "ghost" })} header-panel-toggle`}
                   aria-label={t("conversation.header.browser", { name: props.agent?.name ?? "" })}
                 >
-                  <Globe2 aria-hidden="true" class="size-[14px]" />
+                  <Globe2 aria-hidden="true" class="ui-icon-sm" />
                 </LabelTooltipTrigger>
               </LabelTooltip>
               <DropdownMenu.Portal>

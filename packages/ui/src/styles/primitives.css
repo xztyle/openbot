@@ -512,6 +512,26 @@
   stroke-width: calc(var(--openbot-icon-stroke) * 16 / 24);
 }
 
+/* The icon sizes of the scale, for an icon whose place has no rule of its own. A class, so a
+   feature rule on the container still wins, and no `size-[14px]` literal sits in the markup. */
+.ui-icon-sm {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  flex: 0 0 auto;
+}
+
+.ui-icon-md {
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
+  flex: 0 0 auto;
+}
+
+.ui-icon-lg {
+  width: var(--openbot-icon-lg);
+  height: var(--openbot-icon-lg);
+  flex: 0 0 auto;
+}
+
 :where(.ui-checkbox) {
   position: relative;
   display: inline-flex;

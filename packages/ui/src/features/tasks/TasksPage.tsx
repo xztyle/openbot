@@ -529,7 +529,7 @@ export function TasksPage(props: TasksPageProps) {
                   aria-expanded={props.agentsOpen ? "true" : "false"}
                   onClick={() => toggle()()}
                 >
-                  <PanelLeft aria-hidden="true" class="size-[14px]" />
+                  <PanelLeft aria-hidden="true" class="ui-icon-sm" />
                 </Button>
               )}
             </Show>

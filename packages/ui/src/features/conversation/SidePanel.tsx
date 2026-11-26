@@ -95,7 +95,7 @@ export function SidePanelToggle(props: SidePanelToggleProps) {
         aria-expanded={props.open ? "true" : "false"}
         onClick={() => props.onToggle()}
       >
-        <PanelRight aria-hidden="true" class="size-[14px]" />
+        <PanelRight aria-hidden="true" class="ui-icon-sm" />
         <Show when={props.actingAgentName !== undefined}>
           <span class="computer-control-dot" aria-hidden="true" />
         </Show>

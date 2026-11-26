@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { QueuedMessageReceipt, SendMessageInput, SystemNoticeKind } from "@openbot/contracts/ipc";
+import type { DynamicRecord } from "@openbot/contracts/runtime-values";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { createServerAgentOperations, RESTART_INTERRUPTION_REASON, RESUME_NOTE } from "./server-agent-operations";
@@ -279,5 +280,53 @@ describe("restart without an operator", () => {
     expect(waits).toEqual([1_800_000, 0]);
     expect((await route("POST", "/v1/drain/cancel", ""))?.lines).toEqual({ drain: "cancelled" });
     expect(cancelled).toBe(1);
+  });
+});
+
+describe("operator settings route", () => {
+  function settingsRoute(update: (agentId: string, body: DynamicRecord) => Promise<Record<string, string | null>>) {
+    return createServerAgentOperations({
+      restartInterrupted: () => new Set(),
+      database: () => database().db,
+      agentIds: () => ["agent-a"],
+      send: () => Effect.die("unused"),
+      markerFile: join(mkdtempSync(join(tmpdir(), "openbot-resume-")), "resumes.json"),
+      log: () => {},
+      updateAgentSettings: update,
+    }).route;
+  }
+
+  it("passes the body to the shared settings update and answers the new settings", async () => {
+    const calls: Array<[string, DynamicRecord]> = [];
+    const route = settingsRoute(async (agentId, body) => {
+      calls.push([agentId, body]);
+      return { id: agentId, provider: "claude", model: "claude-haiku-5-5", reasoningEffort: "high" };
+    });
+
+    const answer = await route(
+      "POST",
+      "/v1/agents/agent-a/settings",
+      '{"provider":"claude","model":"claude-haiku-5-5","reasoningEffort":"high"}',
+    );
+
+    expect(answer).toEqual({
+      status: 200,
+      lines: { id: "agent-a", provider: "claude", model: "claude-haiku-5-5", reasoningEffort: "high" },
+    });
+    expect(calls).toEqual([["agent-a", { provider: "claude", model: "claude-haiku-5-5", reasoningEffort: "high" }]]);
+  });
+
+  it("refuses an unknown agent, a body that is not JSON, and keeps the status of a refusal", async () => {
+    const route = settingsRoute(async () => {
+      throw Object.assign(new Error("provider is invalid."), { status: 400 });
+    });
+
+    expect((await route("POST", "/v1/agents/agent-x/settings", "{}"))?.status).toBe(404);
+    expect((await route("POST", "/v1/agents/agent-a/settings", "provider=claude"))?.status).toBe(400);
+    expect((await route("GET", "/v1/agents/agent-a/settings", ""))?.status).toBe(405);
+    expect(await route("POST", "/v1/agents/agent-a/settings", '{"provider":"nope"}')).toEqual({
+      status: 400,
+      lines: { error: "settings_refused", message: "provider is invalid." },
+    });
   });
 });

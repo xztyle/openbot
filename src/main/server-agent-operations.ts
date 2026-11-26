@@ -4,6 +4,11 @@
  * - `POST /v1/agents/<agentId>/message` sends `text` to the agent's own chat as the signed-in owner,
  *   through the same `sendMessage` as the app: the same queue, turn start and steer rules. With
  *   `system` set, the text goes as a note from OpenBot: the chat shows a marker, not the owner's message.
+ * - `POST /v1/agents/<agentId>/settings` changes the agent's provider, model, effort or account (a JSON
+ *   body with any of `provider`, `model`, `reasoningEffort` and `providerAccountId`), through the same
+ *   request check, model resolution and update as the Local scripts `settings` route. While the agent
+ *   works, a provider change waits as `pendingRuntime` for its next turn, as a change in the app does.
+ *   It is for an agent that cannot change itself, for example when its plan has no usage left.
  * - `POST /v1/resume-interrupted` tells each agent whose last delivery a restart cut off to continue,
  *   as a note from OpenBot. The server also does this by itself once after each start
  *   (`resumeAfterRestart`), so the route is for a dry run or for the deliveries of an earlier restart.
@@ -30,7 +35,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { type GuardrailPolicy, normalizeGuardrailPolicy } from "@openbot/contracts/guardrails";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { QueuedMessageReceipt, SendMessageInput, SystemNoticeKind } from "@openbot/contracts/ipc";
-import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
+import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import type { HostRestartState } from "@openbot/contracts/team-protocol/host-update-v1";
 import { Effect, Result } from "effect";
 
@@ -76,6 +81,12 @@ export interface ServerAgentOperationsDependencies {
   alertOwner?: (title: string, body: string) => void;
   /** Starts the upload benchmark of the cloud copies (`POST /v1/cloud-backups/bench`); operator only. */
   cloudBench?: () => Promise<string>;
+  /**
+   * The settings update of `POST /v1/agents/<agentId>/settings`: `settingsUpdate` and the agent
+   * service's update, as the Local scripts route. It answers the agent's settings after the update.
+   * A thrown error with a numeric `status` (`HttpError`) keeps that status; a refusal is a 409.
+   */
+  updateAgentSettings?: (agentId: string, body: DynamicRecord) => Promise<Record<string, string | null>>;
   /** The guardrails policy now, and its save (`GuardrailsService.savePolicy`). */
   guardrailsPolicy?: () => GuardrailPolicy;
   saveGuardrailsPolicy?: (policy: GuardrailPolicy) => Promise<void>;
@@ -133,6 +144,11 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
     if (message?.[1] !== undefined) {
       if (method !== "POST") return failure(405, "method_not_allowed");
       return sendOperatorMessage(decodeURIComponent(message[1]), readFields(rawBody));
+    }
+    const settings = path.match(/^\/v1\/agents\/([^/]+)\/settings$/u);
+    if (settings?.[1] !== undefined) {
+      if (method !== "POST") return failure(405, "method_not_allowed");
+      return updateSettings(decodeURIComponent(settings[1]), rawBody);
     }
     if (path === "/v1/drain" || path === "/v1/drain/cancel") {
       if (method !== "POST") return failure(405, "method_not_allowed");
@@ -244,6 +260,31 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
         tiers: next.failover.tiers.join(","),
       },
     };
+  }
+
+  async function updateSettings(agentId: string, rawBody: string): Promise<ControlAnswer> {
+    const { updateAgentSettings } = dependencies;
+    if (!updateAgentSettings) return failure(404, "not_found");
+    if (!dependencies.agentIds().includes(agentId)) return failure(404, "unknown_agent");
+    let body: unknown = null;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      body = null;
+    }
+    if (!isDynamicRecord(body)) return failure(400, "invalid_body", "The body must be a JSON object.");
+    try {
+      const answer = await updateAgentSettings(agentId, body);
+      dependencies.log(`Operator changed the settings of agent ${agentId}.`);
+      return { status: 200, lines: answer };
+    } catch (error) {
+      dependencies.log(`Operator settings change of ${agentId} was refused.`);
+      const status =
+        isDynamicRecord(error) && typeof error.status === "number" && error.status >= 400 && error.status < 600
+          ? error.status
+          : 409;
+      return failure(status, "settings_refused", errorMessage(error));
+    }
   }
 
   async function sendOperatorMessage(agentId: string, fields: Fields): Promise<ControlAnswer> {

@@ -176,7 +176,7 @@ import { AppearanceService } from "./appearance-service";
 import { createApplicationManagedSkills } from "./application-managed-skills";
 import { ApprovalAutomation, readApprovalAutomation } from "./approval-automation-store";
 import { AttachmentPreviews } from "./attachment-previews";
-import { AutomationServer } from "./automation-server";
+import { AutomationServer, settingsAnswer, settingsUpdate } from "./automation-server";
 import { BillingDesktopService } from "./billing-service";
 import { managedBitwardenCli } from "./bitwarden-cli-installer";
 import { BitwardenConnectorService } from "./bitwarden-connector-service";
@@ -343,6 +343,7 @@ import { SLACK_DEV_CALLBACK_PATH, startSlackDevCallbackServer } from "./slack-de
 import { SpeechPreferenceStore } from "./speech-preference-store";
 import { spawnStorageHygieneHost } from "./storage-hygiene-host-process";
 import { createStorageHygieneSettingsStore, type StorageHygieneSettingsStore } from "./storage-hygiene-settings-store";
+import { HttpError } from "./team-api/http-error";
 import { hiddenProviderAgentIds } from "./team-api/provider-visibility";
 import { TeamStore } from "./team-store";
 import { TeamWebRtcBridge } from "./team-webrtc-bridge";
@@ -3611,6 +3612,13 @@ export async function createApplicationServices({
         database: () => store.database.connection,
         agentIds: () => service.listAgents().map((agent) => agent.id),
         guardrailsPolicy: () => guardrails.policy(),
+        // The same request check, resolution and update as the Local scripts `settings` route.
+        updateAgentSettings: async (agentId, body) => {
+          const agent = service.listAgents().find((candidate) => candidate.id === agentId);
+          if (!agent) throw new HttpError(404, "not found");
+          const updated = await runCauseEffect(service.updateAgent(settingsUpdate(agent, body, service.listModels())));
+          return settingsAnswer(updated);
+        },
         saveGuardrailsPolicy: async (policy) => {
           await runCauseEffect(guardrails.savePolicy(policy));
         },

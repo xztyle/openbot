@@ -295,24 +295,11 @@ export class AutomationServer {
     // The setting can change while the script uploads its body.
     const agent = this.#requireAgent(agentId);
     if (route === "settings") {
-      const { runtime, providerAccountId } = settingsRequest(value);
-      // The same resolution as the agent's `update_profile` tool: a model names its provider, and an
-      // effort that the new model does not support is refused or replaced by the model's default.
-      const input: UpdateAgentInput = {
-        agentId,
-        ...requestedRuntime(agent, runtime, this.#options.listModels()),
-        ...(providerAccountId === undefined ? {} : { providerAccountId }),
-      };
-      const updated = await runCauseEffect(this.#options.updateAgent(input));
+      const updated = await runCauseEffect(
+        this.#options.updateAgent(settingsUpdate(agent, value, this.#options.listModels())),
+      );
       logger.info(`A local script changed the settings of agent ${agentId}.`);
-      return send(response, 200, {
-        id: updated.id,
-        name: updated.name,
-        provider: updated.provider,
-        model: updated.model,
-        reasoningEffort: updated.reasoningEffort,
-        providerAccountId: updated.providerAccountId ?? null,
-      });
+      return send(response, 200, settingsAnswer(updated));
     }
     if (route === "messages") {
       const text = requiredString(value, "text", INPUT_LIMITS.messageText);
@@ -489,6 +476,38 @@ async function readJson(request: IncomingMessage): Promise<DynamicRecord> {
   }
   if (!isDynamicRecord(value)) throw new HttpError(400, "The request body must be an object.");
   return value;
+}
+
+/**
+ * The update that a settings request asks for, with the same resolution as the agent's
+ * `update_profile` tool: a model names its provider, and an effort that the new model does not
+ * support is refused or replaced by the model's default. The Local scripts `settings` route and the
+ * operator route of the control socket share it. It throws `HttpError` for a bad body and
+ * `AgentSettingsRefused` for a model or effort that is not listed.
+ */
+export function settingsUpdate(
+  agent: Pick<AgentSummary, "id" | "provider" | "model" | "reasoningEffort">,
+  value: DynamicRecord,
+  models: AgentModelOption[],
+): UpdateAgentInput {
+  const { runtime, providerAccountId } = settingsRequest(value);
+  return {
+    agentId: agent.id,
+    ...requestedRuntime(agent, runtime, models),
+    ...(providerAccountId === undefined ? {} : { providerAccountId }),
+  };
+}
+
+/** The fields of an updated agent that a settings request answers. */
+export function settingsAnswer(updated: UpdatedAgent) {
+  return {
+    id: updated.id,
+    name: updated.name,
+    provider: updated.provider,
+    model: updated.model,
+    reasoningEffort: updated.reasoningEffort,
+    providerAccountId: updated.providerAccountId ?? null,
+  };
 }
 
 /**

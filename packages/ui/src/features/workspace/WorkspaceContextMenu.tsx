@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { createSignal, For, Show, untrack } from "solid-js";
+import { createSignal, For, getOwner, runWithOwner, Show, untrack } from "solid-js";
 import { ActionSheet } from "../../action-sheet";
 import { ContextMenu } from "../../complex";
 import { createLongPress } from "../../long-press";
@@ -55,7 +55,9 @@ function wantsNativeMenu(event: MouseEvent): boolean {
 
 /**
  * The right-click menu of a part of the workspace, with the same items as its "More" menu. The
- * innermost menu wins: the trigger stops the event. The trigger box does not take part in the layout.
+ * innermost menu with items wins: the trigger stops the event. A menu with no item for the press
+ * never opens: it lets the event go on to the menu around it, and when no menu has an item, the
+ * browser's own menu shows. The trigger box does not take part in the layout.
  *
  * On a touch screen a long press opens the same items in a bottom sheet instead, with rows a finger
  * can hit, as Slack does on a phone. Shift+F10 or the Menu key opens it for the keyboard, at the
@@ -63,15 +65,47 @@ function wantsNativeMenu(event: MouseEvent): boolean {
  */
 export function WorkspaceContextMenu(props: WorkspaceContextMenuProps): JSX.Element {
   const touch = usesTouchLayout();
+  /*
+   * The items are read in event handlers, which run outside any owner, and they hold icons: a lucide
+   * icon reads a context, and a production build throws when no owner is there to read it from. That
+   * error left the menu open with nothing in it. The items are read under this menu's owner, and a
+   * failure reads as no item, so the menu never opens empty.
+   */
+  const owner = getOwner();
+  const readItems = (at: Element | null): readonly WorkspaceMenuItem[] => {
+    try {
+      return runWithOwner(owner, () => props.items(at)) ?? [];
+    } catch (error) {
+      // Reported as an uncaught error is, but the right-click goes on.
+      globalThis.reportError?.(error);
+      return [];
+    }
+  };
   /** The element under the press that opens the menu. Read once, when the menu opens. */
   let pressed: Element | null = null;
   const [shown, setShown] = createSignal<readonly WorkspaceMenuItem[]>([]);
+  /** Whether the menu shows. */
+  let open = false;
+  /**
+   * A right-click for which this menu has no item. Kobalte opens a context menu on every right-click
+   * and on a pen's long press, whatever it would show, so the trigger declines the press: it reads as
+   * disabled while Kobalte handles it, and the menu around it takes the event.
+   */
+  let declined: Event | null = null;
+  let declining = false;
+  const decline = (event: Event) => {
+    declining = event === declined;
+    if (declining)
+      queueMicrotask(() => {
+        declining = false;
+      });
+  };
   const firstDanger = () => shown().findIndex((item) => item.danger);
   const [sheet, setSheet] = createSignal<{ open: boolean; itemsHidden: boolean }>({ open: false, itemsHidden: false });
   const press = createLongPress({
     enabled: () => touch && props.longPress !== false,
     onLongPress: () => {
-      const items = props.items(pressed);
+      const items = readItems(pressed);
       if (items.length === 0) return;
       setShown(items);
       setSheet({ open: true, itemsHidden: false });
@@ -90,7 +124,7 @@ export function WorkspaceContextMenu(props: WorkspaceContextMenuProps): JSX.Elem
     const anchor = event.target instanceof HTMLElement ? event.target : null;
     if (!anchor) return;
     const bounds = anchor.getBoundingClientRect();
-    const items = props.items(null);
+    const items = readItems(null);
     if (items.length === 0) return;
     if (touch) {
       setShown(items);
@@ -107,25 +141,37 @@ export function WorkspaceContextMenu(props: WorkspaceContextMenuProps): JSX.Elem
       }),
     );
   };
+  function isDeclining() {
+    return declining;
+  }
   return (
     <ContextMenu.Root
-      onOpenChange={(open) => {
-        if (open) setShown(props.items(pressed));
+      onOpenChange={(next) => {
+        open = next;
+        if (next) setShown(readItems(pressed));
       }}
     >
       <ContextMenu.Trigger
         class={cx("ws-context-trigger", props.class)}
-        disabled={touch}
+        // Read live while Kobalte handles the event: a declined right-click does not open this menu.
+        disabled={touch || isDeclining()}
         // A long press or a double tap in the message box selects a word; it must not open the sheet.
         onPointerDown={(event: PointerEvent) => {
           if (isNativeTarget(event.target)) return;
           pressed = event.target instanceof Element ? event.target : null;
           press.onPointerDown(event);
+          // Kobalte's own long press, for a pen on a computer: none for a press with no item.
+          if (!touch && event.pointerType === "pen" && readItems(pressed).length === 0) declined = event;
+          decline(event);
         }}
         onPointerMove={press.onPointerMove}
         onPointerUp={press.onPointerUp}
         onPointerCancel={press.onPointerCancel}
-        onContextMenu={press.onContextMenu}
+        onContextMenu={(event: MouseEvent) => {
+          press.onContextMenu(event);
+          // Kobalte calls this first, then reads `disabled` in the same call.
+          decline(event);
+        }}
         onKeyDown={openFromKeyboard}
         ref={(element: HTMLElement) =>
           // Before the trigger and the menus around it see the event, so none of them opens.
@@ -133,7 +179,17 @@ export function WorkspaceContextMenu(props: WorkspaceContextMenuProps): JSX.Elem
             "contextmenu",
             (event) => {
               if (event.isTrusted) pressed = event.target instanceof Element ? event.target : null;
-              if (wantsNativeMenu(event) || props.items(pressed).length === 0) event.stopPropagation();
+              if (wantsNativeMenu(event)) {
+                event.stopPropagation();
+                return;
+              }
+              const items = readItems(pressed);
+              if (items.length === 0) {
+                declined = event;
+                return;
+              }
+              // A right-click while the menu shows moves it to the new place, with that place's items.
+              if (open) setShown(items);
             },
             { capture: true },
           )

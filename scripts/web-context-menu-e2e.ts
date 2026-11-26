@@ -1,23 +1,38 @@
 // Checks that a right-click or a long press on a message offers the actions of what it landed on,
-// before the message's own actions, in the web client on a mock host
-// (`src/renderer/stories/web-client-media-harness.tsx`): an image offers Copy image, Save image and
-// Open; a link offers Open and Copy link; a code block offers Copy code, and the copy lands on the
-// clipboard; selected text offers Copy; the author's face offers View profile and Direct message.
-// The message's items follow in every case. Shift+F10 on a focused row opens the row's menu. On an
-// iPhone a long press on an image opens the same items in a sheet.
+// before the message's own actions, in the web client on a mock host: an image offers Copy image,
+// Save image and Open; a link offers Open and Copy link; a code block offers Copy code, and the copy
+// lands on the clipboard; selected text offers Copy; the author's face offers View profile and Direct
+// message. The message's items follow in every case. Shift+F10 on a focused row opens the row's menu.
+// In the owner's chat with an agent (`src/renderer/stories/web-client-context-menu-harness.tsx`), an
+// image of a row of five, a single image of the agent and an image of the owner each offer Copy image
+// and Annotate, and the video, PDF, document and ZIP cards offer their actions. A right-click on a
+// space, the General space included, shows the space's actions. No menu ever opens with no item: the
+// check sweeps the messages, images, files, links, code, channels, DMs, agents, spaces, sidebar rows,
+// Today cards and the Motion strip. On an iPhone a long press opens the same items in a sheet.
 //
-// `bun scripts/web-context-menu-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>] [--shots]`
+// The harnesses run as a production build, as the site serves the client: the empty menus of
+// 2026-11-26 showed only there (a lucide icon read its context outside an owner, which a development
+// build allows). `--dev` serves them through Vite's development server instead.
+//
+// `bun scripts/web-context-menu-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>] [--shots] [--dev]`
 // Writes report.json to .openbot-build/web-context-menu-e2e, or to --out; `--shots` also keeps a
 // screenshot of each menu, in light and in dark.
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { translateFor } from "@openbot/i18n";
 import { createOpenBotLogger } from "@openbot/logging";
 import solidPlugin from "@solidjs/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { type Browser, type BrowserContext, chromium, type Locator, type Page } from "playwright-core";
-import { createServer, type Plugin } from "vite";
+import { build, createServer, type Plugin } from "vite";
+
+declare global {
+  interface Window {
+    /** The names of the menus that opened with no item. */
+    harnessEmptyMenus?: string[];
+  }
+}
 
 const logger = createOpenBotLogger("web-context-menu-e2e");
 function option(name: string): string | undefined {
@@ -35,7 +50,22 @@ const english = translateFor("en");
 
 const OUT = resolve(option("out") ?? resolve(ROOT, ".openbot-build/web-context-menu-e2e"));
 
-const HARNESS = `<!doctype html>
+/** The pages of the check: each is a story harness that the script serves at every address under `/app`. */
+const HARNESSES = {
+  /** #general with images, a PDF and a CSV (the `ChannelMedia` story). */
+  media: "web-client-media-harness",
+  /** The owner's chat with Research: a row of five images, one image each of the agent and the owner, files. */
+  menu: "web-client-context-menu-harness",
+  /** The spaces workspace: General, Trading and Piks on the rail. */
+  spaces: "web-client-harness",
+  /** Today with things that wait for the owner. */
+  today: "web-client-today-harness",
+} as const;
+type HarnessName = keyof typeof HARNESSES;
+const HARNESS_NAMES: readonly HarnessName[] = ["media", "menu", "spaces", "today"];
+
+function harnessHtml(name: HarnessName): string {
+  return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -44,23 +74,109 @@ const HARNESS = `<!doctype html>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/renderer/stories/web-client-media-harness.tsx"></script>
+    <script type="module" src="/src/renderer/stories/${HARNESSES[name]}.tsx"></script>
   </body>
 </html>`;
+}
 
-function webClientPages(): Plugin {
+const SITE_SOURCE = resolve(OUT, "site-source");
+const SITE = resolve(OUT, "site");
+const FIXTURES = resolve(ROOT, "scripts/fixtures");
+
+/** Builds every harness for production, as the site's client is built. */
+async function buildSite(): Promise<void> {
+  mkdirSync(SITE_SOURCE, { recursive: true });
+  const input: Record<string, string> = {};
+  for (const name of HARNESS_NAMES) {
+    const html = resolve(SITE_SOURCE, `${name}.html`);
+    writeFileSync(html, harnessHtml(name));
+    input[name] = html;
+  }
+  await build({
+    root: ROOT,
+    configFile: false,
+    cacheDir: "node_modules/.vite-e2e/web-context-menu-e2e",
+    logLevel: "error",
+    base: "/",
+    plugins: [tailwindcss(), solidPlugin()],
+    resolve: { dedupe: ["solid-js", "@solidjs/web", "@solidjs/signals"] },
+    build: { outDir: SITE, emptyOutDir: true, minify: true, chunkSizeWarningLimit: 100_000, rollupOptions: { input } },
+  });
+}
+
+/** The built page of a harness at every address under `/app`; its assets; the fixture files under `/__fixtures/`. */
+function serveBuilt(name: HarnessName): { origin: string; stop: () => void } {
+  const page = resolve(SITE, relative(ROOT, SITE_SOURCE), `${name}.html`);
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const path = decodeURIComponent(new URL(request.url).pathname);
+      if (/^\/app(?:\/|$)/u.test(path))
+        return new Response(Bun.file(page), { headers: { "Content-Type": "text/html" } });
+      const file = path.startsWith("/__fixtures/")
+        ? resolve(FIXTURES, path.slice("/__fixtures/".length))
+        : resolve(SITE, `.${path}`);
+      const inside = file.startsWith(`${path.startsWith("/__fixtures/") ? FIXTURES : SITE}/`);
+      const found = inside ? Bun.file(file) : null;
+      return found && (await found.exists()) ? new Response(found) : new Response("Not found", { status: 404 });
+    },
+  });
+  return { origin: `http://127.0.0.1:${server.port}`, stop: () => void server.stop(true) };
+}
+
+/** The development server: the harness named by the `?harness=` of the first address, under `/app`. */
+function devPages(name: HarnessName): Plugin {
   return {
-    name: "openbot-web-context-menu-harness",
+    name: `openbot-web-context-menu-${name}`,
     configureServer(server) {
       server.middlewares.use(async (request, response, next) => {
         const url = request.url ?? "";
+        if (url.startsWith("/__fixtures/")) {
+          request.url = `/@fs${FIXTURES}/${url.slice("/__fixtures/".length)}`;
+          return next();
+        }
         if (!/^\/app(?:[/?]|$)/u.test(url)) return next();
-        const html = await server.transformIndexHtml(url, HARNESS);
+        const html = await server.transformIndexHtml(url, harnessHtml(name));
         response.setHeader("Content-Type", "text/html; charset=utf-8");
         response.end(html);
       });
     },
   };
+}
+
+async function serveDev(name: HarnessName): Promise<{ origin: string; stop: () => void }> {
+  const server = await createServer({
+    root: ROOT,
+    configFile: false,
+    // A cache of its own: the deploy suite runs several scripts at once, and a server that
+    // rebuilds a shared cache for its own entries pulls the modules from under the others.
+    cacheDir: `node_modules/.vite-e2e/web-context-menu-e2e-${name}`,
+    appType: "custom",
+    logLevel: "error",
+    plugins: [devPages(name), tailwindcss({ optimize: false }), solidPlugin()],
+    resolve: { dedupe: ["solid-js", "@solidjs/web", "@solidjs/signals"] },
+    optimizeDeps: {
+      entries: [`src/renderer/stories/${HARNESSES[name]}.tsx`],
+      include: ["@norbert_bodziony/bloub"],
+    },
+    server: { host: "127.0.0.1", port: 0, strictPort: false, fs: { strict: false }, hmr: false },
+  });
+  await server.listen();
+  const address = server.httpServer?.address();
+  assert.ok(address && typeof address === "object", "The harness server has no port.");
+  return { origin: `http://127.0.0.1:${address.port}`, stop: () => void server.close() };
+}
+
+const origins = new Map<HarnessName, string>();
+const stops: (() => void)[] = [];
+async function originOf(name: HarnessName): Promise<string> {
+  const known = origins.get(name);
+  if (known) return known;
+  const served = flag("dev") ? await serveDev(name) : serveBuilt(name);
+  origins.set(name, served.origin);
+  stops.push(served.stop);
+  return served.origin;
 }
 
 interface Step {
@@ -95,7 +211,14 @@ async function shot(page: Page, name: string): Promise<void> {
   report.screenshots.push(path);
 }
 
-async function newPage(browser: Browser, phone: boolean, dark = false): Promise<Page> {
+interface PageOptions {
+  harness?: HarnessName;
+  path?: string;
+  /** What shows once the page is ready. */
+  ready?: string;
+}
+
+async function newPage(browser: Browser, phone: boolean, dark = false, options: PageOptions = {}): Promise<Page> {
   const context: BrowserContext = await browser.newContext({
     ...(phone
       ? { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 }
@@ -103,12 +226,48 @@ async function newPage(browser: Browser, phone: boolean, dark = false): Promise<
     colorScheme: dark ? "dark" : "light",
     permissions: ["clipboard-read", "clipboard-write"],
   });
+  // Every menu that opens with no item, for the whole life of the page.
+  await context.addInitScript(() => {
+    const empty: string[] = [];
+    window.harnessEmptyMenus = empty;
+    new MutationObserver((records) => {
+      for (const record of records)
+        for (const node of record.addedNodes) {
+          if (!(node instanceof Element)) continue;
+          const menus = [...(node.matches("[role=menu]") ? [node] : []), ...node.querySelectorAll("[role=menu]")];
+          for (const menu of menus)
+            setTimeout(() => {
+              if (menu.isConnected && menu.querySelectorAll("[role^=menuitem]").length === 0)
+                empty.push(menu.getAttribute("aria-label") ?? "(no name)");
+            }, 400);
+        }
+    }).observe(document, { childList: true, subtree: true });
+  });
   const page = await context.newPage();
   page.on("pageerror", (error) => report.pageErrors.push(error.stack ?? error.message));
-  await page.goto(`${origin}${CHANNEL_PATH}`, { waitUntil: "commit", timeout: UI_WAIT_MS });
+  const origin = await originOf(options.harness ?? "media");
+  await page.goto(`${origin}${options.path ?? CHANNEL_PATH}`, { waitUntil: "commit", timeout: UI_WAIT_MS });
   // The pictures show once their small copies are read through the host connection.
-  await page.locator(".ws-layout-main [data-attachment-id] img[src]").first().waitFor({ timeout: UI_WAIT_MS });
+  await page
+    .locator(options.ready ?? ".ws-layout-main [data-attachment-id] img[src]")
+    .first()
+    .waitFor({ timeout: UI_WAIT_MS });
   return page;
+}
+
+/** The names of the menus that opened with no item on this page. */
+async function emptyMenus(page: Page): Promise<string[]> {
+  return page.evaluate(() => window.harnessEmptyMenus ?? []);
+}
+
+/** The menus that show now, with the number of their items. */
+async function openMenus(page: Page): Promise<{ label: string; items: number }[]> {
+  return page.locator("[role=menu]").evaluateAll((menus) =>
+    menus.map((node) => ({
+      label: node.getAttribute("aria-label") ?? "",
+      items: node.querySelectorAll("[role^=menuitem]").length,
+    })),
+  );
 }
 
 const main = (page: Page) => page.locator(".ws-layout-main");
@@ -141,6 +300,19 @@ async function closeMenu(page: Page): Promise<void> {
 async function rightClick(target: Locator): Promise<void> {
   await target.scrollIntoViewIfNeeded();
   await target.click({ button: "right" });
+}
+
+/** A finger held on `target` for longer than a long press. */
+async function hold(page: Page, target: Locator): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
+  assert.ok(box, "The target has no box.");
+  const at = { x: box.x + box.width / 2, y: box.y + box.height / 2, id: 1 };
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [at] });
+  await page.waitForTimeout(HOLD_MS);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await cdp.detach();
 }
 
 /** The row's own first item: Reply in thread in a channel. */
@@ -289,19 +461,9 @@ async function checkDesktop(browser: Browser, dark: boolean): Promise<void> {
 async function checkPhone(browser: Browser, dark: boolean): Promise<void> {
   const device = dark ? "phone-dark" : "phone";
   const page = await newPage(browser, true, dark);
-  const cdp = await page.context().newCDPSession(page);
-  const hold = async (target: Locator) => {
-    await target.scrollIntoViewIfNeeded();
-    const box = await target.boundingBox();
-    assert.ok(box, "The target has no box.");
-    const at = { x: box.x + box.width / 2, y: box.y + box.height / 2, id: 1 };
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [at] });
-    await page.waitForTimeout(HOLD_MS);
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-  };
 
   await step(device, "a long press on an image opens a sheet with the image's actions first", async () => {
-    await hold(main(page).locator("[data-attachment-id] img[src]").first());
+    await hold(page, main(page).locator("[data-attachment-id] img[src]").first());
     await sheet(page).waitFor({ timeout: 5_000 });
     const items = await sheet(page).locator(".ui-sheet-item").allInnerTexts();
     await shot(page, `${device}-image-sheet`);
@@ -318,7 +480,7 @@ async function checkPhone(browser: Browser, dark: boolean): Promise<void> {
   });
 
   await step(device, "a long press on the text opens the message's actions only", async () => {
-    await hold(main(page).locator(".ws-message .ws-message-text, .ws-message .message-copy p").first());
+    await hold(page, main(page).locator(".ws-message .ws-message-text, .ws-message .message-copy p").first());
     await sheet(page).waitFor({ timeout: 5_000 });
     const items = await sheet(page).locator(".ui-sheet-item").allInnerTexts();
     assert.equal(items[0], MESSAGE_ITEM, `The sheet starts with ${items[0]}.`);
@@ -329,28 +491,230 @@ async function checkPhone(browser: Browser, dark: boolean): Promise<void> {
   await page.context().close();
 }
 
+/** The chat row's own first item: Reply, which quotes the message. */
+const CHAT_ITEM = english("chat.menu.reply");
+const AGENT_CHAT = "/app/general/dm/research";
+const IMAGE_ACTIONS = [
+  english("workspace.context.copyImage"),
+  english("workspace.context.saveImage"),
+  english("common.open"),
+  english("workspace.context.annotate"),
+];
+
+/** The three images of the owner's report: one of a row of five, the agent's single one, the owner's. */
+function chatImages(page: Page): [string, Locator][] {
+  const row = (text: string) => page.locator(".ws-message").filter({ hasText: text });
+  return [
+    ["an image of a row of five", page.locator(".image-gallery-tile img[src]").nth(2)],
+    ["the agent's single image", row("Y la portada.").locator("img[src]").first()],
+    ["the owner's image", row("Esta es la foto del local.").locator("img[src]").first()],
+  ];
+}
+
+async function checkAgentChat(browser: Browser, dark: boolean): Promise<void> {
+  const device = dark ? "desktop-dark" : "desktop";
+  const page = await newPage(browser, false, dark, {
+    harness: "menu",
+    path: AGENT_CHAT,
+    ready: ".image-gallery-tile img[src]",
+  });
+  for (const [name, image] of chatImages(page))
+    await step(
+      device,
+      `a right-click on ${name} offers Copy image and Annotate, then the message's actions`,
+      async () => {
+        await image.waitFor({ timeout: UI_WAIT_MS });
+        await rightClick(image);
+        const items = await menuItems(page);
+        await shot(page, `${device}-${name.replaceAll(/\W+/gu, "-")}`);
+        assert.deepEqual(items.slice(0, IMAGE_ACTIONS.length), IMAGE_ACTIONS, `The items: ${items.join(", ")}`);
+        assert.ok(items.includes(CHAT_ITEM), `The message's actions are missing: ${items.join(", ")}`);
+        assert.equal(await dividedBefore(page, CHAT_ITEM), true, "No divider before the message's actions.");
+        await closeMenu(page);
+      },
+    );
+
+  await step(device, "Annotate in the menu of an image of the row opens the image editor", async () => {
+    await rightClick(page.locator(".image-gallery-tile img[src]").first());
+    await menu(page)
+      .getByRole("menuitem", { name: english("workspace.context.annotate") })
+      .click();
+    const editor = page.locator(".image-annotator");
+    await editor.waitFor({ timeout: 10_000 });
+    await page.keyboard.press("Escape");
+    await editor.waitFor({ state: "hidden", timeout: 5_000 });
+  });
+
+  await step(
+    device,
+    "a right-click on a video, a PDF, a document and a ZIP card offers the file's actions",
+    async () => {
+      const cards = page.locator(".message-attachment");
+      assert.equal(await cards.count(), 4, "The four file cards do not show.");
+      for (let index = 0; index < 4; index++) {
+        const card = cards.nth(index);
+        await rightClick(card.locator("strong").first());
+        const items = await menuItems(page);
+        const view = await card.getAttribute("data-view");
+        assert.ok(items.includes(english("common.download")), `${view}: ${items.join(", ")}`);
+        assert.ok(
+          items.includes(english("common.open")) || items.includes(english("workspace.context.viewContents")),
+          `${view}: ${items.join(", ")}`,
+        );
+        assert.ok(items.includes(CHAT_ITEM), `${view}: the message's actions are missing.`);
+        await closeMenu(page);
+      }
+    },
+  );
+
+  await step(device, "no menu opened empty in the chat", async () => {
+    assert.deepEqual(await emptyMenus(page), []);
+  });
+  await page.context().close();
+}
+
+async function checkSpaces(browser: Browser): Promise<void> {
+  const device = "desktop";
+  const page = await newPage(browser, false, false, {
+    harness: "spaces",
+    path: "/app/general/c/general",
+    ready: ".space-rail-button",
+  });
+  for (const name of ["General", "Trading"])
+    await step(device, `a right-click on the ${name} space shows the space's actions`, async () => {
+      await rightClick(page.locator(`.space-rail-button[aria-label^="${name}"]`).first());
+      const spaceMenu = page.getByRole("menu", { name: english("workspace.spaces.menu", { name }) });
+      await spaceMenu.waitFor({ timeout: 5_000 });
+      const items = await spaceMenu.getByRole("menuitem").allInnerTexts();
+      await shot(page, `${device}-space-${name}`);
+      assert.ok(items.includes(english("workspace.spaces.agents")), `The items: ${items.join(", ")}`);
+      await page.keyboard.press("Escape");
+      await spaceMenu.waitFor({ state: "hidden", timeout: 5_000 });
+    });
+  await page.context().close();
+}
+
+interface Surface {
+  name: string;
+  selector: string;
+  /** A menu must open there. Otherwise only an empty menu fails: the browser's own menu may show. */
+  required: boolean;
+}
+
+/** Every surface of the workspace that a right-click can land on, by page. */
+const SURFACES: { harness: HarnessName; path: string; ready: string; surfaces: Surface[] }[] = [
+  {
+    harness: "media",
+    path: CHANNEL_PATH,
+    ready: ".ws-layout-main [data-attachment-id] img[src]",
+    surfaces: [
+      { name: "a message's text", selector: ".ws-layout-main .ws-message .ws-message-text", required: true },
+      { name: "a channel image", selector: ".ws-layout-main [data-attachment-id] img[src]", required: true },
+      { name: "a channel file", selector: ".ws-layout-main .message-attachment strong", required: true },
+      { name: "a link", selector: ".ws-layout-main a.message-link", required: true },
+      { name: "a code block", selector: ".ws-layout-main .message-code-header", required: true },
+      { name: "a channel row", selector: ".ws-sidebar-row:has-text('general')", required: true },
+      { name: "a DM row", selector: ".ws-sidebar-row:has-text('Ana')", required: true },
+      { name: "an agent row", selector: ".ws-sidebar-row:has-text('Research')", required: true },
+      { name: "a space", selector: ".space-rail-button", required: true },
+      { name: "the channel header", selector: ".ws-channel-pane > :first-child", required: false },
+      { name: "the sidebar's free area", selector: ".ws-sidebar", required: false },
+    ],
+  },
+  {
+    harness: "media",
+    path: "/app/general/c/dm-ana",
+    ready: ".ws-message",
+    surfaces: [{ name: "a DM message", selector: ".ws-message .ws-message-text", required: true }],
+  },
+  {
+    harness: "menu",
+    path: AGENT_CHAT,
+    ready: ".image-gallery-tile img[src]",
+    surfaces: [
+      { name: "an image of a row", selector: ".image-gallery-tile img[src]", required: true },
+      { name: "a file of an agent", selector: ".ws-chat-row .message-attachment strong", required: true },
+      { name: "an agent's message", selector: ".ws-chat-row .message-copy p", required: true },
+      { name: "the agent's face", selector: ".ws-chat-row .ws-message-gutter .ws-profile-trigger", required: true },
+      { name: "the Motion strip", selector: ".ws-agent-dm-wait", required: false },
+      { name: "the Motion ticket", selector: ".ws-channel-header-ticket", required: false },
+    ],
+  },
+  {
+    harness: "today",
+    path: "/app/general/today",
+    ready: ".ws-today-card",
+    surfaces: [
+      { name: "a Today card", selector: ".ws-today-card", required: false },
+      { name: "a Motion ticket on Today", selector: ".ws-ticket-chip-key", required: false },
+    ],
+  },
+];
+
+async function checkNeverEmpty(browser: Browser): Promise<void> {
+  for (const area of SURFACES) {
+    const page = await newPage(browser, false, false, area);
+    for (const surface of area.surfaces)
+      await step("desktop", `no empty menu: ${surface.name}`, async () => {
+        const target = page.locator(surface.selector).first();
+        if ((await target.count()) === 0) {
+          assert.ok(!surface.required, `${surface.selector} is not on ${area.path}.`);
+          logger.info(`absent: ${surface.name}`);
+          return;
+        }
+        await target.hover().catch(() => undefined);
+        await rightClick(target);
+        await page.waitForTimeout(400);
+        const menus = await openMenus(page);
+        assert.ok(
+          menus.every((shown) => shown.items > 0),
+          `A menu opened with no item: ${JSON.stringify(menus)}`,
+        );
+        assert.ok(menus.length <= 1, `Two menus opened: ${JSON.stringify(menus)}`);
+        if (surface.required) assert.equal(menus.length, 1, "No menu opened.");
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(200);
+      });
+    await step("desktop", `no menu opened empty on ${area.path}`, async () => {
+      assert.deepEqual(await emptyMenus(page), []);
+    });
+    await page.context().close();
+  }
+}
+
+async function checkPhoneAgentChat(browser: Browser): Promise<void> {
+  const device = "phone";
+  const page = await newPage(browser, true, false, {
+    harness: "menu",
+    path: AGENT_CHAT,
+    ready: ".image-gallery-tile img[src]",
+  });
+  for (const [name, image] of chatImages(page))
+    await step(device, `a long press on ${name} opens a sheet with Copy image and Annotate`, async () => {
+      await image.waitFor({ timeout: UI_WAIT_MS });
+      await hold(page, image);
+      await sheet(page).waitFor({ timeout: 5_000 });
+      const items = await sheet(page).locator(".ui-sheet-item").allInnerTexts();
+      await shot(page, `${device}-${name.replaceAll(/\W+/gu, "-")}`);
+      assert.deepEqual(items.slice(0, IMAGE_ACTIONS.length), IMAGE_ACTIONS, `The items: ${items.join(", ")}`);
+      assert.ok(items.includes(CHAT_ITEM), `The message's actions are missing: ${items.join(", ")}`);
+      await page.keyboard.press("Escape");
+      await sheet(page).waitFor({ state: "hidden", timeout: 5_000 });
+    });
+  await step(device, "a long press on a file card opens a sheet with the file's actions", async () => {
+    await hold(page, page.locator(".message-attachment strong").nth(1));
+    await sheet(page).waitFor({ timeout: 5_000 });
+    const items = await sheet(page).locator(".ui-sheet-item").allInnerTexts();
+    assert.ok(items.includes(english("common.download")), `The items: ${items.join(", ")}`);
+    await page.keyboard.press("Escape");
+    await sheet(page).waitFor({ state: "hidden", timeout: 5_000 });
+  });
+  await page.context().close();
+}
+
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
-const server = await createServer({
-  root: ROOT,
-  configFile: false,
-  // A cache of its own: the deploy suite runs several scripts at once, and a server that
-  // rebuilds a shared cache for its own entries pulls the modules from under the others.
-  cacheDir: "node_modules/.vite-e2e/web-context-menu-e2e",
-  appType: "custom",
-  logLevel: "error",
-  plugins: [webClientPages(), tailwindcss({ optimize: false }), solidPlugin()],
-  resolve: { dedupe: ["solid-js", "@solidjs/web", "@solidjs/signals"] },
-  optimizeDeps: {
-    entries: ["src/renderer/stories/web-client-media-harness.tsx"],
-    include: ["@norbert_bodziony/bloub"],
-  },
-  server: { host: "127.0.0.1", port: 0, strictPort: false, fs: { strict: false }, hmr: false },
-});
-await server.listen();
-const address = server.httpServer?.address();
-assert.ok(address && typeof address === "object", "The harness server has no port.");
-const origin = `http://127.0.0.1:${address.port}`;
+if (!flag("dev")) await buildSite();
 let browser: Browser | null = null;
 
 try {
@@ -360,14 +724,27 @@ try {
     ...(executablePath ? { executablePath } : {}),
   });
   await checkDesktop(browser, false);
+  await checkAgentChat(browser, false);
+  await checkSpaces(browser);
+  await checkNeverEmpty(browser);
   await checkPhone(browser, false);
+  await checkPhoneAgentChat(browser);
   if (flag("shots")) {
     await checkDesktop(browser, true);
+    await checkAgentChat(browser, true);
     await checkPhone(browser, true);
   }
+} catch (error) {
+  report.steps.push({
+    device: "-",
+    name: "the check ran to its end",
+    passed: false,
+    detail: String(error).slice(0, 800),
+  });
+  logger.error("the check stopped", { error: String(error).slice(0, 800) });
 } finally {
   await browser?.close();
-  await server.close();
+  for (const stop of stops) stop();
   report.passed = report.steps.every((item) => item.passed) && report.pageErrors.length === 0;
   writeFileSync(resolve(OUT, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
   logger.info(report.passed ? "web-context-menu-e2e passed" : "web-context-menu-e2e failed", { out: OUT });

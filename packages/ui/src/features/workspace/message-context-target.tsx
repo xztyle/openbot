@@ -223,7 +223,8 @@ export function createMessageTargetItems(
             icon: <ExternalLink aria-hidden="true" />,
             onSelect: target.open,
           });
-        if (act.annotateImage)
+        // The editor reads an attachment; a picture of the Markdown text has none to read.
+        if (act.annotateImage && target.attachmentId)
           out.push({
             id: "target-annotate",
             label: t("workspace.context.annotate"),

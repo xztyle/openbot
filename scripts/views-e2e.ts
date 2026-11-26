@@ -136,7 +136,7 @@ try {
   // 1. Each keystroke replaces the scenario; the field must stay, with focus, and keep every letter.
   let page = await open(phone, "portfolio");
   await step(page, "typing in a test-suite scenario keeps the field and its focus", async () => {
-    await page.getByRole("button", { name: "Quality", exact: true }).tap();
+    await page.getByRole("tab", { name: "Quality", exact: true }).tap();
     await page.getByRole("button", { name: "Test suite" }).first().tap();
     const name = page.getByLabel("Name", { exact: true }).first();
     await name.waitFor({ timeout: UI_WAIT_MS });
@@ -149,7 +149,7 @@ try {
 
   // 2. The host refuses the pasted template: the text stays for another try.
   await step(page, "a failed template import keeps the pasted text", async () => {
-    await page.getByRole("button", { name: "Templates", exact: true }).tap();
+    await page.getByRole("tab", { name: "Templates", exact: true }).tap();
     const area = page.getByPlaceholder("Paste the text of an .atelier-template.json file");
     const text = JSON.stringify({
       format: "atelier-space-template",
@@ -181,7 +181,7 @@ try {
   // 4. A lesson for the whole Piks space waits in Piks only; Apply moves the other one to the done list.
   page = await open(phone, "reviews");
   await step(page, "a space-wide lesson shows only in its own space", async () => {
-    await page.getByRole("button", { name: "Learning", exact: true }).tap();
+    await page.getByRole("tab", { name: "Learning", exact: true }).tap();
     await page.getByText("1 change waits for you").waitFor({ timeout: UI_WAIT_MS });
     assert.doesNotMatch(await shown(page), /A lesson for the whole Piks space/u);
     await page.getByRole("button", { name: "Apply", exact: true }).tap();

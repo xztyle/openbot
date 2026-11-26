@@ -5,6 +5,15 @@ export const messages = {
   "composer.queueEdit.body":
     "Kuyruktaki bir mesajı düzenliyorsunuz. Çalışmasına izin vermek için düzenlemeyi kaydedin veya iptal edin.",
   "composer.queueEdit.cancel": "Düzenlemeyi iptal et",
+  "composer.guardrailPause.spaceTitle": "Bu alan duraklatıldı",
+  "composer.guardrailPause.agentTitle": "{name} duraklatıldı",
+  "composer.guardrailPause.turns":
+    "Günlük sınıra ulaşıldı: {limit} turdan {used}. Mesajların iletilir; ajanların kendi işi yarına ya da sen sürdürene kadar bekler.",
+  "composer.guardrailPause.budget":
+    "Bugünkü harcama sınırına ulaşıldı. Mesajların iletilir; ajanların kendi işi sınır yenilenene ya da sen sürdürene kadar bekler.",
+  "composer.guardrailPause.loop":
+    "Başka iş yapmadan bir ekip arkadaşıyla mesajlaştı, bu yüzden bir saat durur. Mesajların iletilir.",
+  "composer.guardrailPause.resumeFailed": "Duraklatma kaldırılamadı. Tekrar dene.",
   "composer.providerWait.offlineTitle": "İnternet bağlantısı yok",
   "composer.providerWait.offline": "Bu bilgisayar yeniden çevrimiçi olana kadar {provider} yanıt veremez.",
   "composer.providerWait.silent": "{provider} {duration} süredir bir şey göndermedi.",

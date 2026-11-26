@@ -4,6 +4,14 @@ import type { messages as source } from "../en/composer";
 export const messages = {
   "composer.queueEdit.body": "你正在编辑一条排队中的消息。保存或取消编辑后它才会继续执行。",
   "composer.queueEdit.cancel": "取消编辑",
+  "composer.guardrailPause.spaceTitle": "此空间已暂停",
+  "composer.guardrailPause.agentTitle": "{name} 已暂停",
+  "composer.guardrailPause.turns":
+    "已达到每日上限：{used} / {limit} 轮。你的消息仍会送达；智能体自己的工作要等到明天或你恢复它。",
+  "composer.guardrailPause.budget":
+    "已达到今天的花费上限。你的消息仍会送达；智能体自己的工作要等到上限重置或你恢复它。",
+  "composer.guardrailPause.loop": "它与队友来回发消息而没有做其他工作，因此暂停一小时。你的消息仍会送达。",
+  "composer.guardrailPause.resumeFailed": "无法解除暂停。请重试。",
   "composer.providerWait.offlineTitle": "没有网络连接",
   "composer.providerWait.offline": "这台电脑重新联网前，{provider} 无法回复。",
   "composer.providerWait.silent": "{provider} 已有 {duration} 没有更新。",

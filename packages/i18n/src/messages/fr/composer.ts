@@ -5,6 +5,15 @@ export const messages = {
   "composer.queueEdit.body":
     "Vous modifiez un message en attente. Enregistrez ou annulez la modification pour permettre son exécution.",
   "composer.queueEdit.cancel": "Annuler",
+  "composer.guardrailPause.spaceTitle": "Cet espace est en pause",
+  "composer.guardrailPause.agentTitle": "{name} est en pause",
+  "composer.guardrailPause.turns":
+    "Limite quotidienne atteinte : {used} sur {limit} tours. Vos messages passent ; le travail propre des agents attend demain ou votre reprise.",
+  "composer.guardrailPause.budget":
+    "Une limite de dépense du jour est atteinte. Vos messages passent ; le travail propre des agents attend la remise à zéro ou votre reprise.",
+  "composer.guardrailPause.loop":
+    "Il échangeait sans fin avec un coéquipier sans autre travail, il s'arrête donc une heure. Vos messages passent.",
+  "composer.guardrailPause.resumeFailed": "Impossible de lever la pause. Réessayez.",
   "composer.providerWait.offlineTitle": "Pas de connexion Internet",
   "composer.providerWait.offline":
     "{provider} ne peut pas répondre tant que cet ordinateur n’est pas de nouveau en ligne.",

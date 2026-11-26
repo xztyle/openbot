@@ -5,6 +5,15 @@ export const messages = {
   "composer.queueEdit.body":
     "Вы редактируете сообщение в очереди. Сохраните или отмените правку, чтобы разрешить его выполнение.",
   "composer.queueEdit.cancel": "Отменить правку",
+  "composer.guardrailPause.spaceTitle": "Это пространство на паузе",
+  "composer.guardrailPause.agentTitle": "{name} на паузе",
+  "composer.guardrailPause.turns":
+    "Достигнут дневной лимит: {used} из {limit} ходов. Ваши сообщения доходят; собственная работа агентов ждёт до завтра или до возобновления.",
+  "composer.guardrailPause.budget":
+    "Достигнут сегодняшний лимит расходов. Ваши сообщения доходят; собственная работа агентов ждёт сброса лимита или возобновления.",
+  "composer.guardrailPause.loop":
+    "Он переписывался с коллегой без другой работы, поэтому стоит час. Ваши сообщения доходят.",
+  "composer.guardrailPause.resumeFailed": "Не удалось снять паузу. Попробуйте ещё раз.",
   "composer.providerWait.offlineTitle": "Нет подключения к интернету",
   "composer.providerWait.offline": "{provider} не сможет ответить, пока этот компьютер не подключится к сети.",
   "composer.providerWait.silent": "Время без обновлений от {provider}: {duration}.",

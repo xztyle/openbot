@@ -21,6 +21,10 @@
  *   backing off to a two-minute wait. A deploy sends it before it stops the container. The drain sends
  *   `waiting` while it waits for turns. A notice that no restart follows ends after five minutes.
  *
+ * - `POST /v1/guardrails/resume` ends guardrails pauses through the same resume as the Team API route:
+ *   a JSON body with `scope` ("agent" or "space") and `id`, or `{"all":true}` for every stored pause.
+ *   The agents of each pause drain at once. It answers how many pauses ended and how many remain.
+ *
  * - `POST /v1/guardrails/failover` changes the failover part of the guardrails policy through the same
  *   save as the Trust page: a JSON body with any of `enabled`, `thresholdPercent` and `tiers`. It
  *   answers the failover policy that applies now.
@@ -37,7 +41,7 @@
 
 import { readFile, rename, writeFile } from "node:fs/promises";
 import type { DatabaseSync } from "node:sqlite";
-import { type GuardrailPolicy, normalizeGuardrailPolicy } from "@openbot/contracts/guardrails";
+import { type GuardrailPause, type GuardrailPolicy, normalizeGuardrailPolicy } from "@openbot/contracts/guardrails";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { QueuedMessageReceipt, SendMessageInput, SystemNoticeKind } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
@@ -104,6 +108,9 @@ export interface ServerAgentOperationsDependencies {
   /** The guardrails policy now, and its save (`GuardrailsService.savePolicy`). */
   guardrailsPolicy?: () => GuardrailPolicy;
   saveGuardrailsPolicy?: (policy: GuardrailPolicy) => Promise<void>;
+  /** The stored guardrails pauses, and their resume (`GuardrailsService.resume`, as the Team API route). */
+  guardrailPauses?: () => readonly GuardrailPause[];
+  resumeGuardrailPause?: (scope: "agent" | "space", id: string) => void;
 }
 
 /** A restart notice that no restart followed ends after this long. */
@@ -240,6 +247,10 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
       dependencies.log(`Owner alert sent: ${title}`);
       return { status: 200, lines: { alert: "sent" } };
     }
+    if (path === "/v1/guardrails/resume") {
+      if (method !== "POST") return failure(405, "method_not_allowed");
+      return resumeGuardrails(rawBody);
+    }
     if (path === "/v1/guardrails/failover") {
       if (method !== "POST") return failure(405, "method_not_allowed");
       return saveFailoverPolicy(rawBody);
@@ -256,6 +267,31 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
       }
     }
     return null;
+  }
+
+  function resumeGuardrails(rawBody: string): ControlAnswer {
+    const { guardrailPauses, resumeGuardrailPause } = dependencies;
+    if (!guardrailPauses || !resumeGuardrailPause) return failure(404, "not_found");
+    let body: unknown = null;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return failure(400, "json_required");
+    }
+    if (!isDynamicRecord(body)) return failure(400, "json_required");
+    const before = guardrailPauses();
+    const { scope, id } = body;
+    const targets: Array<Pick<GuardrailPause, "scope" | "id">> | null =
+      body.all === true
+        ? before.map((pause) => ({ scope: pause.scope, id: pause.id }))
+        : (scope === "agent" || scope === "space") && typeof id === "string" && id
+          ? [{ scope, id }]
+          : null;
+    if (!targets) return failure(400, "scope_and_id_required");
+    for (const target of targets) resumeGuardrailPause(target.scope, target.id);
+    const remaining = guardrailPauses().length;
+    dependencies.log(`The operator resumed ${before.length - remaining} guardrails pause(s).`);
+    return { status: 200, lines: { resumed: before.length - remaining, remaining } };
   }
 
   async function saveFailoverPolicy(rawBody: string): Promise<ControlAnswer> {

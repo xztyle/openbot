@@ -4,6 +4,15 @@ import type { messages as source } from "../en/composer";
 export const messages = {
   "composer.queueEdit.body": "Estás editando un mensaje en cola. Guarda o cancela la edición para que se ejecute.",
   "composer.queueEdit.cancel": "Cancelar edición",
+  "composer.guardrailPause.spaceTitle": "Este espacio está en pausa",
+  "composer.guardrailPause.agentTitle": "{name} está en pausa",
+  "composer.guardrailPause.turns":
+    "Límite diario alcanzado: {used} de {limit} turnos. Tus mensajes sí llegan; el trabajo propio de los agentes espera hasta mañana o hasta que lo reanudes.",
+  "composer.guardrailPause.budget":
+    "Se alcanzó un límite de gasto de hoy. Tus mensajes sí llegan; el trabajo propio de los agentes espera hasta que el límite se renueve o hasta que lo reanudes.",
+  "composer.guardrailPause.loop":
+    "Se escribía una y otra vez con un compañero sin hacer otro trabajo, así que para una hora. Tus mensajes sí llegan.",
+  "composer.guardrailPause.resumeFailed": "No se pudo quitar la pausa. Inténtalo de nuevo.",
   "composer.providerWait.offlineTitle": "Sin conexión a internet",
   "composer.providerWait.offline": "{provider} no puede responder hasta que este equipo vuelva a estar en línea.",
   "composer.providerWait.silent": "{provider} no ha enviado nada en {duration}.",

@@ -473,18 +473,44 @@ export class GuardrailsService {
     return this.#state.pauses.find((pause) => pause.scope === scope && pause.id === id);
   }
 
+  /**
+   * Whether a stored pause holds work under this policy. With the guardrails off nothing pauses, and
+   * with the stuck watch off a loop pause holds nothing. The pause stays stored, so the view and a
+   * policy turned on again still know it until it ends.
+   */
+  #applies(pause: GuardrailPause, policy: GuardrailPolicy = this.#state.policy): boolean {
+    return policy.enabled && (pause.reason !== "loop" || policy.stuck.enabled);
+  }
+
   /** The pause that holds this agent's work, or null. */
   pauseFor(agentId: string): GuardrailPause | null {
-    if (!this.#state.policy.enabled) return null;
-    return this.#paused("agent", agentId) ?? this.#paused("space", this.#runtime?.spaceOf(agentId) ?? "") ?? null;
+    const space = this.#runtime?.spaceOf(agentId) ?? "";
+    return (
+      this.#state.pauses.find(
+        (pause) =>
+          ((pause.scope === "agent" && pause.id === agentId) || (pause.scope === "space" && pause.id === space)) &&
+          this.#applies(pause),
+      ) ?? null
+    );
+  }
+
+  /** Every stored pause, also one that the policy lets go now (the operator's resume). */
+  storedPauses(): readonly GuardrailPause[] {
+    return this.#state.pauses;
+  }
+
+  /** The pauses that hold work now, for the view. */
+  activePauses(): GuardrailPause[] {
+    return this.#state.pauses.filter((pause) => this.#applies(pause));
   }
 
   /**
-   * Whether the drain may start this agent's next delivery. A pause holds everything but the owner's
-   * own messages: the owner stays in control of a paused agent.
+   * Whether a pause holds this agent's own work: routines, teammates' messages, Motion wakes and
+   * event checks. The owner's own messages always start a turn, so the owner stays in control of a
+   * paused agent (`isOwnerWork` in the mailbox store).
    */
-  mayDrain(agentId: string, headSender: string | null): boolean {
-    return headSender === "user" || this.pauseFor(agentId) === null;
+  holdsAgentWork(agentId: string): boolean {
+    return this.pauseFor(agentId) !== null;
   }
 
   /** The owner's one-time passes of blocked actions, by agent and action, until when. */
@@ -556,8 +582,14 @@ export class GuardrailsService {
     this: GuardrailsService,
     policy: GuardrailPolicy,
   ) {
+    const before = this.#state.policy;
     this.#state.policy = policy;
     this.#meterCache = null;
+    // A pause that held work and holds none under the new policy (the guardrails or the stuck watch
+    // turned off) lets its agents run at once: their queues drain now, not at some later event.
+    const released = this.#state.pauses.filter(
+      (pause) => this.#applies(pause, before) && !this.#applies(pause, policy),
+    );
     const lifted = this.#state.pauses.filter((pause) => {
       const key = GUARDRAIL_PAUSE_REASON_LIMIT[pause.reason];
       if (!key) return false;
@@ -575,6 +607,15 @@ export class GuardrailsService {
       });
       this.#drainScope(pause.scope, pause.id);
     }
+    for (const pause of released)
+      if (!lifted.includes(pause)) {
+        this.#record({
+          kind: "budget-resume",
+          ...(pause.scope === "agent" ? { agentId: pause.id } : { spaceId: pause.id }),
+          summary: `Resumed: a guardrail was turned off (${pause.detail}).`,
+        });
+        this.#drainScope(pause.scope, pause.id);
+      }
     this.#runtime?.changed();
     return this.view();
   });
@@ -956,7 +997,8 @@ export class GuardrailsService {
     const row = (scope: "agent" | "space", id: string): GuardrailUsageRow => {
       const used = this.#usageOf(scope, id);
       const limits: GuardrailFullLimits = effectiveGuardrailLimits(policy, scope, id);
-      let state: GuardrailUsageRow["state"] = this.#paused(scope, id) ? "paused" : "ok";
+      const paused = this.#paused(scope, id);
+      let state: GuardrailUsageRow["state"] = paused && this.#applies(paused) ? "paused" : "ok";
       if (state === "ok")
         for (const key of GUARDRAIL_LIMIT_KEYS) {
           const limit = limits[key];
@@ -986,7 +1028,7 @@ export class GuardrailsService {
       policy,
       day: this.#day || dayKey(this.#now()),
       usage: usage.slice(0, GUARDRAIL_VIEW_LIMITS.usage),
-      pauses: this.#state.pauses.slice(0, GUARDRAIL_VIEW_LIMITS.pauses),
+      pauses: this.activePauses().slice(0, GUARDRAIL_VIEW_LIMITS.pauses),
       meter: this.#meter(),
       failovers: this.#state.failovers.slice(0, GUARDRAIL_VIEW_LIMITS.failovers),
       steps: this.#steps(this.#meter()),

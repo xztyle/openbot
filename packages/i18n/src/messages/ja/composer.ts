@@ -4,6 +4,15 @@ import type { messages as source } from "../en/composer";
 export const messages = {
   "composer.queueEdit.body": "キュー内のメッセージを編集中です。実行するには編集を保存するかキャンセルしてください。",
   "composer.queueEdit.cancel": "編集をキャンセル",
+  "composer.guardrailPause.spaceTitle": "このスペースは一時停止中です",
+  "composer.guardrailPause.agentTitle": "{name} は一時停止中です",
+  "composer.guardrailPause.turns":
+    "1日の上限に達しました: {limit} 回中 {used} 回。あなたのメッセージは届きます。エージェント自身の作業は明日まで、または再開するまで待ちます。",
+  "composer.guardrailPause.budget":
+    "今日の支出上限に達しました。あなたのメッセージは届きます。エージェント自身の作業は上限のリセットか再開まで待ちます。",
+  "composer.guardrailPause.loop":
+    "ほかの作業をせずにチームメイトとやり取りを繰り返したため、1時間停止します。あなたのメッセージは届きます。",
+  "composer.guardrailPause.resumeFailed": "一時停止を解除できませんでした。もう一度お試しください。",
   "composer.providerWait.offlineTitle": "インターネットに接続されていません",
   "composer.providerWait.offline": "このコンピューターがオンラインに戻るまで、{provider} は返信できません。",
   "composer.providerWait.silent": "{provider} からの更新が {duration} ありません。",

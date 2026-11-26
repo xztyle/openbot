@@ -160,16 +160,15 @@ try {
     await until(() => guardrails.pauseFor("ana-1")?.reason === "turns"),
     guardrails.pauseFor("ana-1"),
   );
-  check("a paused agent holds agent work", !guardrails.mayDrain("ana-1", "agent"));
-  check("a paused agent still runs the owner's messages", guardrails.mayDrain("ana-1", "user"));
+  check("a paused agent holds agent work", guardrails.holdsAgentWork("ana-1"));
   check("the pause resumes by itself tomorrow", (guardrails.pauseFor("ana-1")?.until ?? "") > new Date().toISOString());
-  check("the other agent runs", guardrails.mayDrain("leo-1", "agent"));
+  check("the other agent runs", !guardrails.holdsAgentWork("leo-1"));
   guardrails.resume("agent", "ana-1", "Owner");
-  check("resume ends the pause and drains", guardrails.mayDrain("ana-1", "agent") && recorded.drains.includes("ana-1"));
+  check("resume ends the pause and drains", !guardrails.holdsAgentWork("ana-1") && recorded.drains.includes("ana-1"));
   turn("ana-1", "t-c");
   end("ana-1", "t-c");
   await new Promise((done) => setTimeout(done, 3_300));
-  check("a resumed limit does not pause again today", guardrails.mayDrain("ana-1", "agent"));
+  check("a resumed limit does not pause again today", !guardrails.holdsAgentWork("ana-1"));
   await Effect.runPromise(guardrails.savePolicy({ ...policy, agents: { "leo-1": { turnsPerDay: 5 } } }));
   turn("leo-1", "t-l");
   end("leo-1", "t-l");

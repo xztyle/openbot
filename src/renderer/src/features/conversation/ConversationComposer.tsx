@@ -80,6 +80,7 @@ import { useSecretHygiene } from "../workspace/workspace-secret-offer";
 import { copyComposerSelection, readComposerCopy } from "./composer-clipboard";
 import { useConversationViewScope } from "./conversation-scope";
 import { useConversationWorkspaceLayout } from "./conversation-workspace-layout";
+import { GuardrailPauseNotice } from "./GuardrailPauseNotice";
 import { defaultSavedReplies, readSavedReplies, SAVED_REPLIES_STORAGE_KEY, writeSavedReplies } from "./saved-replies";
 
 // Module scope: the composer remounts on navigation, and a dismissed notice must stay dismissed.
@@ -552,6 +553,9 @@ export function ConversationComposer() {
               </Show>
             </div>
           </div>
+          <Show when={!channel}>
+            <GuardrailPauseNotice agentId={props.agent?.id} />
+          </Show>
           <Show when={providerWaitNotice()}>
             {(notice) => <ComposerNotice title={notice().title} body={notice().body} />}
           </Show>

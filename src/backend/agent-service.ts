@@ -1744,7 +1744,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         requeueChannelDelivery: (deliveryId, continueWork) => this.#requeueChannelDelivery(deliveryId, continueWork),
         mayFailOver: (agentId, reason) =>
           this.#usageLimitBackup(agentId, reason) !== undefined || this.#poolBackup(agentId),
-        guardrailsHold: (agentId, headSender) => !(this.#guardrails?.mayDrain(agentId, headSender) ?? true),
+        guardrailsHold: (agentId) => this.#guardrails?.holdsAgentWork(agentId) ?? false,
         turnEnded: (turnId) => this.#turn.hasEnded(turnId),
         turnRestarting: (turnId) => this.#turn.forgetEnded(turnId),
         startRequestedNewChat: (agentId) => this.#startRequestedNewChat(agentId),

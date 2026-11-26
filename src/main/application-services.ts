@@ -3634,6 +3634,8 @@ export async function createApplicationServices({
         saveGuardrailsPolicy: async (policy) => {
           await runCauseEffect(guardrails.savePolicy(policy));
         },
+        guardrailPauses: () => guardrails.storedPauses(),
+        resumeGuardrailPause: (scope, id) => guardrails.resume(scope, id, "The operator"),
         // As the owner types it in the app on this computer: the same sender, queue and steer rules.
         // A notice goes with no sender: it is OpenBot's own note, and the chat shows a marker.
         send: (input, notice) =>

@@ -108,10 +108,10 @@ export interface DrainHooks {
    */
   mayFailOver(agentId: string, reason?: FailoverReason): boolean;
   /**
-   * Whether a guardrails pause (a budget or a loop) holds this agent's next delivery. `headSender` is
-   * the sender kind of that delivery: the owner's own messages are never held.
+   * Whether a guardrails pause (a budget or a loop) holds this agent's own work. The owner's own
+   * messages are never held: they start ahead of the held work (`isOwnerWork`).
    */
-  guardrailsHold?(agentId: string, headSender: string | null): boolean;
+  guardrailsHold?(agentId: string): boolean;
   /**
    * Starts the move of this agent to another model for a usage limit, if one is due: back to its own
    * model, or to a backup model during a hold. True when a move started; the move schedules the drain
@@ -310,16 +310,9 @@ export class DrainScheduler {
       },
       isWaiting: (key) => {
         const lane = laneOf(key);
-        return (
-          this.#mayStartNow(lane) &&
-          this.#memory.mayDrain(lane.agentId) &&
-          this.#mailbox.nextQueued(lane.agentId, lane.taskId) !== null
-        );
+        return this.#mayStartNow(lane) && this.#memory.mayDrain(lane.agentId) && this.#nextToStart(lane) !== null;
       },
-      head: (key) => {
-        const lane = laneOf(key);
-        return this.#mailbox.nextQueued(lane.agentId, lane.taskId)?.delivery ?? null;
-      },
+      head: (key) => this.#nextToStart(laneOf(key))?.delivery ?? null,
     });
   }
 
@@ -393,9 +386,17 @@ export class DrainScheduler {
     if (!this.#compaction.mayDrain(agentId)) return "compaction";
     if (!this.#routines.mayDrain(agentId)) return "routine";
     if (!this.#usageLimits.mayDrain(agentId)) return "usage-limit";
-    if (this.#hooks.guardrailsHold?.(agentId, this.#mailbox.nextQueued(agentId, taskId)?.delivery.sender.kind ?? null))
-      return "guardrails";
+    // A pause holds the lane only while no message of the owner waits in it.
+    if (this.#hooks.guardrailsHold?.(agentId) && !this.#mailbox.nextQueued(agentId, taskId, true)) return "guardrails";
     return null;
+  }
+
+  /**
+   * The delivery that starts this lane's next turn: the head of the queue, or under a guardrails pause
+   * the owner's first message, ahead of the agent's own work that the pause holds.
+   */
+  #nextToStart(lane: Lane) {
+    return this.#mailbox.nextQueued(lane.agentId, lane.taskId, this.#hooks.guardrailsHold?.(lane.agentId) ?? false);
   }
 
   /**
@@ -655,7 +656,7 @@ export class DrainScheduler {
     this.#drainingLanes.add(key);
     yield* Effect.gen({ self: this }, function* () {
       if (this.#laneTurnActive(lane)) return;
-      const context = this.#mailbox.nextQueued(agentId, taskId);
+      const context = this.#nextToStart(lane);
       if (!context) {
         this.#recoverIdleLane(lane);
         // Here, so that a message that arrives during the new chat waits for this drain to end.

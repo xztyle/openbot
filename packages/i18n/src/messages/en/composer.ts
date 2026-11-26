@@ -3,6 +3,15 @@ import { defineMessages } from "../../message";
 export const messages = defineMessages("composer", {
   "composer.queueEdit.body": "You are editing a queued message. Save or cancel the edit to let it run.",
   "composer.queueEdit.cancel": "Cancel edit",
+  "composer.guardrailPause.spaceTitle": "This space is paused",
+  "composer.guardrailPause.agentTitle": "{name} is paused",
+  "composer.guardrailPause.turns":
+    "Daily limit reached: {used} of {limit} turns. Your messages still go through; the agents' own work waits until tomorrow or until you resume it.",
+  "composer.guardrailPause.budget":
+    "A spending limit for today was reached. Your messages still go through; the agents' own work waits until the limit resets or until you resume it.",
+  "composer.guardrailPause.loop":
+    "It went back and forth with a teammate with no other work, so it stops for an hour. Your messages still go through.",
+  "composer.guardrailPause.resumeFailed": "The pause could not be ended. Try again.",
   "composer.providerWait.offlineTitle": "No internet connection",
   "composer.providerWait.offline": "{provider} cannot reply until this computer is online again.",
   "composer.providerWait.silent": "{provider} has sent no update for {duration}.",

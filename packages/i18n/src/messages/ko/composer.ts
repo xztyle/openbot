@@ -4,6 +4,15 @@ import type { messages as source } from "../en/composer";
 export const messages = {
   "composer.queueEdit.body": "대기열의 메시지를 수정하는 중이에요. 수정을 저장하거나 취소해야 실행돼요.",
   "composer.queueEdit.cancel": "수정 취소",
+  "composer.guardrailPause.spaceTitle": "이 공간은 일시 중지되었습니다",
+  "composer.guardrailPause.agentTitle": "{name}이(가) 일시 중지되었습니다",
+  "composer.guardrailPause.turns":
+    "일일 한도 도달: {limit}회 중 {used}회. 내 메시지는 전달됩니다. 에이전트 자체 작업은 내일까지 또는 재개할 때까지 기다립니다.",
+  "composer.guardrailPause.budget":
+    "오늘의 지출 한도에 도달했습니다. 내 메시지는 전달됩니다. 에이전트 자체 작업은 한도가 초기화되거나 재개할 때까지 기다립니다.",
+  "composer.guardrailPause.loop":
+    "다른 작업 없이 팀원과 메시지를 주고받기만 해서 1시간 멈춥니다. 내 메시지는 전달됩니다.",
+  "composer.guardrailPause.resumeFailed": "일시 중지를 해제하지 못했습니다. 다시 시도하세요.",
   "composer.providerWait.offlineTitle": "인터넷에 연결되어 있지 않아요",
   "composer.providerWait.offline": "이 컴퓨터가 다시 온라인이 될 때까지 {provider}이(가) 답할 수 없어요.",
   "composer.providerWait.silent": "{provider}에서 {duration} 동안 업데이트가 없어요.",

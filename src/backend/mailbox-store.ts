@@ -301,6 +301,15 @@ export interface CommittedChannelAttachments {
 export const QUEUE_EDIT_HOLD_MS = 10 * 60_000;
 
 /**
+ * A message the owner or the operator wrote: a guardrails pause never holds it. A Motion wake, an
+ * inbound email and a restart resume come as user messages with a notice, and they are the agent's
+ * own work, as teammates' messages and routines are.
+ */
+export function isOwnerWork(message: { sender: { kind: string }; notice?: SystemNoticeKind | undefined }): boolean {
+  return message.sender.kind === "user" && (message.notice === undefined || message.notice === "operator-note");
+}
+
+/**
  * Lookups over the stored messages and deliveries. Valid while the two arrays are the same objects
  * with the same lengths: the store replaces an array to remove rows and only pushes to add them, and a
  * delivery or message changes in place only in fields that this index does not key on.
@@ -1596,13 +1605,15 @@ export class MailboxStore {
    * The delivery that starts the next turn in one lane of this agent: its own chat (`taskId` null,
    * with its channel and messaging work), or one task. Each lane runs one turn at a time.
    */
-  nextQueued(agentId: string, taskId: string | null = null): DeliveryContext | null {
+  nextQueued(agentId: string, taskId: string | null = null, ownerOnly = false): DeliveryContext | null {
     if (this.laneActive(agentId, taskId)) return null;
     const now = Date.now();
     const messages = this.#messagesById();
     const delivery = this.#queuedFor(agentId).find(
       (candidate) =>
         this.#taskIdOf(candidate, messages) === taskId &&
+        // A guardrails pause holds the agent's own work: the owner's messages pass the work it holds.
+        (!ownerOnly || isOwnerWork(this.#requireMessage(candidate.messageId, messages))) &&
         !this.#holdsReply(candidate, now) &&
         !this.#isHeldNote(candidate, messages) &&
         !this.#coalesces(candidate, now, messages),

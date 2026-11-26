@@ -114,6 +114,9 @@ function harness(): Plugin {
 const server = await createServer({
   root: ROOT,
   configFile: false,
+  // A cache of its own: the deploy suite runs several scripts at once, and a server that
+  // rebuilds a shared cache for its own entries pulls the modules from under the others.
+  cacheDir: "node_modules/.vite-e2e/loops-ui-e2e",
   appType: "custom",
   logLevel: "error",
   plugins: [harness(), tailwindcss({ optimize: false }), solidPlugin()],

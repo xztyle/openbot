@@ -624,6 +624,9 @@ const server = await createServer({
   mode: "production",
   define: { "process.env.NODE_ENV": JSON.stringify("production") },
   configFile: false,
+  // A cache of its own: the deploy suite runs several scripts at once, and a server that
+  // rebuilds a shared cache for its own entries pulls the modules from under the others.
+  cacheDir: "node_modules/.vite-e2e/web-perf-stress-e2e",
   appType: "custom",
   logLevel: "error",
   plugins: [

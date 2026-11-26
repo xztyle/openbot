@@ -461,6 +461,9 @@ async function serveHarness(): Promise<{ origin: string; close: () => Promise<vo
     const server = await createServer({
       root: ROOT,
       configFile: false,
+      // A cache of its own: the deploy suite runs several scripts at once, and a server that
+      // rebuilds a shared cache for its own entries pulls the modules from under the others.
+      cacheDir: "node_modules/.vite-e2e/timeline-perf-bench",
       appType: "custom",
       logLevel: "error",
       plugins: [webClientPages(), tailwindcss({ optimize: false }), solidPlugin()],
@@ -482,6 +485,9 @@ async function serveHarness(): Promise<{ origin: string; close: () => Promise<vo
   await build({
     root: ROOT,
     configFile: false,
+    // A cache of its own: the deploy suite runs several scripts at once, and a server that
+    // rebuilds a shared cache for its own entries pulls the modules from under the others.
+    cacheDir: "node_modules/.vite-e2e/timeline-perf-bench-2",
     mode: "production",
     logLevel: "error",
     plugins: [tailwindcss({ optimize: false }), solidPlugin()],

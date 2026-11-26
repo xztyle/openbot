@@ -110,5 +110,5 @@
 }
 
 .efficiency-settings > .settings-field + :not(.settings-field) {
-  margin-bottom: 17px;
+  margin-bottom: var(--openbot-space-4);
 }

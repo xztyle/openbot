@@ -872,5 +872,8 @@
 }
 
 .app-frame-chat-window.app-frame-platform-darwin .conversation-header {
-  padding-left: 76px;
+  /* Clears the macOS traffic lights. */
+  --chat-window-traffic-lights-inset: 76px;
+
+  padding-left: var(--chat-window-traffic-lights-inset);
 }

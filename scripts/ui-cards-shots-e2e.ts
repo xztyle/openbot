@@ -110,7 +110,12 @@ async function load(page: Page, url: string, ready: Locator): Promise<void> {
 }
 
 async function shot(page: Page, label: string): Promise<void> {
-  // The text draws once the fonts are in; a card arrives with a short rise.
+  // The app's loading screen fades out after the first paint; the text draws once the fonts are in;
+  // a card arrives with a short rise.
+  await page
+    .locator(".app-loading")
+    .waitFor({ state: "detached", timeout: UI_WAIT_MS })
+    .catch(() => undefined);
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(450);
   const file = resolve(OUT, `${label}.png`);
@@ -136,10 +141,12 @@ async function decisionCards(browser: Browser, origin: string, viewport: Viewpor
   const page = await context.newPage();
   const cards = page.locator("article.ui-block-decision");
   await load(page, `${origin}/app/general/dm/chief?appearance=${theme}`, cards.first());
-  const legacy = cards.first();
+  // The legacy card is the first card of the chat: a decision card here, a plain confirm before.
+  const legacy = page.locator("article.ui-block-decision, article.ui-block-confirm").first();
   const current = cards.last();
-  await legacy.evaluate((element) => element.scrollIntoView({ block: "start" }));
-  await legacy.locator("button.ui-decision-option").first().waitFor({ state: "visible" });
+  // The chat's top edge loads older messages behind a cover: the card sits a little under it.
+  await legacy.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  await legacy.locator("button").first().waitFor({ state: "visible" });
   const legacyText = await visibleText(legacy);
   check(
     `${viewport} ${theme}: legacy decision card has no emoji, arrow, # or raw key outside the details`,
@@ -156,6 +163,7 @@ async function decisionCards(browser: Browser, origin: string, viewport: Viewpor
   );
   await shot(page, `decision-legacy-${viewport}-${theme}`);
   await current.evaluate((element) => element.scrollIntoView({ block: "start" }));
+  await current.evaluate((element) => element.closest(".conversation-scroll")?.scrollBy(0, -12));
   await shot(page, `decision-${viewport}-${theme}-top`);
   const options = current.locator("button.ui-decision-option");
   await options.first().waitFor({ state: "visible" });

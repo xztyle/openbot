@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { constants, existsSync } from "node:fs";
+import { constants, existsSync, lstatSync, mkdirSync, readlinkSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import {
   copyFile,
   lstat,
@@ -15,9 +15,9 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import type { AgentProviderId } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { createOpenBotLogger } from "@openbot/logging";
+import type { AgentClient } from "./agent-client";
 
 const logger = createOpenBotLogger("agent-jail");
 
@@ -48,23 +48,23 @@ const logger = createOpenBotLogger("agent-jail");
  * still ask it.
  */
 
-/** Which providers are jailed: `OPENBOT_AGENT_JAIL` as a list of provider ids, `off`, or unset for the default. */
+/**
+ * `off` turns the jail off for a server's operator. Any other value, or none, jails the agents.
+ *
+ * The jail belongs to how OpenBot starts an agent's process, not to a provider: every provider is
+ * jailed the same way. Claude starts a process for each session and jails it there
+ * (`claude-client.ts`); every other provider runs each agent in a process of its own, which
+ * `ProviderRuntime` starts through `AgentJailPlan.wrapTarget` (`process-confinement.ts`). A provider
+ * that cannot start in the jail does not start: no agent runs outside it.
+ */
 export const AGENT_JAIL_VARIABLE = "OPENBOT_AGENT_JAIL";
-/** `1`: an agent does not start when the jail cannot be made, instead of starting without it. */
-export const AGENT_JAIL_STRICT_VARIABLE = "OPENBOT_AGENT_JAIL_STRICT";
-/** Only Claude starts one process per thread; the other providers share one process between agents. */
-export const AGENT_JAIL_PROVIDERS: ReadonlySet<AgentProviderId> = new Set(["claude"]);
-const DEFAULT_JAILED: readonly AgentProviderId[] = ["claude"];
 /** The exit code of the launcher when it cannot make the jail. */
 const LAUNCHER_FAILED = 125;
 
-/** The providers that the variable jails. Only a Linux server jails at all. */
-export function jailedProviders(environment: NodeJS.ProcessEnv): ReadonlySet<AgentProviderId> {
+/** Whether the variable leaves the jail on. Only a Linux server jails at all. */
+export function agentJailEnabled(environment: NodeJS.ProcessEnv): boolean {
   const value = environment[AGENT_JAIL_VARIABLE]?.trim().toLowerCase();
-  if (value === undefined || value === "" || value === "on" || value === "1") return new Set(DEFAULT_JAILED);
-  if (value === "off" || value === "0" || value === "none") return new Set();
-  const names = value.split(",").map((name) => name.trim());
-  return new Set([...AGENT_JAIL_PROVIDERS].filter((provider) => names.includes(provider)));
+  return !(value === "off" || value === "0" || value === "none");
 }
 
 /**
@@ -163,8 +163,6 @@ export interface AgentJailHost {
   readonly downloadsRoot: string;
   /** Main's `XDG_RUNTIME_DIR`, with the control socket and the keyring. */
   readonly runtimeDirectory: string | undefined;
-  readonly providers: ReadonlySet<AgentProviderId>;
-  readonly strict: boolean;
 }
 
 export interface AgentJailRequest {
@@ -174,8 +172,11 @@ export interface AgentJailRequest {
   readonly writableRoots: readonly string[];
   /** The workspaces of the agent's teammates in its space, to read only. */
   readonly readRoots: readonly string[];
-  /** The provider's own folder: its sign-in, settings and sessions, such as `CLAUDE_CONFIG_DIR`. */
-  readonly providerHome: string;
+  /**
+   * The provider's own folder: its sign-in, settings and sessions, such as `CLAUDE_CONFIG_DIR`. A
+   * provider in its own process gives its folders to `wrapTarget` instead.
+   */
+  readonly providerHome?: string;
   /** The provider program. */
   readonly executable: string;
   /** Files that main wrote for this start, such as the MCP config. */
@@ -198,8 +199,18 @@ export interface AgentJailPlan {
   readonly rules: readonly AgentJailRule[];
   /** The environment of the jailed process. */
   readonly environment: NodeJS.ProcessEnv;
-  /** The command and arguments that start `command` in the jail. */
+  /** The command and arguments that start `command` in the jail, with `environment` given by the caller. */
   wrap(command: string, args: readonly string[]): { command: string; args: string[] };
+  /**
+   * The command and arguments that start a provider's own process in the jail. `state` names the
+   * provider's folders (its sign-in, settings and sessions), which it may write; each one in the real
+   * home is linked into the agent's home. The launcher sets the jail's environment itself, so the
+   * caller keeps the environment that it would give the process unjailed.
+   */
+  wrapTarget(
+    target: { command: string; args: readonly string[] },
+    state: readonly string[],
+  ): { command: string; args: string[] };
 }
 
 export class AgentJailUnavailableError extends Error {
@@ -229,21 +240,12 @@ export class AgentJail {
     this.#host = host;
   }
 
-  get strict(): boolean {
-    return this.#host.strict;
-  }
-
-  jails(provider: AgentProviderId): boolean {
-    return this.#host.providers.has(provider);
-  }
-
   /** Whether this machine can make the jail. Landlock 3 is the first version that controls truncation. */
   async available(): Promise<boolean> {
     if (!this.#version) {
       this.#version = probeLandlock(this.#host.python, this.#host.launcher);
       void this.#version.then((version) => {
-        if (version >= 3)
-          logger.info("Agents start in their jail.", { landlock: version, providers: [...this.#host.providers] });
+        if (version >= 3) logger.info("Agents start in their jail.", { landlock: version, providers: "all" });
       });
     }
     return (await this.#version) >= 3;
@@ -264,17 +266,16 @@ export class AgentJail {
   }
 
   /**
-   * The plan of one provider start, or null when the machine cannot make the jail and the jail is not
-   * strict: the agent then starts as before, and the log says so once. Strict, it throws.
+   * The plan of one provider start. It throws when the machine cannot make the jail: the agent then
+   * does not start, and never runs outside the jail.
    */
-  async prepare(request: AgentJailRequest): Promise<AgentJailPlan | null> {
+  async prepare(request: AgentJailRequest): Promise<AgentJailPlan> {
     if (!(await this.available())) {
-      if (this.#host.strict) throw new AgentJailUnavailableError("This server cannot make the agent jail (Landlock).");
       if (!this.#warned) {
         this.#warned = true;
-        logger.warn("Agents start without the jail: this server has no Landlock 3, or no python3.", {});
+        logger.warn("Agents do not start: this server has no Landlock 3, or no python3, for their jail.", {});
       }
-      return null;
+      throw new AgentJailUnavailableError("This server cannot make the agent jail (Landlock).");
     }
     await this.#emptyTemporaryFolders();
     const own = join(this.#host.jailRoot, request.agentId);
@@ -289,8 +290,8 @@ export class AgentJail {
     for (const root of SYSTEM_READ) for (const path of await uncovered(root, protectedRoots)) add("read", path);
     add("device", "/dev");
     for (const path of SYSTEM_WRITE) add("write", path);
-    for (const path of [own, request.cwd, ...request.writableRoots, request.providerHome, this.#host.downloadsRoot])
-      add("write", path);
+    for (const path of [own, request.cwd, ...request.writableRoots, this.#host.downloadsRoot]) add("write", path);
+    if (request.providerHome) add("write", request.providerHome);
     // The default folder of `appctl deploy --src`, from before spaces.
     add("write", join(this.#host.openbotRoot, "Shared", "apps"));
     for (const path of linked) add("write", path);
@@ -321,13 +322,35 @@ export class AgentJail {
     const kept = await safeRules(rules, protectedRoots);
     const environment = jailEnvironment(request.environment, this.#host.home, home, temporary, runtime);
     const { python, launcher } = this.#host;
+    const realHome = await realOrResolved(this.#host.home);
+    const flags = (list: readonly AgentJailRule[]) => list.flatMap((rule) => [`--${rule.kind}`, rule.path]);
     return {
       rules: kept,
       environment,
       wrap: (command, args) => ({
         command: python,
-        args: ["-I", "-S", launcher, ...kept.flatMap((rule) => [`--${rule.kind}`, rule.path]), "--", command, ...args],
+        args: ["-I", "-S", launcher, ...flags(kept), "--", command, ...args],
       }),
+      wrapTarget: (target, state) => {
+        const extra = stateRules(state, kept, protectedRoots, realHome, home);
+        return {
+          command: python,
+          args: [
+            "-I",
+            "-S",
+            launcher,
+            ...flags([...kept, ...extra]),
+            "--jail-env",
+            realHome,
+            home,
+            temporary,
+            runtime,
+            "--",
+            target.command,
+            ...target.args,
+          ],
+        };
+      },
     };
   }
 
@@ -336,6 +359,83 @@ export class AgentJail {
     const roots = [home, userDataPath, openbotRoot, apiKeysRoot, jailRoot, "/run/openbot", "/run/user"];
     if (runtimeDirectory) roots.push(runtimeDirectory);
     return unique(await Promise.all(roots.map(realOrResolved)));
+  }
+}
+
+/**
+ * The write rules for a provider's own folders, without the ones that reach a protected root. A
+ * folder in the real home is linked into the agent's home at the same place, because `HOME` names the
+ * agent's home in the jail. A folder under a link of the agent's home is reached through that link.
+ */
+function stateRules(
+  state: readonly string[],
+  kept: readonly AgentJailRule[],
+  protectedRoots: readonly string[],
+  realHome: string,
+  jailHome: string,
+): AgentJailRule[] {
+  const rules: AgentJailRule[] = [];
+  for (const folder of state) {
+    // A folder the provider has not made yet stays out: its driver makes the ones it needs first.
+    if (!isAbsolute(folder) || !lstatOrNull(folder)) continue;
+    const path = realSync(folder);
+    if (protectedRoots.some((root) => contains(path, root))) {
+      logger.warn("The agent jail leaves out a provider folder that holds main's data.", {});
+      continue;
+    }
+    if (!kept.some((rule) => rule.kind === "write" && rule.path === path)) rules.push({ kind: "write", path });
+    const inside = relative(realHome, path);
+    if (inside === "" || inside.startsWith("..") || isAbsolute(inside)) continue;
+    linkIntoHome(jailHome, inside, path);
+  }
+  return rules;
+}
+
+/** Links `target` at `inside` in the agent's home, unless a link or a folder of the agent's own is on the way. */
+function linkIntoHome(jailHome: string, inside: string, target: string): void {
+  const parts = inside.split("/");
+  let current = jailHome;
+  for (const part of parts.slice(0, -1)) {
+    current = join(current, part);
+    const entry = lstatOrNull(current);
+    if (entry?.isSymbolicLink()) return;
+    if (!entry) mkdirSync(current, { mode: 0o700 });
+  }
+  const entry = join(jailHome, inside);
+  const existing = lstatOrNull(entry);
+  if (existing && !existing.isSymbolicLink()) return;
+  if (existing) {
+    if (readLinkOrNull(entry) === target) return;
+    rmSync(entry, { force: true });
+  }
+  try {
+    symlinkSync(target, entry);
+  } catch {
+    // Two starts of one agent can make the same link at once: the other one's link counts.
+  }
+}
+
+function lstatOrNull(path: string) {
+  try {
+    return lstatSync(path);
+  } catch {
+    return null;
+  }
+}
+
+function readLinkOrNull(path: string): string | null {
+  try {
+    return readlinkSync(path);
+  } catch {
+    return null;
+  }
+}
+
+function realSync(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
   }
 }
 
@@ -592,7 +692,7 @@ function unique(values: readonly string[]): string[] {
 
 /**
  * The jail of a server, or undefined: off on a desktop, on another system than Linux, and when
- * `OPENBOT_AGENT_JAIL=off`. `OPENBOT_AGENT_JAIL_STRICT=1` stops an agent that cannot be jailed.
+ * `OPENBOT_AGENT_JAIL=off`. An agent that cannot be jailed on a server does not start.
  */
 export function createAgentJail(options: {
   platform: NodeJS.Platform;
@@ -603,8 +703,7 @@ export function createAgentJail(options: {
   openbotRoot: string;
   downloadsRoot: string;
 }): AgentJail | undefined {
-  const providers = jailedProviders(options.environment);
-  if (options.platform !== "linux" || providers.size === 0) return undefined;
+  if (options.platform !== "linux" || !agentJailEnabled(options.environment)) return undefined;
   return new AgentJail({
     python: existsSync("/usr/bin/python3") ? "/usr/bin/python3" : "python3",
     launcher: options.launcher,
@@ -615,7 +714,22 @@ export function createAgentJail(options: {
     jailRoot: join(options.userDataPath, "agent-jail"),
     downloadsRoot: options.downloadsRoot,
     runtimeDirectory: options.environment.XDG_RUNTIME_DIR?.trim() || undefined,
-    providers,
-    strict: options.environment[AGENT_JAIL_STRICT_VARIABLE] === "1",
   });
+}
+
+/** The clients whose agent processes run in the jail. */
+const jailedClients = new WeakSet<AgentClient>();
+
+/** Records that `client` starts its agent processes in the jail. */
+export function markClientJailed(client: AgentClient): void {
+  jailedClients.add(client);
+}
+
+/**
+ * True when `client` runs its agents in the jail. The jail is then the limit of the agent: the
+ * provider's own sandbox stays off, as it cannot start in the container and would ask the owner to
+ * approve each command, and a command or file approval is answered without a card.
+ */
+export function clientRunsJailed(client: AgentClient): boolean {
+  return jailedClients.has(client);
 }

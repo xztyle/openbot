@@ -51,6 +51,7 @@ import {
 } from "./attachment-files";
 import { AGENT_WAKE_COALESCE_MS, ANSWER_HOLD_LIMIT_MS } from "./collaboration-limits";
 import { eventCheckMarker, isEventCheckOrigin } from "./event-check-marker";
+import { normalizeIdempotencyKey } from "./idempotency-key";
 import { StoredStateFailure, storedIO, storedSync, toStoredStateFailure } from "./stored-state-effects";
 
 export type { ExportedAttachmentFile, GeneratedAttachmentSource } from "./attachment-files";
@@ -647,12 +648,12 @@ export class MailboxStore {
 
   /** The receipt of the message an idempotency key already stored, or null. */
   receiptForKey(key: string): QueuedMessageReceipt | null {
-    const messageId = this.#state.idempotency[key];
+    const messageId = this.#state.idempotency[normalizeIdempotencyKey(key)];
     return messageId ? this.#receipt(messageId) : null;
   }
 
   deliveryForKey(key: string): DeliveryContext | null {
-    const messageId = this.#state.idempotency[key];
+    const messageId = this.#state.idempotency[normalizeIdempotencyKey(key)];
     const delivery = this.#state.deliveries.find((item) => item.messageId === messageId);
     return delivery ? this.#context(delivery) : null;
   }
@@ -714,8 +715,11 @@ export class MailboxStore {
     input: EnqueueInput,
   ): Effect.fn.Return<QueuedMessageReceipt, StoredStateFailure> {
     try {
-      if (input.idempotencyKey) {
-        const existingMessageId = this.#state.idempotency[input.idempotencyKey];
+      // Every caller's key takes one form here, so a long provider id never fails a message.
+      const idempotencyKey =
+        input.idempotencyKey === undefined ? undefined : normalizeIdempotencyKey(input.idempotencyKey);
+      if (idempotencyKey) {
+        const existingMessageId = this.#state.idempotency[idempotencyKey];
         if (existingMessageId) return this.#receipt(existingMessageId);
       }
 
@@ -734,9 +738,6 @@ export class MailboxStore {
       if (sender.kind === "agent" && this.#spaces) {
         const foreign = recipients.find((id) => !this.#spaces?.sameSpace(sender.agentId, id));
         if (foreign) throw new Error(sourceText("error.backend.spaceOtherAgent", { agent: foreign }));
-      }
-      if (input.idempotencyKey !== undefined && input.idempotencyKey.length > INPUT_LIMITS.identifier) {
-        throw new Error("The idempotency key is too long.");
       }
 
       const text = input.text.trim();
@@ -845,7 +846,7 @@ export class MailboxStore {
       this.#state.messages.push(message);
       recordRestartActivity();
       this.#state.deliveries.push(...deliveries);
-      if (input.idempotencyKey) this.#setIdempotencyKey(input.idempotencyKey, messageId);
+      if (idempotencyKey) this.#setIdempotencyKey(idempotencyKey, messageId);
       const usedDrafts = voiceDraft ? [...drafts, voiceDraft] : drafts;
       this.#state.drafts = this.#state.drafts.filter((draft) => !usedDrafts.includes(draft));
       this.#changes.messageIds.add(messageId);
@@ -857,8 +858,8 @@ export class MailboxStore {
         const deliveryIds = new Set(deliveries.map((delivery) => delivery.id));
         this.#state.messages = this.#state.messages.filter((candidate) => candidate.id !== messageId);
         this.#state.deliveries = this.#state.deliveries.filter((candidate) => !deliveryIds.has(candidate.id));
-        if (input.idempotencyKey && this.#state.idempotency[input.idempotencyKey] === messageId) {
-          this.#deleteIdempotencyKey(input.idempotencyKey);
+        if (idempotencyKey && this.#state.idempotency[idempotencyKey] === messageId) {
+          this.#deleteIdempotencyKey(idempotencyKey);
         }
         for (const draft of usedDrafts) {
           if (!this.#state.drafts.some((candidate) => candidate.id === draft.id)) {
@@ -1146,22 +1147,23 @@ export class MailboxStore {
     idempotencyKey: string,
   ): Effect.fn.Return<boolean, StoredStateFailure> {
     try {
+      const key = normalizeIdempotencyKey(idempotencyKey);
       const delivery = this.#state.deliveries.find((candidate) => candidate.id === deliveryId);
       if (delivery?.status !== "queued" || delivery.editId || this.#queueUpdates.has(deliveryId)) return false;
-      if (text.length > INPUT_LIMITS.messageText || this.#state.idempotency[idempotencyKey]) return false;
+      if (text.length > INPUT_LIMITS.messageText || this.#state.idempotency[key]) return false;
       const message = this.#requireMessage(delivery.messageId);
       if (message.messaging?.linkId !== origin.linkId) return false;
       const previous = this.#state.messages;
       this.#state.messages = previous.map((candidate) =>
         candidate === message ? { ...message, text, messaging: structuredClone(origin) } : candidate,
       );
-      this.#setIdempotencyKey(idempotencyKey, message.id);
+      this.#setIdempotencyKey(key, message.id);
       this.#changes.messageIds.add(message.id);
       try {
         this.#persist("mailbox.messaging-joined");
       } catch (error) {
         this.#state.messages = previous;
-        this.#deleteIdempotencyKey(idempotencyKey);
+        this.#deleteIdempotencyKey(key);
         throw error;
       }
       return true;

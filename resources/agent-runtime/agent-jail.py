@@ -69,16 +69,50 @@ def handled_rights(version):
 
 def parse(argv):
     rules = []
+    jail_env = None
     index = 0
     while index < len(argv):
         flag = argv[index]
         if flag == "--":
-            return rules, argv[index + 1 :]
+            return rules, jail_env, argv[index + 1 :]
+        if flag == "--jail-env":
+            if index + 4 >= len(argv):
+                fail("--jail-env takes the real home, the agent's home, its temporary and its runtime folders")
+            jail_env = argv[index + 1 : index + 5]
+            index += 5
+            continue
         if flag not in ("--read", "--write", "--device") or index + 1 >= len(argv):
             fail("unknown argument %r" % flag)
         rules.append((flag[2:], argv[index + 1]))
         index += 2
     fail("no command after --")
+
+
+# What `jailEnvironment` in agent-jail.ts does, for a process whose environment main does not make.
+DROPPED = ("DBUS_SESSION_BUS_ADDRESS", "GNOME_KEYRING_CONTROL", "SSH_AUTH_SOCK", "OPENBOT_AUTOMATION_DIR")
+MOVED = ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME")
+
+
+def jailed_environment(environment, real_home, home, temporary, runtime):
+    result = {name: value for name, value in environment.items() if name not in DROPPED}
+    for name in MOVED:
+        value = result.get(name)
+        if not value or not os.path.isabs(value):
+            continue
+        inside = os.path.relpath(value, real_home)
+        if inside == ".":
+            result[name] = home
+        elif not inside.startswith(".."):
+            result[name] = os.path.join(home, inside)
+    result.update(
+        HOME=home,
+        TMPDIR=temporary,
+        TMP=temporary,
+        TEMP=temporary,
+        XDG_RUNTIME_DIR=runtime,
+        OPENBOT_AGENT_JAILED="1",
+    )
+    return result
 
 
 def rights_of(kind, handled):
@@ -94,7 +128,7 @@ def main():
     if sys.argv[1:] == ["--probe"]:
         print(abi())
         return
-    rules, command = parse(sys.argv[1:])
+    rules, jail_env, command = parse(sys.argv[1:])
     if not command:
         fail("no command after --")
     version = abi()
@@ -131,8 +165,12 @@ def main():
     if libc.syscall(RESTRICT_SELF, ctypes.c_int(ruleset), ctypes.c_uint32(0)) < 0:
         fail("cannot enter the jail (errno %d)" % ctypes.get_errno())
     os.close(ruleset)
+    environment = dict(os.environ)
+    if jail_env:
+        environment = jailed_environment(environment, *jail_env)
     try:
-        os.execv(command[0], command)
+        # A name without a slash is found on the PATH of the process, as a spawn finds it.
+        os.execvpe(command[0], command, environment)
     except OSError as error:
         fail("cannot start %s: %s" % (command[0], error.strerror))
 

@@ -35,6 +35,8 @@ import { classifyUserError } from "@openbot/user-errors";
 import { Deferred, Effect, Exit, Result, Schema, Scope, Semaphore } from "effect";
 import { startAcpAuthentication } from "./../acp-sign-in";
 import { type AgentClient, AgentProcessExitError, type AgentProvider } from "./../agent-client";
+import { agentInheritedEnvironment } from "../agent-inherited-environment";
+import { AgentJailUnavailableError, markClientJailed } from "../agent-jail";
 import { CodexAppServerClient } from "./../app-server-client";
 import {
   type AgentCliInfo,
@@ -246,11 +248,14 @@ export type AgentClientFactory = (
 
 /**
  * Why an agent needs a process of its own: a Workspace only agent on a provider that confines a
- * whole process, an agent on a provider account after the first, or both.
+ * whole process, an agent on a provider account after the first, an agent on a server that jails
+ * each agent (`agent-jail.ts`), or more than one of these.
  */
 interface OwnProcess {
   readonly confinement?: ProcessConfinement;
   readonly account?: StoredProviderAccount;
+  /** The agent's jail, which `#startConfined` plans before the process starts. */
+  readonly jail?: { readonly agentId: string; readonly cwd: string };
 }
 
 /**
@@ -303,6 +308,8 @@ export interface ProviderHooks {
   /** The shared folder, which every Workspace only agent may write besides its workspace. */
   /** The shared folder of the agent's space, which a confined agent may write. */
   sharedRoot(agentId: string): string;
+  /** The workspaces of the agent's teammates in its space, which its jail lets it read. */
+  teammateWorkspaces?(agentId: string): string[];
   /** Runs after a CLI replacement, so deliveries held back during it are delivered. */
   onProviderResumed(provider: AgentProvider): void;
   /**
@@ -2370,8 +2377,12 @@ export class ProviderRuntime implements ProviderPort {
    */
   #ownProcessFor(agent: AgentSummary): OwnProcess | null {
     const provider = providerForAgent(agent);
+    // Claude starts a process for each session and jails it there. Every other provider runs a
+    // jailed agent in a process of its own, whatever its access.
+    const jailed = this.#credentials.agentJail !== undefined && provider !== "claude";
     const confined =
-      workspaceAccessEnforced(agent) && agentProviderDescriptor(provider).workspaceEnforcement === "confined-process";
+      jailed ||
+      (workspaceAccessEnforced(agent) && agentProviderDescriptor(provider).workspaceEnforcement === "confined-process");
     const account = this.#providerAccounts?.account(provider, agent.providerAccountId) ?? null;
     if (!confined && !account) return null;
     return {
@@ -2379,8 +2390,56 @@ export class ProviderRuntime implements ProviderPort {
         ? { confinement: { writableRoots: workspaceWritableRoots(agent, this.#hooks.sharedRoot(agent.id)) } }
         : {}),
       ...(account ? { account } : {}),
+      ...(jailed ? { jail: { agentId: agent.id, cwd: agent.workspacePath } } : {}),
     };
   }
+
+  /**
+   * The jail of an agent's own process. It fails when the server cannot make it: the agent then
+   * does not start, and never runs outside the jail.
+   */
+  readonly #planJail = Effect.fn("ProviderRuntime.planJail")(function* (
+    this: ProviderRuntime,
+    cli: AgentCliInfo,
+    own: OwnProcess,
+    accountEnvironment: Readonly<Record<string, string>> | undefined,
+  ) {
+    const jail = this.#credentials.agentJail;
+    if (!jail || !own.jail || !own.confinement) return own.confinement;
+    const { agentId, cwd } = own.jail;
+    const writableRoots = own.confinement.writableRoots;
+    const environment: NodeJS.ProcessEnv = {
+      ...agentInheritedEnvironment(),
+      ...this.#credentials.serverEnvironment,
+      ...this.#credentials.agentEnvironment?.(),
+      ...accountEnvironment,
+    };
+    const commands = this.#credentials
+      .mcpServers()
+      .flatMap((server) => (server.enabled && server.transport === "stdio" && server.command ? [server.command] : []));
+    const plan = yield* Effect.tryPromise({
+      try: () =>
+        jail.prepare({
+          agentId,
+          cwd,
+          writableRoots,
+          readRoots: this.#hooks.teammateWorkspaces?.(agentId) ?? [],
+          executable: cli.executable,
+          readFiles: [],
+          linkFolders: [],
+          commands,
+          environment,
+        }),
+      catch: (cause) =>
+        new ProviderOperationFailed({
+          cause:
+            cause instanceof AgentJailUnavailableError
+              ? new Error(sourceText("error.agent.jailUnavailable"), { cause })
+              : cause,
+        }),
+    });
+    return { writableRoots, jail: plan };
+  });
 
   /**
    * The shared process is part of the key: it is replaced when the CLI, a stored key or the custom
@@ -2394,6 +2453,7 @@ export class ProviderRuntime implements ProviderPort {
       this.#activations.get(provider) ?? 0,
       own.confinement?.writableRoots ?? null,
       own.account?.id ?? null,
+      own.jail?.cwd ?? null,
     ]);
   }
 
@@ -2416,9 +2476,10 @@ export class ProviderRuntime implements ProviderPort {
       });
     const disposals = this.#disposals;
     const accountEnvironment = own.account ? this.#providerAccounts?.environment(own.account) : undefined;
+    const confinement = yield* this.#planJail(cli, own, accountEnvironment);
     const { client } = yield* this.#authenticateClient(provider, cli, {
       ...(this.#slowStarts.has(provider) ? { startTimeoutMs: LONG_START_TIMEOUT_MS } : {}),
-      ...(own.confinement ? { confinement: own.confinement } : {}),
+      ...(confinement ? { confinement } : {}),
       ...(accountEnvironment ? { accountEnvironment } : {}),
     });
     if (disposals !== this.#disposals || this.#hooks.isStopping()) {
@@ -2427,10 +2488,12 @@ export class ProviderRuntime implements ProviderPort {
         cause: new Error(sourceText("error.provider.stoppedBeforeAgentProcess", { provider: providerLabel(provider) })),
       });
     }
+    if (confinement?.jail) markClientJailed(client);
     this.#confined.set(agentId, { client, key, accountId: own.account?.id ?? null, lastUsed: Date.now() });
     logger.info("Started an agent's own provider process.", {
       provider,
       agentId,
+      jailed: confinement?.jail !== undefined,
       confined: own.confinement !== undefined,
       account: own.account !== undefined,
     });

@@ -325,14 +325,22 @@ included, and a signal to such a process. The jail takes `DBUS_SESSION_BUS_ADDRE
 config in its config folder: the first account gets `CLAUDE_CONFIG_DIR`, and its first jailed start
 copies `~/.claude.json` there.
 
-`OPENBOT_AGENT_JAIL` chooses the providers: unset or `claude` jails Claude, `off` jails nothing. Only
-Claude starts a process for each session; Codex, Grok and the ACP providers share one process between
-agents, so they are not jailed yet. Without Landlock 3 (Linux 6.2) or `python3`, agents start
-without the jail and the log says so once; `OPENBOT_AGENT_JAIL_STRICT=1` stops them instead. A start
-that is not an agent's session, such as a title or a profile generation, has no tools and runs
-without the jail. To see which processes are jailed, run
+Every provider runs in the jail, the same way: Claude, Codex, OpenCode, Antigravity, Cursor, Cline,
+Pi and the key-only providers, Grok, Muse and the custom ACP agents. Claude starts a process for each
+session and jails it there; every other provider runs each agent in a process of its own, which
+`ProviderRuntime` starts through the launcher, with the provider's own folders (its sign-in, settings
+and sessions, such as `~/.codex`) writable and linked into the agent's home. In the jail the
+provider's own sandbox is off: Codex runs with `danger-full-access` and Claude without its Workspace
+only sandbox, because their sandboxes cannot start in the container and would ask the owner to approve
+each command. The jail is the agent's limit, so a command, file or permission approval of a jailed
+agent is answered without a card; money stays with the trust gate. `OPENBOT_AGENT_JAIL=off` turns the
+jail off. Without Landlock 3 (Linux 6.2) or `python3`, an agent does not start, with a plain message:
+no agent runs outside the jail. A start that is not an agent's session, such as a title or a profile
+generation, has no tools and runs without the jail. To see which processes are jailed, run
 `docker exec openbot sh -c 'grep -l OPENBOT_AGENT_JAILED=1 /proc/[0-9]*/environ'`.
-`bun scripts/agent-jail-e2e.ts` checks the jail on a Linux computer.
+`bun scripts/agent-jail-e2e.ts` checks the jail on a Linux computer, and
+`bun scripts/agent-jail-providers-e2e.ts` checks that each provider runtime on the server starts jailed
+and that a Codex agent reads a file with no approval card.
 
 What still reaches a jailed agent:
 

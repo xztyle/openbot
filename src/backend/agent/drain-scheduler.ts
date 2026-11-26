@@ -4,6 +4,7 @@ import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { Deferred, Effect, Result, Schema } from "effect";
 import { type AgentProvider, ProviderSessionBusyError, ProviderTurnActiveError } from "../agent-client";
+import { clientRunsJailed } from "../agent-jail";
 import type { AgentStore } from "../agent-store";
 import type { ChannelService } from "../channel-service";
 import { causeHelpers } from "../effect-boundary";
@@ -973,7 +974,11 @@ export class DrainScheduler {
                 runtimeWorkspaceRoots: workspaceWritableRoots(agent, this.#store.spaces.agentSharedDirectory(agent.id)),
                 approvalPolicy: "on-request",
                 approvalsReviewer: "user",
-                sandboxPolicy: codexSandboxPolicy(agent, this.#store.spaces.agentSharedDirectory(agent.id)),
+                sandboxPolicy: codexSandboxPolicy(
+                  agent,
+                  this.#store.spaces.agentSharedDirectory(agent.id),
+                  clientRunsJailed(client),
+                ),
                 ...(client.provider === "codex"
                   ? codexServiceTier(
                       this.#store.list().find((current) => current.id === agent.id) ?? agent,

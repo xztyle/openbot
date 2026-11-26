@@ -17,6 +17,7 @@ import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger } from "@openbot/logging";
 import { Effect, Result, Schema } from "effect";
 import type { AgentClient, AgentProvider } from "../agent-client";
+import { clientRunsJailed } from "../agent-jail";
 import type { AgentStore } from "../agent-store";
 import type { ProviderSession } from "../database/provider-sessions";
 import { causeHelpers } from "../effect-boundary";
@@ -578,7 +579,7 @@ export class ThreadLifecycle {
       // ignores OpenBot cards. A resumed thread keeps its last reviewer, so each request names the user
       // (upstream d4518b386).
       approvalsReviewer: "user",
-      sandbox: codexSandboxMode(agent),
+      sandbox: codexSandboxMode(agent, clientRunsJailed(client)),
       ...this.#workspaceOnlyParam(agent, client),
       ...this.#computerUseParam(agent, client),
       ...this.#jailParam(agent, client),
@@ -787,7 +788,7 @@ export class ThreadLifecycle {
           ...CODEX_DIRECT_ONLY_NAMESPACES,
           ...codexMcpNamespaces(servers),
         ],
-        ...codexSandboxConfig(agent, this.#store.spaces.agentSharedDirectory(agent.id)),
+        ...codexSandboxConfig(agent, this.#store.spaces.agentSharedDirectory(agent.id), clientRunsJailed(client)),
         ...Object.fromEntries(
           Object.entries(environment).map(([name, value]) => [`shell_environment_policy.set.${name}`, value]),
         ),
@@ -985,15 +986,18 @@ export class ThreadLifecycle {
    * Codex reads `sandbox`, and `ProviderRuntime` confines a `confined-process` provider.
    */
   #workspaceOnlyParam(agent: AgentSummary, client: AgentClient): { workspaceOnly?: true } {
+    // In the jail, the jail is the limit: the provider's own sandbox cannot start in the container.
     return agentProviderDescriptor(client.provider).workspaceEnforcement === "tool-sandbox" &&
+      !clientRunsJailed(client) &&
       workspaceAccessEnforced(agent)
       ? { workspaceOnly: true }
       : {};
   }
 
   /**
-   * Claude starts a process for each session, and so can jail it with the agent's own folders on a
-   * server (`agent-jail.ts`). The other providers share one process between agents.
+   * Claude starts a process for each session, and jails it with the agent's own folders on a server
+   * (`agent-jail.ts`). The other providers run each jailed agent in a process of its own, which
+   * `ProviderRuntime` jails.
    */
   #jailParam(agent: AgentSummary, client: AgentClient): { jailAgentId?: string; jailReadRoots?: string[] } {
     if (client.provider !== "claude") return {};
@@ -1138,7 +1142,7 @@ export class ThreadLifecycle {
       // ignores OpenBot cards. A resumed thread keeps its last reviewer, so each request names the user
       // (upstream d4518b386).
       approvalsReviewer: "user",
-      sandbox: codexSandboxMode(agent),
+      sandbox: codexSandboxMode(agent, clientRunsJailed(client)),
       ...this.#workspaceOnlyParam(agent, client),
       ...this.#computerUseParam(agent, client),
       ...this.#jailParam(agent, client),

@@ -1,8 +1,9 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { sourceText } from "@openbot/i18n/source";
 import { workspaceTemporaryPaths } from "./agent/workspace-sandbox";
+import type { AgentJailPlan } from "./agent-jail";
 
 /**
  * The folders one Workspace only agent may write: its workspace and the shared folder. The temporary
@@ -17,6 +18,12 @@ import { workspaceTemporaryPaths } from "./agent/workspace-sandbox";
  */
 export interface ProcessConfinement {
   readonly writableRoots: readonly string[];
+  /**
+   * The agent's jail on a Linux server (`agent-jail.ts`). It holds the agent's own folders already,
+   * and starts the process in the jail with the provider's folders writable, whatever the agent's
+   * access. A provider in it runs with its own sandbox off.
+   */
+  readonly jail?: AgentJailPlan;
 }
 
 /** What a provider must write to run, and what in there it must not write. */
@@ -48,6 +55,16 @@ class ProcessConfinementUnavailableError extends Error {
 }
 
 const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
+
+/** Codex keeps its sign-in, settings, sessions and logs in `CODEX_HOME`. */
+export function codexStatePaths(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  home = homedir(),
+): ProviderStatePaths {
+  const codexHome = env.CODEX_HOME?.trim() || process.env.CODEX_HOME?.trim() || join(home, ".codex");
+  mkdirSync(codexHome, { recursive: true, mode: 0o700 });
+  return { writable: [codexHome], protected: [] };
+}
 
 /** Grok keeps its sign-in, sessions and caches in `GROK_HOME`, and its hooks and settings too. */
 export function grokStatePaths(env: NodeJS.ProcessEnv = process.env, home = homedir()): ProviderStatePaths {
@@ -267,6 +284,10 @@ export function confineSpawnTarget(
   state: ProviderStatePaths,
   platform: NodeJS.Platform = process.platform,
 ): SpawnTarget {
+  if (confinement.jail) {
+    const jailed = confinement.jail.wrapTarget(target, state.writable);
+    return { command: jailed.command, args: jailed.args, windowsVerbatimArguments: false };
+  }
   const writable = [...confinement.writableRoots, ...state.writable, ...workspaceTemporaryPaths(platform)];
   const protectedPaths = [
     ...state.protected,

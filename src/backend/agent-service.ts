@@ -1060,6 +1060,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             );
           }),
         sharedRoot: (agentId) => this.#store.spaces.agentSharedDirectory(agentId),
+        // Teammates of one space read each other's work, as in Claude's jail (`ThreadLifecycle`).
+        teammateWorkspaces: (agentId) =>
+          this.#store
+            .list()
+            .filter((other) => other.id !== agentId && this.#store.spaces.sameSpace(agentId, other.id))
+            .map((other) => other.workspacePath),
         isStopping: () => this.#stopping,
         isProviderBusy: (provider) => this.#isProviderBusy(provider),
         isProviderBusyApartFrom: (provider, agentId) => this.#isProviderBusyApartFrom(provider, agentId),

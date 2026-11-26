@@ -93,7 +93,7 @@ export const messages = {
   "error.agent.automationRateLimited": "过去一小时内本地脚本运行了该助手的自动化任务 {limit} 次，请稍后再试。",
   "error.agent.workspaceOnlyMacOnly": "该服务商的“仅工作区”仅在 macOS 上可用，请在助手设置中选择完全访问。",
   "error.agent.jailUnavailable":
-    "此服务器无法在隔离环境中启动代理，而运营者要求必须隔离。请运营者确认已安装 python3 且内核支持 Landlock，或取消设置 OPENBOT_AGENT_JAIL_STRICT。",
+    "此代理无法启动：服务器无法将它与你的其他代理和数据安全隔开。你的数据没有风险。请让管理你服务器的人修复此问题。",
   "error.agent.lowMemory":
     "该服务器内存不足。你的消息会在队列中等待，内存释放后自动开始。更大的套餐可为服务器提供更多内存。",
   "error.agent.lowMemoryServer": "该服务器内存不足。你的消息会在队列中等待，内存释放后自动开始。",

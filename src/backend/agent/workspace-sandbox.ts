@@ -9,12 +9,14 @@ type SandboxedAgent = Pick<AgentSummary, "access" | "provider" | "workspacePath"
  * says. A write outside asks for approval, and `AttentionRegistry` always shows that approval.
  *
  * Codex takes the mode itself. Claude gets an explicit `workspaceOnly` flag instead and applies its
- * own sandbox (`claude-workspace-sandbox.ts`). A provider whose `workspaceEnforcement` is
+ * own sandbox (`claude-workspace-sandbox.ts`). An agent in the jail (`agent-jail.ts`) gets
+ * `danger-full-access`: the jail is its limit, and Codex's own sandbox cannot start in a container,
+ * so each command would ask the owner. A provider whose `workspaceEnforcement` is
  * `confined-process` ignores it: `ProviderRuntime` runs such an agent in a sandboxed process of its
  * own (`process-confinement.ts`).
  */
-export function codexSandboxMode(agent: SandboxedAgent): "workspace-write" | "danger-full-access" {
-  return workspaceAccessEnforced(agent) ? "workspace-write" : "danger-full-access";
+export function codexSandboxMode(agent: SandboxedAgent, jailed = false): "workspace-write" | "danger-full-access" {
+  return !jailed && workspaceAccessEnforced(agent) ? "workspace-write" : "danger-full-access";
 }
 
 /** The folders a Workspace only agent may write, besides the temporary folders. */
@@ -41,8 +43,8 @@ export function workspaceTemporaryPaths(platform: NodeJS.Platform = process.plat
 }
 
 /** Sent with each turn. Codex keeps it for the turns after, so a changed setting applies at the next turn. */
-export function codexSandboxPolicy(agent: SandboxedAgent, sharedRoot: string): CodexSandboxPolicy {
-  if (!workspaceAccessEnforced(agent)) return { type: "dangerFullAccess" };
+export function codexSandboxPolicy(agent: SandboxedAgent, sharedRoot: string, jailed = false): CodexSandboxPolicy {
+  if (jailed || !workspaceAccessEnforced(agent)) return { type: "dangerFullAccess" };
   return {
     type: "workspaceWrite",
     writableRoots: workspaceWritableRoots(agent, sharedRoot),
@@ -61,8 +63,9 @@ export function codexSandboxPolicy(agent: SandboxedAgent, sharedRoot: string): C
 export function codexSandboxConfig(
   agent: SandboxedAgent,
   sharedRoot: string,
+  jailed = false,
 ): { sandbox_workspace_write?: { writable_roots: string[]; network_access: boolean } } {
-  if (!workspaceAccessEnforced(agent)) return {};
+  if (jailed || !workspaceAccessEnforced(agent)) return {};
   return {
     sandbox_workspace_write: { writable_roots: workspaceWritableRoots(agent, sharedRoot), network_access: true },
   };

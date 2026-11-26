@@ -5,13 +5,15 @@ import {
   type AgentInputEscalation,
   inputEscalationRoot,
 } from "@openbot/contracts/ipc";
-import { redactText } from "@openbot/logging";
+import { createOpenBotLogger, redactText } from "@openbot/logging";
 import { Effect } from "effect";
 import type { AgentStore } from "../agent-store";
 import type { MailboxStore } from "../mailbox-store";
 import type { PendingAttentionRequest } from "./attention-registry";
 import type { ConversationRuntime } from "./conversation-runtime";
 import type { MailboxSync } from "./mailbox-sync";
+
+const logger = createOpenBotLogger("input-escalations");
 
 /** The longest question that a note quotes. The card in the chat holds the rest. */
 const NOTE_QUESTION_LIMIT = 300;
@@ -174,12 +176,10 @@ export class InputEscalations {
       this.#mailboxSync.emitQueue(recipientId);
       this.#hooks.scheduleDrain(recipientId);
     }).pipe(
-      Effect.catch((failure) =>
-        Effect.sync(() => this.#hooks.emitError("input_escalation_note_failed", failure.cause, agentId)),
-      ),
-      Effect.catchDefect((defect) =>
-        Effect.sync(() => this.#hooks.emitError("input_escalation_note_failed", defect, agentId)),
-      ),
+      // The note goes from one agent to another, and the owner can do nothing about it: the request
+      // itself still shows as a card. A failed note goes to the log, not to a banner in the owner's chat.
+      Effect.catch((failure) => Effect.sync(() => noteFailed(agentId, failure.cause))),
+      Effect.catchDefect((defect) => Effect.sync(() => noteFailed(agentId, defect))),
     );
   }
 
@@ -187,6 +187,13 @@ export class InputEscalations {
     const key = this.#lastNoteKeys.get(`${agentId}\n${recipientId}`);
     return key !== undefined && this.#mailbox.deliveryForKey(key)?.delivery.status === "queued";
   }
+}
+
+function noteFailed(agentId: string, cause: unknown): void {
+  logger.warn("A note to the agent that waits for this one failed.", {
+    agentId,
+    cause: redactText(cause instanceof Error ? cause.message : String(cause)),
+  });
 }
 
 function requestKey(escalation: Pick<AgentInputEscalation, "kind" | "agentId" | "requestId">): string {

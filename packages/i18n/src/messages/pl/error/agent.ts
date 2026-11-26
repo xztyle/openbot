@@ -109,7 +109,7 @@ export const messages = {
   "error.agent.workspaceOnlyMacOnly":
     "Tryb „Tylko obszar roboczy” jest dla tego dostawcy dostępny wyłącznie w macOS. Wybierz pełny dostęp w ustawieniach agenta.",
   "error.agent.jailUnavailable":
-    "Ten serwer nie może uruchamiać agentów w izolacji, a operator jej wymaga. Poproś operatora o sprawdzenie, czy python3 jest zainstalowany i jądro obsługuje Landlock, albo o usunięcie OPENBOT_AGENT_JAIL_STRICT.",
+    "Ten agent nie może się uruchomić: serwer nie potrafi bezpiecznie oddzielić go od innych agentów i Twoich danych. Twoje dane są bezpieczne. Poproś osobę, która zarządza serwerem, o naprawę.",
   "error.agent.lowMemory":
     "Na tym serwerze brakuje pamięci. Twoja wiadomość czeka w kolejce i ruszy, gdy pamięć się zwolni. Większy plan daje serwerowi więcej pamięci.",
   "error.agent.lowMemoryServer":

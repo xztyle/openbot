@@ -107,7 +107,7 @@ export const messages = {
   "error.agent.workspaceOnlyMacOnly":
     "이 제공자의 워크스페이스 전용 모드는 macOS에서만 사용할 수 있어요. 에이전트 설정에서 전체 접근 권한을 선택하세요.",
   "error.agent.jailUnavailable":
-    "이 서버는 에이전트를 격리 환경에서 시작할 수 없지만 운영자가 격리를 요구합니다. python3가 설치되어 있고 커널이 Landlock을 지원하는지 운영자에게 확인을 요청하거나 OPENBOT_AGENT_JAIL_STRICT를 해제해 달라고 하세요.",
+    "이 에이전트를 시작할 수 없습니다. 서버가 다른 에이전트와 데이터로부터 안전하게 분리할 수 없기 때문입니다. 데이터는 안전합니다. 서버 관리자에게 해결을 요청하세요.",
   "error.agent.lowMemory":
     "이 서버의 메모리가 부족해요. 메시지는 대기열에서 기다리다가 메모리가 확보되면 시작돼요. 더 큰 플랜을 쓰면 서버 메모리가 늘어나요.",
   "error.agent.lowMemoryServer":

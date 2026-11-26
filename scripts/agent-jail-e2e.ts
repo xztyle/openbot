@@ -316,8 +316,6 @@ try {
     jailRoot: join(userData, "agent-jail"),
     downloadsRoot: join(openbotRoot, "Downloads"),
     runtimeDirectory: runtime,
-    providers: new Set(["claude"]),
-    strict: true,
   };
   const jail = new AgentJail(host);
   report.landlock = await jail.available();

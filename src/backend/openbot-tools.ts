@@ -576,6 +576,14 @@ export const messageOwnerToolSchema = z.strictObject({
     .describe(
       "What the owner must know or decide, in plain words in their language, as a colleague texts: the news or the question first, with your default.",
     ),
+  paths: z
+    .array(z.string().min(1).max(INPUT_LIMITS.path))
+    .min(1)
+    .max(8)
+    .optional()
+    .describe(
+      "Files the owner must see with the message, such as an image, by their absolute paths: files of your workspace or Shared, or the attached local files of a teammate's message, which you pass on as they are. When you tell the owner about something visual, attach it.",
+    ),
 });
 
 export const alertOwnerToolSchema = z.strictObject({
@@ -1018,7 +1026,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "message_owner",
     description:
-      "Write to the owner in your chat with them, when they need to know or decide something. In a turn that the owner's own message started, just answer: this is for the other turns. A turn that a Motion event, a teammate, a routine or a note from Atelier started is your own activity: the owner does not see its answer as a message and is not told about it. Only this message (or ask_user, or alert_owner for an emergency) reaches them, and it tells them. Your normal updates go to the board, not to the owner. One short message; never an acknowledgement or a status echo.",
+      "Write to the owner in your chat with them, when they need to know or decide something, with the files they must see in paths (an image you made, or one a teammate sent you: pass its attached local file path). In a turn that the owner's own message started, just answer: this is for the other turns. A turn that a Motion event, a teammate, a routine or a note from Atelier started is your own activity: the owner does not see its answer as a message and is not told about it. Only this message (or ask_user, or alert_owner for an emergency) reaches them, and it tells them. Your normal updates go to the board, not to the owner. One short message; never an acknowledgement or a status echo.",
     shape: messageOwnerToolSchema.shape,
   },
   {

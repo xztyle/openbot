@@ -71,6 +71,7 @@ import {
   type AgentJail,
   type AgentJailPlan,
   AgentJailUnavailableError,
+  markClientJailed,
   seedClaudeGlobalConfig,
   spawnJailed,
 } from "./agent-jail";
@@ -629,6 +630,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     super();
     this.#userSetup = userSetup;
     this.#jail = jail;
+    if (jail) markClientJailed(this);
     this.#cli = cli;
     this.#sdkLaunch = claudeSdkLaunch(cli.executable);
     this.#createQuery = createQuery;
@@ -1045,9 +1047,9 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
   }
 
   /**
-   * The jail of an agent's process, or null for a process that runs as before: a start that is not
-   * an agent's session (a title, a profile), a provider the server does not jail, or a server that
-   * cannot make the jail. The default account gets `CLAUDE_CONFIG_DIR` so that the CLI keeps its
+   * The jail of an agent's process, or null for a start that is not an agent's session (a title, a
+   * profile) or a computer with no jail (a desktop). A server that cannot make the jail fails the
+   * start: an agent never runs outside it. The default account gets `CLAUDE_CONFIG_DIR` so that the CLI keeps its
    * global config in the config folder, inside the jail, and never in the real home.
    */
   readonly #jailPlan = Effect.fn("ClaudeAgentClient.jailPlan")(function* (
@@ -1058,7 +1060,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
   ) {
     const jail = this.#jail;
     const agentId = config.jailAgentId;
-    if (!jail || !agentId || !jail.jails(this.provider)) return null;
+    if (!jail || !agentId) return null;
     const home = homedir();
     const providerHome = environment.CLAUDE_CONFIG_DIR ?? join(home, ".claude");
     if (!environment.CLAUDE_CONFIG_DIR) yield* providerCall(() => seedClaudeGlobalConfig(home, providerHome));

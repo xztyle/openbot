@@ -19,7 +19,7 @@ import { EventEmitter } from "node:events";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { AgentEvent, AgentSummary, ConversationSnapshot } from "@openbot/contracts/ipc";
 import { Effect } from "effect";
 import { OwnerTools } from "../src/backend/agent/owner-tools";
@@ -309,6 +309,18 @@ const tools = new OwnerTools({
       return current;
     },
     discardStagedGeneratedAttachments: () => Effect.void,
+    stageGeneratedAttachments: ({ sources }) =>
+      Effect.succeed(
+        sources.map((source) => ({
+          id: `file-${randomUUID()}`,
+          name: basename(source.path),
+          size: 0,
+          kind: "image" as const,
+          mimeType: "image/png",
+          previewKind: "image" as const,
+          previewUrl: null,
+        })),
+      ),
   },
   conversation: {
     ensureSnapshot: () => snapshot,

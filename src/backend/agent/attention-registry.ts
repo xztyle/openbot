@@ -49,6 +49,7 @@ import { createOpenBotLogger, redactSecrets, redactText, toLogValue } from "@ope
 import { Deferred, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
 import { type AgentApiKeys, SHARED_API_KEY_SCOPE } from "../agent-api-keys";
 import type { AgentClient } from "../agent-client";
+import { clientRunsJailed } from "../agent-jail";
 import { type BrowserOperationError, browserFailure } from "../browser-effects";
 import type { PreparedBrowserSecret } from "../browser-host";
 import type { BrowserCardVault } from "../browser-tool-actions";
@@ -1108,7 +1109,9 @@ export class AttentionRegistry {
    * The response shape is the one `respondToApproval` uses for an accepted request.
    */
   #answerWithoutAsking(client: AgentClient, request: AppServerRequest, approval: AgentApproval): boolean {
-    if (!this.#answersForAgent(approval.agentId)) return false;
+    // A command, a file change or a permission of an agent in the jail stays inside the jail, which is
+    // the agent's limit: approvals tier 0. A money command is answered before this, by the trust gate.
+    if (!clientRunsJailed(client) && !this.#answersForAgent(approval.agentId)) return false;
     client.respond(request.id, approvalReply(request.method, request.params, "accept", ""));
     return true;
   }

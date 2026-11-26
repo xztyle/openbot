@@ -7,6 +7,8 @@
 // (d) In the chat, the two wakes are one collapsed "Agent activity" row ("2 updates · Motion,
 //     Chief"), which opens to their messages; the owner's exchange and the message to the owner show
 //     as messages; the rest of the turn with the message to the owner is one activity row before it.
+//     The message to the owner shows the image that the agent passed on with it (`message_owner`
+//     with `paths`), on a computer and on a phone.
 // (e) A money ticket's strip at the top of the DM stays, with Approve and Decline, when the owner
 //     asks the agent something (its Reply, or the chat's box); it says "You asked something" while the
 //     host says so; Approve takes it away.
@@ -196,6 +198,15 @@ async function display(browser: Browser, viewport: ViewportName): Promise<void> 
   await step(page, viewport, "the owner's exchange and the message to the owner show as messages", async () => {
     await page.getByText("¿Cómo va la campaña?").first().waitFor({ timeout: UI_WAIT_MS });
     await page.getByText("Necesito tu OK para lanzar Peluquería.").first().waitFor({ timeout: UI_WAIT_MS });
+    // The image that the agent passed on with its message to the owner shows with it.
+    const image = page.locator('img[src^="blob:"]').first();
+    await image.waitFor({ timeout: UI_WAIT_MS });
+    assert.ok(
+      await image.evaluate(
+        (element) => element instanceof HTMLImageElement && element.complete && element.naturalWidth > 0,
+      ),
+      "the image of the message to the owner did not load",
+    );
     assert.equal(await activity.count(), 2, "the turn with the message to the owner is not one activity row");
     assert.equal(await page.getByText("Listo.", { exact: true }).count(), 0, "that turn's answer shows");
     await page.screenshot({ path: resolve(OUT, `${viewport}-chat.png`) });

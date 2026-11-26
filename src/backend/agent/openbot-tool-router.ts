@@ -351,6 +351,38 @@ export interface OpenBotToolRouterOptions {
 }
 
 /** The agent's latest words in a turn: the last text it wrote there, from the working snapshot. */
+/**
+ * Adds a message to the owner with staged files to the agent's chat with the owner. The files and the
+ * message are saved in one write of their own, as `attach_files_to_response` saves an answer's files:
+ * that write opens its own transaction, so it is not in `withConversationTransaction`.
+ */
+function postToOwnerWithFiles(
+  options: Pick<OpenBotToolRouterOptions, "store" | "mailbox" | "conversation">,
+  agentId: string,
+  message: ConversationMessage,
+): boolean {
+  const threadId = options.store.ensureThreadIdNow(agentId);
+  const snapshot = options.conversation.ensureSnapshot(agentId, threadId);
+  if (snapshot.messages.some(({ id }) => id === message.id)) return false;
+  snapshot.messages.push(message);
+  sortConversationMessages(snapshot.messages);
+  try {
+    const persisted = options.mailbox.persistGeneratedAttachmentsWithConversation(
+      snapshot,
+      "thread.owner-message-added",
+      { messageId: message.id, attachmentCount: message.attachments?.length ?? 0 },
+      (message.attachments ?? []).map(({ id }) => id),
+    );
+    snapshot.revision = persisted.revision;
+  } catch (error) {
+    const index = snapshot.messages.findIndex(({ id }) => id === message.id);
+    if (index >= 0) snapshot.messages.splice(index, 1);
+    throw error;
+  }
+  options.conversation.publishConversation(snapshot);
+  return true;
+}
+
 function latestAgentWords(conversation: ConversationRuntime, agentId: string, turnId: string): string | null {
   const messages = conversation.snapshot(agentId)?.messages ?? [];
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -470,19 +502,21 @@ export class OpenBotToolRouter {
       conversation: options.conversation,
       teamChannel: (agentId, turnId) => options.channels.teamContext(agentId, turnId)?.channelId ?? null,
       postToOwner: (agentId, message) =>
-        options.conversation.withConversationTransaction(agentId, ({ threadId, snapshot }) => {
-          if (snapshot.messages.some(({ id }) => id === message.id)) return { result: false, snapshot };
-          snapshot.messages.push(message);
-          sortConversationMessages(snapshot.messages);
-          snapshot.revision = options.store.database.appendConversationMessage({
-            agentId,
-            threadId,
-            activeTurnId: snapshot.activeTurnId,
-            message,
-            eventType: "thread.owner-message-added",
-          });
-          return { result: true, snapshot };
-        }),
+        (message.attachments ?? []).length > 0
+          ? postToOwnerWithFiles(options, agentId, message)
+          : options.conversation.withConversationTransaction(agentId, ({ threadId, snapshot }) => {
+              if (snapshot.messages.some(({ id }) => id === message.id)) return { result: false, snapshot };
+              snapshot.messages.push(message);
+              sortConversationMessages(snapshot.messages);
+              snapshot.revision = options.store.database.appendConversationMessage({
+                agentId,
+                threadId,
+                activeTurnId: snapshot.activeTurnId,
+                message,
+                eventType: "thread.owner-message-added",
+              });
+              return { result: true, snapshot };
+            }),
     });
     this.#trust = options.trust
       ? new TrustToolGate({
@@ -569,13 +603,9 @@ export class OpenBotToolRouter {
             // The process can exit between the running check and the write.
           }
         }
-        this.#hooks.emitError(
-          "server_request_failed",
-          toolCall
-            ? new Error(sourceText("error.agent.toolFailed", { tool: context.tool ?? "", reason: cause }))
-            : error,
-          context.agentId,
-        );
+        // A failed tool call goes back to the agent above, which reads it and tries another way. The
+        // owner can do nothing about it, so it is no banner in the owner's chat.
+        if (!toolCall) this.#hooks.emitError("server_request_failed", error, context.agentId);
       });
     return yield* Effect.gen({ self: this }, function* () {
       switch (request.method) {

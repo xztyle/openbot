@@ -66,6 +66,7 @@ import { PiAgentClient } from "./pi-client";
 import {
   antigravityStatePaths,
   clineStatePaths,
+  codexStatePaths,
   confineSpawnTarget,
   cursorConfinedEnv,
   cursorStatePaths,
@@ -716,21 +717,25 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
     },
     catalog: { paged: true, modelFields: codexFastServiceTier },
     resolveCli: resolveCodexCli,
-    createClient: (cli, requestTimeoutMs, context) => {
+    createClient: (cli, requestTimeoutMs, context, confinement) => {
       // The variables go in the spawn environment: the app-server is one process for every agent.
       // Codex leaves a name with KEY, SECRET or TOKEN out of the shells that its agents run.
       const variables = context.providerEnvironment?.("codex") ?? {};
+      const environment = {
+        ...cliPathEnvironment(cli),
+        ...context.serverEnvironment,
+        ...context.accountEnvironment,
+        // The host refuses `CODEX_HOME`, the account's folder.
+        ...variables,
+      };
+      // Only the jail confines Codex: a Workspace only agent elsewhere keeps Codex's own sandbox.
+      const jail = confinement?.jail ? confinement : undefined;
       return new CodexAppServerClient(
         cli.executable,
         requestTimeoutMs,
-        {
-          ...cliPathEnvironment(cli),
-          ...context.serverEnvironment,
-          ...context.accountEnvironment,
-          // The host refuses `CODEX_HOME`, the account's folder.
-          ...variables,
-        },
+        environment,
         codexVariableOverrides(variables),
+        jail ? (target) => confineSpawnTarget(target, jail, codexStatePaths(environment)) : undefined,
       );
     },
     authState: (account) => ({ kind: "chatgpt", email: account?.email ?? null }),

@@ -9,6 +9,7 @@ import { type AgentProvider, ProviderSessionBusyError, RequestTimeoutError } fro
 import { agentInheritedEnvironment } from "./agent-inherited-environment";
 import { cliSpawnTarget } from "./cli";
 import { JsonLineDecoder, LineTooLongError } from "./jsonl";
+import type { SpawnTarget } from "./process-confinement";
 import {
   type AppServerNotification,
   type AppServerRequest,
@@ -148,6 +149,7 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
   /** Added to the inherited environment, such as the `CODEX_HOME` of an account after the first. */
   readonly #extraEnv: Readonly<Record<string, string>> | undefined;
   readonly #configOverrides: readonly string[];
+  readonly #confine: ((target: SpawnTarget) => SpawnTarget) | undefined;
 
   constructor(
     executable: string,
@@ -155,8 +157,11 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
     extraEnv?: Readonly<Record<string, string>>,
     /** `key=value` config overrides, each given to the app-server as one `-c`. */
     configOverrides: readonly string[] = [],
+    /** Wraps the command of an agent's own process, such as one in the agent's jail (`agent-jail.ts`). */
+    confine?: (target: SpawnTarget) => SpawnTarget,
   ) {
     super();
+    this.#confine = confine;
     this.#executable = executable;
     this.#requestTimeoutMs = requestTimeoutMs;
     this.#extraEnv = extraEnv;
@@ -174,12 +179,13 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
     this.#decoder = new JsonLineDecoder();
     // An answer to a request of the previous process must not reach a request of this one.
     this.#serverRequestIds.clear();
-    const target = cliSpawnTarget(this.#executable, [
+    const plain = cliSpawnTarget(this.#executable, [
       "app-server",
       ...this.#configOverrides.flatMap((override) => ["-c", override]),
       "--listen",
       "stdio://",
     ]);
+    const target = this.#confine ? this.#confine(plain) : plain;
     const child = spawn(target.command, target.args, {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...agentInheritedEnvironment(), ...this.#extraEnv },

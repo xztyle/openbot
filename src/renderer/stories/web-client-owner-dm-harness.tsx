@@ -40,6 +40,19 @@ function person(id: string, turnId: string, time: string, text: string): Convers
     senderMember: { id: WEB_PREVIEW_MEMBER_ID, name: "Preview User" },
   };
 }
+/** A 1 × 1 orange PNG, the turkey image of the relay, served as the host serves a file: a blob URL. */
+const PAVO_IMAGE = URL.createObjectURL(
+  new Blob(
+    [
+      Uint8Array.from(
+        atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP4+5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="),
+        (character) => character.charCodeAt(0),
+      ),
+    ],
+    { type: "image/png" },
+  ),
+);
+
 function answer(
   id: string,
   turnId: string,
@@ -111,7 +124,21 @@ export const OWNER_DM_TURNS: { turnId: string; activity: boolean; messages: Conv
     activity: false,
     messages: [
       motion("told-1", "turn-told", "14:00", "Motion · MAS-31 needs the owner's OK."),
-      answer("told-2", "turn-told", "14:01", "Necesito tu OK para lanzar Peluquería.", "owner-message"),
+      {
+        ...answer("told-2", "turn-told", "14:01", "Necesito tu OK para lanzar Peluquería.", "owner-message"),
+        // The image a teammate made, passed on to the owner with `message_owner`.
+        attachments: [
+          {
+            id: "attachment-pavo",
+            name: "pavo.png",
+            size: 2048,
+            kind: "image",
+            mimeType: "image/png",
+            previewKind: "image",
+            previewUrl: PAVO_IMAGE,
+          },
+        ],
+      },
       answer("told-3", "turn-told", "14:02", "Listo."),
     ],
   },

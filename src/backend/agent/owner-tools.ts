@@ -54,14 +54,18 @@ export interface OwnerToolsOptions {
   attachments: Pick<AttachmentGateway, "openSources">;
   mailbox: Pick<
     MailboxStore,
-    "stageGeneratedBytes" | "persistGeneratedAttachmentsWithConversation" | "discardStagedGeneratedAttachments"
+    | "stageGeneratedBytes"
+    | "stageGeneratedAttachments"
+    | "persistGeneratedAttachmentsWithConversation"
+    | "discardStagedGeneratedAttachments"
   >;
   conversation: Pick<ConversationRuntime, "ensureSnapshot" | "publishConversation" | "isExecutionThread">;
   /** The team channel that the turn works for, for the place of a held request. */
   teamChannel: (agentId: string, turnId: string) => string | null;
   /**
-   * Adds a message of the agent to its own chat with the owner and saves it, unless the chat holds
-   * one with its id already. True when it added it. Absent: `message_owner` answers that this host has none.
+   * Adds a message of the agent to its own chat with the owner and saves it, with the staged
+   * attachments it names, unless the chat holds one with its id already. True when it added it.
+   * Absent: `message_owner` answers that this host has none.
    */
   postToOwner?: (agentId: string, message: ConversationMessage) => boolean;
   /** What an agent sends the owner: the Motion pages it links get a human version. */
@@ -129,7 +133,7 @@ export class OwnerTools {
       this.#options.ownerText?.(agentId, JSON.stringify(params.arguments ?? null));
     if (params.tool === "hold_for_owner") return this.#hold(params, agentId);
     if (params.tool === "alert_owner") return this.#alert(params, agentId);
-    if (params.tool === "message_owner") return this.#message(params, agentId, executionThreadId);
+    if (params.tool === "message_owner") return yield* this.#message(params, agentId, executionThreadId);
     if (params.tool === "share_preview") return yield* this.#share(params, agentId, executionThreadId);
     return null;
   });
@@ -157,14 +161,38 @@ export class OwnerTools {
    * A message to the owner on purpose (`OWNER_MESSAGE_ITEM_TYPE`): it shows in the agent's chat with
    * the owner and counts as unread whatever started the turn, and the end of the turn tells the owner.
    */
-  #message(params: DynamicToolCallParams, agentId: string, executionThreadId: string): OpenBotToolResponse {
+  readonly #message = Effect.fn("OwnerTools.message")(function* (
+    this: OwnerTools,
+    params: DynamicToolCallParams,
+    agentId: string,
+    executionThreadId: string,
+  ) {
     const parsed = messageOwnerToolSchema.safeParse(params.arguments);
     if (!parsed.success) return failure(parsed.error);
     const post = this.#options.postToOwner;
     if (!post) return openBotToolFailure("This Atelier cannot post a message to the owner. Say it in your answer.");
     // In the agent's own chat the message joins the turn; a channel's or a task's turn is not there.
-    const { conversation } = this.#options;
+    const { conversation, mailbox } = this.#options;
     const ownChat = !conversation.isExecutionThread(conversation.ensureSnapshot(agentId, executionThreadId).threadId);
+    const paths = parsed.data.paths ?? [];
+    // The files go with the message as they are: a teammate's image is passed on, not uploaded again.
+    let attachments: AttachmentSummary[] = [];
+    if (paths.length > 0) {
+      const opened = yield* Effect.result(
+        this.#options.attachments.openSources(agentId, [...paths], { allowAnyReadablePath: false }),
+      );
+      if (Result.isFailure(opened))
+        return openBotToolFailure(
+          "A file could not be read: pass files of your workspace or Shared, or the attached local files of a teammate's message, by their absolute paths. Nothing was sent.",
+        );
+      const sources = opened.success;
+      attachments = yield* mailbox
+        .stageGeneratedAttachments({ sources, ownerAgentId: agentId })
+        .pipe(
+          Effect.ensuring(Effect.promise(() => Promise.allSettled(sources.map((source) => source.handle.close())))),
+          toToolOperationFailed,
+        );
+    }
     const message: ConversationMessage = {
       id: callMessageId("owner-message", params),
       ...(ownChat ? { turnId: params.turnId } : {}),
@@ -174,13 +202,21 @@ export class OwnerTools {
       createdAt: new Date().toISOString(),
       status: "completed",
       itemType: OWNER_MESSAGE_ITEM_TYPE,
+      ...(attachments.length > 0 ? { attachments } : {}),
     };
-    post(agentId, message);
+    const staged = attachments.map(({ id }) => id);
+    const added = yield* Effect.try({ try: () => post(agentId, message), catch: (cause) => ({ cause }) }).pipe(
+      Effect.tapError(() => mailbox.discardStagedGeneratedAttachments(staged).pipe(Effect.ignore)),
+      toToolOperationFailed,
+    );
+    // A retried call finds its message: the files staged again are not used.
+    if (!added && staged.length > 0) yield* mailbox.discardStagedGeneratedAttachments(staged).pipe(Effect.ignore);
     return openBotToolResult({
       status: "sent",
+      ...(attachments.length > 0 ? { attachments: attachments.map(({ name }) => name) } : {}),
       note: "The owner sees it in your chat with them and is told. Do not repeat it in your answer; continue your work or end your turn.",
     });
-  }
+  });
 
   #alert(params: DynamicToolCallParams, agentId: string): OpenBotToolResponse {
     const parsed = alertOwnerToolSchema.safeParse(params.arguments);

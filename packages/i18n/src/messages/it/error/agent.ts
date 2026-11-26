@@ -115,7 +115,7 @@ export const messages = {
   "error.agent.workspaceOnlyMacOnly":
     "Solo workspace è disponibile per questo provider solo su macOS. Scegli Accesso completo nelle impostazioni dell'agente.",
   "error.agent.jailUnavailable":
-    "Questo server non può avviare gli agenti nel loro isolamento, e il suo operatore lo richiede. Chiedi all'operatore di verificare che python3 sia installato e che il kernel abbia Landlock, o di rimuovere OPENBOT_AGENT_JAIL_STRICT.",
+    "Questo agente non può avviarsi: il server non riesce a tenerlo separato in modo sicuro dagli altri agenti e dai tuoi dati. I tuoi dati non sono a rischio. Chiedi a chi gestisce il tuo server di risolvere il problema.",
   "error.agent.lowMemory":
     "Questo server ha poca memoria. Il tuo messaggio resta in coda e parte quando si libera memoria. Un piano più grande dà più memoria al server.",
   "error.agent.lowMemoryServer":

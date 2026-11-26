@@ -41,6 +41,40 @@
   padding-left: calc(var(--openbot-space-2) + var(--openbot-icon-sm) + var(--openbot-space-1-5));
 }
 
+/* A row of tabs that heads a view's own content (Trust, Reviews, Portfolio), as a toolbar heads a
+   list. The bar sizes to its tabs on a computer; on a phone it fills the row and scrolls sideways
+   when the labels are longer than the screen (workspace-phone-views.css). */
+.ws-view-tabs {
+  display: flex;
+  flex: none;
+  min-width: 0;
+}
+
+/* A row that scrolls sideways fades the edge where more waits: the right edge at the start, the
+   left edge at the end, both in between. The animation runs on the row's own scroll position, so a
+   row with nothing to scroll (the timeline is inactive) keeps its edges whole. */
+@keyframes ws-scroll-row-fade {
+  from {
+    mask-image: linear-gradient(
+      to right,
+      currentcolor 0,
+      currentcolor 0,
+      currentcolor calc(100% - var(--openbot-space-6)),
+      transparent 100%
+    );
+  }
+
+  to {
+    mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      currentcolor var(--openbot-space-6),
+      currentcolor 100%,
+      currentcolor 100%
+    );
+  }
+}
+
 .ws-view-layout-toggle {
   display: flex;
   gap: var(--openbot-space-0-5);

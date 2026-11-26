@@ -28,6 +28,7 @@ import {
   SettingsRow,
   SettingsSection,
   ShieldCheck,
+  SlidingTabs,
   SwitchField,
   Trash2,
   toast,
@@ -143,24 +144,19 @@ export function WorkspaceTrustView() {
         subtitle={t("trust.subtitle")}
         onBack={() => ws.back()}
       />
-      <div class="trust-tabs">
-        <For each={["rules", "guardrails", "audit"] as const}>
-          {(value) => (
-            <Button
-              type="button"
-              size="sm"
-              variant={tab() === value ? "secondary" : "ghost"}
-              aria-pressed={tab() === value ? "true" : "false"}
-              onClick={() => setTab(value)}
-            >
-              {value === "rules"
-                ? t("trust.tab.rules")
-                : value === "guardrails"
-                  ? t("trust.tab.guardrails")
-                  : t("trust.tab.audit")}
-            </Button>
-          )}
-        </For>
+      <div class="ws-view-tabs trust-tabs">
+        <SlidingTabs.Root
+          value={tab()}
+          onChange={(value) => {
+            if (value === "rules" || value === "guardrails" || value === "audit") setTab(value);
+          }}
+        >
+          <SlidingTabs.List aria-label={t("trust.title")}>
+            <SlidingTabs.Trigger value="rules">{t("trust.tab.rules")}</SlidingTabs.Trigger>
+            <SlidingTabs.Trigger value="guardrails">{t("trust.tab.guardrails")}</SlidingTabs.Trigger>
+            <SlidingTabs.Trigger value="audit">{t("trust.tab.audit")}</SlidingTabs.Trigger>
+          </SlidingTabs.List>
+        </SlidingTabs.Root>
       </div>
       <div class="ws-view-scroll trust-scroll">
         <Show when={!calls()}>

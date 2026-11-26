@@ -1,6 +1,6 @@
 import type { RealityPage, RealityReport, ValueReport } from "@openbot/contracts/portfolio";
 import type { AppTextKey } from "@openbot/i18n";
-import { Button, Input, SwitchField, Text, toast } from "@openbot/ui";
+import { Button, Input, SlidingTabs, SwitchField, Text, toast } from "@openbot/ui";
 import { WorkspacePaneHeader } from "@openbot/ui/features/workspace/WorkspacePaneHeader";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, onSettled, Show } from "solid-js";
@@ -47,20 +47,21 @@ export function WorkspacePortfolioView() {
     <section class="ws-view" aria-label={t("portfolio.title")}>
       <WorkspacePaneHeader title={t("portfolio.title")} onBack={() => ws.back()} />
       <div class="portfolio-view">
-        <fieldset class="portfolio-tabs" aria-label={t("portfolio.title")}>
-          <For each={TABS}>
-            {(entry) => (
-              <Button
-                variant={tab() === entry.id ? "secondary" : "ghost"}
-                size="sm"
-                aria-pressed={tab() === entry.id ? "true" : "false"}
-                onClick={() => setTab(entry.id)}
-              >
-                {t(entry.label)}
-              </Button>
-            )}
-          </For>
-        </fieldset>
+        <div class="ws-view-tabs">
+          <SlidingTabs.Root
+            value={tab()}
+            onChange={(value) => {
+              const next = TABS.find((entry) => entry.id === value);
+              if (next) setTab(next.id);
+            }}
+          >
+            <SlidingTabs.List aria-label={t("portfolio.title")}>
+              <For each={TABS}>
+                {(entry) => <SlidingTabs.Trigger value={entry.id}>{t(entry.label)}</SlidingTabs.Trigger>}
+              </For>
+            </SlidingTabs.List>
+          </SlidingTabs.Root>
+        </div>
         <Show when={tab() === "value"}>
           <PortfolioValue />
         </Show>

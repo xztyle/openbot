@@ -5,7 +5,7 @@ import type {
   RolePlaybooksSnapshot,
 } from "@openbot/contracts/agent-efficiency";
 import type { LearningReviewItem, LearningSettings } from "@openbot/contracts/agent-learning";
-import { Button, Input, SwitchField, Text, Textarea, toast } from "@openbot/ui";
+import { Button, Input, SlidingTabs, SwitchField, Text, Textarea, toast } from "@openbot/ui";
 import { WorkspacePaneHeader } from "@openbot/ui/features/workspace/WorkspacePaneHeader";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, onSettled, Show } from "solid-js";
@@ -144,30 +144,21 @@ export function WorkspaceReviewsView() {
     <section class="ws-view" aria-label={t("efficiency.view.title")}>
       <WorkspacePaneHeader title={t("efficiency.view.title")} onBack={() => ws.back()} />
       <div class="efficiency-view">
-        <div class="efficiency-actions">
-          <Button
-            variant={tab() === "reviews" ? "secondary" : "ghost"}
-            aria-pressed={tab() === "reviews" ? "true" : "false"}
-            onClick={() => setTab("reviews")}
+        <div class="ws-view-tabs">
+          <SlidingTabs.Root
+            value={tab()}
+            onChange={(value) => {
+              if (value === "reviews" || value === "playbooks" || value === "learning") setTab(value);
+            }}
           >
-            {t("efficiency.view.tab.reviews")}
-          </Button>
-          <Button
-            variant={tab() === "playbooks" ? "secondary" : "ghost"}
-            aria-pressed={tab() === "playbooks" ? "true" : "false"}
-            onClick={() => setTab("playbooks")}
-          >
-            {t("efficiency.view.tab.playbooks")}
-          </Button>
-          <Show when={learningSettings()}>
-            <Button
-              variant={tab() === "learning" ? "secondary" : "ghost"}
-              aria-pressed={tab() === "learning" ? "true" : "false"}
-              onClick={() => setTab("learning")}
-            >
-              {t("efficiency.view.tab.learning")}
-            </Button>
-          </Show>
+            <SlidingTabs.List aria-label={t("efficiency.view.title")}>
+              <SlidingTabs.Trigger value="reviews">{t("efficiency.view.tab.reviews")}</SlidingTabs.Trigger>
+              <SlidingTabs.Trigger value="playbooks">{t("efficiency.view.tab.playbooks")}</SlidingTabs.Trigger>
+              <Show when={learningSettings()}>
+                <SlidingTabs.Trigger value="learning">{t("efficiency.view.tab.learning")}</SlidingTabs.Trigger>
+              </Show>
+            </SlidingTabs.List>
+          </SlidingTabs.Root>
         </div>
         <Show when={error()}>
           {(message) => (

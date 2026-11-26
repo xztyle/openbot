@@ -233,6 +233,13 @@
   scrollbar-width: none;
 }
 
+/* The row scrolls sideways; the last chip fades at the edge instead of being cut, so a thumb
+   knows more wait to the right (ws-scroll-row-fade in workspace-views.css). */
+.ws-phone-chips {
+  animation: ws-scroll-row-fade linear both;
+  animation-timeline: scroll(self x);
+}
+
 .ws-phone-chips::-webkit-scrollbar {
   display: none;
 }

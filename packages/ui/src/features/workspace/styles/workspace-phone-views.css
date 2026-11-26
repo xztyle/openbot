@@ -152,6 +152,42 @@
     text-overflow: ellipsis;
   }
 
+  /* A view's own tab row scrolls sideways instead of wrapping to a second line: the bar is at least
+     the row, each tab keeps its whole label, and the right edge fades where more tabs wait. */
+  .ws-view-tabs {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    animation: ws-scroll-row-fade linear both;
+    animation-timeline: scroll(self x);
+  }
+
+  .ws-view-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* The tabs root between the row and the bar sizes to its content; the bar reads the row's width
+     through it. */
+  .ws-view-tabs > * {
+    flex: none;
+    min-width: 100%;
+  }
+
+  .ws-view-tabs .ui-sliding-tabs {
+    display: flex;
+    min-width: 100%;
+    width: max-content;
+  }
+
+  .ws-view-tabs .ui-sliding-tabs-trigger {
+    flex: 1 0 auto;
+  }
+
+  .ws-view-tabs .ui-sliding-tabs-trigger,
+  .ws-view-tabs .ui-sliding-tabs-pill {
+    height: calc(var(--openbot-touch-target) - 6px);
+  }
+
   .ws-view-search {
     min-width: 0;
     flex: 1 1 0;

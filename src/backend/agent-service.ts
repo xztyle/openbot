@@ -110,6 +110,7 @@ import type {
   TestMcpServerInput,
   TestRoutineInput,
   TicketAsks,
+  TicketVerdict,
   UpdateAgentInput,
   UpdateAgentMemoryInput,
   UpdateChannelMemoryInput,
@@ -2320,10 +2321,15 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   /**
    * Where a Motion ticket that the owner dismissed or answered in Needs you goes, by its id in Motion.
-   * An answer is the text the owner wrote; a dismissal has none.
+   * An answer is the text the owner wrote; a dismissal has none. An escalated review's answer can carry
+   * the owner's verdict.
    */
-  onWaitingTicketDismissed(dismiss: (issueId: string, answer: string | null) => Promise<void>): void {
-    this.#attention.onTicketDismissed((requestId, answer) => dismiss(requestId.replace(/^motion:/u, ""), answer));
+  onWaitingTicketDismissed(
+    dismiss: (issueId: string, answer: string | null, verdict: TicketVerdict | null) => Promise<void>,
+  ): void {
+    this.#attention.onTicketDismissed((requestId, answer, verdict) =>
+      dismiss(requestId.replace(/^motion:/u, ""), answer, verdict),
+    );
   }
 
   /** The source of each agent's current Motion ticket, which the fleet shows. */

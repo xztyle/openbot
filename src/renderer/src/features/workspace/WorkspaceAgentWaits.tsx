@@ -10,7 +10,7 @@
  * or dismissed. Writing in the chat does the same. Dismiss only clears the mark. Motion itself stays
  * one small link away.
  */
-import { type AgentAttentionItem, isTicketAttention } from "@openbot/contracts/ipc";
+import { type AgentAttentionItem, isTicketAttention, type TicketVerdict } from "@openbot/contracts/ipc";
 import { Button } from "@openbot/ui/button";
 import { Input } from "@openbot/ui/form";
 import { Check, ExternalLink, Ticket, X } from "@openbot/ui/icons";
@@ -74,7 +74,7 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
     }
   };
   /** The reader's answer: their message to the agent first (it wakes the agent), then the ticket. */
-  const answer = async (item: AgentAttentionItem, text: string) => {
+  const answer = async (item: AgentAttentionItem, text: string, verdict?: TicketVerdict) => {
     const key = String(item.requestId);
     const trimmed = text.trim();
     if (!trimmed || busy()) return;
@@ -83,7 +83,7 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
     try {
       hide(key);
       const message = t("workspace.needsYou.ticket.message", { ticket: item.summary ?? "", answer: trimmed });
-      const { commented } = await answerTicket(ws.channels.port(), item, message, trimmed);
+      const { commented } = await answerTicket(ws.channels.port(), item, message, trimmed, verdict);
       setReplying(null);
       setReply("");
       setNoting(null);
@@ -144,7 +144,11 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
               </span>
               <Show when={answers().primary}>
                 {(primary) => (
-                  <Button size="sm" disabled={busy() !== null} onClick={() => void answer(item(), primary().answer)}>
+                  <Button
+                    size="sm"
+                    disabled={busy() !== null}
+                    onClick={() => void answer(item(), primary().answer, primary().verdict)}
+                  >
                     <Check aria-hidden="true" />
                     {primary().label}
                   </Button>
@@ -207,7 +211,7 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
                   onSubmit={(event) => {
                     event.preventDefault();
                     if (secondary().noteRequired && !note().trim()) return;
-                    void answer(item(), secondary().answer(note()));
+                    void answer(item(), secondary().answer(note()), secondary().verdict);
                   }}
                 >
                   <Input

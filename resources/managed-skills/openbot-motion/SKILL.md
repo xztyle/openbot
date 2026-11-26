@@ -26,8 +26,10 @@ history, assignees, and comments show who did what. People see the same board at
    what is left. The issue's `reviewer` grades it with `issues_review`; with no reviewer, Atelier's independent
    grader (another model, from the other vendor for important issues) checks the criteria against the evidence of
    your run. A pass moves it to Done. A reopen comes back to you with the notes: fix exactly that and request
-   review again. After three rounds the owner decides. An issue with criteria that you move to Done goes to review
-   anyway. Never grade an issue you are assigned to; when you are its reviewer, grade it against its criteria
+   review again. After three rounds the owner (or your manager) decides: when they accept it as it is, Atelier
+   closes the issue for them, so do not set its status again. An issue with criteria that you move to Done goes to
+   review anyway. Never ask the owner to change a ticket's status, or anything else in Motion, by hand: if you
+   cannot close or move an issue, ask your manager, or tell the owner in plain words that it failed. Never grade an issue you are assigned to; when you are its reviewer, grade it against its criteria
    only, and reopen with notes that say exactly what is missing.
 4. **Results go in comments.** Put outcomes, evidence (files, links, numbers with sources), and decisions in
    comments on the issue (`comments_create` on the issue's page). The chat message to your orchestrator or the

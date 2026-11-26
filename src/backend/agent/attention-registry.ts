@@ -21,6 +21,9 @@ import {
   type AgentAttentionItem,
   BROWSER_TAKEOVER_REASONS,
   TICKET_ANSWER_FIELD,
+  TICKET_VERDICT_FIELD,
+  TICKET_VERDICTS,
+  type TicketVerdict,
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isOneOf } from "@openbot/contracts/runtime-values";
 import { parseTwoStepKey, twoStepCode } from "@openbot/contracts/two-step-code";
@@ -698,9 +701,12 @@ export class AttentionRegistry {
    * Where a dismissed or answered Motion ticket goes: the Motion events, which keep the waiting list.
    * An answer is the owner's text, which goes on the ticket; a dismissal has none.
    */
-  #ticketDismissed: (requestId: string, answer: string | null) => Promise<void> = async () => undefined;
+  #ticketDismissed: (requestId: string, answer: string | null, verdict: TicketVerdict | null) => Promise<void> =
+    async () => undefined;
 
-  onTicketDismissed(dismiss: (requestId: string, answer: string | null) => Promise<void>): void {
+  onTicketDismissed(
+    dismiss: (requestId: string, answer: string | null, verdict: TicketVerdict | null) => Promise<void>,
+  ): void {
     this.#ticketDismissed = dismiss;
   }
 
@@ -853,7 +859,10 @@ export class AttentionRegistry {
     if (ticket) {
       const requestId = String(ticket.requestId);
       const answer = (input.answers[TICKET_ANSWER_FIELD] ?? []).join("\n").trim() || null;
-      return yield* attentionIo(() => this.#ticketDismissed(requestId, answer));
+      // An escalated review's verdict: the host closes or reopens the ticket with the answer.
+      const given = input.answers[TICKET_VERDICT_FIELD]?.[0];
+      const verdict = answer && isOneOf(TICKET_VERDICTS, given) ? given : null;
+      return yield* attentionIo(() => this.#ticketDismissed(requestId, answer, verdict));
     }
     const saved = yield* this.#saveApiKeyAnswer(input, responder);
     yield* attentionStep(() => {

@@ -12,11 +12,16 @@
  * - After `MAX_REVIEW_ROUNDS` reopenings, or when the judge gives no verdict twice, the ticket stays in
  *   review and goes to the owner as a Needs you item, with the notes on the ticket.
  *
- * The rounds of each ticket are kept in one small file, so a restart does not reset them.
+ * - The owner's verdict on such a ticket (from Atelier), or the deciding manager's, replaces the
+ *   grader's (`decide`): accept closes it in Motion at once as that person's member, with no further
+ *   round, even when its agent marks it Done afterwards; send back reopens it with the note.
+ *
+ * The rounds of each ticket, and the tickets a person accepted, are kept in one small file, so a
+ * restart does not reset them.
  */
 
 import { readFile } from "node:fs/promises";
-import type { ConversationMessage } from "@openbot/contracts/ipc";
+import type { ConversationMessage, TicketVerdict } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { Effect } from "effect";
 import { writeJsonFileAtomically } from "../../backend/atomic-json-file";
@@ -38,6 +43,8 @@ import {
 import { ticketOfToolCall } from "./motion-tickets";
 
 const ROUNDS_MS = 30 * 86_400_000;
+/** How long a person's acceptance keeps a ticket out of review. */
+const ACCEPTED_MS = 7 * 86_400_000;
 /** A status an agent sets that means done, in the languages the boards use. */
 const DONE_STATUS =
   /^(done|hecho|terminad[oa]|completad[oa]|completed?|closed|cerrad[oa]|listo|finished|finalizad[oa]|resuelt[oa]|resolved)$/iu;
@@ -70,6 +77,30 @@ interface Rounds {
   at: number;
 }
 
+/** A ticket that a person accepted as it is: its key, and when. */
+interface Accepted {
+  key: string;
+  at: number;
+}
+
+function decodeAccepted(value: unknown): Record<string, Accepted> {
+  const accepted = isDynamicRecord(value) && isDynamicRecord(value.accepted) ? value.accepted : {};
+  const out: Record<string, Accepted> = {};
+  for (const [id, entry] of Object.entries(accepted))
+    if (isDynamicRecord(entry) && isString(entry.key) && typeof entry.at === "number")
+      out[id] = { key: entry.key, at: entry.at };
+  return out;
+}
+
+/** A person's verdict on a review that the grader handed over. */
+export interface ReviewDecision {
+  issueId: string;
+  key: string;
+  verdict: TicketVerdict;
+  /** The person's words: they go on the ticket as the review notes. */
+  notes: string;
+}
+
 function decodeRounds(value: unknown): Record<string, Rounds> {
   const rounds = isDynamicRecord(value) && isDynamicRecord(value.rounds) ? value.rounds : {};
   const out: Record<string, Rounds> = {};
@@ -96,6 +127,7 @@ export function missingLine(notes: string): string {
 export class MotionGrader {
   readonly #deps: MotionGraderDependencies;
   #rounds: Record<string, Rounds> = {};
+  #accepted: Record<string, Accepted> = {};
   #loaded: Promise<void> | null = null;
   #chain: Promise<unknown> = Promise.resolve();
   readonly #inFlight = new Set<string>();
@@ -112,6 +144,7 @@ export class MotionGrader {
     this.#loaded ??= readFile(this.#deps.stateFile, "utf8")
       .then((text) => {
         this.#rounds = decodeRounds(JSON.parse(text));
+        this.#accepted = decodeAccepted(JSON.parse(text));
       })
       .catch(() => undefined);
     return this.#loaded;
@@ -120,10 +153,50 @@ export class MotionGrader {
   #save(): Promise<void> {
     const now = this.#now();
     this.#rounds = Object.fromEntries(Object.entries(this.#rounds).filter(([, entry]) => now - entry.at < ROUNDS_MS));
+    this.#accepted = Object.fromEntries(
+      Object.entries(this.#accepted).filter(([, entry]) => now - entry.at < ACCEPTED_MS),
+    );
     // Grades run one at a time, so their saves do too.
     return Effect.runPromise(
-      writeJsonFileAtomically(this.#deps.stateFile, { version: 1, rounds: this.#rounds }, { createDirectory: true }),
+      writeJsonFileAtomically(
+        this.#deps.stateFile,
+        { version: 1, rounds: this.#rounds, accepted: this.#accepted },
+        { createDirectory: true },
+      ),
     ).catch(() => this.#deps.log("Could not save the grader's review rounds."));
+  }
+
+  /** Whether a person accepted this ticket as it is: no review round starts for it. */
+  #isAccepted(issueId: string | null, key: string): boolean {
+    return Object.entries(this.#accepted).some(([id, entry]) => id === issueId || (key !== "" && entry.key === key));
+  }
+
+  /**
+   * A person's verdict on a review that the grader handed over: the owner's answer from Atelier, or
+   * the deciding manager's. It replaces the grader's verdict in Motion (`issues_review` with
+   * `override`), as the caller's own member: accept moves the ticket to Done whatever its status,
+   * and no review round follows; send back reopens it with the notes, and the grader grades the next
+   * hand-off once before it comes back to a person. Throws when Motion refuses it.
+   */
+  async decide(caller: MotionCaller, decision: ReviewDecision): Promise<void> {
+    await this.#load();
+    const accept = decision.verdict === "accept";
+    // Marked before Motion answers: an agent that closes the ticket meanwhile does not send it back to review.
+    if (accept) {
+      this.#accepted[decision.issueId] = { key: decision.key, at: this.#now() };
+      delete this.#rounds[decision.issueId];
+    } else {
+      delete this.#accepted[decision.issueId];
+      this.#rounds[decision.issueId] = { rounds: MAX_REVIEW_ROUNDS - 1, at: this.#now() };
+    }
+    await this.#save();
+    await this.#deps.tool(caller, "issues_review", {
+      issue: decision.issueId,
+      verdict: accept ? "pass" : "reopen",
+      notes: decision.notes,
+      override: true,
+    });
+    this.#deps.log(`A person's verdict on ${decision.key}: ${accept ? "accepted as it is" : "sent back"}.`);
   }
 
   /** Grades a ticket that went to review with no reviewer. Grades run one at a time. */
@@ -162,9 +235,13 @@ export class MotionGrader {
   }
 
   async #backToReview(agentId: string, reference: string): Promise<void> {
+    await this.#load();
     const row = await this.#deps.tool({ agentId }, "rows_get", { id: reference });
     const ticket = reviewTicket(row, { key: reference, title: "", url: "" });
     if (!ticket.criteria?.trim()) return;
+    // A person accepted it as it is: Done stays Done.
+    const rowId = isDynamicRecord(row) && isString(row.id) ? row.id : null;
+    if (this.#isAccepted(rowId, ticket.key)) return;
     if (ticket.status && !DONE_STATUS.test(ticket.status.trim())) return;
     await this.#deps.tool({ agentId }, "issues_request_review", {
       issue: ticket.key,
@@ -203,6 +280,17 @@ export class MotionGrader {
       criteria: read.criteria ?? event.criteria,
       handoff: read.handoff ?? event.handoff,
     };
+    if (this.#isAccepted(event.issue.id, ticket.key)) {
+      // A person accepted it as it is, and it came back to review: it passes on their decision.
+      await this.#deps.tool(grader, "issues_review", {
+        issue: reference,
+        verdict: "pass",
+        notes: "Accepted as it is by a person's decision: no more review rounds.",
+        override: true,
+      });
+      this.#deps.log(`Passed ${ticket.key} on a person's earlier acceptance.`);
+      return;
+    }
     const previous = this.#rounds[event.issue.id]?.rounds ?? 0;
     const round = previous + 1;
     const waiting = {

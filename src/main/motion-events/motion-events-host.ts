@@ -7,7 +7,7 @@
 
 import type { Server } from "node:http";
 import { join } from "node:path";
-import type { ConversationMessage } from "@openbot/contracts/ipc";
+import type { ConversationMessage, TicketVerdict } from "@openbot/contracts/ipc";
 import {
   DEFAULT_WORKSPACE_MOTION_EVENTS,
   type McpServerConfig,
@@ -116,9 +116,11 @@ export interface MotionEventsHost {
   observeToolCall(agentId: string, tool: string, args: unknown): void;
   /**
    * The owner answered a ticket that waits on them from Atelier: the answer goes on the ticket as a
-   * comment of the owner's own Motion member, and the ticket leaves Needs you.
+   * comment of the owner's own Motion member, and the ticket leaves Needs you. With a verdict (an
+   * escalated review), the owner's member also closes the ticket (accept) or reopens it with the
+   * answer (send back), in place of the grader.
    */
-  answerWaiting(issueId: string, answer: string, ownerName: string): Promise<void>;
+  answerWaiting(issueId: string, answer: string, ownerName: string, verdict?: TicketVerdict | null): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -265,20 +267,40 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
       const note = answer.note ? ` ${answer.note}` : "";
       const text = request.reviewEscalated
         ? answer.verdict === "approve"
-          ? `${answer.byName} (manager) accepts ${key} as is, with no more review rounds: close it.${note}`
+          ? `${answer.byName} (manager) accepts ${key} as is, with no more review rounds. The ticket is closed now.${note}`
           : `${answer.byName} (manager) sends ${key} back. Fix this, then request review again:${note}`
         : answer.verdict === "approve"
           ? `${answer.byName} (manager) approves ${key}: go ahead.${note}`
           : `${answer.byName} (manager) declines ${key}:${note}`;
+      // An escalated review: the manager's verdict replaces the grader's, as the manager's own member,
+      // and its notes go on the ticket. Anything else, or a verdict Motion refused: a comment.
+      const decided = request.reviewEscalated
+        ? await grader
+            .decide(
+              { agentId: answer.byId },
+              { issueId, key, verdict: answer.verdict === "approve" ? "accept" : "send-back", notes: text },
+            )
+            .then(
+              () => true,
+              (error: unknown) => {
+                logger.warn("Motion refused a manager's verdict on an escalated review.", {
+                  key,
+                  error: error instanceof Error ? error.message : "failed",
+                });
+                return false;
+              },
+            )
+        : false;
       // The answer goes on the ticket as the manager's own comment, and wakes the asker at once.
-      await motion
-        .tool({ agentId: answer.byId }, "comments_create", { page_id: issueId, body: text })
-        .catch((error: unknown) =>
-          logger.warn("Could not comment a manager's answer on a Motion ticket.", {
-            key,
-            error: error instanceof Error ? error.message : "failed",
-          }),
-        );
+      if (!decided)
+        await motion
+          .tool({ agentId: answer.byId }, "comments_create", { page_id: issueId, body: text })
+          .catch((error: unknown) =>
+            logger.warn("Could not comment a manager's answer on a Motion ticket.", {
+              key,
+              error: error instanceof Error ? error.message : "failed",
+            }),
+          );
       events.noteWoken(request.askerId, issueId);
       await Effect.runPromise(
         options.send(
@@ -369,9 +391,10 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
       grader.observeToolCall(agentId, name, args);
       orders.observeToolCall(agentId, name, args);
     },
-    answerWaiting: async (issueId, answer, ownerName) => {
+    answerWaiting: async (issueId, answer, ownerName, verdict) => {
       const ticket = events.waiting().find((item) => item.issueId === issueId);
       if (!ticket) return;
+      const owner = { agentId: ticket.agentId, asMember: { key: MOTION_OWNER_KEY, name: ownerName } };
       const agentName = options.agents().find((agent) => agent.id === ticket.agentId)?.name;
       options.record?.({
         actor: { kind: "agent", id: ticket.agentId, ...(agentName ? { name: agentName } : {}) },
@@ -384,11 +407,22 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
         answeredBy: ownerName,
         answeredByKind: "owner",
       });
-      await motion.tool(
-        { agentId: ticket.agentId, asMember: { key: MOTION_OWNER_KEY, name: ownerName } },
-        "comments_create",
-        { page_id: issueId, body: answer },
-      );
+      // The owner's verdict on an escalated review replaces the grader's: Motion closes or reopens
+      // the ticket and keeps the answer as its review notes, so nobody has to change its status by hand.
+      // A verdict Motion refused still leaves the answer on the ticket, and the error in the log.
+      const decided = verdict
+        ? await grader.decide(owner, { issueId, key: ticket.key, verdict, notes: answer }).then(
+            () => true,
+            (error: unknown) => {
+              logger.warn("Motion refused the owner's verdict on an escalated review.", {
+                key: ticket.key,
+                error: error instanceof Error ? error.message : "failed",
+              });
+              return false;
+            },
+          )
+        : false;
+      if (!decided) await motion.tool(owner, "comments_create", { page_id: issueId, body: answer });
       await events.dismissWaiting(issueId);
     },
     close: async () => {

@@ -12,6 +12,7 @@ import {
   agentAttentionKey,
   isTicketAttention,
   type LoopDecision,
+  type TicketVerdict,
 } from "@openbot/contracts/ipc";
 import type { NeedsYouRow } from "@openbot/ui/features/workspace/NeedsYou";
 import type { TodayDecision } from "@openbot/ui/features/workspace/TodayView";
@@ -235,13 +236,13 @@ export function useDecisionQueue() {
       // Why the ticket waits picks its answers: Approve / Decline, Accept as is / Send back, or a
       // written answer. Each goes to the agent and on the ticket.
       const answers = ticket ? ticketAnswers(item, t) : {};
-      const answerWith = (answer: string) => async () => {
+      const answerWith = (answer: string, verdict?: TicketVerdict) => async () => {
         const message = t("workspace.needsYou.ticket.message", { ticket: item.summary ?? "", answer });
-        await answerTicket(ws.channels.port(), item, message, answer);
+        await answerTicket(ws.channels.port(), item, message, answer, verdict);
       };
       const primary = answers.primary;
       const secondary = answers.secondary;
-      const approveTicket = primary ? answerWith(primary.answer) : undefined;
+      const approveTicket = primary ? answerWith(primary.answer, primary.verdict) : undefined;
       const writtenAnswer = ticket && !primary ? (text: string) => answerWith(text.trim())() : undefined;
       return {
         key: agentAttentionKey(item),
@@ -290,7 +291,7 @@ export function useDecisionQueue() {
         ...(secondary
           ? {
               rejectLabel: secondary.label,
-              rejectWithNote: (note: string) => answerWith(secondary.answer(note))(),
+              rejectWithNote: (note: string) => answerWith(secondary.answer(note), secondary.verdict)(),
               rejectNoteRequired: secondary.noteRequired,
             }
           : {}),

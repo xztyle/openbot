@@ -35,7 +35,10 @@ Tier 1 covers:
 - a Motion ticket handed over for an OK or a decision (`asks` = `approval` or `other`), and a `blocked`
   ticket that does not need a credential, money or a sign-in;
 - a review that the grader escalated after its 3 rounds (`asks` = `review-escalated`): the manager
-  accepts it as is or sends it back with a note;
+  accepts it as is or sends it back with a note. Either verdict, the manager's or the owner's, replaces
+  the grader's in Motion (`issues_review` with `override`, as that person's own Motion member): accept
+  closes the ticket at once and starts no new review round, even when its agent marks it Done again;
+  send back reopens it with the note. Nobody changes the ticket's status by hand;
 - plan approvals and other `request_decision` calls that are not in a tier-2 class;
 - creating or changing an agent within the space's limits (when the trust policy asks);
 - free, reversible external sign-ups, such as an affiliate program with no fee;

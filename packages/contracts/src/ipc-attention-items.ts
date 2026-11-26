@@ -92,6 +92,15 @@ export const MOTION_TICKET_TURN = "motion";
  */
 export const TICKET_ANSWER_FIELD = "answer";
 
+/**
+ * The optional verdict field of the same `respondToPrompt`, for a review that the grader escalated:
+ * `accept` closes the ticket as it is (the owner's verdict replaces the grader's), `send-back` reopens
+ * it with the note. A client that sends no verdict only comments.
+ */
+export const TICKET_VERDICT_FIELD = "verdict";
+export const TICKET_VERDICTS = ["accept", "send-back"] as const;
+export type TicketVerdict = (typeof TICKET_VERDICTS)[number];
+
 /** A Motion ticket that waits on the user, which opens at its `url`, not in a chat. */
 export function isTicketAttention(item: Pick<AgentAttentionItem, "turnId" | "url">): item is AgentAttentionItem & {
   url: string;

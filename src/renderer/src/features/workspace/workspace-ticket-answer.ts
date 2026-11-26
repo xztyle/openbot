@@ -3,7 +3,12 @@
  * agent, which wakes it like any message of theirs, then the same text on the ticket as the owner's
  * comment (the host posts it), which also takes the ticket off Needs you.
  */
-import { type AgentAttentionItem, TICKET_ANSWER_FIELD } from "@openbot/contracts/ipc";
+import {
+  type AgentAttentionItem,
+  TICKET_ANSWER_FIELD,
+  TICKET_VERDICT_FIELD,
+  type TicketVerdict,
+} from "@openbot/contracts/ipc";
 import type { AppTranslate } from "@openbot/i18n";
 import type { ChannelsPort } from "../channels/channels-port";
 
@@ -12,11 +17,12 @@ import type { ChannelsPort } from "../channels/channels-port";
  * - an approval: Approve, and Decline with an optional note;
  * - an escalated review: Accept as is, and Send back with a note it needs;
  * - anything else, or a ticket the host has not read yet: only a written answer.
- * Each answer is the text that goes to the agent and on the ticket.
+ * Each answer is the text that goes to the agent and on the ticket. An escalated review's answers also
+ * carry a verdict: the host closes or reopens the ticket in Motion itself, so no agent has to.
  */
 export interface TicketAnswers {
-  primary?: { label: string; answer: string };
-  secondary?: { label: string; answer: (note: string) => string; noteRequired: boolean };
+  primary?: { label: string; answer: string; verdict?: TicketVerdict };
+  secondary?: { label: string; answer: (note: string) => string; noteRequired: boolean; verdict?: TicketVerdict };
 }
 
 export function ticketAnswers(item: Pick<AgentAttentionItem, "asks">, t: AppTranslate): TicketAnswers {
@@ -37,11 +43,13 @@ export function ticketAnswers(item: Pick<AgentAttentionItem, "asks">, t: AppTran
       primary: {
         label: t("workspace.needsYou.ticket.acceptAsIs"),
         answer: t("workspace.needsYou.ticket.acceptedAsIs"),
+        verdict: "accept",
       },
       secondary: {
         label: t("workspace.needsYou.ticket.sendBack"),
         answer: (note) => t("workspace.needsYou.ticket.sentBack", { note: note.trim() }),
         noteRequired: true,
+        verdict: "send-back",
       },
     };
   return {};
@@ -56,11 +64,13 @@ export async function answerTicket(
   item: Pick<AgentAttentionItem, "agentId" | "requestId">,
   message: string,
   answer: string,
+  verdict?: TicketVerdict,
 ): Promise<{ commented: boolean }> {
   // The channels port reaches the host on the desktop and in the browser alike; `window.openbot` is the
   // desktop's preload only, and the browser client has none.
   await port.sendAgentMessage({ agentId: item.agentId, text: message, clientMessageId: crypto.randomUUID() });
-  return port.agent.respondToPrompt({ requestId: item.requestId, answers: { [TICKET_ANSWER_FIELD]: [answer] } }).then(
+  const answers = { [TICKET_ANSWER_FIELD]: [answer], ...(verdict ? { [TICKET_VERDICT_FIELD]: [verdict] } : {}) };
+  return port.agent.respondToPrompt({ requestId: item.requestId, answers }).then(
     () => ({ commented: true }),
     () => ({ commented: false }),
   );

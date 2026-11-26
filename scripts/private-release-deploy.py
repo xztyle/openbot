@@ -256,10 +256,11 @@ def control(method, path, name, max_time=10, body=None):
 
 
 def drain_host():
-    """Holds new turns and waits up to 10 minutes for running ones to end, so the restart cuts as few
-    as it can. A host without the drain route (older images) answers None and the deploy goes on."""
+    """Holds new turns and does not wait for running ones: the restart stops them right away and
+    resume_interrupted() starts them again once the new host is up (owner rule, 2026-11-26). A host
+    without the drain route (older images) answers None and the deploy goes on."""
     start = time.monotonic()
-    answer = control("POST", "/v1/drain?timeout=600", "drain", max_time=660)
+    answer = control("POST", "/v1/drain?timeout=0", "drain", max_time=30)
     TIMES["drain"] = round(time.monotonic() - start, 3)
     return answer
 

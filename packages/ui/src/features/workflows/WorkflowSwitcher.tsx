@@ -126,6 +126,7 @@ export function WorkflowSwitcher(props: {
           <CopyPlus class="agent-context-icon" aria-hidden="true" />
           <span>{t("workflow.canvas.switcher.duplicate")}</span>
         </DropdownMenu.Item>
+        <DropdownMenu.Separator />
         <DropdownMenu.Item class="ui-action-menu-danger" onSelect={() => props.onAction("delete")}>
           <Trash2 aria-hidden="true" />
           <span>{t("workflow.canvas.switcher.delete")}</span>

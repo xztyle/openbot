@@ -134,7 +134,9 @@ export function ProviderAccountList(props: ProviderAccountListProps) {
                         </DropdownMenu.Item>
                       </Show>
                       <Show when={!own()}>
+                        <DropdownMenu.Separator />
                         <DropdownMenu.Item
+                          class="ui-action-menu-danger"
                           onSelect={() => run(name(), () => props.actions.remove(props.provider, account().id))}
                         >
                           <Trash2 aria-hidden="true" />

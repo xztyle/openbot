@@ -24,6 +24,7 @@ import { ArtifactCard } from "@openbot/ui/features/workspace/ArtifactCard";
 import { LongMessageFold } from "@openbot/ui/features/workspace/LongMessageFold";
 import { DayDivider, NewMessagesDivider } from "@openbot/ui/features/workspace/MessageDividers";
 import { MessageRow } from "@openbot/ui/features/workspace/MessageRow";
+import type { MessageTargetActions } from "@openbot/ui/features/workspace/message-context-target";
 import { StepTrail } from "@openbot/ui/features/workspace/StepTrail";
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
@@ -38,7 +39,7 @@ import { MemberProfile } from "./WorkspaceProfile";
 import { useWorkspace } from "./workspace-context";
 import { draftKey } from "./workspace-controller";
 import { debugMode } from "./workspace-debug";
-import { createWorkspaceFileViewer } from "./workspace-file-viewer";
+import { createWorkspaceFileViewer, type WorkspaceFileViewer } from "./workspace-file-viewer";
 import {
   memberById,
   mentionsReader,
@@ -52,6 +53,24 @@ import {
   type WorkspaceStepTrailView,
 } from "./workspace-model";
 
+/**
+ * Opens the annotator on an image of a message. Send in the annotator fills the box of the current
+ * chat: the thread's, when the message is in the thread panel.
+ */
+function createMessageAnnotator(entry: () => ChannelMessage, inThread: () => boolean) {
+  const ws = useWorkspace();
+  const { t } = useText();
+  const composerKey = () =>
+    draftKey(entry().channelId, inThread() ? (ws.state.thread?.rootId ?? entry().threadRootId ?? entry().id) : null);
+  return (attachment: AttachmentSummary, url?: string) =>
+    openImageAnnotator({
+      source: attachmentImageSource(attachment, ws.channels.port(), url),
+      onSend: (file) => {
+        if (!attachFilesToComposer(composerKey(), [file])) throw new Error(t("workspace.app.composer.attachFailed"));
+      },
+    });
+}
+
 /** The body of a message: Markdown, files and images, as the agent chat draws them. */
 export function WorkspaceMessageBody(props: {
   entry: ChannelMessage;
@@ -59,6 +78,10 @@ export function WorkspaceMessageBody(props: {
   fold?: { id: string; enabled: boolean; live: boolean } | undefined;
   /** The message is in the thread panel: an annotated image goes to the thread's box. */
   inThread?: boolean | undefined;
+  /** The viewer of the row's files, shared with the row's right-click menu. Absent: the body has its own. */
+  viewer?: WorkspaceFileViewer | undefined;
+  /** Opens the annotator on an image of the row, shared with the right-click menu. Absent: the body has its own. */
+  annotate?: ((attachment: AttachmentSummary, url?: string) => void) | undefined;
 }) {
   const ws = useWorkspace();
   const message = createMemo((): AgentMessage => {
@@ -73,20 +96,13 @@ export function WorkspaceMessageBody(props: {
   const cardId = () => CHAT_CARD_MARKER.exec(props.entry.message.text)?.[1];
   const port = () => ws.channels.port();
   const { t, errorMessage } = useText();
-  /** The box that Send in the annotator fills: the thread's, when the message is in the thread panel. */
-  const composerKey = () =>
-    draftKey(
-      props.entry.channelId,
-      props.inThread ? (ws.state.thread?.rootId ?? props.entry.threadRootId ?? props.entry.id) : null,
+  const annotate =
+    props.annotate ??
+    createMessageAnnotator(
+      () => props.entry,
+      () => props.inThread === true,
     );
-  const annotate = (attachment: AttachmentSummary, url?: string) =>
-    openImageAnnotator({
-      source: attachmentImageSource(attachment, port(), url),
-      onSend: (file) => {
-        if (!attachFilesToComposer(composerKey(), [file])) throw new Error(t("workspace.app.composer.attachFailed"));
-      },
-    });
-  const { view, download, Viewer } = createWorkspaceFileViewer({ annotate });
+  const { view, download, Viewer } = props.viewer ?? createWorkspaceFileViewer({ annotate });
   const attachmentAction = (attachment: AttachmentSummary, action: "open" | "reveal" | "download") => {
     if (action === "open") return view(attachment);
     if (action === "download") return download(attachment);
@@ -146,6 +162,28 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
   const author = createMemo(() => messageAuthor(ws.directory(), entry()));
   const own = () => entry().author.kind === "member" && !entry().externalAuthor && ws.env.isReader(entry().author.id);
   const deleted = () => Boolean(entry().deletedAt);
+  const annotate = createMessageAnnotator(entry, () => props.inThread === true);
+  const viewer = createWorkspaceFileViewer({ annotate });
+  const attachment = (id: string) => entry().message.attachments?.find((candidate) => candidate.id === id);
+  /** What a right-click on an image, a file, a link or the author offers, through the same paths as a tap. */
+  const targetActions = (): MessageTargetActions => ({
+    download: (id) => {
+      const file = attachment(id);
+      if (file) viewer.download(file);
+    },
+    openFile: (id) => {
+      const file = attachment(id);
+      if (file) viewer.view(file);
+    },
+    openLink: (url) => {
+      if (!ws.openLink(url)) void ws.channels.port().openUrl(url);
+    },
+    annotateImage: ({ attachmentId, src }) => {
+      const file = attachmentId ? attachment(attachmentId) : undefined;
+      if (file) annotate(file, src);
+    },
+    directMessage: own() || entry().externalAuthor ? undefined : () => ws.messageMember(entry().author.id),
+  });
   const artifacts = createMemo(() =>
     // Attached files already show as file cards; the links to deliverables get a card of their own.
     props.row.pending
@@ -395,6 +433,7 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
             : undefined
         }
         menuItems={menuItems()}
+        targetActions={targetActions()}
         note={note()}
         fold={fold()}
         profile={() => <MemberProfile member={author()} />}
@@ -415,7 +454,13 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
           )}
         </Show>
         <Show when={!props.row.pending && !plain()}>
-          <WorkspaceMessageBody entry={shownEntry()} fold={fold()} inThread={props.inThread} />
+          <WorkspaceMessageBody
+            entry={shownEntry()}
+            fold={fold()}
+            inThread={props.inThread}
+            viewer={viewer}
+            annotate={annotate}
+          />
         </Show>
         <Show when={props.row.progress?.length ? props.row.progress : undefined}>
           {(lines) => <ProgressFold lines={lines()} />}

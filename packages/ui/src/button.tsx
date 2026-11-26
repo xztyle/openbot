@@ -4,7 +4,7 @@ import type { ComponentProps, JSX, ValidComponent } from "@solidjs/web";
 import { cva, type VariantProps } from "class-variance-authority";
 import { createEffect, createSignal, For, merge, omit, onCleanup, Show, untrack } from "solid-js";
 import { Check, Copy } from "./icons";
-import { Spinner } from "./surface";
+import { Kbd, Spinner } from "./surface";
 import { useText } from "./text";
 import { LabelTooltip, LabelTooltipTrigger } from "./tooltip";
 import { cx } from "./utils";
@@ -168,14 +168,23 @@ export interface IconButtonProps
   label: string;
   children: JSX.Element;
   tooltip?: string;
+  /** The keys that do the same, shown after the label in the tooltip, such as "⌘N" or "Esc". */
+  shortcut?: string | undefined;
   size?: IconButtonSize;
 }
 
 /** A button that shows only an icon. The label names it for a screen reader and in its tooltip. */
 export function IconButton(props: IconButtonProps): JSX.Element {
-  const others = omit(props, "label", "tooltip", "children", "class", "size");
+  const others = omit(props, "label", "tooltip", "shortcut", "children", "class", "size");
   return (
-    <LabelTooltip content={props.tooltip ?? props.label}>
+    <LabelTooltip
+      content={
+        <>
+          {props.tooltip ?? props.label}
+          <Show when={props.shortcut}>{(keys) => <Kbd class="ui-tooltip-key">{keys()}</Kbd>}</Show>
+        </>
+      }
+    >
       <LabelTooltipTrigger
         as={Button}
         class={cx("ui-icon-button", props.class)}

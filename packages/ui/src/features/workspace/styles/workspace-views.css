@@ -302,8 +302,10 @@
   background: var(--openbot-accent-soft);
 }
 
+/* A row that is a button opens on a click. A row drawn as a box lights only when it holds actions;
+ * a row with nothing to click stays still, so nothing static looks clickable. */
 @media (hover: hover) and (pointer: fine) {
-  div.ws-row:hover {
+  div.ws-row:has(.ws-row-actions):hover {
     background: var(--ws-hover);
   }
 }

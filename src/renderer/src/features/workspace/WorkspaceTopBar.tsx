@@ -19,7 +19,7 @@ import { useJumpEntries } from "./WorkspaceSwitcher";
 import { useWorkspace } from "./workspace-context";
 import { debugMode, setDebugMode } from "./workspace-debug";
 import { useDecisionQueue } from "./workspace-decisions";
-import { shortcutKeys } from "./workspace-shortcuts";
+import { shortcutKeys, shortcutLabel } from "./workspace-shortcuts";
 
 export function WorkspaceTopBar() {
   const ws = useWorkspace();
@@ -80,6 +80,7 @@ export function WorkspaceTopBar() {
               }}
               onShortcuts={() => ws.openDialog({ kind: "shortcuts" })}
               shortcutsLabel={t("workspace.shortcuts.title")}
+              shortcutsKey={shortcutLabel(["mod"], "/")}
             />
           </Show>
           <WorkspaceNeedsYouButton queue={waiting} />

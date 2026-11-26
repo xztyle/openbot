@@ -45,6 +45,8 @@ export interface ChannelHeaderProps {
   memberCount: number;
   onShowMembers?: (() => void) | undefined;
   onShowDetails?: (() => void) | undefined;
+  /** The keys that open the details, for the button's tooltip. */
+  detailsShortcut?: string | undefined;
   onShowThreads?: (() => void) | undefined;
   onShowArtifacts?: (() => void) | undefined;
   activePanel?: ChannelHeaderPanel | null | undefined;
@@ -207,6 +209,7 @@ export function ChannelHeader(props: ChannelHeaderProps): JSX.Element {
               variant="ghost"
               class="ws-channel-header-details"
               label={t("workspace.header.details")}
+              shortcut={props.detailsShortcut}
               aria-pressed={pressed("details")}
               onClick={() => open()()}
             >

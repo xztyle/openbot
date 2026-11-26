@@ -840,7 +840,7 @@ export function MessageMenu(props: {
       </Show>
       <ContextMenu.Item onSelect={props.onCopy}>
         <CopyIcon />
-        <span>{t("chat.menu.copy")}</span>
+        <span>{t("workspace.app.message.copyText")}</span>
       </ContextMenu.Item>
       <Show when={props.reactions !== false}>
         <ContextMenu.Sub>

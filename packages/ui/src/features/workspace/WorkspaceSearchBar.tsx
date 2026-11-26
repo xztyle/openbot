@@ -45,6 +45,8 @@ export interface WorkspaceSearchBarProps {
   /** Opens the keyboard shortcuts. */
   onShortcuts?: (() => void) | undefined;
   shortcutsLabel?: string | undefined;
+  /** The keys that open the shortcuts sheet, for the help button's tooltip. */
+  shortcutsKey?: string | undefined;
   ref?: ((api: WorkspaceSearchBarApi) => void) | undefined;
   class?: string;
 }
@@ -193,6 +195,7 @@ export function WorkspaceSearchBar(props: WorkspaceSearchBarProps): JSX.Element 
             variant="ghost"
             class="ws-searchbar-help"
             label={props.shortcutsLabel ?? t("workspace.shortcuts.title")}
+            shortcut={props.shortcutsKey}
             onClick={() => show()()}
           >
             <CircleQuestionMark />

@@ -38,6 +38,12 @@ export function shortcutKeys(modifiers: readonly Modifier[], key: string, mac = 
   return [...modifiers.map((modifier) => names[modifier]), key];
 }
 
+/** The chord as one label for a tooltip: "⌘⇧I" on macOS, "Ctrl+Shift+I" elsewhere. */
+export function shortcutLabel(modifiers: readonly Modifier[], key: string): string {
+  const mac = currentDevicePlatform() === "darwin";
+  return shortcutKeys(modifiers, key, mac).join(mac ? "" : "+");
+}
+
 /** The groups of the ⌘/ sheet. Only keys that the workspace listens for are listed. */
 export function workspaceShortcutGroups(t: ReturnType<typeof useText>["t"], mac: boolean): ShortcutGroup[] {
   const keys = (modifiers: readonly Modifier[], key: string) => shortcutKeys(modifiers, key, mac);

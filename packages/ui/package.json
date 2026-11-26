@@ -449,6 +449,7 @@
     "./features/workspace/MessageDividers": "./src/features/workspace/MessageDividers.tsx",
     "./features/workspace/LongMessageFold": "./src/features/workspace/LongMessageFold.tsx",
     "./features/workspace/MessageRow": "./src/features/workspace/MessageRow.tsx",
+    "./features/workspace/message-context-target": "./src/features/workspace/message-context-target.tsx",
     "./features/workspace/NewMessageDialog": "./src/features/workspace/NewMessageDialog.tsx",
     "./features/workspace/StepTrail": "./src/features/workspace/StepTrail.tsx",
     "./features/workspace/PhoneScreens": "./src/features/workspace/PhoneScreens.tsx",

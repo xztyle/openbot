@@ -13,8 +13,12 @@ export interface WorkspaceSheetControls {
 }
 
 export interface WorkspaceContextMenuProps {
-  /** Read when the menu opens. No item: the browser's own menu shows. */
-  items: () => readonly WorkspaceMenuItem[];
+  /**
+   * Read when the menu opens, with the element under the pointer or the finger (null when the
+   * keyboard opened it). A message gives the items of an image, a link or a code block first. No
+   * item: the browser's own menu shows.
+   */
+  items: (pressed: Element | null) => readonly WorkspaceMenuItem[];
   /** The accessible name of the menu. */
   label: string;
   children: JSX.Element;
@@ -30,28 +34,23 @@ export interface WorkspaceContextMenuProps {
 }
 
 /**
- * A field, a link or selected text keeps the browser's own menu, for copy, paste and spelling.
- * `currentTarget` is the trigger: a selection inside it is text the person means to copy.
+ * A field keeps the browser's own menu, for paste and spelling. A link and selected text get the
+ * workspace menu, which offers to open, copy and quote them.
  */
-const NATIVE_MENU_TARGETS = "input, textarea, select, [contenteditable=''], [contenteditable='true'], a[href]";
+const NATIVE_MENU_TARGETS = "input, textarea, select, [contenteditable=''], [contenteditable='true']";
 
-/** A field or a link: a press there selects text or opens the link, never the workspace menu. */
+/** A field: a press there selects text or places the caret, never the workspace menu. */
 function isNativeTarget(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(NATIVE_MENU_TARGETS) !== null;
 }
 
 function wantsNativeMenu(event: MouseEvent): boolean {
+  // Shift with a right-click opens the browser's menu, with Inspect, on a computer.
+  if (event.shiftKey) return true;
   if (isNativeTarget(event.target)) return true;
+  // Text selected inside a field: the field's own copy and paste.
   const selection = globalThis.getSelection?.();
-  const trigger = event.currentTarget;
-  return Boolean(
-    selection &&
-      !selection.isCollapsed &&
-      selection.toString().trim() &&
-      trigger instanceof Node &&
-      selection.anchorNode &&
-      trigger.contains(selection.anchorNode),
-  );
+  return Boolean(selection && !selection.isCollapsed && isNativeTarget(selection.anchorNode?.parentElement ?? null));
 }
 
 /**
@@ -59,39 +58,82 @@ function wantsNativeMenu(event: MouseEvent): boolean {
  * innermost menu wins: the trigger stops the event. The trigger box does not take part in the layout.
  *
  * On a touch screen a long press opens the same items in a bottom sheet instead, with rows a finger
- * can hit, as Slack does on a phone.
+ * can hit, as Slack does on a phone. Shift+F10 or the Menu key opens it for the keyboard, at the
+ * focused element.
  */
 export function WorkspaceContextMenu(props: WorkspaceContextMenuProps): JSX.Element {
-  const firstDanger = () => props.items().findIndex((item) => item.danger);
   const touch = usesTouchLayout();
+  /** The element under the press that opens the menu. Read once, when the menu opens. */
+  let pressed: Element | null = null;
+  const [shown, setShown] = createSignal<readonly WorkspaceMenuItem[]>([]);
+  const firstDanger = () => shown().findIndex((item) => item.danger);
   const [sheet, setSheet] = createSignal<{ open: boolean; itemsHidden: boolean }>({ open: false, itemsHidden: false });
   const press = createLongPress({
-    enabled: () => touch && props.longPress !== false && props.items().length > 0,
-    onLongPress: () => setSheet({ open: true, itemsHidden: false }),
+    enabled: () => touch && props.longPress !== false,
+    onLongPress: () => {
+      const items = props.items(pressed);
+      if (items.length === 0) return;
+      setShown(items);
+      setSheet({ open: true, itemsHidden: false });
+    },
   });
   const controls: WorkspaceSheetControls = {
     close: () => setSheet({ open: false, itemsHidden: false }),
     setItemsHidden: (itemsHidden) => setSheet((current) => ({ ...current, itemsHidden })),
   };
+  /** The keyboard opens the menu at the focused element, with the message's items. */
+  const openFromKeyboard = (event: KeyboardEvent) => {
+    if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+    if (isNativeTarget(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const anchor = event.target instanceof HTMLElement ? event.target : null;
+    if (!anchor) return;
+    const bounds = anchor.getBoundingClientRect();
+    const items = props.items(null);
+    if (items.length === 0) return;
+    if (touch) {
+      setShown(items);
+      setSheet({ open: true, itemsHidden: false });
+      return;
+    }
+    pressed = null;
+    anchor.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        clientX: bounds.left + Math.min(bounds.width, 24),
+        clientY: bounds.top + Math.min(bounds.height, 24),
+      }),
+    );
+  };
   return (
-    <ContextMenu.Root>
+    <ContextMenu.Root
+      onOpenChange={(open) => {
+        if (open) setShown(props.items(pressed));
+      }}
+    >
       <ContextMenu.Trigger
         class={cx("ws-context-trigger", props.class)}
         disabled={touch}
         // A long press or a double tap in the message box selects a word; it must not open the sheet.
         onPointerDown={(event: PointerEvent) => {
-          if (!isNativeTarget(event.target)) press.onPointerDown(event);
+          if (isNativeTarget(event.target)) return;
+          pressed = event.target instanceof Element ? event.target : null;
+          press.onPointerDown(event);
         }}
         onPointerMove={press.onPointerMove}
         onPointerUp={press.onPointerUp}
         onPointerCancel={press.onPointerCancel}
         onContextMenu={press.onContextMenu}
+        onKeyDown={openFromKeyboard}
         ref={(element: HTMLElement) =>
           // Before the trigger and the menus around it see the event, so none of them opens.
           element.addEventListener(
             "contextmenu",
             (event) => {
-              if (wantsNativeMenu(event) || props.items().length === 0) event.stopPropagation();
+              if (event.isTrusted) pressed = event.target instanceof Element ? event.target : null;
+              if (wantsNativeMenu(event) || props.items(pressed).length === 0) event.stopPropagation();
             },
             { capture: true },
           )
@@ -102,10 +144,10 @@ export function WorkspaceContextMenu(props: WorkspaceContextMenuProps): JSX.Elem
       <Show when={!touch}>
         <ContextMenu.Portal>
           <ContextMenu.Content class="agent-context-menu" aria-label={props.label}>
-            <For each={props.items()} keyed={(item) => item.id}>
+            <For each={shown()} keyed={(item) => item.id}>
               {(item, index) => (
                 <>
-                  <Show when={index() > 0 && index() === firstDanger()}>
+                  <Show when={index() > 0 && (item().divider || index() === firstDanger())}>
                     <ContextMenu.Separator />
                   </Show>
                   <ContextMenu.Item
@@ -134,7 +176,7 @@ export function WorkspaceContextMenu(props: WorkspaceContextMenuProps): JSX.Elem
               }}
               title={props.label}
               header={header}
-              items={sheet().itemsHidden ? [] : props.items()}
+              items={sheet().itemsHidden ? [] : shown()}
             />
           );
         }}

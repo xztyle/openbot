@@ -12,6 +12,8 @@ export interface ActionSheetItem {
   /** Red, and after a divider when it follows other items. */
   danger?: boolean | undefined;
   disabled?: boolean | undefined;
+  /** A divider above this item: it starts a new group. */
+  divider?: boolean | undefined;
   onSelect: () => void;
 }
 
@@ -51,7 +53,7 @@ export function ActionSheet(props: ActionSheetProps): JSX.Element {
                   {(item, index) => (
                     <li
                       class="ui-sheet-item-row"
-                      data-divided={index() > 0 && index() === firstDanger() ? "" : undefined}
+                      data-divided={index() > 0 && (item().divider || index() === firstDanger()) ? "" : undefined}
                     >
                       <Button
                         variant="ghost"

@@ -20,6 +20,7 @@ import {
 } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
+import { type SendShortcut, sendShortcutAriaKey, sendShortcutHintKey } from "../conversation/send-shortcut";
 import { EmojiPickerPopover, type EmojiPickerProps } from "./emoji-picker-lazy";
 
 export type ComposerFormat =
@@ -122,6 +123,8 @@ export interface MessageComposerProps {
   onMention?: (() => void) | undefined;
   onSend: () => void;
   canSend: boolean;
+  /** The keys that send, for the Send button's tooltip. */
+  sendShortcut?: SendShortcut | undefined;
   sending?: boolean | undefined;
   disabled?: boolean | undefined;
   /** "Also send to #general", under the composer of a thread. */
@@ -246,6 +249,8 @@ export function MessageComposer(props: MessageComposerProps): JSX.Element {
                   class="ws-composer-send"
                   data-ready={props.canSend ? "" : undefined}
                   aria-label={t("workspace.composer.send")}
+                  title={props.sendShortcut ? t(sendShortcutHintKey(props.sendShortcut, "send")) : undefined}
+                  aria-keyshortcuts={props.sendShortcut ? sendShortcutAriaKey(props.sendShortcut) : undefined}
                   disabled={!props.canSend || props.disabled}
                   loading={props.sending}
                   onClick={() => props.onSend()}

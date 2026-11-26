@@ -265,8 +265,18 @@ button.ws-profile-trigger.ws-message-author:hover {
   text-decoration: underline;
 }
 
+button.ws-profile-trigger .ws-avatar {
+  transition: filter var(--openbot-duration-hover) var(--openbot-ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button.ws-profile-trigger:hover .ws-avatar {
+    filter: brightness(1.08) saturate(1.05);
+  }
+}
+
 .ws-profile-trigger:focus-visible {
-  outline: 2px solid var(--openbot-focus-ring);
+  outline: 2px solid var(--openbot-border-focus);
   outline-offset: 2px;
 }
 

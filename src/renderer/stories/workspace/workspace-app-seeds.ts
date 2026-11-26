@@ -188,6 +188,12 @@ export function seeds(
         MEDIA_FILES.budget,
       ]),
       withFiles(message("general", 60 * 26 + 5, you, "Así quedó el menú:"), [MEDIA_FILES.photo]),
+      message(
+        "general",
+        60 * 26 + 6,
+        research,
+        'The tracking snippet for the site:\n\n```html\n<script src="https://cakemaker-web.delynith.com/track.js"></script>\n```',
+      ),
     );
   }
   const replies: ChannelMessage[] = [

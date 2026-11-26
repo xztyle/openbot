@@ -335,7 +335,6 @@ export const messages = {
   "chat.actions.readAloud": "소리 내어 읽기",
   "chat.actions.stopReading": "읽기 중지",
   "chat.menu.reply": "답장",
-  "chat.menu.copy": "메시지 복사",
   "chat.menu.react": "반응",
   "chat.voice.play": "음성 메시지 재생",
   "chat.voice.pause": "음성 메시지 일시 정지",

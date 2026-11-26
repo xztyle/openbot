@@ -38,6 +38,7 @@ import {
   shownMessageId,
   workingAgents,
 } from "./workspace-model";
+import { shortcutLabel } from "./workspace-shortcuts";
 
 /** The open channel, DM or group: its header, its messages, who works on an answer, and the composer. */
 export function WorkspaceChannelPane(props: { channelId: string }) {
@@ -294,6 +295,7 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
           memberCount={members().length}
           onShowMembers={() => ws.openDetails(props.channelId, "members")}
           onShowDetails={() => ws.openDetails(props.channelId, "about")}
+          detailsShortcut={shortcutLabel(["mod", "shift"], "I")}
           onShowArtifacts={() => ws.openArtifactsPanel(props.channelId)}
           activePanel={panel()?.kind === "details" ? "details" : panel()?.kind === "artifacts" ? "artifacts" : null}
           muted={ws.isMuted(props.channelId)}

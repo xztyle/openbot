@@ -1001,7 +1001,7 @@ function AccountRow(
               </Show>
               <Show when={!own() && !apiKey()}>
                 <DropdownMenu.Separator />
-                <DropdownMenu.Item onSelect={() => props.onRemove()}>
+                <DropdownMenu.Item class="ui-action-menu-danger" onSelect={() => props.onRemove()}>
                   <Trash2 aria-hidden="true" />
                   {t("provider.account.remove")}
                 </DropdownMenu.Item>

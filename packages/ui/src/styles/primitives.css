@@ -234,6 +234,28 @@
   }
 }
 
+/* The button darkens while it is held, with a mouse or a finger, so a press is seen before it lands. */
+:where(.ui-button-variant-outline, .ui-button-variant-ghost, .ui-button-variant-secondary):active:not(:disabled):not(
+  [data-disabled]
+) {
+  background: var(--openbot-bg-control-active);
+  color: var(--openbot-text-primary);
+}
+
+:where(.ui-button-variant-default):active:not(:disabled):not([data-disabled]) {
+  background: color-mix(in srgb, var(--openbot-surface-light) 70%, transparent);
+}
+
+:where(.ui-button-variant-destructive, .ui-button-variant-destructive-ghost):active:not(:disabled):not(
+  [data-disabled]
+) {
+  background: var(--openbot-danger-soft-hover);
+}
+
+:where(.ui-button-variant-link):active:not(:disabled):not([data-disabled]) {
+  opacity: 0.75;
+}
+
 :where(.ui-button-variant-outline, .ui-button-variant-secondary, .ui-button-variant-ghost)[aria-expanded="true"] {
   background: var(--openbot-bg-control-hover);
   color: var(--openbot-text-primary);
@@ -1950,6 +1972,12 @@
     opacity: 0;
     transform: translateY(2px) scale(0.96);
   }
+}
+
+/* The keys of a shortcut after the label of a tooltip. */
+.ui-tooltip .ui-tooltip-key {
+  margin-left: var(--openbot-space-2);
+  vertical-align: middle;
 }
 
 .ui-tooltip::after {

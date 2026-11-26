@@ -14,10 +14,12 @@ import {
   DropdownMenu,
   Ellipsis,
   IconButton,
+  RefreshCw,
   SlidingTabs,
   Store,
   Switch,
   Trash2,
+  Wrench,
   X,
 } from "@openbot/ui";
 import { createScrollFades } from "@openbot/ui/components/createScrollFades";
@@ -722,10 +724,25 @@ function SkillMoreMenu(props: {
       <DropdownMenu.Portal>
         <DropdownMenu.Content class="agent-skill-menu">
           <Show when={props.skill.state === "update-available"}>
-            <DropdownMenu.Item onSelect={() => props.onUpdate(trigger)}>{t("skill.update")}</DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={() => props.onUpdate(trigger)}>
+              <RefreshCw aria-hidden="true" />
+              {t("skill.update")}
+            </DropdownMenu.Item>
           </Show>
           <Show when={props.skill.state === "needs-repair" || props.skill.state === "modified"}>
-            <DropdownMenu.Item onSelect={() => props.onRepair(trigger)}>{t("skill.repair")}</DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={() => props.onRepair(trigger)}>
+              <Wrench aria-hidden="true" />
+              {t("skill.repair")}
+            </DropdownMenu.Item>
+          </Show>
+          <Show
+            when={
+              props.skill.state === "update-available" ||
+              props.skill.state === "needs-repair" ||
+              props.skill.state === "modified"
+            }
+          >
+            <DropdownMenu.Separator />
           </Show>
           <DropdownMenu.Item class="ui-action-menu-danger" onSelect={() => props.onUninstall(trigger)}>
             <Trash2 />

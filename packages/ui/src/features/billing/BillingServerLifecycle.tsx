@@ -143,6 +143,9 @@ export function BillingServerLifecycle(props: BillingServerLifecycleProps) {
                       {t("settings.hostedServers.wake")}
                     </DropdownMenu.Item>
                   </Show>
+                  <Show when={props.onChangePlan || props.onWake}>
+                    <DropdownMenu.Separator />
+                  </Show>
                   <DropdownMenu.Item
                     class="ui-action-menu-danger"
                     onSelect={() => {

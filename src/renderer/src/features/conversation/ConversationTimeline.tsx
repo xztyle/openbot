@@ -216,6 +216,7 @@ export function ConversationTimeline() {
     providerUpdateRequired,
     previewAttachment,
     props,
+    quoteSelection,
     mcpServers,
     sendCardMessage,
     reactToMessage,
@@ -1521,6 +1522,7 @@ export function ConversationTimeline() {
                             : undefined
                         }
                         onOpenQuote={openQuote}
+                        onQuote={(text) => quoteSelection((message() ?? initialMessage).id, text)}
                         onDownload={(attachment) => attachmentAction(attachment, "download")}
                         onAnnotateImage={annotateImage}
                         mediaSource={runtime.attachmentMedia}

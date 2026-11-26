@@ -510,6 +510,7 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
       </Show>
       <MessageComposer
         label={props.label}
+        sendShortcut={deviceSendShortcut(platform.appInfo()?.platform)}
         class={editing() ? "ws-composer-editing" : undefined}
         notice={
           <>

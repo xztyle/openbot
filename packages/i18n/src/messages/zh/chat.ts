@@ -336,7 +336,6 @@ export const messages = {
   "chat.actions.readAloud": "朗读",
   "chat.actions.stopReading": "停止朗读",
   "chat.menu.reply": "回复",
-  "chat.menu.copy": "复制消息",
   "chat.menu.react": "回应",
   "chat.voice.play": "播放语音消息",
   "chat.voice.pause": "暂停语音消息",

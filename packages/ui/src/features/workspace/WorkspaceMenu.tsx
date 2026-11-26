@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 import { buttonVariants } from "../../button";
 import { DropdownMenu } from "../../complex";
 import { cx } from "../../utils";
@@ -18,8 +18,12 @@ export interface WorkspaceMenuProps {
   row?: boolean;
 }
 
-/** A trigger and the menu of actions that it opens. */
+/**
+ * A trigger and the menu of actions that it opens. The destructive items sit last, after a separator,
+ * as in the right-click menu and the phone sheet of the same items.
+ */
 export function WorkspaceMenu(props: WorkspaceMenuProps): JSX.Element {
+  const firstDanger = () => props.items.findIndex((item) => item.danger);
   return (
     <DropdownMenu.Root placement={props.placement ?? "bottom-end"} gutter={4} onOpenChange={props.onOpenChange}>
       <DropdownMenu.Trigger
@@ -32,15 +36,20 @@ export function WorkspaceMenu(props: WorkspaceMenuProps): JSX.Element {
       <DropdownMenu.Portal>
         <DropdownMenu.Content>
           <For each={props.items} keyed={(item) => item.id}>
-            {(item) => (
-              <DropdownMenu.Item
-                class={item().danger ? "ui-action-menu-danger" : undefined}
-                disabled={item().disabled}
-                onSelect={() => item().onSelect()}
-              >
-                {item().icon}
-                <span>{item().label}</span>
-              </DropdownMenu.Item>
+            {(item, index) => (
+              <>
+                <Show when={index() > 0 && (item().divider || index() === firstDanger())}>
+                  <DropdownMenu.Separator />
+                </Show>
+                <DropdownMenu.Item
+                  class={item().danger ? "ui-action-menu-danger" : undefined}
+                  disabled={item().disabled}
+                  onSelect={() => item().onSelect()}
+                >
+                  {item().icon}
+                  <span>{item().label}</span>
+                </DropdownMenu.Item>
+              </>
             )}
           </For>
         </DropdownMenu.Content>

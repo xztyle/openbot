@@ -270,8 +270,12 @@
   border-top: 1px solid var(--openbot-border-strong);
 }
 
-.ui-block-option:hover {
+.ui-block-option:not([data-disabled]):hover {
   background: var(--openbot-hover);
+}
+
+.ui-block-option:not([data-disabled]):active {
+  background: var(--openbot-bg-control-active);
 }
 
 .ui-block-option[data-checked] {

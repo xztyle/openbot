@@ -352,7 +352,6 @@ export const messages = {
   "chat.actions.readAloud": "Sesli oku",
   "chat.actions.stopReading": "Okumayı durdur",
   "chat.menu.reply": "Yanıtla",
-  "chat.menu.copy": "Mesajı kopyala",
   "chat.menu.react": "Tepki ver",
   "chat.voice.play": "Sesli mesajı oynat",
   "chat.voice.pause": "Sesli mesajı duraklat",

@@ -344,7 +344,6 @@ export const messages = {
   "chat.actions.readAloud": "Lire à voix haute",
   "chat.actions.stopReading": "Arrêter la lecture",
   "chat.menu.reply": "Répondre",
-  "chat.menu.copy": "Copier le message",
   "chat.menu.react": "Réagir",
   "chat.voice.play": "Lire le message vocal",
   "chat.voice.pause": "Mettre en pause le message vocal",

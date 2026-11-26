@@ -391,7 +391,6 @@ export const messages = defineMessages("chat", {
   "chat.actions.readAloud": "Read aloud",
   "chat.actions.stopReading": "Stop reading",
   "chat.menu.reply": "Reply",
-  "chat.menu.copy": "Copy message",
   "chat.menu.react": "React",
   "chat.voice.play": "Play voice message",
   "chat.voice.pause": "Pause voice message",

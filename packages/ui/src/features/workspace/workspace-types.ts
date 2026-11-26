@@ -44,6 +44,8 @@ export interface WorkspaceMenuItem {
   icon?: JSX.Element | undefined;
   danger?: boolean | undefined;
   disabled?: boolean | undefined;
+  /** A separator above this item: it starts a new group, such as the message's actions after an image's. */
+  divider?: boolean | undefined;
   onSelect: () => void;
 }
 

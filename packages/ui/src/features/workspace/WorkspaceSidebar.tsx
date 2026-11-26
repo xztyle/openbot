@@ -154,6 +154,8 @@ export interface WorkspaceSidebarProps {
   /** The items of the menu that the workspace name opens. */
   workspaceMenu?: readonly WorkspaceMenuItem[] | undefined;
   onNewMessage?: (() => void) | undefined;
+  /** The keys that start a new message, for the button's tooltip. */
+  newMessageShortcut?: string | undefined;
   /** A slot under the header, such as the ⌘K jump field. */
   search?: JSX.Element;
   /** The view or the conversation id that shows now. */
@@ -423,6 +425,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                 class="ws-sidebar-compose"
                 variant="secondary"
                 label={t("workspace.sidebar.newMessage")}
+                shortcut={props.newMessageShortcut}
                 onClick={() => onNew()()}
               >
                 <SquarePen />

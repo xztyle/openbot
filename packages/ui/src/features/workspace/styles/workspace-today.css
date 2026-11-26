@@ -181,7 +181,21 @@
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
   text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentcolor 45%, transparent);
   cursor: pointer;
+  transition: color var(--openbot-duration-hover) var(--openbot-ease-out);
+}
+
+.ws-today-decision-more:hover,
+.ws-today-decision-more:focus-visible {
+  color: var(--openbot-text-primary);
+  text-decoration-color: currentcolor;
+}
+
+/* The card takes the focus when the card before it goes: the ring says where the keyboard is. */
+.ws-today-decision:focus-visible {
+  outline: 0;
+  box-shadow: var(--openbot-focus-ring);
 }
 
 .ws-today-decision-where {
@@ -751,6 +765,24 @@
 .ws-today-decision-technical {
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
+}
+
+.ws-today-decision-technical > summary {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  border-radius: var(--openbot-radius-xs);
+  cursor: pointer;
+  transition: color var(--openbot-duration-hover) var(--openbot-ease-out);
+}
+
+.ws-today-decision-technical > summary:hover {
+  color: var(--openbot-text-secondary);
+}
+
+.ws-today-decision-technical > summary:focus-visible {
+  outline: 2px solid var(--openbot-border-focus);
+  outline-offset: 2px;
 }
 
 .ws-today-decision-technical p {

@@ -82,7 +82,7 @@
 }
 
 .ws-tab:focus-visible {
-  outline: 2px solid var(--openbot-focus-ring);
+  outline: 2px solid var(--openbot-border-focus);
   outline-offset: -2px;
 }
 
@@ -211,7 +211,7 @@
   padding: var(--openbot-space-2);
 }
 
-.ws-details-member:hover {
+.ws-details-member:has(.ws-details-remove):hover {
   background: var(--ws-hover);
 }
 

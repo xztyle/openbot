@@ -18,6 +18,12 @@ import { cx, usesTouchLayout } from "../../utils";
 import { EmojiPicker, type EmojiPickerProps } from "./emoji-picker-lazy";
 import { LongMessageFold } from "./LongMessageFold";
 import { MemberProfilePopover } from "./MemberProfileCard";
+import {
+  createMessageTargetItems,
+  joinContextItems,
+  type MessageTargetActions,
+  resolveMessageContextTarget,
+} from "./message-context-target";
 import { AvatarStack, MemberAvatar, MemberName } from "./WorkspaceAvatar";
 import { WorkspaceContextMenu, type WorkspaceSheetControls } from "./WorkspaceContextMenu";
 import { WorkspaceMenu } from "./WorkspaceMenu";
@@ -76,6 +82,12 @@ export interface MessageRowProps {
   replyLabel?: string | undefined;
   /** The items of the "more" menu: edit, copy link, mark unread, delete. */
   menuItems?: readonly WorkspaceMenuItem[] | undefined;
+  /**
+   * What a right-click or a long press on an image, a file, a link, a code block, selected text or
+   * the author offers, before the message's items. Absent: only the items that need no action, such
+   * as copying a code block, show.
+   */
+  targetActions?: MessageTargetActions | undefined;
   /** Draws the author's profile card, which the avatar and the name open. */
   profile?: (() => JSX.Element) | undefined;
   /**
@@ -126,9 +138,17 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
   const [noteOpen, setNoteOpen] = createSignal(false);
   /** A folded note shows its line only; the text and the content wait for the reader to open it. */
   const folded = () => props.note !== undefined && !noteOpen() && !props.editor;
+  let row: HTMLElement | undefined;
+  const targetItems = createMessageTargetItems(() => props.targetActions);
+  /** The items of what was pressed first, then the message's own under a divider. */
+  const contextItems = (pressed: Element | null) => {
+    const own = props.menuItems ?? [];
+    if (!pressed || !row || props.deleted || props.editor) return own;
+    return joinContextItems(targetItems(resolveMessageContextTarget(pressed, row)), own);
+  };
   return (
     <WorkspaceContextMenu
-      items={() => props.menuItems ?? []}
+      items={contextItems}
       label={t(touch ? "workspace.message.actions" : "workspace.message.more")}
       sheetHeader={
         props.onToggleReaction && !props.deleted
@@ -145,6 +165,7 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
       }
     >
       <article
+        ref={row}
         class={cx("ws-message", props.class)}
         tabindex="0"
         data-grouped={props.grouped ? "" : undefined}

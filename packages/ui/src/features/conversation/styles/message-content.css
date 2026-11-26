@@ -1628,6 +1628,10 @@
   font-size: var(--openbot-text-lg);
   text-align: left;
   overflow-wrap: anywhere;
+  cursor: pointer;
+  transition:
+    background-color var(--openbot-duration-hover) var(--openbot-ease-out),
+    color var(--openbot-duration-hover) var(--openbot-ease-out);
 }
 
 .choice-option-item:last-child .choice-option {
@@ -1640,9 +1644,19 @@
   color: var(--openbot-text-primary);
 }
 
-.choice-option-item:focus-within .choice-option {
-  outline: 1px solid var(--openbot-border-focus);
-  outline-offset: -1px;
+/* The row darkens under the finger or the mouse button, as a pressed button does. */
+.choice-option-item:not([data-disabled]) .choice-option:active {
+  background: var(--openbot-bg-control-active);
+}
+
+.choice-option-item[data-disabled] .choice-option {
+  cursor: default;
+}
+
+/* The ring shows for the keyboard; a click does not leave one behind. */
+.choice-option-item:has(:focus-visible) .choice-option {
+  outline: 2px solid var(--openbot-border-focus);
+  outline-offset: -2px;
 }
 
 .choice-option-item[data-disabled] {

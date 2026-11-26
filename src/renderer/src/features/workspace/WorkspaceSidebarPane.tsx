@@ -33,6 +33,7 @@ import { WorkspaceSpaceRail } from "./WorkspaceSpaceRail";
 import { useWorkspace } from "./workspace-context";
 import { useDecisionQueue } from "./workspace-decisions";
 import { AGENT_DM_PREFIX } from "./workspace-model";
+import { shortcutLabel } from "./workspace-shortcuts";
 import {
   isCustomSection,
   newSectionId,
@@ -319,6 +320,7 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
         }
         workspaceMenu={menu()}
         onNewMessage={() => ws.openDialog({ kind: "new-message" })}
+        newMessageShortcut={shortcutLabel(["mod"], "N")}
         // A computer with the top bar's search has one search there (and ⌘K for the command bar): the
         // sidebar does not add a second and a third field.
         search={

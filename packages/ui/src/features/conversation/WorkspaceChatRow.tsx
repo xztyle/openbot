@@ -1,4 +1,4 @@
-import type { AttachmentSummary, InstalledSkill } from "@openbot/contracts/ipc";
+import { type AttachmentSummary, canPreviewAttachment, type InstalledSkill } from "@openbot/contracts/ipc";
 import type { JSX } from "@solidjs/web";
 import { createSignal, Show } from "solid-js";
 import type { AgentMessage, AgentProfile, MessageEventCheckOrigin } from "../../data";
@@ -6,6 +6,7 @@ import { Bell } from "../../icons";
 import { useText } from "../../text";
 import { LongMessageFold } from "../workspace/LongMessageFold";
 import { MessageRow, type ReactionEmojiPicker } from "../workspace/MessageRow";
+import type { MessageTargetActions } from "../workspace/message-context-target";
 import type { WorkspaceMember, WorkspaceMenuItem, WorkspaceReaction } from "../workspace/workspace-types";
 import type { AttachmentMediaSource } from "./AttachmentCards";
 import { CondensedNote, createCondensedView } from "./CondensedNote";
@@ -58,6 +59,10 @@ export interface WorkspaceChatRowProps {
   /** Annotate in the image viewer; see `MessageBody`'s `onAnnotateImage`. */
   onAnnotateImage?: ((attachment: AttachmentSummary, url: string) => void) | undefined;
   mediaSource?: AttachmentMediaSource | undefined;
+  /** Quotes text selected in the message in the composer, from the right-click menu. */
+  onQuote?: ((text: string) => void) | undefined;
+  /** Opens the image editor on a picture of the message, from its right-click menu. */
+  onAnnotateImage?: MessageTargetActions["annotateImage"];
 }
 
 /**
@@ -83,6 +88,26 @@ export function WorkspaceChatRow(props: WorkspaceChatRowProps): JSX.Element {
     const original = props.message.condensedOriginal;
     return original !== undefined && condensed.showingOriginal() ? { ...props.message, body: original } : props.message;
   };
+  const attachment = (id: string) => props.message.attachments?.find((candidate) => candidate.id === id);
+  /** What a right-click on an image, a file, a link or the author offers, through the row's own handlers. */
+  const targetActions = (): MessageTargetActions => ({
+    download: (id) => {
+      const file = attachment(id);
+      if (!file) return;
+      if (props.onDownload) props.onDownload(file);
+      else props.onAttachmentAction(file, "download");
+    },
+    openFile: (id) => {
+      const file = attachment(id);
+      if (!file) return;
+      if (canPreviewAttachment(file)) props.onPreview(file);
+      else props.onAttachmentAction(file, "open");
+    },
+    openLink: props.onOpenLink,
+    quote: props.onQuote,
+    annotateImage: props.onAnnotateImage,
+    directMessage: props.author.kind === "agent" ? () => props.onSelectAgent(props.author.id) : undefined,
+  });
   return (
     <MessageRow
       class={["ws-chat-row", props.animate ? "message-entry-animated" : undefined, props.class]
@@ -103,6 +128,7 @@ export function WorkspaceChatRow(props: WorkspaceChatRowProps): JSX.Element {
       onOpenThread={props.onReply}
       replyLabel={t("chat.menu.reply")}
       menuItems={props.menuItems}
+      targetActions={targetActions()}
       profile={props.profile}
     >
       <Show when={props.eventCheckOrigin}>

@@ -1097,7 +1097,7 @@ textarea {
   justify-content: flex-start;
   font-size: var(--openbot-text-md);
   font-weight: var(--openbot-weight-regular);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   cursor: pointer;
 }
 
@@ -1179,7 +1179,7 @@ textarea {
   box-shadow: none;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-md);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
 }
 
 .search-field input::placeholder {
@@ -1371,7 +1371,7 @@ textarea {
   overflow: hidden;
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-regular);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1434,7 +1434,7 @@ textarea {
   color: var(--openbot-text-readable);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-regular);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   white-space: nowrap;
 }
 
@@ -1630,7 +1630,7 @@ textarea {
   background: transparent;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   list-style: none;
   transition:
     border-color var(--openbot-duration-fast) ease-out,
@@ -1722,7 +1722,7 @@ textarea {
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-regular);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   text-align: center;
   text-overflow: ellipsis;
   text-wrap: pretty;
@@ -1959,7 +1959,7 @@ textarea {
   color: var(--openbot-bg-sidebar);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-semibold);
-  line-height: 12px;
+  line-height: 1;
 }
 
 .agent-row-agent-status-routine,
@@ -2008,7 +2008,7 @@ textarea {
   color: var(--openbot-warning-text);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-semibold);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   white-space: nowrap;
 }
 
@@ -2378,7 +2378,7 @@ textarea {
 .avatar-image-upload small {
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 14px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .avatar-editor-actions button:active,
@@ -2534,7 +2534,7 @@ textarea {
   overflow: hidden;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-lg);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   font-weight: var(--openbot-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2555,7 +2555,7 @@ textarea {
   color: var(--openbot-text-readable);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-regular);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   white-space: nowrap;
 }
 
@@ -2573,7 +2573,7 @@ textarea {
   flex: 0 0 auto;
   color: var(--openbot-text-readable);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   white-space: nowrap;
 }
 
@@ -2594,7 +2594,7 @@ textarea {
   overflow: hidden;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-md);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -525,7 +525,7 @@
   background-clip: text;
   color: transparent;
   font-size: var(--openbot-text-sm);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -547,7 +547,7 @@
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   font-variant-numeric: tabular-nums;
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
 }
 
 .chat-action-marker {
@@ -1319,7 +1319,7 @@ button.chat-action-target:active,
   overflow: hidden;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-md);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1328,7 +1328,7 @@ button.chat-action-target:active,
   max-width: 100%;
   color: var(--openbot-danger);
   font-size: var(--openbot-text-sm);
-  line-height: 17px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .image-generation-preview {

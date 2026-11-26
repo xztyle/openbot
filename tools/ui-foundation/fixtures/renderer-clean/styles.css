@@ -16,6 +16,7 @@
   color: var(--openbot-text);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
+  line-height: 1;
   border-radius: 0;
   transition: none;
 }

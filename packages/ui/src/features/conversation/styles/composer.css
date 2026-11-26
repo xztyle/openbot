@@ -94,7 +94,7 @@
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
-  line-height: 14px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .composer-reply-preview .message-reply-quote {
@@ -586,7 +586,7 @@
   color: var(--openbot-text-primary);
   cursor: text;
   font-size: var(--openbot-text-lg);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   white-space: pre-wrap;
   word-break: break-word;
   user-select: text;
@@ -608,7 +608,7 @@
   padding: var(--openbot-space-0-5) var(--openbot-space-2);
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   pointer-events: none;
 }
 
@@ -680,7 +680,7 @@
   left: 4px;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-lg);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   pointer-events: none;
   user-select: none;
 }
@@ -878,7 +878,7 @@
   overflow: hidden;
   font-size: var(--openbot-text-lg);
   font-weight: var(--openbot-weight-medium);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -889,7 +889,7 @@
   overflow: hidden;
   color: var(--openbot-queue-action);
   font-size: var(--openbot-text-md);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -899,7 +899,7 @@
   flex: 0 0 auto;
   color: var(--openbot-queue-action);
   font-size: var(--openbot-text-md);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   white-space: nowrap;
 }
 
@@ -912,7 +912,7 @@
   padding: 0 calc(var(--mention-picker-gutter) + 8px);
   color: var(--openbot-queue-action);
   font-size: var(--openbot-text-md);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
 }
 
 .mention-picker-badge {
@@ -996,13 +996,13 @@
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .composer-attachment-copy small {
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 14px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .composer-attachment-preview {

@@ -63,14 +63,14 @@
   font-size: var(--openbot-text-3xl);
   font-weight: var(--openbot-weight-medium);
   letter-spacing: -0.035em;
-  line-height: 30px;
+  line-height: var(--openbot-leading-3xl);
 }
 
 .account-login-description {
   margin: var(--openbot-space-2) 0 0;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-lg);
-  line-height: 21px;
+  line-height: var(--openbot-leading-lg);
 }
 
 .account-login-description strong {
@@ -82,7 +82,7 @@
   margin: 0;
   color: var(--openbot-danger);
   font-size: var(--openbot-text-sm);
-  line-height: 17px;
+  line-height: var(--openbot-leading-sm);
   text-align: left;
 }
 
@@ -157,7 +157,7 @@
   margin: var(--openbot-space-1) 0 0;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 17px;
+  line-height: var(--openbot-leading-sm);
   text-align: center;
   text-wrap: balance;
 }
@@ -209,7 +209,7 @@
   margin: -2px 0 0;
   color: var(--openbot-danger);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -253,7 +253,7 @@
   color: var(--openbot-warning);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   text-align: left;
 }
 
@@ -468,7 +468,7 @@
 .setup-route-copy small {
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 17px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .setup-route-arrow {
@@ -512,7 +512,7 @@
   padding: 11px 12px;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-md);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   resize: none;
 }
 
@@ -535,7 +535,7 @@
   margin: -2px 1px 0;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .setup-remote-change {
@@ -735,20 +735,20 @@
 .provider-picker-name {
   font-size: var(--openbot-text-md);
   font-weight: var(--openbot-weight-medium);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
 }
 
 .provider-picker-email {
   color: var(--text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 15px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .provider-picker-check-error {
   overflow: hidden;
   color: var(--openbot-warning);
   font-size: var(--openbot-text-sm);
-  line-height: 15px;
+  line-height: var(--openbot-leading-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -842,7 +842,7 @@
   color: var(--text-muted);
   font-size: var(--openbot-text-sm);
   font-variant-numeric: tabular-nums;
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -857,7 +857,7 @@
   gap: var(--openbot-space-1-5);
   color: var(--text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   white-space: nowrap;
 }
 
@@ -866,7 +866,7 @@
 .provider-picker-custom-count {
   color: var(--text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   white-space: nowrap;
 }
 
@@ -937,7 +937,7 @@
   margin: 7px 0 0;
   color: var(--text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
 }
 
 /* "More providers" is a button below the list, beside the hint. It uses the style of the heading's

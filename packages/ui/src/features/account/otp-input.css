@@ -193,7 +193,7 @@
   margin: 0;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 17px;
+  line-height: var(--openbot-leading-sm);
   text-align: center;
 }
 

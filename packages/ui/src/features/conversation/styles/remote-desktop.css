@@ -154,7 +154,7 @@
   max-width: 330px;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .remote-desktop-empty-mark {

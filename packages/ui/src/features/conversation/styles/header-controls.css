@@ -22,7 +22,7 @@
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-md);
   font-weight: var(--openbot-weight-regular);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   letter-spacing: 0;
 }
 
@@ -116,7 +116,7 @@
   white-space: nowrap;
   font-size: var(--openbot-text-md);
   font-weight: var(--openbot-weight-regular);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
 }
 
 .provider-model-trigger-effort {
@@ -125,7 +125,7 @@
   align-items: center;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-md);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   white-space: nowrap;
 }
 
@@ -242,7 +242,7 @@
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-regular);
-  line-height: 17px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .provider-model-trigger-field .provider-model-trigger-value {
@@ -529,21 +529,21 @@
   padding: var(--openbot-space-2) var(--ui-menu-inset);
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
 }
 
 .provider-model-heading strong {
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-lg);
   font-weight: var(--openbot-weight-semibold);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
 }
 
 .provider-model-heading span {
   margin-top: 1px;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .provider-model-empty > .ui-progress {
@@ -569,7 +569,7 @@
   padding: var(--ui-menu-padding) var(--ui-menu-padding) 0 calc(var(--ui-menu-padding) + var(--ui-menu-inset));
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 17px;
+  line-height: var(--openbot-leading-sm);
 }
 
 /* The effort and auto-approve rows are one group under one separator. */
@@ -772,7 +772,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--openbot-text-md);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
 }
 
 .provider-model-option-name small {
@@ -783,7 +783,7 @@
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
-  line-height: 15px;
+  line-height: var(--openbot-leading-sm);
 }
 
 /* The tick sits in the filled circle, cut out of it in the panel color. */

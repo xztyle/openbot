@@ -20,6 +20,7 @@
    word that a hyphen joins to its neighbours, or every token in the palette counts. */
 .tokenised-heading {
   font-weight: inherit;
+  line-height: 1.2;
 }
 
 .tokenised {
@@ -27,6 +28,7 @@
   border-color: var(--openbot-red-500);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
+  line-height: var(--openbot-leading-sm);
   border-radius: 0;
   transition: none;
   /* Spacing the budget leaves alone: a step, a zero, a 1px nudge, a negative, a calc(). */

@@ -45,7 +45,7 @@
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-md);
   font-weight: var(--openbot-weight-semibold);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   text-align: center;
 }
 
@@ -119,7 +119,7 @@
   margin: 0 0 var(--openbot-space-1-5) var(--openbot-space-2);
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-md);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
 }
 
 /* The count and error under a field, after its control rather than above it like the label. */
@@ -141,7 +141,7 @@
   color: var(--openbot-text-primary);
   caret-color: var(--openbot-text-primary);
   font-size: var(--openbot-text-lg);
-  line-height: 19px;
+  line-height: var(--openbot-leading-lg);
   transition:
     border-color var(--openbot-duration-hover) ease,
     background var(--openbot-duration-hover) ease;

@@ -136,7 +136,7 @@
   background: var(--openbot-bg-surface-raised);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   white-space: nowrap;
 }
 
@@ -198,7 +198,7 @@
   overflow: hidden;
   color: inherit;
   font-size: var(--openbot-text-lg);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -223,7 +223,7 @@
   padding: 0 var(--openbot-space-1);
   color: inherit;
   font-size: var(--openbot-text-lg);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   transition:
     background var(--openbot-duration-hover) ease,
     color var(--openbot-duration-hover) ease;

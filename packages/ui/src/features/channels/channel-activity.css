@@ -23,7 +23,7 @@
   overflow: hidden;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

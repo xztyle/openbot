@@ -5,7 +5,7 @@
 .message-copy {
   margin: 0;
   font-size: var(--openbot-text-lg);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   overflow-wrap: anywhere;
   white-space: pre-line;
   user-select: text;
@@ -315,7 +315,7 @@
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-regular);
-  line-height: 28px;
+  line-height: var(--openbot-control-sm);
   outline: 0;
 }
 
@@ -505,7 +505,7 @@
   padding: var(--openbot-space-1-5) var(--openbot-space-2);
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  line-height: 17px;
+  line-height: var(--openbot-leading-sm);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -668,7 +668,7 @@
   color: var(--openbot-text-readable);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .message-code-language:only-child {
@@ -684,7 +684,7 @@
   padding-inline: 7px;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -756,7 +756,7 @@
   font-family: var(--openbot-font-mono);
   font-size: var(--openbot-text-sm);
   font-variant-numeric: tabular-nums;
-  line-height: 19px;
+  line-height: var(--openbot-leading-sm);
   /* Only the inline axis: Chromium stops a vertical wheel at a contained block even when the block
      cannot scroll, so the chat would not scroll under the pointer. */
   overscroll-behavior-x: contain;
@@ -1047,7 +1047,7 @@
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
-  line-height: 15px;
+  line-height: var(--openbot-leading-sm);
   overflow-wrap: anywhere;
   pointer-events: none;
   text-align: left;
@@ -1098,7 +1098,7 @@
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-regular);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   text-decoration: none;
 }
 
@@ -1205,7 +1205,7 @@
   margin-bottom: 1px;
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
-  line-height: 14px;
+  line-height: var(--openbot-leading-sm);
 }
 
 /*
@@ -1216,7 +1216,7 @@
   max-height: 60px;
   overflow: hidden;
   font-size: var(--openbot-text-sm);
-  line-height: 15px;
+  line-height: var(--openbot-leading-sm);
   overflow-wrap: anywhere;
 }
 
@@ -1311,7 +1311,7 @@
   gap: var(--openbot-space-1);
   margin: -1px 0 7px;
   font-size: var(--openbot-text-sm);
-  line-height: 15px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .message-reply-unavailable-icon {
@@ -1348,7 +1348,7 @@
   padding: 0 var(--openbot-space-1-5);
   color: var(--openbot-text-muted);
   font: inherit;
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   vertical-align: middle;
   white-space: nowrap;
 }
@@ -1378,7 +1378,7 @@
   color: var(--file-reference-color);
   font: inherit;
   font-weight: var(--openbot-weight-medium);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   vertical-align: middle;
   white-space: nowrap;
   transition:

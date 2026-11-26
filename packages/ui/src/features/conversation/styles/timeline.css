@@ -299,7 +299,7 @@
   color: var(--openbot-unread-text);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-semibold);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   transition: background-color var(--openbot-duration-hover) var(--openbot-ease-out);
 }
 
@@ -317,7 +317,7 @@
   padding: 0 var(--openbot-space-3);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-semibold);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   text-align: left;
 }
 
@@ -328,7 +328,7 @@
   padding: 0;
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-bold);
-  line-height: 14px;
+  line-height: var(--openbot-leading-sm);
   text-decoration: underline;
   text-underline-offset: 2px;
   transition: transform var(--openbot-duration-fast) cubic-bezier(0.23, 1, 0.32, 1);
@@ -382,7 +382,7 @@
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-bold);
   letter-spacing: 0.08em;
-  line-height: 12px;
+  line-height: 1;
 }
 
 .unread-messages-divider hr {
@@ -407,6 +407,6 @@
   padding: var(--openbot-space-1) 0;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   text-align: center;
 }

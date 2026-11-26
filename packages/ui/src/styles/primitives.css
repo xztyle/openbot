@@ -2714,7 +2714,7 @@ button.ui-bubble-content {
   padding: 0 var(--openbot-space-1);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .ui-message[data-align="end"] .ui-message-footer {

@@ -155,7 +155,7 @@
   overflow: hidden;
   margin-top: -3px;
   font-size: var(--openbot-text-sm);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -22,7 +22,7 @@
   height: 22px;
   padding: 0 var(--openbot-space-2);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .message-preview-switch .ui-sliding-tabs-pill {

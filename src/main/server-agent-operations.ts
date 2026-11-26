@@ -34,6 +34,9 @@
  *   (`workspaceName`, `days`, default 7) in the background and answers its state; `GET` answers the
  *   state and the report file (`motion-human-backfill.ts`).
  *
+ * - `POST /v1/agents/<agentId>/routines/<routineId>` changes a routine's `name`, `instruction` or
+ *   `active` (a JSON body) through the same parse and update as the Team API routine route.
+ *
  * - `POST /v1/mailboxes` answers the agent mailboxes state (`agent-mailboxes-v1.ts`), and
  *   `/v1/mailboxes/save` (`{ address, agentId, mode, displayName?, id? }`), `/v1/mailboxes/worker`
  *   (`{ workerUrl }`) and `/v1/mailboxes/secret` (`{}`) make the same changes as Secrets › Agent
@@ -122,6 +125,8 @@ export interface ServerAgentOperationsDependencies {
   /** The stored guardrails pauses, and their resume (`GuardrailsService.resume`, as the Team API route). */
   guardrailPauses?: () => readonly GuardrailPause[];
   resumeGuardrailPause?: (scope: "agent" | "space", id: string) => void;
+  /** `parseUpdateRoutine` and the agent service's `updateRoutine`; it answers the routine's name. */
+  updateRoutine?: (agentId: string, routineId: string, body: DynamicRecord) => string;
   /** The agent mailboxes (`AgentMail`), as the Secrets page changes them; null before the connectors start. */
   mailboxes?: () => OperatorMailboxes | null;
 }
@@ -191,6 +196,11 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
     if (settings?.[1] !== undefined) {
       if (method !== "POST") return failure(405, "method_not_allowed");
       return updateSettings(decodeURIComponent(settings[1]), rawBody);
+    }
+    const routine = path.match(/^\/v1\/agents\/([^/]+)\/routines\/([^/]+)$/u);
+    if (routine?.[1] !== undefined && routine[2] !== undefined) {
+      if (method !== "POST") return failure(405, "method_not_allowed");
+      return updateRoutine(decodeURIComponent(routine[1]), decodeURIComponent(routine[2]), rawBody);
     }
     if (path === "/v1/drain" || path === "/v1/drain/cancel") {
       if (method !== "POST") return failure(405, "method_not_allowed");
@@ -317,6 +327,30 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
     const remaining = guardrailPauses().length;
     dependencies.log(`The operator resumed ${before.length - remaining} guardrails pause(s).`);
     return { status: 200, lines: { resumed: before.length - remaining, remaining } };
+  }
+
+  function updateRoutine(agentId: string, routineId: string, rawBody: string): ControlAnswer {
+    if (!dependencies.updateRoutine) return failure(404, "not_found");
+    if (!dependencies.agentIds().includes(agentId)) return failure(404, "unknown_agent");
+    let body: unknown = null;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      body = null;
+    }
+    if (!isDynamicRecord(body)) return failure(400, "invalid_body", "The body must be a JSON object.");
+    const { name, instruction, active } = body;
+    try {
+      const updated = dependencies.updateRoutine(agentId, routineId, {
+        ...(name === undefined ? {} : { name }),
+        ...(instruction === undefined ? {} : { instruction }),
+        ...(active === undefined ? {} : { active }),
+      });
+      dependencies.log(`Operator changed the routine ${routineId} of agent ${agentId}.`);
+      return { status: 200, lines: { routine: routineId, name: updated } };
+    } catch (error) {
+      return failure(409, "routine_refused", errorMessage(error));
+    }
   }
 
   async function routeMailboxes(path: string, rawBody: string): Promise<ControlAnswer> {

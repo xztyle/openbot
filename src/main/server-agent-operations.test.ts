@@ -380,3 +380,25 @@ describe("operator mailbox routes", () => {
     expect((await route("GET", "/v1/mailboxes", ""))?.status).toBe(405);
   });
 });
+
+describe("operator routine route", () => {
+  it("passes name, instruction and active to the routine update", async () => {
+    const calls: Array<[string, string, DynamicRecord]> = [];
+    const { route } = createServerAgentOperations({
+      restartInterrupted: () => new Set(),
+      database: () => database().db,
+      agentIds: () => ["agent-a"],
+      send: () => Effect.die("unused"),
+      markerFile: join(mkdtempSync(join(tmpdir(), "openbot-resume-")), "resumes.json"),
+      log: () => {},
+      updateRoutine: (agentId, routineId, body) => {
+        calls.push([agentId, routineId, body]);
+        return "Report";
+      },
+    });
+    const answer = await route("POST", "/v1/agents/agent-a/routines/r-1", '{"instruction":"Do it","other":1}');
+    expect(answer).toEqual({ status: 200, lines: { routine: "r-1", name: "Report" } });
+    expect(calls).toEqual([["agent-a", "r-1", { instruction: "Do it" }]]);
+    expect((await route("POST", "/v1/agents/agent-x/routines/r-1", "{}"))?.status).toBe(404);
+  });
+});

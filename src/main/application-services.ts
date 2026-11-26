@@ -241,6 +241,7 @@ import { IdleRestart } from "./idle-restart";
 import { loadIngressQueueKey } from "./ingress-queue-key";
 import { InstanceTransferService } from "./instance-transfer-service";
 import { InterfaceSizeService } from "./interface-size-service";
+import { parseUpdateRoutine } from "./ipc/agent-inputs";
 import { prepareToolRuntimeForTest } from "./ipc/mcp-server-handlers";
 import { LanguageService } from "./language-service";
 import { localRoutineFeedDocument } from "./local-routine-calendar";
@@ -3649,6 +3650,9 @@ export async function createApplicationServices({
         announceRestart: (state) => host.announceRestart(state, null),
         cloudBench: () => cloudBackups.bench(),
         mailboxes: () => connectorsReady?.mail ?? null,
+        // The same parse and update as the Team API routine route.
+        updateRoutine: (agentId, routineId, body) =>
+          service.updateRoutine(parseUpdateRoutine({ ...body, agentId, routineId })).name,
         humanBackfill: motionEvents
           ? createHumanBackfill({
               human: motionEvents.human,

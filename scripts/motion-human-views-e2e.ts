@@ -385,6 +385,8 @@ const tools = new OwnerTools({
   },
   attachments: { openSources: () => Effect.succeed([]) },
   mailbox: {
+    // This check sends no file with a message to the owner.
+    stageGeneratedAttachments: () => Effect.succeed([]),
     stageGeneratedBytes: (input) =>
       Effect.succeed({
         id: `file-${randomUUID()}`,

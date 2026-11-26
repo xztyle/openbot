@@ -12,9 +12,20 @@ import {
   type SubscriptionWindowMeter,
 } from "@openbot/contracts/guardrails";
 import type { AppTextKey } from "@openbot/i18n";
-import { Badge, Button, Input, SwitchField, Text, toast } from "@openbot/ui";
+import {
+  Badge,
+  Button,
+  Input,
+  SettingsGroup,
+  SettingsHelp,
+  SettingsRow,
+  SettingsSection,
+  SwitchField,
+  toast,
+} from "@openbot/ui";
+import { SaveBarDock, SettingsSaveBar } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { useText } from "@openbot/ui/text";
-import { createMemo, createSignal, For, onSettled, Show } from "solid-js";
+import { createMemo, createSignal, createUniqueId, For, onSettled, Show } from "solid-js";
 import type { GuardrailCalls } from "./trust-port";
 
 const LIMIT_LABEL = {
@@ -167,7 +178,7 @@ export function TrustGuardrailsPanel(props: {
         )}
       </Show>
       <Show when={view() && draft()}>
-        <section class="trust-section" aria-label={t("trust.guardrails.week")}>
+        <SettingsSection title={t("trust.guardrails.week")}>
           <div class="guardrails-kpis">
             <span class="guardrails-kpi">
               <strong>{kpi(["injection-blocked"])}</strong> {t("trust.guardrails.kpi.injections")}
@@ -182,45 +193,41 @@ export function TrustGuardrailsPanel(props: {
               <strong>{kpi(["budget-pause"])}</strong> {t("trust.guardrails.kpi.pauses")}
             </span>
           </div>
-          <Text variant="caption" tone="muted">
-            {t("trust.guardrails.week")}
-          </Text>
-        </section>
-        <section class="trust-section" aria-labelledby="guardrails-paused-heading">
-          <h3 id="guardrails-paused-heading" class="trust-heading">
-            {t("trust.guardrails.paused")}
-          </h3>
-          <For each={view()?.pauses ?? []} fallback={<p class="trust-muted">{t("trust.guardrails.pausedEmpty")}</p>}>
-            {(pause) => (
-              <div class="guardrails-row">
-                <span class="guardrails-row-main">
-                  <strong>{props.name(pause.scope, pause.id)}</strong>
-                  <span class="trust-muted">
-                    {pause.detail} ·{" "}
-                    {pause.until
+        </SettingsSection>
+        <SettingsSection title={t("trust.guardrails.paused")}>
+          <SettingsGroup label={t("trust.guardrails.paused")}>
+            <For
+              each={view()?.pauses ?? []}
+              fallback={<SettingsHelp>{t("trust.guardrails.pausedEmpty")}</SettingsHelp>}
+            >
+              {(pause) => (
+                <SettingsRow
+                  label={props.name(pause.scope, pause.id)}
+                  description={`${pause.detail} · ${
+                    pause.until
                       ? t("trust.guardrails.until", { time: time(pause.until) })
-                      : t("trust.guardrails.untilOwner")}
-                  </span>
-                </span>
-                <Button type="button" size="sm" variant="secondary" onClick={() => void resume(pause.scope, pause.id)}>
-                  {t("trust.guardrails.resume")}
-                </Button>
-              </div>
-            )}
-          </For>
-        </section>
-        <section class="trust-section" aria-labelledby="guardrails-meter-heading">
-          <h3 id="guardrails-meter-heading" class="trust-heading">
-            {t("trust.guardrails.meter")}
-          </h3>
-          <For each={view()?.meter ?? []} fallback={<p class="trust-muted">{t("trust.guardrails.meterEmpty")}</p>}>
+                      : t("trust.guardrails.untilOwner")
+                  }`}
+                >
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void resume(pause.scope, pause.id)}
+                  >
+                    {t("trust.guardrails.resume")}
+                  </Button>
+                </SettingsRow>
+              )}
+            </For>
+          </SettingsGroup>
+        </SettingsSection>
+        <SettingsSection title={t("trust.guardrails.meter")}>
+          <For each={view()?.meter ?? []} fallback={<SettingsHelp>{t("trust.guardrails.meterEmpty")}</SettingsHelp>}>
             {(account) => (
-              <div class="guardrails-meter">
-                <div class="guardrails-row-main">
-                  <strong>
-                    {account.provider}
-                    {account.label ? ` · ${account.label}` : ""}
-                  </strong>
+              <SettingsGroup
+                title={account.label ? `${account.provider} · ${account.label}` : account.provider}
+                description={
                   <span class="guardrails-badges">
                     <Show when={account.nearlyExhausted}>
                       <Badge variant="destructive">{t("trust.guardrails.nearlyOut")}</Badge>
@@ -231,16 +238,19 @@ export function TrustGuardrailsPanel(props: {
                     <Show when={account.inUse}>
                       <Badge variant="secondary">{t("trust.guardrails.inUse")}</Badge>
                     </Show>
-                    <span class="trust-muted">{t("trust.guardrails.agents", { count: account.agents })}</span>
+                    <span>{t("trust.guardrails.agents", { count: account.agents })}</span>
                   </span>
-                </div>
+                }
+              >
                 <Show when={account.creditBalance !== undefined}>
-                  <p class="trust-muted">
+                  <SettingsHelp>
                     {t("trust.guardrails.creditBalance", { balance: format.number(account.creditBalance ?? 0) })}
-                  </p>
+                  </SettingsHelp>
                 </Show>
                 <Show when={(account.resetCredits ?? 0) > 0}>
-                  <p class="trust-muted">{t("trust.guardrails.resetCredits", { count: account.resetCredits ?? 0 })}</p>
+                  <SettingsHelp>
+                    {t("trust.guardrails.resetCredits", { count: account.resetCredits ?? 0 })}
+                  </SettingsHelp>
                 </Show>
                 <For each={account.windows}>
                   {(window) => (
@@ -261,103 +271,91 @@ export function TrustGuardrailsPanel(props: {
                     </div>
                   )}
                 </For>
-              </div>
+              </SettingsGroup>
             )}
           </For>
           <Show when={view()?.steps}>
             {(steps) => (
-              <>
-                <h4 class="trust-muted">{t("trust.guardrails.order")}</h4>
-                <p class="trust-muted">{t("trust.guardrails.orderDescription")}</p>
+              <SettingsGroup title={t("trust.guardrails.order")} description={t("trust.guardrails.orderDescription")}>
                 <For each={FAILOVER_STEPS}>
                   {(step, index) => {
                     const agents = () => steps().filter((row) => row.step === step);
                     return (
-                      <div class="guardrails-row">
-                        <span class="guardrails-row-main">
-                          <strong>
-                            {step === "none" ? t(STEP_LABEL[step]) : `${index() + 1}. ${t(STEP_LABEL[step])}`}
-                          </strong>
-                          <span class="trust-muted">
-                            {agents().length > 0
-                              ? agents()
-                                  .map((row) => props.name("agent", row.agentId))
-                                  .join(", ")
-                              : t("trust.guardrails.stepEmpty")}
-                          </span>
-                        </span>
-                      </div>
+                      <SettingsRow
+                        label={step === "none" ? t(STEP_LABEL[step]) : `${index() + 1}. ${t(STEP_LABEL[step])}`}
+                        description={
+                          agents().length > 0
+                            ? agents()
+                                .map((row) => props.name("agent", row.agentId))
+                                .join(", ")
+                            : t("trust.guardrails.stepEmpty")
+                        }
+                      />
                     );
                   }}
                 </For>
-              </>
+              </SettingsGroup>
             )}
           </Show>
           <Show when={(view()?.failovers ?? []).length > 0}>
-            <h4 class="trust-muted">{t("trust.guardrails.failovers")}</h4>
-            <For each={view()?.failovers ?? []}>
-              {(row) => (
-                <div class="guardrails-row">
-                  <span class="guardrails-row-main">
-                    <strong>{props.name("agent", row.agentId)}</strong>
-                    <span class="trust-muted">
-                      {t("trust.guardrails.failoverRow", {
-                        from: `${row.from.provider}/${row.from.model}`,
-                        to: `${row.to.provider}/${row.to.model}`,
-                      })}
-                    </span>
-                  </span>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => props.onOpenAgent(row.agentId)}>
-                    {t("common.open")}
-                  </Button>
-                </div>
+            <SettingsGroup title={t("trust.guardrails.failovers")}>
+              <For each={view()?.failovers ?? []}>
+                {(row) => (
+                  <SettingsRow
+                    label={props.name("agent", row.agentId)}
+                    description={t("trust.guardrails.failoverRow", {
+                      from: `${row.from.provider}/${row.from.model}`,
+                      to: `${row.to.provider}/${row.to.model}`,
+                    })}
+                  >
+                    <Button type="button" size="sm" variant="ghost" onClick={() => props.onOpenAgent(row.agentId)}>
+                      {t("common.open")}
+                    </Button>
+                  </SettingsRow>
+                )}
+              </For>
+            </SettingsGroup>
+          </Show>
+        </SettingsSection>
+        <SettingsSection title={t("trust.guardrails.today")}>
+          <SettingsGroup label={t("trust.guardrails.today")}>
+            <For each={busiest()} fallback={<SettingsHelp>{t("trust.guardrails.todayEmpty")}</SettingsHelp>}>
+              {({ row }) => (
+                <SettingsRow
+                  layout="inline"
+                  label={props.name(row.scope, row.id)}
+                  description={`${t("trust.guardrails.usage", {
+                    turns: format.number(row.turns),
+                    cost: format.currencyUsd(row.costUsd),
+                    tokens: format.compact(row.tokens),
+                  })}${
+                    row.windowSharePercent === null
+                      ? ""
+                      : ` · ${t("trust.guardrails.window.used", { percent: Math.round(row.windowSharePercent) })}`
+                  }`}
+                >
+                  <Show when={row.state !== "ok"}>
+                    <Badge variant={row.state === "paused" ? "destructive" : "secondary"}>
+                      {row.state === "paused" ? t("trust.guardrails.state.paused") : t("trust.guardrails.state.warn")}
+                    </Badge>
+                  </Show>
+                </SettingsRow>
               )}
             </For>
-          </Show>
-        </section>
-        <section class="trust-section" aria-labelledby="guardrails-today-heading">
-          <h3 id="guardrails-today-heading" class="trust-heading">
-            {t("trust.guardrails.today")}
-          </h3>
-          <For each={busiest()} fallback={<p class="trust-muted">{t("trust.guardrails.todayEmpty")}</p>}>
-            {({ row }) => (
-              <div class="guardrails-row">
-                <span class="guardrails-row-main">
-                  <strong>{props.name(row.scope, row.id)}</strong>
-                  <span class="trust-muted">
-                    {t("trust.guardrails.usage", {
-                      turns: format.number(row.turns),
-                      cost: format.currencyUsd(row.costUsd),
-                      tokens: format.compact(row.tokens),
-                    })}
-                    {row.windowSharePercent === null
-                      ? ""
-                      : ` · ${t("trust.guardrails.window.used", { percent: Math.round(row.windowSharePercent) })}`}
-                  </span>
-                </span>
-                <Show when={row.state !== "ok"}>
-                  <Badge variant={row.state === "paused" ? "destructive" : "secondary"}>
-                    {row.state === "paused" ? t("trust.guardrails.state.paused") : t("trust.guardrails.state.warn")}
-                  </Badge>
-                </Show>
-              </div>
-            )}
-          </For>
-        </section>
+          </SettingsGroup>
+        </SettingsSection>
         <Show when={draft()}>
           {(policy) => (
-            <section class="trust-section" aria-labelledby="guardrails-limits-heading">
-              <h3 id="guardrails-limits-heading" class="trust-heading">
-                {t("trust.guardrails.limits")}
-              </h3>
-              <SwitchField
-                size="default"
-                checked={policy().enabled}
-                onChange={(enabled) => change((current) => ({ ...current, enabled }))}
-                label={t("trust.guardrails.enabled")}
-                description={t("trust.guardrails.enabledDescription")}
-              />
-              <p class="trust-muted">{t("trust.guardrails.limitsDescription")}</p>
+            <SettingsSection title={t("trust.guardrails.limits")} description={t("trust.guardrails.limitsDescription")}>
+              <SettingsGroup label={t("trust.guardrails.enabled")}>
+                <SwitchField
+                  size="default"
+                  checked={policy().enabled}
+                  onChange={(enabled) => change((current) => ({ ...current, enabled }))}
+                  label={t("trust.guardrails.enabled")}
+                  description={t("trust.guardrails.enabledDescription")}
+                />
+              </SettingsGroup>
               <LimitFields
                 title={t("trust.guardrails.agentDefaults")}
                 limits={policy().agentDefaults}
@@ -378,20 +376,39 @@ export function TrustGuardrailsPanel(props: {
                 limits={policy().routine}
                 onChange={(routine) => change((current) => ({ ...current, routine }))}
               />
-              <div class="trust-budget">
-                <NumberField
+              <SettingsGroup label={t("trust.guardrails.warnPercent")}>
+                <NumberRow
                   label={t("trust.guardrails.warnPercent")}
                   value={policy().warnPercent}
                   onChange={(value) => value !== null && change((current) => ({ ...current, warnPercent: value }))}
                 />
-                <NumberField
+                <NumberRow
+                  label={t("trust.guardrails.moneyHours")}
+                  value={policy().moneyApprovalHours}
+                  onChange={(value) =>
+                    value !== null && change((current) => ({ ...current, moneyApprovalHours: value }))
+                  }
+                />
+                <SwitchField
+                  checked={policy().injection.enabled}
+                  onChange={(enabled) => change((current) => ({ ...current, injection: { enabled } }))}
+                  label={t("trust.guardrails.injection")}
+                />
+              </SettingsGroup>
+              <SettingsGroup label={t("trust.guardrails.stuck")}>
+                <SwitchField
+                  checked={policy().stuck.enabled}
+                  onChange={(enabled) => change((current) => ({ ...current, stuck: { ...current.stuck, enabled } }))}
+                  label={t("trust.guardrails.stuck")}
+                />
+                <NumberRow
                   label={t("trust.guardrails.stuckRepeats")}
                   value={policy().stuck.repeats}
                   onChange={(value) =>
                     value !== null && change((current) => ({ ...current, stuck: { ...current.stuck, repeats: value } }))
                   }
                 />
-                <NumberField
+                <NumberRow
                   label={t("trust.guardrails.pingPong")}
                   value={policy().stuck.pingPong}
                   onChange={(value) =>
@@ -399,40 +416,23 @@ export function TrustGuardrailsPanel(props: {
                     change((current) => ({ ...current, stuck: { ...current.stuck, pingPong: value } }))
                   }
                 />
-                <NumberField
-                  label={t("trust.guardrails.moneyHours")}
-                  value={policy().moneyApprovalHours}
-                  onChange={(value) =>
-                    value !== null && change((current) => ({ ...current, moneyApprovalHours: value }))
+              </SettingsGroup>
+              <SettingsGroup label={t("trust.guardrails.failover")}>
+                <SwitchField
+                  checked={policy().failover.enabled}
+                  onChange={(enabled) =>
+                    change((current) => ({ ...current, failover: { ...current.failover, enabled } }))
                   }
+                  label={t("trust.guardrails.failover")}
                 />
-              </div>
-              <SwitchField
-                checked={policy().stuck.enabled}
-                onChange={(enabled) => change((current) => ({ ...current, stuck: { ...current.stuck, enabled } }))}
-                label={t("trust.guardrails.stuck")}
-              />
-              <SwitchField
-                checked={policy().injection.enabled}
-                onChange={(enabled) => change((current) => ({ ...current, injection: { enabled } }))}
-                label={t("trust.guardrails.injection")}
-              />
-              <SwitchField
-                checked={policy().failover.enabled}
-                onChange={(enabled) =>
-                  change((current) => ({ ...current, failover: { ...current.failover, enabled } }))
-                }
-                label={t("trust.guardrails.failover")}
-              />
-              <SwitchField
-                checked={policy().failover.allowApiKey}
-                onChange={(allowApiKey) =>
-                  change((current) => ({ ...current, failover: { ...current.failover, allowApiKey } }))
-                }
-                label={t("trust.guardrails.allowApiKey")}
-              />
-              <div class="trust-budget">
-                <NumberField
+                <SwitchField
+                  checked={policy().failover.allowApiKey}
+                  onChange={(allowApiKey) =>
+                    change((current) => ({ ...current, failover: { ...current.failover, allowApiKey } }))
+                  }
+                  label={t("trust.guardrails.allowApiKey")}
+                />
+                <NumberRow
                   label={t("trust.guardrails.failoverThreshold")}
                   value={policy().failover.thresholdPercent}
                   onChange={(value) =>
@@ -440,60 +440,50 @@ export function TrustGuardrailsPanel(props: {
                     change((current) => ({ ...current, failover: { ...current.failover, thresholdPercent: value } }))
                   }
                 />
-              </div>
-            </section>
+              </SettingsGroup>
+            </SettingsSection>
           )}
         </Show>
-        <section class="trust-section" aria-labelledby="guardrails-events-heading">
-          <h3 id="guardrails-events-heading" class="trust-heading">
-            {t("trust.guardrails.events")}
-          </h3>
-          <For each={view()?.events ?? []} fallback={<p class="trust-muted">{t("trust.guardrails.eventsEmpty")}</p>}>
-            {(event) => (
-              <div class="guardrails-event">
-                <span class="trust-muted">{time(event.at)}</span>
-                <span>{event.summary}</span>
-              </div>
-            )}
-          </For>
-        </section>
-      </Show>
-      <Show when={dirty()}>
-        <section class="trust-save-bar" aria-label={t("trust.unsaved")}>
-          <Text variant="caption" tone="muted">
-            {t("trust.unsaved")}
-          </Text>
-          <div class="trust-save-actions">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={saving()}
-              onClick={() => setDraft(view()?.policy ?? null)}
+        <SettingsSection title={t("trust.guardrails.events")}>
+          <SettingsGroup label={t("trust.guardrails.events")}>
+            <For
+              each={view()?.events ?? []}
+              fallback={<SettingsHelp>{t("trust.guardrails.eventsEmpty")}</SettingsHelp>}
             >
-              {t("server.settings.reset")}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              loading={saving()}
-              loadingLabel={t("common.saving")}
-              onClick={() => void save()}
-            >
-              {t("common.save")}
-            </Button>
-          </div>
-        </section>
+              {(event) => (
+                <div class="guardrails-event">
+                  <span class="trust-muted">{time(event.at)}</span>
+                  <span>{event.summary}</span>
+                </div>
+              )}
+            </For>
+          </SettingsGroup>
+        </SettingsSection>
       </Show>
+      <SaveBarDock value={dirty() ? true : null}>
+        {() => (
+          <SettingsSaveBar
+            label={t("trust.unsaved")}
+            message={t("trust.unsaved")}
+            saving={saving()}
+            resetDisabled={saving()}
+            onReset={() => setDraft(view()?.policy ?? null)}
+            onSave={() => void save()}
+          />
+        )}
+      </SaveBarDock>
     </>
   );
 }
 
-function NumberField(props: { label: string; value: number | null; onChange: (value: number | null) => void }) {
+/** One number of the policy: its name on the left, a short field on the right. Empty means "no limit". */
+function NumberRow(props: { label: string; value: number | null; onChange: (value: number | null) => void }) {
+  const id = `guardrails-number-${createUniqueId()}`;
   return (
-    <label class="trust-field">
-      <span>{props.label}</span>
+    <SettingsRow label={props.label} controlId={id}>
       <Input
+        id={id}
+        class="trust-number"
         size="sm"
         inputmode="decimal"
         value={props.value === null ? "" : String(props.value)}
@@ -502,7 +492,7 @@ function NumberField(props: { label: string; value: number | null; onChange: (va
           props.onChange(text.trim() && Number.isFinite(value) && value >= 0 ? value : null);
         }}
       />
-    </label>
+    </SettingsRow>
   );
 }
 
@@ -512,23 +502,24 @@ function LimitFields(props: {
   onChange: (limits: GuardrailFullLimits) => void;
 }) {
   const { t } = useText();
+  const ids = `guardrails-limit-${createUniqueId()}`;
   return (
-    <fieldset class="trust-budget guardrails-fieldset">
-      <legend class="trust-muted">{props.title}</legend>
+    <SettingsGroup title={props.title}>
       <For each={GUARDRAIL_LIMIT_KEYS}>
         {(key) => (
-          <label class="trust-field">
-            <span>{t(LIMIT_LABEL[key])}</span>
+          <SettingsRow label={t(LIMIT_LABEL[key])} controlId={`${ids}-${key}`}>
             <Input
+              id={`${ids}-${key}`}
+              class="trust-number"
               size="sm"
               inputmode="decimal"
               value={shown(key, props.limits[key])}
               onValueChange={(text) => props.onChange({ ...props.limits, [key]: parsed(key, text) })}
             />
-          </label>
+          </SettingsRow>
         )}
       </For>
-    </fieldset>
+    </SettingsGroup>
   );
 }
 
@@ -538,22 +529,23 @@ function RunFields(props: {
   onChange: (limits: GuardrailRunLimits) => void;
 }) {
   const { t } = useText();
+  const ids = `guardrails-run-${createUniqueId()}`;
   return (
-    <fieldset class="trust-budget guardrails-fieldset">
-      <legend class="trust-muted">{props.title}</legend>
+    <SettingsGroup title={props.title}>
       <For each={RUN_KEYS}>
         {(key) => (
-          <label class="trust-field">
-            <span>{t(RUN_LABEL[key])}</span>
+          <SettingsRow label={t(RUN_LABEL[key])} controlId={`${ids}-${key}`}>
             <Input
+              id={`${ids}-${key}`}
+              class="trust-number"
               size="sm"
               inputmode="decimal"
               value={shown(key, props.limits[key])}
               onValueChange={(text) => props.onChange({ ...props.limits, [key]: parsed(key, text) })}
             />
-          </label>
+          </SettingsRow>
         )}
       </For>
-    </fieldset>
+    </SettingsGroup>
   );
 }

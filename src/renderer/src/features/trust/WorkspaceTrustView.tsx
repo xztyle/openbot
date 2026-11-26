@@ -18,11 +18,25 @@ import {
   type TrustRule,
   trustAuditCsv,
 } from "@openbot/contracts/trust-control";
-import { Badge, Button, Input, NativeSelect, ShieldCheck, SwitchField, Text, Trash2, toast } from "@openbot/ui";
+import {
+  Badge,
+  Button,
+  Input,
+  NativeSelect,
+  SettingsGroup,
+  SettingsHelp,
+  SettingsRow,
+  SettingsSection,
+  ShieldCheck,
+  SwitchField,
+  Trash2,
+  toast,
+} from "@openbot/ui";
+import { SaveBarDock, SettingsSaveBar } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { WorkspacePaneHeader } from "@openbot/ui/features/workspace/WorkspacePaneHeader";
 import { zoneDay } from "@openbot/ui/features/workspace/workspace-format";
 import { useText } from "@openbot/ui/text";
-import { createMemo, createSignal, For, flush, onSettled, Show } from "solid-js";
+import { createMemo, createSignal, createUniqueId, For, flush, onSettled, Show } from "solid-js";
 import { useWorkspace } from "../workspace/workspace-context";
 import { TrustGuardrailsPanel } from "./TrustGuardrailsPanel";
 import {
@@ -114,9 +128,12 @@ export function WorkspaceTrustView() {
   const spaceName = (id: string) => ws.spaces.space(id)?.name ?? id;
   const spaceOf = (agentId: string) => ws.spaces.agentSpace(agentId);
   const managers = createMemo(() => {
-    const ids = new Set(agents().flatMap((agent) => (agent.reportsToAgentId ? [agent.reportsToAgentId] : [])));
-    return agents().filter((agent) => ids.has(agent.id));
+    const managerIds = new Set(agents().flatMap((agent) => (agent.reportsToAgentId ? [agent.reportsToAgentId] : [])));
+    return agents().filter((agent) => managerIds.has(agent.id));
   });
+  const ids = `trust-${createUniqueId()}`;
+  const roleLabel = (role: (typeof TRUST_ROLES)[number]) =>
+    role === "lead" ? t("trust.role.lead") : t("trust.role.member");
 
   return (
     <section class="ws-view trust-view" aria-label={t("trust.title")}>
@@ -196,7 +213,7 @@ export function WorkspaceTrustView() {
                 <Show when={weeks()}>
                   {(value) => <TrustInterventions week={value().week} previousWeek={value().previousWeek} />}
                 </Show>
-                <section class="trust-section">
+                <SettingsGroup label={t("trust.enabled")}>
                   <SwitchField
                     size="default"
                     checked={policy().enabled}
@@ -204,29 +221,27 @@ export function WorkspaceTrustView() {
                     label={t("trust.enabled")}
                     description={t("trust.enabledDescription")}
                   />
-                </section>
-                <section class="trust-section" aria-labelledby="trust-roles-heading">
-                  <h3 id="trust-roles-heading" class="trust-heading">
-                    {t("trust.roles")}
-                  </h3>
-                  <p class="trust-muted">{t("trust.rolesDescription")}</p>
-                  <div class="trust-grid">
+                </SettingsGroup>
+                <SettingsSection title={t("trust.roles")} description={t("trust.rolesDescription")}>
+                  <SettingsGroup label={t("trust.roles")}>
                     <div class="trust-grid-row trust-grid-head">
                       <span>{t("trust.actionColumn")}</span>
-                      <For each={TRUST_ROLES}>
-                        {(role) => <span>{role === "lead" ? t("trust.role.lead") : t("trust.role.member")}</span>}
-                      </For>
+                      <For each={TRUST_ROLES}>{(role) => <span>{roleLabel(role)}</span>}</For>
                       <span>{t("trust.approverColumn")}</span>
                     </div>
                     <For each={TRUST_ACTIONS}>
                       {(action) => (
                         <div class="trust-grid-row">
-                          <span>{t(TRUST_ACTION_LABEL[action])}</span>
+                          <span class="trust-grid-label">{t(TRUST_ACTION_LABEL[action])}</span>
                           <For each={TRUST_ROLES}>
                             {(role) => (
-                              <span>
+                              <div class="trust-cell">
+                                <label class="trust-cell-label" for={`${ids}-${action}-${role}`}>
+                                  {roleLabel(role)}
+                                </label>
                                 <RuleSelect
-                                  label={`${t(TRUST_ACTION_LABEL[action])} · ${role === "lead" ? t("trust.role.lead") : t("trust.role.member")}`}
+                                  id={`${ids}-${action}-${role}`}
+                                  label={`${t(TRUST_ACTION_LABEL[action])} · ${roleLabel(role)}`}
                                   value={policy().roles[role][action]}
                                   onChange={(rule) =>
                                     rule &&
@@ -236,12 +251,15 @@ export function WorkspaceTrustView() {
                                     }))
                                   }
                                 />
-                              </span>
+                              </div>
                             )}
                           </For>
-                          <span>
+                          <div class="trust-cell">
+                            <label class="trust-cell-label" for={`${ids}-${action}-approver`}>
+                              {t("trust.approverColumn")}
+                            </label>
                             <NativeSelect
-                              size="sm"
+                              id={`${ids}-${action}-approver`}
                               aria-label={`${t(TRUST_ACTION_LABEL[action])} · ${t("trust.approverColumn")}`}
                               value={policy().approvers[action]}
                               disabled={OWNER_ONLY_TRUST_ACTIONS.includes(action)}
@@ -256,69 +274,75 @@ export function WorkspaceTrustView() {
                               <option value="owner">{t("trust.approver.owner")}</option>
                               <option value="manager">{t("trust.approver.manager")}</option>
                             </NativeSelect>
-                          </span>
+                          </div>
                         </div>
                       )}
                     </For>
-                  </div>
-                  <p class="trust-muted">{t("trust.approversDescription")}</p>
-                </section>
-                <section class="trust-section" aria-labelledby="trust-sandbox-heading">
-                  <h3 id="trust-sandbox-heading" class="trust-heading">
-                    {t("trust.sandbox")}
-                  </h3>
-                  <p class="trust-muted">{t("trust.sandboxDescription")}</p>
-                  <SwitchField
-                    checked={policy().sandbox.landings}
-                    onChange={(value) =>
-                      change((current) => ({ ...current, sandbox: { ...current.sandbox, landings: value } }))
-                    }
-                    label={t("trust.sandbox.landings")}
-                  />
-                  <SwitchField
-                    checked={policy().sandbox.ads}
-                    onChange={(value) =>
-                      change((current) => ({ ...current, sandbox: { ...current.sandbox, ads: value } }))
-                    }
-                    label={t("trust.sandbox.ads")}
-                  />
-                  <SwitchField
-                    checked={policy().sandbox.emails}
-                    onChange={(value) =>
-                      change((current) => ({ ...current, sandbox: { ...current.sandbox, emails: value } }))
-                    }
-                    label={t("trust.sandbox.emails")}
-                  />
-                  <label class="trust-inline">
-                    <span>{t("trust.pass")}</span>
-                    <NativeSelect
+                  </SettingsGroup>
+                  <SettingsHelp>{t("trust.approversDescription")}</SettingsHelp>
+                </SettingsSection>
+                <SettingsSection title={t("trust.sandbox")} description={t("trust.sandboxDescription")}>
+                  <SettingsGroup label={t("trust.sandbox")}>
+                    <SwitchField
+                      checked={policy().sandbox.landings}
+                      onChange={(value) =>
+                        change((current) => ({ ...current, sandbox: { ...current.sandbox, landings: value } }))
+                      }
+                      label={t("trust.sandbox.landings")}
+                    />
+                    <SwitchField
+                      checked={policy().sandbox.ads}
+                      onChange={(value) =>
+                        change((current) => ({ ...current, sandbox: { ...current.sandbox, ads: value } }))
+                      }
+                      label={t("trust.sandbox.ads")}
+                    />
+                    <SwitchField
+                      checked={policy().sandbox.emails}
+                      onChange={(value) =>
+                        change((current) => ({ ...current, sandbox: { ...current.sandbox, emails: value } }))
+                      }
+                      label={t("trust.sandbox.emails")}
+                    />
+                    <SettingsRow label={t("trust.pass")} controlId={`${ids}-pass`}>
+                      <NativeSelect
+                        id={`${ids}-pass`}
+                        value={String(policy().approvalPassMinutes)}
+                        onChange={(event) => {
+                          const minutes = Number(event.currentTarget.value);
+                          change((current) => ({ ...current, approvalPassMinutes: minutes }));
+                        }}
+                      >
+                        <For each={PASS_MINUTES}>
+                          {(minutes) => (
+                            <option value={String(minutes)}>
+                              {minutes === 0 ? t("trust.pass.none") : t("trust.pass.minutes", { count: minutes })}
+                            </option>
+                          )}
+                        </For>
+                      </NativeSelect>
+                    </SettingsRow>
+                  </SettingsGroup>
+                </SettingsSection>
+                <SettingsSection
+                  title={t("trust.budgets")}
+                  description={t("trust.budgetsDescription")}
+                  actions={
+                    <Button
+                      type="button"
                       size="sm"
-                      value={String(policy().approvalPassMinutes)}
-                      onChange={(event) => {
-                        const minutes = Number(event.currentTarget.value);
-                        change((current) => ({ ...current, approvalPassMinutes: minutes }));
-                      }}
+                      variant="secondary"
+                      onClick={() => change((current) => ({ ...current, budgets: [...current.budgets, newBudget()] }))}
                     >
-                      <For each={PASS_MINUTES}>
-                        {(minutes) => (
-                          <option value={String(minutes)}>
-                            {minutes === 0 ? t("trust.pass.none") : t("trust.pass.minutes", { count: minutes })}
-                          </option>
-                        )}
-                      </For>
-                    </NativeSelect>
-                  </label>
-                </section>
-                <section class="trust-section" aria-labelledby="trust-budgets-heading">
-                  <h3 id="trust-budgets-heading" class="trust-heading">
-                    {t("trust.budgets")}
-                  </h3>
-                  <p class="trust-muted">{t("trust.budgetsDescription")}</p>
+                      {t("trust.budgets.add")}
+                    </Button>
+                  }
+                >
                   {/* Keyed by id: an edit replaces the budget, and its fields must keep focus while typing. */}
                   <For
                     each={policy().budgets}
                     keyed={(budget) => budget.id}
-                    fallback={<p class="trust-muted">{t("trust.budgets.empty")}</p>}
+                    fallback={<SettingsHelp>{t("trust.budgets.empty")}</SettingsHelp>}
                   >
                     {(budget, index) => (
                       <BudgetRow
@@ -342,17 +366,7 @@ export function WorkspaceTrustView() {
                       />
                     )}
                   </For>
-                  <div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => change((current) => ({ ...current, budgets: [...current.budgets, newBudget()] }))}
-                    >
-                      {t("trust.budgets.add")}
-                    </Button>
-                  </div>
-                </section>
+                </SettingsSection>
                 <OverridesSection
                   policy={policy()}
                   agents={agents()}
@@ -367,33 +381,18 @@ export function WorkspaceTrustView() {
           </Show>
         </Show>
       </div>
-      <Show when={tab() === "rules" && dirty()}>
-        <section class="trust-save-bar" aria-label={t("trust.unsaved")}>
-          <Text variant="caption" tone="muted">
-            {t("trust.unsaved")}
-          </Text>
-          <div class="trust-save-actions">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={saving()}
-              onClick={() => setDraft(view()?.policy ?? null)}
-            >
-              {t("server.settings.reset")}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              loading={saving()}
-              loadingLabel={t("common.saving")}
-              onClick={() => void save()}
-            >
-              {t("common.save")}
-            </Button>
-          </div>
-        </section>
-      </Show>
+      <SaveBarDock value={tab() === "rules" && dirty() ? true : null}>
+        {() => (
+          <SettingsSaveBar
+            label={t("trust.unsaved")}
+            message={t("trust.unsaved")}
+            saving={saving()}
+            resetDisabled={saving()}
+            onReset={() => setDraft(view()?.policy ?? null)}
+            onSave={() => void save()}
+          />
+        )}
+      </SaveBarDock>
     </section>
   );
 }
@@ -403,27 +402,31 @@ function TrustInterventions(props: { week: ApprovalWeek; previousWeek: ApprovalW
   const { t } = useText();
   const total = () => props.week.owner + props.week.agents;
   return (
-    <section class="trust-section" aria-labelledby="trust-interventions-heading">
-      <h3 id="trust-interventions-heading" class="trust-heading">
-        {t("trust.interventions.title")}
-      </h3>
-      <Show when={total() > 0} fallback={<p class="trust-muted">{t("trust.interventions.none")}</p>}>
-        <p>{t("trust.interventions.week", { owner: String(props.week.owner), agents: String(props.week.agents) })}</p>
-        <p class="trust-muted">
-          {t("trust.interventions.share", { share: String(Math.round((props.week.agents / total()) * 100)) })}
-        </p>
-      </Show>
-      <p class="trust-muted">
-        {t("trust.interventions.previous", {
-          owner: String(props.previousWeek.owner),
-          agents: String(props.previousWeek.agents),
-        })}
-      </p>
-    </section>
+    <SettingsSection title={t("trust.interventions.title")}>
+      <SettingsGroup label={t("trust.interventions.title")}>
+        <SettingsRow
+          label={
+            total() > 0
+              ? t("trust.interventions.week", { owner: String(props.week.owner), agents: String(props.week.agents) })
+              : t("trust.interventions.none")
+          }
+          description={
+            total() > 0
+              ? t("trust.interventions.share", { share: String(Math.round((props.week.agents / total()) * 100)) })
+              : undefined
+          }
+          help={t("trust.interventions.previous", {
+            owner: String(props.previousWeek.owner),
+            agents: String(props.previousWeek.agents),
+          })}
+        />
+      </SettingsGroup>
+    </SettingsSection>
   );
 }
 
 function RuleSelect(props: {
+  id?: string;
   label: string;
   value: TrustRule | null;
   /** Shows an empty choice that clears an override, labeled with what applies without it. */
@@ -433,7 +436,7 @@ function RuleSelect(props: {
   const { t } = useText();
   return (
     <NativeSelect
-      size="sm"
+      id={props.id}
       aria-label={props.label}
       value={props.value ?? ""}
       data-rule={props.value ?? "inherit"}
@@ -461,25 +464,30 @@ function TrustAgentCard(props: {
 }) {
   const { t } = useText();
   const effective = () => effectiveTrustRules(props.policy, props.placement);
+  const ids = `trust-agent-${createUniqueId()}`;
   return (
-    <section class="trust-section trust-agent" aria-label={t("trust.agent.title", { name: props.name })}>
-      <div class="trust-agent-header">
-        <h3 class="trust-heading">{t("trust.agent.title", { name: props.name })}</h3>
+    <SettingsGroup
+      class="trust-agent"
+      title={t("trust.agent.title", { name: props.name })}
+      description={
+        <>
+          {props.placement.role === "lead" ? t("trust.role.lead") : t("trust.role.member")}
+          <Show when={props.placement.managers[0]}>
+            {(manager) => ` · ${t("trust.agent.reportsTo", { name: props.managerName(manager()) })}`}
+          </Show>
+        </>
+      }
+      actions={
         <Button type="button" size="sm" variant="ghost" onClick={() => props.onClose()}>
           {t("common.close")}
         </Button>
-      </div>
-      <p class="trust-muted">
-        {props.placement.role === "lead" ? t("trust.role.lead") : t("trust.role.member")}
-        <Show when={props.placement.managers[0]}>
-          {(manager) => ` · ${t("trust.agent.reportsTo", { name: props.managerName(manager()) })}`}
-        </Show>
-      </p>
+      }
+    >
       <For each={TRUST_ACTIONS}>
         {(action) => (
-          <div class="trust-grid-row">
-            <span>{t(TRUST_ACTION_LABEL[action])}</span>
+          <SettingsRow label={t(TRUST_ACTION_LABEL[action])} controlId={`${ids}-${action}`}>
             <RuleSelect
+              id={`${ids}-${action}`}
               label={t(TRUST_ACTION_LABEL[action])}
               value={props.policy.agents[props.agentId]?.[action] ?? null}
               inherit={t("trust.inherit", {
@@ -488,10 +496,10 @@ function TrustAgentCard(props: {
               })}
               onChange={(rule) => props.onSet(action, rule)}
             />
-          </div>
+          </SettingsRow>
         )}
       </For>
-    </section>
+    </SettingsGroup>
   );
 }
 
@@ -571,11 +579,31 @@ function BudgetRow(props: {
         : scope === "team"
           ? t("trust.scope.team")
           : t("trust.scope.agent");
+  const ids = `trust-budget-${createUniqueId()}`;
+  const targetName = () => targets().find((target) => target.id === props.budget.scopeId)?.name;
   return (
-    <div class="trust-budget">
-      <label class="trust-field">
-        <span>{t("trust.budget.platform")}</span>
+    <SettingsGroup
+      title={[props.budget.platform, scopeLabel(props.budget.scope), targetName()].filter(Boolean).join(" · ")}
+      description={t("trust.budget.spent", {
+        today: format.number(spent().today),
+        total: format.number(spent().total),
+        currency: props.budget.currency,
+      })}
+      actions={
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          aria-label={t("trust.budget.remove")}
+          onClick={() => props.onRemove()}
+        >
+          <Trash2 aria-hidden="true" />
+        </Button>
+      }
+    >
+      <SettingsRow label={t("trust.budget.platform")} controlId={`${ids}-platform`}>
         <Input
+          id={`${ids}-platform`}
           size="sm"
           value={platform.value()}
           placeholder={t("trust.budget.platformHint")}
@@ -584,11 +612,10 @@ function BudgetRow(props: {
             set({ platform: value.trim().toLowerCase() || "*" });
           }}
         />
-      </label>
-      <label class="trust-field">
-        <span>{t("trust.budget.scope")}</span>
+      </SettingsRow>
+      <SettingsRow label={t("trust.budget.scope")} controlId={`${ids}-scope`}>
         <NativeSelect
-          size="sm"
+          id={`${ids}-scope`}
           value={props.budget.scope}
           onChange={(event) => {
             const scope = TRUST_BUDGET_SCOPES.find((value) => value === event.currentTarget.value) ?? "all";
@@ -597,23 +624,23 @@ function BudgetRow(props: {
         >
           <For each={TRUST_BUDGET_SCOPES}>{(scope) => <option value={scope}>{scopeLabel(scope)}</option>}</For>
         </NativeSelect>
-      </label>
+      </SettingsRow>
       <Show when={props.budget.scope !== "all"}>
-        <label class="trust-field">
-          <span>{scopeLabel(props.budget.scope)}</span>
+        <SettingsRow label={scopeLabel(props.budget.scope)} controlId={`${ids}-target`}>
           <NativeSelect
-            size="sm"
+            id={`${ids}-target`}
             value={props.budget.scopeId ?? ""}
             onChange={(event) => set({ scopeId: event.currentTarget.value || undefined })}
           >
             <option value="">{t("trust.budget.pick")}</option>
             <For each={targets()}>{(target) => <option value={target.id}>{target.name}</option>}</For>
           </NativeSelect>
-        </label>
+        </SettingsRow>
       </Show>
-      <label class="trust-field">
-        <span>{t("trust.budget.perDay")}</span>
+      <SettingsRow label={t("trust.budget.perDay")} controlId={`${ids}-per-day`}>
         <Input
+          id={`${ids}-per-day`}
+          class="trust-number"
           size="sm"
           inputmode="decimal"
           value={perDay.value()}
@@ -622,10 +649,11 @@ function BudgetRow(props: {
             set({ perDay: amount(value) });
           }}
         />
-      </label>
-      <label class="trust-field">
-        <span>{t("trust.budget.total")}</span>
+      </SettingsRow>
+      <SettingsRow label={t("trust.budget.total")} controlId={`${ids}-total`}>
         <Input
+          id={`${ids}-total`}
+          class="trust-number"
           size="sm"
           inputmode="decimal"
           value={total.value()}
@@ -634,10 +662,11 @@ function BudgetRow(props: {
             set({ total: amount(value) });
           }}
         />
-      </label>
-      <label class="trust-field trust-field-short">
-        <span>{t("trust.budget.currency")}</span>
+      </SettingsRow>
+      <SettingsRow label={t("trust.budget.currency")} controlId={`${ids}-currency`}>
         <Input
+          id={`${ids}-currency`}
+          class="trust-number"
           size="sm"
           maxlength={3}
           value={currency.value()}
@@ -646,24 +675,8 @@ function BudgetRow(props: {
             set({ currency: value.trim().toUpperCase() || "USD" });
           }}
         />
-      </label>
-      <span class="trust-spent">
-        {t("trust.budget.spent", {
-          today: format.number(spent().today),
-          total: format.number(spent().total),
-          currency: props.budget.currency,
-        })}
-      </span>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        aria-label={t("trust.budget.remove")}
-        onClick={() => props.onRemove()}
-      >
-        <Trash2 aria-hidden="true" />
-      </Button>
-    </div>
+      </SettingsRow>
+    </SettingsGroup>
   );
 }
 
@@ -691,23 +704,20 @@ function OverridesSection(props: {
         ? t("trust.override.team", { name: props.agentName(id) })
         : t("trust.override.space", { name: props.spaceName(id) });
   const targets = () => (level() === "agents" ? props.agents : level() === "teams" ? props.managers : props.spaces);
+  const ids = `trust-override-${createUniqueId()}`;
   return (
-    <section class="trust-section" aria-labelledby="trust-overrides-heading">
-      <h3 id="trust-overrides-heading" class="trust-heading">
-        {t("trust.overrides")}
-      </h3>
-      <p class="trust-muted">{t("trust.overridesDescription")}</p>
+    <SettingsSection title={t("trust.overrides")} description={t("trust.overridesDescription")}>
       <For
         each={rows()}
         keyed={(row) => `${row.kind}:${row.id}`}
-        fallback={<p class="trust-muted">{t("trust.overrides.empty")}</p>}
+        fallback={<SettingsHelp>{t("trust.overrides.empty")}</SettingsHelp>}
       >
         {(item) => {
           const row = item();
           return (
-            <div class="trust-override">
-              <div class="trust-agent-header">
-                <strong>{label(row.kind, row.id)}</strong>
+            <SettingsGroup
+              title={label(row.kind, row.id)}
+              actions={
                 <Button
                   type="button"
                   size="sm"
@@ -717,69 +727,73 @@ function OverridesSection(props: {
                 >
                   <Trash2 aria-hidden="true" />
                 </Button>
-              </div>
-              <div class="trust-override-rules">
-                <For each={TRUST_ACTIONS}>
-                  {(action) => (
-                    <div class="trust-field">
-                      <span>{t(TRUST_ACTION_LABEL[action])}</span>
-                      <RuleSelect
-                        label={t(TRUST_ACTION_LABEL[action])}
-                        value={props.policy[row.kind][row.id]?.[action] ?? null}
-                        inherit={t("trust.inheritShort")}
-                        onChange={(rule) =>
-                          props.onChange((policy) => withOverride(policy, row.kind, row.id, action, rule))
-                        }
-                      />
-                    </div>
-                  )}
-                </For>
-              </div>
-            </div>
+              }
+            >
+              <For each={TRUST_ACTIONS}>
+                {(action) => (
+                  <SettingsRow
+                    label={t(TRUST_ACTION_LABEL[action])}
+                    controlId={`${ids}-${row.kind}-${row.id}-${action}`}
+                  >
+                    <RuleSelect
+                      id={`${ids}-${row.kind}-${row.id}-${action}`}
+                      label={t(TRUST_ACTION_LABEL[action])}
+                      value={props.policy[row.kind][row.id]?.[action] ?? null}
+                      inherit={t("trust.inheritShort")}
+                      onChange={(rule) =>
+                        props.onChange((policy) => withOverride(policy, row.kind, row.id, action, rule))
+                      }
+                    />
+                  </SettingsRow>
+                )}
+              </For>
+            </SettingsGroup>
           );
         }}
       </For>
-      <div class="trust-add">
-        <NativeSelect
-          size="sm"
-          aria-label={t("trust.override.level")}
-          value={level()}
-          onChange={(event) => {
-            const value = event.currentTarget.value;
-            setLevel(value === "teams" ? "teams" : value === "spaces" ? "spaces" : "agents");
-            setTarget("");
-          }}
-        >
-          <option value="agents">{t("trust.scope.agent")}</option>
-          <option value="teams">{t("trust.scope.team")}</option>
-          <option value="spaces">{t("trust.scope.space")}</option>
-        </NativeSelect>
-        <NativeSelect
-          size="sm"
-          aria-label={t("trust.budget.pick")}
-          value={target()}
-          onChange={(event) => setTarget(event.currentTarget.value)}
-        >
-          <option value="">{t("trust.budget.pick")}</option>
-          <For each={targets()}>{(entry) => <option value={entry.id}>{entry.name}</option>}</For>
-        </NativeSelect>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          disabled={!target()}
-          onClick={() => {
-            const id = target();
-            const kind = level();
-            // A new override starts as the stricter "ask" for spending; the person adjusts it.
-            props.onChange((policy) => withOverride(policy, kind, id, "pay", "ask"));
-            setTarget("");
-          }}
-        >
-          {t("trust.override.add")}
-        </Button>
-      </div>
-    </section>
+      <SettingsGroup title={t("trust.override.add")}>
+        <SettingsRow label={t("trust.override.level")} controlId={`${ids}-level`}>
+          <NativeSelect
+            id={`${ids}-level`}
+            value={level()}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setLevel(value === "teams" ? "teams" : value === "spaces" ? "spaces" : "agents");
+              setTarget("");
+            }}
+          >
+            <option value="agents">{t("trust.scope.agent")}</option>
+            <option value="teams">{t("trust.scope.team")}</option>
+            <option value="spaces">{t("trust.scope.space")}</option>
+          </NativeSelect>
+        </SettingsRow>
+        <SettingsRow label={t("trust.budget.pick")} controlId={`${ids}-target`}>
+          <NativeSelect
+            id={`${ids}-target`}
+            value={target()}
+            onChange={(event) => setTarget(event.currentTarget.value)}
+          >
+            <option value="">{t("trust.budget.pick")}</option>
+            <For each={targets()}>{(entry) => <option value={entry.id}>{entry.name}</option>}</For>
+          </NativeSelect>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={!target()}
+            onClick={() => {
+              const id = target();
+              const kind = level();
+              // A new override starts as the stricter "ask" for spending; the person adjusts it.
+              props.onChange((policy) => withOverride(policy, kind, id, "pay", "ask"));
+              setTarget("");
+            }}
+          >
+            {t("trust.override.add")}
+          </Button>
+        </SettingsRow>
+      </SettingsGroup>
+    </SettingsSection>
   );
 }
 
@@ -885,7 +899,14 @@ export function TrustAuditPanel(props: {
   }
 
   return (
-    <section class="trust-section" aria-label={t("trust.tab.audit")}>
+    <SettingsSection
+      title={t("trust.tab.audit")}
+      actions={
+        <Button type="button" size="sm" variant="secondary" onClick={() => void exportCsv()}>
+          {t("trust.audit.export")}
+        </Button>
+      }
+    >
       <div class="trust-filters">
         <NativeSelect
           size="sm"
@@ -950,9 +971,6 @@ export function TrustAuditPanel(props: {
             onValueChange={setText}
           />
         </form>
-        <Button type="button" size="sm" variant="secondary" onClick={() => void exportCsv()}>
-          {t("trust.audit.export")}
-        </Button>
       </div>
       <Show when={error()}>
         {(message) => (
@@ -961,53 +979,55 @@ export function TrustAuditPanel(props: {
           </p>
         )}
       </Show>
-      <Show when={entries()} fallback={<p class="trust-muted">{t("trust.audit.loading")}</p>}>
+      <Show when={entries()} fallback={<SettingsHelp>{t("trust.audit.loading")}</SettingsHelp>}>
         {(list) => (
-          <ul class="trust-audit">
-            <For each={list()} fallback={<li class="trust-muted">{t("trust.audit.empty")}</li>}>
-              {(entry) => (
-                <li class="trust-audit-row">
-                  <div class="trust-audit-meta">
-                    <time datetime={entry.at}>
-                      {format.date(new Date(entry.at), { dateStyle: "medium", timeStyle: "short" })}
-                    </time>
-                    <Badge variant="secondary">{t(CATEGORY_LABEL[entry.category])}</Badge>
-                    <Badge variant={OUTCOME_TONE[entry.outcome]}>{t(OUTCOME_LABEL[entry.outcome])}</Badge>
-                    <Show when={entry.amount !== undefined}>
-                      <strong>
-                        {entry.currency
-                          ? format.currency(entry.amount ?? 0, entry.currency)
-                          : format.number(entry.amount ?? 0)}
-                      </strong>
-                    </Show>
-                    <Show when={entry.platform}>{(platform) => <span class="trust-muted">{platform()}</span>}</Show>
-                  </div>
-                  <div class="trust-audit-what">
-                    <span class="trust-audit-who">
-                      {entry.actor.kind === "agent"
-                        ? (entry.actor.name ?? props.agentName(entry.actor.id ?? ""))
-                        : (entry.actor.name ?? t("trust.audit.person"))}
-                    </span>
-                    <code class="trust-audit-action">{entry.action}</code>
-                  </div>
-                  <p class="trust-audit-summary">{entry.summary}</p>
-                  <div class="trust-audit-links">
-                    <Show when={entry.answeredBy}>
-                      {(who) => <span class="trust-muted">{t("trust.audit.answeredBy", { name: who() })}</span>}
-                    </Show>
-                    <Show when={entry.ticket}>{(ticket) => <span class="trust-muted">#{ticket()}</span>}</Show>
-                    <Show when={entry.agentId}>
-                      {(id) => (
-                        <Button type="button" size="sm" variant="ghost" onClick={() => props.onOpenAgent(id())}>
-                          {t("trust.audit.openChat")}
-                        </Button>
-                      )}
-                    </Show>
-                  </div>
-                </li>
-              )}
-            </For>
-          </ul>
+          <SettingsGroup label={t("trust.tab.audit")}>
+            <ul class="trust-audit">
+              <For each={list()} fallback={<li class="trust-audit-row trust-muted">{t("trust.audit.empty")}</li>}>
+                {(entry) => (
+                  <li class="trust-audit-row">
+                    <div class="trust-audit-meta">
+                      <time datetime={entry.at}>
+                        {format.date(new Date(entry.at), { dateStyle: "medium", timeStyle: "short" })}
+                      </time>
+                      <Badge variant="secondary">{t(CATEGORY_LABEL[entry.category])}</Badge>
+                      <Badge variant={OUTCOME_TONE[entry.outcome]}>{t(OUTCOME_LABEL[entry.outcome])}</Badge>
+                      <Show when={entry.amount !== undefined}>
+                        <strong>
+                          {entry.currency
+                            ? format.currency(entry.amount ?? 0, entry.currency)
+                            : format.number(entry.amount ?? 0)}
+                        </strong>
+                      </Show>
+                      <Show when={entry.platform}>{(platform) => <span class="trust-muted">{platform()}</span>}</Show>
+                    </div>
+                    <div class="trust-audit-what">
+                      <span class="trust-audit-who">
+                        {entry.actor.kind === "agent"
+                          ? (entry.actor.name ?? props.agentName(entry.actor.id ?? ""))
+                          : (entry.actor.name ?? t("trust.audit.person"))}
+                      </span>
+                      <code class="trust-audit-action">{entry.action}</code>
+                    </div>
+                    <p class="trust-audit-summary">{entry.summary}</p>
+                    <div class="trust-audit-links">
+                      <Show when={entry.answeredBy}>
+                        {(who) => <span class="trust-muted">{t("trust.audit.answeredBy", { name: who() })}</span>}
+                      </Show>
+                      <Show when={entry.ticket}>{(ticket) => <span class="trust-muted">#{ticket()}</span>}</Show>
+                      <Show when={entry.agentId}>
+                        {(id) => (
+                          <Button type="button" size="sm" variant="ghost" onClick={() => props.onOpenAgent(id())}>
+                            {t("trust.audit.openChat")}
+                          </Button>
+                        )}
+                      </Show>
+                    </div>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </SettingsGroup>
         )}
       </Show>
       <Show when={more()}>
@@ -1017,6 +1037,6 @@ export function TrustAuditPanel(props: {
           </Button>
         </div>
       </Show>
-    </section>
+    </SettingsSection>
   );
 }

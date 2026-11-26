@@ -24,7 +24,7 @@ import {
   motionPageOfUrl,
   ownerFacing,
 } from "../src/main/motion-events/motion-human-text";
-import { MotionHumanViews } from "../src/main/motion-events/motion-human-views";
+import { GENERATIONS_AT_ONCE, MotionHumanViews } from "../src/main/motion-events/motion-human-views";
 
 const OUT = resolve(import.meta.dirname, "../.openbot-build/motion-human-views-e2e");
 const checks: string[] = [];
@@ -233,8 +233,15 @@ const base = `http://127.0.0.1:${address.port}`;
 // The generation stand-in: a rewrite that drops a number the first time when asked to.
 const prompts: string[] = [];
 let dropFirst = false;
+let inFlight = 0;
+let mostAtOnce = 0;
 const generate = async ({ prompt }: { prompt: string }) => {
   prompts.push(prompt);
+  inFlight += 1;
+  mostAtOnce = Math.max(mostAtOnce, inFlight);
+  // A model takes time: the bound on generations at once shows only when they overlap.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  inFlight -= 1;
   const original = prompt.split("--- original ---\n")[1]?.split("\n--- end of original ---")[0] ?? "";
   if (original.includes("Precio $99")) {
     if (dropFirst) {
@@ -452,6 +459,31 @@ check("backfill", () => {
   assert.ok(ids.includes(dossier.id), "The linked dossier.");
   assert.ok(ids.includes(written.id), "Decisiones.");
   assert.ok(!ids.includes(notes.id), "Not a page outside the collections.");
+});
+
+// 9. Many owner-facing pages at once: at most GENERATIONS_AT_ONCE generations run together.
+for (let index = 0; index < 10; index += 1)
+  put({
+    kind: "page",
+    id: randomUUID(),
+    title: `Decisión ${index}`,
+    text: `Precio 1${index}0 dólares.`,
+    path: ["Decisiones"],
+    issueKey: null,
+  });
+mostAtOnce = 0;
+const many = await human.backfill({
+  workspaceName: "Universidad Online",
+  days: 7,
+  seedLinks: [],
+  progress: () => undefined,
+});
+check("bounded generations at once", () => {
+  assert.ok(
+    many.outcomes.filter((outcome) => outcome.status === "generated").length >= 10,
+    "Every new page is written.",
+  );
+  assert.equal(mostAtOnce, GENERATIONS_AT_ONCE, "Four at a time, never more.");
 });
 
 server.close();

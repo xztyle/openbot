@@ -4,3 +4,4 @@
   writes it with the cheap model, checks that every number, amount, date and decision is still there,
   and keeps it up to date when the agent text changes. Motion shows it as "Vista para personas".
 - A Motion link that an agent shares with the owner shows the plain version in the chat preview.
+- Motion human views are written four at a time, bounded, in the pass and the backfill.

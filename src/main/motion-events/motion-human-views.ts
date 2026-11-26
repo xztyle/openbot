@@ -44,7 +44,9 @@ import {
 } from "./motion-human-text";
 
 const TICK_MS = 3 * 60_000;
-const PER_TICK = 8;
+const PER_TICK = 16;
+/** How many versions the host writes at once: enough to keep up with many agents, bounded for the model's cost. */
+export const GENERATIONS_AT_ONCE = 4;
 const QUEUE_LIMIT = 200;
 /** The largest part of a text that one generation rewrites. */
 const PART_CHARS = 12_000;
@@ -160,8 +162,11 @@ export class MotionHumanViews {
   #state: HumanState = emptyState();
   #loaded: Promise<void> | null = null;
   #timer: ReturnType<typeof setInterval> | null = null;
-  /** One generation at a time: the pass, a preview and the backfill wait for each other. */
-  #chain: Promise<unknown> = Promise.resolve();
+  /** Generations running now; the pass, a preview and the backfill share the bound. */
+  #running = 0;
+  #waiting: (() => void)[] = [];
+  /** One state write at a time. */
+  #saving: Promise<void> = Promise.resolve();
   #passing = false;
   #disposed = false;
 
@@ -184,7 +189,12 @@ export class MotionHumanViews {
     return this.#loaded;
   }
 
-  async #save(): Promise<void> {
+  #save(): Promise<void> {
+    this.#saving = this.#saving.then(() => this.#writeState());
+    return this.#saving;
+  }
+
+  async #writeState(): Promise<void> {
     this.#state.linked = newest(this.#state.linked, LINKED_LIMIT, this.#now() - LINKED_MS);
     this.#state.unknownKeys = newest(this.#state.unknownKeys, LINKED_LIMIT, this.#now() - LINKED_MS);
     const fresh = Object.entries(this.#state.fresh);
@@ -230,10 +240,16 @@ export class MotionHumanViews {
     if (added) void this.load().then(() => this.#save());
   }
 
-  #serial<T>(work: () => Promise<T>): Promise<T> {
-    const next = this.#chain.then(work, work);
-    this.#chain = next.catch(() => undefined);
-    return next;
+  /** Runs `work` when fewer than `GENERATIONS_AT_ONCE` others run. */
+  async #limited<T>(work: () => Promise<T>): Promise<T> {
+    if (this.#running >= GENERATIONS_AT_ONCE) await new Promise<void>((resolve) => this.#waiting.push(resolve));
+    this.#running += 1;
+    try {
+      return await work();
+    } finally {
+      this.#running -= 1;
+      this.#waiting.shift()?.();
+    }
   }
 
   /** One pass: the queue from the cursor, then the linked pages that have no fresh human version. */
@@ -242,7 +258,7 @@ export class MotionHumanViews {
     this.#passing = true;
     try {
       await this.load();
-      return await this.#serial(() => this.#runPass());
+      return await this.#runPass();
     } catch (error) {
       this.#deps.log("The human views pass failed.", { error: error instanceof Error ? error.message : "failed" });
       return [];
@@ -258,29 +274,27 @@ export class MotionHumanViews {
     );
     const linked = this.linked();
     let cursor = answer.nextSince ?? this.#state.cursor;
-    let budget = PER_TICK;
+    const chosen: HumanQueueItem[] = [];
     for (const item of answer.items) {
       if (this.#disposed) break;
       if (!this.#wants(item, linked)) continue;
-      if (budget === 0) {
+      if (chosen.length >= PER_TICK) {
         // The rest waits for the next pass: the cursor stops before the first object left.
         if (!item.human?.requested) cursor = Math.min(cursor, Math.max(0, item.changedAt - 1));
         continue;
       }
-      const outcome = await this.#handle(item);
-      outcomes.push(outcome);
-      if (outcome.status === "generated" || outcome.status === "failed") budget -= 1;
+      chosen.push(item);
     }
-    for (const reference of Object.keys(this.#state.linked)) {
-      if (budget === 0 || this.#disposed) break;
-      if (this.#state.fresh[objectKey("page", reference)] !== undefined) continue;
-      if (this.#failedTooOften(objectKey("page", reference))) continue;
-      const outcome = await this.#handleReference(reference);
-      if (outcome) {
-        outcomes.push(outcome);
-        if (outcome.status === "generated" || outcome.status === "failed") budget -= 1;
-      }
-    }
+    const written = await Promise.all(chosen.map((item) => this.#limited(() => this.#handle(item))));
+    outcomes.push(...written);
+    const references = Object.keys(this.#state.linked)
+      .filter((reference) => this.#state.fresh[objectKey("page", reference)] === undefined)
+      .filter((reference) => !this.#failedTooOften(objectKey("page", reference)))
+      .slice(0, Math.max(0, PER_TICK - chosen.length));
+    const linkedOutcomes = await Promise.all(
+      references.map((reference) => this.#limited(() => this.#handleReference(reference))),
+    );
+    for (const outcome of linkedOutcomes) if (outcome) outcomes.push(outcome);
     this.#state.cursor = Math.max(this.#state.cursor, cursor);
     await this.#save();
     return outcomes;
@@ -457,7 +471,7 @@ export class MotionHumanViews {
       await this.#deps.call("human.get", { kind: "page", object_id: pageId }).catch(() => null),
     );
     if (stored && (!stored.stale || stored.written)) return { title: stored.title, markdown: stored.markdown };
-    return this.#serial(async () => {
+    return this.#limited(async () => {
       const source = await this.#source("page", pageId);
       if (!source) return null;
       const outcome = await this.#write(source, null);
@@ -470,7 +484,7 @@ export class MotionHumanViews {
   /**
    * The backfill of one workspace: Reportes changed in the last `days`, every page of Decisiones,
    * Manual del CSO, Inicio and Equipo, and the dossiers linked to the owner in the last `days`
-   * (`seedLinks` gives the texts the agents sent the owner). One object at a time.
+   * (`seedLinks` gives the texts the agents sent the owner). `GENERATIONS_AT_ONCE` objects at a time.
    */
   async backfill(input: {
     workspaceName: string;
@@ -503,9 +517,9 @@ export class MotionHumanViews {
     }
     const selected = [...wanted.values()];
     const outcomes: HumanOutcome[] = [];
-    for (const item of selected) {
-      if (this.#disposed) break;
-      const outcome = await this.#serial(() =>
+    const one = async (item: HumanQueueItem) => {
+      if (this.#disposed) return;
+      const outcome = await this.#limited(() =>
         item.human?.origin === "written" && !item.human.requested
           ? Promise.resolve<HumanOutcome>({
               kind: item.kind,
@@ -525,7 +539,8 @@ export class MotionHumanViews {
       outcomes.push(outcome);
       input.progress(outcome, outcomes.length, selected.length);
       await this.#save();
-    }
+    };
+    await Promise.all(selected.map(one));
     return { selected: selected.length, outcomes };
   }
 

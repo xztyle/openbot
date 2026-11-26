@@ -3,9 +3,9 @@
 // that looks like a Motion page, with a plain-text part beside it (multipart/alternative).
 //
 // Mail clients ignore most CSS, so the HTML is table-based with inline styles. Motion's design
-// tokens (`motion/DESIGN.md`, `web/src/app/globals.css`) are mirrored below. A `<style>` block adds
-// only what inline styles cannot: a narrower layout on phones and the dark surfaces where the client
-// supports `prefers-color-scheme` (Apple Mail).
+// tokens (`motion/DESIGN.md`, `web/src/app/globals.css`) are mirrored below, in Motion's dark theme:
+// the mail is dark by default, inline, and says `color-scheme: dark` so clients do not invert it. A
+// `<style>` block adds only a narrower layout on phones.
 //
 // Safety: the agent's text is never passed through as HTML. Every text is escaped, raw HTML tags are
 // dropped (script and style contents with them), links keep only https, http and mailto targets, and
@@ -15,44 +15,32 @@ import { Lexer, type Token, type Tokens } from "marked";
 
 export type MailFormat = "text" | "markdown";
 
-/** Motion's light tokens, and the dark ones the `<style>` block swaps in. */
+/** Motion's dark theme (`.dark` in globals.css): the mail is dark by default, in every client. */
 const M = {
-  wall: "#f4f5f7",
-  stock: "#ffffff",
-  ink: "#1c1d21",
-  ink2: "#5b5f69",
-  ink3: "#676c76",
-  edge: "#e2e4e9",
-  edgeStrong: "#cdd0d7",
-  muted: "#eef0f3",
-  rule: "#e5484d",
-  skyInk: "#1b6fc2",
-  mint: "#2f9e60",
-  coral: "#ff6b4a",
-  sticky: "#ffd84d",
-} as const;
-
-const DARK = {
   wall: "#15171c",
   stock: "#1e2128",
   ink: "#ecedf0",
   ink2: "#b1b5be",
   ink3: "#8f949e",
   edge: "#2b2f38",
-  muted: "#262a32",
+  edgeStrong: "#3a3f4b",
+  muted: "#22262e",
   rule: "#f0676b",
   skyInk: "#7cbef5",
+  mint: "#45c07c",
+  /** Text on an ink fill: Motion's `primary-foreground` in dark. */
+  onInk: "#15171c",
 } as const;
 
-/** Tag plates: callout fills (light, dark). */
+/** Tag plates in dark: callout fills. */
 const PLATES = {
-  default: ["#eaecf0", "#2a2e36"],
-  blue: ["#cfe6ff", "#16314d"],
-  green: ["#ccf0d9", "#163a26"],
-  purple: ["#e2d9ff", "#2c2452"],
-  orange: ["#ffd9b3", "#4a2d12"],
-  red: ["#fbd3da", "#4a1c24"],
-  yellow: ["#fff0a3", "#433a12"],
+  default: "#2a2e37",
+  blue: "#173150",
+  green: "#173a26",
+  purple: "#2e2452",
+  orange: "#4a3016",
+  red: "#4a1f28",
+  yellow: "#4a4016",
 } as const;
 type Plate = keyof typeof PLATES;
 
@@ -228,7 +216,7 @@ function button(link: Tokens.Link): string | null {
   return [
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 18px"><tr>`,
     `<td class="m-btn" style="${style({ background: M.ink, "border-radius": "8px" })}">`,
-    `<a class="m-btn-a" href="${escapeHtml(href)}" style="${style({ display: "inline-block", padding: "10px 18px", "font-family": SANS, "font-size": "15px", "font-weight": 600, "line-height": "20px", color: M.stock, "text-decoration": "none", "border-radius": "8px" })}">${label}&nbsp;&rarr;</a>`,
+    `<a class="m-btn-a" href="${escapeHtml(href)}" style="${style({ display: "inline-block", padding: "10px 18px", "font-family": SANS, "font-size": "15px", "font-weight": 600, "line-height": "20px", color: M.onInk, "text-decoration": "none", "border-radius": "8px" })}">${label}&nbsp;&rarr;</a>`,
     "</td></tr></table>",
   ].join("");
 }
@@ -272,7 +260,7 @@ function table(token: Tokens.Table): string {
 
 function checkbox(checked: boolean): string {
   return checked
-    ? `<span style="${style({ display: "inline-block", width: "16px", height: "16px", "line-height": "16px", "border-radius": "4px", background: M.mint, color: "#ffffff", "font-size": "12px", "font-weight": 700, "text-align": "center", "font-family": SANS })}">&#10003;</span>`
+    ? `<span style="${style({ display: "inline-block", width: "16px", height: "16px", "line-height": "16px", "border-radius": "4px", background: M.mint, color: M.onInk, "font-size": "12px", "font-weight": 700, "text-align": "center", "font-family": SANS })}">&#10003;</span>`
     : `<span class="m-box" style="${style({ display: "inline-block", width: "13px", height: "13px", "border-radius": "4px", border: `1.5px solid ${M.ink3}`, background: M.stock })}">&nbsp;</span>`;
 }
 
@@ -332,7 +320,7 @@ function blockquote(token: Tokens.Blockquote): string {
   ].join("");
   return [
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:6px 0 18px;border-collapse:separate"><tr>`,
-    `<td class="m-plate-${callout.plate}" style="${style({ background: PLATES[callout.plate][0], "border-radius": "8px", padding: "12px 16px" })}">`,
+    `<td class="m-plate-${callout.plate}" style="${style({ background: PLATES[callout.plate], "border-radius": "8px", padding: "12px 16px" })}">`,
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>`,
     `<td valign="top" style="width:30px;padding-top:2px;font-size:18px;line-height:24px">${escapeHtml(callout.emoji)}</td>`,
     `<td valign="top" class="m-callout" style="font-family:${SANS};font-size:16px;line-height:1.7;color:${M.ink}">${body}</td>`,
@@ -562,28 +550,9 @@ export interface RenderedMail {
   text: string;
 }
 
-function darkStyles(): string {
-  const plates = Object.entries(PLATES)
-    .map(([plate, [, dark]]) => `.m-plate-${plate}{background:${dark}!important}`)
-    .join("");
+function phoneStyles(): string {
   return [
-    "@media (prefers-color-scheme:dark){",
-    `.m-wall{background:${DARK.wall}!important}`,
-    `.m-card{background:${DARK.stock}!important;border-color:${DARK.edge}!important}`,
-    `.m-t,.m-t *,.m-callout,.m-callout *,.m-td{color:${DARK.ink}!important}`,
-    `.m-t2{color:${DARK.ink2}!important}.m-t3{color:${DARK.ink3}!important}`,
-    `.m-th{background:${DARK.wall}!important;color:${DARK.ink}!important;border-color:${DARK.edge}!important}`,
-    `.m-td{background:${DARK.stock}!important;border-color:${DARK.edge}!important}`,
-    `.m-table{border-color:${DARK.edge}!important}`,
-    `.m-title{color:${DARK.ink}!important;border-color:${DARK.rule}!important}`,
-    `.m-link{color:${DARK.skyInk}!important}`,
-    `.m-btn{background:${DARK.ink}!important}.m-btn-a{color:${DARK.stock}!important}`,
-    `.m-details{background:${DARK.stock}!important;border-color:${DARK.edge}!important}`,
-    `.m-code,code{background:${DARK.muted}!important;color:${DARK.ink}!important}`,
-    `.m-hr{background:${DARK.edge}!important}.m-box{background:${DARK.stock}!important}`,
-    `.m-quote{border-color:${DARK.ink}!important}.m-quote *{color:${DARK.ink2}!important}`,
-    plates,
-    "}",
+    ":root{color-scheme:dark}",
     "@media only screen and (max-width:520px){",
     ".m-pad{padding:20px 18px 22px!important}.m-outer{padding:12px 8px 20px!important}",
     ".m-title{font-size:26px!important}",
@@ -626,18 +595,18 @@ export function renderMarkdownMail(input: MailRenderInput): RenderedMail {
 
   const html = [
     "<!doctype html>",
-    '<html lang="es"><head><meta charset="utf-8">',
+    `<html lang="es" style="color-scheme:dark;background:${M.wall}"><head><meta charset="utf-8">`,
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
-    '<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">',
+    '<meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark">',
     `<title>${escapeHtml(titleText)}</title>`,
-    `<style>${darkStyles()}</style>`,
+    `<style>${phoneStyles()}</style>`,
     "</head>",
-    `<body class="m-wall" style="margin:0;padding:0;background:${M.wall};-webkit-text-size-adjust:100%">`,
-    `<table role="presentation" class="m-wall" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${M.wall}"><tr>`,
+    `<body class="m-wall" bgcolor="${M.wall}" style="margin:0;padding:0;background:${M.wall};color-scheme:dark;-webkit-text-size-adjust:100%">`,
+    `<table role="presentation" class="m-wall" bgcolor="${M.wall}" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${M.wall}"><tr>`,
     `<td class="m-outer" align="center" style="padding:24px 12px 32px">`,
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:680px;width:100%;table-layout:fixed"><tr><td>`,
     header,
-    `<table role="presentation" class="m-card" cellpadding="0" cellspacing="0" border="0" width="100%" style="${style({ background: M.stock, border: `1px solid ${M.edge}`, "border-radius": "8px", "border-collapse": "separate", "table-layout": "fixed" })}"><tr>`,
+    `<table role="presentation" class="m-card" bgcolor="${M.stock}" cellpadding="0" cellspacing="0" border="0" width="100%" style="${style({ background: M.stock, border: `1px solid ${M.edge}`, "border-radius": "8px", "border-collapse": "separate", "table-layout": "fixed" })}"><tr>`,
     `<td class="m-pad" style="padding:30px 32px 26px;font-family:${SANS};color:${M.ink}">`,
     titleBlock,
     blocks(body),

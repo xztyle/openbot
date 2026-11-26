@@ -6,7 +6,7 @@
 // button for its Motion link; that the plain-text part is present and readable; that scripts,
 // event handlers, `javascript:` links, remote images and raw HTML are gone; that a plain-text mail
 // stays text-only; and that the Worker drops an HTML part with active content. It renders the mail
-// at 390 px and 800 px, light and dark, with Playwright.
+// at 390 px and 800 px with Playwright, in a light and a dark browser: both show Motion's dark theme.
 // `bun scripts/agent-mail-html-e2e.ts [--markdown=<file>]`. Writes .openbot-build/agent-mail-html-e2e/
 // (report.json, mail.html, mail.txt and the screenshots).
 import assert from "node:assert/strict";
@@ -164,6 +164,8 @@ try {
   checks.numberedDecisions = /<span [^>]*>1\.<\/span>[\s\S]*Subir el presupuesto/u.test(html);
   checks.details = html.includes("Ver evidencia: de dónde vienen las ventas");
   checks.inlineCss = !/<link\b/u.test(html) && /style="/u.test(html);
+  checks.darkColorScheme =
+    html.includes('<meta name="color-scheme" content="dark">') && !/prefers-color-scheme/u.test(html);
   checks.plainTextPart =
     formatted.text.startsWith(report.match(/^# (.+)$/mu)?.[1] ?? "Reporte CSO") &&
     /^Indicador +\| /mu.test(formatted.text) &&
@@ -227,6 +229,13 @@ try {
         });
         await page.setContent(html, { waitUntil: "load" });
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        // Dark by default: the page ground and the text are Motion's dark theme in a light browser too.
+        const colors = await page.evaluate(() => ({
+          ground: getComputedStyle(document.body).backgroundColor,
+          title: getComputedStyle(document.querySelector("h1") ?? document.body).color,
+        }));
+        checks[`darkByDefault${width}${scheme}`] =
+          colors.ground === "rgb(21, 23, 28)" && colors.title === "rgb(236, 237, 240)";
         checks[`noSideScroll${width}${scheme}`] = overflow <= 0;
         checks[`noRemoteLoads${width}${scheme}`] = remote.length === 0;
         const file = join(OUT, `mail-${width}-${scheme}.png`);

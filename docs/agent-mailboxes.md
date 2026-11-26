@@ -36,13 +36,13 @@ the host detects: a heading, a table, a checklist, a callout, or several marks).
 (`src/main/agent-mail/agent-mail-html.ts`) turns Markdown into an HTML part that looks like a Motion
 page, and sends it with a plain-text part beside it (multipart/alternative):
 
-- Motion's tokens, inline: the wall ground, a white card with a 1px edge and 8px corners, a header
+- Motion's dark theme by default, inline, with `color-scheme: dark` so clients do not invert it: the wall ground, a dark card with a 1px edge and 8px corners, a header
   line with the sender and the subject, the title on Motion's red header rule, Bricolage headings and
   Figtree text (with system fonts after them), tables with edge lines and wall header cells, callouts
   on Motion's tag plates (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`, or
   `> [!💡]`), checklists with Motion's mint tick, quotes, code and `<details>` blocks (shown open).
   A link alone on its line is a button. Table-based layout; a `<style>` block adds only the phone
-  layout and the dark surfaces where the client supports them.
+  layout.
 - Safe: every text is escaped, raw HTML tags go (script and style contents too), links keep only
   `https`, `http` and `mailto`, and images are not loaded (their alt text shows). No scripts, remote
   images, trackers or remote fonts. The Worker drops an HTML part that holds active content.

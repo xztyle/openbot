@@ -397,8 +397,18 @@ function alertOwner(failed: Result[]): void {
   say(`Owner alert: ${alert.status === 0 ? alert.stdout.trim() : `not sent (${alert.stderr.trim()})`}`);
 }
 
+/** A script whose header says `deploy-tests: alone` runs after the others, with nothing beside it. */
+const alone = (test: Test) =>
+  test.program === bun &&
+  test.args[0]?.startsWith("scripts/") === true &&
+  readFileSync(join(root, test.args[0]), "utf8").slice(0, 4_000).includes("deploy-tests: alone");
+
 await runAll(CRITICAL);
-if (!criticalOnly) await runAll(tests.filter((test) => !test.critical));
+if (!criticalOnly) {
+  const rest = tests.filter((test) => !test.critical);
+  await runAll(rest.filter((test) => !alone(test)));
+  for (const test of rest.filter(alone)) await runAll([test]);
+}
 save(true);
 const failed = results.filter(isFailure);
 if (failed.length > 0) {

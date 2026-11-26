@@ -5,6 +5,8 @@
 //
 // `bun scripts/web-deep-links-e2e.ts [--browser-executable=<path>] [--headed]`
 // Writes .openbot-build/web-deep-links-e2e/report.json and screenshots.
+// deploy-tests: alone (some 25 page loads in one tab of a dev server: next to two other browser
+// tests on a busy host a page stopped answering for minutes, 3 of 10 suites on 2026-11-26).
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -130,6 +132,41 @@ async function started(page: Page): Promise<void> {
  */
 const STEP_MS = 240_000;
 
+/** Pauses the page's script through the DevTools protocol and names the functions it was in. */
+async function pausedStack(page: Page): Promise<string> {
+  return Promise.race([
+    readPausedStack(page),
+    new Promise<string>((done) => setTimeout(() => done("(the page did not take a pause in 20 s)"), 20_000).unref()),
+  ]);
+}
+
+async function readPausedStack(page: Page): Promise<string> {
+  try {
+    const session = await page.context().newCDPSession(page);
+    await session.send("Debugger.enable");
+    const paused = new Promise<string>((done) =>
+      session.once("Debugger.paused", (event) =>
+        done(
+          event.callFrames
+            .slice(0, 20)
+            .map(
+              (frame) =>
+                `${frame.functionName || "(anonymous)"} ${frame.url.replace(/^.*?\/(src|packages|node_modules)\//u, "$1/")}:${frame.location.lineNumber + 1}`,
+            )
+            .join(" < "),
+        ),
+      ),
+    );
+    await session.send("Debugger.pause");
+    return await Promise.race([
+      paused,
+      new Promise<string>((done) => setTimeout(() => done("(no script ran in 15 s)"), 15_000).unref()),
+    ]);
+  } catch (error) {
+    return `(not read: ${String(error).slice(0, 200)})`;
+  }
+}
+
 async function step(page: Page, name: string, check: () => Promise<void>): Promise<void> {
   try {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -151,11 +188,13 @@ async function step(page: Page, name: string, check: () => Promise<void>): Promi
         .catch((reason: unknown) => String(reason)),
       new Promise<string>((done) => setTimeout(() => done("(the page did not answer)"), 10_000).unref()),
     ]);
+    // A page that does not answer: where its script stands, so the report says why.
+    const stack = shown === "(the page did not answer)" ? `\nScript: ${await pausedStack(page)}` : "";
     report.steps.push({
       name,
       url: path(page),
       passed: false,
-      detail: `${String(error).slice(0, 500)}\nPage: ${shown}`,
+      detail: `${String(error).slice(0, 500)}\nPage: ${shown}${stack}`,
     });
     const shot = resolve(OUT, `${report.steps.length}-failed.png`);
     await page.screenshot({ path: shot }).catch(() => undefined);
@@ -202,19 +241,34 @@ try {
   });
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
-  const page = await context.newPage();
-  page.on("pageerror", (error) => report.pageErrors.push(error.stack ?? error.message));
-  page.on("console", (message) => {
-    // The harness has no favicon or fonts route; a missing file is not a failure of the client.
-    // The dev server's own socket is no part of the client: a page left during a step drops it.
-    if (
-      message.type() === "error" &&
-      !message.text().startsWith("Failed to load resource") &&
-      !message.text().startsWith("[vite]") &&
-      !message.text().startsWith(`WebSocket connection to 'ws://127.0.0.1:${address.port}/`)
-    )
-      report.consoleErrors.push(message.text().slice(0, 1_000));
-  });
+  /** A tab with the report's listeners. */
+  const openTab = async () => {
+    const tab = await context.newPage();
+    tab.on("pageerror", (error) => report.pageErrors.push(error.stack ?? error.message));
+    tab.on("console", (message) => {
+      // The harness has no favicon or fonts route; a missing file is not a failure of the client.
+      // The dev server's own socket is no part of the client: a page left during a step drops it.
+      if (
+        message.type() === "error" &&
+        !message.text().startsWith("Failed to load resource") &&
+        !message.text().startsWith("[vite]") &&
+        !message.text().startsWith(`WebSocket connection to 'ws://127.0.0.1:${address.port}/`)
+      )
+        report.consoleErrors.push(message.text().slice(0, 1_000));
+    });
+    return tab;
+  };
+  /**
+   * A step that opens its own address starts in a new tab. After many loads in one tab, a load of
+   * the dev server could stay pending for minutes on a busy host, with the page idle and the server
+   * answering (2026-11-26); the steps that check Back and Forward keep their tab.
+   */
+  const newTab = async () => {
+    const tab = await openTab();
+    await page.close().catch(() => undefined);
+    return tab;
+  };
+  let page = await openTab();
 
   // 1. A shared link to a channel of another space opens that space and the channel.
   await step(page, "link to a channel of another space", async () => {
@@ -340,6 +394,7 @@ try {
   await shot(page, "6-reply");
 
   // 7. The owner's chat with an agent.
+  page = await newTab();
   await step(page, "agent chat link", async () => {
     await settle(page);
     await page.goto(`${origin}/app/general/dm/chief`, COMMIT);
@@ -353,6 +408,7 @@ try {
   await shot(page, "7-agent");
 
   // 8. A link to something gone shows the space's home, Today, with a notice.
+  page = await newTab();
   await step(page, "a gone channel falls back with a notice", async () => {
     await settle(page);
     await page.goto(`${origin}/app/general/c/no-such-channel`, COMMIT);
@@ -363,6 +419,7 @@ try {
   await shot(page, "8-gone");
 
   // 9. A settings page over a place: Back closes it.
+  page = await newTab();
   await step(page, "a settings page is a step of its own", async () => {
     await settle(page);
     await page.goto(`${origin}/app/general/c/random?page=settings`, COMMIT);
@@ -376,6 +433,7 @@ try {
   });
 
   // 9b. A page with no place opens over the space's home, not over the last chat.
+  page = await newTab();
   await step(page, "a page address with no place opens over Today", async () => {
     await settle(page);
     await page.goto(`${origin}/app/general?page=settings`, COMMIT);
@@ -386,6 +444,7 @@ try {
 
   // 9c. A link to a section of the server settings opens it, and the client still answers: a sync
   // throw of the section's first read halted every update.
+  page = await newTab();
   await step(page, "a server settings section link opens and the client still answers", async () => {
     await settle(page);
     await page.goto(`${origin}/app/general/c/random?page=server-settings&section=workspace`, COMMIT);
@@ -403,6 +462,7 @@ try {
 
   // 9d. The section stays in the address: an old `preferences` link opens Appearance, and a tab the
   // user picks is what a reload opens.
+  page = await newTab();
   await step(page, "a settings section survives the load and a reload", async () => {
     await settle(page);
     await page.goto(`${origin}/app/general/c/random?page=settings&section=preferences`, COMMIT);
@@ -460,6 +520,7 @@ try {
   });
 
   // 10. Copy link of a channel header; a link that names the wrong space opens the channel's own.
+  page = await newTab();
   await step(page, "Copy link of a channel", async () => {
     await settle(page);
     await page.goto(`${origin}/app/general/c/cakemaker`, COMMIT);
@@ -474,6 +535,7 @@ try {
 
   // 10b. The command bar: a sentence that starts with "tell" goes to the lead; a verb with nothing to
   // act on offers no channel of that name.
+  page = await newTab();
   await step(page, "the command bar sends a 'tell me' sentence to the lead", async () => {
     await settle(page);
     await page.goto(`${origin}/app/general/c/general`, COMMIT);
@@ -507,6 +569,7 @@ try {
   });
 
   // 11. A phone opens the conversation of the address, and Back goes to the list, not to another place.
+  page = await newTab();
   await step(page, "phone opens the linked conversation", async () => {
     await page.setViewportSize({ width: 390, height: 800 });
     await settle(page);

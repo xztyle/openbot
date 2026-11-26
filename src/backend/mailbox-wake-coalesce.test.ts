@@ -35,7 +35,8 @@ describe("teammate wake coalescing", () => {
     vi.setSystemTime(new Date("2026-11-21T10:00:00.000Z"));
     const store = await mailbox();
     await Effect.runPromise(store.enqueue(fromAgent("agent-a", "Build passed.")));
-    vi.setSystemTime(new Date("2026-11-21T10:00:30.000Z"));
+    // The second message comes inside the window, whatever its length.
+    vi.setSystemTime(new Date(Date.parse("2026-11-21T10:00:00.000Z") + AGENT_WAKE_COALESCE_MS / 2));
     await Effect.runPromise(store.enqueue(fromAgent("agent-c", "Tests are green too.")));
 
     expect(store.nextQueued("agent-b")).toBeNull();

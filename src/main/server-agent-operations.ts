@@ -26,6 +26,7 @@
  *   answers the failover policy that applies now.
  *
  * - `POST /v1/motion/human-backfill` starts the backfill of Motion human views for one workspace
+ *   (with `regenerate: true`, it writes every generated version again; `workspaceName` "*" is all)
  *   (`workspaceName`, `days`, default 7) in the background and answers its state; `GET` answers the
  *   state and the report file (`motion-human-backfill.ts`).
  *
@@ -89,7 +90,7 @@ export interface ServerAgentOperationsDependencies {
    * `workspaceName` and `days`; `GET` answers its report). Operator only.
    */
   humanBackfill?: {
-    start(input: { workspaceName: string; days?: number | undefined }): HumanBackfillReport;
+    start(input: { workspaceName: string; days?: number | undefined; regenerate?: boolean }): HumanBackfillReport;
     status(): HumanBackfillReport | null;
   };
   /** Starts the upload benchmark of the cloud copies (`POST /v1/cloud-backups/bench`); operator only. */
@@ -213,8 +214,10 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
       if (!workspaceName) return failure(400, "invalid_body", "Give workspaceName.");
       const days = fields.days === undefined ? undefined : Number(fields.days);
       if (days !== undefined && !Number.isFinite(days)) return failure(400, "invalid_body", "days must be a number.");
-      const started = backfill.start({ workspaceName, days });
-      dependencies.log(`Operator started the human views backfill of ${workspaceName}.`);
+      const started = backfill.start({ workspaceName, days, regenerate: fields.regenerate });
+      dependencies.log(
+        `Operator started the human views ${fields.regenerate ? "regeneration" : "backfill"} of ${workspaceName}.`,
+      );
       return { status: 202, lines: backfillLines(started) };
     }
     if (path === "/v1/cloud-backups/bench") {
@@ -502,6 +505,8 @@ interface Fields {
   /** The workspace and the days of `POST /v1/motion/human-backfill`. */
   workspaceName: string | undefined;
   days: string | undefined;
+  /** `POST /v1/motion/human-backfill`: write every generated version again under the current rules. */
+  regenerate: boolean;
 }
 
 /** A JSON object, or form fields (`delivery` may repeat). */
@@ -527,6 +532,7 @@ function readFields(rawBody: string): Fields {
       title: isString(record.title) ? record.title : undefined,
       workspaceName: isString(record.workspaceName) ? record.workspaceName : undefined,
       days: typeof record.days === "number" || isString(record.days) ? String(record.days) : undefined,
+      regenerate: record.regenerate === true,
     };
   }
   const form = new URLSearchParams(trimmed);
@@ -546,6 +552,7 @@ function readFields(rawBody: string): Fields {
     title: form.get("title") ?? undefined,
     workspaceName: form.get("workspaceName") ?? undefined,
     days: form.get("days") ?? undefined,
+    regenerate: form.get("regenerate") === "1" || form.get("regenerate") === "true",
   };
 }
 

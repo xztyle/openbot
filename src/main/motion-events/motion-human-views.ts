@@ -13,9 +13,13 @@
  *   only stamps the human version with the new revision. A version an agent wrote itself is kept until
  *   someone asks for a new one.
  * - Generation: the cheap owner-summary model path (`generateReviewText`, not important) with a strict
- *   prompt. Afterwards `missingFacts` checks that every key number, amount, date and decision of the
- *   original is still there; one more try names what is missing. A version that still misses something
- *   is saved all the same, and the log names the facts.
+ *   prompt: current state only, a decision box on top, evidence in collapsed blocks, tables over prose,
+ *   and a visible-word budget. A second pass (`reviewHumanView`) checks the length and the layout and,
+ *   when the draft is over budget or out of layout, has the model tighten it with the owner's
+ *   self-check. Then `missingFacts` checks that every key number, amount, date and decision of the
+ *   original is still there, visible or collapsed (facts that a later part of the original replaced
+ *   excepted); one more try names what is missing. A version that still misses something is saved
+ *   all the same, and the log names the facts.
  * - At most `PER_TICK` objects per pass, one at a time, so the work stays cheap.
  *
  * The state (cursor, linked pages, fresh revisions, failures) is one small file.
@@ -32,6 +36,7 @@ import {
   type HumanCollection,
   type HumanKind,
   type HumanQueueItem,
+  type HumanReview,
   type HumanSource,
   humanViewPrompt,
   looksTechnical,
@@ -40,7 +45,8 @@ import {
   motionReferences,
   ownerFacing,
   parseHumanView,
-  splitSections,
+  reviewHumanView,
+  tightenPrompt,
 } from "./motion-human-text";
 
 const TICK_MS = 3 * 60_000;
@@ -48,9 +54,10 @@ const PER_TICK = 16;
 /** How many versions the host writes at once: enough to keep up with many agents, bounded for the model's cost. */
 export const GENERATIONS_AT_ONCE = 4;
 const QUEUE_LIMIT = 200;
-/** The largest part of a text that one generation rewrites. */
-const PART_CHARS = 12_000;
-/** The longest agent text the host rewrites at all. */
+/**
+ * The longest agent text the host rewrites: one generation reads it whole, so that an add-on at the
+ * end can replace what an earlier section says.
+ */
 const TEXT_LIMIT = 120_000;
 const GENERATION_TIMEOUT_MS = 6 * 60_000;
 const LINKED_MS = 30 * 86_400_000;
@@ -93,6 +100,11 @@ export interface HumanOutcome {
   title: string;
   status: "generated" | "restamped" | "fresh" | "skipped" | "failed";
   missing?: string[];
+  /** The words the owner sees without opening a collapsed block, and the budget. */
+  visibleWords?: number;
+  budget?: number;
+  /** Facts left out because a later part of the original replaced them. */
+  superseded?: string[];
   error?: string;
   model?: string;
 }
@@ -408,52 +420,86 @@ export class MotionHumanViews {
           missing: view.missing.slice(0, 20),
         });
       const outcome = this.#fresh(objectKey(source.kind, source.objectId), source.rev, base, "generated");
-      return { ...outcome, ...(view.missing.length > 0 ? { missing: view.missing } : {}) };
+      return {
+        ...outcome,
+        visibleWords: view.review.visibleWords,
+        budget: view.review.budget,
+        ...(view.missing.length > 0 ? { missing: view.missing } : {}),
+        ...(view.superseded.length > 0 ? { superseded: view.superseded } : {}),
+      };
     } catch (error) {
       return this.#failed(base, error);
     }
   }
 
   /**
-   * The human version of an agent text: each part rewritten under the strict prompt, then checked
-   * for dropped facts; when one is missing, the parts are written once more with the list.
+   * The human version of an agent text: one draft of the whole text under the strict prompt; the
+   * review of its length and layout, with one tightening pass when it is over budget or out of
+   * layout; then the facts check. When a fact is missing, all of it runs once more with the list, and
+   * the better of the two is kept: fewer missing facts first, then within the budget.
    */
   async rewrite(
     source: Pick<HumanSource, "kind" | "title" | "text" | "path">,
     isTicket: boolean,
-  ): Promise<{ title: string | null; markdown: string; missing: string[] } | null> {
+  ): Promise<{
+    title: string | null;
+    markdown: string;
+    missing: string[];
+    superseded: string[];
+    review: HumanReview;
+  } | null> {
     const agentId = this.#deps.agentId();
     if (!agentId) throw new Error("No agent to run the generation.");
     const text = source.text.slice(0, TEXT_LIMIT);
-    const parts = splitSections(text, PART_CHARS);
+    const original = `${source.title}\n${text}`;
+    const shape = reviewHumanView(text, "");
+    const generate = (prompt: string) =>
+      this.#deps.generate({ agentId, prompt, timeoutMs: GENERATION_TIMEOUT_MS }).then(parseHumanView);
     const attempt = async (missing: readonly string[]) => {
-      const written: string[] = [];
-      let title: string | null = null;
-      for (const [index, part] of parts.entries()) {
-        const prompt = humanViewPrompt({
+      const draft = await generate(
+        humanViewPrompt({
           language: this.#deps.language(),
           kind: source.kind,
           title: source.title,
-          text: part,
+          text,
           path: source.path,
           isTicket,
-          part: { index, count: parts.length },
+          budget: shape.budget,
+          long: shape.long,
           missing: missing.length > 0 ? missing : undefined,
-        });
-        const answer = await this.#deps.generate({ agentId, prompt, timeoutMs: GENERATION_TIMEOUT_MS });
-        const parsed = parseHumanView(answer);
-        if (!parsed) return null;
-        if (index === 0) title = parsed.title;
-        written.push(index === 0 || !parsed.title ? parsed.markdown : `# ${parsed.title}\n\n${parsed.markdown}`);
-      }
-      const markdown = written.join("\n\n");
-      return { title, markdown, missing: missingFacts(`${source.title}\n${text}`, `${title ?? ""}\n${markdown}`) };
+        }),
+      );
+      if (!draft) return null;
+      const title = draft.title;
+      const checked = (markdown: string) => ({
+        title,
+        markdown,
+        superseded: draft.superseded,
+        review: reviewHumanView(text, markdown),
+        missing: missingFacts(original, `${title ?? ""}\n${markdown}`, draft.superseded),
+      });
+      const drafted = checked(draft.markdown);
+      if (drafted.review.problems.length === 0) return drafted;
+      const tight = await generate(
+        tightenPrompt({
+          language: this.#deps.language(),
+          title: title ?? source.title,
+          draft: draft.markdown,
+          review: drafted.review,
+        }),
+      ).catch(() => null);
+      if (!tight) return drafted;
+      const tightened = checked(tight.markdown);
+      return tightened.missing.length <= drafted.missing.length ? tightened : drafted;
     };
-    const first = await attempt([]);
-    if (!first || first.missing.length === 0) return first;
-    const second = await attempt(first.missing);
-    if (!second) return first;
-    return second.missing.length <= first.missing.length ? second : first;
+    const better = <T extends { missing: string[]; review: HumanReview }>(a: T, b: T) => {
+      if (a.missing.length !== b.missing.length) return a.missing.length < b.missing.length ? a : b;
+      return a.review.visibleWords <= b.review.visibleWords ? a : b;
+    };
+    const one = await attempt([]);
+    if (!one || one.missing.length === 0) return one;
+    const two = await attempt(one.missing);
+    return two ? better(two, one) : one;
   }
 
   /**
@@ -485,11 +531,16 @@ export class MotionHumanViews {
    * The backfill of one workspace: Reportes changed in the last `days`, every page of Decisiones,
    * Manual del CSO, Inicio and Equipo, and the dossiers linked to the owner in the last `days`
    * (`seedLinks` gives the texts the agents sent the owner). `GENERATIONS_AT_ONCE` objects at a time.
+   *
+   * With `regenerate`, it writes again every version the host generated before, under the current
+   * rules, whatever its freshness; `workspaceName` "*" takes every workspace. A version an agent
+   * wrote itself stays.
    */
   async backfill(input: {
     workspaceName: string;
     days: number;
     seedLinks: readonly string[];
+    regenerate?: boolean | undefined;
     progress: (outcome: HumanOutcome, done: number, total: number) => void;
   }): Promise<{ selected: number; outcomes: HumanOutcome[] }> {
     await this.load();
@@ -503,45 +554,70 @@ export class MotionHumanViews {
       if (answer.items.length === 0 || answer.nextSince === null || answer.nextSince <= cursor) break;
       cursor = answer.nextSince;
     }
+    const name = input.workspaceName.trim().toLowerCase();
+    const inWorkspace = (item: HumanQueueItem) => name === "*" || item.workspaceName.trim().toLowerCase() === name;
+    if (input.regenerate) {
+      const selected = items.filter((item) => inWorkspace(item) && item.human?.origin === "generated");
+      return this.#runAll(selected, input.progress, (item) => this.#regenerate(item));
+    }
     await this.#resolveLinkedKeys();
     const linked = this.linked();
     const wanted = new Map<string, HumanQueueItem>();
-    const name = input.workspaceName.trim().toLowerCase();
     for (const item of items) {
-      if (item.workspaceName.trim().toLowerCase() !== name || item.kind === "comment") continue;
+      if (!inWorkspace(item) || item.kind === "comment") continue;
       const collection: HumanCollection | null = collectionOf(item);
       const isLinked = linked.has(item.pageId) || (item.issueKey !== null && linked.has(item.issueKey.toUpperCase()));
       const take =
         collection === "reportes" ? item.changedAt >= since : collection === "dossier" ? isLinked : collection !== null;
       if (take) wanted.set(objectKey(item.kind, item.objectId), item);
     }
-    const selected = [...wanted.values()];
-    const outcomes: HumanOutcome[] = [];
-    const one = async (item: HumanQueueItem) => {
-      if (this.#disposed) return;
-      const outcome = await this.#limited(() =>
-        item.human?.origin === "written" && !item.human.requested
+    return this.#runAll([...wanted.values()], input.progress, (item) =>
+      item.human?.origin === "written" && !item.human.requested
+        ? Promise.resolve<HumanOutcome>({
+            kind: item.kind,
+            objectId: item.objectId,
+            title: item.title,
+            status: "skipped",
+          })
+        : item.human && item.human.sourceRev === item.rev && !item.human.requested
           ? Promise.resolve<HumanOutcome>({
               kind: item.kind,
               objectId: item.objectId,
               title: item.title,
-              status: "skipped",
+              status: "fresh",
             })
-          : item.human && item.human.sourceRev === item.rev && !item.human.requested
-            ? Promise.resolve<HumanOutcome>({
-                kind: item.kind,
-                objectId: item.objectId,
-                title: item.title,
-                status: "fresh",
-              })
-            : this.#handle(item),
-      );
+          : this.#handle(item),
+    );
+  }
+
+  /** Runs `work` on each item, `GENERATIONS_AT_ONCE` at a time, with the progress after each. */
+  async #runAll(
+    selected: readonly HumanQueueItem[],
+    progress: (outcome: HumanOutcome, done: number, total: number) => void,
+    work: (item: HumanQueueItem) => Promise<HumanOutcome>,
+  ): Promise<{ selected: number; outcomes: HumanOutcome[] }> {
+    const outcomes: HumanOutcome[] = [];
+    const one = async (item: HumanQueueItem) => {
+      if (this.#disposed) return;
+      const outcome = await this.#limited(() => work(item));
       outcomes.push(outcome);
-      input.progress(outcome, outcomes.length, selected.length);
+      progress(outcome, outcomes.length, selected.length);
       await this.#save();
     };
     await Promise.all(selected.map(one));
     return { selected: selected.length, outcomes };
+  }
+
+  /** Writes a generated version again from the current agent text, under the current rules. */
+  async #regenerate(item: HumanQueueItem): Promise<HumanOutcome> {
+    const base = { kind: item.kind, objectId: item.objectId, title: item.title };
+    try {
+      const source = await this.#source(item.kind, item.objectId);
+      if (!source) return { ...base, status: "skipped" };
+      return await this.#write(source, item);
+    } catch (error) {
+      return this.#failed(base, error);
+    }
   }
 
   /** Turns each linked issue key into its page id, so a dossier ticket linked by key counts. */

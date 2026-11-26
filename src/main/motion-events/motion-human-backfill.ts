@@ -4,7 +4,8 @@
  * from the owners' chats, then lets `MotionHumanViews.backfill` write the human versions of
  * Reportes of those days, Decisiones, Manual del CSO, Inicio, Equipo and the linked dossiers. It runs
  * in the background, one object at a time; the report file under userData shows the progress and,
- * at the end, every object with its outcome and the facts a version still misses.
+ * at the end, every object with its outcome and the facts a version still misses. With `regenerate`, it
+ * writes every version the host generated before again under the current rules ("*": every workspace).
  */
 import { writeFile } from "node:fs/promises";
 import type { DatabaseSync } from "node:sqlite";
@@ -18,6 +19,8 @@ const LINK_ROWS = 20_000;
 export interface HumanBackfillReport {
   workspaceName: string;
   days: number;
+  /** Every generated version written again under the current rules. */
+  regenerate: boolean;
   state: "running" | "done" | "failed";
   startedAt: string;
   finishedAt: string | null;
@@ -61,7 +64,7 @@ export function createHumanBackfill(options: HumanBackfillOptions) {
   };
   return {
     status: (): HumanBackfillReport | null => report,
-    start(input: { workspaceName: string; days?: number | undefined }): HumanBackfillReport {
+    start(input: { workspaceName: string; days?: number | undefined; regenerate?: boolean }): HumanBackfillReport {
       if (report?.state === "running") return report;
       const days = Math.min(Math.max(Math.round(input.days ?? DAYS_DEFAULT), 1), DAYS_MAX);
       const startedAt = new Date().toISOString();
@@ -69,6 +72,7 @@ export function createHumanBackfill(options: HumanBackfillOptions) {
       const current: HumanBackfillReport = {
         workspaceName: input.workspaceName,
         days,
+        regenerate: input.regenerate === true,
         state: "running",
         startedAt,
         finishedAt: null,
@@ -83,12 +87,13 @@ export function createHumanBackfill(options: HumanBackfillOptions) {
       const since = new Date(Date.now() - days * 86_400_000).toISOString();
       void (async () => {
         try {
-          const seedLinks = ownerLinkTexts(options.database(), options.ownerThreads(), since);
+          const seedLinks = input.regenerate ? [] : ownerLinkTexts(options.database(), options.ownerThreads(), since);
           options.log(`Human views backfill of ${input.workspaceName}: ${seedLinks.length} owner messages with links.`);
           const result = await options.human.backfill({
             workspaceName: input.workspaceName,
             days,
             seedLinks,
+            regenerate: input.regenerate === true,
             progress: (outcome, done, total) => {
               current.selected = total;
               current.done = done;

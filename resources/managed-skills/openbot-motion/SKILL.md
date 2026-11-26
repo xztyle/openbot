@@ -102,5 +102,21 @@ Each team works in one Motion project: a space for its pages and a project datab
   change.
 - `human_view` adds one by hand, on any page, ticket, comment or list (`object_id`: an id, an issue key or a
   link): `mode: "generate"` when the owner asks for a human view or it would help them; `mode: "set"` with
-  `text` (and `title`) when you write the plain version yourself, in the owner's language, with every fact,
-  number, decision and next step and no ids, codes or jargon; `mode: "remove"` on a page you own.
+  `text` (and `title`) when you write the plain version yourself; `mode: "remove"` on a page you own.
+- A version for people (yours with `set`, or the host's) follows these rules:
+  - **Current state only.** Fold add-ons and corrections into the section they change. Leave out what a later
+    decision replaced; name only the current decision.
+  - **Decision box on top**, one screen: the verdict, what the owner must do (if anything), the key numbers in
+    a small table, and a "Falta antes de …" checklist with who does each step. Use a callout
+    (`> [!IMPORTANT]`) for the verdict and the ask.
+  - **Evidence collapsed**: searches, competitor data, sub-niche lists, personas, country comparisons go in
+    `<details><summary>Ver evidencia: …</summary>` blocks (a blank line after the summary line).
+  - **Tables and visuals over prose**: one table per topic, status as a checklist, a simple Mermaid `pie` or
+    `flowchart LR` where it reads better than text.
+  - **Length**: at most about 900 visible words (outside collapsed blocks) for a long dossier or report, far
+    fewer for short items. Every key fact, number and decision stays, visible or collapsed.
+  - No ids, codes, issue keys, abbreviations or jargon; money and units in words.
+  - Then check it a second time with the owner's question, and tighten it if it is still long: "¿Estoy siendo
+    lo más conciso posible sin caer en lenguaje no humano? Si ya soy conciso y la página sigue larga, ¿estoy
+    presentando la información en tablas o imágenes fáciles de seguir que la hagan más fácil de entender y más
+    corta?"

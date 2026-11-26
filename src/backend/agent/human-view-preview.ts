@@ -2,7 +2,8 @@
  * The chat preview of a Motion page link (`share_preview`): Motion is not reachable for the window
  * that draws web pages, and the owner reads the human version of a page, not the agent text. So the
  * host draws the human version's Markdown as a small page with no script: headings, paragraphs,
- * lists, tables, bold and italic. A long page shows its start.
+ * lists, checklists, the decision box, tables, bold and italic. Collapsed evidence blocks and charts
+ * stay out: the preview shows what the owner sees without opening anything. A long page shows its start.
  */
 
 /** Gives the human version of a Motion page link, or null for a link that is no Motion page. */
@@ -31,9 +32,22 @@ const cells = (line: string) =>
     .split("|")
     .map((cell) => cell.trim());
 
+/** The Markdown without its collapsed `<details>` blocks (nested ones go with them) and its charts. */
+export function shownMarkdown(markdown: string): string {
+  const out: string[] = [];
+  let depth = 0;
+  const withoutCharts = markdown.replace(/^```mermaid\n[\s\S]*?^```[ \t]*$/gmu, "");
+  for (const piece of withoutCharts.split(/(<details\b[^>]*>|<\/details\s*>)/iu)) {
+    if (/^<details\b/iu.test(piece)) depth += 1;
+    else if (/^<\/details/iu.test(piece)) depth = Math.max(0, depth - 1);
+    else if (depth === 0) out.push(piece);
+  }
+  return out.join("");
+}
+
 /** The Markdown as HTML: block by block, line by line. */
 export function markdownHtml(markdown: string): string {
-  const lines = markdown.split("\n");
+  const lines = shownMarkdown(markdown).split("\n");
   const out: string[] = [];
   let list: "ul" | "ol" | null = null;
   const closeList = () => {
@@ -45,7 +59,12 @@ export function markdownHtml(markdown: string): string {
     const heading = /^(#{1,4})\s+(.*)$/u.exec(line);
     const bullet = /^\s*[-*+]\s+(.*)$/u.exec(line);
     const numbered = /^\s*\d+[.)]\s+(.*)$/u.exec(line);
-    if (line.trim().startsWith("|") && /^\s*\|?[\s:-]+\|/u.test(lines[index + 1] ?? "")) {
+    const boxed = /^\s*>\s?(.*)$/u.exec(line);
+    if (boxed?.[1] !== undefined) {
+      closeList();
+      const text = boxed[1].replace(/^\[![^\]]*\]\s*/u, "");
+      if (text.trim()) out.push(`<p class="box">${inline(text)}</p>`);
+    } else if (line.trim().startsWith("|") && /^\s*\|?[\s:-]+\|/u.test(lines[index + 1] ?? "")) {
       closeList();
       const head = cells(line);
       const rows: string[][] = [];
@@ -71,7 +90,10 @@ export function markdownHtml(markdown: string): string {
         out.push(`<${kind}>`);
         list = kind;
       }
-      out.push(`<li>${inline(bullet?.[1] ?? numbered?.[1] ?? "")}</li>`);
+      const item = (bullet?.[1] ?? numbered?.[1] ?? "").replace(/^\[( |x|X)\]\s+/u, (_all, mark: string) =>
+        mark === " " ? "☐ " : "☑ ",
+      );
+      out.push(`<li>${inline(item)}</li>`);
     } else if (line.trim() === "" || /^-{3,}$/u.test(line.trim())) closeList();
     else {
       closeList();
@@ -84,14 +106,15 @@ export function markdownHtml(markdown: string): string {
 
 /** The preview page of a human version: its title and the start of its text. */
 export function humanViewHtml(title: string, markdown: string): string {
-  const cut = markdown.length > PREVIEW_CHARS;
-  const text = cut ? `${markdown.slice(0, markdown.lastIndexOf("\n", PREVIEW_CHARS))}\n\n…` : markdown;
+  const shown = shownMarkdown(markdown);
+  const cut = shown.length > PREVIEW_CHARS;
+  const text = cut ? `${shown.slice(0, shown.lastIndexOf("\n", PREVIEW_CHARS))}\n\n…` : shown;
   return `<!doctype html><html><head><meta charset="utf-8"><style>
 body{margin:0;padding:28px 32px;font:15px/1.5 -apple-system,system-ui,sans-serif;color:#1f2328;background:#fff}
 h1{font-size:24px;margin:0 0 14px}h2{font-size:19px;margin:18px 0 8px}h3,h4{font-size:16px;margin:14px 0 6px}
 p{margin:6px 0}ul,ol{margin:6px 0;padding-inline-start:22px}
 table{border-collapse:collapse;margin:8px 0;font-size:14px}th,td{border:1px solid #d0d7de;padding:5px 9px;text-align:start}
-th{background:#f6f8fa}
+th{background:#f6f8fa}.box{margin:0;padding:6px 12px;background:#f3f0ff;border-inline-start:3px solid #8250df}
 </style></head><body><h1>${inline(title)}</h1>
 ${markdownHtml(text)}
 </body></html>`;

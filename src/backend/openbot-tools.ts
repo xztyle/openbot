@@ -356,13 +356,22 @@ export const requestDecisionToolSchema = z.strictObject({
     .min(1)
     .max(3)
     .describe("One option for a yes/no decision (its button approves), or up to three alternatives."),
+  recommended: z
+    .number()
+    .int()
+    .min(1)
+    .max(3)
+    .optional()
+    .describe("The option (1 to 3) that you recommend. The card marks it."),
   defaultOption: z
     .number()
     .int()
     .min(1)
     .max(4)
     .optional()
-    .describe("The option (1 to 3, or 4 for No) that Atelier picks when nobody answers in timeoutMinutes."),
+    .describe(
+      "The option (1 to 3, or 4 for No) that Atelier picks when nobody answers in timeoutMinutes. Not for a decision that goes to the owner.",
+    ),
   timeoutMinutes: z
     .number()
     .int()
@@ -370,7 +379,7 @@ export const requestDecisionToolSchema = z.strictObject({
     .max(24 * 60)
     .optional()
     .describe(
-      "Wait at most this long, then take defaultOption. Without it the card waits for the answer. A timed-out answer never approves money or a go-live.",
+      "Wait at most this long for your manager, then take defaultOption. A decision that goes to the owner never times out. A timed-out answer never approves money or a go-live.",
     ),
   amount: z
     .strictObject({
@@ -1088,8 +1097,10 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     description: [
       "Ask for a decision you may not take alone: a launch, a go-live, an email to customers, a sign-up, or a choice between options with consequences. Your manager in the org chart decides it; a decision about money, a deletion, credentials, a legal commitment or security (set concerns) goes to the owner as a card in Needs you.",
       "Use it instead of a message such as I need you to decide, and instead of ask_ui for these decisions. Write every label in the person's language. Put the money in amount and the staged preview in previewUrl or preview.",
-      "Your work waits until the answer, or until timeoutMinutes when you set it with defaultOption. Continue only with work that does not depend on it in other turns.",
-      'The result is JSON {"status":"answered","option":1-3|"change"|"no","label",…}: an option means do it; "change" means ask in one sentence what to change and end the turn; "no" means do not do it. With goLive and an approved option, run the publish command now. {"status":"skipped"} or {"status":"expired"} means it was not decided.',
+      "Give each option a one-line consequence and set recommended. Do not put links, ticket keys or IDs in the title or the labels: put the link in previewUrl and the ticket in ticket.",
+      "Your work waits until the answer, or until timeoutMinutes when your manager decides and you set it with defaultOption. Continue only with work that does not depend on it in other turns.",
+      'The result is JSON {"status":"answered","option":1-3|"change"|"no","label",…}: an option means do it; "change" means ask in one sentence what to change and end the turn; "no" means do not do it. With goLive and an approved option, run the publish command now. {"status":"skipped"} means it was not decided.',
+      '{"status":"expired"} on an owner card means your call ended first (such as a restart): the card stays open for the owner, and the answer comes later as a message that starts with Decision answer. Do not ask again; continue from that message.',
     ].join(" "),
     shape: requestDecisionToolSchema.shape,
   },

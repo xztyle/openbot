@@ -242,6 +242,24 @@ const Turns = createSimpleContext({
       return submitPromptAnswers(agent.id, prompt, answers, options);
     }
 
+    /**
+     * Answers a card of the history by its request id, such as an owner decision card whose call
+     * ended (`pastDecisionRequestId`): the host gives the answer to the agent as a message.
+     */
+    async function answerPastPrompt(
+      requestId: string,
+      answers: Record<string, string[]>,
+      options?: PromptAnswerOptions,
+    ): Promise<boolean> {
+      try {
+        await respondToPrompt({ requestId, answers });
+        return true;
+      } catch (error) {
+        options?.onError?.(error);
+        return false;
+      }
+    }
+
     /** Answers the waiting question of any agent, as its own chat does: a teammate's, from its delegator's chat. */
     async function answerAgentPrompt(
       agentId: string,
@@ -252,6 +270,11 @@ const Turns = createSimpleContext({
       const prompt = pendingPrompts()[agentId];
       if (prompt?.type !== "prompt" || String(prompt.requestId) !== String(requestId)) return false;
       return submitPromptAnswers(agentId, prompt, answers, options);
+    }
+
+    /** The one call that answers a prompt on the host. */
+    function respondToPrompt(input: { requestId: string | number; answers: Record<string, string[]> }): Promise<void> {
+      return turnsPort().agent.respondToPrompt(input);
     }
 
     async function submitPromptAnswers(
@@ -267,10 +290,7 @@ const Turns = createSimpleContext({
         [agentId]: promptRequestKey(prompt.turnId, prompt.requestId) ?? undefined,
       }));
       try {
-        await turnsPort().agent.respondToPrompt({
-          requestId: prompt.requestId,
-          answers,
-        });
+        await respondToPrompt({ requestId: prompt.requestId, answers });
         analytics.track("agent_input_action", {
           kind: "prompt",
           decision: "answered",
@@ -519,6 +539,7 @@ const Turns = createSimpleContext({
       activeRoutines,
       refreshRoutineIds,
       answerPrompt,
+      answerPastPrompt,
       answerAgentPrompt,
       respondToApproval,
       respondToApprovalRequest,

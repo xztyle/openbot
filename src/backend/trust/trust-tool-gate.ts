@@ -5,6 +5,10 @@ import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { normalizeTrustPlatform } from "@openbot/contracts/trust-control";
 import {
   normalizeUiBlockSpec,
+  OWNER_DECISION_BLOCK_PREFIX,
+  OWNER_DECISION_FIELD,
+  UI_BLOCK_LIMITS,
+  UI_BLOCK_TEXT_ACTION_ID,
   type UiAction,
   type UiBlockResponse,
   type UiConfirmField,
@@ -13,6 +17,7 @@ import { sourceText } from "@openbot/i18n/source";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { PromptResponder, SurfacedUiBlock } from "../agent/attention-registry";
+import { type PastDecision, pastDecisionAnswerText } from "../agent/past-decisions";
 import { openBotToolFailure, openBotToolResult } from "../agent/routine-tools";
 import type { AgentClient } from "../agent-client";
 import {
@@ -165,10 +170,12 @@ const OPTION_IDS: readonly string[] = ["option1", "option2", "option3"];
 
 /** The buttons of a decision card: its options, Change… while there is room, and No. */
 function decisionActions(input: z.infer<typeof requestDecisionToolSchema>): UiAction[] {
+  // The recommended option is the primary button; without one, the first is.
+  const primary = (input.recommended ?? 1) - 1;
   const actions: UiAction[] = input.options.map((option, index) => ({
     id: OPTION_IDS[index] ?? "option1",
     label: option.label,
-    ...(index === 0 ? { style: "primary" as const } : {}),
+    ...(index === (primary < input.options.length ? primary : 0) ? { style: "primary" as const } : {}),
   }));
   if (input.options.length < 3)
     actions.push({ id: REQUEST_DECISION_ACTIONS.change, label: input.changeLabel ?? "Change…" });
@@ -784,58 +791,119 @@ export class TrustToolGate {
       return refuse(
         "This chat is in Slack, Discord or Telegram and cannot show the decision card. Ask in your answer.",
       );
-    const single = input.options.length === 1;
     const actions = decisionActions(input);
+    // The owner reads only what decides it (docs/approvals.md, plain language): who asks, each
+    // option with its consequence, the amount and a link. The ticket stays behind the technical details.
     const fields: UiConfirmField[] = [];
     const escalated = escalationLine(why);
-    if (escalated) fields.push({ label: "↑", value: sourceText("status.agent.escalatedBy", escalated).slice(0, 400) });
+    if (escalated)
+      fields.push({
+        label: OWNER_DECISION_FIELD.escalated,
+        value: sourceText("status.agent.escalatedBy", escalated).slice(0, 400),
+      });
     else if (why?.kind === "unanswered")
-      fields.push({ label: "↑", value: sourceText("status.agent.unansweredByManagers") });
+      fields.push({ label: OWNER_DECISION_FIELD.escalated, value: sourceText("status.agent.unansweredByManagers") });
     for (const option of input.options)
-      if (option.consequence) fields.push({ label: single ? "→" : option.label, value: option.consequence });
-    if (input.amount)
+      if (option.consequence) fields.push({ label: option.label, value: option.consequence });
+    const asker = this.#trust.agentName(agentId);
+    if (asker) fields.push({ label: OWNER_DECISION_FIELD.askedBy, value: asker.slice(0, 200) });
+    if (input.amount) {
+      const amount = `${input.amount.value} ${input.amount.currency?.toUpperCase() ?? "USD"}`;
       fields.push({
-        label: "💰",
-        value: `${input.amount.value} ${input.amount.currency?.toUpperCase() ?? "USD"}${input.amount.perDay ? "/day" : ""}${input.amount.platform ? ` · ${input.amount.platform}` : ""}`,
+        label: OWNER_DECISION_FIELD.amount,
+        value: input.amount.perDay ? sourceText("status.agent.decisionCard.perDay", { amount }) : amount,
       });
-    const defaultAction =
-      input.defaultOption === undefined
-        ? undefined
-        : input.defaultOption === 4
-          ? REQUEST_DECISION_ACTIONS.no
-          : OPTION_IDS[input.defaultOption - 1];
-    if (defaultAction && !actions.some((action) => action.id === defaultAction))
-      return refuse("defaultOption names an option that the card does not have.");
-    if (defaultAction && input.timeoutMinutes)
-      fields.push({
-        label: "⏱",
-        value: `${input.timeoutMinutes} min → ${actions.find((action) => action.id === defaultAction)?.label ?? ""}`,
-      });
-    if (input.ticket) fields.push({ label: "#", value: input.ticket });
-    const preview = [input.previewUrl ? `[${input.previewUrl}](${input.previewUrl})` : "", input.preview ?? ""]
+    }
+    // A link longer than a field fits stays a link in the preview.
+    const linkFits = input.previewUrl !== undefined && input.previewUrl.length <= UI_BLOCK_LIMITS.text;
+    if (input.previewUrl && linkFits) fields.push({ label: OWNER_DECISION_FIELD.link, value: input.previewUrl });
+    if (input.ticket) fields.push({ label: OWNER_DECISION_FIELD.ticket, value: input.ticket });
+    const preview = [input.previewUrl && !linkFits ? `<${input.previewUrl}>` : "", input.preview ?? ""]
       .filter(Boolean)
       .join("\n\n");
     const spec = normalizeUiBlockSpec({
       type: "confirm",
       title: input.title,
-      ...(fields.length ? { fields: fields.slice(0, 8) } : {}),
+      ...(fields.length ? { fields: fields.slice(0, UI_BLOCK_LIMITS.confirmFields) } : {}),
       ...(preview ? { preview } : {}),
       actions,
     });
     if (!spec)
       return refuse("Each button needs a different label, and the text must fit the card. Correct it and retry.");
-    const blockId = randomUUID();
+    // An owner decision never answers itself: it waits until the owner answers or dismisses it, also
+    // after a restart ends this call (see `PastDecisions`). `defaultOption` and `timeoutMinutes` are
+    // for the manager only.
+    const blockId = `${OWNER_DECISION_BLOCK_PREFIX}${randomUUID()}`;
     const onAnswer = (response: UiBlockResponse | null, responder: PromptResponder | undefined) =>
       this.#decided(agentId, threadId, params.turnId, input, actions, response, responder);
-    this.#attention.surfaceUiBlock(
-      client,
-      request,
-      { blockId, spec, card: true, onAnswer },
-      defaultAction && input.timeoutMinutes
-        ? { actionId: defaultAction, afterMs: input.timeoutMinutes * 60_000 }
-        : undefined,
-    );
+    this.#attention.surfaceUiBlock(client, request, {
+      blockId,
+      spec,
+      card: true,
+      onAnswer,
+      ownerDecision: {
+        ...(input.goLive ? { goLive: input.goLive } : {}),
+        ...(input.amount
+          ? {
+              amount: {
+                value: input.amount.value,
+                currency: input.amount.currency?.toUpperCase() ?? "USD",
+                ...(input.amount.platform ? { platform: input.amount.platform } : {}),
+              },
+            }
+          : {}),
+        ...(input.ticket ? { ticket: input.ticket } : {}),
+        ...(input.previewUrl ? { previewUrl: input.previewUrl } : {}),
+      },
+    });
     return undefined;
+  }
+
+  /**
+   * The owner answered a decision card after its call ended (`PastDecisions`): the audit record, the
+   * go-live that the answer grants, and the message that the agent reads.
+   */
+  pastDecisionAnswered(
+    decision: PastDecision,
+    response: UiBlockResponse,
+    responder: PromptResponder | undefined,
+  ): string {
+    const { agentId, meta, spec } = decision;
+    const approved = /^option[1-3]$/u.test(response.actionId);
+    let goLive: "granted" | "needs-owner" | null = null;
+    if (meta.goLive && approved) {
+      if (responder && !responder.privileged) goLive = "needs-owner";
+      else {
+        this.#trust.grantGoLive(agentId, meta.goLive);
+        goLive = "granted";
+      }
+    }
+    const chosen = spec.actions.find((action) => action.id === response.actionId);
+    const answeredBy = responder?.sender?.name ?? "owner";
+    const name = this.#trust.agentName(agentId);
+    this.#trust.record({
+      actor: { kind: "agent", id: agentId, ...(name ? { name } : {}) },
+      category: meta.goLive ? "approval" : "decision",
+      action: meta.goLive ? `request_decision (go-live ${meta.goLive})` : "request_decision",
+      summary: trustSummary(
+        `${spec.title} → ${response.actionId === UI_BLOCK_TEXT_ACTION_ID ? `"${response.text ?? ""}"` : (chosen?.label ?? response.actionId)} (after the call ended)${meta.previewUrl ? ` · ${meta.previewUrl}` : ""}`,
+      ),
+      outcome: meta.goLive ? (approved ? "approved" : "declined") : "answered",
+      ...(meta.amount
+        ? {
+            amount: meta.amount.value,
+            currency: meta.amount.currency,
+            ...(meta.amount.platform ? { platform: normalizeTrustPlatform(meta.amount.platform) } : {}),
+          }
+        : {}),
+      agentId,
+      threadId: decision.threadId,
+      turnId: decision.turnId,
+      ...(meta.ticket ? { ticket: meta.ticket } : {}),
+      answeredBy,
+      answeredByKind: "owner",
+    });
+    return pastDecisionAnswerText(decision, response, answeredBy, goLive);
   }
 
   #decided(

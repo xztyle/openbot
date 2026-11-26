@@ -143,6 +143,7 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
     turnProgress,
     turnStepLines,
     answerPrompt,
+    answerPastPrompt,
     respondToApproval,
     respondToApprovalRequest,
     respondToBrowserTakeover,
@@ -646,6 +647,7 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
         }
         onTypingChange={setTeamTyping}
         onAnswerPrompt={answerPrompt}
+        onAnswerPastPrompt={answerPastPrompt}
         onPromptResolutionPresented={presentPromptResolution}
         onRespondToApproval={respondToApproval}
         onAlwaysAllowApproval={alwaysAllowApproval()}

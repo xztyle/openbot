@@ -298,6 +298,8 @@ export function createChannelConversation(env: ChannelConversationEnvironment) {
       if (requestId === undefined) return Promise.resolve(false);
       return respond(() => channels.port().agent.respondToPrompt({ requestId, answers }), options);
     },
+    onAnswerPastPrompt: (requestId: string, answers: Record<string, string[]>, options?: PromptAnswerOptions) =>
+      respond(() => channels.port().agent.respondToPrompt({ requestId, answers }), options),
     onRespondToApproval: (decision: "accept" | "decline") => {
       const requestId = approval()?.requestId;
       if (requestId === undefined) return Promise.resolve(false);

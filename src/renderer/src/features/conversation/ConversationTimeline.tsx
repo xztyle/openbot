@@ -1656,6 +1656,7 @@ export function ConversationTimeline() {
                                   agents={props.agents}
                                   onSelectAgent={props.onSelectAgent}
                                   onOpenLink={(url) => void openExternalMessageUrl(url)}
+                                  onAnswerPast={props.onAnswerPastPrompt}
                                 />
                               </article>
                             )}

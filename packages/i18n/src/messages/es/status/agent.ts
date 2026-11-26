@@ -102,6 +102,7 @@ export const messages = {
     "{agent} leyó contenido externo (una web, un email o un webhook) en este turno y el control de seguridad no pudo validar este pago. Decides tú.",
   "status.agent.escalatedBy": "{by} te lo pasa a ti: {reason}",
   "status.agent.unansweredByManagers": "Ningún agente de arriba respondió a tiempo, así que te llega a ti.",
+  "status.agent.decisionCard.perDay": "{amount} al día",
   "status.agent.mailFirstRecipient":
     "Primer correo a {address}. Apruébalo para enviarlo; los siguientes a esta persona no necesitan tu OK.",
 } as const satisfies PartialTranslation<typeof source>;

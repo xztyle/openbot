@@ -216,6 +216,7 @@ import {
 import { ModelPolicy, tierModel } from "./agent/model-policy";
 import { OpenBotToolRouter } from "./agent/openbot-tool-router";
 import type { OrderCardsPort } from "./agent/order-tools";
+import { PAST_DECISIONS_FILE, PastDecisions } from "./agent/past-decisions";
 import { ProfileClients } from "./agent/profile-clients";
 import {
   GenerationUsageLimitError,
@@ -647,6 +648,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #hostedSites: HostedSiteCoordinator;
   readonly #conversation: ConversationRuntime;
   readonly #attention: AttentionRegistry;
+  /** The owner decision cards that wait for the owner after their call ended. */
+  readonly #pastDecisions: PastDecisions;
   readonly #images: ImageGenRuntime;
   readonly #threads: ThreadLifecycle;
   readonly #memoryHold: MemoryHold;
@@ -1181,6 +1184,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         if (agent) Effect.runFork(this.#memoryReview.compacted(agent.id));
       },
     });
+    this.#pastDecisions = new PastDecisions(join(store.database.userDataPath, PAST_DECISIONS_FILE));
+    Effect.runFork(
+      this.#pastDecisions.load().pipe(
+        Effect.tap(() => Effect.sync(() => this.#emitRuntimeSnapshot())),
+        Effect.forkIn(this.#scope),
+      ),
+    );
     this.#attention = new AttentionRegistry({
       // The channel service starts later; a question only arrives once both run.
       teamQuestion: {
@@ -1216,6 +1226,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       // The router is made later; a note comes only from a tool call, after both exist.
       noteVaultChange: (agentId, threadId, turnId, text) => this.#tools.postVaultNote(agentId, threadId, turnId, text),
       apiKeys: options.agentApiKeys ?? null,
+      pastDecisions: this.#pastDecisions,
+      readStoredMessage: (agentId, threadId, messageId) =>
+        store.database.readConversationMessages(agentId, threadId, [messageId])[0],
     });
     this.#duplication = new DuplicationGate({
       store,
@@ -2098,6 +2111,16 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             : Effect.fail({ message: "Goals are not available yet." }),
       },
     });
+    // The owner answers a decision card after the agent's call ended: the agent gets it as a message
+    // from the owner, which starts its turn.
+    this.#attention.onPastDecisionAnswered((decision, response, responder) =>
+      Effect.suspend(() =>
+        this.sendMessage(
+          { agentId: decision.agentId, text: this.#tools.pastDecisionAnswered(decision, response, responder) },
+          responder?.sender,
+        ),
+      ).pipe(Effect.asVoid),
+    );
     this.#guardrails?.connect(
       guardrailsRuntime({
         store,

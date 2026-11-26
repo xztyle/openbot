@@ -97,6 +97,7 @@ export const messages = defineMessages("status.agent", {
     "{agent} read outside content (a web page, an email or a webhook) in this turn, and the security check could not clear this payment. You decide.",
   "status.agent.escalatedBy": "{by} sent this to you: {reason}",
   "status.agent.unansweredByManagers": "No agent above it answered in time, so it comes to you.",
+  "status.agent.decisionCard.perDay": "{amount} a day",
   "status.agent.mailFirstRecipient":
     "First mail to {address}. Approve it to send it; later mails to this person need no OK.",
 });

@@ -1,5 +1,7 @@
 import {
   type ConversationUiBlock,
+  isOwnerDecisionBlock,
+  pastDecisionRequestId,
   type UiBlockResponse,
   type UiBlockState,
   uiBlockAnswersFromResponse,
@@ -9,8 +11,9 @@ import {
 import type { AgentProfile } from "@openbot/ui/data";
 import { MarkdownMessageText } from "@openbot/ui/features/conversation/MarkdownMessageText";
 import { UiBlockingBlock } from "@openbot/ui/features/conversation/ui-blocks/UiBlockingBlock";
+import { UiDecisionBlock } from "@openbot/ui/features/conversation/ui-blocks/UiDecisionBlock";
 import { useText } from "@openbot/ui/text";
-import { createSignal, onCleanup } from "solid-js";
+import { createSignal, Match, onCleanup, Switch } from "solid-js";
 import type { PromptAnswerOptions } from "./conversation-types";
 
 export interface UiBlockPromptProps {
@@ -24,6 +27,13 @@ export interface UiBlockPromptProps {
    * in the history, which only shows its stored state.
    */
   onAnswer?: ((answers: Record<string, string[]>, options?: PromptAnswerOptions) => Promise<boolean>) | undefined;
+  /**
+   * Answers a prompt of the history by its request id. An owner decision card whose call ended takes
+   * its answer through it (`pastDecisionRequestId`): the host gives the answer to the agent as a message.
+   */
+  onAnswerPast?:
+    | ((requestId: string, answers: Record<string, string[]>, options?: PromptAnswerOptions) => Promise<boolean>)
+    | undefined;
   /** The answer went through and the card shows it. */
   onAnswered?: (() => void) | undefined;
   /** Gets the card's element, and undefined once the card is gone. */
@@ -42,8 +52,11 @@ export function UiBlockPrompt(props: UiBlockPromptProps) {
   // What this client sent, shown frozen until the host's stored state replaces it.
   const [sent, setSent] = createSignal<UiBlockState>();
   onCleanup(() => props.elementRef?.(undefined));
-  const stored = (): UiBlockState =>
-    props.block.state.status === "pending" ? (sent() ?? props.block.state) : props.block.state;
+  const decision = () => isOwnerDecisionBlock(props.block);
+  // An owner decision card waits for the owner after its call ended, until they answer or dismiss it.
+  const lateAnswer = () => decision() && props.block.state.status === "expired" && props.onAnswerPast !== undefined;
+  const answerable = () => props.block.state.status === "pending" || lateAnswer();
+  const stored = (): UiBlockState => (answerable() ? (sent() ?? props.block.state) : props.block.state);
   // The host stores the outcome with English list commas; draw it again in the reader's language.
   const state = (): UiBlockState => {
     const current = stored();
@@ -53,8 +66,15 @@ export function UiBlockPrompt(props: UiBlockPromptProps) {
   };
 
   async function send(answers: Record<string, string[]>, frozen: UiBlockState): Promise<void> {
-    const answer = props.onAnswer;
-    if (!answer || busy() || state().status !== "pending") return;
+    const past = props.onAnswerPast;
+    const answer =
+      props.block.state.status === "pending"
+        ? props.onAnswer
+        : lateAnswer() && past
+          ? (given: Record<string, string[]>, options?: PromptAnswerOptions) =>
+              past(pastDecisionRequestId(props.block.blockId), given, options)
+          : undefined;
+    if (!answer || busy() || sent() !== undefined) return;
     setBusy(true);
     setError(undefined);
     let failure: string | undefined;
@@ -91,27 +111,51 @@ export function UiBlockPrompt(props: UiBlockPromptProps) {
     void send(answers, { status: "closed" });
   }
 
+  const renderPreview = (markdown: string) => (
+    <div class="message-markdown">
+      <MarkdownMessageText
+        imagesAsLinks
+        body={markdown}
+        agents={props.agents}
+        onSelectAgent={props.onSelectAgent}
+        onOpenLink={props.onOpenLink}
+      />
+    </div>
+  );
+  const canAnswer = () => (props.block.state.status === "pending" ? props.onAnswer !== undefined : lateAnswer());
+
   return (
-    <UiBlockingBlock
-      spec={props.block.spec}
-      state={state()}
-      busy={busy()}
-      error={error()}
-      disabled={!props.onAnswer}
-      onRespond={respond}
-      onSkip={props.onAnswer ? skip : undefined}
-      elementRef={(element) => props.elementRef?.(element)}
-      renderPreview={(markdown) => (
-        <div class="message-markdown">
-          <MarkdownMessageText
-            imagesAsLinks
-            body={markdown}
-            agents={props.agents}
-            onSelectAgent={props.onSelectAgent}
+    <Switch>
+      <Match when={decision() && props.block.spec.type === "confirm" && props.block.spec}>
+        {(spec) => (
+          <UiDecisionBlock
+            spec={spec()}
+            state={state()}
+            busy={busy()}
+            error={error()}
+            disabled={!canAnswer()}
+            lateAnswer={lateAnswer() && sent() === undefined}
+            onRespond={respond}
+            onSkip={canAnswer() ? skip : undefined}
             onOpenLink={props.onOpenLink}
+            elementRef={(element) => props.elementRef?.(element)}
+            renderPreview={renderPreview}
           />
-        </div>
-      )}
-    />
+        )}
+      </Match>
+      <Match when={true}>
+        <UiBlockingBlock
+          spec={props.block.spec}
+          state={state()}
+          busy={busy()}
+          error={error()}
+          disabled={!props.onAnswer}
+          onRespond={respond}
+          onSkip={props.onAnswer ? skip : undefined}
+          elementRef={(element) => props.elementRef?.(element)}
+          renderPreview={renderPreview}
+        />
+      </Match>
+    </Switch>
   );
 }

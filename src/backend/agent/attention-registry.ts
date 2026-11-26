@@ -8,6 +8,7 @@ import type {
   AgentRuntimeSnapshot,
   BrowserTab,
   BrowserTakeoverRequest,
+  ConversationMessage,
   ConversationMessageSender,
   LocalBrowserSecretResponse,
   RespondToApprovalInput,
@@ -30,6 +31,8 @@ import { parseTwoStepKey, twoStepCode } from "@openbot/contracts/two-step-code";
 import {
   type ConversationUiBlock,
   normalizeConversationUiBlock,
+  pastDecisionBlockId,
+  pastDecisionRequestId,
   UI_BLOCK_TEXT_ACTION_ID,
   UI_BLOCK_VERSION,
   type UiBlockAutoAnswer,
@@ -75,6 +78,7 @@ import {
 } from "./hosted-site-coordinator";
 import type { HostedSiteMutationTool } from "./hosted-site-events";
 import { ForbiddenAttentionAnswer, InactiveAttentionRequest } from "./inactive-attention-request";
+import type { OwnerDecisionMeta, PastDecision, PastDecisions } from "./past-decisions";
 import {
   API_KEY_FIELD_ID,
   apiKeyPromptResult,
@@ -131,6 +135,11 @@ export interface SurfacedUiBlock {
   apiKey?: { name: string; shared?: true };
   /** Always a card here, also for work of a team channel: a decision waits for its answer. */
   card?: true;
+  /**
+   * The card of a decision only the owner takes. It waits for the owner after the call ends too: the
+   * owner's answer then goes to the agent as a message (`PastDecisions`).
+   */
+  ownerDecision?: OwnerDecisionMeta;
   /**
    * Sees the answer before the agent does, such as a decision that grants a go-live. A result it
    * returns replaces the block's own. A skipped block gives `null`.
@@ -362,7 +371,21 @@ export interface AttentionRegistryOptions {
   ownerHold?:
     | ((agentId: string, turnId: string, questions: readonly AgentPromptQuestion[]) => string | null)
     | undefined;
+  /** The owner decision cards that wait for the owner, also after their call ended. */
+  pastDecisions?: PastDecisions | undefined;
+  /** A stored message that the bounded snapshot no longer holds, such as an old decision card. */
+  readStoredMessage?(agentId: string, threadId: string, messageId: string): ConversationMessage | undefined;
 }
+
+/**
+ * Gives the agent the owner's answer to a decision card whose call had ended, as a message from the
+ * owner that starts its turn. A failure leaves the card open for another try.
+ */
+export type PastDecisionAnswered = (
+  decision: PastDecision,
+  response: UiBlockResponse,
+  responder: PromptResponder | undefined,
+) => Effect.Effect<void, unknown>;
 
 /** How a question of work that belongs to a team channel reaches the people of that channel. */
 export interface TeamQuestionRouting {
@@ -441,6 +464,9 @@ export class AttentionRegistry {
   readonly #apiKeys: AgentApiKeys | null;
   readonly #teamQuestion: TeamQuestionRouting | null;
   readonly #ownerHold: AttentionRegistryOptions["ownerHold"];
+  readonly #pastDecisions: PastDecisions | null;
+  readonly #readStoredMessage: AttentionRegistryOptions["readStoredMessage"];
+  #pastDecisionAnswered: PastDecisionAnswered | null = null;
   readonly #prompts = new Map<RequestId, PendingPrompt>();
   readonly #approvals = new Map<RequestId, PendingApproval>();
   readonly #takeovers = new Map<RequestId, PendingBrowserTakeover>();
@@ -469,6 +495,21 @@ export class AttentionRegistry {
     this.#apiKeys = options.apiKeys ?? null;
     this.#teamQuestion = options.teamQuestion ?? null;
     this.#ownerHold = options.ownerHold;
+    this.#pastDecisions = options.pastDecisions ?? null;
+    this.#readStoredMessage = options.readStoredMessage;
+  }
+
+  onPastDecisionAnswered(answered: PastDecisionAnswered): void {
+    this.#pastDecisionAnswered = answered;
+  }
+
+  /** The owner decision cards whose call ended and that still wait for the owner. */
+  #waitingPastDecisions(): PastDecision[] {
+    if (!this.#pastDecisions) return [];
+    const live = new Set([...this.#prompts.values()].flatMap((pending) => pending.uiBlock?.blockId ?? []));
+    return this.#pastDecisions
+      .list()
+      .filter((decision) => !live.has(decision.blockId) && this.#agentName(decision.agentId) !== undefined);
   }
 
   /**
@@ -551,7 +592,8 @@ export class AttentionRegistry {
       this.#prompts.get(requestId)?.agentId ??
       this.#approvals.get(requestId)?.approval.agentId ??
       this.#takeovers.get(requestId)?.request.agentId ??
-      this.#tickets.find((item) => item.requestId === requestId)?.agentId
+      this.#tickets.find((item) => item.requestId === requestId)?.agentId ??
+      this.#pastDecisions?.get(pastDecisionBlockId(requestId) ?? "")?.agentId
     );
   }
 
@@ -690,6 +732,16 @@ export class AttentionRegistry {
       });
     }
     items.push(...this.#tickets);
+    for (const decision of this.#waitingPastDecisions())
+      items.push({
+        kind: "form",
+        requestId: pastDecisionRequestId(decision.blockId),
+        agentId: decision.agentId,
+        threadId: decision.threadId,
+        turnId: decision.turnId,
+        createdAt: decision.createdAt,
+        ...optionalText("summary", attentionLine(decision.spec.title)),
+      });
     return items.sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(0, AGENT_ATTENTION_ITEMS_LIMIT);
   }
 
@@ -851,9 +903,16 @@ export class AttentionRegistry {
 
   readonly respondToPrompt = Effect.fn("AttentionRegistry.respondToPrompt")(function* (
     this: AttentionRegistry,
-    input: RespondToPromptInput,
+    given: RespondToPromptInput,
     responder?: PromptResponder,
   ) {
+    // An owner decision card answered by its lasting id while its call still waits: the call gets it.
+    const pastBlockId = pastDecisionBlockId(given.requestId);
+    const live =
+      pastBlockId === null
+        ? undefined
+        : [...this.#prompts.values()].find((pending) => pending.uiBlock?.blockId === pastBlockId);
+    const input = live ? { ...given, requestId: live.id } : given;
     // A waiting Motion ticket has no turn to answer. Empty answers dismiss it from Needs you; the
     // `answer` field's text goes on the ticket as the owner's comment, then it leaves Needs you too.
     const ticket = this.#tickets.find((item) => item.requestId === input.requestId);
@@ -865,6 +924,7 @@ export class AttentionRegistry {
       const verdict = answer && isOneOf(TICKET_VERDICTS, given) ? given : null;
       return yield* attentionIo(() => this.#ticketDismissed(requestId, answer, verdict));
     }
+    if (pastBlockId !== null && !live) return yield* this.#answerPastDecision(pastBlockId, input.answers, responder);
     const saved = yield* this.#saveApiKeyAnswer(input, responder);
     yield* attentionStep(() => {
       const pending = this.#prompts.get(input.requestId);
@@ -906,6 +966,7 @@ export class AttentionRegistry {
       pending.client.respond(pending.id, answered ?? result);
       this.#prompts.delete(input.requestId);
       clearTimeout(pending.autoAnswer?.timer);
+      if (pending.uiBlock?.ownerDecision) this.#pastDecisions?.remove(pending.uiBlock.blockId);
       this.#emitInputResolved("prompt", input.requestId, pending.agentId);
       try {
         if (pending.uiBlock) {
@@ -1763,6 +1824,17 @@ export class AttentionRegistry {
     }
 
     const messageId = this.#persistQuestionPrompt(agentId, publicThreadId, turnId, request.id, questions, uiBlock);
+    if (block.ownerDecision && uiBlock.spec.type === "confirm")
+      this.#pastDecisions?.add({
+        blockId: block.blockId,
+        agentId,
+        threadId: publicThreadId,
+        turnId,
+        messageId,
+        spec: uiBlock.spec,
+        meta: block.ownerDecision,
+        createdAt: new Date().toISOString(),
+      });
     let autoAnswerTimer: PendingPrompt["autoAnswer"];
     if (auto && autoAnswer) {
       const timer = setTimeout(() => this.#answerAutomatically(request.id), autoAnswer.afterMs);
@@ -2313,6 +2385,81 @@ export class AttentionRegistry {
       this.#conversation.emitConversation(snapshot, "prompt.requested", { turnId, requestId });
     }
     return messageId;
+  }
+
+  /**
+   * The owner answers or dismisses a decision card whose call ended. An answer goes to the agent as a
+   * message (`onPastDecisionAnswered`) before the card freezes, so a failed delivery leaves it open.
+   * A dismissal (no answer) only closes it.
+   */
+  readonly #answerPastDecision = Effect.fn("AttentionRegistry.answerPastDecision")(function* (
+    this: AttentionRegistry,
+    blockId: string,
+    answers: Record<string, string[]>,
+    responder: PromptResponder | undefined,
+  ) {
+    const { decision, response } = yield* attentionStep(() => {
+      const decision = this.#pastDecisions?.get(blockId);
+      if (!decision) throw new InactiveAttentionRequest(sourceText("error.backend.promptInactive"));
+      const questionIds = new Set(uiBlockFallbackQuestions(decision.spec).map((question) => question.id));
+      if (Object.keys(answers).some((id) => !questionIds.has(id)))
+        throw new Error(sourceText("error.backend.promptAnswerMismatch"));
+      return { decision, response: uiBlockAnswer(decision.spec, answers, responder) };
+    });
+    if (response) {
+      const answered = this.#pastDecisionAnswered;
+      if (!answered) {
+        return yield* attentionStep(() => {
+          throw new InactiveAttentionRequest(sourceText("error.backend.promptInactive"));
+        });
+      }
+      yield* answered(decision, response, responder).pipe(
+        Effect.mapError((cause) => new AttentionOperationFailed({ cause })),
+      );
+    }
+    yield* attentionStep(() => {
+      // Another answer took it while the message went out.
+      if (!this.#pastDecisions?.get(blockId)) return;
+      this.#pastDecisions.remove(blockId);
+      try {
+        this.#freezePastDecision(decision, answers, response, responder);
+      } catch (error) {
+        this.#emitError("prompt_persistence_failed", error, decision.agentId);
+      }
+      this.#emitRuntimeSnapshot();
+    });
+  }).bind(this);
+
+  /** Shows the owner's answer on a decision card whose call had ended. */
+  #freezePastDecision(
+    decision: PastDecision,
+    answers: Record<string, string[]>,
+    response: UiBlockResponse | null,
+    responder: PromptResponder | undefined,
+  ): void {
+    const snapshot = this.#conversation.ensureSnapshot(decision.agentId, decision.threadId);
+    let message = snapshot.messages.find((candidate) => candidate.id === decision.messageId);
+    if (!message) {
+      message = this.#readStoredMessage?.(decision.agentId, snapshot.threadId ?? decision.threadId, decision.messageId);
+      if (!message) return;
+      snapshot.messages.push(message);
+    }
+    if (!message.questionPrompt || !message.uiBlock) return;
+    const resolution: AgentPromptResolution = response
+      ? promptResolution(message.questionPrompt.questions, answers)
+      : { status: "cancelled" };
+    message.questionPrompt.resolution = resolution;
+    message.text = questionPromptText(message.questionPrompt.questions, resolution);
+    const frozen = normalizeConversationUiBlock({
+      ...message.uiBlock,
+      state: answeredUiBlockState(decision.spec, response, responder, undefined),
+    });
+    if (frozen) message.uiBlock.state = frozen.state;
+    this.#conversation.emitConversation(snapshot, "prompt.resolved", {
+      turnId: decision.turnId,
+      requestId: pastDecisionRequestId(decision.blockId),
+      status: resolution.status,
+    });
   }
 
   /** `uiBlockState` freezes the message's UI block, when it has one, in the same write. */

@@ -535,3 +535,106 @@
     transition: none;
   }
 }
+
+/* The card of a decision only the owner takes: options as large buttons, each with what it does. */
+.ui-decision-note,
+.ui-decision-late,
+.ui-decision-after {
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-md);
+  line-height: var(--openbot-leading-md);
+  overflow-wrap: anywhere;
+}
+
+.ui-decision-late {
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-glass-surface);
+  color: var(--openbot-text-primary);
+}
+
+.ui-decision-amount {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--openbot-space-2);
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-lg);
+}
+
+.ui-decision-amount-label {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-md);
+}
+
+.ui-decision-link {
+  align-self: flex-start;
+}
+
+.ui-decision-options {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ui-decision-legend {
+  margin-bottom: var(--openbot-space-1);
+  padding: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ui-button.ui-decision-option {
+  display: flex;
+  width: 100%;
+  height: auto;
+  min-height: var(--openbot-control-xl);
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--openbot-space-1);
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  text-align: start;
+  white-space: normal;
+}
+
+.ui-decision-option-head {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+.ui-decision-option-label {
+  min-width: 0;
+  font-weight: var(--openbot-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.ui-decision-option-consequence {
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-regular);
+  line-height: var(--openbot-leading-md);
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+
+.ui-decision-recommended[data-slot="badge"] {
+  border-radius: var(--openbot-radius-pill);
+  font-size: var(--openbot-text-sm);
+}
+
+.ui-decision-address {
+  font-family: var(--openbot-font-mono);
+  font-size: var(--openbot-text-sm);
+  overflow-wrap: anywhere;
+}

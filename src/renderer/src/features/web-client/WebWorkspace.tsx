@@ -3114,6 +3114,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       onOpenSearchMessage={workspace.openSearchMessage}
       onTypingChange={setTyping}
       onAnswerPrompt={view.answerPrompt}
+      onAnswerPastPrompt={view.answerPastPrompt}
       onPromptResolutionPresented={(_agentId, turnId, requestId) => view.presentPromptResolution(turnId, requestId)}
       onRespondToApproval={view.respondToApproval}
       onAlwaysAllowApproval={view.alwaysAllowApproval()}
@@ -3984,6 +3985,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       onLoadOlder={channelView.onLoadOlder}
                       onTypingChange={() => {}}
                       onAnswerPrompt={channelView.onAnswerPrompt}
+                      onAnswerPastPrompt={channelView.onAnswerPastPrompt}
                       onRespondToApproval={channelView.onRespondToApproval}
                       onRespondToBrowserTakeover={channelView.onRespondToBrowserTakeover}
                       onCancelQueuedMessage={() => {}}

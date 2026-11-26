@@ -1095,3 +1095,103 @@ export function uiBlockOutcomeText(
   }
   return clip(text, UI_BLOCK_LIMITS.outcome);
 }
+
+// ---------------------------------------------------------------------------------------------------
+// Owner decision cards
+
+/**
+ * The block id prefix of the card that `request_decision` shows the owner. Only the host makes such an
+ * id: `ask_ui` refuses it. The card keeps the frozen `confirm` shape, so every client shows it; a
+ * client that knows the prefix draws it as a decision (`ownerDecisionView`) and lets the owner answer
+ * it after the agent stopped waiting (`pastDecisionRequestId`).
+ */
+export const OWNER_DECISION_BLOCK_PREFIX = "owner-decision.";
+
+/**
+ * The fixed labels of the host's fields on an owner decision card. A field whose label is an option's
+ * label holds that option's one-line consequence. The labels are English: a client that does not know
+ * the card shows them as they are.
+ */
+export const OWNER_DECISION_FIELD = {
+  askedBy: "Asked by",
+  amount: "Amount",
+  link: "Link",
+  ticket: "Ticket",
+  escalated: "↑",
+} as const;
+
+/** The `respondToPrompt` request id that answers an owner decision card after its call ended. */
+const PAST_DECISION_REQUEST_PREFIX = "past-decision:";
+
+export function isOwnerDecisionBlock(block: Pick<ConversationUiBlock, "blockId" | "spec">): boolean {
+  return block.blockId.startsWith(OWNER_DECISION_BLOCK_PREFIX) && block.spec.type === "confirm";
+}
+
+/**
+ * The request id that answers the owner decision card `blockId` through the released prompt route,
+ * once the agent's call ended (a restart, a stop) and the card waits for the owner on its own.
+ */
+export function pastDecisionRequestId(blockId: string): string {
+  return `${PAST_DECISION_REQUEST_PREFIX}${blockId}`;
+}
+
+/** The block id that `pastDecisionRequestId` made, or null for any other request id. */
+export function pastDecisionBlockId(requestId: string | number): string | null {
+  if (typeof requestId !== "string" || !requestId.startsWith(PAST_DECISION_REQUEST_PREFIX)) return null;
+  const blockId = requestId.slice(PAST_DECISION_REQUEST_PREFIX.length);
+  return blockId.startsWith(OWNER_DECISION_BLOCK_PREFIX) && isUiBlockId(blockId) ? blockId : null;
+}
+
+/** One option of an owner decision card: its button, what it does, and whether the agent recommends it. */
+export interface OwnerDecisionOption {
+  action: UiAction;
+  consequence?: string;
+  recommended: boolean;
+}
+
+/** An owner decision card in the parts the owner reads, from the frozen `confirm` shape. */
+export interface OwnerDecisionView {
+  /** The options the agent gave, in order. */
+  options: OwnerDecisionOption[];
+  /** The other buttons: Change… and No. */
+  others: UiAction[];
+  askedBy?: string;
+  /** Host text (`status.*`), to show through the reader's source text translation. */
+  escalated?: string;
+  /** Host text (`status.*`) when per day. */
+  amount?: string;
+  link?: string;
+  ticket?: string;
+}
+
+const OWNER_DECISION_OPTION_ID = /^option[1-3]$/u;
+
+export function ownerDecisionView(spec: UiConfirmBlock): OwnerDecisionView {
+  const values = new Map<string, string>();
+  for (const field of spec.fields ?? []) if (!("select" in field)) values.set(field.label, field.value);
+  const choices = spec.actions.filter((action) => OWNER_DECISION_OPTION_ID.test(action.id));
+  // A single option is the yes of a yes/no decision: its button is primary, not a recommendation.
+  const options = choices.map((action) => {
+    const consequence = values.get(action.label);
+    return {
+      action,
+      ...(consequence ? { consequence } : {}),
+      recommended: choices.length > 1 && action.style === "primary",
+    };
+  });
+  const view: OwnerDecisionView = {
+    options,
+    others: spec.actions.filter((action) => !OWNER_DECISION_OPTION_ID.test(action.id)),
+  };
+  const askedBy = values.get(OWNER_DECISION_FIELD.askedBy);
+  if (askedBy) view.askedBy = askedBy;
+  const escalated = values.get(OWNER_DECISION_FIELD.escalated);
+  if (escalated) view.escalated = escalated;
+  const amount = values.get(OWNER_DECISION_FIELD.amount);
+  if (amount) view.amount = amount;
+  const link = values.get(OWNER_DECISION_FIELD.link);
+  if (link && /^https?:\/\/\S+$/u.test(link)) view.link = link;
+  const ticket = values.get(OWNER_DECISION_FIELD.ticket);
+  if (ticket) view.ticket = ticket;
+  return view;
+}

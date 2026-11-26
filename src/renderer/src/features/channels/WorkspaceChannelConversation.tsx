@@ -143,6 +143,7 @@ function DesktopChannelConversation(props: { channelId: string; account: () => C
       onLoadOlder={view.onLoadOlder}
       onTypingChange={() => {}}
       onAnswerPrompt={view.onAnswerPrompt}
+      onAnswerPastPrompt={view.onAnswerPastPrompt}
       onRespondToApproval={view.onRespondToApproval}
       onRespondToBrowserTakeover={view.onRespondToBrowserTakeover}
       onCancelQueuedMessage={() => {}}

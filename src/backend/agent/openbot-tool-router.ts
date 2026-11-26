@@ -31,7 +31,12 @@ import {
   workspaceAccessEnforced,
 } from "@openbot/contracts/ipc";
 import { isString } from "@openbot/contracts/runtime-values";
-import { isUiBlockId, normalizeUiBlockSpec } from "@openbot/contracts/ui-blocks";
+import {
+  isUiBlockId,
+  normalizeUiBlockSpec,
+  OWNER_DECISION_BLOCK_PREFIX,
+  type UiBlockResponse,
+} from "@openbot/contracts/ui-blocks";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, redactText } from "@openbot/logging";
 import { Effect, Result } from "effect";
@@ -93,7 +98,7 @@ import { AgentInterruptTool } from "./agent-interrupt-tool";
 import type { AgentMemories } from "./agent-memories";
 import { type ApprovalAutomationPolicy, NO_APPROVAL_AUTOMATION } from "./approval-automation";
 import type { AttachmentGateway } from "./attachment-gateway";
-import type { AttentionRegistry } from "./attention-registry";
+import type { AttentionRegistry, PromptResponder } from "./attention-registry";
 import { loadAvatarFile } from "./avatar-file";
 import type { BrowserUploads } from "./browser-uploads";
 import { handleChannelAdminTool } from "./channel-admin-tools";
@@ -133,6 +138,7 @@ import {
   planApprover,
 } from "./order-tools";
 import { OWNER_TOOL_NAMES, OwnerTools } from "./owner-tools";
+import { type PastDecision, pastDecisionAnswerText } from "./past-decisions";
 import {
   createAgentToolSchema,
   listModelsToolSchema,
@@ -897,9 +903,10 @@ export class OpenBotToolRouter {
     const spec = normalizeUiBlockSpec(parsed.data.block);
     // The stored block must read back, so its id passes the same check as the read.
     const blockId = parsed.data.blockId ?? randomUUID();
-    if (!spec || !isUiBlockId(blockId)) {
+    // Only the host makes the id of an owner decision card, which can be answered after the call ends.
+    if (!spec || !isUiBlockId(blockId) || blockId.startsWith(OWNER_DECISION_BLOCK_PREFIX)) {
       refuse(
-        "The block breaks a rule: ids and option labels must be unique, an id must not be botId or a similar name, a value must be one of its options, a single choice selects at most one option, and a secret field is a text field with no value. Correct the block and retry.",
+        "The block breaks a rule: ids and option labels must be unique, an id must not be botId or a similar name or start with owner-decision., a value must be one of its options, a single choice selects at most one option, and a secret field is a text field with no value. Correct the block and retry.",
       );
       return;
     }
@@ -1999,6 +2006,21 @@ export class OpenBotToolRouter {
         ),
     });
   });
+
+  /**
+   * The owner answered a decision card after its call ended: what the agent reads, after the audit
+   * record and the go-live it grants.
+   */
+  pastDecisionAnswered(
+    decision: PastDecision,
+    response: UiBlockResponse,
+    responder: PromptResponder | undefined,
+  ): string {
+    return (
+      this.#trust?.pastDecisionAnswered(decision, response, responder) ??
+      pastDecisionAnswerText(decision, response, responder?.sender?.name ?? "owner", null)
+    );
+  }
 
   /** Adds the note that an agent changed the Vault. `text` names the item, never a secret. */
   postVaultNote(agentId: string, threadId: string, turnId: string, text: string): void {

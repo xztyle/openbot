@@ -28,6 +28,21 @@ export const messages = defineMessages("uiBlock", {
   "uiBlock.form.choose": "Choose an option",
   "uiBlock.form.notSet": "Not set",
   "uiBlock.form.invalid": "Some answers are not correct. Check them and try again.",
+  "uiBlock.decision.askedBy": "Asked by {name}",
+  "uiBlock.decision.theAgent": "the agent",
+  "uiBlock.decision.choose": "Choose one",
+  "uiBlock.decision.answerAnyway": "Answer anyway",
+  "uiBlock.decision.lateNote":
+    "{name} stopped waiting on this card (for example, after a restart). It is still open: your answer goes to {name} as a message, and the work continues from there.",
+  "uiBlock.decision.recommended": "Recommended",
+  "uiBlock.decision.amount": "Amount",
+  "uiBlock.decision.after":
+    "When you choose, {name} gets your answer and continues. Nothing happens before you choose.",
+  "uiBlock.decision.openCampaign": "See the campaign in {place}",
+  "uiBlock.decision.openLink": "Open in {place}",
+  "uiBlock.decision.technical": "See technical details",
+  "uiBlock.decision.ticket": "Ticket",
+  "uiBlock.decision.address": "Address",
   "uiBlock.skip": "Skip",
   "uiBlock.error.answerFailed": "Could not send your answer. Try again.",
 });

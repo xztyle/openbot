@@ -332,6 +332,13 @@ export interface ConversationProps {
   onOpenSearchMessage?: ((messageId: string) => Promise<void>) | undefined;
   onTypingChange: (agentId: string, typing: boolean) => void;
   onAnswerPrompt: (answers: Record<string, string[]>, options?: PromptAnswerOptions) => Promise<boolean>;
+  /**
+   * Answers a card of the history by its request id: an owner decision card whose call ended, which
+   * still takes the owner's answer. Absent where the view cannot answer one.
+   */
+  onAnswerPastPrompt?:
+    | ((requestId: string, answers: Record<string, string[]>, options?: PromptAnswerOptions) => Promise<boolean>)
+    | undefined;
   onPromptResolutionPresented?: ((agentId: string, turnId: string, requestId: string | number) => void) | undefined;
   onRespondToApproval: (decision: "accept" | "decline") => Promise<boolean>;
   /**

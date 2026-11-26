@@ -209,6 +209,24 @@ export function createWebConversationView(options: {
     }
     return true;
   }
+  /** Answers a card of the history by its request id: an owner decision card whose call ended. */
+  async function answerPastPrompt(
+    requestId: string,
+    answers: RespondToPromptInput["answers"],
+    options?: PromptAnswerOptions,
+  ): Promise<boolean> {
+    try {
+      await workspace.answer({ requestId, answers });
+      return true;
+    } catch (error) {
+      if (options?.onError) options.onError(error);
+      else {
+        const { errorMessage, t } = currentText();
+        toast.error(errorMessage(error, t("uiBlock.error.answerFailed")));
+      }
+      return false;
+    }
+  }
   function presentPromptResolution(turnId: string, requestId: string | number): void {
     const answered = answeredPrompt();
     if (answered && isAnswered(turnId, requestId)) setAnsweredPrompt({ ...answered, presented: true });
@@ -234,6 +252,7 @@ export function createWebConversationView(options: {
     messageReferences,
     missingMessageReferences,
     answerPrompt,
+    answerPastPrompt,
     presentPromptResolution,
     respondToApproval,
     reset,

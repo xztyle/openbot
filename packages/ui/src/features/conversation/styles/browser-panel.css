@@ -98,7 +98,7 @@
   align-items: center;
   gap: var(--openbot-space-1);
   border-radius: var(--openbot-radius-sm);
-  padding: 0 5px;
+  padding: 0 var(--openbot-space-1-5);
   font-size: var(--openbot-text-sm);
   line-height: 1;
 }
@@ -261,7 +261,7 @@
   display: grid;
   height: 100%;
   place-content: center;
-  gap: 5px;
+  gap: var(--openbot-space-1);
   color: var(--openbot-text-muted);
   text-align: center;
 }

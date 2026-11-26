@@ -337,7 +337,7 @@
   margin: 0;
   border: 0;
   overflow: hidden;
-  padding: 0 3px 0 12px;
+  padding: 0 var(--openbot-space-1) 0 var(--openbot-space-3);
   color: var(--openbot-text-secondary);
   animation: voice-morph-content-in var(--openbot-duration-slow) var(--openbot-ease-out) var(--openbot-duration-fast)
     both;
@@ -378,7 +378,7 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 3px;
+  gap: var(--openbot-space-1);
 }
 
 /* Quiet dots stay round; speech stretches them into bars. */
@@ -809,7 +809,7 @@
   /* The list computes its own height from this one, so the two must not drift apart. */
   height: var(--mention-picker-row-height);
   align-items: center;
-  gap: 7px;
+  gap: var(--openbot-space-2);
   border: 0;
   border-radius: var(--openbot-radius-md);
   background: transparent;
@@ -958,7 +958,7 @@
   border: 1px solid var(--openbot-border);
   border-radius: var(--openbot-radius-lg);
   background: var(--openbot-bg-control);
-  padding: 7px 12px 7px 8px;
+  padding: var(--openbot-space-2) var(--openbot-space-3) var(--openbot-space-2) var(--openbot-space-2);
 }
 
 /* The image of a chip is a button: it opens the annotator. */

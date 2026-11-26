@@ -843,8 +843,8 @@
 
   .direct-message-list,
   .direct-composer-wrap {
-    padding-right: 14px;
-    padding-left: 14px;
+    padding-right: var(--openbot-space-4);
+    padding-left: var(--openbot-space-4);
   }
 
   .direct-message > .ui-message-content {

@@ -13,7 +13,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 7px;
+  gap: var(--openbot-space-2);
 }
 
 .chat-search {
@@ -36,7 +36,7 @@
   width: var(--openbot-icon-md);
   height: var(--openbot-icon-md);
   flex: 0 0 auto;
-  margin-left: 11px;
+  margin-left: var(--openbot-space-3);
   stroke-width: var(--openbot-icon-stroke);
 }
 
@@ -93,7 +93,7 @@
 }
 
 .chat-search .chat-search-close {
-  margin-right: 3px;
+  margin-right: var(--openbot-space-1);
 }
 
 ::highlight(openbot-chat-search-results) {

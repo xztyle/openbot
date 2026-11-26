@@ -311,7 +311,7 @@
   height: 28px;
   border: 0;
   background: transparent;
-  padding: 0 10px 0 11px;
+  padding: 0 var(--openbot-space-2-5) 0 var(--openbot-space-3);
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-regular);
@@ -408,7 +408,7 @@
   gap: var(--openbot-space-1);
   border: 1px solid transparent;
   background: transparent;
-  padding: 0 9px;
+  padding: 0 var(--openbot-space-2);
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-regular);
@@ -440,7 +440,7 @@
   width: 1px;
   height: 16px;
   flex: 0 0 auto;
-  margin: 0 3px;
+  margin: 0 var(--openbot-space-1);
   background: var(--openbot-border-strong);
 }
 
@@ -471,7 +471,7 @@
   display: inline-flex;
   height: 28px;
   align-items: center;
-  gap: 7px;
+  gap: var(--openbot-space-2);
   padding: 0 var(--openbot-space-2-5);
   font-size: var(--openbot-text-sm);
   white-space: nowrap;
@@ -681,7 +681,7 @@
   flex: none;
   gap: var(--openbot-space-1);
   border-radius: var(--openbot-radius-sm);
-  padding-inline: 7px;
+  padding-inline: var(--openbot-space-2);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   line-height: var(--openbot-leading-sm);
@@ -901,7 +901,7 @@
 
 .message-data-table th,
 .message-data-table td {
-  padding: 9px 12px;
+  padding: var(--openbot-space-2) var(--openbot-space-3);
   color: var(--openbot-data-table-text);
   font-weight: inherit;
   overflow-wrap: break-word;
@@ -911,8 +911,8 @@
 
 .message-data-table thead th {
   border-bottom: 1px solid var(--openbot-data-table-border);
-  padding-top: 7px;
-  padding-bottom: 7px;
+  padding-top: var(--openbot-space-2);
+  padding-bottom: var(--openbot-space-2);
   color: var(--openbot-data-table-header-text);
 }
 
@@ -1194,7 +1194,7 @@
 
 .message-reply-context {
   max-width: 360px;
-  margin: -1px 0 7px;
+  margin: -1px 0 var(--openbot-space-2);
   border-left: 2px solid var(--openbot-text-dim);
   padding-left: var(--openbot-space-2);
   color: var(--openbot-text-secondary);
@@ -1309,7 +1309,7 @@
   display: flex;
   align-items: center;
   gap: var(--openbot-space-1);
-  margin: -1px 0 7px;
+  margin: -1px 0 var(--openbot-space-2);
   font-size: var(--openbot-text-sm);
   line-height: var(--openbot-leading-sm);
 }
@@ -1374,7 +1374,7 @@
   border: 0;
   border-radius: var(--openbot-radius-sm);
   background: transparent;
-  padding: 1px 6px 1px 3px;
+  padding: 1px var(--openbot-space-1-5) 1px var(--openbot-space-1);
   color: var(--file-reference-color);
   font: inherit;
   font-weight: var(--openbot-weight-medium);

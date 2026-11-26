@@ -1,7 +1,7 @@
 .message-attachments {
   display: grid;
   width: min(100%, 256px);
-  gap: 7px;
+  gap: var(--openbot-space-2);
   margin-top: var(--openbot-space-2-5);
 }
 
@@ -15,7 +15,7 @@
   border: 1px solid var(--openbot-border);
   border-radius: var(--openbot-radius-lg);
   background: var(--openbot-bg-surface-raised);
-  padding: 7px;
+  padding: var(--openbot-space-2);
   transition:
     background-color var(--openbot-duration-hover) ease,
     border-color var(--openbot-duration-hover) ease;

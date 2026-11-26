@@ -23,7 +23,7 @@
   min-width: 0;
   grid-template-columns: 14px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 7px;
+  gap: var(--openbot-space-2);
   margin: 0;
   border: 0;
   padding: 0;

@@ -338,7 +338,7 @@
   display: inline-flex;
   align-items: center;
   border-radius: var(--openbot-radius-sm);
-  padding: 3px 5px;
+  padding: var(--openbot-space-0-5) var(--openbot-space-1-5);
   transition: background-color var(--openbot-duration-hover) var(--openbot-ease-out);
 }
 

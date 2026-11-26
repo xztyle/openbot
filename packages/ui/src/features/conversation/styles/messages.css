@@ -126,7 +126,7 @@
   min-width: 0;
   max-width: 100%;
   align-items: center;
-  gap: 5px;
+  gap: var(--openbot-space-1-5);
 }
 
 .message-entry-user .message-shell {
@@ -266,7 +266,7 @@
 }
 
 .reaction-picker-more {
-  margin-top: 3px;
+  margin-top: var(--openbot-space-1);
   border-top: 1px solid var(--openbot-border);
   padding-top: var(--openbot-space-1);
 }
@@ -1149,7 +1149,7 @@ button.chat-action-target:active,
   display: grid;
   min-width: 0;
   justify-items: start;
-  gap: 14px;
+  gap: var(--openbot-space-3);
 }
 
 .message-image-attachments {
@@ -1271,7 +1271,7 @@ button.chat-action-target:active,
   right: 8px;
   border-radius: var(--openbot-radius-pill);
   background: var(--openbot-bg-surface);
-  padding: 2px 7px;
+  padding: var(--openbot-space-0-5) var(--openbot-space-2);
   color: var(--openbot-text-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: var(--openbot-text-sm);
@@ -1369,7 +1369,7 @@ button.chat-action-target:active,
   border: 1px solid var(--openbot-border-strong);
   border-radius: var(--openbot-radius-pill);
   background: var(--openbot-bg-glass);
-  padding: 5px 10px;
+  padding: var(--openbot-space-1-5) var(--openbot-space-2-5);
   color: var(--openbot-text-primary);
   cursor: pointer;
   backdrop-filter: blur(12px) saturate(1.15);

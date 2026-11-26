@@ -42,7 +42,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--openbot-text-md);
-  font-weight: 500;
+  font-weight: var(--openbot-weight-medium);
 }
 
 .image-annotator-history {
@@ -112,7 +112,7 @@
   border-color: var(--annotator-ink);
   color: var(--annotator-ink);
   font-size: var(--annotator-label-size, var(--openbot-text-lg));
-  font-weight: 600;
+  font-weight: var(--openbot-weight-semibold);
 }
 
 .image-annotator-wait {

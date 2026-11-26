@@ -260,7 +260,7 @@ def drain_host():
     resume_interrupted() starts them again once the new host is up (owner rule, 2026-11-26). A host
     without the drain route (older images) answers None and the deploy goes on."""
     start = time.monotonic()
-    answer = control("POST", "/v1/drain?timeout=0", "drain", max_time=30)
+    answer = control("POST", "/v1/drain", "drain", max_time=30, body="timeout=0")
     TIMES["drain"] = round(time.monotonic() - start, 3)
     return answer
 

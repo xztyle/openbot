@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { QueuedMessageReceipt, SendMessageInput, SystemNoticeKind } from "@openbot/contracts/ipc";
 import type { DynamicRecord } from "@openbot/contracts/runtime-values";
+import type { AgentMailboxesState } from "@openbot/contracts/team-protocol/agent-mailboxes-v1";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { createServerAgentOperations, RESTART_INTERRUPTION_REASON, RESUME_NOTE } from "./server-agent-operations";
@@ -328,5 +329,54 @@ describe("operator settings route", () => {
       status: 400,
       lines: { error: "settings_refused", message: "provider is invalid." },
     });
+  });
+});
+
+describe("operator mailbox routes", () => {
+  it("saves an address, links the Worker and makes a secret through the mailboxes", async () => {
+    const saved: unknown[] = [];
+    const state: AgentMailboxesState = {
+      gateway: { listening: true, publicUrl: "https://connect.example.com" },
+      inboxUrl: "https://connect.example.com/hooks/mail_x",
+      workerUrl: null,
+      hasSecret: false,
+      lastMailAt: null,
+      lastStatus: null,
+      mailboxes: [],
+    };
+    const { route } = createServerAgentOperations({
+      restartInterrupted: () => new Set(),
+      database: () => database().db,
+      agentIds: () => [],
+      send: () => Effect.die("unused"),
+      markerFile: join(mkdtempSync(join(tmpdir(), "openbot-resume-")), "resumes.json"),
+      log: () => {},
+      mailboxes: () => ({
+        state: () => state,
+        saveMailbox: async (input) => {
+          saved.push(input);
+          return state;
+        },
+        setWorker: async (workerUrl) => ({ ...state, workerUrl }),
+        newSecret: async () => ({ state: { ...state, hasSecret: true }, secret: "ams_secret" }),
+      }),
+    });
+
+    expect((await route("POST", "/v1/mailboxes", ""))?.lines).toMatchObject({
+      inbox_url: "https://connect.example.com/hooks/mail_x",
+      has_secret: "no",
+    });
+    const body = JSON.stringify({ address: "cso@example.com", agentId: "agent-a", mode: "write-first" });
+    expect((await route("POST", "/v1/mailboxes/save", body))?.status).toBe(200);
+    expect(saved).toEqual([{ address: "cso@example.com", agentId: "agent-a", mode: "write-first" }]);
+    expect((await route("POST", "/v1/mailboxes/save", '{"address":"a@b.c"}'))?.status).toBe(400);
+    expect(
+      (await route("POST", "/v1/mailboxes/worker", '{"workerUrl":"https://w.example.workers.dev"}'))?.lines,
+    ).toMatchObject({ worker_url: "https://w.example.workers.dev" });
+    expect((await route("POST", "/v1/mailboxes/secret", "{}"))?.lines).toMatchObject({
+      has_secret: "yes",
+      secret: "ams_secret",
+    });
+    expect((await route("GET", "/v1/mailboxes", ""))?.status).toBe(405);
   });
 });

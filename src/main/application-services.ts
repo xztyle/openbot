@@ -3648,6 +3648,7 @@ export async function createApplicationServices({
         endDrain: () => service.endDeployDrain(),
         announceRestart: (state) => host.announceRestart(state, null),
         cloudBench: () => cloudBackups.bench(),
+        mailboxes: () => connectorsReady?.mail ?? null,
         humanBackfill: motionEvents
           ? createHumanBackfill({
               human: motionEvents.human,

@@ -34,6 +34,12 @@
  *   (`workspaceName`, `days`, default 7) in the background and answers its state; `GET` answers the
  *   state and the report file (`motion-human-backfill.ts`).
  *
+ * - `POST /v1/mailboxes` answers the agent mailboxes state (`agent-mailboxes-v1.ts`), and
+ *   `/v1/mailboxes/save` (`{ address, agentId, mode, displayName?, id? }`), `/v1/mailboxes/worker`
+ *   (`{ workerUrl }`) and `/v1/mailboxes/secret` (`{}`) make the same changes as Secrets › Agent
+ *   mailboxes, for an operator who sets up the mail Worker from the server. The secret answer is the
+ *   only time the new secret leaves the host; the old one stops at once.
+ *
  * A body is JSON or form fields. Every action is logged without the text. The resume route keeps the
  * deliveries it handled in a small file, so a second call, or a call after another restart, does not
  * send the note again.
@@ -45,6 +51,11 @@ import { type GuardrailPause, type GuardrailPolicy, normalizeGuardrailPolicy } f
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { QueuedMessageReceipt, SendMessageInput, SystemNoticeKind } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
+import {
+  AGENT_MAILBOX_MODES,
+  type AgentMailboxesState,
+  type AgentMailboxInput,
+} from "@openbot/contracts/team-protocol/agent-mailboxes-v1";
 import type { HostRestartState } from "@openbot/contracts/team-protocol/host-update-v1";
 import { Effect, Result } from "effect";
 import type { HumanBackfillReport } from "./motion-events/motion-human-backfill";
@@ -111,6 +122,16 @@ export interface ServerAgentOperationsDependencies {
   /** The stored guardrails pauses, and their resume (`GuardrailsService.resume`, as the Team API route). */
   guardrailPauses?: () => readonly GuardrailPause[];
   resumeGuardrailPause?: (scope: "agent" | "space", id: string) => void;
+  /** The agent mailboxes (`AgentMail`), as the Secrets page changes them; null before the connectors start. */
+  mailboxes?: () => OperatorMailboxes | null;
+}
+
+/** The parts of `AgentMail` that the operator routes use. */
+export interface OperatorMailboxes {
+  state(): AgentMailboxesState;
+  saveMailbox(input: AgentMailboxInput): Promise<AgentMailboxesState>;
+  setWorker(value: string): Promise<AgentMailboxesState>;
+  newSecret(): Promise<{ state: AgentMailboxesState; secret: string }>;
 }
 
 /** A restart notice that no restart followed ends after this long. */
@@ -251,6 +272,10 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
       if (method !== "POST") return failure(405, "method_not_allowed");
       return resumeGuardrails(rawBody);
     }
+    if (path === "/v1/mailboxes" || path.startsWith("/v1/mailboxes/")) {
+      if (method !== "POST") return failure(405, "method_not_allowed");
+      return routeMailboxes(path, rawBody);
+    }
     if (path === "/v1/guardrails/failover") {
       if (method !== "POST") return failure(405, "method_not_allowed");
       return saveFailoverPolicy(rawBody);
@@ -292,6 +317,51 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
     const remaining = guardrailPauses().length;
     dependencies.log(`The operator resumed ${before.length - remaining} guardrails pause(s).`);
     return { status: 200, lines: { resumed: before.length - remaining, remaining } };
+  }
+
+  async function routeMailboxes(path: string, rawBody: string): Promise<ControlAnswer> {
+    const mail = dependencies.mailboxes?.();
+    if (!mail) return failure(404, "not_found");
+    let body: unknown = {};
+    if (rawBody.trim()) {
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        return failure(400, "json_required");
+      }
+    }
+    if (!isDynamicRecord(body)) return failure(400, "json_required");
+    try {
+      if (path === "/v1/mailboxes") return mailboxLines(mail.state());
+      if (path === "/v1/mailboxes/save") {
+        const { id, address, agentId, mode, displayName } = body;
+        if (!isString(address) || !isString(agentId) || !AGENT_MAILBOX_MODES.some((item) => item === mode))
+          return failure(400, "invalid_body", "Give address, agentId and mode (reply or write-first).");
+        const state = await mail.saveMailbox({
+          address,
+          agentId,
+          mode: mode === "write-first" ? "write-first" : "reply",
+          ...(isString(id) ? { id } : {}),
+          ...(isString(displayName) ? { displayName } : {}),
+        });
+        dependencies.log(`Operator saved the mailbox ${address} for agent ${agentId}.`);
+        return mailboxLines(state);
+      }
+      if (path === "/v1/mailboxes/worker") {
+        if (!isString(body.workerUrl)) return failure(400, "invalid_body", "Give workerUrl.");
+        const state = await mail.setWorker(body.workerUrl);
+        dependencies.log("Operator linked the mail Worker.");
+        return mailboxLines(state);
+      }
+      if (path === "/v1/mailboxes/secret") {
+        const { state, secret } = await mail.newSecret();
+        dependencies.log("Operator made a new mail secret.");
+        return { status: 200, lines: { ...mailboxLines(state).lines, secret } };
+      }
+      return failure(404, "not_found");
+    } catch (error) {
+      return failure(409, "mailbox_refused", errorMessage(error));
+    }
   }
 
   async function saveFailoverPolicy(rawBody: string): Promise<ControlAnswer> {
@@ -614,6 +684,27 @@ function failure(status: number, error: string, message: string | null = null): 
 
 function errorMessage(cause: unknown): string | null {
   return cause instanceof Error ? cause.message : null;
+}
+
+/** The mailbox state as lines: the links, then one `mailbox<N>` line per address. */
+function mailboxLines(state: AgentMailboxesState): ControlAnswer {
+  return {
+    status: 200,
+    lines: {
+      inbox_url: state.inboxUrl,
+      worker_url: state.workerUrl,
+      has_secret: state.hasSecret ? "yes" : "no",
+      last_mail_at: state.lastMailAt,
+      last_status: state.lastStatus,
+      mailboxes: state.mailboxes.length,
+      ...Object.fromEntries(
+        state.mailboxes.map((item, index) => [
+          `mailbox${index + 1}`,
+          `${item.id} ${item.address} agent=${item.agentId} mode=${item.mode} sent_today=${item.sentToday}`,
+        ]),
+      ),
+    },
+  };
 }
 
 /** The lines of a backfill report: its state and counts, and the file with every outcome. */

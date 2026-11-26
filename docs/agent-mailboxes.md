@@ -91,6 +91,11 @@ Do these once per business domain, in the Cloudflare dashboard (the host's token
    address from another account and the agent's chat shows it. Then let the agent answer it; a reply
    needs no approval.
 
+From the server itself, the control socket does steps 2 and 4 and adds addresses (operator only):
+`POST /v1/mailboxes` answers the state, `/v1/mailboxes/save` takes `{ address, agentId, mode,
+displayName? }`, `/v1/mailboxes/worker` takes `{ workerUrl }`, and `/v1/mailboxes/secret` answers a
+new `secret=` line once; pipe it straight into `wrangler secret put MAIL_SECRET`.
+
 A new mail secret stops the old one at once: put it in the Worker right away with `wrangler secret
 put MAIL_SECRET`. The state lives in `openbot-agent-mailboxes-v1.json` in the profile, with the secret
 encrypted by the host's secret storage.

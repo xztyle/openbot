@@ -308,7 +308,11 @@ async function ticketApproval(browser: Browser, origin: string): Promise<void> {
     const sent = await page.evaluate(() => document.documentElement.dataset.needsYouSent ?? "");
     assert.match(sent, /^sales: .*MAN-5.*Approved\./u, "The agent did not get the approval.");
     const answers = await page.evaluate(() => document.documentElement.dataset.needsYouTicket ?? "");
-    assert.deepEqual(JSON.parse(answers), { answer: [english("workspace.needsYou.ticket.approved")] });
+    // The answer says what it decides, so the host answers the ticket's decision card the same way.
+    assert.deepEqual(JSON.parse(answers), {
+      answer: [english("workspace.needsYou.ticket.approved")],
+      decision: ["approve"],
+    });
     assert.equal(await page.getByText(english("workspace.today.answerFailed")).count(), 0, "The card says it failed.");
     await shot(page, "phone-ticket-approved");
   });
@@ -362,6 +366,8 @@ async function ticketReview(browser: Browser, origin: string): Promise<void> {
     const answers = await page.evaluate(() => document.documentElement.dataset.needsYouTicket ?? "");
     assert.deepEqual(JSON.parse(answers), {
       answer: [english("workspace.needsYou.ticket.sentBack", { note: "Paste the table of ads" })],
+      decision: ["decline"],
+      verdict: ["send-back"],
     });
     await shot(page, "phone-ticket-sent-back");
   });

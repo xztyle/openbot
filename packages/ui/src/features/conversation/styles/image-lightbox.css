@@ -66,11 +66,10 @@
   }
 }
 
-/* The viewer. The backdrop is a sibling below the content, and the content covers the window so
- * that its empty stage can take the click that closes it. */
+/* The viewer. The backdrop is the shared dim and blur, a sibling below the content; the content
+ * covers the window so that its empty stage can take the click that closes it. */
 .ui-dialog-overlay.image-lightbox-backdrop {
-  background: var(--openbot-bg-overlay);
-  /* The viewer animates its backdrop from script, with the zoom of the image. */
+  /* The viewer animates its backdrop from script, with the zoom of the image, in and out. */
   animation: none;
 }
 
@@ -315,6 +314,11 @@
   }
 
   .image-lightbox-step {
+    display: none;
+  }
+
+  /* A finger pinches and double-taps; the zoom buttons would push the actions off the toolbar. */
+  .image-lightbox-zoom {
     display: none;
   }
 }

@@ -1,9 +1,22 @@
 import type { AttachmentSummary } from "@openbot/contracts/ipc";
-import { Button, ChevronLeft, ChevronRight, Dialog, ExternalLink, Spinner, X } from "@openbot/ui";
+import {
+  Button,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Dialog,
+  ExternalLink,
+  PencilLine,
+  Spinner,
+  X,
+} from "@openbot/ui";
+import { toast } from "@openbot/ui/toast";
 import { prefersReducedMotion } from "@openbot/ui/utils";
 import { createMemo, createSignal, createStore, For, onCleanup, onSettled, Show, untrack } from "solid-js";
 import { useText } from "../../text";
 import { CloseIcon, DownloadIcon } from "./ConversationIcons";
+import { canCopyImage, copyImageToClipboard } from "./image-clipboard";
 import { justifiedGalleryLayout } from "./image-gallery-layout";
 import {
   BACKDROP_IN,
@@ -48,6 +61,8 @@ const GALLERY_GAP = 6;
 const GALLERY_MIN_RATIO = 0.5;
 const GALLERY_MAX_RATIO = 3;
 const SWIPE_DISTANCE = 48;
+/** How long the Copy button says "copied". */
+const COPIED_MS = 2000;
 /** A drag down this far on a touch screen closes the viewer, as in a phone's photo viewer. */
 const DISMISS_DISTANCE = 96;
 /** A drag of a zoomed image that moves this far is not a click, so it does not close the viewer. */
@@ -242,10 +257,49 @@ export function ImageLightbox(props: {
   onDownload?: ((attachment: AttachmentSummary) => void) | undefined;
   /** Opens the original in a browser tab, once the viewer has read it. */
   onOpenInNewTab?: ((attachment: AttachmentSummary) => void) | undefined;
+  /**
+   * The "Annotate" entry point of the viewer: the hook for the image editor. The viewer shows the
+   * Annotate button when this is set and calls it with the image and the URL it shows now (the
+   * original when it is here, else the small copy). The editor plugs in by passing this prop from the
+   * consumer (`MessageBody`'s `onAnnotateImage`); the viewer stays open under the editor.
+   */
+  onAnnotate?: ((attachment: AttachmentSummary, url: string) => void) | undefined;
   onClose: () => void;
 }) {
   const { t } = useText();
   const motion = !prefersReducedMotion();
+  // The clipboard takes an image on every platform the same way, so the viewer copies it itself.
+  const copyable = canCopyImage();
+  const [copying, setCopying] = createSignal(false);
+  // The button itself says "copied" for a moment: a toast would sit over the viewer's toolbar on a phone.
+  const [copied, setCopied] = createSignal(false);
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(copiedTimer));
+  /** The URL of the image that shows now, for the clipboard and the editor. */
+  const shownUrl = () => {
+    const shown = current();
+    return shown ? imageUrl(shown) : undefined;
+  };
+  const copyShown = async () => {
+    const url = shownUrl();
+    if (!url || copying()) return;
+    setCopying(true);
+    try {
+      await copyImageToClipboard(url);
+      setCopied(true);
+      clearTimeout(copiedTimer);
+      copiedTimer = setTimeout(() => setCopied(false), COPIED_MS);
+    } catch {
+      toast.error(t("chat.image.lightbox.copyFailed"));
+    } finally {
+      setCopying(false);
+    }
+  };
+  const annotateShown = () => {
+    const shown = current();
+    const url = shownUrl();
+    if (shown && url) props.onAnnotate?.(shown, url);
+  };
   const originRect = untrack(() => (motion ? visibleRect(props.opening.origin) : undefined));
   const openedId = untrack(() => props.opening.images[props.opening.index]?.id);
   // The viewer unmounts while it is still open, so Kobalte does not give focus back. The viewer does.
@@ -605,7 +659,7 @@ export function ImageLightbox(props: {
   return (
     <Dialog.Root open onOpenChange={(open) => !open && close()}>
       <Dialog.Portal>
-        <Dialog.Overlay ref={overlay} class="image-lightbox-backdrop" />
+        <Dialog.Overlay ref={overlay} class="image-lightbox-backdrop" data-overlay-exit="none" />
         <Dialog.Content
           class="image-lightbox"
           data-dialog-surface="unstyled"
@@ -660,7 +714,10 @@ export function ImageLightbox(props: {
             if (offset !== undefined) step(offset);
             else if (event.key === "Home") go(0, -1);
             else if (event.key === "End") go(images().length - 1, 1);
-            // With Command, Ctrl or Alt, the keys are the app's own zoom shortcuts.
+            // Copy copies the image that shows, as it does in a photo viewer.
+            else if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "c" && copyable)
+              void copyShown();
+            // With Command, Ctrl or Alt, the other keys are the app's own zoom shortcuts.
             else if (event.metaKey || event.ctrlKey || event.altKey) return;
             else if (event.key === "+" || event.key === "=") zoomBy(ZOOM_STEP);
             else if (event.key === "-") zoomBy(1 / ZOOM_STEP);
@@ -725,6 +782,38 @@ export function ImageLightbox(props: {
                     <DownloadIcon />
                   </Button>
                 )}
+              </Show>
+              <Show when={copyable && shownUrl()}>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  type="button"
+                  class="image-lightbox-action"
+                  aria-label={copied() ? t("chat.image.lightbox.copied") : t("chat.image.lightbox.copy")}
+                  title={copied() ? t("chat.image.lightbox.copied") : t("chat.image.lightbox.copy")}
+                  aria-live="polite"
+                  loading={copying()}
+                  onClick={() => void copyShown()}
+                >
+                  <Show when={copied()} fallback={<Copy aria-hidden="true" />}>
+                    <Check aria-hidden="true" />
+                  </Show>
+                </Button>
+              </Show>
+              {/* "Anotar": the image editor's entry point. It calls `props.onAnnotate(image, url)`. */}
+              <Show when={props.onAnnotate && shownUrl()}>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  type="button"
+                  class="image-lightbox-action"
+                  aria-label={t("chat.image.lightbox.annotate")}
+                  title={t("chat.image.lightbox.annotate")}
+                  data-cuelume-tap="open"
+                  onClick={annotateShown}
+                >
+                  <PencilLine aria-hidden="true" />
+                </Button>
               </Show>
               <Button
                 variant="ghost"

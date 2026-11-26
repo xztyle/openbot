@@ -278,6 +278,11 @@ export function MessageBody(props: {
   onOpenQuote?: ((messageId: string, text: string) => void) | undefined;
   onDownload?: ((attachment: AttachmentSummary) => void) | undefined;
   mediaSource?: AttachmentMediaSource | undefined;
+  /**
+   * Opens the image editor on an image of the message, from the viewer's Annotate button. The editor
+   * plugs in here; see `ImageLightbox`'s `onAnnotate`. Absent, the viewer has no Annotate button.
+   */
+  onAnnotateImage?: ((attachment: AttachmentSummary, url: string) => void) | undefined;
   /** Wraps the text, not the images and files under it: a channel folds a long text this way. */
   foldText?: ((text: JSX.Element) => JSX.Element) | undefined;
 }) {
@@ -649,6 +654,7 @@ export function MessageBody(props: {
             full={opening().markdown ? undefined : fullImages()}
             onDownload={opening().markdown ? undefined : props.onDownload}
             onOpenInNewTab={opening().markdown || !fullImages() ? undefined : openInNewTab}
+            onAnnotate={props.onAnnotateImage}
             onClose={() => setLightbox(null)}
           />
         )}

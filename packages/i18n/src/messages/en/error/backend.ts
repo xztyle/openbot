@@ -213,6 +213,8 @@ export const messages = defineMessages("error.backend", {
   "error.backend.mailboxStateCorrupt":
     "Mailbox state is corrupt or from a newer Atelier version; refusing to overwrite it.",
   "error.backend.recipientDeleting": "The recipient is being deleted. Retry after deletion finishes.",
+  "error.backend.queueNotOwn":
+    "Only its sender can change this queued message: it comes from Motion, another agent or Atelier.",
   "error.backend.recipientHidden": "This agent is hidden. Restore it to send messages.",
   "error.backend.attachBetween": "Attach between 1 and {limit} files.",
   "error.backend.attachmentNotFile": "Attachment is not a file: {path}",

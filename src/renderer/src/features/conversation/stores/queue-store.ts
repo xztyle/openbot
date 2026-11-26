@@ -1,4 +1,4 @@
-import type { QueueDelivery } from "@openbot/contracts/ipc";
+import { isOwnQueuedMessage, type QueueDelivery } from "@openbot/contracts/ipc";
 import { agentActivityExitDuration } from "@openbot/ui/features/conversation/activity-timing";
 import { type Accessor, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import { agentAwaitingReplies } from "../../../awaiting-replies";
@@ -13,12 +13,19 @@ export interface QueueStoreDeps {
 export function createQueueStore(deps: QueueStoreDeps) {
   const activeDeliveries = createMemo(() => activeQueueDeliveries(deps.props.queue, deps.props.activeTurnId));
   const orderedQueuedDeliveries = createMemo(() => queuedDeliveriesInOrder(deps.props.queue));
-  const presentedQueueDeliveries = createMemo(() =>
+  const waitingDeliveries = createMemo(() =>
     presentQueueDeliveries({
       snapshot: deps.props.queue,
       activeTurnId: deps.props.activeTurnId,
       renderedMessageIds: new Set(deps.props.messages.map((message) => message.id)),
     }),
+  );
+  // The panel lists only the person's own messages, with their actions. The messages of others wait
+  // too: a teammate's, a Motion note, a note from Atelier or a mail. The panel names only their number.
+  const presentedQueueDeliveries = createMemo(() => waitingDeliveries().filter(isOwnQueuedMessage));
+  const othersWaiting = createMemo(
+    () =>
+      waitingDeliveries().filter((delivery) => delivery.status === "queued" && !isOwnQueuedMessage(delivery)).length,
   );
   // The agents this agent asked, and the answers that wait for it. A queue of another agent, which
   // the view holds for a moment while it switches, answers nothing here.
@@ -34,7 +41,7 @@ export function createQueueStore(deps: QueueStoreDeps) {
     }).filter((row) => !(hidden.has(row.id) && (row.state === "replied" || row.state === "failed")));
   });
   const [renderedQueueDeliveries, setRenderedQueueDeliveries] = createSignal<QueueDelivery[]>([]);
-  const queuePanelVisible = createMemo(() => renderedQueueDeliveries().length > 0);
+  const queuePanelVisible = createMemo(() => renderedQueueDeliveries().length > 0 || othersWaiting() > 0);
   let queueExitTimer: number | undefined;
   createEffect(
     () => presentedQueueDeliveries(),
@@ -63,6 +70,7 @@ export function createQueueStore(deps: QueueStoreDeps) {
     awaitingReplies,
     orderedQueuedDeliveries,
     presentedQueueDeliveries,
+    othersWaiting,
     renderedQueueDeliveries,
     setRenderedQueueDeliveries,
     queuePanelVisible,

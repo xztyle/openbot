@@ -391,7 +391,8 @@ export function createConversationViewScope(props: ConversationProps) {
     return entry?.message === message ? entry.run : null;
   });
   const queue = createQueueStore({ props, hiddenAwaitingReplyIds });
-  const { activeDeliveries, orderedQueuedDeliveries, presentedQueueDeliveries, queuePanelVisible } = queue;
+  const { activeDeliveries, orderedQueuedDeliveries, presentedQueueDeliveries, othersWaiting, queuePanelVisible } =
+    queue;
   const awaitingReplies = channel
     ? createMemo(() => {
         const hidden = hiddenAwaitingReplyIds();
@@ -1952,6 +1953,7 @@ export function createConversationViewScope(props: ConversationProps) {
     editPendingSend,
     dismissPendingSend,
     presentedQueueDeliveries,
+    othersWaiting,
     previewAttachment,
     props,
     queuePanelVisible,

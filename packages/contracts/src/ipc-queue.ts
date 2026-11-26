@@ -1,6 +1,7 @@
 import { INPUT_LIMITS } from "./input-limits";
 import { type AttachmentSummary, isAttachmentSummary } from "./ipc-attachments";
 import { isBoundedString, isIdentifier } from "./ipc-bounded-values";
+import { atelierPromptNotice } from "./owner-conversation";
 import { isBoolean, isDynamicRecord, isNumber, isOneOf } from "./runtime-values";
 import type { QueueEditRequest } from "./team-protocol/queue-edit-v1";
 
@@ -76,6 +77,12 @@ export interface QueueDelivery {
    */
   fyi?: boolean;
   /**
+   * Atelier sent the message for the agent, not a person: a Motion note, a note from Atelier or a
+   * mail. Only the host sets it, and only to `true`. Absent on a host too old to send it; a client then
+   * reads the text (`atelierPromptNotice`).
+   */
+  atelierNote?: boolean;
+  /**
    * The message was sent to steer the running turn and waits in the queue instead. Absent on a
    * released Team API response: the shipped adapters project a fixed key list.
    */
@@ -133,6 +140,7 @@ export function isQueueDelivery(value: unknown): value is QueueDelivery {
     (value.editing === undefined || isBoolean(value.editing)) &&
     (value.expectsReply === undefined || isBoolean(value.expectsReply)) &&
     (value.fyi === undefined || isBoolean(value.fyi)) &&
+    (value.atelierNote === undefined || isBoolean(value.atelierNote)) &&
     (value.steerFallback === undefined || isOneOf(QUEUE_STEER_FALLBACKS, value.steerFallback))
   );
 }
@@ -261,3 +269,14 @@ export interface InterruptTurnInput {
 
 /** A queue edit for one agent. The Team API route names the agent, so the request body does not. */
 export type EditQueuedMessageInput = QueueEditRequest & { agentId: string };
+
+/**
+ * A queued message that is the person's own: the queue panel lists only these, with edit, delete and
+ * steer. A message from another agent, a Motion note, a note from Atelier or a mail waits in the queue
+ * too, but it is the agent's own activity and nobody but its sender may change it.
+ */
+export function isOwnQueuedMessage(delivery: Pick<QueueDelivery, "sender" | "text" | "atelierNote">): boolean {
+  return (
+    delivery.sender.kind !== "agent" && delivery.atelierNote !== true && atelierPromptNotice(delivery.text) === null
+  );
+}

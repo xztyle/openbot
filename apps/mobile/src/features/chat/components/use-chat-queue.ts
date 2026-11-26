@@ -1,5 +1,10 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
-import { type ConversationMessage, isQueuedAgentReply, type QueueDelivery } from "@openbot/contracts/ipc";
+import {
+  type ConversationMessage,
+  isOwnQueuedMessage,
+  isQueuedAgentReply,
+  type QueueDelivery,
+} from "@openbot/contracts/ipc";
 import { isQueueEditRejected } from "@openbot/contracts/team-protocol/queue-edit-v1";
 import { type MobileTextKey, sourceText } from "@openbot/i18n/mobile";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -99,9 +104,11 @@ export function useChatQueue(
       query.data?.deliveries.some((item) => item.id === edit.delivery.id && item.status !== "queued"),
   );
   // A teammate's answer waits in the queue until the agent reads it, but it is not the user's
-  // message: it has no edit, steer or reorder actions. The waiting block shows it instead.
+  // message: it has no edit, steer or reorder actions. The waiting block shows it instead. A teammate's
+  // own message, a Motion note, a note from Atelier or a mail is not the user's either: it is the
+  // agent's own activity, so the queue lists only the user's own messages (`isOwnQueuedMessage`).
   const queued = useMemo(
-    () => orderedQueue((query.data?.deliveries ?? []).filter((item) => !isQueuedAgentReply(item))),
+    () => orderedQueue((query.data?.deliveries ?? []).filter((item) => isOwnQueuedMessage(item))),
     [query.data],
   );
   const replies = useMemo(() => orderedQueue((query.data?.deliveries ?? []).filter(isQueuedAgentReply)), [query.data]);

@@ -46,6 +46,11 @@ export interface ClaudeSessionMessage {
   timestamp?: string;
   /** Claude Code's own text in the user role, such as a skill's instructions. No one sent it. */
   isMeta?: boolean;
+  /**
+   * The prompts that Claude Code joined into this one user entry: it sends the prompts that wait while
+   * a turn runs as one entry, under a new ID. Each is the ID that OpenBot sent a prompt with.
+   */
+  mergedSendUuids?: string[];
 }
 
 interface ParsedRecord {
@@ -61,6 +66,7 @@ interface ParsedRecord {
   session_id?: unknown;
   isSidechain?: unknown;
   isMeta?: unknown;
+  mergedSendUuids?: unknown;
   teamName?: unknown;
   subtype?: unknown;
   compactMetadata?: unknown;
@@ -719,6 +725,7 @@ async function emitTurnFragments(
             id: message.uuid,
             type: "userMessage",
             clientId: message.uuid,
+            ...mergedClientIds(message),
             content: [{ type: "text", text }],
           }))
         )
@@ -827,6 +834,7 @@ async function readMessage(
     parent_agent_id: stringOrNull(parsed.parentAgentId ?? parsed.parent_agent_id),
     ...(parsed.timestamp ? { timestamp: String(parsed.timestamp) } : {}),
     ...(parsed.isMeta === true ? { isMeta: true } : {}),
+    ...mergedSends(parsed.mergedSendUuids),
   };
 }
 
@@ -863,6 +871,7 @@ function historyFragments(messages: readonly ClaudeSessionMessage[], includeItem
           id: message.uuid,
           type: "userMessage",
           clientId: message.uuid,
+          ...mergedClientIds(message),
           content: [{ type: "text", text }],
         });
       continue;
@@ -964,6 +973,17 @@ async function findTranscript(
   return null;
 }
 
+function mergedSends(value: unknown): Pick<ClaudeSessionMessage, "mergedSendUuids"> {
+  if (!Array.isArray(value)) return {};
+  const ids = value.filter((id): id is string => typeof id === "string" && id.length > 0);
+  return ids.length > 0 ? { mergedSendUuids: ids } : {};
+}
+
+/** The IDs of the prompts that Claude Code joined into this entry, for `messagesFromThreadItems`. */
+function mergedClientIds(message: ClaudeSessionMessage): { mergedClientIds?: string[] } {
+  return message.mergedSendUuids ? { mergedClientIds: message.mergedSendUuids } : {};
+}
+
 function parseRecord(line: string): ParsedRecord | null {
   try {
     const value = JSON.parse(line);
@@ -984,6 +1004,7 @@ function parseRecord(line: string): ParsedRecord | null {
       session_id: value.session_id,
       isSidechain: value.isSidechain,
       isMeta: value.isMeta,
+      mergedSendUuids: value.mergedSendUuids,
       teamName: value.teamName,
       subtype: value.subtype,
       compactMetadata: value.compactMetadata,

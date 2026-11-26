@@ -3261,6 +3261,8 @@ export class MailboxStore {
       replyToMessageId: message.replyToMessageId,
       ...(message.expectsReply === false ? { expectsReply: false } : {}),
       ...(message.fyi ? { fyi: true } : {}),
+      // Atelier sent it (a Motion note, a note, a mail), not the person: the queue offers no actions on it.
+      ...(message.notice ? { atelierNote: true } : {}),
       position:
         delivery.status === "queued"
           ? positions

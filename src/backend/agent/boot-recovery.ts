@@ -1,10 +1,13 @@
+import type { ConversationMessage } from "@openbot/contracts/ipc";
 import { Cause, Effect, Schema } from "effect";
 import type { AgentProvider } from "../agent-client";
 import type { AgentStore } from "../agent-store";
-import { mergeConversationSnapshots } from "../conversation-snapshots";
+import { mergeConversationSnapshots, reattributedAtelierPrompt } from "../conversation-snapshots";
+import { databaseRow, decodeConversationMessageJson, requiredStringColumn } from "../database/database-rows";
 import { causeHelpers, reportOriginalFailure } from "../effect-boundary";
 import { LineTooLongError } from "../jsonl";
 import type { DeliveryContext, MailboxStore } from "../mailbox-store";
+import type { OpenBotDatabase } from "../openbot-database";
 import { providerSync } from "../provider-client-effects";
 import { importProviderHistory } from "../provider-history-import";
 import type { ConversationRuntime } from "./conversation-runtime";
@@ -367,6 +370,19 @@ export class BootRecovery {
     }
   }
 
+  /** Repairs the notes that an import stored as the owner's messages (`reattributeAtelierPrompts`). */
+  reattributeAtelierPrompts(): void {
+    for (const { agentId, messages, revision } of reattributeAtelierPrompts(this.#store.database, this.threads())) {
+      const loaded = this.#conversation.loadedSnapshot(agentId);
+      if (!loaded) continue;
+      const changedById = new Map(messages.map((message) => [message.id, message]));
+      const snapshot = structuredClone(loaded);
+      snapshot.messages = snapshot.messages.map((message) => changedById.get(message.id) ?? message);
+      snapshot.revision = revision;
+      this.#conversation.setSnapshot(agentId, snapshot);
+    }
+  }
+
   readonly backfillProviderHistory = Effect.fn("BootRecovery.backfillProviderHistory")(function* (this: BootRecovery) {
     for (const agent of yield* recoveryStep(() => this.threads())) {
       const publicThreadId = agent.threadId;
@@ -451,6 +467,57 @@ export class BootRecovery {
     const signature = conversationContentSignature(published);
     if (!live || signature !== previousSignature) this.#conversation.publishConversation(published, signature);
   }
+}
+
+/**
+ * Gives back their author to the notes that Atelier wrote for an agent but that a provider-history
+ * import stored as the owner's messages (`reattributedAtelierPrompt`): Motion notes, teammates'
+ * messages and guardrail notes that Claude Code joined into one prompt. Each becomes the note it is,
+ * with its text and ID, through a new event; no row or event is deleted or edited. A repaired row no
+ * longer matches, so a later start writes nothing.
+ */
+export function reattributeAtelierPrompts(
+  database: OpenBotDatabase,
+  threads: readonly { id: string; threadId: string | null }[],
+): { agentId: string; threadId: string; revision: number; messages: ConversationMessage[] }[] {
+  const rows = database.connection
+    .prepare(
+      `SELECT thread_id, message_json FROM projection_thread_messages
+       WHERE author = 'user' AND (item_type LIKE 'system-notice:%'
+           OR json_extract(message_json, '$.text') LIKE 'Motion · %'
+           OR json_extract(message_json, '$.text') LIKE 'Message from OpenBot teammate %'
+           OR json_extract(message_json, '$.text') LIKE 'This turn starts with %'
+           OR json_extract(message_json, '$.text') LIKE 'Atelier %'
+           OR json_extract(message_json, '$.text') LIKE 'OpenBot restarted during your last turn%')`,
+    )
+    .all();
+  const byThread = new Map<string, ConversationMessage[]>();
+  for (const row of rows) {
+    const value = databaseRow(row);
+    if (!value) continue;
+    const repaired = reattributedAtelierPrompt(
+      decodeConversationMessageJson(requiredStringColumn(value, "message_json")),
+    );
+    if (!repaired) continue;
+    const threadId = requiredStringColumn(value, "thread_id");
+    byThread.set(threadId, [...(byThread.get(threadId) ?? []), repaired]);
+  }
+  const repaired: { agentId: string; threadId: string; revision: number; messages: ConversationMessage[] }[] = [];
+  for (const { id: agentId, threadId } of threads) {
+    const messages = threadId ? byThread.get(threadId) : undefined;
+    if (!threadId || !messages) continue;
+    byThread.delete(threadId);
+    const revision = database.persistConversationChanges({
+      agentId,
+      threadId,
+      activeTurnId: database.readActiveTurnId(agentId, threadId),
+      changedMessages: messages,
+      eventType: "conversation.atelier-prompts-reattributed",
+      detail: { messageIds: messages.map((message) => message.id) },
+    });
+    repaired.push({ agentId, threadId, revision, messages });
+  }
+  return repaired;
 }
 
 class BootRecoveryFailed extends Schema.TaggedError<BootRecoveryFailed>()("BootRecoveryFailed", {

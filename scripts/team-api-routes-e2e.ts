@@ -261,6 +261,8 @@ const fakeAgents: TeamApiAgents = {
   },
   acknowledgeFailedTurn: (agentId, turnId) => record("acknowledgeFailedTurn", agentId, turnId),
   cancelQueuedMessage: (agentId, deliveryId) => Effect.sync(() => record("cancelQueuedMessage", agentId, deliveryId)),
+  cancelOwnQueuedMessage: (agentId, deliveryId) =>
+    Effect.sync(() => record("cancelQueuedMessage", agentId, deliveryId)),
   steerQueuedMessage: (input) => {
     record("steerQueuedMessage", input);
     // OpenCode defers steering: the queue keeps the message and refuses the steer.

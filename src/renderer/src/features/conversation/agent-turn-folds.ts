@@ -49,12 +49,19 @@ export function agentActivityTurns(
  * Whether a drawn row is the agent's own activity: a row of such a turn, or a note from Atelier or a
  * message between agents that no turn has started yet. A message to the owner and a question to them
  * never are, whatever started their turn.
+ *
+ * A Motion note, a note from Atelier or a teammate's own message is activity also in a turn that the
+ * owner's message started: a held or queued batch starts one turn with all of them, and only the
+ * owner's message and the answer are the owner's conversation. A teammate's answer to a request stays
+ * in place: it can be the answer that the owner waits for.
  */
 function activityRow(row: AgentMessage, turns: ReadonlyMap<string, AgentActivitySource[]>): boolean {
   if (isOwnerAddressedItemType(row.itemType)) return false;
-  if (row.turnId) return isBackgroundRow(row, turns);
+  if (row.turnId && isBackgroundRow(row, turns)) return true;
   const notice = storedNoticeKind(row.itemType);
-  return (notice !== null && notice !== "restart-resume") || row.itemType === AGENT_EXCHANGE_ITEM_TYPE;
+  if (notice !== null) return notice !== "restart-resume";
+  if (row.itemType !== AGENT_EXCHANGE_ITEM_TYPE) return false;
+  return !row.turnId || (row.exchange?.direction === "incoming" && !row.exchange.replyToMessageId);
 }
 
 /** What woke the agent for a row with no turn, from the row itself. */
@@ -126,10 +133,12 @@ function foldedRows(rows: readonly AgentMessage[], options: AgentTurnFoldOptions
   const key = first.id;
   const expanded = options.open.has(key);
   // One update for each wake: each turn, and each note or message that no turn started yet.
-  const updates = new Set(rows.map((row) => row.turnId ?? `row:${row.id}`)).size;
+  // A note or a teammate's message in a turn that the owner started is a wake of its own.
+  const folded = (row: AgentMessage) => row.turnId !== undefined && options.turns.has(row.turnId);
+  const updates = new Set(rows.map((row) => (folded(row) ? row.turnId : `row:${row.id}`))).size;
   const sources: AgentActivitySource[] = [];
   for (const row of rows) {
-    const found = row.turnId ? (options.turns.get(row.turnId) ?? []) : rowSources(row);
+    const found = row.turnId && folded(row) ? (options.turns.get(row.turnId) ?? []) : rowSources(row);
     for (const source of found) if (!sources.some((known) => sameSource(known, source))) sources.push(source);
   }
   const activeTurnId = options.activeTurnId;

@@ -2,6 +2,10 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/queue";
 
 export const messages = {
+  "queue.othersWaiting": {
+    one: "{count} aviso de Motion o de agentes en espera",
+    other: "{count} avisos de Motion o de agentes en espera",
+  },
   "queue.label": "Cola de mensajes",
   "queue.moved": "Se movió el mensaje en cola a la posición {position} de {total}.",
   "queue.attachment": "Archivo adjunto",

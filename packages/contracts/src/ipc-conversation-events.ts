@@ -390,6 +390,20 @@ export function systemNoticeFields(
   return kind ? { author: "system", source: "system", itemType: systemNoticeItemType(kind) } : {};
 }
 
+/**
+ * The author that a stored message keeps when an update merges into it: its own, except that a note
+ * from Atelier is always the system's. A row that was first stored as a person's message, such as a
+ * Motion note that a race or an import wrote as the owner's, becomes the note it is.
+ */
+export function mergedMessageAuthor(
+  existing: Pick<ConversationMessage, "author">,
+  updated: Pick<ConversationMessage, "source" | "itemType">,
+): ConversationMessage["author"] {
+  return updated.source === "system" && updated.itemType?.startsWith(SYSTEM_NOTICE_ITEM_TYPE_PREFIX)
+    ? "system"
+    : existing.author;
+}
+
 /** The kind of a system notice message, or null for any other message. */
 export function systemNoticeKind(message: ConversationMessage): SystemNoticeKind | null {
   if (message.author !== "system" || message.source !== "system") return null;

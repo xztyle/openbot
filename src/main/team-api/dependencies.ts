@@ -167,6 +167,7 @@ type TeamApiAgentMethods = Pick<
   | "acknowledgeFailedTurn"
   | "setMessageReaction"
   | "cancelQueuedMessage"
+  | "cancelOwnQueuedMessage"
   | "steerQueuedMessage"
   | "updateQueuedMessage"
   | "editQueuedMessage"

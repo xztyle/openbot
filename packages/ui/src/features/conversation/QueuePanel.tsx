@@ -30,6 +30,11 @@ interface QueuePanelProps {
   onStopAndClear?: (() => void) | undefined;
   onEdit: (delivery: QueueDelivery) => void;
   onReorder: (deliveryIds: string[]) => void;
+  /**
+   * How many queued messages of others wait: a teammate's, a Motion note, a note from Atelier or a mail.
+   * They are not the person's, so the panel names only their number, with no actions.
+   */
+  othersWaiting?: number | undefined;
   /** `floating` is the glass queue over a browser page, with quiet glass row actions. */
   variant?: "docked" | "floating";
 }
@@ -414,6 +419,11 @@ export function QueuePanel(props: QueuePanelProps) {
               {holdText(hold())}
             </p>
           )}
+        </Show>
+        <Show when={(props.othersWaiting ?? 0) > 0}>
+          <p class="agent-queue-hold" role="status">
+            {t("queue.othersWaiting", { count: props.othersWaiting ?? 0 })}
+          </p>
         </Show>
         <div class="agent-queue-panel-resize" ref={(element) => (queueResizeContainer = element)}>
           <div class="agent-queue-panel-list" ref={(element) => (queueList = element)}>

@@ -1,6 +1,10 @@
 import { defineMessages } from "../../message";
 
 export const messages = defineMessages("queue", {
+  "queue.othersWaiting": {
+    one: "{count} update from Motion or agents waits for the agent",
+    other: "{count} updates from Motion or agents wait for the agent",
+  },
   "queue.label": "Message queue",
   "queue.moved": "Moved queued message to position {position} of {total}.",
   "queue.attachment": "Attachment",

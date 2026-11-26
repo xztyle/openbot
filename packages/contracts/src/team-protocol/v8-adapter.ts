@@ -85,6 +85,8 @@ const QUEUE_MARKS = {
   // A teammate's information that waits for the next turn. A client on an older protocol shows it as
   // an ordinary queued message.
   fyi: "Invalid queue fyi mark.",
+  // Atelier, not a person, sent it. A client on an older protocol reads the text instead.
+  atelierNote: "Invalid queue note mark.",
 } as const;
 
 function withQueueMarks(projected: TeamProtocolV8BaseJsonValue, source: unknown): TeamProtocolV8BaseJsonValue {

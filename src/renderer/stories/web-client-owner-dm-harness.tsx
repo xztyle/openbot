@@ -1,11 +1,16 @@
 /*
  * The web client on a mock host whose chat with Research holds the agent's own activity beside the
- * owner's conversation, for `scripts/owner-dm-only-e2e-web.ts`. `?seed=full` loads every turn below;
+ * owner's conversation, for `scripts/owner-dm-only-e2e-web.ts` and `scripts/coalesced-wake-attribution-e2e.ts`. `?seed=full` loads every turn below;
  * otherwise the chat holds only the owner's first exchange, and `window.harnessOwnerDm` adds the
  * others as a host does: the messages, then the end of the turn (with `agentTalk` for the agent's own
  * activity, as `isBackgroundTurn` sets it on the host).
  */
-import { type AgentAttentionItem, type ConversationMessage, MOTION_TICKET_TURN } from "@openbot/contracts/ipc";
+import {
+  type AgentAttentionItem,
+  type ConversationMessage,
+  MOTION_TICKET_TURN,
+  type QueueDelivery,
+} from "@openbot/contracts/ipc";
 import { Toaster } from "@openbot/ui";
 import { render } from "@solidjs/web";
 import { WebWorkspace } from "../src/features/web-client/WebWorkspace";
@@ -143,6 +148,10 @@ declare global {
      * host's attention list with `OWNER_DM_TICKET` (`asked`: the host's `ownerAsked`), or without it.
      * `calls` records what the page asked the host: the messages to agents and the prompt answers.
      */
+    /** The messages of `?seed=coalesced`, as the host stores them. */
+    coalescedOwnerDm?: ConversationMessage[];
+    /** The queue of Research for `?seed=coalesced`, as the host lists it. */
+    coalescedOwnerQueue?: QueueDelivery[];
     harnessOwnerDm?: {
       next(): string | null;
       ticket(state: "waiting" | "asked" | "gone"): void;
@@ -151,7 +160,10 @@ declare global {
   }
 }
 
-const full = new URLSearchParams(window.location.search).get("seed") === "full";
+const seed = new URLSearchParams(window.location.search).get("seed");
+const full = seed === "full";
+/** `?seed=coalesced`: the chat holds the messages that `scripts/coalesced-wake-attribution-e2e.ts` made with host code. */
+const coalesced = seed === "coalesced" ? (window.coalescedOwnerDm ?? []) : [];
 
 const runtime: WebRuntimeFactory = (_accountId, events) => {
   const mock = createMockOpenBot({
@@ -163,9 +175,10 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
         threadId: THREAD,
         activeTurnId: null,
         revision: 1,
-        messages: [...BASE, ...(full ? OWNER_DM_TURNS.flatMap((turn) => turn.messages) : [])],
+        messages: [...BASE, ...(full ? OWNER_DM_TURNS.flatMap((turn) => turn.messages) : []), ...coalesced],
       },
     },
+    ...(seed === "coalesced" ? { queues: { [AGENT]: window.coalescedOwnerQueue ?? [] } } : {}),
     // The owner read the chat up to the first answer.
     conversationReads: { [AGENT]: { unreadCount: 0, firstUnreadMessageId: null, throughMessageId: "base-2" } },
   });

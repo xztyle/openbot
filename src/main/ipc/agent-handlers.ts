@@ -955,7 +955,7 @@ export function agentIpcHandlers({
           ),
       }),
       cancelQueuedMessage: scopedHandler(parseCancelQueuedMessage, {
-        local: (parsed) => runCauseEffect(service.cancelQueuedMessage(parsed.agentId, parsed.deliveryId)),
+        local: (parsed) => runCauseEffect(service.cancelOwnQueuedMessage(parsed.agentId, parsed.deliveryId)),
         remote: (parsed, serverId) =>
           runCauseEffect(
             remoteServers.request(serverId, TEAM_API_ROUTES.agent.queueCancel(parsed.agentId), decodeVoid, {

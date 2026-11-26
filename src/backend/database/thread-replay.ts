@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ConversationMessage, ConversationSnapshot } from "@openbot/contracts/ipc";
-import { isAgentProvider } from "@openbot/contracts/ipc";
+import { isAgentProvider, mergedMessageAuthor } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 import type { ConversationQueries } from "./conversation-queries";
 import { type DatabaseCore, deleteThreadAttachments } from "./database-core";
@@ -419,7 +419,7 @@ function mergeReplayedMessage(existing: ConversationMessage, imported: Conversat
     ...existing,
     ...imported,
     id: existing.id,
-    author: existing.author,
+    author: mergedMessageAuthor(existing, imported),
     createdAt: existing.createdAt,
     ...(turnId === undefined ? {} : { turnId }),
     ...(attachments === undefined ? {} : { attachments }),
@@ -436,7 +436,7 @@ function mergeReplayedLiveMessage(existing: ConversationMessage, updated: Conver
     ...existing,
     ...updated,
     id: existing.id,
-    author: existing.author,
+    author: mergedMessageAuthor(existing, updated),
     // Mailbox updates can move a queued message to the time it joined a running turn.
     createdAt: updated.delivery ? updated.createdAt : existing.createdAt,
     ...(turnId === undefined ? {} : { turnId }),

@@ -233,6 +233,8 @@ export const messages = {
     "El estado del buzón está dañado o pertenece a una versión más reciente de Atelier; no se sobrescribirá.",
   "error.backend.recipientDeleting":
     "El destinatario se está eliminando. Inténtalo de nuevo cuando termine la eliminación.",
+  "error.backend.queueNotOwn":
+    "Solo quien lo envió puede cambiar este mensaje en cola: viene de Motion, de otro agente o de Atelier.",
   "error.backend.recipientHidden": "Este agente está oculto. Restáuralo para enviarle mensajes.",
   "error.backend.attachBetween": "Adjunta entre 1 y {limit} archivos.",
   "error.backend.attachmentNotFile": "El adjunto no es un archivo: {path}",

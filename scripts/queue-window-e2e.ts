@@ -129,7 +129,7 @@ function queueAgents(mailbox: MailboxStore): AgentQueueRouteDependencies["agents
         return mailbox.listQueue(agentId);
       }),
     acknowledgeFailedTurn: () => unused("acknowledgeFailedTurn"),
-    cancelQueuedMessage: () => Effect.sync(() => unused("cancelQueuedMessage")),
+    cancelOwnQueuedMessage: () => Effect.sync(() => unused("cancelOwnQueuedMessage")),
     steerQueuedMessage: () => Effect.sync(() => unused("steerQueuedMessage")),
     updateQueuedMessage: () => Effect.sync(() => unused("updateQueuedMessage")),
     reorderQueue: () => Effect.sync(() => unused("reorderQueue")),

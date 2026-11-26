@@ -35,6 +35,31 @@ export function isOwnerAddressedItemType(itemType: string | undefined): boolean 
   return itemType === OWNER_MESSAGE_ITEM_TYPE || itemType === QUESTION_PROMPT_ITEM_TYPE;
 }
 
+/**
+ * Text that Atelier wrote for the agent, not a person: a Motion note, a teammate's message as the
+ * agent reads it, a guardrail or delegation note, or the note after a restart. Each starts with words
+ * that only Atelier writes.
+ */
+const ATELIER_PROMPTS: ReadonlyArray<{ pattern: RegExp; notice: SystemNoticeKind }> = [
+  { pattern: /^Motion · /u, notice: "motion-event" },
+  {
+    pattern: /^(?:OpenBot|Atelier) restarted during your last turn; continue where you left off\.$/u,
+    notice: "restart-resume",
+  },
+  { pattern: /^Message from OpenBot teammate [^\n]* \([^()\s]+\)\.\nMessage ID: /u, notice: "operator-note" },
+  { pattern: /^This turn starts with \d+ messages\. Read all of them before you answer\.\n/u, notice: "operator-note" },
+  { pattern: /^Atelier (?:stopped this |guardrail: |note: )/u, notice: "operator-note" },
+];
+
+/**
+ * The kind of note that a prompt is when Atelier, not a person, wrote it, or null. A provider can keep
+ * such a prompt with no sign of the delivery that sent it, for example when it joins the prompts that
+ * waited during a turn into one; it is then the agent's own activity, never the owner's message.
+ */
+export function atelierPromptNotice(text: string): SystemNoticeKind | null {
+  return ATELIER_PROMPTS.find(({ pattern }) => pattern.test(text))?.notice ?? null;
+}
+
 /** What woke the agent for a turn of its own activity, for the row that names the senders. */
 export type AgentActivitySource =
   | { kind: "agent"; agentId: string }

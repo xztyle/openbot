@@ -3,8 +3,10 @@ import type { AgentProviderId, ConversationMessage, ConversationSnapshot } from 
 import {
   isImageGenerationAspectRatio,
   ROUTINE_QUIET_ANSWER_ITEM_TYPE,
+  SYSTEM_NOTICE_ITEM_TYPE_PREFIX,
   systemNoticeFields,
 } from "@openbot/contracts/ipc";
+import { atelierPromptNotice } from "@openbot/contracts/owner-conversation";
 import { isString } from "@openbot/contracts/runtime-values";
 import { displayMessageReferences, type TeammatePrompt, teammatePrompts } from "./agent/delivery-content";
 import { imageGenerationFailure, isImageGenerationItem } from "./agent/image-generation";
@@ -47,6 +49,12 @@ export function messagesFromThreadItems(
         .join("\n");
       const delivery = item.clientId ? findDelivery(item.clientId) : null;
       if (!text) continue;
+      /* Claude Code joins the prompts that waited during a turn into one entry under a new ID: Motion
+         notes, teammates' messages, Atelier's notes and the owner's messages alike. Each was stored
+         under its own delivery when it was sent, with its own author, so the joined text is only a
+         copy. It is never one message of the owner. */
+      const merged = mergedClientIds(item);
+      if (!delivery && merged.length > 0 && merged.every((id) => findDelivery(id) !== null)) continue;
       const row = { id: item.id, turnId: turn.id, text, createdAt };
       if (delivery) messages.push(promptMessage(delivery, row));
       else {
@@ -60,7 +68,7 @@ export function messagesFromThreadItems(
         const fromTeammates =
           teammates.length > 0 &&
           teammates.every(({ teammate, found }) => !found || isTeammatePromptOf(teammate, promptMessage(found, row)));
-        if (!fromTeammates) messages.push(promptMessage(null, row));
+        if (!fromTeammates) messages.push(undeliveredPrompt(row));
         else
           for (const [index, { teammate, found }] of teammates.entries())
             messages.push(
@@ -178,6 +186,44 @@ function promptMessage(
     ...eventCheckMarker(context?.eventCheck),
     ...systemNoticeFields(context?.notice),
   };
+}
+
+/**
+ * A prompt that names no delivery. Text that Atelier wrote for the agent (`atelierPromptNotice`) is a
+ * note in the agent's own activity; any other text stays the person's.
+ */
+function undeliveredPrompt(
+  row: Pick<ConversationMessage, "id" | "turnId" | "text" | "createdAt">,
+): ConversationMessage {
+  const notice = atelierPromptNotice(row.text);
+  return notice ? { ...promptMessage(null, row), ...systemNoticeFields(notice) } : promptMessage(null, row);
+}
+
+function mergedClientIds(item: ThreadItem): string[] {
+  const ids = item.mergedClientIds;
+  return Array.isArray(ids) ? ids.filter(isString) : [];
+}
+
+/**
+ * A message that Atelier wrote for the agent but that is stored as one of the owner's (`author:
+ * "user"`): a prompt that a provider kept with no sign of its delivery, imported before
+ * `undeliveredPrompt`. It comes back as the note it is, with its text and ID, or null when it is not one.
+ * A row with a delivery is the person's, except the old restart note that Atelier sent as the owner.
+ */
+export function reattributedAtelierPrompt(message: ConversationMessage): ConversationMessage | null {
+  if (message.author !== "user") return null;
+  // A note whose first write was a person's message kept that author (`mergedMessageAuthor`).
+  if (message.itemType?.startsWith(SYSTEM_NOTICE_ITEM_TYPE_PREFIX))
+    return message.source === "system" ? withoutSenderMember({ ...message, author: "system" }) : null;
+  const notice = atelierPromptNotice(message.text);
+  if (!notice || (message.delivery && notice !== "restart-resume")) return null;
+  return withoutSenderMember({ ...message, ...systemNoticeFields(notice) });
+}
+
+/** A note has no person who sent it. */
+function withoutSenderMember(message: ConversationMessage): ConversationMessage {
+  const { senderMember: _senderMember, ...rest } = message;
+  return rest;
 }
 
 /** A teammate's message whose mailbox delivery is gone, rebuilt from its provider prompt. */

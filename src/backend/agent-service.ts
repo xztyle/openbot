@@ -141,6 +141,7 @@ import {
   isAgentBackupModels,
   isAgentProvider,
   isContextResetMarker,
+  isOwnQueuedMessage,
   isReasoningEffort,
   MODEL_SWITCH_ITEM_TYPES,
   MOTION_TICKET_TURN,
@@ -5284,6 +5285,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       );
     yield* lifecycleStep("recover agent state", () => {
       this.#boot.recoverPersistedTurns();
+      this.#boot.reattributeAtelierPrompts();
       this.#hostedSites.restore();
       this.#routines.skipMissed(new Date(), options.heldRoutines);
       this.#channelRoutines.skipMissed(new Date(), options.heldRoutines);
@@ -6238,6 +6240,25 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#turn.acknowledgeFailedTurn(agentId, turnId);
   }
 
+  /**
+   * A person changes only their own queued message. A teammate's message, a Motion note, a note from
+   * Atelier or a mail waits in the same queue, but only its sender may change it
+   * (`isOwnQueuedMessage`). A delivery that is gone passes, so the operation reports it as before.
+   */
+  #ownQueuedMessage(agentId: string, deliveryId: string, operation: string): Effect.Effect<void, AgentLifecycleFailed> {
+    const delivery = this.listQueue(agentId).deliveries.find((item) => item.id === deliveryId);
+    return delivery && !isOwnQueuedMessage(delivery)
+      ? Effect.fail(new AgentLifecycleFailed({ operation, cause: new Error(sourceText("error.backend.queueNotOwn")) }))
+      : Effect.void;
+  }
+
+  /** Cancels a queued message for the person who asks: only one of their own (`#ownQueuedMessage`). */
+  cancelOwnQueuedMessage(agentId: string, deliveryId: string): Effect.Effect<void, AgentLifecycleFailed> {
+    return this.#ownQueuedMessage(agentId, deliveryId, "cancelQueuedMessage").pipe(
+      Effect.andThen(() => this.cancelQueuedMessage(agentId, deliveryId)),
+    );
+  }
+
   cancelQueuedMessage(agentId: string, deliveryId: string): Effect.Effect<void, AgentLifecycleFailed> {
     return this.#queue
       .cancel(agentId, deliveryId)
@@ -6300,8 +6321,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     input: QueueEditRequest,
     sender?: ConversationMessageSender,
   ): Effect.Effect<QueueSnapshot, AgentLifecycleFailed> {
-    return this.#queue
-      .edit(agentId, input, sender)
+    return this.#ownQueuedMessage(agentId, input.deliveryId, "editQueuedMessage")
+      .pipe(Effect.andThen(() => this.#queue.edit(agentId, input, sender)))
       .pipe(
         Effect.mapError(
           (failure) => new AgentLifecycleFailed({ operation: "editQueuedMessage", cause: failure.cause }),
@@ -6313,8 +6334,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     input: UpdateQueuedMessageInput,
     sender?: ConversationMessageSender,
   ): Effect.Effect<void, AgentLifecycleFailed> {
-    return this.#queue
-      .update(input, sender)
+    return this.#ownQueuedMessage(input.agentId, input.deliveryId, "updateQueuedMessage")
+      .pipe(Effect.andThen(() => this.#queue.update(input, sender)))
       .pipe(
         Effect.mapError(
           (failure) => new AgentLifecycleFailed({ operation: "updateQueuedMessage", cause: failure.cause }),
@@ -6339,8 +6360,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           cause: new Error(sourceText("error.backend.recipientHidden")),
         }),
       );
-    return this.#queue
-      .steer(input)
+    return this.#ownQueuedMessage(input.agentId, input.deliveryId, "steerQueuedMessage")
+      .pipe(Effect.andThen(() => this.#queue.steer(input)))
       .pipe(
         Effect.mapError(
           (failure) => new AgentLifecycleFailed({ operation: "steerQueuedMessage", cause: failure.cause }),

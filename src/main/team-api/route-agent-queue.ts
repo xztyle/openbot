@@ -38,7 +38,7 @@ export interface AgentQueueRouteDependencies {
     TeamApiAgents,
     | "listQueue"
     | "acknowledgeFailedTurn"
-    | "cancelQueuedMessage"
+    | "cancelOwnQueuedMessage"
     | "steerQueuedMessage"
     | "updateQueuedMessage"
     | "editQueuedMessage"
@@ -80,7 +80,7 @@ export async function routeAgentQueue(
   }
   if (method === "POST" && action === "queue/cancel") {
     const body = await readJson(request);
-    await runCauseEffect(agents.cancelQueuedMessage(agentId, stringField(body, "deliveryId")));
+    await runCauseEffect(agents.cancelOwnQueuedMessage(agentId, stringField(body, "deliveryId")));
     return empty(204);
   }
   if (method === "POST" && action === "queue/steer") {

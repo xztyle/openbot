@@ -8,7 +8,17 @@
  * each renderer: an `img` in a preview button, a `.message-attachment` card, an `a[href]`, a
  * `.message-code-block`, the row's `.ws-profile-trigger`.
  */
-import { Copy, Download, ExternalLink, Highlighter, Link, MessageCircle, TextQuote, UserRound } from "../../icons";
+import {
+  Copy,
+  Download,
+  ExternalLink,
+  Highlighter,
+  Link,
+  MessageCircle,
+  Play,
+  TextQuote,
+  UserRound,
+} from "../../icons";
 import { useText } from "../../text";
 import { toast } from "../../toast";
 import { canCopyImage, copyImageToClipboard } from "../conversation/image-clipboard";
@@ -27,7 +37,15 @@ export interface ImageTarget {
 
 export type MessageContextTarget =
   | ImageTarget
-  | { kind: "file"; attachmentId: string; name: string }
+  | {
+      kind: "file";
+      attachmentId: string;
+      name: string;
+      /** How the file shows (`FileViewKind`), from the card. */
+      view: string;
+      /** Plays a video or audio card in place, as its play button does. Null for other files. */
+      play: (() => void) | null;
+    }
   | { kind: "link"; href: string }
   | { kind: "code"; text: string }
   | { kind: "selection"; text: string }
@@ -41,6 +59,10 @@ export interface MessageTargetActions {
   download?: ((attachmentId: string) => void) | undefined;
   /** Opens a file in the viewer or in its app. */
   openFile?: ((attachmentId: string) => void) | undefined;
+  /** Copies a link to the message that holds the file. */
+  copyFileLink?: ((attachmentId: string) => void) | undefined;
+  /** Copies the text of a text, code, Markdown or CSV file. */
+  copyFileText?: ((attachmentId: string) => void) | undefined;
   /** Opens the image editor on a picture. The editor fills this in. */
   annotateImage?: ((image: Omit<ImageTarget, "kind" | "open">) => void) | undefined;
   openLink?: ((href: string) => void) | undefined;
@@ -78,7 +100,8 @@ export function resolveMessageContextTarget(
   }
 
   const image = element.closest<HTMLImageElement>("img");
-  if (image && !image.closest(".message-link-icon, .ws-avatar") && image.currentSrc) {
+  // A thumbnail of a document or a video's first frame is the file, not a picture to copy.
+  if (image && !image.closest(".message-link-icon, .ws-avatar, .attachment-rich") && image.currentSrc) {
     const opener = image.closest<HTMLElement>(PREVIEW_BUTTON);
     const attachmentId = opener?.dataset.attachmentId ?? null;
     const card = image.closest(".message-attachment");
@@ -99,7 +122,15 @@ export function resolveMessageContextTarget(
   const card = element.closest<HTMLElement>(".message-attachment");
   if (card && root.contains(card)) {
     const id = card.querySelector<HTMLElement>("[data-attachment-id]")?.dataset.attachmentId;
-    if (id) return { kind: "file", attachmentId: id, name: card.querySelector("strong")?.textContent?.trim() ?? "" };
+    const player = card.querySelector<HTMLButtonElement>(".attachment-poster-button, .attachment-audio-toggle");
+    if (id)
+      return {
+        kind: "file",
+        attachmentId: id,
+        name: card.querySelector("strong")?.textContent?.trim() ?? "",
+        view: card.dataset.view ?? "unknown",
+        play: player && !player.disabled ? () => player.click() : null,
+      };
   }
 
   const block = element.closest<HTMLElement>(".message-code-block");
@@ -205,10 +236,17 @@ export function createMessageTargetItems(
       }
       case "file": {
         const out: WorkspaceMenuItem[] = [];
+        if (target.play)
+          out.push({
+            id: "target-play",
+            label: t("workspace.context.play"),
+            icon: <Play aria-hidden="true" />,
+            onSelect: target.play,
+          });
         if (act.openFile)
           out.push({
             id: "target-open",
-            label: t("common.open"),
+            label: target.view === "archive" ? t("workspace.context.viewContents") : t("common.open"),
             icon: <ExternalLink aria-hidden="true" />,
             onSelect: () => act.openFile?.(target.attachmentId),
           });
@@ -218,6 +256,20 @@ export function createMessageTargetItems(
             label: t("common.download"),
             icon: <Download aria-hidden="true" />,
             onSelect: () => act.download?.(target.attachmentId),
+          });
+        if (act.copyFileLink)
+          out.push({
+            id: "target-copy-link",
+            label: t("workspace.app.message.copyLink"),
+            icon: <Link aria-hidden="true" />,
+            onSelect: () => act.copyFileLink?.(target.attachmentId),
+          });
+        if (act.copyFileText && ["code", "markdown", "csv"].includes(target.view))
+          out.push({
+            id: "target-copy-text",
+            label: t("workspace.context.copyContents"),
+            icon: <Copy aria-hidden="true" />,
+            onSelect: () => act.copyFileText?.(target.attachmentId),
           });
         return out;
       }

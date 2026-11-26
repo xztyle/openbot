@@ -18,4 +18,9 @@ export const messages = {
   "attachment.error.fileFallback": "Archivo",
   "attachment.error.fileNotFound": "No se encontró «{name}» en esta ruta. Puede que se haya movido o eliminado.",
   "attachment.error.previewFile": "No se pudo mostrar la vista previa de «{name}». Vuelve a intentarlo.",
+  "attachment.play": "Reproducir {name}",
+  "attachment.pause": "Pausar {name}",
+  "attachment.seek": "Avanzar en {name}",
+  "attachment.enlarge": "Ampliar {name}",
+  "attachment.cannotPlay": "No se puede reproducir aquí",
 } as const satisfies PartialTranslation<typeof source>;

@@ -1,4 +1,5 @@
 import { isXlsxMimeType, playableMediaKind } from "./attachment-files";
+import { fileViewKind } from "./file-view-kind";
 import { INPUT_LIMITS } from "./input-limits";
 import { isBoundedString, isIdentifier, isNullableBoundedString } from "./ipc-bounded-values";
 import { guardedDecoder } from "./ipc-decoding";
@@ -40,7 +41,9 @@ export function canPreviewAttachment(attachment: AttachmentSummary): boolean {
   return (
     attachment.previewKind !== "none" ||
     playableMediaKind(attachment.mimeType) !== null ||
-    isXlsxMimeType(attachment.mimeType)
+    isXlsxMimeType(attachment.mimeType) ||
+    // Office files and archives show from what the host makes of them (`attachment-renditions-v1`).
+    fileViewKind(attachment.name, attachment.mimeType) !== "unknown"
   );
 }
 
@@ -156,6 +159,8 @@ export const FILE_PREVIEW_KINDS = [
   "audio",
   "video",
   "spreadsheet",
+  /** A ZIP or TAR listing (`ArchiveListing` JSON in `bytes`), made by the host. Renderer only. */
+  "archive",
   "none",
 ] as const;
 

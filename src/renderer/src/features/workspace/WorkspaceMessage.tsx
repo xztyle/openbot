@@ -32,6 +32,7 @@ import { createMemo, createSignal, For, Show, untrack } from "solid-js";
 import { toAgentMessage } from "../../app-message-projection";
 import { writeClipboardText } from "../../clipboard";
 import { attachmentImageSource, openImageAnnotator } from "../../image-annotator";
+import { loadAttachmentPreview } from "../conversation/attachment-preview";
 import { WorkspaceChatCard } from "../portfolio/WorkspaceChatCard";
 import { attachFilesToComposer } from "./WorkspaceComposer";
 import { WorkspaceMessageEditor } from "./WorkspaceMessageEditor";
@@ -163,7 +164,15 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
   const own = () => entry().author.kind === "member" && !entry().externalAuthor && ws.env.isReader(entry().author.id);
   const deleted = () => Boolean(entry().deletedAt);
   const annotate = createMessageAnnotator(entry, () => props.inThread === true);
-  const viewer = createWorkspaceFileViewer({ annotate });
+  const viewer = createWorkspaceFileViewer({
+    annotate,
+    context: () => ({
+      files: entry().message.attachments ?? [],
+      sender: author().name,
+      sentAt: Date.parse(entry().message.createdAt) || undefined,
+      link: ws.env.messageLink?.(props.channelId, entry().id, entry().threadRootId ?? null) ?? null,
+    }),
+  });
   const attachment = (id: string) => entry().message.attachments?.find((candidate) => candidate.id === id);
   /** What a right-click on an image, a file, a link or the author offers, through the same paths as a tap. */
   const targetActions = (): MessageTargetActions => ({
@@ -174,6 +183,22 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
     openFile: (id) => {
       const file = attachment(id);
       if (file) viewer.view(file);
+    },
+    copyFileLink: ws.env.messageLink ? () => void viewer.copyLink() : undefined,
+    copyFileText: (id) => {
+      const file = attachment(id);
+      if (!file) return;
+      void loadAttachmentPreview(file, {
+        previewAttachment: ws.channels.port().previewAttachment,
+        media: ws.channels.port().attachmentMedia,
+      })
+        .then(({ preview }) =>
+          navigator.clipboard.writeText(new TextDecoder().decode(preview.bytes ?? new Uint8Array())),
+        )
+        .then(
+          () => toast.success(t("workspace.context.contentsCopied")),
+          () => toast.error(t("app.clipboard.copyFailed")),
+        );
     },
     openLink: (url) => {
       if (!ws.openLink(url)) void ws.channels.port().openUrl(url);

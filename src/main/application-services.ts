@@ -221,6 +221,7 @@ import {
   ExternalLinkOpener,
   type ExternalLinkPreferenceStore,
 } from "./external-link-opener";
+import { FileRenditions } from "./file-renditions";
 import { githubAppConfig } from "./github-connector-config";
 import { GitHubConnectorService } from "./github-connector-service";
 import { GitHubConnectorStore } from "./github-connector-store";
@@ -2683,6 +2684,7 @@ export async function createApplicationServices({
   service.setOrderCards(motion.orders);
   teardown.push(TEARDOWN_ORDER.motionEvents, "the Motion events", () => motion.close());
   const attachmentPreviews = new AttachmentPreviews(join(app.getPath("userData"), "attachment-previews"));
+  const fileRenditions = new FileRenditions(join(app.getPath("userData"), "file-renditions"));
   const downloadTickets = new DownloadTickets({
     keyPath: join(app.getPath("userData"), "download-ticket.key"),
     baseUrlPath: join(app.getPath("userData"), "download-base-url"),
@@ -2825,6 +2827,8 @@ export async function createApplicationServices({
     downloadTickets,
     // Small copies of image attachments, which the browser client shows inline.
     attachmentPreviews,
+    // Thumbnails, PDFs of Office files, waveforms and archive entries, made on this computer.
+    fileRenditions,
     // Present, so the host advertises `mcp-sign-in-v1`. The routes are admin-only.
     mcpSignIns: mcpHostSignIns,
     // Present, so the host advertises `sign-in-relay-v1`. The routes are admin-only.
@@ -3304,7 +3308,7 @@ export async function createApplicationServices({
       }),
     );
   }
-  configureAttachmentProtocol({ mailbox, agents: service, remoteServers });
+  configureAttachmentProtocol({ mailbox, agents: service, remoteServers, renditions: fileRenditions });
   configureServerLogoProtocols({ teamStore, remoteServers });
   // After the servers: the view it opens belongs to one of them, and it has to stop before they do.
   const browserView = new BrowserViewClient({

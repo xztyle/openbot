@@ -14,6 +14,10 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve } from "node:path";
 import { CHAT_VISUAL_PAGE_LIMIT, isChatVisualMimeType } from "@openbot/contracts/chat-visual";
 import { LOCAL_SERVER_ID } from "@openbot/contracts/ipc";
+import {
+  type AttachmentRenditionKind,
+  isAttachmentRenditionKind,
+} from "@openbot/contracts/team-protocol/attachment-renditions-v1";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { app, session } from "electron";
 import type { AgentService } from "../backend/agent-service";
@@ -22,6 +26,7 @@ import type { MailboxStore } from "../backend/mailbox-store";
 import { attachmentCorsHeaders, attachmentDocumentHeaders, chatVisualResponse } from "./chat-visual-protocol";
 import { buildContentSecurityPolicy, readSelfHostedSignalOrigin } from "./content-security-policy";
 import { filePreviewPages } from "./file-preview-pages";
+import type { FileRenditions } from "./file-renditions";
 import { fileResponse } from "./file-response";
 import type { RemoteServerManager } from "./remote-server-manager";
 import { canCheckRendererPermission, canRequestRendererPermission } from "./renderer-permissions";
@@ -71,9 +76,25 @@ export interface AttachmentProtocolDependencies {
   mailbox: MailboxStore;
   agents: AgentService;
   remoteServers: RemoteServerManager;
+  renditions: Pick<FileRenditions, "render">;
 }
 
-export function configureAttachmentProtocol({ mailbox, agents, remoteServers }: AttachmentProtocolDependencies): void {
+/**
+ * `?rendition=<kind>[&path=<entry>]` on an attachment URL reads a file the host makes from the
+ * attachment (`attachment-renditions-v1`): the same request on this computer and on a remote host.
+ */
+function renditionQuery(url: URL): { kind: AttachmentRenditionKind; path: string | undefined } | null {
+  const kind = url.searchParams.get("rendition");
+  if (!isAttachmentRenditionKind(kind)) return null;
+  return { kind, path: url.searchParams.get("path") ?? undefined };
+}
+
+export function configureAttachmentProtocol({
+  mailbox,
+  agents,
+  remoteServers,
+  renditions,
+}: AttachmentProtocolDependencies): void {
   const logger = createOpenBotLogger("attachment-protocol");
   session.defaultSession.protocol.handle("openbot-attachment", async (request) => {
     try {
@@ -81,6 +102,26 @@ export function configureAttachmentProtocol({ mailbox, agents, remoteServers }: 
       const id = url.pathname.split("/").filter(Boolean).at(-1);
       const attachment = id ? await runCauseEffect(mailbox.resolveAttachment(id)) : null;
       if (!attachment) return new Response("Not found", { status: 404 });
+      const rendition = renditionQuery(url);
+      if (rendition) {
+        const file = await runCauseEffect(
+          renditions.render(
+            { path: attachment.path, name: attachment.name, mimeType: attachment.mimeType },
+            rendition.kind,
+            rendition.path,
+          ),
+        );
+        if (!file) return new Response("Not found", { status: 404 });
+        return await runCauseEffect(
+          fileResponse(file.path, {
+            "Content-Type": renditionResponseType(file.mimeType),
+            "Cache-Control": "private, max-age=3600",
+            ...attachmentCorsHeaders(request.headers.get("Origin")),
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": "inline",
+          }),
+        );
+      }
       return await runCauseEffect(
         fileResponse(attachment.path, {
           "Content-Type": attachment.mimeType,
@@ -101,6 +142,22 @@ export function configureAttachmentProtocol({ mailbox, agents, remoteServers }: 
       const serverId = decodeURIComponent(url.hostname);
       const attachmentId = decodeURIComponent(url.pathname.split("/").filter(Boolean)[0] ?? "");
       if (!serverId || !attachmentId) return new Response("Not found", { status: 404 });
+      const rendition = renditionQuery(url);
+      if (rendition) {
+        const file = await runCauseEffect(
+          remoteServers.downloadAttachmentRendition(attachmentId, serverId, rendition.kind, rendition.path),
+        );
+        if (!file) return new Response("Not found", { status: 404 });
+        return new Response(Buffer.from(file.bytes), {
+          headers: {
+            "Content-Type": renditionResponseType(file.mimeType),
+            "Cache-Control": "private, max-age=3600",
+            ...attachmentCorsHeaders(request.headers.get("Origin")),
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": "inline",
+          },
+        });
+      }
       const attachment = await runCauseEffect(remoteServers.downloadAttachment(attachmentId, serverId, true));
       return new Response(Buffer.from(attachment.bytes), {
         headers: {
@@ -314,4 +371,14 @@ function applicationContentType(
     default:
       return "application/octet-stream";
   }
+}
+
+/**
+ * A rendition is drawn as an image, read as JSON or handed to the PDF reader as bytes. Any other
+ * type goes as `application/octet-stream`, so the renderer never loads one as a page.
+ */
+function renditionResponseType(mimeType: string): string {
+  return mimeType === "image/jpeg" || mimeType === "application/json" || mimeType === "application/pdf"
+    ? mimeType
+    : "application/octet-stream";
 }

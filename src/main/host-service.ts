@@ -117,6 +117,7 @@ interface HostServiceOptions {
   cloudBackups?: ForwardedApiOptions["cloudBackups"];
   downloadTickets?: ForwardedApiOptions["downloadTickets"];
   attachmentPreviews?: ForwardedApiOptions["attachmentPreviews"];
+  fileRenditions?: ForwardedApiOptions["fileRenditions"];
   mcpToolRuntimePreparation?: ForwardedApiOptions["mcpToolRuntimePreparation"];
   storage?: ForwardedApiOptions["storage"];
   storageHygiene?: ForwardedApiOptions["storageHygiene"];
@@ -431,6 +432,7 @@ export class HostService extends EventEmitter<HostEvents> {
       ...(options.cloudBackups === undefined ? {} : { cloudBackups: options.cloudBackups }),
       ...(options.downloadTickets === undefined ? {} : { downloadTickets: options.downloadTickets }),
       ...(options.attachmentPreviews === undefined ? {} : { attachmentPreviews: options.attachmentPreviews }),
+      ...(options.fileRenditions === undefined ? {} : { fileRenditions: options.fileRenditions }),
       ...(options.mcpToolRuntimePreparation === undefined
         ? {}
         : { mcpToolRuntimePreparation: options.mcpToolRuntimePreparation }),

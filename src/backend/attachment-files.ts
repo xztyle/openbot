@@ -742,7 +742,11 @@ function attachmentMetadata(
   // Media and archives stay opaque files even if an importer supplies a preview MIME type. An SVG is
   // text for the provider: an `image/*` type would send it as a raster image block.
   const mimeType =
-    inferred.startsWith("audio/") || inferred.startsWith("video/") || inferred === "application/zip"
+    inferred.startsWith("audio/") ||
+    inferred.startsWith("video/") ||
+    inferred === "application/zip" ||
+    inferred === "application/x-tar" ||
+    inferred === "application/gzip"
       ? inferred
       : attachmentFileExtension(name) === "svg"
         ? "text/plain"

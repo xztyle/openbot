@@ -17,4 +17,9 @@ export const messages = defineMessages("attachment", {
   "attachment.error.fileFallback": "File",
   "attachment.error.fileNotFound": "“{name}” was not found at this path. It may have been moved or deleted.",
   "attachment.error.previewFile": "Could not preview “{name}”. Try again.",
+  "attachment.play": "Play {name}",
+  "attachment.pause": "Pause {name}",
+  "attachment.seek": "Move through {name}",
+  "attachment.enlarge": "Enlarge {name}",
+  "attachment.cannotPlay": "Cannot play here",
 });

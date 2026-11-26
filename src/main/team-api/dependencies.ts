@@ -80,6 +80,7 @@ import type { AttachmentPreviews } from "../attachment-previews";
 import type { BitwardenConnectorService } from "../bitwarden-connector-service";
 import type { BrowserViewGateway } from "../browser-view-gateway";
 import type { DownloadTickets } from "../download-tickets";
+import type { FileRenditions } from "../file-renditions";
 import type { GitHubConnectorService } from "../github-connector-service";
 import type { HostedSiteDesktopService } from "../hosted-site-service";
 import type { InstanceTransferService } from "../instance-transfer-service";
@@ -584,6 +585,8 @@ export interface TeamApiOptions {
   downloadTickets?: Pick<DownloadTickets, "mint"> | undefined;
   /** `attachment-previews-v1`: small copies of image attachments for a client that shows them inline. */
   attachmentPreviews?: Pick<AttachmentPreviews, "preview"> | undefined;
+  /** `attachment-renditions-v1`: thumbnails, PDFs of Office files, waveforms and archive entries. */
+  fileRenditions?: Pick<FileRenditions, "render"> | undefined;
   /** Starts and waits for the managed tool runtimes behind the MCP save, enable, and test routes. */
   mcpToolRuntimePreparation?: McpToolRuntimePreparation;
   storage?: TeamApiStorage;

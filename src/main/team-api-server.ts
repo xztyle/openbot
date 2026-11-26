@@ -1180,6 +1180,7 @@ export class TeamApiServer {
       mailbox: this.#options.mailbox,
       tickets: this.#options.downloadTickets,
       previews: this.#options.attachmentPreviews,
+      renditions: this.#options.fileRenditions,
     });
   }
 

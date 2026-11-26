@@ -72,6 +72,11 @@ import {
   attachmentPreviewRoute,
 } from "@openbot/contracts/team-protocol/attachment-previews-v1";
 import {
+  ATTACHMENT_RENDITIONS_CAPABILITY,
+  type AttachmentRenditionKind,
+  attachmentRenditionRoute,
+} from "@openbot/contracts/team-protocol/attachment-renditions-v1";
+import {
   BROWSER_PAGE_STATE_CAPABILITY,
   BROWSER_PAGE_STATE_ROUTES,
   decodeBrowserPageStateSnapshot,
@@ -297,6 +302,11 @@ export interface WebWorkspaceRuntime {
    * original when the host makes no copy. `null` when the host has no such route.
    */
   attachmentPreview?(attachmentId: string): Promise<WebFile | null>;
+  /**
+   * A file the host makes from an attachment for display (`attachment-renditions-v1`): a thumbnail, a
+   * PDF of an Office file, a waveform, an archive listing or entry. `null` when the host has none.
+   */
+  attachmentRendition?(attachmentId: string, kind: AttachmentRenditionKind, path?: string): Promise<WebFile | null>;
   /** The image that the host drew of a workspace artifact's page, at its `thumbnailVersion`. */
   artifactThumbnail?(artifactId: string, version: string): Promise<WebFile>;
   /**
@@ -1266,6 +1276,17 @@ export function createWebWorkspaceRuntime(
           previewsMissing.add(openedHostId);
           return null;
         }
+        throw error;
+      }
+    },
+    async attachmentRendition(id, kind, path) {
+      if (!capabilities.includes(ATTACHMENT_RENDITIONS_CAPABILITY)) return null;
+      try {
+        return decodeWebFile(await request("GET", attachmentRenditionRoute(id, kind, path)));
+      } catch (error) {
+        // The host cannot make this one, or it was built before the route.
+        if (error instanceof WebHostRequestError && error.refused && error.reference === referenceFrom("http", 404))
+          return null;
         throw error;
       }
     },

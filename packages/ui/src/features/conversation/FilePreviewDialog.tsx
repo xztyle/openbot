@@ -3,8 +3,15 @@ import { Button, Dialog, Download, File, Spinner, X } from "@openbot/ui";
 import type { AgentProfile } from "@openbot/ui/data";
 import { useText } from "@openbot/ui/text";
 import { Loading, lazy, Match, Switch } from "solid-js";
+import type { FilePreviewMeta } from "./FilePreviewPanel";
 
 const FilePreviewPanel = lazy(() => import("./FilePreviewPanel"));
+
+/** A swipe goes this far before it closes the viewer or turns to the next file. */
+const SWIPE_DISTANCE = 72;
+/** Inside these a finger scrolls or plays, so a swipe there is not a gesture of the viewer. */
+const OWN_GESTURES =
+  "input, textarea, video, audio, .pdf-viewer-rail, .spreadsheet-file-preview, .csv-preview, .file-preview-text";
 
 /** The file that the viewer shows: while it is read, once it is here, or when it cannot be read. */
 export type FilePreviewDialogState =
@@ -28,13 +35,70 @@ export function FilePreviewDialog(props: {
   /** Opens an image in the annotator. Absent, or for a file that is not an image, there is no Annotate. */
   onAnnotate?: (() => void) | undefined;
   onClose: () => void;
+  meta?: FilePreviewMeta | undefined;
+  onCopyLink?: (() => void) | undefined;
+  /** Opens one file of an archive in the viewer. */
+  onOpenArchiveEntry?: ((path: string) => void) | undefined;
+  /** Goes back from a file of an archive to its listing. */
+  onBack?: (() => void) | undefined;
+  /** The other files of the message. Arrows and a sideways swipe step through them. */
+  siblings?: { index: number; count: number; previous: () => void; next: () => void } | undefined;
 }) {
   const { t } = useText();
+  let swipe: { x: number; y: number; id: number; down: boolean; sideways: boolean } | null = null;
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented || !props.siblings || props.siblings.count < 2) return;
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    if (event.key === "ArrowLeft") props.siblings.previous();
+    else if (event.key === "ArrowRight") props.siblings.next();
+    else return;
+    event.preventDefault();
+  };
+  const onPointerDown = (event: PointerEvent) => {
+    if (event.pointerType !== "touch" || !(event.target instanceof Element)) {
+      swipe = null;
+      return;
+    }
+    const content = event.target.closest(".file-preview-content, .pdf-viewer-pages");
+    swipe = {
+      x: event.clientX,
+      y: event.clientY,
+      id: event.pointerId,
+      // Down closes only from the top of the content, so a scroll back up is not a close.
+      down: !content || content.scrollTop <= 0,
+      sideways: !event.target.closest(OWN_GESTURES),
+    };
+  };
+  const onPointerUp = (event: PointerEvent) => {
+    const start = swipe;
+    swipe = null;
+    if (!start || start.id !== event.pointerId) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (start.down && dy > SWIPE_DISTANCE && Math.abs(dx) < dy / 2) props.onClose();
+    else if (
+      start.sideways &&
+      props.siblings &&
+      props.siblings.count > 1 &&
+      Math.abs(dx) > SWIPE_DISTANCE &&
+      Math.abs(dy) < Math.abs(dx) / 2
+    )
+      dx < 0 ? props.siblings.next() : props.siblings.previous();
+  };
   return (
     <Dialog.Root open onOpenChange={(open) => !open && props.onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay class="file-preview-dialog-backdrop" />
-        <Dialog.Content class="file-preview-dialog" data-dialog-surface="unstyled">
+        <Dialog.Content
+          class="file-preview-dialog"
+          data-dialog-surface="unstyled"
+          onKeyDown={onKeyDown}
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
+          onPointerCancel={() => {
+            swipe = null;
+          }}
+        >
           <Dialog.Title class="sr-only">{props.state.name}</Dialog.Title>
           <Switch>
             <Match when={props.state.status === "ready" && props.state}>
@@ -60,6 +124,11 @@ export function FilePreviewDialog(props: {
                     onDownload={props.onDownload}
                     onAnnotate={props.onAnnotate}
                     onClose={props.onClose}
+                    meta={props.meta}
+                    onCopyLink={props.onCopyLink}
+                    onOpenArchiveEntry={props.onOpenArchiveEntry}
+                    onBack={props.onBack}
+                    siblings={props.siblings}
                   />
                 </Loading>
               )}

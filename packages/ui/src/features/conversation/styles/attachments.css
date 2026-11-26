@@ -245,3 +245,180 @@
 .message-attachment[data-media="audio"] .attachment-media-player {
   height: var(--openbot-control-xl);
 }
+
+/* Rich previews of a message's files: a video's first frame, an audio waveform, a document's first page. */
+.message-attachments:has(.attachment-rich) {
+  width: min(100%, 360px);
+}
+
+.message-attachment.attachment-rich {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--openbot-space-1-5);
+  padding: var(--openbot-space-1-5);
+}
+
+.attachment-rich-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  min-width: 0;
+  padding-left: var(--openbot-space-1);
+}
+
+.attachment-type-label {
+  font-weight: var(--openbot-weight-medium);
+}
+
+.attachment-video-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--openbot-radius-media-preview);
+  background: var(--openbot-bg-canvas);
+  aspect-ratio: 16 / 9;
+}
+
+.ui-button.attachment-poster-button,
+.ui-button.attachment-page-button {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--openbot-radius-media-preview);
+  background: var(--openbot-bg-canvas);
+  padding: 0;
+}
+
+.attachment-rendition {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment-poster-icon,
+.attachment-page-placeholder svg {
+  width: var(--openbot-icon-lg);
+  height: var(--openbot-icon-lg);
+  color: var(--openbot-text-muted);
+}
+
+.attachment-play-badge {
+  position: absolute;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-bg-overlay);
+  color: var(--openbot-text-primary);
+  box-shadow: var(--openbot-shadow-raised);
+}
+
+.attachment-play-badge svg {
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
+  fill: currentColor;
+}
+
+.attachment-video-player {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--openbot-bg-canvas);
+  object-fit: contain;
+}
+
+.ui-button.attachment-page-button {
+  height: auto;
+  aspect-ratio: 4 / 3;
+}
+
+.attachment-page-button[data-view="document"],
+.attachment-page-button[data-view="pdf"] {
+  aspect-ratio: 3 / 2;
+}
+
+.attachment-page-button .attachment-rendition {
+  object-fit: cover;
+  object-position: top;
+}
+
+.attachment-page-placeholder {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+}
+
+.attachment-type-badge {
+  position: absolute;
+  bottom: var(--openbot-space-1-5);
+  left: var(--openbot-space-1-5);
+  border-radius: var(--openbot-radius-xs);
+  background: var(--openbot-bg-overlay);
+  padding: var(--openbot-space-0-5) var(--openbot-space-1-5);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-semibold);
+  line-height: var(--openbot-leading-sm);
+}
+
+.attachment-audio {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  min-width: 0;
+  padding: var(--openbot-space-1) var(--openbot-space-1) 0;
+}
+
+.ui-button.attachment-audio-toggle {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-accent);
+  padding: 0;
+  color: var(--openbot-text-on-accent);
+}
+
+.attachment-audio-toggle svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  fill: currentColor;
+}
+
+.ui-button.attachment-waveform {
+  display: flex;
+  height: 40px;
+  min-width: 0;
+  align-items: center;
+  gap: var(--openbot-space-0-5);
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.attachment-waveform-bar {
+  flex: 1 1 0;
+  min-width: 1px;
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-border-strong);
+}
+
+.attachment-waveform-bar[data-played="true"] {
+  background: var(--openbot-accent);
+}
+
+.attachment-audio-time {
+  color: var(--openbot-text-readable);
+  font-size: var(--openbot-text-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--openbot-leading-sm);
+}

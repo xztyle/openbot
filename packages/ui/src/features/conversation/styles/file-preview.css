@@ -132,14 +132,6 @@
   object-fit: contain;
 }
 
-.file-preview-pdf {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  background: var(--openbot-bg-canvas);
-}
-
 .file-preview-audio {
   display: block;
   width: calc(100% - 40px);
@@ -379,4 +371,254 @@
     padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px)
       env(safe-area-inset-left, 0px);
   }
+}
+
+/* The viewer's header: the name, and who sent the file, when, and its size. */
+.file-preview-title {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.file-preview-meta {
+  overflow: hidden;
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-preview-position {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.media-preview-controls {
+  display: flex;
+  justify-content: center;
+  padding: var(--openbot-space-3);
+}
+
+.media-preview-speed {
+  font-variant-numeric: tabular-nums;
+}
+
+/* PDF and Office documents: pages to scroll, or slides with a rail. */
+.pdf-viewer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  background: var(--openbot-bg-canvas);
+}
+
+.pdf-viewer-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  border-bottom: 1px solid var(--openbot-border);
+  background: var(--openbot-bg-surface);
+  padding: var(--openbot-space-1) var(--openbot-space-2);
+}
+
+.pdf-viewer-page,
+.pdf-viewer-matches {
+  min-width: 64px;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ui-button.pdf-viewer-zoom {
+  min-width: 56px;
+  font-size: var(--openbot-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.pdf-viewer-search {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 160px;
+  align-items: center;
+  gap: var(--openbot-space-1-5);
+  margin-left: auto;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-bg-control);
+  padding: 0 var(--openbot-space-2);
+}
+
+.pdf-viewer-search input {
+  min-width: 0;
+  height: 32px;
+  flex: 1 1 auto;
+  border: 0;
+  background: transparent;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+  outline: none;
+}
+
+.pdf-viewer-body {
+  display: flex;
+  min-height: 0;
+}
+
+.pdf-viewer-pages {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-content: start;
+  justify-items: safe center;
+  gap: var(--openbot-space-3);
+  overflow: auto;
+  padding: var(--openbot-space-3);
+  outline: none;
+}
+
+.pdf-viewer[data-layout="slides"] .pdf-viewer-pages {
+  align-content: center;
+}
+
+.pdf-page canvas {
+  display: block;
+  background: var(--openbot-paper);
+  box-shadow: var(--openbot-shadow-card);
+}
+
+.pdf-viewer-status {
+  display: grid;
+  min-height: 240px;
+  place-items: center;
+  color: var(--openbot-text-muted);
+}
+
+.pdf-viewer-rail {
+  display: grid;
+  width: 152px;
+  flex: 0 0 auto;
+  align-content: start;
+  gap: var(--openbot-space-2);
+  overflow-y: auto;
+  border-right: 1px solid var(--openbot-border);
+  padding: var(--openbot-space-2);
+}
+
+.ui-button.pdf-viewer-thumb {
+  display: block;
+  height: auto;
+  border: 2px solid transparent;
+  border-radius: var(--openbot-radius-sm);
+  padding: var(--openbot-space-0-5);
+}
+
+.pdf-viewer-thumb[aria-current="true"] {
+  border-color: var(--openbot-accent);
+}
+
+@media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
+  .pdf-viewer-body {
+    flex-direction: column-reverse;
+  }
+
+  .pdf-viewer-rail {
+    display: flex;
+    width: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-top: 1px solid var(--openbot-border);
+    border-right: 0;
+  }
+
+  .ui-button.pdf-viewer-thumb {
+    flex: 0 0 96px;
+  }
+}
+
+/* An archive's files as a tree. */
+.archive-preview {
+  display: grid;
+  align-content: start;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-3);
+}
+
+.archive-preview-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.archive-tree,
+.archive-tree ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ui-button.archive-tree-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 16px auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  justify-content: stretch;
+  border-radius: var(--openbot-radius-sm);
+  padding: var(--openbot-space-1-5) var(--openbot-space-2);
+  padding-left: calc(var(--openbot-space-2) + var(--archive-depth, 0) * var(--openbot-space-4));
+  text-align: left;
+}
+
+.archive-tree-chevron {
+  display: grid;
+  width: 16px;
+  place-items: center;
+}
+
+.archive-tree-chevron svg {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+}
+
+/* CSV and TSV as a table. */
+.csv-preview {
+  min-width: 0;
+  overflow: auto;
+  padding: var(--openbot-space-3);
+}
+
+.csv-preview-table {
+  border-collapse: collapse;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+}
+
+.csv-preview-table th,
+.csv-preview-table td {
+  max-width: 320px;
+  overflow: hidden;
+  border: 1px solid var(--openbot-border);
+  padding: var(--openbot-space-1) var(--openbot-space-2);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csv-preview-table th {
+  position: sticky;
+  top: 0;
+  background: var(--openbot-bg-surface-raised);
+  font-weight: var(--openbot-weight-semibold);
 }

@@ -1,8 +1,16 @@
 import { attachmentMimeTypeForName, playableMediaKind } from "@openbot/contracts/attachment-files";
+import { fileViewKind, hasThumbnailViewKind } from "@openbot/contracts/file-view-kind";
 import { type AttachmentSummary, canPreviewAttachment } from "@openbot/contracts/ipc";
-import { AudioLines, Button, Download, ExternalLink, Film, LabelTooltip, LabelTooltipTrigger, Play } from "@openbot/ui";
+import type { AttachmentRenditionKind } from "@openbot/contracts/team-protocol/attachment-renditions-v1";
+import { Button, Download, ExternalLink, LabelTooltip, LabelTooltipTrigger, Play } from "@openbot/ui";
 import { createSignal, For, Show } from "solid-js";
 import { useText } from "../../text";
+import {
+  AudioAttachmentPreview,
+  DocumentAttachmentPreview,
+  FileKindIcon,
+  VideoAttachmentPreview,
+} from "./AttachmentInlinePreviews";
 import { attachmentReferenceTone } from "./AttachmentReference";
 import { MediaFilePreview } from "./MediaFilePreview";
 
@@ -30,6 +38,19 @@ export interface AttachmentMediaSource {
   fullUrl?(attachmentId: string): string | undefined;
   /** Reads the full-size image for the viewer. Resolves false when it cannot. */
   loadFull?(attachment: AttachmentSummary): Promise<boolean>;
+  /**
+   * Reads a file the host makes from the attachment for display (`attachment-renditions-v1`).
+   * Absent: the rendition is read from the attachment's `previewUrl`.
+   */
+  rendition?(
+    attachment: AttachmentSummary,
+    kind: AttachmentRenditionKind,
+    path?: string,
+  ): Promise<{ bytes: Uint8Array; mimeType: string } | null>;
+  /** A URL that plays the original audio or video as it arrives, without reading it whole first. */
+  streamUrl?(attachment: AttachmentSummary): Promise<string | null>;
+  /** Names the host, so files kept for one host are not shown for another. */
+  cacheKey?(): string;
 }
 
 export function AttachmentCards(props: {
@@ -85,9 +106,20 @@ export function AttachmentCards(props: {
             attachment.size <= source.thumbnailLimit
           )
             void source.load(attachment);
+          const view = fileViewKind(attachment.name, attachment.mimeType);
+          const inline = {
+            attachment,
+            source: props.mediaSource,
+            onOpen: props.onPreview,
+            onDownload: (file: AttachmentSummary) => props.onAction(file, "download"),
+          };
+          if (view === "video") return <VideoAttachmentPreview {...inline} />;
+          if (view === "audio") return <AudioAttachmentPreview {...inline} />;
+          if (hasThumbnailViewKind(view)) return <DocumentAttachmentPreview {...inline} />;
           return (
             <div
               class="message-attachment"
+              data-view={view}
               data-media={mediaKind(attachment) ?? undefined}
               data-status={isMissing(attachment) ? "missing" : undefined}
             >
@@ -109,10 +141,8 @@ export function AttachmentCards(props: {
                       data-file-tone={attachmentReferenceTone(attachment.name)}
                       aria-hidden="true"
                     >
-                      <Show when={mediaKind(attachment)} fallback={<AttachmentFileIcon />}>
-                        <Show when={mediaKind(attachment) === "audio"} fallback={<Film />}>
-                          <AudioLines />
-                        </Show>
+                      <Show when={view !== "unknown"} fallback={<AttachmentFileIcon />}>
+                        <FileKindIcon kind={view} />
                       </Show>
                     </span>
                   }

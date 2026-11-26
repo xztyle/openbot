@@ -8,7 +8,7 @@ import {
 import { currentText } from "@openbot/ui/text";
 import { createMemo, createSignal, type Store, type StoreSetter, untrack } from "solid-js";
 import { createScopeGuard } from "../../../scope-lifetime";
-import { attachmentFilePreview } from "../attachment-preview";
+import { loadAttachmentPreview } from "../attachment-preview";
 import { releaseFilePreviewPage } from "../conversation-port";
 import { conversationRuntime } from "../conversation-runtime";
 import type {
@@ -268,7 +268,11 @@ export function createPanelsStore(deps: PanelsStoreDeps) {
     const generation = deps.nextFilePreviewGeneration();
     deps.setComposerError(null, target);
     try {
-      const preview = await (deps.props.runtime?.previewAttachment?.(attachment) ?? attachmentFilePreview(attachment));
+      const { preview } = await loadAttachmentPreview(attachment, {
+        previewAttachment: deps.props.runtime?.previewAttachment,
+        media: deps.props.runtime?.attachmentMedia,
+        stream: false,
+      });
       if (generation !== deps.currentFilePreviewGeneration() || conversationOwnerId(deps.props) !== ownerAgentId)
         return;
       deps.setSidebarFilePreview({ ownerAgentId, source: { kind: "attachment", attachment }, preview });

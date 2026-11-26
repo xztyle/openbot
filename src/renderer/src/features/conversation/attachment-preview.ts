@@ -1,6 +1,9 @@
-import { attachmentMimeTypeForName } from "@openbot/contracts/attachment-files";
+import { attachmentMimeTypeForName, isXlsxMimeType, XLSX_MIME_TYPE } from "@openbot/contracts/attachment-files";
+import { fileViewKind, isOfficeViewKind } from "@openbot/contracts/file-view-kind";
 import { type AttachmentSummary, type FilePreview, filePreviewKindForFile } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
+import type { AttachmentMediaSource } from "@openbot/ui/features/conversation/AttachmentCards";
+import { readRendition } from "@openbot/ui/features/conversation/attachment-renditions";
 import { currentText } from "@openbot/ui/text";
 
 /** Kinds the panel can render straight from `previewUrl`, without reading the bytes first. */
@@ -47,4 +50,87 @@ async function assertAttachmentAvailable(url: string): Promise<void> {
   const response = await fetch(url).catch(() => null);
   void response?.body?.cancel();
   if (response?.status === 404) throw new Error(attachmentUnavailable());
+}
+
+/** What the viewer shows for an attachment: the file, and a URL to point at instead of its bytes. */
+export interface LoadedAttachmentPreview {
+  preview: FilePreview;
+  sourceUrl: string | null;
+}
+
+/**
+ * Reads what the viewer needs for an attachment, on every client through the same steps. An Office
+ * file shows the PDF the host made of it, an old spreadsheet its XLSX copy, an archive its listing,
+ * and audio or video plays from a stream when the host gives one. Everything else is the file itself,
+ * from `previewAttachment` (the browser) or from `previewUrl` (desktop).
+ */
+export async function loadAttachmentPreview(
+  attachment: AttachmentSummary,
+  readers: {
+    previewAttachment?: ((attachment: AttachmentSummary) => Promise<FilePreview>) | undefined;
+    media?: AttachmentMediaSource | undefined;
+    /** Whether audio and video may play from a stream URL instead of their bytes. */
+    stream?: boolean;
+  },
+): Promise<LoadedAttachmentPreview> {
+  const view = fileViewKind(attachment.name, attachment.mimeType);
+  const base = { name: attachment.name, size: attachment.size };
+  const unavailable = () => new Error(currentText().t("attachment.previewUnavailable"));
+  if (isOfficeViewKind(view) && !isXlsxMimeType(attachment.mimeType || attachmentMimeTypeForName(attachment.name))) {
+    const kind = view === "sheet" ? "sheet" : "document";
+    const file = await readRendition(attachment, kind, readers.media);
+    if (!file) throw unavailable();
+    return {
+      preview: {
+        ...base,
+        mimeType: kind === "sheet" ? XLSX_MIME_TYPE : "application/pdf",
+        previewKind: kind === "sheet" ? "spreadsheet" : "pdf",
+        bytes: file.bytes,
+      },
+      sourceUrl: null,
+    };
+  }
+  if (view === "archive") {
+    const file = await readRendition(attachment, "archive", readers.media);
+    if (!file) throw unavailable();
+    return {
+      preview: { ...base, mimeType: "application/json", previewKind: "archive", bytes: file.bytes },
+      sourceUrl: null,
+    };
+  }
+  if ((view === "video" || view === "audio") && !attachment.previewUrl && readers.stream !== false) {
+    const stream = await readers.media?.streamUrl?.(attachment).catch(() => null);
+    if (stream)
+      return {
+        preview: { ...base, mimeType: attachment.mimeType, previewKind: view, bytes: null },
+        sourceUrl: stream,
+      };
+  }
+  const preview = await (readers.previewAttachment ?? attachmentFilePreview)(attachment);
+  // The PDF reader takes bytes on every client, so it never fetches an app URL from its worker.
+  if (preview.previewKind === "pdf" && !preview.bytes && attachment.previewUrl) {
+    const response = await fetch(attachment.previewUrl);
+    if (!response.ok) throw unavailable();
+    return { preview: { ...preview, bytes: new Uint8Array(await response.arrayBuffer()) }, sourceUrl: null };
+  }
+  return { preview, sourceUrl: attachment.previewUrl };
+}
+
+/** One file inside an archive, read from the host as the viewer shows it. */
+export async function loadArchiveEntryPreview(
+  attachment: AttachmentSummary,
+  path: string,
+  media: AttachmentMediaSource | undefined,
+): Promise<FilePreview> {
+  const file = await readRendition(attachment, "entry", media, path);
+  if (!file) throw new Error(currentText().t("attachment.previewUnavailable"));
+  const name = path.split("/").filter(Boolean).at(-1) ?? path;
+  const mimeType = attachmentMimeTypeForName(name);
+  return {
+    name,
+    size: file.bytes.byteLength,
+    mimeType,
+    previewKind: filePreviewKindForFile(name, mimeType),
+    bytes: file.bytes,
+  };
 }

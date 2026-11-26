@@ -32,7 +32,19 @@ const IMAGE_TYPES: ReadonlySet<string> = new Set(["image/png", "image/jpeg", "im
  * SVG image gets a `data:` URL instead: an image element does not run its scripts, and a `data:`
  * page has no origin of its own.
  */
-const MEDIA_TYPES: ReadonlySet<string> = new Set([...IMAGE_TYPES, "audio/mpeg", "video/quicktime"]);
+const MEDIA_TYPES: ReadonlySet<string> = new Set([
+  ...IMAGE_TYPES,
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/aac",
+  "audio/wav",
+  "audio/ogg",
+  "audio/opus",
+  "audio/flac",
+  "video/quicktime",
+  "video/mp4",
+  "video/webm",
+]);
 const SVG_TYPE = "image/svg+xml";
 
 export interface WebAttachmentMedia extends AttachmentMediaSource {
@@ -56,7 +68,8 @@ type Variant = "inline" | "full";
  * images without a download: an attachment id names bytes that do not change.
  */
 export function createWebAttachmentMedia(
-  remote: Pick<WebWorkspaceRuntime, "download" | "attachmentPreview">,
+  remote: Pick<WebWorkspaceRuntime, "download" | "attachmentPreview"> &
+    Partial<Pick<WebWorkspaceRuntime, "attachmentRendition" | "fileLink">>,
   hostId: () => string,
   urls: { create(blob: Blob): string; revoke(url: string): void } = {
     create: (blob) => URL.createObjectURL(blob),
@@ -258,6 +271,17 @@ export function createWebAttachmentMedia(
       if (!type || attachment.size > WEB_MEDIA_BYTES || (!IMAGE_TYPES.has(type) && type !== SVG_TYPE))
         return Promise.resolve(false);
       return begin(`${key}:full`, () => download(attachment, "full", WEB_MEDIA_BYTES, `${key}:full`));
+    },
+    cacheKey: () => hostId(),
+    async rendition(attachment, kind, path) {
+      const file = await remote.attachmentRendition?.(attachment.id, kind, path);
+      if (!file) return null;
+      return { bytes: base64ToBytes(file.base64), mimeType: file.mimeType.split(";")[0]?.trim() ?? "" };
+    },
+    // The host's download address answers range requests, so a video starts before its last byte.
+    async streamUrl(attachment) {
+      const ticket = await remote.fileLink?.({ kind: "attachment", attachmentId: attachment.id }).catch(() => null);
+      return ticket?.url ?? null;
     },
     dispose() {
       disposed = true;

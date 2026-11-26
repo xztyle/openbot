@@ -6,6 +6,7 @@
 // side when it can make one, or else the original file with its own type. The client checks the type
 // before it shows the image. A host built before this route answers 404, and the client reads the
 // original. The route names no capability of its own: it shares `fork-host-v1`.
+import { attachmentRenditionTarget } from "./attachment-renditions-v1";
 import { FORK_HOST_CAPABILITY } from "./fork-host-v1";
 import { workspaceArtifactThumbnailId } from "./workspace-fleet-v1";
 
@@ -30,11 +31,15 @@ export function attachmentPreviewId(pathname: string): string | null {
 }
 
 /**
- * A GET of an image file that came after the frozen v3 no-body route list: an attachment preview or
- * an artifact thumbnail. Its frame carries no body, as the browser display route's does.
+ * A GET of a file that came after the frozen v3 no-body route list: an attachment preview, an
+ * attachment rendition (`attachment-renditions-v1`) or an artifact thumbnail. Its frame carries no body, as the browser display route's does.
  */
 export function isFileImageRoute(method: string, path: string): boolean {
   if (method !== "GET") return false;
   const pathname = new URL(path, "http://openbot.invalid").pathname;
-  return attachmentPreviewId(pathname) !== null || workspaceArtifactThumbnailId(pathname) !== null;
+  return (
+    attachmentPreviewId(pathname) !== null ||
+    attachmentRenditionTarget(pathname) !== null ||
+    workspaceArtifactThumbnailId(pathname) !== null
+  );
 }

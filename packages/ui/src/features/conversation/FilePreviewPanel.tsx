@@ -1,7 +1,10 @@
+import { fileViewKind } from "@openbot/contracts/file-view-kind";
 import type { FilePreview, WorkspaceDirectory, WorkspaceDirectoryEntry } from "@openbot/contracts/ipc";
 import {
   ArrowLeft,
   Button,
+  ChevronLeft,
+  ChevronRight,
   Code,
   CopyButton,
   Download,
@@ -9,6 +12,7 @@ import {
   File,
   Folder,
   FolderOpen,
+  Link,
   Pencil,
   WrapText,
   X,
@@ -20,9 +24,19 @@ import { type CodeToken, fileCodeLanguage, highlightedCodeLines } from "@openbot
 import { MarkdownFilePreview } from "@openbot/ui/features/conversation/MarkdownFilePreview";
 import { SpreadsheetFilePreview } from "@openbot/ui/features/conversation/SpreadsheetFilePreview";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
-
+import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onSettled, Show, untrack } from "solid-js";
+import { ArchiveFilePreview } from "./ArchiveFilePreview";
+import { CsvTablePreview } from "./CsvTablePreview";
 import { MediaFilePreview } from "./MediaFilePreview";
+
+const PdfViewer = lazy(() => import("./PdfViewer"));
+
+/** Who sent a file and when, for the viewer's header. */
+export interface FilePreviewMeta {
+  sender?: string | undefined;
+  /** Milliseconds since the epoch. */
+  sentAt?: number | undefined;
+}
 
 const PANEL_MIN = 220;
 const PANEL_MAX = 1600;
@@ -34,8 +48,10 @@ const HIGHLIGHT_LIMIT = 200_000;
  * grows with the square of its length, and a long string is usually on one line.
  */
 const HIGHLIGHT_LINE_LIMIT = 5_000;
-/** Kinds the panel hands to the browser as an object URL instead of decoding itself. */
-const BLOB_PREVIEW_KINDS = new Set<FilePreview["previewKind"]>(["image", "pdf", "audio", "video"]);
+/** Kinds the panel hands to the browser as an object URL instead of decoding itself. A PDF reads its bytes. */
+const BLOB_PREVIEW_KINDS = new Set<FilePreview["previewKind"]>(["image", "audio", "video"]);
+/** Kinds that point at `sourceUrl` when they have no bytes. */
+const URL_PREVIEW_KINDS = new Set<FilePreview["previewKind"]>(["image", "pdf", "audio", "video"]);
 
 interface FilePreviewPanelProps {
   readWidth: (fallback: number, min: number, max: number) => number;
@@ -81,6 +97,14 @@ interface FilePreviewPanelProps {
   onClose: () => void;
   /** `dialog`: the panel fills a viewer over the app, with no resize handle. */
   presentation?: "panel" | "dialog" | undefined;
+  /** The sender and time under the name, in the viewer. */
+  meta?: FilePreviewMeta | undefined;
+  /** Copies a link to the file. */
+  onCopyLink?: (() => void) | undefined;
+  /** Opens one file of an archive in this viewer. */
+  onOpenArchiveEntry?: ((path: string) => void) | undefined;
+  /** The other files of the message: `index` of `count`, with steps to the one before and after. */
+  siblings?: { index: number; count: number; previous: () => void; next: () => void } | undefined;
 }
 
 export default function FilePreviewPanel(props: FilePreviewPanelProps) {
@@ -101,8 +125,10 @@ export default function FilePreviewPanel(props: FilePreviewPanelProps) {
   const pageUrl = () => (previewKind() === "text" ? props.pageUrl : null) ?? null;
   const pageHtml = () => (previewKind() === "text" ? props.pageHtml : null) ?? null;
   const hasPage = () => pageHtml() !== null || pageUrl() !== null;
+  const isCsv = () => previewKind() === "text" && fileViewKind(title(), file()?.mimeType ?? "") === "csv";
   const showsSourceText = () =>
-    (previewKind() === "text" && (rawSource() || !hasPage())) || (previewKind() === "markdown" && rawSource());
+    (previewKind() === "text" && !isCsv() && (rawSource() || !hasPage())) ||
+    ((previewKind() === "markdown" || isCsv()) && rawSource());
   const title = () => props.directory?.name ?? props.preview?.name ?? "";
   /** The whole text of a text or Markdown file. Copy takes all of it; the view shows up to `TEXT_LIMIT`. */
   const source = createMemo(() => {
@@ -134,7 +160,8 @@ export default function FilePreviewPanel(props: FilePreviewPanelProps) {
         setPreviewUrl(null);
         return;
       }
-      if (sourceUrl && BLOB_PREVIEW_KINDS.has(preview.previewKind)) {
+      // Bytes win over the URL: an Office file's URL is the original, its bytes the PDF to show.
+      if (sourceUrl && !preview.bytes && URL_PREVIEW_KINDS.has(preview.previewKind)) {
         setPreviewUrl(sourceUrl);
         return;
       }
@@ -216,13 +243,60 @@ export default function FilePreviewPanel(props: FilePreviewPanelProps) {
         <Show when={props.directory} fallback={<File class="file-preview-file-icon" />}>
           <Folder class="file-preview-file-icon" />
         </Show>
-        <h2 title={props.directory?.path ?? title()}>{title()}</h2>
-        <Show when={previewKind() === "markdown"}>
+        <div class="file-preview-title">
+          <h2 title={props.directory?.path ?? title()}>{title()}</h2>
+          <Show when={dialog() && file()}>
+            {(shown) => (
+              <p class="file-preview-meta">
+                {[
+                  props.meta?.sender,
+                  props.meta?.sentAt
+                    ? format.date(props.meta.sentAt, { dateStyle: "medium", timeStyle: "short" })
+                    : null,
+                  format.fileSize(shown().size),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            )}
+          </Show>
+        </div>
+        <Show when={props.siblings && props.siblings.count > 1 && props.siblings}>
+          {(siblings) => (
+            <>
+              <Button
+                variant="ghost"
+                type="button"
+                class="browser-toolbar-button"
+                aria-label={t("preview.panel.previousFile")}
+                onClick={() => siblings().previous()}
+              >
+                <ChevronLeft class="browser-toolbar-icon" />
+              </Button>
+              <span class="file-preview-position">
+                {t("preview.panel.position", {
+                  index: format.number(siblings().index + 1),
+                  count: format.number(siblings().count),
+                })}
+              </span>
+              <Button
+                variant="ghost"
+                type="button"
+                class="browser-toolbar-button"
+                aria-label={t("preview.panel.nextFile")}
+                onClick={() => siblings().next()}
+              >
+                <ChevronRight class="browser-toolbar-icon" />
+              </Button>
+            </>
+          )}
+        </Show>
+        <Show when={previewKind() === "markdown" || isCsv()}>
           <Button
             variant="ghost"
             type="button"
             class="browser-toolbar-button"
-            aria-label={t("preview.panel.rawMarkdown")}
+            aria-label={isCsv() ? t("preview.panel.rawCsv") : t("preview.panel.rawMarkdown")}
             aria-pressed={rawSource() ? "true" : "false"}
             onClick={() => setRawSource((raw) => !raw)}
           >
@@ -285,6 +359,19 @@ export default function FilePreviewPanel(props: FilePreviewPanelProps) {
               onClick={() => annotate()()}
             >
               <Pencil class="browser-toolbar-icon" />
+            </Button>
+          )}
+        </Show>
+        <Show when={file() && props.onCopyLink}>
+          {(copyLink) => (
+            <Button
+              variant="ghost"
+              type="button"
+              class="browser-toolbar-button"
+              aria-label={t("preview.panel.copyLink")}
+              onClick={() => copyLink()()}
+            >
+              <Link class="browser-toolbar-icon" />
             </Button>
           )}
         </Show>
@@ -407,8 +494,24 @@ export default function FilePreviewPanel(props: FilePreviewPanelProps) {
             <img class="file-preview-image" src={previewUrl() ?? ""} alt={title()} />
           </div>
         </Show>
-        <Show when={previewKind() === "pdf" && previewUrl()}>
-          <iframe class="file-preview-pdf" title={title()} src={previewUrl() ?? ""} />
+        <Show when={previewKind() === "pdf" && (file()?.bytes || previewUrl())}>
+          <PdfViewer
+            bytes={file()?.bytes ?? null}
+            url={file()?.bytes ? null : previewUrl()}
+            name={title()}
+            layout={fileViewKind(title(), "") === "slides" ? "slides" : "pages"}
+          />
+        </Show>
+        <Show when={isCsv() && !rawSource()}>
+          <CsvTablePreview text={text().value} name={title()} />
+        </Show>
+        <Show when={previewKind() === "archive"}>
+          <ArchiveFilePreview
+            bytes={file()?.bytes ?? null}
+            name={title()}
+            onOpenEntry={props.onOpenArchiveEntry}
+            onDownloadAll={props.onDownload}
+          />
         </Show>
         <Show when={previewUrl()}>
           <MediaFilePreview
@@ -416,6 +519,7 @@ export default function FilePreviewPanel(props: FilePreviewPanelProps) {
             src={previewUrl() ?? ""}
             name={title()}
             class={previewKind() === "audio" ? "file-preview-audio" : "file-preview-video"}
+            speedControl
           />
         </Show>
         <Show when={previewKind() === "spreadsheet"}>

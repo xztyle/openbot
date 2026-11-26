@@ -26,12 +26,17 @@ import {
   ATTACHMENT_PREVIEWS_CAPABILITY,
   attachmentPreviewId,
 } from "@openbot/contracts/team-protocol/attachment-previews-v1";
+import {
+  ATTACHMENT_RENDITIONS_CAPABILITY,
+  attachmentRenditionTarget,
+} from "@openbot/contracts/team-protocol/attachment-renditions-v1";
 import { FILE_TICKET_ROUTES, FILE_TICKETS_CAPABILITY } from "@openbot/contracts/team-protocol/file-tickets-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { Deferred, Effect } from "effect";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import type { AttachmentPreviews } from "../attachment-previews";
 import type { DownloadTickets } from "../download-tickets";
+import type { FileRenditions } from "../file-renditions";
 import { remoteCall } from "../remote-service-effects";
 import type { TeamApiAgents, TeamApiMailbox } from "./dependencies";
 import { HttpError } from "./http-error";
@@ -95,11 +100,13 @@ export interface FileRouteDependencies {
   tickets?: Pick<DownloadTickets, "mint">;
   /** `attachment-previews-v1`: absent on a host that makes no previews, so the route answers 404. */
   previews?: Pick<AttachmentPreviews, "preview">;
+  /** `attachment-renditions-v1`: absent on a host that makes none, so the route answers 404. */
+  renditions?: Pick<FileRenditions, "render"> | undefined;
 }
 
 export async function routeFiles(
   context: TeamApiRequestContext,
-  { agents, mailbox, tickets, previews }: FileRouteDependencies,
+  { agents, mailbox, tickets, previews, renditions }: FileRouteDependencies,
 ): Promise<RouteOutcome> {
   const { method, url, request, response, json, empty, capabilities } = context;
 
@@ -155,6 +162,35 @@ export async function routeFiles(
       "Content-Type": file.mimeType,
       "Content-Length": String(size),
       "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+      "X-Content-Type-Options": "nosniff",
+    }));
+  }
+  const rendition = method === "GET" ? attachmentRenditionTarget(url.pathname) : null;
+  if (rendition !== null && capabilities.has(ATTACHMENT_RENDITIONS_CAPABILITY)) {
+    // The same read as `GET /v1/attachments/:id`, so a rendition never names a file that route refuses.
+    const attachment = await runCauseEffect(
+      mailbox.resolveAttachment(pathIdentifier(rendition.attachmentId, "attachmentId")),
+    );
+    if (!attachment || !renditions) throw new HttpError(404, sourceText("error.team.attachmentNotFound"));
+    const entryPath = url.searchParams.get("path") ?? undefined;
+    if (entryPath !== undefined && entryPath.length > INPUT_LIMITS.path)
+      throw new HttpError(400, "A valid archive entry path is required.");
+    const file = await runCauseEffect(
+      renditions.render(
+        {
+          path: attachment.path,
+          name: attachment.name,
+          mimeType: attachment.mimeType || attachmentMimeTypeForName(attachment.name),
+        },
+        rendition.kind,
+        entryPath,
+      ),
+    );
+    if (!file) throw new HttpError(404, sourceText("error.team.attachmentNotFound"));
+    return sendFile(response, file.path, null, (size) => ({
+      "Content-Type": file.mimeType,
+      "Content-Length": String(size),
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
       "X-Content-Type-Options": "nosniff",
     }));
   }

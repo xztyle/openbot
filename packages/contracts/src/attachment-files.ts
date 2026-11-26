@@ -1,8 +1,21 @@
 export const IMAGE_ATTACHMENT_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "avif"] as const;
 
-export const MEDIA_ATTACHMENT_EXTENSIONS = ["mp3", "mov"] as const;
+export const MEDIA_ATTACHMENT_EXTENSIONS = [
+  "mp3",
+  "mov",
+  "mp4",
+  "m4v",
+  "webm",
+  "m4a",
+  "wav",
+  "ogg",
+  "oga",
+  "opus",
+  "aac",
+  "flac",
+] as const;
 
-export const ARCHIVE_ATTACHMENT_EXTENSIONS = ["zip"] as const;
+export const ARCHIVE_ATTACHMENT_EXTENSIONS = ["zip", "tar", "tgz", "gz"] as const;
 
 export const CONTEXT_ATTACHMENT_EXTENSIONS = [
   "pdf",
@@ -202,7 +215,7 @@ export function isExtendedTextAttachmentName(name: string): boolean {
 
 export const ATTACHMENT_FILE_ACCEPT = ATTACHMENT_FILE_EXTENSIONS.map((extension) => `.${extension}`).join(",");
 export const SUPPORTED_ATTACHMENT_DESCRIPTION =
-  "images, MP3 audio, MOV video, ZIP archives, PDF, Office documents, EML, text, Markdown, data, or source files";
+  "images, audio (MP3, M4A, WAV, OGG), video (MP4, MOV, WebM), ZIP and TAR archives, PDF, Office documents, EML, text, Markdown, data, or source files";
 
 export const XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -252,7 +265,7 @@ export function isSupportedAttachmentNameFor(name: string, support: AttachmentSu
 export function assertSupportedAttachmentName(name: string): void {
   if (isSupportedAttachmentName(name)) return;
   throw new Error(
-    `${name} is not supported. Attach ${SUPPORTED_ATTACHMENT_DESCRIPTION}. For other audio or video formats, export as MP3 or MOV, or attach a text transcript.`,
+    `${name} is not supported. Attach ${SUPPORTED_ATTACHMENT_DESCRIPTION}. For other audio or video formats, export as MP3 or MP4, or attach a text transcript.`,
   );
 }
 
@@ -273,8 +286,31 @@ export function attachmentMimeTypeForName(name: string) {
       return "audio/mpeg";
     case "mov":
       return "video/quicktime";
+    case "mp4":
+    case "m4v":
+      return "video/mp4";
+    case "webm":
+      return "video/webm";
+    case "m4a":
+      return "audio/mp4";
+    case "aac":
+      return "audio/aac";
+    case "wav":
+      return "audio/wav";
+    case "ogg":
+    case "oga":
+      return "audio/ogg";
+    case "opus":
+      return "audio/opus";
+    case "flac":
+      return "audio/flac";
     case "zip":
       return "application/zip";
+    case "tar":
+      return "application/x-tar";
+    case "tgz":
+    case "gz":
+      return "application/gzip";
     case "pdf":
       return "application/pdf";
     // An SVG attachment is text, not a raster image: an attachment with an `image/*` type becomes

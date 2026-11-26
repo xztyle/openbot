@@ -56,6 +56,11 @@ import {
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import { AGENT_IMPORT_ROUTES } from "@openbot/contracts/team-protocol/agent-import-v1";
+import {
+  ATTACHMENT_RENDITIONS_CAPABILITY,
+  type AttachmentRenditionKind,
+  attachmentRenditionRoute,
+} from "@openbot/contracts/team-protocol/attachment-renditions-v1";
 import { decodeBrowserViewSessionResponse } from "@openbot/contracts/team-protocol/browser-view-v1";
 import { TEAM_MEMBER_LEAVE_CAPABILITY, type TeamCurrentCapability } from "@openbot/contracts/team-protocol/current";
 import { FOCUS_USE_CAPABILITY, FOCUS_USE_ROUTES } from "@openbot/contracts/team-protocol/focus-use-v1";
@@ -1831,6 +1836,30 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   ).bind(this);
 
   /** The image that the host drew of a workspace artifact's page (`workspace-fleet-v1`, `fork-host-v1`). */
+  /**
+   * A file the host makes from an attachment for display (`attachment-renditions-v1`), or null when
+   * the host has none: an older host, or a file it cannot convert.
+   */
+  readonly downloadAttachmentRendition = Effect.fn("RemoteManager.downloadAttachmentRendition")(
+    function* (
+      this: RemoteServerManager,
+      attachmentId: string,
+      serverId: string,
+      kind: AttachmentRenditionKind,
+      entryPath: string | undefined,
+    ): Effect.fn.Return<{ bytes: Uint8Array; mimeType: string } | null, RemoteWorkflowError, RemoteRequest> {
+      const server = yield* remoteDecode(() => this.#store.require(serverId));
+      if (!this.supportsCapability(server.id, ATTACHMENT_RENDITIONS_CAPABILITY)) return null;
+      const response = yield* this.#client
+        .fetch(server, new URL(attachmentRenditionRoute(attachmentId, kind, entryPath), server.apiUrl))
+        .pipe(Effect.catch(() => Effect.succeed(null)));
+      if (!response?.ok) return null;
+      const mimeType = response.headers.get("content-type")?.split(";", 1)[0]?.trim() ?? "application/octet-stream";
+      return { bytes: new Uint8Array(yield* remoteCall(() => response.arrayBuffer())), mimeType };
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
   readonly downloadArtifactThumbnail = Effect.fn("RemoteManager.downloadArtifactThumbnail")(
     function* (
       this: RemoteServerManager,

@@ -353,6 +353,8 @@
     .ui-select-content,
     .ws-secrets,
     .ws-view,
+    .first-agent-editor,
+    .server-connection-notice,
     .schedule-pane,
     .agent-usage,
     .tasks-page
@@ -422,10 +424,26 @@
     min-height: var(--openbot-touch-target);
   }
 
-  /* The panel toggles of a diagram's header. */
+  /* The panel toggles of a diagram's header, and its "ask an agent" bar. */
   .header-panel-toggle.ui-button {
     min-width: var(--openbot-touch-target);
     min-height: var(--openbot-touch-target);
+  }
+
+  .diagram-chat-launcher.ui-button,
+  .server-connection-actions .ui-button,
+  .ws-needs-you-row .ui-button,
+  .teammate-request-header .ui-button,
+  .ui-native-select {
+    min-height: var(--openbot-touch-target);
+  }
+
+  /* The face and colour choices of the first agent's form: a grid of taps. */
+  .ui-button.first-agent-face-choice,
+  .ui-button.first-agent-color-choice {
+    width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
+    flex-basis: var(--openbot-touch-target);
   }
 
   /* The open and download controls on an attachment card. */
@@ -445,6 +463,7 @@
     .ws-reaction-add.ui-button,
     .ws-fleet-money-link.ui-button,
     .message-copy .message-link,
+    .awaiting-replies-open.ui-button,
     .ui-button-variant-link,
     details > summary
   ) {
@@ -464,6 +483,7 @@
     .ws-reaction-add.ui-button,
     .ws-fleet-money-link.ui-button,
     .message-copy .message-link,
+    .awaiting-replies-open.ui-button,
     .ui-button-variant-link,
     details > summary
   )::after {

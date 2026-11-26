@@ -445,7 +445,8 @@
 
 :where(.z-badge-variant-warning-light) {
   background: var(--openbot-warning-soft);
-  color: var(--openbot-warning);
+  /* The text token: the fill amber of the Atelier light themes does not read on their paper. */
+  color: var(--openbot-warning-text);
 }
 
 :where(.z-badge-variant-destructive),

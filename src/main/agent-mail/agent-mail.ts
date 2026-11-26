@@ -30,6 +30,7 @@ import { parseStoredJson, writeJsonFileAtomically } from "../../backend/atomic-j
 import { isMissingFileError } from "../../backend/file-errors";
 import { readBodyWithin } from "../http-body";
 import type { SecretCipher } from "../provider-credential-store";
+import { mailIsMarkdown, renderMarkdownMail } from "./agent-mail-html";
 import { asksToOptOut, inboundMailNote, optOutFooter, replySubject } from "./agent-mail-text";
 
 const logger = createOpenBotLogger("agent-mail");
@@ -595,23 +596,35 @@ export class AgentMail {
     const workerUrl = this.#state.workerUrl;
     if (!secret || !workerUrl) return { ok: false, message: "Mail cannot leave yet. Tell the owner." };
     const agentName = this.#hooks.agent(agentId)?.name ?? "";
+    const senderName = (mailbox.displayName || agentName).slice(0, AGENT_MAIL_LIMITS.name) || null;
+    const subject = plan.subject.slice(0, AGENT_MAIL_LIMITS.subject);
+    const written = call.input.text.trim();
+    // Markdown goes out as a Motion-style HTML part with a plain-text part beside it.
+    const rendered = mailIsMarkdown(written, call.input.format)
+      ? renderMarkdownMail({
+          markdown: written,
+          subject,
+          senderName,
+          footer: firstContact ? optOutFooter().replace(/^\s*--\s*\n/u, "") : null,
+        })
+      : null;
     const outbound: OutboundMail = {
       version: AGENT_MAIL_VERSION,
-      from: {
-        address: mailbox.address,
-        name: (mailbox.displayName || agentName).slice(0, AGENT_MAIL_LIMITS.name) || null,
-      },
+      from: { address: mailbox.address, name: senderName },
       to: plan.to,
-      subject: plan.subject.slice(0, AGENT_MAIL_LIMITS.subject),
-      text: `${call.input.text.trim()}${firstContact ? `\n${optOutFooter()}` : ""}`.slice(
+      subject,
+      text: (rendered ? rendered.text : `${written}${firstContact ? `\n${optOutFooter()}` : ""}`).slice(
         0,
         AGENT_MAIL_LIMITS.sendText,
       ),
+      html: rendered && rendered.html.length <= AGENT_MAIL_LIMITS.sendHtml ? rendered.html : null,
       inReplyTo: thread?.lastInboundId ?? null,
       references: thread?.references ?? [],
       listUnsubscribe: firstContact ? `<mailto:${mailbox.address}?subject=unsubscribe>` : null,
     };
-    const body = JSON.stringify(outbound);
+    let body = JSON.stringify(outbound);
+    // A send over the Worker's body limit keeps its text and drops the HTML part.
+    if (outbound.html && body.length > AGENT_MAIL_LIMITS.body) body = JSON.stringify({ ...outbound, html: null });
     let response: Response;
     try {
       response = await this.#fetch(`${workerUrl}${AGENT_MAIL_SEND_PATH}`, {

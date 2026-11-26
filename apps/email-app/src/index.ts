@@ -16,6 +16,7 @@ export interface MailSender {
     from: { email: string; name?: string };
     subject: string;
     text: string;
+    html?: string;
     headers?: Record<string, string>;
   }): Promise<{ messageId?: string }>;
 }
@@ -148,6 +149,7 @@ export async function handleSend(request: Request, env: Env): Promise<Response> 
       from: { email: mail.from.address, ...(mail.from.name ? { name: mail.from.name } : {}) },
       subject: mail.subject,
       text: mail.text,
+      ...(mail.html ? { html: mail.html } : {}),
       headers: outboundHeaders(mail),
     });
     return json(200, { messageId: result.messageId ?? null });

@@ -35,6 +35,8 @@ export const AGENT_MAIL_LIMITS = {
   body: 128 * 1024,
   /** One outbound mail's text. */
   sendText: 20_000,
+  /** One outbound mail's HTML part, which the host makes from the agent's Markdown. */
+  sendHtml: 96_000,
 } as const;
 
 export const MAIL_AUTH_RESULTS = ["pass", "fail", "softfail", "neutral", "none", "temperror", "permerror"] as const;
@@ -78,6 +80,12 @@ export interface OutboundMail {
   to: string;
   subject: string;
   text: string;
+  /**
+   * The HTML part, sent beside `text` (multipart/alternative), or null for a text-only mail. The
+   * host renders it from the agent's Markdown and escapes the agent's text; a Worker that predates
+   * the field ignores it and sends the text only.
+   */
+  html?: string | null;
   inReplyTo: string | null;
   references: string[];
   /** A `mailto:` for `List-Unsubscribe`, on a first-contact mail. */
@@ -167,6 +175,16 @@ export function decodeInboundMail(value: unknown): InboundMail | null {
   };
 }
 
+/** Active content that a mail's HTML part never carries: the host's renderer makes none. */
+const ACTIVE_HTML =
+  /<\s*\/?\s*(script|iframe|object|embed|form|input|button|link|meta\s+http-equiv|base)\b|<[^>]*\son[a-z]+\s*=|<[^>]*(javascript|vbscript|data):/iu;
+
+/** The HTML part of a send, or null when it is missing, too large or carries active content. */
+function outboundHtml(value: unknown): string | null {
+  if (!isString(value) || !value.trim() || value.length > AGENT_MAIL_LIMITS.sendHtml) return null;
+  return ACTIVE_HTML.test(value) ? null : value;
+}
+
 /** The mail to send of a body, or null when it is not one. */
 export function decodeOutboundMail(value: unknown): OutboundMail | null {
   if (!isDynamicRecord(value) || value.version !== AGENT_MAIL_VERSION) return null;
@@ -184,6 +202,7 @@ export function decodeOutboundMail(value: unknown): OutboundMail | null {
     to,
     subject,
     text: body,
+    html: outboundHtml(value.html),
     inReplyTo: cleanMessageId(isString(value.inReplyTo) ? value.inReplyTo : null),
     references: (Array.isArray(value.references) ? value.references : [])
       .flatMap((item: unknown) => {

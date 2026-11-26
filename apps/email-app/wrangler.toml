@@ -9,11 +9,12 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 preview_urls = false
 
-[vars]
-# The host's webhook inbox for mail. Settings → Secrets → Agent mailboxes shows it.
-HOST_INBOX_URL = "https://connect.example.com/hooks/REPLACE_WITH_MAIL_ROUTE_ID"
-# The domains agents may send from, comma-separated. Each needs Cloudflare Email Sending.
-SENDER_DOMAINS = "example.com"
+# Vars: HOST_INBOX_URL (the host's webhook inbox for mail: Settings → Secrets → Agent mailboxes) and
+# SENDER_DOMAINS (the domains agents may send from, comma-separated). They are not in this file, so a
+# deploy never replaces the live values with placeholders: `bun run deploy` (`--keep-vars`) keeps
+# them. Set them on the first deploy, or to change them:
+#   bunx wrangler deploy --keep-vars --var HOST_INBOX_URL:https://connect.<domain>/hooks/mail_… \
+#     --var SENDER_DOMAINS:aprendivo.com
 
 # Cloudflare Email Sending. Set the secret with `wrangler secret put MAIL_SECRET`.
 [[send_email]]

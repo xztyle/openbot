@@ -4,6 +4,13 @@ export const EMAIL_REPLY_TOOL = "email_reply";
 export const EMAIL_SEND_TOOL = "email_send";
 export const MAIL_TOOLS: ReadonlySet<string> = new Set([EMAIL_REPLY_TOOL, EMAIL_SEND_TOOL]);
 
+const mailFormat = z
+  .enum(["text", "markdown"])
+  .optional()
+  .describe(
+    'How Atelier sends `text`. "markdown" sends a formatted mail that looks like a Motion page (headings, tables, lists, checklists, `> [!IMPORTANT]` callouts, a link alone on its line as a button) with a plain-text copy beside it. "text" sends it as written. Without it, Atelier sends Markdown when the text reads as Markdown.',
+  );
+
 export const emailReplyToolSchema = z.strictObject({
   threadId: z
     .string()
@@ -11,13 +18,27 @@ export const emailReplyToolSchema = z.strictObject({
     .min(1)
     .max(64)
     .describe('The mail thread from the message that brought the mail, such as "mt_3f9a…".'),
-  text: z.string().trim().min(1).max(20_000).describe("The answer, in plain text, in the customer's language."),
+  text: z
+    .string()
+    .trim()
+    .min(1)
+    .max(20_000)
+    .describe('The answer, in the customer\'s language: plain text, or Markdown with format "markdown".'),
+  format: mailFormat,
 });
 
 export const emailSendToolSchema = z.strictObject({
   to: z.string().trim().min(3).max(254).describe("One address."),
   subject: z.string().trim().min(1).max(200),
-  text: z.string().trim().min(1).max(20_000).describe("The mail, in plain text."),
+  text: z
+    .string()
+    .trim()
+    .min(1)
+    .max(20_000)
+    .describe(
+      'The mail: plain text, or Markdown with format "markdown". A report to a person is Markdown: the link to its Motion page alone on the first line, the decision in a `> [!IMPORTANT]` callout, tables over prose.',
+    ),
+  format: mailFormat,
   from: z
     .string()
     .trim()
@@ -56,12 +77,20 @@ export interface AgentMailPort {
   ): Promise<{ ok: true; result: Record<string, string> } | { ok: false; message: string }>;
 }
 
+/** How to write a mail that a person reads: shared by both tools and the tool guidance. */
+export const MAIL_FORMAT_GUIDANCE = [
+  'Short answers are plain text. A report, summary or update for a person (the owner or a teammate) is Markdown with format "markdown": Atelier sends it formatted like a Motion page, with a plain-text copy.',
+  "Shape a report so it reads in one screen: the link to its Motion page alone on the first line (it shows as a button at the top), then the decision first in a `> [!IMPORTANT]` callout (what you need from the reader and by when), the key numbers as a small table, decisions as a numbered list with a deadline each, open steps as a `- [ ]` checklist, and what is done as a short table. Prefer tables to prose.",
+  "Plain business language: no IDs, codes, file names, field names or jargon; write out abbreviations. No images and no raw HTML: they are removed.",
+].join(" ");
+
 export const MAIL_TOOL_DEFINITIONS = [
   {
     name: EMAIL_REPLY_TOOL,
     description: [
       "Answer a mail that came to your mail address, as that address, in the same mail thread. Pass the threadId from the message that brought the mail.",
-      "Write plain text like a person on the team: short, in the customer's language, no signature block of secrets or prices you were not given. Never promise refunds, money or anything only the owner decides: ask the owner first.",
+      "Write like a person on the team: short, in the customer's language, no signature block of secrets or prices you were not given. Never promise refunds, money or anything only the owner decides: ask the owner first.",
+      MAIL_FORMAT_GUIDANCE,
       "It sends at once, with no approval. Atelier limits how many mails you send an hour and a day.",
       'The result is JSON {"status":"sent","to","subject","messageId"}.',
     ].join(" "),
@@ -72,6 +101,7 @@ export const MAIL_TOOL_DEFINITIONS = [
     description: [
       "Write a new mail to someone who has not written to you, from your mail address. It works only from an address that the owner set to may write first; otherwise answer mail with email_reply.",
       "The first mail to each new person waits for the owner's OK in Needs you, and Atelier adds a line on how to opt out. Never write to someone who opted out. Keep it short and personal: no bulk mail.",
+      MAIL_FORMAT_GUIDANCE,
       'The result is JSON {"status":"sent","to","subject","threadId","messageId"}.',
     ].join(" "),
     shape: emailSendToolSchema.shape,

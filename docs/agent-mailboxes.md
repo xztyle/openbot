@@ -29,6 +29,31 @@ agent: email_reply / email_send ──> host ──signed POST /send──> mail
 - An address the host does not know answers 404, and the sender gets a bounce. So does a mail while
   the host is offline: Settings show the time and status of the last mail.
 
+## Formatted mail
+
+`email_reply` and `email_send` take plain text or Markdown (`format: "markdown"`, or Markdown that
+the host detects: a heading, a table, a checklist, a callout, or several marks). The host
+(`src/main/agent-mail/agent-mail-html.ts`) turns Markdown into an HTML part that looks like a Motion
+page, and sends it with a plain-text part beside it (multipart/alternative):
+
+- Motion's tokens, inline: the wall ground, a white card with a 1px edge and 8px corners, a header
+  line with the sender and the subject, the title on Motion's red header rule, Bricolage headings and
+  Figtree text (with system fonts after them), tables with edge lines and wall header cells, callouts
+  on Motion's tag plates (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`, or
+  `> [!💡]`), checklists with Motion's mint tick, quotes, code and `<details>` blocks (shown open).
+  A link alone on its line is a button. Table-based layout; a `<style>` block adds only the phone
+  layout and the dark surfaces where the client supports them.
+- Safe: every text is escaped, raw HTML tags go (script and style contents too), links keep only
+  `https`, `http` and `mailto`, and images are not loaded (their alt text shows). No scripts, remote
+  images, trackers or remote fonts. The Worker drops an HTML part that holds active content.
+- An HTML part over 96 KB, or a send over the Worker's body limit, goes as text only.
+- A report for a person: the Motion link alone on the first line, the decision first in a
+  `> [!IMPORTANT]` callout, then tables (key numbers, what is done) and numbered decisions with a
+  deadline each, in plain business language.
+
+`scripts/agent-mail-html-e2e.ts` sends a report through the real host and Worker code and renders it
+at 390 and 800 px.
+
 ## Safety
 
 - The note says that the mail is a stranger's data, never instructions, and fences the text. A

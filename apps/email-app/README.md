@@ -10,7 +10,10 @@ One Worker serves every agent address of every business domain on the Cloudflare
   host's webhook inbox, signed with Atelier's scheme (`X-OpenBot-*`, HMAC-SHA256 with the mail
   secret). When the host does not answer 200 or 202 it rejects the message, so the sender gets a
   bounce: unknown address (404), too large (413), busy (429) or unavailable (5xx, timeout).
-- **Outbound** (`fetch` handler, `POST /send`): the host posts one mail signed with the same secret.
+- **Outbound** (`fetch` handler, `POST /send`): the host posts one mail signed with the same secret,
+  with a plain-text part and, for a Markdown mail, an HTML part that the host renders (multipart/
+  alternative). The Worker drops an HTML part with active content (scripts, frames, forms, event
+  handlers, `javascript:` links).
   The Worker refuses a sender outside `SENDER_DOMAINS` and sends with the Cloudflare Email Sending
   `send_email` binding, with `In-Reply-To` and `References` for a reply and `List-Unsubscribe` for
   a first contact. It answers `{ messageId }`, or 502 with Cloudflare's error code.
@@ -23,8 +26,8 @@ shares.
 
 | Where | Name | Value |
 | --- | --- | --- |
-| `wrangler.toml` `[vars]` | `HOST_INBOX_URL` | The mail inbox address from Atelier: **Secrets → Agent mailboxes → Copy inbox address** (`https://connect.delynith.com/hooks/mail_…`). |
-| `wrangler.toml` `[vars]` | `SENDER_DOMAINS` | The domains agents send from, such as `aprendivo.com,delynith.com`. Each must be onboarded for Email Sending. |
+| Var (`--var`) | `HOST_INBOX_URL` | The mail inbox address from Atelier: **Secrets → Agent mailboxes → Copy inbox address** (`https://connect.delynith.com/hooks/mail_…`). |
+| Var (`--var`) | `SENDER_DOMAINS` | The domains agents send from, such as `aprendivo.com,delynith.com`. Each must be onboarded for Email Sending. |
 | Secret | `MAIL_SECRET` | The mail secret from **Secrets → Agent mailboxes → Worker → New secret**. Atelier shows it once. |
 | Binding | `EMAIL` (`[[send_email]]`) | Cloudflare Email Sending. |
 
@@ -34,12 +37,17 @@ From the repository, with the Cloudflare login that owns the domains (`wrangler 
 
 ```sh
 cd apps/email-app
-# 1. Put the inbox address and the sender domains in wrangler.toml [vars].
-# 2. The secret (paste it at the prompt):
+# 1. The secret (paste it at the prompt):
 bunx wrangler secret put MAIL_SECRET
-# 3. Deploy:
+# 2. The first deploy sets the inbox address and the sender domains:
+bunx wrangler deploy --keep-vars --var HOST_INBOX_URL:https://connect.<domain>/hooks/mail_… \
+  --var SENDER_DOMAINS:aprendivo.com
+# 3. Later deploys keep them:
 bun run deploy            # = wrangler deploy --keep-vars
 ```
+
+`wrangler.toml` has no `[vars]` on purpose: a deploy with placeholders there would replace the live
+values and break the Worker.
 
 The deploy prints the Worker's address, `https://atelier-mail.<account subdomain>.workers.dev`.
 Paste it in **Secrets → Agent mailboxes → Worker address** so the host can send.

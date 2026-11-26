@@ -6,10 +6,11 @@
 // `src/renderer/stories/web-client-*-harness.tsx` (picked by `?harness=`), as the other web-client
 // scripts do, and switches each harness to the locale of `?locale=` without changing the harness.
 //
-// `bun scripts/ui-polish-sweep-e2e.ts [--out=<name>] [--screens=today,dm/chief] [--phone-only] [--headed]`
-// Writes .openbot-build/ui-polish/<name>/<screen>-<width>-<scheme>.png and report.json; `--out`
-// defaults to `sweep`. Exits 1 when a screen overflows sideways or a phone control is under 36 px.
-// deploy-tests timeout: 900s
+// `bun scripts/ui-polish-sweep-e2e.ts [--out=<name>] [--screens=today,dm-chief] [--schemes=dark,light]
+// [--phone-only] [--headed]`. Writes .openbot-build/ui-polish/<name>/<screen>-<width>-<scheme>.png and
+// report.json; `--out` defaults to `sweep`, and `--schemes` to dark (a deploy runs dark; the full audit
+// passes both). Exits 1 when a screen overflows sideways or a phone control is under 36 px.
+// deploy-tests timeout: 2700s
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -26,7 +27,7 @@ const OUT = resolve(ROOT, ".openbot-build/ui-polish", option("out") ?? "sweep");
 const LOCALE = option("locale") ?? "es";
 const PHONE_ONLY = process.argv.includes("--phone-only");
 const ONLY = option("screens")?.split(",");
-const SCHEMES = ["dark", "light"] as const;
+const SCHEMES = (option("schemes") ?? "dark").split(",").filter((scheme) => scheme === "dark" || scheme === "light");
 
 /** The type scale of `packages/brand/src/tokens.css`, in px, with the display size and the glyph sizes. */
 const TEXT_SCALE = new Set([7, 8, 9, 12, 13, 14, 16, 18, 24, 32]);
@@ -327,6 +328,8 @@ function measure([phone, scale, weights]: readonly [boolean, readonly number[], 
     );
     for (const control of controls) {
       if (!visible(control) || control.closest(".ui-toast-layer")) continue;
+      // A node on a zoomable canvas is drawn at the canvas's scale, not at the finger's.
+      if (control.closest(".diagram-view-canvas")) continue;
       const box = control.getBoundingClientRect();
       // A 1px input behind a switch or a check box is not what the finger hits; its label is.
       if (box.width < 4 || box.height < 4) continue;

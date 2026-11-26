@@ -422,6 +422,12 @@
     min-height: var(--openbot-touch-target);
   }
 
+  /* The panel toggles of a diagram's header. */
+  .header-panel-toggle.ui-button {
+    min-width: var(--openbot-touch-target);
+    min-height: var(--openbot-touch-target);
+  }
+
   /* The open and download controls on an attachment card. */
   .attachment-open-button {
     width: var(--openbot-touch-target);

@@ -21,6 +21,9 @@ const logger = createOpenBotLogger("ux-creation-flows-e2e");
 const ROOT = resolve(import.meta.dirname, "..");
 const OUT = resolve(ROOT, ".openbot-build/ux-creation-flows-e2e");
 const UI_WAIT_MS = 60_000;
+// The dev server compiles the client on its first request. Beside the whole deploy suite that takes
+// more than a minute, so the first load of each viewport allows longer.
+const FIRST_LOAD_MS = 180_000;
 const english = translateFor("en");
 const COMMIT = { waitUntil: "commit" } as const;
 
@@ -160,7 +163,7 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
     await page.goto(`${origin}/app/general/activity`, COMMIT);
     await page
       .getByRole("heading", { name: english("workspace.view.activity"), exact: true })
-      .waitFor({ timeout: UI_WAIT_MS });
+      .waitFor({ timeout: FIRST_LOAD_MS });
   });
 
   // 1. New agent: the sidebar row opens the dialog; Escape closes it; Create opens the agent's chat.

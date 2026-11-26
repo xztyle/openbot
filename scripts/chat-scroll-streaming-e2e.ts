@@ -346,8 +346,13 @@ async function checkStory(page: Page, story: StoryCase, result: StoryResult): Pr
   assertHolds(story.id, "a short scroll up", result.shortScrollUp);
   assertHolds(story.id, "a long scroll up", result.longScrollUp);
 
-  // Back at the bottom, the chat follows again.
+  // Back at the bottom, the chat follows again. The wheel's first scroll event can come before the
+  // scroll reaches the end on a busy host; the check starts once the chat is at the bottom.
   await wheel(page, 100_000);
+  await page.waitForFunction((scrollSelector) => {
+    const scroll = document.querySelector<HTMLElement>(scrollSelector);
+    return scroll !== null && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight <= 80;
+  }, SCROLL);
   result.followsAgain = await assertFollows(page, story, "new content again at the bottom");
 
   // A click on a row leaves the focus on the page; the arrow key then scrolls the chat up. The content

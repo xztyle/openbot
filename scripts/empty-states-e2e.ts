@@ -23,6 +23,9 @@ const logger = createOpenBotLogger("empty-states-e2e");
 const ROOT = resolve(import.meta.dirname, "..");
 const OUT = resolve(ROOT, ".openbot-build/empty-states-e2e");
 const UI_WAIT_MS = 60_000;
+// The dev server compiles a harness on its first request. Beside the whole deploy suite that takes
+// more than a minute, so the first wait on each page allows longer.
+const FIRST_LOAD_MS = 180_000;
 const english = translateFor("en");
 const COMMIT = { waitUntil: "commit" } as const;
 const HARNESSES = ["web-client-empty-harness", "views-harness"] as const;
@@ -174,7 +177,7 @@ try {
       .getByText(english("server.connection.connecting", { name: "Preview computer" }))
       .filter({ visible: true })
       .first()
-      .waitFor({ timeout: UI_WAIT_MS });
+      .waitFor({ timeout: FIRST_LOAD_MS });
     await downPage
       .getByRole("button", { name: english("server.connection.retry") })
       .filter({ visible: true })
@@ -202,7 +205,7 @@ try {
   const emptyPage = await open(empty, "web-client-empty-harness");
   await step(emptyPage, "the guide of a host with no agent starts with New agent", async () => {
     await emptyPage.goto(`${origin}/app?agents=none`, COMMIT);
-    await guide(emptyPage).filter({ visible: true }).first().waitFor({ timeout: UI_WAIT_MS });
+    await guide(emptyPage).filter({ visible: true }).first().waitFor({ timeout: FIRST_LOAD_MS });
     await emptyPage.getByText(english("workspace.fleet.noAgentsHint")).filter({ visible: true }).first().tap();
     await emptyPage
       .getByRole("button", { name: english("agent.setup.create") })
@@ -218,7 +221,7 @@ try {
   const deskPage = await open(desk, "web-client-empty-harness");
   await step(deskPage, "the guide of a new space makes a channel there", async () => {
     await deskPage.goto(`${origin}/app/fresh/today?space=new`, COMMIT);
-    await guide(deskPage).filter({ visible: true }).first().waitFor({ timeout: UI_WAIT_MS });
+    await guide(deskPage).filter({ visible: true }).first().waitFor({ timeout: FIRST_LOAD_MS });
     assert.equal(await deskPage.getByText(english("workspace.today.guide.channel"), { exact: true }).count(), 0);
     await deskPage
       .getByRole("button", { name: new RegExp(`^${english("workspace.app.welcome.createChannel")}`, "u") })
@@ -237,7 +240,9 @@ try {
   const viewsPage = await open(views, "views-harness");
   await step(viewsPage, "an import clears the name and shows its validation score on the tab", async () => {
     await viewsPage.goto(`${origin}/app/general/portfolio`, COMMIT);
-    await viewsPage.getByRole("button", { name: english("portfolio.tab.templates"), exact: true }).tap();
+    await viewsPage
+      .getByRole("button", { name: english("portfolio.tab.templates"), exact: true })
+      .tap({ timeout: FIRST_LOAD_MS });
     const name = viewsPage.getByPlaceholder(english("portfolio.templates.namePlaceholder"));
     await name.fill("Bakery");
     await viewsPage

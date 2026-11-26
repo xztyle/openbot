@@ -444,7 +444,9 @@ function scanContrast(scope: string | null): Scan {
  * under the other with less than 2px between them. A stack spaces its cards with a gap token; a 0
  * here is what an undeclared token paints, as `--openbot-space-5` did on Today. Rows of one list
  * (`ul`, `ol`, a table body, a tab list, a radio or menu group) sit flush by design and do not count,
- * nor does a box inside another.
+ * nor does a box inside another. Only what is painted counts: a box that is hidden (a view kept
+ * mounted under the one on screen) is not a card, and an edge that a scroll area cuts off (a card
+ * half scrolled out of a chat, above the composer) is not an edge of the card.
  */
 function scanTouching(scope: string | null): Scan {
   const root = (scope && Array.from(document.querySelectorAll(scope)).at(-1)) || document.body;
@@ -456,7 +458,22 @@ function scanTouching(scope: string | null): Scan {
     const text = (el.getAttribute("aria-label") ?? el.textContent ?? "").trim().replace(/\s+/gu, " ").slice(0, 30);
     return `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ""} "${text}"`;
   };
+  /** The part of an element that its scroll and clip areas let paint. */
+  const painted = (el: Element) => {
+    const rect = el.getBoundingClientRect();
+    let top = rect.top;
+    let bottom = rect.bottom;
+    for (let parent = el.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+      const style = getComputedStyle(parent);
+      if (style.overflowY === "visible" && style.overflowX === "visible") continue;
+      const clip = parent.getBoundingClientRect();
+      top = Math.max(top, clip.top);
+      bottom = Math.min(bottom, clip.bottom);
+    }
+    return { rect, top, bottom };
+  };
   const cards = Array.from(root.querySelectorAll("*")).filter((el) => {
+    if (!el.checkVisibility({ visibilityProperty: true, opacityProperty: true })) return false;
     const rect = el.getBoundingClientRect();
     if (rect.width < 120 || rect.height < 24 || rect.bottom <= 0 || rect.top >= height || rect.left >= width)
       return false;
@@ -478,10 +495,15 @@ function scanTouching(scope: string | null): Scan {
     /^(?:button|tab|option|menuitem)$/u.test(el.getAttribute("role") ?? "");
   const seen = new Set<string>();
   for (const above of cards) {
-    const a = above.getBoundingClientRect();
+    const shownAbove = painted(above);
+    const a = shownAbove.rect;
+    // A bottom edge that a scroll area cuts off is not painted.
+    if (shownAbove.bottom < a.bottom - 0.5) continue;
     for (const below of cards) {
       if (above === below || above.contains(below) || below.contains(above)) continue;
-      const b = below.getBoundingClientRect();
+      const shownBelow = painted(below);
+      const b = shownBelow.rect;
+      if (shownBelow.top > b.top + 0.5) continue;
       const gap = b.top - a.bottom;
       if (gap < -1 || gap >= 2) continue;
       if (b.right <= a.left || b.left >= a.right) continue;

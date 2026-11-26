@@ -124,14 +124,33 @@ async function started(page: Page): Promise<void> {
   await shows();
 }
 
+/**
+ * The most one step may take. A Playwright input has no time limit of its own, so an input to a page
+ * that does not answer would otherwise hold the whole check until the suite stops it, with no report.
+ */
+const STEP_MS = 240_000;
+
 async function step(page: Page, name: string, check: () => Promise<void>): Promise<void> {
   try {
-    await check();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      check(),
+      new Promise<never>((_, fail) => {
+        timer = setTimeout(() => fail(new Error(`The step took more than ${STEP_MS / 1_000} s.`)), STEP_MS);
+      }),
+    ]).finally(() => clearTimeout(timer));
     report.steps.push({ name, url: path(page), passed: true });
   } catch (error) {
-    const shown = await page
-      .evaluate(() => (document.querySelector("main, .web-app")?.textContent ?? "").replace(/\s+/gu, " ").slice(0, 300))
-      .catch((reason: unknown) => String(reason));
+    // A page that is still loading has no context to run a script in, and an evaluate waits for one
+    // with no time limit: the failure must be reported, not wait for the suite's own timeout.
+    const shown = await Promise.race([
+      page
+        .evaluate(() =>
+          (document.querySelector("main, .web-app")?.textContent ?? "").replace(/\s+/gu, " ").slice(0, 300),
+        )
+        .catch((reason: unknown) => String(reason)),
+      new Promise<string>((done) => setTimeout(() => done("(the page did not answer)"), 10_000).unref()),
+    ]);
     report.steps.push({
       name,
       url: path(page),

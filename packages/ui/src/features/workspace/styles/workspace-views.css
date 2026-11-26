@@ -53,13 +53,19 @@
 /* A row that scrolls sideways fades the edge where more waits: the right edge at the start, the
    left edge at the end, both in between. The animation runs on the row's own scroll position, so a
    row with nothing to scroll (the timeline is inactive) keeps its edges whole. */
+:root {
+  /* The length of the fade at the edge of a row that scrolls sideways: long enough to read as a
+     cue, short enough to leave the last label legible. */
+  --ws-scroll-row-fade: calc(2 * var(--openbot-space-6));
+}
+
 @keyframes ws-scroll-row-fade {
   from {
     mask-image: linear-gradient(
       to right,
       currentcolor 0,
       currentcolor 0,
-      currentcolor calc(100% - var(--openbot-space-6)),
+      currentcolor calc(100% - var(--ws-scroll-row-fade)),
       transparent 100%
     );
   }
@@ -68,7 +74,7 @@
     mask-image: linear-gradient(
       to right,
       transparent 0,
-      currentcolor var(--openbot-space-6),
+      currentcolor var(--ws-scroll-row-fade),
       currentcolor 100%,
       currentcolor 100%
     );

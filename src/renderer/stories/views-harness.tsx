@@ -3,7 +3,8 @@
  * `scripts/views-e2e.ts`: Portfolio (value, quality with a suite, templates, reality check), Reviews
  * (savings, a weekly review, playbooks, the learning queue), Trust (rules with a budget, the audit
  * trail, the guardrails) and Insights. `?data=empty` serves each view with nothing in it, and
- * `?data=extreme` with large numbers and long text. Each admin call lands in `data-views-calls`.
+ * `?data=extreme` with large numbers and long text; `?appearance=dark` paints the dark palette. Each
+ * admin call lands in `data-views-calls`.
  */
 import type { LearningReviewItem } from "@openbot/contracts/agent-learning";
 import { DEFAULT_GUARDRAIL_POLICY, type GuardrailsView, normalizeGuardrailPolicy } from "@openbot/contracts/guardrails";
@@ -39,6 +40,8 @@ import "../src/features/web-client/web-client.css";
 
 const params = new URLSearchParams(window.location.search);
 const DATA = params.get("data") === "empty" ? "empty" : params.get("data") === "extreme" ? "extreme" : "real";
+/** `?appearance=dark` paints the views in the dark palette, for a screenshot sweep. */
+const APPEARANCE = params.get("appearance") === "dark" ? "dark" : "light";
 const empty = DATA === "empty";
 const big = DATA === "extreme";
 const NOW = Date.now();
@@ -516,7 +519,7 @@ if (root)
             createRuntime={runtime}
             language="system"
             onChangeLanguage={() => {}}
-            appearance="light"
+            appearance={APPEARANCE}
             onChangeAppearance={() => {}}
           />
         </div>
@@ -524,4 +527,4 @@ if (root)
     ),
     root,
   );
-document.documentElement.dataset.openbotColorScheme = "light";
+document.documentElement.dataset.openbotColorScheme = APPEARANCE;

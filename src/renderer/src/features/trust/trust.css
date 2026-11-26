@@ -147,6 +147,19 @@
   flex: 1 1 10rem;
 }
 
+/* The filters and the pass length are one wrapping row: a control takes the width of its text,
+   not the primitive's 100%, which put each select on a line of its own. */
+.trust-filters > :is(.ui-native-select, .ui-input) {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 9rem;
+}
+
+.trust-inline > .ui-native-select {
+  width: auto;
+  flex: 0 1 auto;
+}
+
 .trust-search > * {
   flex: 1 1 auto;
 }
@@ -314,13 +327,28 @@
 }
 
 @media (max-width: 640px) {
+  /* Four columns do not fit a phone: the action's name squeezed into 3rem and ran under the
+     first select. Each row is now the name on a line, the selects on the next, in three equal
+     columns; the head keeps the column names and drops the word "Action". */
+  .trust-grid {
+    gap: var(--openbot-space-3);
+  }
+
   .trust-grid-row {
-    grid-template-columns: minmax(0, 1fr) repeat(3, minmax(0, 6rem));
-    gap: var(--openbot-space-2);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--openbot-space-1) var(--openbot-space-2);
+  }
+
+  .trust-grid-row > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .trust-grid-head > :first-child {
+    display: none;
   }
 
   .trust-agent .trust-grid-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 11rem);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .guardrails-window {

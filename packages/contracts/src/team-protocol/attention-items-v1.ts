@@ -19,6 +19,8 @@
 // characters: the ticket explained for an owner with no technical background, which the card shows
 // instead of `reason`), `escalatedBy` and `escalationReason` (the manager that sent it up to the
 // owner, and why; at most 200 characters each). A client of before drops them.
+// Added later, optional: `ownerAsked` (only `true`): the owner wrote to the agent while the request
+// waits and the agent has not answered since. A client of before drops it.
 //
 // The host sends the event after each runtime snapshot that it sends to a peer, and again at each
 // change, to a peer that has `fork-host-v1` only. It leaves out each request of an agent that the peer
@@ -78,6 +80,7 @@ function item(value: unknown): AgentAttentionItem {
   const plain = value.plain === undefined ? undefined : isOwnerSummary(value.plain) ? value.plain : invalid();
   const escalatedBy = text(value.escalatedBy);
   const escalationReason = text(value.escalationReason);
+  if (value.ownerAsked !== undefined && value.ownerAsked !== true) invalid();
   return {
     kind: value.kind,
     requestId: requestId(value.requestId),
@@ -96,6 +99,7 @@ function item(value: unknown): AgentAttentionItem {
       : { plain: { asks: plain.asks, why: plain.why, ifYes: plain.ifYes, ifNo: plain.ifNo } }),
     ...(escalatedBy === undefined ? {} : { escalatedBy }),
     ...(escalationReason === undefined ? {} : { escalationReason }),
+    ...(value.ownerAsked === true ? { ownerAsked: true as const } : {}),
   };
 }
 

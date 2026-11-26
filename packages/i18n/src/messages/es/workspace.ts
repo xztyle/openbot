@@ -909,6 +909,10 @@ export const messages = {
   "workspace.needsYou.ticket.declined": "Rechazado.",
   "workspace.needsYou.ticket.reply": "Responder",
   "workspace.needsYou.ticket.send": "Enviar",
+  "workspace.needsYou.ticket.asked": "Le preguntaste algo · esperando respuesta",
+  "workspace.needsYou.ticket.askedNote":
+    "Una pregunta no decide: esto sigue aquí hasta que apruebes, rechaces o lo descartes.",
+  "workspace.needsYou.ticket.askPlaceholder": "Tu pregunta: va al agente; la decisión sigue pendiente",
   "workspace.needsYou.ticket.replyPlaceholder": "Tu respuesta: va al agente y al ticket",
   "workspace.needsYou.ticket.message": "Sobre {ticket}: {answer}",
   "workspace.needsYou.ticket.acceptAsIs": "Aceptar así",

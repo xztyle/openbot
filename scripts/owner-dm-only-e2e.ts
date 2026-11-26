@@ -7,6 +7,8 @@
 // (c) The owner writes: the answer counts as unread and the end of the turn tells the owner.
 // (d) A Motion event wakes the agent and it writes to the owner with `message_owner`: that message,
 //     and only it, counts as unread, and the end of the turn tells the owner with its text.
+// (e) A Motion ticket that waits for the owner's money decision stays in Needs you when the owner asks
+//     the agent something, marked `ownerAsked`, until the agent answers.
 // The host's two counts (the SQL one and the one over a snapshot) agree at each step.
 // `bun scripts/owner-dm-only-e2e.ts`. Writes .openbot-build/owner-dm-only-e2e/report.json.
 import assert from "node:assert/strict";
@@ -255,6 +257,8 @@ try {
         args: { recipientAgentIds: [lead.id], text: "Revisa MAS-28, por favor.", expectsReply: true },
       },
       "tell-owner": { tool: "message_owner", args: { text: OWNER_NOTE } },
+      // Holds the turn on a question to the owner, so the turn has not answered yet.
+      hold: { tool: "ask_user", args: { questions: [{ question: "¿México o Colombia?" }] } },
     }),
   );
   await readAll(lead.id);
@@ -337,6 +341,51 @@ try {
     unread: told.unread,
     agentTalk: false,
     notification: told.content.body,
+    passed: true,
+  });
+  // (e) A Motion ticket waits for the owner's money decision; the owner asks the agent something.
+  const ticketItem = () =>
+    agents.attentionItems().find((item) => item.agentId === lead.id && item.requestId === "motion:eve-20");
+  agents.setWaitingTickets([
+    {
+      agentId: lead.id,
+      issueId: "eve-20",
+      key: "EVE-20",
+      title: "Globos para fiestas",
+      url: "https://motion.example.com/EVE-20",
+      createdAt: new Date().toISOString(),
+      asks: "approval",
+    },
+  ]);
+  assert.ok(ticketItem(), "The ticket waits in Needs you.");
+  assert.equal(ticketItem()?.ownerAsked, undefined, "Nobody asked yet.");
+  before = completions(lead.id).length;
+  await runCauseEffect(agents.sendMessage({ agentId: lead.id, text: "¿Por qué solo México? STEP:hold" }, owner));
+  const prompt = await waitFor("the turn to hold on its question", () =>
+    agents.attentionItems().find((item) => item.agentId === lead.id && item.turnId !== "motion"),
+  );
+  await waitFor("the ticket to say the owner asked", () => ticketItem()?.ownerAsked === true);
+  report.cases.push({
+    name: "the owner asks about a waiting money ticket: it stays, marked asked",
+    unread: -1,
+    agentTalk: false,
+    notification: null,
+    passed: true,
+  });
+  const asked = events.find(
+    (event): event is Extract<AgentEvent, { type: "prompt" }> =>
+      event.type === "prompt" && event.requestId === prompt.requestId,
+  );
+  const questionId = asked?.questions[0]?.id ?? "q1";
+  await runCauseEffect(agents.respondToPrompt({ requestId: prompt.requestId, answers: { [questionId]: ["México"] } }));
+  await waitFor("the turn to end", () => completions(lead.id)[before]);
+  await idle(lead.id);
+  await waitFor("the ticket to wait for the decision again", () => ticketItem() && !ticketItem()?.ownerAsked);
+  report.cases.push({
+    name: "the agent answers: the ticket waits for the decision again",
+    unread: -1,
+    agentTalk: false,
+    notification: null,
     passed: true,
   });
   report.passed = true;

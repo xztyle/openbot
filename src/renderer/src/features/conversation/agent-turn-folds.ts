@@ -1,6 +1,7 @@
 import { AGENT_EXCHANGE_ITEM_TYPE } from "@openbot/contracts/ipc";
 import {
   type AgentActivitySource,
+  type BackgroundTurnOptions,
   backgroundTurns,
   isBackgroundRow,
   isOwnerAddressedItemType,
@@ -25,7 +26,10 @@ function rowRole(message: AgentMessage): OwnerConversationRow["role"] {
  * of the host's read state (`backgroundTurns` in `@openbot/contracts/owner-conversation`), so a turn
  * that does not count as unread is also a turn that folds.
  */
-export function agentActivityTurns(messages: readonly AgentMessage[]): Map<string, AgentActivitySource[]> {
+export function agentActivityTurns(
+  messages: readonly AgentMessage[],
+  options: BackgroundTurnOptions = {},
+): Map<string, AgentActivitySource[]> {
   return backgroundTurns(
     messages.map((message) => ({
       turnId: message.turnId,
@@ -35,8 +39,9 @@ export function agentActivityTurns(messages: readonly AgentMessage[]): Map<strin
       direction: message.exchange?.direction,
       text: message.body,
     })),
-    // The latest pages hold whole turns, except perhaps the first: it can start on an older page.
-    { wholeTurns: true, partialTurnId: messages[0]?.turnId },
+    // By default only a turn with a sign of what woke the agent folds: the chat never hides a turn it
+    // cannot explain. A count passes `wholeTurns`, as the host counts.
+    options,
   );
 }
 

@@ -923,6 +923,10 @@ export const messages = defineMessages("workspace", {
   "workspace.needsYou.ticket.declined": "Declined.",
   "workspace.needsYou.ticket.reply": "Reply",
   "workspace.needsYou.ticket.send": "Send",
+  "workspace.needsYou.ticket.asked": "You asked something · waiting for the answer",
+  "workspace.needsYou.ticket.askedNote":
+    "A question doesn't decide: this stays here until you approve, decline or dismiss it.",
+  "workspace.needsYou.ticket.askPlaceholder": "Your question: it goes to the agent; the decision stays pending",
   "workspace.needsYou.ticket.replyPlaceholder": "Your answer: it goes to the agent and on the ticket",
   "workspace.needsYou.ticket.message": "About {ticket}: {answer}",
   "workspace.needsYou.ticket.acceptAsIs": "Accept as is",

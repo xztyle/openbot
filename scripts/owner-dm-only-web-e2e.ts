@@ -7,6 +7,9 @@
 // (d) In the chat, the two wakes are one collapsed "Agent activity" row ("2 updates · Motion,
 //     Chief"), which opens to their messages; the owner's exchange and the message to the owner show
 //     as messages; the rest of the turn with the message to the owner is one activity row before it.
+// (e) A money ticket's strip at the top of the DM stays, with Approve and Decline, when the owner
+//     asks the agent something (its Reply, or the chat's box); it says "You asked something" while the
+//     host says so; Approve takes it away.
 // Unread counts come from the client's own recount over the same rule as the host
 // (`@openbot/contracts/owner-conversation`); `scripts/owner-dm-only-e2e.ts` checks the host.
 // It serves the web client on the mock host of `src/renderer/stories/web-client-owner-dm-harness.tsx`.
@@ -25,7 +28,11 @@ import { createServer, type Plugin } from "vite";
 
 declare global {
   interface Window {
-    harnessOwnerDm?: { next(): string | null };
+    harnessOwnerDm?: {
+      next(): string | null;
+      ticket(state: "waiting" | "asked" | "gone"): void;
+      calls: { kind: "message" | "answer"; text: string }[];
+    };
     /** The browser notifications that the page showed, by title and body. */
     shownNotifications?: { title: string; body: string }[];
   }
@@ -204,6 +211,67 @@ async function display(browser: Browser, viewport: ViewportName): Promise<void> 
   await page.context().close();
 }
 
+/**
+ * The money ticket's strip at the top of the DM stays pinned with its buttons when the owner asks the
+ * agent something (its Reply, or the chat's box): a question decides nothing. It says "You asked
+ * something" while the host says so, and goes back to waiting for the decision when the agent answers.
+ * Only Approve takes it away.
+ */
+async function strip(browser: Browser, viewport: ViewportName): Promise<void> {
+  const page = await open(browser, viewport, "/app/general/dm/research");
+  const banner = page.getByRole("status").filter({ hasText: "¿Apruebas gastar 70 dólares" });
+  const approve = banner.getByRole("button", { name: english("workspace.needsYou.ticket.approve"), exact: true });
+  const askedText = banner.getByText(english("workspace.needsYou.ticket.asked"));
+  const calls = () => page.evaluate(() => window.harnessOwnerDm?.calls ?? []);
+  await step(page, viewport, "a money ticket shows its strip with Approve and Decline", async () => {
+    await page.getByText("Hola, aquí estoy.").first().waitFor({ timeout: UI_WAIT_MS });
+    await page.evaluate(() => window.harnessOwnerDm?.ticket("waiting"));
+    await approve.waitFor({ timeout: UI_WAIT_MS });
+    await banner
+      .getByRole("button", { name: english("workspace.needsYou.ticket.decline"), exact: true })
+      .waitFor({ timeout: UI_WAIT_MS });
+  });
+  await step(page, viewport, "a question with Reply keeps the strip and its buttons, and says you asked", async () => {
+    await banner.getByRole("button", { name: english("workspace.needsYou.ticket.reply"), exact: true }).click();
+    await banner.getByRole("textbox").fill("¿Por qué solo México?");
+    await banner.getByRole("button", { name: english("workspace.needsYou.ticket.send"), exact: true }).click();
+    await askedText.waitFor({ timeout: UI_WAIT_MS });
+    await approve.waitFor({ timeout: UI_WAIT_MS });
+    const made = await calls();
+    assert.ok(
+      made.some((call) => call.kind === "message" && call.text.includes("¿Por qué solo México?")),
+      `the question did not reach the agent: ${JSON.stringify(made)}`,
+    );
+    assert.ok(!made.some((call) => call.kind === "answer"), "the question answered the ticket");
+    await page.screenshot({ path: resolve(OUT, `${viewport}-strip-asked.png`) });
+    report.screenshots.push(resolve(OUT, `${viewport}-strip-asked.png`));
+  });
+  await step(page, viewport, "writing in the chat keeps the strip", async () => {
+    const box = page.getByRole("textbox", { name: english("composer.placeholder.message", { name: "Research" }) });
+    await box.fill("Otra pregunta sobre la campaña");
+    await box.press("Enter");
+    await page.waitForTimeout(1_000);
+    await approve.waitFor({ timeout: UI_WAIT_MS });
+    assert.ok(!(await calls()).some((call) => call.kind === "answer"), "a chat message answered the ticket");
+  });
+  await step(page, viewport, "the host's asked state shows, and the agent's answer clears it", async () => {
+    await page.evaluate(() => window.harnessOwnerDm?.ticket("asked"));
+    await askedText.waitFor({ timeout: UI_WAIT_MS });
+    await page.evaluate(() => window.harnessOwnerDm?.ticket("waiting"));
+    await askedText.waitFor({ state: "detached", timeout: UI_WAIT_MS });
+    await approve.waitFor({ timeout: UI_WAIT_MS });
+  });
+  await step(page, viewport, "Approve answers the ticket and takes the strip away", async () => {
+    await approve.click();
+    await banner.waitFor({ state: "detached", timeout: UI_WAIT_MS });
+    assert.ok(
+      (await calls()).some((call) => call.kind === "answer"),
+      "Approve did not answer the ticket",
+    );
+  });
+  await page.context().close();
+}
+
 function option(name: string): string | undefined {
   return process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
 }
@@ -237,6 +305,7 @@ try {
   for (const viewport of ["desktop", "phone"] as const) {
     await badges(browser, viewport);
     await display(browser, viewport);
+    await strip(browser, viewport);
   }
   report.passed =
     report.steps.length > 0 && report.steps.every((item) => item.passed) && report.pageErrors.length === 0;

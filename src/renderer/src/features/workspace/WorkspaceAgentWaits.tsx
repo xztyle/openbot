@@ -4,18 +4,24 @@
  * why it waits (the host reads that from the ticket), and lets the reader answer it here: an approval
  * has Approve and Decline, an escalated review has Accept as is and Send back with a note, any ticket
  * has Reply. An answer goes to the agent as the reader's own message, which wakes it, and
- * on the ticket as the owner's comment (the host), and the ticket leaves Needs you. Dismiss only
- * clears the mark. Motion itself stays one small link away.
+ * on the ticket as the owner's comment (the host), and the ticket leaves Needs you. On a ticket that
+ * waits for a decision, Reply is a question: it goes to the agent only, and the strip stays pinned
+ * with its buttons ("you asked something · waiting for the answer") until the decision is answered
+ * or dismissed. Writing in the chat does the same. Dismiss only clears the mark. Motion itself stays
+ * one small link away.
  */
 import { type AgentAttentionItem, isTicketAttention } from "@openbot/contracts/ipc";
 import { Button } from "@openbot/ui/button";
 import { Input } from "@openbot/ui/form";
 import { Check, ExternalLink, Ticket, X } from "@openbot/ui/icons";
 import { useText } from "@openbot/ui/text";
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { useWorkspace } from "./workspace-context";
 import { ticketDetail } from "./workspace-decisions";
 import { answerTicket, ticketAnswers } from "./workspace-ticket-answer";
+
+/** How long the strip says "you asked" on its own, before the host's list says it. */
+const ASKED_LOCAL_MS = 60_000;
 
 export function WorkspaceAgentWaits(props: { agentId: string }) {
   const ws = useWorkspace();
@@ -34,6 +40,24 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
     (ws.env.needsYou?.() ?? []).filter(
       (item) => item.agentId === props.agentId && isTicketAttention(item) && !gone().has(String(item.requestId)),
     ),
+  );
+  /**
+   * The tickets the reader just asked about, by when, until the host says so too (`ownerAsked`): a
+   * question goes to the agent only, and the ticket keeps waiting for the decision.
+   */
+  const [askedHere, setAskedHere] = createSignal<ReadonlyMap<string, number>>(new Map());
+  const asked = (item: AgentAttentionItem) => {
+    if (item.ownerAsked) return true;
+    const at = askedHere().get(String(item.requestId));
+    return at !== undefined && Date.now() - at < ASKED_LOCAL_MS;
+  };
+  // Once the host says the reader asked, its word counts: it says when the agent answered.
+  createEffect(
+    () => tickets().flatMap((item) => (item.ownerAsked ? [String(item.requestId)] : [])),
+    (reported) => {
+      if (!reported.some((key) => askedHere().has(key))) return;
+      setAskedHere((map) => new Map([...map].filter(([key]) => !reported.includes(key))));
+    },
   );
   const hide = (key: string) => setGone((keys) => new Set([...keys, key]));
   const show = (key: string) => setGone((keys) => new Set([...keys].filter((entry) => entry !== key)));
@@ -77,13 +101,41 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
       setBusy(null);
     }
   };
+  /**
+   * A question about a ticket that waits for a decision: the reader's message to the agent, nothing on
+   * the ticket. The strip stays, with its buttons, until the decision itself is answered or dismissed.
+   */
+  const ask = async (item: AgentAttentionItem, text: string) => {
+    const key = String(item.requestId);
+    const trimmed = text.trim();
+    if (!trimmed || busy()) return;
+    setFailed(null);
+    setBusy(key);
+    try {
+      await ws.channels.port().sendAgentMessage({
+        agentId: item.agentId,
+        text: t("workspace.needsYou.ticket.message", { ticket: item.summary ?? "", answer: trimmed }),
+        clientMessageId: crypto.randomUUID(),
+      });
+      setAskedHere((map) => new Map([...map, [key, Date.now()]]));
+      setReplying(null);
+      setReply("");
+    } catch (cause) {
+      setFailure(errorMessage(cause, t("workspace.today.answerFailed")));
+      setFailed(key);
+    } finally {
+      setBusy(null);
+    }
+  };
   return (
     <For each={tickets()} keyed={(item) => String(item.requestId)}>
       {(item) => {
         const key = () => String(item().requestId);
         const answers = () => ticketAnswers(item(), t);
+        /** A ticket that waits for a decision: a reply to it is a question, not the answer. */
+        const decides = () => answers().primary !== undefined;
         return (
-          <div class="ws-agent-dm-wait" role="status">
+          <div class="ws-agent-dm-wait" role="status" data-asked={asked(item()) ? "true" : undefined}>
             <div class="ws-agent-dm-wait-row">
               <Ticket class="ws-agent-dm-wait-icon" aria-hidden="true" />
               <span class="ws-agent-dm-wait-text">
@@ -132,6 +184,12 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
                 {t("workspace.today.dismiss")}
               </Button>
             </div>
+            <Show when={asked(item())}>
+              <p class="ws-agent-dm-wait-asked">
+                <strong>{t("workspace.needsYou.ticket.asked")}</strong>
+                <span>{t("workspace.needsYou.ticket.askedNote")}</span>
+              </p>
+            </Show>
             <Show when={ticketDetail(item(), t)}>{(detail) => <p class="ws-agent-dm-wait-reason">{detail()}</p>}</Show>
             {/* The raw reason is technical: only the reader opens it. */}
             <Show when={[item().summary, item().reason, item().escalationReason].filter(Boolean).join("\n")}>
@@ -179,15 +237,23 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
                 class="ws-agent-dm-wait-reply"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  void answer(item(), reply());
+                  void (decides() ? ask(item(), reply()) : answer(item(), reply()));
                 }}
               >
                 <Input
                   class="ws-agent-dm-wait-input"
                   value={reply()}
                   onInput={(event) => setReply(event.currentTarget.value)}
-                  placeholder={t("workspace.needsYou.ticket.replyPlaceholder")}
-                  aria-label={t("workspace.needsYou.ticket.replyPlaceholder")}
+                  placeholder={
+                    decides()
+                      ? t("workspace.needsYou.ticket.askPlaceholder")
+                      : t("workspace.needsYou.ticket.replyPlaceholder")
+                  }
+                  aria-label={
+                    decides()
+                      ? t("workspace.needsYou.ticket.askPlaceholder")
+                      : t("workspace.needsYou.ticket.replyPlaceholder")
+                  }
                   ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus())}
                 />
                 <Button type="submit" size="sm" disabled={busy() !== null || !reply().trim()}>

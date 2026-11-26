@@ -682,6 +682,20 @@
   min-width: 0;
 }
 
+/* The owner asked the agent something: the strip stays, softer, until the decision is answered. */
+.ws-agent-dm-wait[data-asked="true"] {
+  border-style: dashed;
+  background: color-mix(in oklab, var(--openbot-warning) 6%, transparent);
+}
+
+.ws-agent-dm-wait-asked {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+  margin: 0;
+  color: var(--openbot-text-secondary);
+}
+
 .ws-agent-dm-wait-reason {
   margin: 0;
   color: var(--openbot-text-secondary);

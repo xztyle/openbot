@@ -155,6 +155,7 @@ import {
   type WorkspaceSettings,
   workspaceAccessEnforced,
 } from "@openbot/contracts/ipc";
+import { OWNER_MESSAGE_ITEM_TYPE } from "@openbot/contracts/owner-conversation";
 import { CLAUDE_API_KEY_ACCOUNT_ID } from "@openbot/contracts/team-protocol/claude-api-key-v1";
 import { ContextResetBusyError } from "@openbot/contracts/team-protocol/context-reset-v1";
 import type { QueueEditRequest } from "@openbot/contracts/team-protocol/queue-edit-v1";
@@ -354,6 +355,9 @@ const ATTENTION_LIST_EVENTS: ReadonlySet<AgentEvent["type"]> = new Set([
   "browser-takeover-resolved",
   "turn-completed",
   "runtime-snapshot",
+  // The owner's message to an agent with a waiting ticket marks it asked (`ownerAsked`).
+  "turn-started",
+  "queue-changed",
 ]);
 
 /**
@@ -2228,7 +2232,32 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   /** Every request of every agent that waits for the user now. */
   attentionItems(): AgentAttentionItem[] {
-    return this.#attention.attentionItems();
+    return this.#attentionList();
+  }
+
+  /**
+   * The attention list, with `ownerAsked` on a Motion ticket whose agent the owner wrote to while it
+   * waits and that has not answered since: a question decides nothing, so the ticket stays, and the
+   * card says the owner asked. It comes back to "waits for your decision" when the agent answers.
+   */
+  #attentionList(): AgentAttentionItem[] {
+    return this.#attention.attentionItems().map((item) => {
+      if (item.turnId !== MOTION_TICKET_TURN) return item;
+      const asked = this.#store.database.connection
+        .prepare(
+          `SELECT 1 FROM projection_thread_messages asked
+           WHERE asked.thread_id = ?1 AND asked.author = 'user' AND asked.created_at > ?2
+             AND COALESCE(asked.item_type, '') != 'routine' AND COALESCE(asked.item_type, '') NOT LIKE 'system-notice:%'
+             AND NOT EXISTS (
+               SELECT 1 FROM projection_thread_messages answer
+               WHERE answer.thread_id = ?1 AND answer.author = 'assistant' AND answer.created_at > asked.created_at
+                 AND COALESCE(answer.item_type, 'agentMessage') IN ('agentMessage', 'final_answer', '${OWNER_MESSAGE_ITEM_TYPE}')
+             )
+           LIMIT 1`,
+        )
+        .get(item.threadId, item.createdAt);
+      return asked ? { ...item, ownerAsked: true as const } : item;
+    });
   }
 
   /**
@@ -2278,7 +2307,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         ];
       }),
     );
-    const items = this.#attention.attentionItems();
+    const items = this.#attentionList();
     const encoded = JSON.stringify(items);
     if (encoded === this.#attentionEncoded) return;
     this.#attentionEncoded = encoded;
@@ -2459,7 +2488,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       attention: this.#attention,
       usageLimits: this.#usageLimits,
       inputEscalations: this.#escalations?.list() ?? [],
-      attentionItems: this.#attention.attentionItems(),
+      attentionItems: this.#attentionList(),
     });
   }
 
@@ -6845,7 +6874,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
    */
   #observeAttention(event: AgentEvent): void {
     if (!ATTENTION_LIST_EVENTS.has(event.type)) return;
-    const items = this.#attention.attentionItems();
+    const items = this.#attentionList();
     const encoded = JSON.stringify(items);
     if (encoded === this.#attentionEncoded) return;
     this.#attentionEncoded = encoded;

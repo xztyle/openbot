@@ -161,7 +161,8 @@ export function preserveKnownAgentUnread(
   const throughMessageId = state.throughMessageId ?? boundary;
   const throughIndex = throughMessageId ? messages.findIndex((message) => message.id === throughMessageId) : -1;
   if (throughMessageId && throughIndex < 0) return state;
-  const activity = agentActivityTurns(messages);
+  // As the host counts: a turn that no person started is not unread, also with no sign of who did.
+  const activity = agentActivityTurns(messages, { wholeTurns: true, partialTurnId: messages[0]?.turnId });
   const unread = messages
     .slice(throughIndex + 1)
     .filter((message) => isIncomingAgentMessage(message) && !isBackgroundRow(message, activity));

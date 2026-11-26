@@ -5,7 +5,7 @@
  * others as a host does: the messages, then the end of the turn (with `agentTalk` for the agent's own
  * activity, as `isBackgroundTurn` sets it on the host).
  */
-import type { ConversationMessage } from "@openbot/contracts/ipc";
+import { type AgentAttentionItem, type ConversationMessage, MOTION_TICKET_TURN } from "@openbot/contracts/ipc";
 import { Toaster } from "@openbot/ui";
 import { render } from "@solidjs/web";
 import { WebWorkspace } from "../src/features/web-client/WebWorkspace";
@@ -117,10 +117,37 @@ const BASE: ConversationMessage[] = [
   answer("base-2", "turn-base", "10:01", "Hola, aquí estoy."),
 ];
 
+/** A Motion ticket of Research that waits for the owner's money decision. */
+export const OWNER_DM_TICKET: AgentAttentionItem = {
+  kind: "question",
+  requestId: "motion:eve-20",
+  agentId: AGENT,
+  threadId: THREAD,
+  turnId: MOTION_TICKET_TURN,
+  createdAt: at("09:00"),
+  summary: "EVE-20 · Globos para fiestas",
+  url: "https://motion.example.com/EVE-20",
+  asks: "approval",
+  plain: {
+    asks: "¿Apruebas gastar 70 dólares en la campaña de globos?",
+    why: "Es la primera prueba de anuncios.",
+    ifYes: "La campaña sale el lunes.",
+    ifNo: "No se gasta nada.",
+  },
+};
+
 declare global {
   interface Window {
-    /** Adds the next turn of `OWNER_DM_TURNS` as a host does, and says which it was. */
-    harnessOwnerDm?: { next(): string | null };
+    /**
+     * Adds the next turn of `OWNER_DM_TURNS` as a host does, and says which it was. `ticket` sends the
+     * host's attention list with `OWNER_DM_TICKET` (`asked`: the host's `ownerAsked`), or without it.
+     * `calls` records what the page asked the host: the messages to agents and the prompt answers.
+     */
+    harnessOwnerDm?: {
+      next(): string | null;
+      ticket(state: "waiting" | "asked" | "gone"): void;
+      calls: { kind: "message" | "answer"; text: string }[];
+    };
   }
 }
 
@@ -144,7 +171,24 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
   });
   window.harnessHost = mock;
   let added = 0;
+  const calls: { kind: "message" | "answer"; text: string }[] = [];
+  const sendMessage = mock.api.agent.sendMessage.bind(mock.api.agent);
+  mock.api.agent.sendMessage = async (input) => {
+    calls.push({ kind: "message", text: input.text });
+    return sendMessage(input);
+  };
+  const respondToPrompt = mock.api.agent.respondToPrompt.bind(mock.api.agent);
+  mock.api.agent.respondToPrompt = async (input) => {
+    calls.push({ kind: "answer", text: JSON.stringify(input.answers) });
+    return respondToPrompt(input);
+  };
   window.harnessOwnerDm = {
+    calls,
+    ticket(state) {
+      const items =
+        state === "gone" ? [] : [{ ...OWNER_DM_TICKET, ...(state === "asked" ? { ownerAsked: true as const } : {}) }];
+      mock.emitAgentEvent({ type: "agent-attention-changed", items });
+    },
     next() {
       const turn = OWNER_DM_TURNS[added];
       if (!turn) return null;

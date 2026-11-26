@@ -76,6 +76,11 @@ export interface AgentAttentionItem {
   /** A ticket that a manager sent up to the owner: the manager's name, and why. */
   escalatedBy?: string;
   escalationReason?: string;
+  /**
+   * The owner wrote to the agent while this waits, and the agent has not answered since: the owner
+   * asked something instead of deciding. A question decides nothing, so the request stays.
+   */
+  ownerAsked?: true;
 }
 
 /** The `turnId` of a Motion ticket that waits on the user. */
@@ -111,7 +116,8 @@ export function isAgentAttentionItem(value: unknown): value is AgentAttentionIte
     (value.reason === undefined || isBoundedString(value.reason, AGENT_ATTENTION_TEXT_LIMIT)) &&
     (value.plain === undefined || isOwnerSummary(value.plain)) &&
     (value.escalatedBy === undefined || isBoundedString(value.escalatedBy, AGENT_ATTENTION_TEXT_LIMIT)) &&
-    (value.escalationReason === undefined || isBoundedString(value.escalationReason, AGENT_ATTENTION_TEXT_LIMIT))
+    (value.escalationReason === undefined || isBoundedString(value.escalationReason, AGENT_ATTENTION_TEXT_LIMIT)) &&
+    (value.ownerAsked === undefined || value.ownerAsked === true)
   );
 }
 

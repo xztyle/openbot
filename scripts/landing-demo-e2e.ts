@@ -9,7 +9,7 @@
 //    demo does, in the Europe/Warsaw time zone, and checks:
 //    - desktop 1440 px: exactly the four agents, no foreign helper agent, no update card and no time
 //      zone toast; the visitor answers the channel question and the launch plan uses that answer;
-//      reactions, unread replies and a fuller context meter at the end; a click on each teammate
+//      reactions, no unread mark on the teammates (their work was for the lead) and a fuller context meter at the end; a click on each teammate
 //      plays its scene with its own model; a typed message gets the agent's scripted reply; the
 //      sidebar groups the chats in sections with no People section, and the launch channel opens with
 //      its history.
@@ -335,7 +335,9 @@ try {
     for (const agent of AGENTS.slice(1)) {
       unread[agent] = (await unreadLabel(app, agent)) === "1 mention";
     }
-    assert.deepEqual(unread, { Scout: true, Forge: true, Pulse: true });
+    // The teammates worked for the lead, not for the visitor: their chats count nothing unread
+    // (the owner's chat with an agent is for the owner's conversation only).
+    assert.deepEqual(unread, { Scout: false, Forge: false, Pulse: false });
     const models: Record<string, string> = { Atlas: await modelLabel(app) };
     assert.ok(models.Atlas?.includes("Claude Opus 5.5"), models.Atlas);
     await desktop.page.locator(".landing-app-preview").screenshot({ path: resolve(OUT, "desktop-autoplay-end.png") });

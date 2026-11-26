@@ -7,6 +7,8 @@
 // - on the iPhone, no text or control sits under the notch or the home indicator: the page is served
 //   with `env(safe-area-inset-*)` as an iPhone 13 has it (47 px at the top and 34 px at the bottom, or
 //   47 px at the sides on its side), which Chromium otherwise reports as 0;
+// - no two cards touch: rounded boxes stacked with under 2px between them (a stack whose gap token
+//   is not declared paints 0, as Today's once did);
 // - text keeps a contrast of at least 3:1 to what is behind it, in light and in dark;
 // - System gives the same colors as the choice that it resolves to.
 // It serves `src/renderer/stories/web-client-visual-harness.tsx` on a mock host; no host is needed.
@@ -142,7 +144,7 @@ const DESKTOP_SIZES: Size[] = [
 ];
 
 interface Finding {
-  kind: "overflow" | "covered" | "safe-area" | "contrast" | "system" | "blank";
+  kind: "overflow" | "covered" | "safe-area" | "contrast" | "system" | "blank" | "touching";
   theme: string;
   scheme: string;
   size: string;
@@ -437,6 +439,65 @@ function scanContrast(scope: string | null): Scan {
   return out;
 }
 
+/**
+ * Two cards that touch, in the page: rounded boxes (a border or a fill and a radius) stacked one
+ * under the other with less than 2px between them. A stack spaces its cards with a gap token; a 0
+ * here is what an undeclared token paints, as `--openbot-space-5` did on Today. Rows of one list
+ * (`ul`, `ol`, a table body, a tab list, a radio or menu group) sit flush by design and do not count,
+ * nor does a box inside another.
+ */
+function scanTouching(scope: string | null): Scan {
+  const root = (scope && Array.from(document.querySelectorAll(scope)).at(-1)) || document.body;
+  const out: { kind: "touching"; detail: string }[] = [];
+  const width = document.documentElement.clientWidth;
+  const height = window.innerHeight;
+  const label = (el: Element) => {
+    const cls = typeof el.className === "string" ? el.className.split(/\s+/u).slice(0, 2).join(".") : "";
+    const text = (el.getAttribute("aria-label") ?? el.textContent ?? "").trim().replace(/\s+/gu, " ").slice(0, 30);
+    return `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ""} "${text}"`;
+  };
+  const cards = Array.from(root.querySelectorAll("*")).filter((el) => {
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 120 || rect.height < 24 || rect.bottom <= 0 || rect.top >= height || rect.left >= width)
+      return false;
+    const style = getComputedStyle(el);
+    if (style.position === "fixed" || style.position === "absolute" || style.position === "sticky") return false;
+    const filled = style.backgroundColor !== "rgba(0, 0, 0, 0)" && style.backgroundColor !== "transparent";
+    const bordered = Number.parseFloat(style.borderTopWidth) > 0 && style.borderTopStyle !== "none";
+    return (filled || bordered) && Number.parseFloat(style.borderTopLeftRadius) > 0;
+  });
+  const rows = (el: Element) => {
+    const parent = el.parentElement;
+    if (!parent) return false;
+    if (/^(?:UL|OL|TBODY|TABLE|MENU)$/u.test(parent.tagName)) return true;
+    const role = parent.getAttribute("role") ?? "";
+    return /^(?:list|listbox|menu|menubar|tablist|radiogroup|group|grid|rowgroup|tree)$/u.test(role);
+  };
+  const control = (el: Element) =>
+    /^(?:BUTTON|A|INPUT|SELECT|TEXTAREA)$/u.test(el.tagName) ||
+    /^(?:button|tab|option|menuitem)$/u.test(el.getAttribute("role") ?? "");
+  const seen = new Set<string>();
+  for (const above of cards) {
+    const a = above.getBoundingClientRect();
+    for (const below of cards) {
+      if (above === below || above.contains(below) || below.contains(above)) continue;
+      const b = below.getBoundingClientRect();
+      const gap = b.top - a.bottom;
+      if (gap < -1 || gap >= 2) continue;
+      if (b.right <= a.left || b.left >= a.right) continue;
+      if (above.parentElement === below.parentElement && rows(above)) continue;
+      // Two controls one under the other are a menu, a nav or a split control, not two cards.
+      if (control(above) && control(below)) continue;
+      if (above.closest("nav, [role=navigation], [role=menu], [role=listbox], [role=tablist]")) continue;
+      const key = `${label(above)} ${label(below)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ kind: "touching", detail: `${label(above)} and ${label(below)} are ${Math.round(gap)}px apart` });
+    }
+  }
+  return out;
+}
+
 /** A digest of the colors that the page paints, to compare two color choices. */
 function colorDigest(): string[] {
   return Array.from(document.body.querySelectorAll("*"))
@@ -628,7 +689,7 @@ async function runFlows(browser: Browser, origin: string): Promise<void> {
                 detail: "no overlay opened",
               });
             const insets = size.orientation ? INSETS[size.orientation] : null;
-            if (scheme === "light")
+            if (scheme === "light") {
               record(
                 await page.evaluate(scanLayout, { insets, scope: open ? OVERLAY : null }),
                 theme,
@@ -636,6 +697,8 @@ async function runFlows(browser: Browser, origin: string): Promise<void> {
                 size.name,
                 where,
               );
+              record(await page.evaluate(scanTouching, open ? OVERLAY : null), theme, scheme, size.name, where);
+            }
             record(await page.evaluate(scanContrast, open ? OVERLAY : null), theme, scheme, size.name, where);
             if (shots)
               await page.screenshot({
@@ -713,7 +776,7 @@ try {
                 await current.setViewportSize({ width: size.width, height: size.height });
                 await setInsets(current, size.orientation);
                 await current.waitForTimeout(250);
-                if (scheme === "light")
+                if (scheme === "light") {
                   record(
                     await current.evaluate(scanLayout, {
                       insets: size.orientation ? INSETS[size.orientation] : null,
@@ -724,6 +787,8 @@ try {
                     size.name,
                     route,
                   );
+                  record(await current.evaluate(scanTouching, null), theme, scheme, size.name, route);
+                }
                 if (size === sizes[0])
                   record(await current.evaluate(scanContrast, null), theme, scheme, size.name, route);
                 if (shots)

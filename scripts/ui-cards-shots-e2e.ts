@@ -141,12 +141,17 @@ async function decisionCards(browser: Browser, origin: string, viewport: Viewpor
   const page = await context.newPage();
   const cards = page.locator("article.ui-block-decision");
   await load(page, `${origin}/app/general/dm/chief?appearance=${theme}`, cards.first());
-  // The legacy card is the first card of the chat: a decision card here, a plain confirm before.
+  // The legacy card is the first card of the chat: a decision card here, a plain confirm before. The
+  // chat draws its rows as they come into view, so the top of the chat comes first.
+  await page
+    .locator(".conversation-scroll")
+    .first()
+    .evaluate((element) => element.scrollTo(0, 0));
   const legacy = page.locator("article.ui-block-decision, article.ui-block-confirm").first();
   const current = cards.last();
   // The chat's top edge loads older messages behind a cover: the card sits a little under it.
   await legacy.evaluate((element) => element.scrollIntoView({ block: "center" }));
-  await legacy.locator("button").first().waitFor({ state: "visible" });
+  await legacy.waitFor({ state: "visible" });
   const legacyText = await visibleText(legacy);
   check(
     `${viewport} ${theme}: legacy decision card has no emoji, arrow, # or raw key outside the details`,

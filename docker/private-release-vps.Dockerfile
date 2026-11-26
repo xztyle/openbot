@@ -51,6 +51,15 @@ FROM ghcr.io/nightly-labs/openbot:0.51.1@sha256:f04294c28d65b8a6d1dfa275a58399a5
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap nodejs python3 \
     && rm -rf /var/lib/apt/lists/*
+# File previews (attachment-renditions-v1): LibreOffice turns Office files into PDFs, Poppler draws a
+# PDF's first page, FFmpeg takes a video's first frame and an audio waveform. The nogui packages and
+# no recommends keep it to about 600 MB. The fonts are metric-compatible with Calibri, Cambria, Arial
+# and Times, so a converted deck keeps its layout. A layer of its own, so a code change never reruns it.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui \
+      poppler-utils ffmpeg \
+      fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=package /src/dist/linux-unpacked/ /opt/OpenBot/app/
 ARG REVISION
 LABEL org.opencontainers.image.source=https://github.com/xztyle/openbot \

@@ -3,7 +3,7 @@
 // socket (`server-agent-operations.ts`) wired as `application-services.ts` wires them.
 // (a) The restart note goes to the agent as a note from OpenBot: the agent gets the text and runs a turn,
 //     the chat stores a `system-notice:restart-resume` row with no sender, not a message from the owner,
-//     it adds nothing to the unread count, and a second send with the same `restart-resume:<id>` key
+//     neither it nor the turn it starts adds to the unread count, and a second send with the same `restart-resume:<id>` key
 //     returns the first receipt.
 // (b) An operator message is the owner's by default, and a note from OpenBot with `system: true`.
 // (c) The steps of a turn keep an email address that the agent wrote, in its narration, the label of a
@@ -224,10 +224,20 @@ try {
   assert.equal(notice.itemType, "system-notice:restart-resume");
   assert.equal(notice.senderMember, undefined, "The note names no person.");
   const reads = agents.listConversationReads(owner.id)[agent.id];
-  const answers = (await messages()).filter(
-    (message) => message.author === "assistant" && message.itemType !== "commentary",
+  const stored = await messages();
+  // Only the answer to the owner's own message counts: a turn that Atelier's note started is the
+  // agent's own activity (`backgroundTurns`), so neither the note nor its answer is unread.
+  const ownerTurns = new Set(
+    stored.flatMap((message) => (message.author === "user" && message.turnId ? [message.turnId] : [])),
   );
-  assert.equal(reads?.unreadCount, answers.length, "Only the agent's answer is unread, not the note.");
+  const answers = stored.filter(
+    (message) =>
+      message.author === "assistant" &&
+      message.itemType !== "commentary" &&
+      message.turnId !== undefined &&
+      ownerTurns.has(message.turnId),
+  );
+  assert.equal(reads?.unreadCount, answers.length, "Only the answer to the owner is unread, not the note or its turn.");
   assert.equal(
     agents
       .listAgents()

@@ -70,12 +70,14 @@ interface Step {
   detail?: string;
 }
 
-const report: { steps: Step[]; pageErrors: string[]; screenshots: string[]; passed: boolean } = {
-  steps: [],
-  pageErrors: [],
-  screenshots: [],
-  passed: false,
-};
+const report: { steps: Step[]; pageErrors: string[]; consoleErrors: string[]; screenshots: string[]; passed: boolean } =
+  {
+    steps: [],
+    pageErrors: [],
+    consoleErrors: [],
+    screenshots: [],
+    passed: false,
+  };
 
 async function step(page: Page, name: string, run: () => Promise<void>): Promise<void> {
   try {
@@ -155,8 +157,13 @@ const LEGACY_PAGES = PAGES.map((page) => ({
 async function sweep(context: BrowserContext, origin: string, dir: string, legacy: boolean): Promise<void> {
   const page = await context.newPage();
   page.on("pageerror", (error) => report.pageErrors.push(error.stack ?? error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error" && !message.text().startsWith("Failed to load resource"))
+      report.consoleErrors.push(message.text().slice(0, 600));
+  });
+  const only = option("routes");
   for (const theme of ["dark", "light"] as const) {
-    for (const entry of legacy ? LEGACY_PAGES : PAGES) {
+    for (const entry of (legacy ? LEGACY_PAGES : PAGES).filter((item) => !only || item.name.includes(only))) {
       await show(page, `${origin}/app/general${entry.search}&theme=${theme}`, (target) =>
         target.locator(".settings-page").first().waitFor({ timeout: 20_000 }),
       );
@@ -255,7 +262,8 @@ try {
       const what = page.getByRole("region", { name: t("backups.cloud.plan.what"), exact: true });
       const motion = what.getByRole("switch", { name: t("backups.cloud.group.motion") });
       const before = await motion.getAttribute("aria-checked");
-      await motion.click();
+      // The switch's input is visually hidden; the user presses its label, as a finger does.
+      await what.getByText(t("backups.cloud.group.motion"), { exact: true }).click();
       await page
         .getByRole("region", { name: t("backups.cloud.plan.keep"), exact: true })
         .getByRole("button", { name: t("common.save"), exact: true })

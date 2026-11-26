@@ -16,6 +16,8 @@ export function SettingsPageFrame(props: {
   heading: JSX.Element;
   /** Content between the heading and the section list, such as a search. */
   children?: JSX.Element;
+  /** The section list, when the page draws one list for every settings panel. */
+  nav?: JSX.Element;
   sectionsHidden?: boolean;
   onMounts: (mounts: SettingsPagePlacement | undefined) => void;
   /** Escape outside a popup or a text field of the window, and the Close or Back button. */
@@ -94,7 +96,9 @@ export function SettingsPageFrame(props: {
           </IconButton>
         </div>
         {props.children}
-        <div class="settings-page-sections" ref={nav} hidden={props.sectionsHidden} />
+        <div class="settings-page-sections" ref={nav} hidden={props.sectionsHidden}>
+          {props.nav}
+        </div>
       </div>
       <div class="settings-page-content" ref={content} />
     </div>

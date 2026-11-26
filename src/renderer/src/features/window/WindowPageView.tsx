@@ -6,7 +6,7 @@ import { SchedulePanel } from "../schedule/SchedulePanel";
 import { useServers } from "../servers/servers-context";
 import { useUsage } from "../usage/usage-context";
 import { SettingsPage } from "./SettingsPage";
-import { type SettingsKind, useWindowPage } from "./window-page-context";
+import { useWindowPage } from "./window-page-context";
 
 /**
  * The page of the desktop window that covers the conversation: a settings page, usage, schedule,
@@ -17,19 +17,16 @@ export function WindowPageView() {
   const windowPage = useWindowPage();
   const usage = useUsage();
   const { servers } = useServers();
-  const settingsKind = (): SettingsKind | null => {
-    const page = windowPage.page();
-    if (page === "settings") return "personal";
-    return page === "server-settings" ? "server" : null;
-  };
+  /** Both settings pages show in the one Settings page. */
+  const settingsOpen = () => windowPage.page() === "settings" || windowPage.page() === "server-settings";
   const hostName = (serverId: string) =>
     servers().find((server) => server.id === serverId)?.name ?? t("app.page.serverFallback");
   return (
     <Show
-      when={settingsKind() ? null : usage.state.serverId}
+      when={settingsOpen() ? null : usage.state.serverId}
       fallback={
-        <Show when={settingsKind()} keyed fallback={<SkillsMarketplace />}>
-          {(kind) => <SettingsPage kind={kind} />}
+        <Show when={settingsOpen()} fallback={<SkillsMarketplace />}>
+          <SettingsPage />
         </Show>
       }
     >

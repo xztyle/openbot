@@ -50,7 +50,7 @@ const context = createSimpleContext({
     const usage = useUsage();
     const { activeServerId } = useServers();
     /** The elements of the settings page that the settings panel shows in. The page sets them. */
-    const [settingsMounts, setSettingsMounts] = createSignal<{ nav: HTMLElement; content: HTMLElement } | undefined>();
+    const [settingsMounts, setSettingsMounts] = createSignal<SettingsPagePlacement | undefined>();
 
     const page = createMemo<WindowPage>(() => {
       if (serverSettings.serverSettingsOpen()) return "server-settings";
@@ -107,11 +107,14 @@ const context = createSimpleContext({
       if (untrack(serverSettings.serverSettingsOpen)) untrack(() => serverSettings.openServerSettings(serverId, null));
     });
 
-    /** Where the panel of a settings page shows, or nothing while that page is not on screen. */
+    /**
+     * Where the panel of a settings page shows, or nothing while that page is not on screen. The one
+     * Settings page draws the section list itself, so a panel gets only the content column.
+     */
     function settingsPlacement(kind: SettingsKind): SettingsPagePlacement | undefined {
       const mounts = settingsMounts();
       if (!mounts || page() !== (kind === "personal" ? "settings" : "server-settings")) return undefined;
-      return mounts;
+      return { content: mounts.content };
     }
 
     return {

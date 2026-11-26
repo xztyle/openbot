@@ -368,7 +368,9 @@ try {
     await settle(page);
     await page.goto(`${origin}/app/general/c/random?page=server-settings&section=workspace`, COMMIT);
     await started(page);
-    await page.getByRole("heading", { name: "Preview computer" }).first().waitFor({ timeout: UI_WAIT_MS });
+    // One Settings page: the old server-settings address opens it on the server's section.
+    await page.getByRole("heading", { name: english("app.settingsPage.title") }).waitFor({ timeout: UI_WAIT_MS });
+    await waitForPath(page, "/app/general/c/random?page=settings&section=workspace");
     await page.keyboard.press("Escape");
     await waitForPath(page, "/app/general/c/random");
     assert.equal(
@@ -383,8 +385,9 @@ try {
     await settle(page);
     await page.goto(`${origin}/app/general/c/random?page=settings&section=preferences`, COMMIT);
     await started(page);
-    await page
-      .getByRole("tab", { name: english("webClient.settings.appearance.title") })
+    const sections = page.getByRole("navigation", { name: english("settings.sections.label") });
+    await sections
+      .getByRole("button", { name: english("webClient.settings.appearance.title"), exact: true })
       .waitFor({ timeout: UI_WAIT_MS });
     await page.waitForFunction(
       () => document.querySelector('[data-tab="appearance"]')?.checkVisibility() === true,
@@ -392,7 +395,9 @@ try {
       { timeout: UI_WAIT_MS },
     );
     await waitForPath(page, "/app/general/c/random?page=settings&section=appearance");
-    await page.getByRole("tab", { name: english("webClient.settings.notifications.title") }).click();
+    await sections
+      .getByRole("button", { name: english("webClient.settings.notifications.title"), exact: true })
+      .click();
     await waitForPath(page, "/app/general/c/random?page=settings&section=notifications");
     await settle(page);
     await page.reload(COMMIT);
@@ -407,18 +412,22 @@ try {
     await waitForPath(page, "/app/general/c/random");
   });
 
-  // 9e. The account's shortcut to Connections & secrets opens the server settings, and the client still
+  // 9e. A server section in the one section list opens the server settings, and the client still
   // answers: the dialog read the section's options in an effect callback, which halted every update.
-  await step(page, "the Connections & secrets shortcut opens and the client still answers", async () => {
+  await step(page, "a server section of the one list opens and the client still answers", async () => {
     await settle(page);
     const halted = report.consoleErrors.length;
     await page.goto(`${origin}/app/general/c/random?page=settings&section=appearance`, COMMIT);
     await started(page);
     await page
-      .getByRole("button", { name: english("server.settings.group.connections"), exact: true })
+      .getByRole("navigation", { name: english("settings.sections.label") })
+      .getByRole("button", { name: english("server.settings.workspaceTitle"), exact: true })
       .click({ timeout: UI_WAIT_MS });
-    await waitForPath(page, "/app/general/c/random?page=server-settings&section=connections");
-    await page.getByRole("heading", { name: "Preview computer" }).first().waitFor({ timeout: UI_WAIT_MS });
+    await waitForPath(page, "/app/general/c/random?page=settings&section=workspace");
+    await page
+      .getByRole("heading", { name: english("server.settings.workspaceTitle") })
+      .first()
+      .waitFor({ timeout: UI_WAIT_MS });
     await page.keyboard.press("Escape");
     await waitForPath(page, "/app/general/c/random");
     assert.equal(

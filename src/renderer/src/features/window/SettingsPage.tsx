@@ -3,8 +3,13 @@ import { Button, Input, Search } from "@openbot/ui";
 import { createSignal, For, flush, Show } from "solid-js";
 import { useI18n } from "../../i18n-context";
 import { usePlatform } from "../../platform";
+import { useProviders } from "../../providers";
 import { useServerSettings } from "../servers/server-settings";
+import { availableServerSettingsSections } from "../servers/server-settings-sections";
+import { useServers } from "../servers/servers-context";
+import { SettingsNav } from "../settings/SettingsNav";
 import { useSettings } from "../settings/settings-context";
+import { settingsNavItems } from "../settings/settings-nav";
 import {
   dynamicIslandSettingsShown,
   navItem,
@@ -12,8 +17,8 @@ import {
   type SettingsTab,
   settingsTabShown,
 } from "../settings/settings-tabs";
-import { ServerSettingsPageTitle, SettingsPageFrame } from "./SettingsPageFrame";
-import { type SettingsKind, useWindowPage } from "./window-page-context";
+import { SettingsPageFrame } from "./SettingsPageFrame";
+import { useWindowPage } from "./window-page-context";
 
 /** A search entry: a tab, or a row of a tab. A row has an anchor; a tab has none and opens at the top. */
 type SearchRow = { tab: SettingsTab; titleKey: AppTextKey; descriptionKey?: AppTextKey; anchor?: AppTextKey };
@@ -48,15 +53,18 @@ function rankRows(query: string, text: (key: AppTextKey) => string, shown: (tab:
 }
 
 /**
- * A settings page of the window: the user settings or the settings of the active server. The settings
- * panel shows its nav and content in the mounts of this page. On the user settings page, the search
- * above the nav replaces the nav with matching rows. A result opens its tab and moves to its row.
+ * The one Settings page of the window: the user's settings and the settings of the active server in
+ * one list, grouped by what each setting affects. The settings panels show their content in the
+ * mount of this page; the page draws the section list itself. The search above the list replaces
+ * it with matching rows. A result opens its tab and moves to its row.
  */
-export function SettingsPage(props: { kind: SettingsKind }) {
+export function SettingsPage() {
   const i18n = useI18n();
   const windowPage = useWindowPage();
   const settings = useSettings();
   const serverSettings = useServerSettings();
+  const { activeServer } = useServers();
+  const { providerAdminServerId } = useProviders();
   const platform = usePlatform();
   const [query, setQuery] = createSignal("");
   const tabShown = (tab: SettingsTab) =>
@@ -71,6 +79,26 @@ export function SettingsPage(props: { kind: SettingsKind }) {
       : i18n.t("app.settingsPage.noResults");
   };
   let content: HTMLElement | undefined;
+
+  /** The items of the list: the user's tabs this computer shows, and the sections of the active server. */
+  const items = () => {
+    const server = activeServer();
+    return settingsNavItems({
+      personal: navItems.map((item) => item.value).filter(tabShown),
+      server: server
+        ? availableServerSettingsSections(server, {
+            platform: platform.appInfo()?.platform,
+            providers: server.kind === "local" || server.id === providerAdminServerId(),
+          })
+        : [],
+      actions: [],
+    });
+  };
+  /** The item whose panel shows. */
+  const active = () =>
+    windowPage.page() === "server-settings"
+      ? ({ kind: "server", id: serverSettings.serverSettingsSection() ?? "general" } as const)
+      : ({ kind: "personal", id: settings.appSettingsTab() ?? "general" } as const);
 
   /** Opens the tab of the result. For a row, it then scrolls to the row, marks it and puts the focus on its control. */
   const openResult = (row: SearchRow) => {
@@ -98,89 +126,97 @@ export function SettingsPage(props: { kind: SettingsKind }) {
   return (
     <SettingsPageFrame
       heading={
-        <Show
-          when={props.kind === "personal"}
-          fallback={
-            <Show when={serverSettings.serverSettingsTarget()}>
-              {(server) => <ServerSettingsPageTitle server={server()} />}
-            </Show>
-          }
-        >
-          <h1 class="settings-page-title" tabindex={-1}>
-            {i18n.t("app.settingsPage.title")}
-          </h1>
-        </Show>
+        <h1 class="settings-page-title" tabindex={-1}>
+          {i18n.t("app.settingsPage.title")}
+        </h1>
+      }
+      nav={
+        <SettingsNav
+          items={items()}
+          active={active()}
+          serverName={activeServer()?.name}
+          onSelect={(item) => {
+            if (item.kind === "personal") {
+              const tab = navItems.find((candidate) => candidate.value === item.id)?.value;
+              if (tab) settings.openAppSettings(null, tab);
+            } else if (item.kind === "server") {
+              const server = activeServer();
+              if (server) serverSettings.openServerSettings(server.id, null, item.id);
+            }
+          }}
+        />
       }
       sectionsHidden={results() !== null}
       onMounts={(mounts) => {
         content = mounts?.content;
         windowPage.setSettingsMounts(mounts);
       }}
+      section={
+        windowPage.page() === "server-settings" ? serverSettings.serverSettingsSection() : settings.appSettingsTab()
+      }
       // Escape clears the search, or else closes the page.
       onEscape={() => {
         if (query()) setQuery("");
         else windowPage.showAgents();
       }}
     >
-      <Show when={props.kind === "personal"}>
-        <label class="search-field settings-page-search">
-          <Search aria-hidden="true" />
-          <Input
-            type="search"
-            aria-label={i18n.t("app.settingsPage.search")}
-            placeholder={i18n.t("app.settingsPage.searchPlaceholder")}
-            spellcheck={false}
-            value={query()}
-            onInput={(event) => setQuery(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              const top = results()?.[0];
-              if (event.key === "Enter" && top) {
-                event.preventDefault();
-                openResult(top);
-              }
-            }}
-          />
-        </label>
-        {/* Always in the page, so a screen reader announces each change of the count. */}
-        <span class="sr-only" role="status">
-          {resultStatus()}
-        </span>
-        <Show when={results()}>
-          {(rows) => (
-            <Show
-              when={rows().length > 0}
-              fallback={<p class="settings-page-empty">{i18n.t("app.settingsPage.noResults")}</p>}
-            >
-              <ul class="settings-page-results" aria-label={i18n.t("app.settingsPage.results")}>
-                <For each={rows()}>
-                  {(row) => {
-                    const tab = navItem(row.tab);
-                    const TabIcon = tab.icon;
-                    return (
-                      <li>
-                        <Button
-                          variant="ghost"
-                          type="button"
-                          class="settings-page-result"
-                          onClick={() => openResult(row)}
-                        >
-                          <span class="settings-page-result-section">
-                            <TabIcon aria-hidden="true" />
-                            {i18n.t(tab.titleKey)}
-                          </span>
-                          {/* A tab result shows the tab description, as its title is already on the line above. */}
-                          <span class="settings-page-result-title">
-                            {i18n.t(row.anchor ? row.titleKey : tab.descriptionKey)}
-                          </span>
-                        </Button>
-                      </li>
-                    );
-                  }}
-                </For>
-              </ul>
-            </Show>
-          )}
-        </Show>
+      <label class="search-field settings-page-search">
+        <Search aria-hidden="true" />
+        <Input
+          type="search"
+          aria-label={i18n.t("app.settingsPage.search")}
+          placeholder={i18n.t("app.settingsPage.searchPlaceholder")}
+          spellcheck={false}
+          value={query()}
+          onInput={(event) => setQuery(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            const top = results()?.[0];
+            if (event.key === "Enter" && top) {
+              event.preventDefault();
+              openResult(top);
+            }
+          }}
+        />
+      </label>
+      {/* Always in the page, so a screen reader announces each change of the count. */}
+      <span class="sr-only" role="status">
+        {resultStatus()}
+      </span>
+      <Show when={results()}>
+        {(rows) => (
+          <Show
+            when={rows().length > 0}
+            fallback={<p class="settings-page-empty">{i18n.t("app.settingsPage.noResults")}</p>}
+          >
+            <ul class="settings-page-results" aria-label={i18n.t("app.settingsPage.results")}>
+              <For each={rows()}>
+                {(row) => {
+                  const tab = navItem(row.tab);
+                  const TabIcon = tab.icon;
+                  return (
+                    <li>
+                      <Button
+                        variant="ghost"
+                        type="button"
+                        class="settings-page-result"
+                        onClick={() => openResult(row)}
+                      >
+                        <span class="settings-page-result-section">
+                          <TabIcon aria-hidden="true" />
+                          {i18n.t(tab.titleKey)}
+                        </span>
+                        {/* A tab result shows the tab description, as its title is already on the line above. */}
+                        <span class="settings-page-result-title">
+                          {i18n.t(row.anchor ? row.titleKey : tab.descriptionKey)}
+                        </span>
+                      </Button>
+                    </li>
+                  );
+                }}
+              </For>
+            </ul>
+          </Show>
+        )}
       </Show>
     </SettingsPageFrame>
   );

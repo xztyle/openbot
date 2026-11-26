@@ -17,6 +17,7 @@ import {
   KeyRound,
   NativeSelect,
   Palette,
+  SettingsDeviceNote,
   SettingsSection,
   Sparkles,
   SwitchField,
@@ -195,6 +196,7 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
         page={props.page}
         title={t(navItem().titleKey)}
         description={t(navItem().descriptionKey)}
+        note={activeTab() === "profile" ? undefined : <SettingsDeviceNote />}
         contentKey={activeTab()}
         onContentElement={(element) => (modalElement = element)}
         sidebar={

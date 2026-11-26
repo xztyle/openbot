@@ -23,6 +23,7 @@ import {
   AlertIcon,
   Button,
   ChevronRight,
+  SettingsDeviceNote,
   Tabs,
   TriangleAlert,
 } from "@openbot/ui";
@@ -52,6 +53,18 @@ import { SettingsNotificationsTab } from "./SettingsNotificationsTab";
 import { SettingsVoiceTab } from "./SettingsVoiceTab";
 import { dynamicIslandSettingsShown, navItem, navItems, type SettingsTab, settingsTabShown } from "./settings-tabs";
 import { createSettingsVoiceStore } from "./settings-voice-store";
+
+/** The tabs whose settings this computer keeps for itself; the others belong to the account. */
+const DEVICE_TABS: readonly SettingsTab[] = [
+  "general",
+  "agents",
+  "notifications",
+  "voice",
+  "dynamic-island",
+  "computer-use",
+  "mobile-connect",
+  "updates",
+];
 
 export interface SettingsModalProps {
   open: boolean;
@@ -251,6 +264,7 @@ export function SettingsModal(props: SettingsModalProps) {
           </Show>
         }
         description={description()}
+        note={DEVICE_TABS.includes(activeTab()) ? <SettingsDeviceNote /> : undefined}
         contentKey={`${activeTab()}:${agents.crumb()?.title ?? ""}`}
         restoreFocusTarget={props.restoreFocusTarget}
         onContentElement={(element) => (modalElement = element)}

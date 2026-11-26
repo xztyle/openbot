@@ -389,6 +389,17 @@ label.ui-settings-row-label {
   text-wrap: pretty;
 }
 
+/* The name of the server after the heading of its first group in the one section list. */
+.settings-nav-server {
+  color: var(--openbot-text-muted);
+  font-weight: var(--openbot-weight-regular);
+}
+
+/* The note under a panel title, such as "Only on this device". */
+.settings-modal-note {
+  margin-top: var(--openbot-space-1);
+}
+
 /* "Only on this device": the note on a setting that this browser or computer keeps for itself. */
 .ui-settings-device-note {
   display: inline-flex;

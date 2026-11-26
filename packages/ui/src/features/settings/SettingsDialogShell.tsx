@@ -7,8 +7,8 @@ import { useText } from "../../text";
 
 /** Where a settings page puts its parts, when the settings show as a page of the window. */
 export interface SettingsPagePlacement {
-  /** The element that holds the section list. */
-  nav: HTMLElement;
+  /** The element that holds the section list. Absent when the page draws one list for every settings panel. */
+  nav?: HTMLElement | undefined;
   /** The element that holds the panel. */
   content: HTMLElement;
 }
@@ -18,6 +18,8 @@ interface SettingsDialogShellProps {
   title: JSX.Element;
   description: JSX.Element;
   sidebar: JSX.Element;
+  /** A note under the title, such as "Only on this device" on a panel this device keeps for itself. */
+  note?: JSX.Element;
   contentKey: string;
   children: JSX.Element;
   class?: string;
@@ -236,9 +238,13 @@ export function SettingsDialogShell(props: SettingsDialogShellProps) {
     <Show when={props.open && props.page}>
       {(page) => (
         <>
-          <Portal mount={page().nav}>
-            <div class="settings-page-nav-group">{props.sidebar}</div>
-          </Portal>
+          <Show when={page().nav}>
+            {(nav) => (
+              <Portal mount={nav()}>
+                <div class="settings-page-nav-group">{props.sidebar}</div>
+              </Portal>
+            )}
+          </Show>
           <Portal mount={page().content}>
             <section
               ref={(element) => props.onContentElement?.(element)}
@@ -252,6 +258,9 @@ export function SettingsDialogShell(props: SettingsDialogShellProps) {
                       {props.title}
                     </h2>
                     <p class="settings-modal-description">{props.description}</p>
+                    <Show when={props.note}>
+                      <div class="settings-modal-note">{props.note}</div>
+                    </Show>
                   </div>
                 </header>
                 <div

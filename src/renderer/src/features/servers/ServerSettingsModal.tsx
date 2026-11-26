@@ -264,6 +264,11 @@ export interface ServerSettingsModalProps {
   /** Called when the user picks another section, so an address can name it. */
   onSectionChange?: (section: ServerSettingsSection) => void;
   /**
+   * Called with the sections this server has, as its options and the role give them, and again
+   * when they change. The one Settings page lists them beside the account's own.
+   */
+  onAvailableSectionsChange?: ((sections: ServerSettingsSection[]) => void) | undefined;
+  /**
    * Settings that live elsewhere, listed under the server's own sections so the owner finds every
    * task in one place: the money limits, the notifications and quiet hours, and the look.
    */
@@ -622,6 +627,16 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
     () => (props.open ? availableInitialSection() : null),
     (requested) => {
       if (requested) setSection(requested);
+    },
+  );
+
+  /** The sections this server has, for the one Settings page. After every section's state exists. */
+  createEffect(
+    () => SERVER_SETTINGS_GROUPS.flatMap((group) => group.sections.filter(sectionAvailable)),
+    (sections, previous) => {
+      if (previous && sections.length === previous.length && sections.every((item, index) => item === previous[index]))
+        return;
+      untrack(() => props.onAvailableSectionsChange?.(sections));
     },
   );
 

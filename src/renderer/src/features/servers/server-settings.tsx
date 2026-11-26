@@ -706,6 +706,7 @@ const ServerSettings = createSimpleContext({
     return {
       serverSettingsTarget,
       serverSettingsSection,
+      setServerSettingsSection,
       serverSettingsOpen,
       setServerSettingsOpen,
       serverSettingsOpenRequest,

@@ -61,7 +61,8 @@ export function WorkspacePageRail(props: { hidden: boolean }) {
   const current = (): PageRailPage | null => {
     const page = windowPage.page();
     if (page === "agents") return layout.sidebarView();
-    return page === "server-settings" ? null : page;
+    // The server's sections are part of the one Settings page.
+    return page === "server-settings" ? "settings" : page;
   };
   return (
     <PageRail

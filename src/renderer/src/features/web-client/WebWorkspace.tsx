@@ -258,7 +258,13 @@ import {
   serverRoleCanAdminister,
 } from "../servers/server-capabilities";
 import { createServerConnectionToast } from "../servers/server-connection-toast";
-import { type ServerSettingsTarget, serverSettingsTargetOf } from "../servers/server-settings-target";
+import {
+  isServerSettingsSection,
+  SERVER_SETTINGS_GROUPS,
+  type ServerSettingsSection,
+  type ServerSettingsTarget,
+  serverSettingsTargetOf,
+} from "../servers/server-settings-target";
 import {
   offerServerUpdate,
   ServerUpdateDialogHost,
@@ -268,12 +274,14 @@ import {
 import { licenseContactUs, trackLicenseEvent } from "../settings/license-analytics";
 import type { HostProviderEnvironmentCalls } from "../settings/provider-environment";
 import type { HostPromptCacheTtlCalls } from "../settings/provider-prompt-cache";
+import { SettingsNav } from "../settings/SettingsNav";
+import { settingsNavItems } from "../settings/settings-nav";
 import { createCommunityCardVisibility } from "../sidebar/community-card";
 import { hostStorageHygieneCalls, serverHasStorageHygiene } from "../storage-hygiene/storage-hygiene-port";
 import { isReaderAuthor } from "../team/reader-identity";
 import { hostTrustCalls } from "../trust/trust-port";
 import { RailHelpMenu } from "../window/RailHelpMenu";
-import { ServerSettingsPageTitle, SettingsPageFrame } from "../window/SettingsPageFrame";
+import { SettingsPageFrame } from "../window/SettingsPageFrame";
 import type { SettingsKind, WindowPage } from "../window/window-page-context";
 import { createAgentMailboxesStore } from "../workspace/agent-mailboxes-store";
 import { createConnectorAccessStore } from "../workspace/connector-access-store";
@@ -301,6 +309,7 @@ import {
 } from "./WebPhoneShell";
 import { createWebAccountCalls } from "./web-account";
 import {
+  WEB_ACCOUNT_SETTINGS_TABS,
   type WebAccountSettingsShortcut,
   type WebAccountSettingsTab,
   webAccountSettingsTabOf,
@@ -1136,16 +1145,30 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     setHostPage(null);
     serverSettings.setOpen(false);
     setAccountSettingsLoaded(true);
+    // The server's settings mount too, so the one section list knows which sections the host has.
+    if (server()) setServerSettingsLoaded(true);
     setAccountSettingsOpen(true);
   }
   /** The elements of the settings page that the settings panel shows in. The page sets them. */
   const [settingsMounts, setSettingsMounts] = createSignal<SettingsPagePlacement | undefined>();
-  /** Where the panel of a settings page shows, or nothing while that page is not on screen. */
+  /**
+   * Where the panel of a settings page shows, or nothing while that page is not on screen. The page
+   * draws the one section list itself, so a panel gets only the content column.
+   */
   function settingsPlacement(kind: SettingsKind): SettingsPagePlacement | undefined {
     const mounts = settingsMounts();
     if (!mounts || page() !== (kind === "personal" ? "settings" : "server-settings")) return undefined;
-    return mounts;
+    return { content: mounts.content };
   }
+  /** The sections of the open server, as its settings report them for the one section list. */
+  const [serverSections, setServerSections] = createSignal<ServerSettingsSection[]>([]);
+  /** The server section on screen: the one asked for, or the first section of the group asked for. */
+  const shownServerSection = (): ServerSettingsSection => {
+    const target = serverSettingsSection();
+    if (target && isServerSettingsSection(target)) return target;
+    const group = SERVER_SETTINGS_GROUPS.find((item) => item.id === target);
+    return group?.sections.find((section) => serverSections().includes(section)) ?? "general";
+  };
   const scheduleSource = webScheduleSource(workspace, hostRequest);
   const tasksSource = webTasksSource(workspace, hostRequest);
   const tasksSupported = () => workspace.state.capabilities.includes(AGENT_TASKS_CAPABILITY);
@@ -2048,7 +2071,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   const railPage = (): PageRailPage | null => {
     const current = page();
     if (current === "agents") return layout.sidebarView();
-    return current === "server-settings" ? null : current;
+    return current === "server-settings" ? "settings" : current;
   };
   /**
    * The Slack-style workspace: the main view on a host with channels and the workspace routes,
@@ -2693,7 +2716,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       current === "schedule" ||
       current === "tasks"
       ? {
-          kind: current,
+          // One Settings page: the server's sections share its address with the account's tabs.
+          kind: current === "server-settings" ? "settings" : current,
           // The section stays in the address, so a reload or a shared link opens the same section.
           section:
             current === "settings"
@@ -2753,10 +2777,15 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       return;
     }
     if (!id) return;
-    if (target.kind === "settings") openAccountSettings(webAccountSettingsTabOf(target.section));
-    else if (target.kind === "server-settings")
-      void openServerSettings(id, null, serverSettingsTargetOf(target.section));
-    else if (target.kind !== "tasks" || tasksSupported()) void openHostPage(id, target.kind, null);
+    if (target.kind === "settings" || target.kind === "server-settings") {
+      // One address for every setting: a section the account has opens there; one of the server's
+      // opens the server's; an old `server-settings` address opens the server's General.
+      const account = webAccountSettingsTabOf(target.section);
+      const serverTarget = serverSettingsTargetOf(target.section);
+      if (account && target.kind === "settings") openAccountSettings(account);
+      else if (serverTarget || target.kind === "server-settings") void openServerSettings(id, null, serverTarget);
+      else openAccountSettings(null);
+    } else if (target.kind !== "tasks" || tasksSupported()) void openHostPage(id, target.kind, null);
   }
   /**
    * Shows a place of the open server. A conversation, a thread, a view or a space that is gone, or
@@ -3228,23 +3257,45 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
               <Show
                 when={page() === "usage" || page() === "schedule" ? server() : undefined}
                 fallback={
-                  <Show when={settingsKind()} keyed>
-                    {(kind) => (
-                      <SettingsPageFrame
-                        heading={
-                          kind === "personal" ? (
-                            <h1 class="settings-page-title" tabindex={-1}>
-                              {t("app.settingsPage.title")}
-                            </h1>
-                          ) : (
-                            <Show when={server()}>{(target) => <ServerSettingsPageTitle server={target()} />}</Show>
-                          )
-                        }
-                        onMounts={setSettingsMounts}
-                        onEscape={showAgents}
-                        section={kind === "personal" ? accountSettingsSection() : serverSettingsSection()}
-                      />
-                    )}
+                  <Show when={settingsKind()}>
+                    <SettingsPageFrame
+                      heading={
+                        <h1 class="settings-page-title" tabindex={-1}>
+                          {t("app.settingsPage.title")}
+                        </h1>
+                      }
+                      nav={
+                        <SettingsNav
+                          items={settingsNavItems({
+                            personal: WEB_ACCOUNT_SETTINGS_TABS,
+                            server: server() ? serverSections() : [],
+                            actions: server() && trustSupported() ? ["money", "billing"] : ["billing"],
+                          })}
+                          active={
+                            settingsKind() === "personal"
+                              ? { kind: "personal", id: accountSettingsSection() ?? "profile" }
+                              : { kind: "server", id: shownServerSection() }
+                          }
+                          serverName={server()?.name}
+                          onSelect={(item) => {
+                            const id = server()?.id;
+                            if (item.kind === "personal") {
+                              const tab = WEB_ACCOUNT_SETTINGS_TABS.find((candidate) => candidate === item.id);
+                              openAccountSettings(tab ?? null);
+                            } else if (item.kind === "server") {
+                              if (id) void openServerSettings(id, null, item.id);
+                            } else if (item.id === "money") openWorkspaceView("trust");
+                            else {
+                              showAgents();
+                              setBillingOpen(true);
+                            }
+                          }}
+                        />
+                      }
+                      onMounts={setSettingsMounts}
+                      onEscape={showAgents}
+                      section={settingsKind() === "personal" ? accountSettingsSection() : serverSettingsSection()}
+                    />
                   </Show>
                 }
               >
@@ -3610,6 +3661,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       restoreFocusTarget={serverSettings.restoreTarget()}
                       initialSection={serverSettingsSection()}
                       onSectionChange={setServerSettingsSection}
+                      onAvailableSectionsChange={setServerSections}
                       shortcuts={{
                         ...(trustSupported() ? { money: () => openWorkspaceView("trust") } : {}),
                         notifications: () => openAccountSettings("notifications"),

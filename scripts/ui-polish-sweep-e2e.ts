@@ -30,6 +30,8 @@ const SCHEMES = ["dark", "light"] as const;
 
 /** The type scale of `packages/brand/src/tokens.css`, in px, with the display size and the glyph sizes. */
 const TEXT_SCALE = new Set([7, 8, 9, 12, 13, 14, 16, 18, 24, 32]);
+/** The phone adds the touch sizes (`--openbot-touch-text-*`), which the workspace panes take. */
+const PHONE_TEXT_SCALE = new Set([...TEXT_SCALE, 15, 17, 20]);
 /** The weight tokens, and the display weight of the Atelier themes (`--atelier-display-weight`). */
 const WEIGHT_SCALE = new Set([400, 500, 600, 700, 800]);
 
@@ -201,6 +203,10 @@ interface TextSample {
   weight: number;
   /** left, top, right, bottom in CSS px. */
   box: [number, number, number, number];
+  /** The element's own background colour, which is what its text sits on when it is opaque. */
+  background: string;
+  /** The element paints an image or a gradient of its own: no one colour is behind its text. */
+  painted: boolean;
 }
 
 function measure([phone, scale, weights]: readonly [boolean, readonly number[], readonly number[]]): Omit<
@@ -218,7 +224,13 @@ function measure([phone, scale, weights]: readonly [boolean, readonly number[], 
     map[key] = (map[key] ?? 0) + 1;
   };
   const name = (element: Element) => {
-    const classes = element.className?.toString().split(/\s+/u).filter(Boolean).slice(0, 2).join(".");
+    // The primitive's own classes say nothing about the place; the feature classes do.
+    const classes = element.className
+      ?.toString()
+      .split(/\s+/u)
+      .filter((value) => value && !/^ui-button(?:-|$)/u.test(value))
+      .slice(0, 3)
+      .join(".");
     const text = element.textContent?.replace(/\s+/gu, " ").trim().slice(0, 40) ?? "";
     return `${element.tagName.toLowerCase()}${classes ? `.${classes}` : ""} "${text}"`;
   };
@@ -286,6 +298,8 @@ function measure([phone, scale, weights]: readonly [boolean, readonly number[], 
         size,
         weight,
         box: [box.left, box.top, box.right, box.bottom],
+        background: style.backgroundColor,
+        painted: style.backgroundImage !== "none",
       });
     }
   }
@@ -412,8 +426,12 @@ async function contrastFindings(page: Page, shot: Buffer, texts: readonly TextSa
   );
   texts.forEach((text, index) => {
     const ink = parseColor(text.color);
-    if (!ink) return;
+    if (!ink || text.painted) return;
+    const own = parseColor(text.background);
     const seen = new Map<string, { color: [number, number, number, number]; count: number }>();
+    // A button or a badge with text of its own paints the colour behind that text itself; the
+    // pixels around its box are the canvas it sits on, which is not what the eye compares.
+    if (own && own[3] >= 1) seen.set("own", { color: own, count: 6 });
     for (const color of pixels.slice(index * 6, index * 6 + 6)) {
       if (!color) continue;
       const key = color.join(",");
@@ -430,7 +448,9 @@ async function contrastFindings(page: Page, shot: Buffer, texts: readonly TextSa
     const paperLuminance = luminance(background.color);
     const ratio = (Math.max(inkLuminance, paperLuminance) + 0.05) / (Math.min(inkLuminance, paperLuminance) + 0.05);
     const large = text.size >= 24 || (text.size >= 18.66 && text.weight >= 700);
-    if (ratio < (large ? 3 : 4.5))
+    // Text the same colour as what is around it is not rendered text; the samples missed the
+    // surface it sits on (a filled control the span does not fill), so the number says nothing.
+    if (ratio < (large ? 3 : 4.5) && ratio > 1.05)
       findings.push({
         kind: "contrast",
         detail: `${text.name} ${ratio.toFixed(2)}:1 (${text.color} on rgb(${background.color.slice(0, 3).join(", ")}))`,
@@ -518,7 +538,7 @@ try {
         const shot = await page.screenshot({ path: resolve(OUT, file), fullPage: false });
         const { texts, ...measured } = await page.evaluate(measure, [
           isPhone,
-          [...TEXT_SCALE],
+          [...(isPhone ? PHONE_TEXT_SCALE : TEXT_SCALE)],
           [...WEIGHT_SCALE],
         ] as const);
         measured.findings.push(...(await contrastFindings(page, shot, texts)));

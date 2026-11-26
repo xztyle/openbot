@@ -415,8 +415,16 @@
     min-height: var(--openbot-touch-target);
   }
 
-  .ws-channel-intro .ui-button {
+  .ws-channel-intro .ui-button,
+  .browser-takeover-actions .ui-button,
+  .image-generation-hover-download.ui-button {
     min-height: var(--openbot-touch-target);
+  }
+
+  /* The open and download controls on an attachment card. */
+  .attachment-open-button {
+    width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
   }
 
   :is(

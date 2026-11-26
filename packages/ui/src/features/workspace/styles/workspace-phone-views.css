@@ -1,7 +1,8 @@
 /* The workspace's lists and views on a phone, as Slack's iOS app: Home's list, the DMs and Activity
    tabs, and the views that push over them (Unreads, Threads, Drafts & sent, Later, Fleet, Org chart,
-   Artifacts, Search). Type is at least 15px for body text, and rows and buttons that a finger hits
-   are at least --openbot-touch-target high. A computer keeps the sizes of the other fragments. */
+   Artifacts, Search). Type takes the touch sizes of the scale (--openbot-touch-text-*), the same
+   as the panes in patterns.css, and rows and buttons that a finger hits are at least
+   --openbot-touch-target high. A computer keeps the sizes of the other fragments. */
 
 /* The DMs and Activity tabs are the views of a computer. They answer the same narrow-layout rules as
    a view that pushes over Home. */
@@ -14,19 +15,19 @@
 @media (pointer: coarse) {
   @container ws-layout (max-width: 720px) or style(--ws-phone-landscape: 1) {
     .ws-view {
-      --openbot-text-sm: 13px;
-      --openbot-text-md: 15px;
-      --openbot-text-lg: 16px;
-      --openbot-text-xl: 17px;
-      --openbot-leading-sm: 18px;
-      --openbot-leading-md: 20px;
-      --openbot-leading-lg: 22px;
+      --openbot-text-sm: var(--openbot-touch-text-sm);
+      --openbot-text-md: var(--openbot-touch-text-md);
+      --openbot-text-lg: var(--openbot-touch-text-lg);
+      --openbot-text-xl: var(--openbot-touch-text-xl);
+      --openbot-leading-sm: var(--openbot-touch-leading-sm);
+      --openbot-leading-md: var(--openbot-touch-leading-md);
+      --openbot-leading-lg: var(--openbot-touch-leading-lg);
     }
   }
 
   .ws-phone-home-list {
-    --openbot-text-md: 15px;
-    --openbot-text-lg: 17px;
+    --openbot-text-md: var(--openbot-touch-text-md);
+    --openbot-text-lg: var(--openbot-touch-text-xl);
   }
 }
 
@@ -202,8 +203,13 @@
     gap: 0;
   }
 
+  .ws-row-actions .ui-button {
+    min-width: var(--openbot-touch-target);
+    min-height: var(--openbot-touch-target);
+  }
+
   .ws-row-actions .ui-icon-button.ui-button {
-    width: 40px;
+    width: var(--openbot-touch-target);
     height: var(--openbot-touch-target);
   }
 

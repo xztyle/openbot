@@ -534,6 +534,11 @@
     min-height: var(--openbot-touch-target);
   }
 
+  /* The fold chevron of a group is an icon button: as wide as it is tall. */
+  .ws-unreads-toggle.ui-button {
+    min-width: var(--openbot-touch-target);
+  }
+
   .ws-view-toolbar .ws-select-trigger {
     min-height: var(--openbot-touch-target);
   }

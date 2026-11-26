@@ -101,13 +101,36 @@ const fleetSettings = (page: Page, name: string) =>
 
 const tabBar = (page: Page) => page.getByRole("navigation", { name: english("workspace.phone.tabs") });
 
+/**
+ * Waits until the client shows something. The dev server can leave a first page blank with its
+ * modules pending when it optimizes a dependency that it found late (it has no hot reload here to
+ * tell the page); a fresh load of the same address then shows. This is the dev server's, not the
+ * client's, as in web-deep-links-e2e.ts.
+ */
+async function started(page: Page): Promise<void> {
+  const shows = () =>
+    page
+      .waitForFunction(() => (document.getElementById("root")?.textContent ?? "").length > 0, undefined, {
+        timeout: 30_000,
+      })
+      .then(
+        () => true,
+        () => false,
+      );
+  if (await shows()) return;
+  await page.reload(COMMIT);
+  await shows();
+}
+
 /** Fleet: the Agents tab on the phone, the Fleet address on the desktop. */
 async function openFleet(page: Page, device: "phone" | "desktop"): Promise<void> {
   if (device === "desktop") {
     await page.goto(`${origin}/app/general/fleet`, COMMIT);
+    await started(page);
     return;
   }
   await page.goto(`${origin}/app/general`, COMMIT);
+  await started(page);
   const agents = tabBar(page).getByRole("button", { name: new RegExp(`^${english("workspace.phone.agents")}`, "u") });
   await agents.waitFor({ timeout: LOAD_WAIT_MS });
   await agents.tap();

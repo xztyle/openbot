@@ -2257,7 +2257,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: var(--openbot-space-2-5);
-  padding: 7px 10px 3px 13px;
+  padding: var(--openbot-space-2) var(--openbot-space-2-5) var(--openbot-space-1) var(--openbot-space-3);
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
@@ -2280,7 +2280,7 @@ textarea {
   border: 0;
   border-radius: var(--openbot-radius-md);
   background: transparent;
-  padding: 0 9px;
+  padding: 0 var(--openbot-space-2);
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
@@ -2314,9 +2314,9 @@ textarea {
   border: 1px dashed var(--openbot-border-strong);
   border-radius: var(--openbot-radius-lg);
   background: var(--openbot-hover);
-  padding: 9px;
+  padding: var(--openbot-space-2-5);
   grid-template-columns: 42px minmax(0, 1fr);
-  gap: 11px;
+  gap: var(--openbot-space-3);
   color: var(--openbot-text-primary);
   text-align: left;
   transition:
@@ -2372,7 +2372,7 @@ textarea {
 }
 
 .avatar-image-upload strong {
-  margin-bottom: 3px;
+  margin-bottom: var(--openbot-space-1);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
 }
@@ -2396,7 +2396,7 @@ textarea {
   border: 0;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--openbot-space-1-5);
-  padding: 7px 10px 12px;
+  padding: var(--openbot-space-2) var(--openbot-space-2-5) var(--openbot-space-3);
 }
 
 .avatar-face-choice,
@@ -2440,7 +2440,7 @@ textarea {
   margin: 0;
   border: 0;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 5px;
+  gap: var(--openbot-space-1);
   padding: var(--openbot-space-1) var(--openbot-space-2-5) var(--openbot-space-3);
 }
 

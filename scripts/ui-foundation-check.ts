@@ -125,8 +125,8 @@ export function checkUiFoundation(
   uiRoot = resolve(rendererRoot, "components/ui"),
   tokenRoots: readonly string[] = [],
   /**
-   * How many spacing declarations may still write pixels off the scale. The CLI holds the
-   * repository's remaining count; a fixture tree, like every other budget, runs at zero.
+   * How many spacing declarations may still write pixels off the scale. The repository and every
+   * fixture tree run at zero.
    */
   spacingBudget = 0,
 ): UiFoundationReport {
@@ -320,10 +320,9 @@ export function checkUiFoundation(
     // Spacing between and around boxes reads `--openbot-space-*`. Every declaration whose pixels
     // sat on the scale was rewritten to it in 2026-11, and the off-scale ones (7px, 14px, 28px...)
     // were snapped to the nearest step after that; a reserved inset for a fixed control (the macOS
-    // traffic lights, a title bar) is a named local custom property instead. What remains sits in
-    // the Settings styles (settings-panel.css, agent-settings.css, settings-mobile-connect.css,
-    // server-settings-modal.css and the avatar editor rules of app-shell.css), left alone while
-    // those pages are redesigned as one. A new one is not allowed.
+    // traffic lights, a title bar) is a named local custom property instead. The last ones, in the
+    // Settings styles and the avatar editor, were snapped in 2026-11-26: none is left, and a new
+    // one is not allowed.
     ["untokenized spacing", matches(legacyStyles, SPACING_LITERAL), spacingBudget],
   ] as const;
 
@@ -344,7 +343,6 @@ if (import.meta.main) {
     [resolve(projectRoot, "src"), resolve(projectRoot, "apps"), resolve(projectRoot, "packages/ui/src")],
     resolve(projectRoot, "packages/ui/src"),
     [resolve(projectRoot, "packages/brand/src")],
-    26,
   );
 
   if (failures.length > 0) {

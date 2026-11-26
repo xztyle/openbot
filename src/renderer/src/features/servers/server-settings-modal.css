@@ -362,7 +362,7 @@
   .server-settings-desktop-meta,
   .server-settings-desktop-hint {
     max-width: none;
-    margin-left: 52px;
+    margin-left: calc(var(--openbot-space-8) + var(--openbot-space-5));
     justify-items: start;
     text-align: left;
   }

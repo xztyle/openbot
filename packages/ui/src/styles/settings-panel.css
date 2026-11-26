@@ -106,12 +106,12 @@
 .settings-panel-content {
   min-height: 0;
   overflow-y: auto;
-  padding: 24px 15px 28px;
+  padding: var(--openbot-space-6) var(--openbot-space-4) var(--openbot-space-6);
 }
 
 .settings-field {
   display: block;
-  margin: 0 0 17px;
+  margin: 0 0 var(--openbot-space-4);
 }
 
 .settings-field > span {
@@ -137,7 +137,7 @@
   border-radius: var(--openbot-radius-md);
   outline: 0;
   background: var(--openbot-shadow-popover-ambient);
-  padding: 10px 11px;
+  padding: var(--openbot-space-2-5) var(--openbot-space-3);
   color: var(--openbot-text-primary);
   caret-color: var(--openbot-text-primary);
   font-size: var(--openbot-text-lg);
@@ -215,7 +215,7 @@
 .settings-link-group {
   display: grid;
   width: 100%;
-  margin: 7px 0 22px;
+  margin: var(--openbot-space-2) 0 var(--openbot-space-6);
   border-top: 1px solid var(--openbot-border);
   border-bottom: 1px solid var(--openbot-border);
 }

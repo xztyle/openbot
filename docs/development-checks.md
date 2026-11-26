@@ -345,10 +345,8 @@ not counted. Every declaration whose pixels sat on the scale was rewritten to th
 off-scale ones (7px, 14px, 28px...) were then snapped to the nearest step; a reserved inset for a
 fixed control, such as the macOS traffic lights or a title bar, is a named local custom property
 (`--sidebar-traffic-lights-inset: 78px`) read with `var()`, because it is a dimension and not
-spacing. The budget holds the Settings styles only (`settings-panel.css`, `agent-settings.css`,
-`settings-mobile-connect.css`, `server-settings-modal.css` and the avatar editor rules in
-`app-shell.css`), left as they are while the Settings pages are redesigned as one, and it only goes
-down.
+spacing. The budget is 0: the last off-scale values, in the Settings styles and the avatar editor,
+were snapped to the scale on 2026-11-26.
 
 Errors cover prohibited syntax. Warnings ask for judgment, such as an `object` parameter or a
 module mock. Making correct boundary code worse to remove a warning defeats the check. A spy call

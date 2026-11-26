@@ -23,6 +23,9 @@ const logger = createOpenBotLogger("agent-settings-e2e");
 const ROOT = resolve(import.meta.dirname, "..");
 const OUT = resolve(ROOT, ".openbot-build/agent-settings-e2e");
 const UI_WAIT_MS = 60_000;
+// The dev server compiles the client on a page's first request. Beside the whole deploy suite that
+// takes more than a minute, so a page load waits longer.
+const LOAD_WAIT_MS = 180_000;
 const english = translateFor("en");
 const COMMIT = { waitUntil: "commit" } as const;
 
@@ -106,7 +109,7 @@ async function openFleet(page: Page, device: "phone" | "desktop"): Promise<void>
   }
   await page.goto(`${origin}/app/general`, COMMIT);
   const agents = tabBar(page).getByRole("button", { name: new RegExp(`^${english("workspace.phone.agents")}`, "u") });
-  await agents.waitFor({ timeout: UI_WAIT_MS });
+  await agents.waitFor({ timeout: LOAD_WAIT_MS });
   await agents.tap();
 }
 

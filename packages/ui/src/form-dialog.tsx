@@ -123,11 +123,15 @@ export function FormDialog(props: FormDialogProps): JSX.Element {
               event.preventDefault();
               // A dialog with no field, as the shortcuts sheet, takes the focus itself: it reads its title,
               // and the focus leaves the page behind, which the modal hides from a screen reader.
-              const target =
-                props.initialFocus?.() ??
-                body?.querySelector<HTMLElement>(FIELD_SELECTOR) ??
-                (event.currentTarget instanceof HTMLElement ? event.currentTarget : null);
-              requestAnimationFrame(() => target?.focus({ preventScroll: true }));
+              const content = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+              const target = props.initialFocus?.() ?? body?.querySelector<HTMLElement>(FIELD_SELECTOR) ?? content;
+              requestAnimationFrame(() => {
+                // A user who already went to a field of the form keeps it: the next frame can come late,
+                // and the focus must not jump back while they type (their text would go to the first field).
+                const active = document.activeElement;
+                if (active && active !== content && content?.contains(active)) return;
+                target?.focus({ preventScroll: true });
+              });
             }}
           >
             <Show when={phone()}>

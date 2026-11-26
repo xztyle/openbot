@@ -30,6 +30,14 @@
   height: 22px;
 }
 
+/* On a touch screen each view is a whole finger high, as the phone's other controls. */
+@media (hover: none), (pointer: coarse) {
+  .message-preview-switch .ui-sliding-tabs-trigger,
+  .message-preview-switch .ui-sliding-tabs-pill {
+    height: var(--openbot-touch-target);
+  }
+}
+
 /* The two views share one cell. Only the selected view sets the height, so the block eases from
    one height to the other while the views cross-fade. */
 .message-preview-resize {

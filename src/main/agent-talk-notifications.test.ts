@@ -8,8 +8,8 @@ import { translateFor } from "@openbot/i18n";
 import { notificationForAgentEvent } from "@openbot/team-client/agent-notifications";
 import { describe, expect, it } from "vitest";
 
-// Failure modes: a turn in which an agent answered another agent raises a "Finished" notification,
-// though the chat folds it and counts nothing unread; the marker reaches a peer without fork-host-v1,
+// Failure modes: a turn of the agent's own activity (a teammate, a Motion event, a note from Atelier)
+// raises a "Finished" or "Failed" notification, though the chat folds it and counts nothing unread; the marker reaches a peer without fork-host-v1,
 // or a peer with it loses the marker.
 const completed: Extract<AgentEvent, { type: "turn-completed" }> = {
   type: "turn-completed",
@@ -50,10 +50,11 @@ describe("agent talk turns", () => {
     const t = translateFor("en");
     expect(notificationForAgentEvent({ ...completed, agentTalk: true }, [agent], t, "all")).toBeNull();
     expect(notificationForAgentEvent(completed, [agent], t, "all")).toMatchObject({ title: "Scout" });
-    // A failure is still news.
+    // The agent's own activity is not the owner's conversation: its failure tells nothing either.
     expect(
       notificationForAgentEvent({ ...completed, status: "failed", agentTalk: true }, [agent], t, "all"),
-    ).not.toBeNull();
+    ).toBeNull();
+    expect(notificationForAgentEvent({ ...completed, status: "failed" }, [agent], t, "all")).not.toBeNull();
   });
 
   it("carry the marker only to a peer with fork-host-v1", () => {

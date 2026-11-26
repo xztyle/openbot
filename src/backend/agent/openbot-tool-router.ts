@@ -447,6 +447,20 @@ export class OpenBotToolRouter {
       mailbox: options.mailbox,
       conversation: options.conversation,
       teamChannel: (agentId, turnId) => options.channels.teamContext(agentId, turnId)?.channelId ?? null,
+      postToOwner: (agentId, message) =>
+        options.conversation.withConversationTransaction(agentId, ({ threadId, snapshot }) => {
+          if (snapshot.messages.some(({ id }) => id === message.id)) return { result: false, snapshot };
+          snapshot.messages.push(message);
+          sortConversationMessages(snapshot.messages);
+          snapshot.revision = options.store.database.appendConversationMessage({
+            agentId,
+            threadId,
+            activeTurnId: snapshot.activeTurnId,
+            message,
+            eventType: "thread.owner-message-added",
+          });
+          return { result: true, snapshot };
+        }),
     });
     this.#trust = options.trust
       ? new TrustToolGate({

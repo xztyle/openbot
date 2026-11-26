@@ -21,7 +21,7 @@ import { afterEach, assert, describe, expect, it } from "vitest";
 import { AgentRoutineStore } from "./agent-routine-store";
 import { ChannelRoutineStore } from "./channel-routine-store";
 import { ChannelStore } from "./channel-store";
-import { ConversationReadStore, isAgentTalkTurn } from "./conversation-read-store";
+import { ConversationReadStore, isBackgroundTurn } from "./conversation-read-store";
 import { runCauseEffect } from "./effect-boundary";
 import { OpenBotDatabase } from "./openbot-database";
 
@@ -1432,7 +1432,7 @@ describe("OpenBotDatabase", () => {
       "conversation.test",
     );
 
-    const talk = (turnId: string) => (agent.threadId ? isAgentTalkTurn(database, agent.threadId, turnId) : null);
+    const talk = (turnId: string) => (agent.threadId ? isBackgroundTurn(database, agent.threadId, turnId) : null);
     expect(["asked-by-agent", "person-turn", "report-turn", "fyi-turn"].map(talk)).toEqual([true, false, false, true]);
     database.close();
   });

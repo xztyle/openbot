@@ -15,6 +15,7 @@ import {
   SKILL_EVENT_ITEM_TYPE_PREFIX,
   SYSTEM_NOTICE_ITEM_TYPE_PREFIX,
 } from "@openbot/contracts/ipc";
+import { OWNER_MESSAGE_ITEM_TYPE } from "@openbot/contracts/owner-conversation";
 import { isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 import {
   type ConversationMarkerExclusions,
@@ -312,8 +313,8 @@ export class ThreadReadStates {
       AND COALESCE(item_type, '') != '${CONTEXT_RESET_ITEM_TYPE}'
       AND NOT (
         author = 'assistant' AND turn_id IS NOT NULL
-        AND EXISTS (${AGENT_TALK_TURNS} AND exchange.turn_id = ordered.turn_id)
-        AND NOT EXISTS (SELECT 1 FROM ordered asker WHERE asker.turn_id = ordered.turn_id AND asker.author = 'user')
+        AND COALESCE(item_type, '') NOT IN ('${OWNER_MESSAGE_ITEM_TYPE}', 'question_prompt')
+        AND ${backgroundTurn("ordered.turn_id")}
       )`;
     // One pass over the ordered thread: the first unread row carries the count of all of them.
     const firstRow = this.#prepared(
@@ -335,14 +336,6 @@ export class ThreadReadStates {
 }
 
 /**
- * The turns of the agent's talk with another agent: no person wrote in them, and their answer is not
- * for the person who reads the chat, because another agent's request started the turn, OpenBot sent
- * the answer on to an agent, or a teammate's report started it that does not answer a request the
- * agent sent while it worked on a person's own message (not a routine run). A report that does answer
- * such a request, and whose answer goes nowhere else, is the agent telling the person, so it counts.
- * The same rule as `AGENT_TALK_TURNS` and the renderer's `agentOnlyTurns`.
- */
-/**
  * The turns, of the thread that `ordered` reads, whose answer is not for the person: an agent's
  * request started them, a teammate's report started them that does not answer a request sent in a
  * turn a person's own message (not a routine run) started, or OpenBot sent the answer on to an agent (an outgoing
@@ -350,7 +343,8 @@ export class ThreadReadStates {
  *
  * The caller adds the turn to test (`AND exchange.turn_id = ...`), so the test reads the rows of that
  * turn through the turn index. As an `IN` list it read and parsed every exchange of the thread for each
- * unread count, also for a count with only the last few messages after the cursor.
+ * unread count, also for a count with only the last few messages after the cursor. The teammate part of
+ * `backgroundTurns` in `@openbot/contracts/owner-conversation`.
  */
 const AGENT_TALK_TURNS = `SELECT 1 FROM ordered exchange
   JOIN projection_thread_messages stored ON stored.thread_id = exchange.thread_id AND stored.message_id = exchange.message_id
@@ -377,17 +371,38 @@ const AGENT_TALK_TURNS = `SELECT 1 FROM ordered exchange
   )`;
 
 /**
- * Whether a turn of the thread is the agent's talk with another agent, by the rule that read state
- * uses (`AGENT_TALK_TURNS`): no person wrote in it, and its answer is not for the person. A turn
- * that completes with this shows no "Finished" notification, as it adds nothing unread.
+ * The test that the turn `turn` (an SQL expression) of the thread that `ordered` reads is the agent's
+ * own activity, by the rule of `backgroundTurns` with whole turns (`@openbot/contracts/owner-conversation`):
+ * no person wrote in it, and it is not a teammate's report back to a person's request that the agent
+ * passes on to the person. A teammate's report that `AGENT_TALK_TURNS` names stays the agent's own.
  */
-export function isAgentTalkTurn(database: { readonly connection: DatabaseSync }, threadId: string, turnId: string) {
+function backgroundTurn(turn: string): string {
+  return `(NOT EXISTS (
+      SELECT 1 FROM ordered person WHERE person.turn_id = ${turn} AND person.author = 'user'
+        AND COALESCE(person.item_type, '') != 'routine' AND COALESCE(person.item_type, '') NOT LIKE '${SYSTEM_NOTICE_ITEM_TYPE_PREFIX}%'
+    ) AND (
+      EXISTS (${AGENT_TALK_TURNS} AND exchange.turn_id = ${turn})
+      OR NOT EXISTS (
+        SELECT 1 FROM ordered relay
+        JOIN projection_thread_messages reported ON reported.thread_id = relay.thread_id AND reported.message_id = relay.message_id
+        WHERE relay.turn_id = ${turn} AND relay.author = 'agent' AND relay.item_type = '${AGENT_EXCHANGE_ITEM_TYPE}'
+          AND json_extract(reported.message_json, '$.exchange.expectsReply') = 0
+      )
+    ))`;
+}
+
+/**
+ * Whether a turn of the thread is the agent's own activity (`backgroundTurn`) and the agent wrote
+ * nothing in it to the owner on purpose. A turn that completes with this tells nothing: no "Finished"
+ * notification, sound or push, as it adds nothing unread.
+ */
+export function isBackgroundTurn(database: { readonly connection: DatabaseSync }, threadId: string, turnId: string) {
   return (
     database.connection
       .prepare(
         `${ORDERED_THREAD_MESSAGES}
-         SELECT 1 WHERE EXISTS (${AGENT_TALK_TURNS} AND exchange.turn_id = ?2)
-           AND NOT EXISTS (SELECT 1 FROM ordered WHERE author = 'user' AND turn_id = ?2)`,
+         SELECT 1 WHERE ${backgroundTurn("?2")}
+           AND NOT EXISTS (SELECT 1 FROM ordered WHERE turn_id = ?2 AND item_type = '${OWNER_MESSAGE_ITEM_TYPE}')`,
       )
       .get(threadId, turnId) !== undefined
   );

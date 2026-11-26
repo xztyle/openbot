@@ -31,12 +31,14 @@ export function createAgentEventSounds(
         ask(event.request.agentId, `browser:${event.request.turnId}:${event.request.requestId}`);
         return;
       case "turn-completed":
-        // A routine or a teammate starts a run without the user, so its failure stays silent. A
-        // provider retry reports an error more than once in a run, so the cue follows the run end.
+        // A routine, a teammate or a note from Atelier starts a run without the user, so its failure
+        // stays silent. A provider retry reports an error more than once in a run, so the cue follows
+        // the run end.
         if (
           event.status === "failed" &&
           event.origin !== "routine" &&
           event.origin !== "agent" &&
+          !event.agentTalk &&
           notifies(event.agentId)
         ) {
           playActionSound("error");

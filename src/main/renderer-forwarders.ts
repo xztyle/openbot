@@ -32,6 +32,7 @@ import {
   type WorkspaceSidebarPrefs,
   workspaceNotifyLevel,
 } from "@openbot/contracts/ipc";
+import { OWNER_MESSAGE_ITEM_TYPE } from "@openbot/contracts/owner-conversation";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import { CHANNEL_ROUTES } from "@openbot/contracts/team-protocol/channels-v1";
 import { TEAM_CHANNEL_ATTENTION_CAPABILITY } from "@openbot/contracts/team-protocol/current";
@@ -467,7 +468,11 @@ export function createRendererForwarders({
           );
     if (!page) return null;
     const loaded = await runCauseEffect(page).catch(() => null);
-    const answer = loaded && latestTurnAnswer(loaded.messages, turnId)?.text;
+    // A message that the agent wrote to the owner on purpose is what the notice tells.
+    const toOwner = loaded?.messages.findLast(
+      (message) => message.turnId === turnId && message.itemType === OWNER_MESSAGE_ITEM_TYPE,
+    );
+    const answer = loaded && (toOwner ?? latestTurnAnswer(loaded.messages, turnId))?.text;
     // A routine Test run shows the no-update marker in the chat, but it is not news to show.
     return answer && !isNoUpdateAnswer(answer) ? answer : null;
   }

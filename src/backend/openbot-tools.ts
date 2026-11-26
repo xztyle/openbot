@@ -567,6 +567,17 @@ export const holdForOwnerToolSchema = z.strictObject({
     .describe("The page for a takeover, or the thing to review."),
 });
 
+export const messageOwnerToolSchema = z.strictObject({
+  text: z
+    .string()
+    .trim()
+    .min(1)
+    .max(2_000)
+    .describe(
+      "What the owner must know or decide, in plain words in their language, as a colleague texts: the news or the question first, with your default.",
+    ),
+});
+
 export const alertOwnerToolSchema = z.strictObject({
   category: z
     .enum(["money", "outage", "security"])
@@ -1001,8 +1012,14 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "alert_owner",
     description:
-      "Push an urgent alert to the owner's phone, also in quiet hours and focus: money at stake at or over the owner's limit, an outage of a live site, app or ad account, or a security event. Anything else waits in quiet hours: hold it with hold_for_owner. One alert of each kind per 15 minutes. Then tell the owner the details in your answer.",
+      "Push an urgent alert to the owner's phone, also in quiet hours and focus: money at stake at or over the owner's limit, an outage of a live site, app or ad account, or a security event. Anything else waits in quiet hours: hold it with hold_for_owner. One alert of each kind per 15 minutes. Then tell the owner the details with message_owner, or in your answer when the owner's own message started your turn.",
     shape: alertOwnerToolSchema.shape,
+  },
+  {
+    name: "message_owner",
+    description:
+      "Write to the owner in your chat with them, when they need to know or decide something. In a turn that the owner's own message started, just answer: this is for the other turns. A turn that a Motion event, a teammate, a routine or a note from Atelier started is your own activity: the owner does not see its answer as a message and is not told about it. Only this message (or ask_user, or alert_owner for an emergency) reaches them, and it tells them. Your normal updates go to the board, not to the owner. One short message; never an acknowledgement or a status echo.",
+    shape: messageOwnerToolSchema.shape,
   },
   {
     name: "log_decision",

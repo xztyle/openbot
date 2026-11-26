@@ -1,3 +1,4 @@
+import { isBackgroundRow } from "@openbot/contracts/owner-conversation";
 import { createScrollFades } from "@openbot/ui/components/createScrollFades";
 import type { AgentMessage } from "@openbot/ui/data";
 import type { RoutineRunToggleMarkerModel } from "@openbot/ui/features/conversation/ChatActionMarker";
@@ -23,7 +24,7 @@ import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { eventCheckOrigins, eventCheckOriginsEqual, isEventCheckMarkerMessage } from "../../../app-message-projection";
 import { useShowAgentMessages, useShowAgentReasoning } from "../../../chat-visibility-preferences";
 import { groupAgentMessageMarkers, markOpenAgentMessages } from "../agent-message-timeline";
-import { agentOnlyTurns, foldAgentTurns } from "../agent-turn-folds";
+import { agentActivityTurns, foldAgentTurns } from "../agent-turn-folds";
 import type { ConversationProps, ConversationTarget } from "../conversation-types";
 import {
   expandRoutineRunGroups,
@@ -136,12 +137,11 @@ export function createScrollStore(deps: ScrollStoreDeps) {
   );
   const routineRunTurns = createMemo(() => routineRunTurnMessages(deps.props.messages, shownMessages()));
   /*
-   * In the agent's own chat, the turns that only another agent started fold into one row for each
-   * run of turns with the same agent. A channel draws every turn.
+   * In the agent's own chat, the agent's own activity (turns that a Motion event, a teammate, a note
+   * from Atelier or a routine run started) folds into one "Agent activity" row for each burst. A
+   * channel draws every turn.
    */
-  const foldedTurns = createMemo(() =>
-    deps.props.channel ? new Map<string, string>() : agentOnlyTurns(deps.props.messages),
-  );
+  const foldedTurns = createMemo(() => agentActivityTurns(deps.props.messages));
   /* The keys of the folded rows that the person opened. */
   const [openAgentTurns, setOpenAgentTurns] = createSignal<ReadonlySet<string>>(new Set());
   function toggleAgentTurns(key: string): void {
@@ -155,13 +155,23 @@ export function createScrollStore(deps: ScrollStoreDeps) {
    * The messages of a routine run follow its row and open and close with it. The messages of a
    * folded run of agent turns follow its row in the same way.
    */
-  const drawnMessages = createMemo(() => [
-    ...foldAgentTurns(
-      placeRoutineRunTurns(summarizeRoutineRunMessages(shownMessages()), routineRunTurns(), openRoutineRuns()),
-      { turns: foldedTurns(), open: openAgentTurns(), activeTurnId: deps.props.activeTurnId },
-    ),
-    ...deps.pendingMessages(),
-  ]);
+  const drawnMessages = createMemo(() => {
+    const rows = placeRoutineRunTurns(
+      summarizeRoutineRunMessages(shownMessages()),
+      routineRunTurns(),
+      openRoutineRuns(),
+    );
+    return [
+      ...(deps.props.channel
+        ? rows
+        : foldAgentTurns(rows, {
+            turns: foldedTurns(),
+            open: openAgentTurns(),
+            activeTurnId: deps.props.activeTurnId,
+          })),
+      ...deps.pendingMessages(),
+    ];
+  });
   /* The chip of an event check, by the id of the agent message that carries it. */
   const eventCheckOriginById = createMemo(
     () => eventCheckOrigins(deps.props.messages, { activeTurnId: deps.props.activeTurnId }),
@@ -254,8 +264,8 @@ export function createScrollStore(deps: ScrollStoreDeps) {
   });
   rowFlow = messageFlow;
   /*
-   * Every row anchors the count, but only some rows add to it. A message of a folded agent turn does
-   * not add to it, as it does not add to the unread count.
+   * Every row anchors the count, but only some rows add to it. A message of the agent's own activity
+   * does not add to it, as it does not add to the unread count.
    */
   const timelineRows = createMemo(() =>
     deps.props.messages.map((message) => ({
@@ -263,7 +273,7 @@ export function createScrollStore(deps: ScrollStoreDeps) {
       countable:
         countableTimelineMessage(message) &&
         !switchedOff(message, showReasoning(), showAgentMessages()) &&
-        !(message.turnId !== undefined && foldedTurns().has(message.turnId)),
+        !(!deps.props.channel && isBackgroundRow(message, foldedTurns())),
     })),
   );
 

@@ -29,7 +29,7 @@ import type { AgentStore } from "../agent-store";
 import type { BrowserOperationError } from "../browser-effects";
 import type { BrowserDynamicToolHooks } from "../browser-tool-actions";
 import { hideChannelSecrets } from "../channel-secrets";
-import { isAgentTalkTurn } from "../conversation-read-store";
+import { isBackgroundTurn } from "../conversation-read-store";
 import { newAssistantMessage, normalizeCompletionStatus } from "../conversation-snapshots";
 import { causeHelpers, reportOriginalFailure } from "../effect-boundary";
 import type { DeliveryContext, MailboxStore, UsageLimitContinuation } from "../mailbox-store";
@@ -1292,12 +1292,15 @@ export class TurnLifecycle {
         ...(quiet ? { quiet: true as const } : {}),
         // After the deliveries ended and the result reached the requester, so a relayed answer counts.
         ...(outcome === "completed" && this.#mailbox.hasFollowUpWork(agentId) ? { moreWork: true as const } : {}),
-        // A person's message or a routine run is never talk between agents, so only another start is read.
-        ...(outcome === "completed" &&
-        deliveries[0]?.delivery.sender.kind !== "user" &&
-        deliveries[0]?.delivery.sender.kind !== "routine" &&
+        // The agent's own activity (a Motion event, a teammate, a note from Atelier, a routine run) tells
+        // the owner nothing, unless the agent wrote to them on purpose; their own conversation tells.
+        // A channel's or a task's turn keeps its own rule: only a teammate's start is its own activity.
+        ...((outcome === "completed" || outcome === "failed") &&
         snapshot.threadId &&
-        isAgentTalkTurn(this.#store.database, snapshot.threadId, turnId)
+        (!channelTurn && !taskTurn
+          ? isBackgroundTurn(this.#store.database, snapshot.threadId, turnId)
+          : deliveries[0]?.delivery.sender.kind === "agent" &&
+            isBackgroundTurn(this.#store.database, snapshot.threadId, turnId))
           ? { agentTalk: true as const }
           : {}),
       });

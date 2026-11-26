@@ -677,8 +677,10 @@ export function createWebWorkspace(
             if (draft.progress[event.agentId]?.turnId === event.turnId) delete draft.progress[event.agentId];
             if (event.status === "failed") draft.failedTurns[event.agentId] = event.turnId;
             else delete draft.failedTurns[event.agentId];
-            // As on desktop, a reply that ends while the page has focus is already seen.
-            if (event.status === "completed" && !document.hasFocus()) draft.recentReplies[event.agentId] = true;
+            // As on desktop, a reply that ends while the page has focus is already seen, and the agent's
+            // own activity is no reply to the owner.
+            if (event.status === "completed" && !event.agentTalk && !document.hasFocus())
+              draft.recentReplies[event.agentId] = true;
             draft.prompts = draft.prompts.filter(
               (item) =>
                 item.agentId !== event.agentId || item.threadId !== event.threadId || item.turnId !== event.turnId,

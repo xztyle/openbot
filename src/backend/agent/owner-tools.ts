@@ -1,11 +1,17 @@
 import { createHash } from "node:crypto";
 import { basename, extname } from "node:path";
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
-import type { AttachmentSummary } from "@openbot/contracts/ipc";
+import type { AttachmentSummary, ConversationMessage } from "@openbot/contracts/ipc";
+import { OWNER_MESSAGE_ITEM_TYPE } from "@openbot/contracts/owner-conversation";
 import { Effect, Result } from "effect";
 import { z } from "zod";
 import type { MailboxStore } from "../mailbox-store";
-import { alertOwnerToolSchema, holdForOwnerToolSchema, sharePreviewToolSchema } from "../openbot-tools";
+import {
+  alertOwnerToolSchema,
+  holdForOwnerToolSchema,
+  messageOwnerToolSchema,
+  sharePreviewToolSchema,
+} from "../openbot-tools";
 import { type OwnerAwayService, OwnerHoldRefused } from "../owner-away";
 import type { DynamicToolCallParams } from "../protocol";
 import type { SharePreviewDrawer } from "../workspace-thumbnails";
@@ -16,7 +22,12 @@ import { type OpenBotToolResponse, openBotToolFailure, openBotToolResult } from 
 import { csvPreviewHtml } from "./share-preview";
 import { toToolOperationFailed } from "./tool-operation";
 
-export const OWNER_TOOL_NAMES: ReadonlySet<string> = new Set(["hold_for_owner", "alert_owner", "share_preview"]);
+export const OWNER_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "hold_for_owner",
+  "alert_owner",
+  "share_preview",
+  "message_owner",
+]);
 
 /**
  * A `share_preview` message is an attachment message with a caption, so every chat, channel and
@@ -44,21 +55,26 @@ export interface OwnerToolsOptions {
     MailboxStore,
     "stageGeneratedBytes" | "persistGeneratedAttachmentsWithConversation" | "discardStagedGeneratedAttachments"
   >;
-  conversation: Pick<ConversationRuntime, "ensureSnapshot" | "publishConversation">;
+  conversation: Pick<ConversationRuntime, "ensureSnapshot" | "publishConversation" | "isExecutionThread">;
   /** The team channel that the turn works for, for the place of a held request. */
   teamChannel: (agentId: string, turnId: string) => string | null;
+  /**
+   * Adds a message of the agent to its own chat with the owner and saves it, unless the chat holds
+   * one with its id already. True when it added it. Absent: `message_owner` answers that this host has none.
+   */
+  postToOwner?: (agentId: string, message: ConversationMessage) => boolean;
 }
 
 function failure(error: z.ZodError): OpenBotToolResponse {
   return openBotToolFailure(`${z.prettifyError(error)}\nCorrect the arguments and retry.`);
 }
 
-function previewMessageId(params: DynamicToolCallParams): string {
+function callMessageId(prefix: string, params: DynamicToolCallParams): string {
   const digest = createHash("sha256")
     .update(`${params.threadId}\0${params.turnId}\0${params.callId}`)
     .digest("hex")
     .slice(0, 32);
-  return `share-preview:${digest}`;
+  return `${prefix}:${digest}`;
 }
 
 function hostOf(url: string): string {
@@ -101,6 +117,7 @@ export class OwnerTools {
   ) {
     if (params.tool === "hold_for_owner") return this.#hold(params, agentId);
     if (params.tool === "alert_owner") return this.#alert(params, agentId);
+    if (params.tool === "message_owner") return this.#message(params, agentId, executionThreadId);
     if (params.tool === "share_preview") return yield* this.#share(params, agentId, executionThreadId);
     return null;
   });
@@ -122,6 +139,35 @@ export class OwnerTools {
       if (error instanceof OwnerHoldRefused) return openBotToolFailure(error.message);
       throw error;
     }
+  }
+
+  /**
+   * A message to the owner on purpose (`OWNER_MESSAGE_ITEM_TYPE`): it shows in the agent's chat with
+   * the owner and counts as unread whatever started the turn, and the end of the turn tells the owner.
+   */
+  #message(params: DynamicToolCallParams, agentId: string, executionThreadId: string): OpenBotToolResponse {
+    const parsed = messageOwnerToolSchema.safeParse(params.arguments);
+    if (!parsed.success) return failure(parsed.error);
+    const post = this.#options.postToOwner;
+    if (!post) return openBotToolFailure("This Atelier cannot post a message to the owner. Say it in your answer.");
+    // In the agent's own chat the message joins the turn; a channel's or a task's turn is not there.
+    const { conversation } = this.#options;
+    const ownChat = !conversation.isExecutionThread(conversation.ensureSnapshot(agentId, executionThreadId).threadId);
+    const message: ConversationMessage = {
+      id: callMessageId("owner-message", params),
+      ...(ownChat ? { turnId: params.turnId } : {}),
+      author: "assistant",
+      source: "assistant",
+      text: parsed.data.text,
+      createdAt: new Date().toISOString(),
+      status: "completed",
+      itemType: OWNER_MESSAGE_ITEM_TYPE,
+    };
+    post(agentId, message);
+    return openBotToolResult({
+      status: "sent",
+      note: "The owner sees it in your chat with them and is told. Do not repeat it in your answer; continue your work or end your turn.",
+    });
   }
 
   #alert(params: DynamicToolCallParams, agentId: string): OpenBotToolResponse {
@@ -154,7 +200,7 @@ export class OwnerTools {
     const parsed = sharePreviewToolSchema.safeParse(params.arguments);
     if (!parsed.success) return failure(parsed.error);
     const { url, paths, caption, revision } = parsed.data;
-    const messageId = previewMessageId(params);
+    const messageId = callMessageId("share-preview", params);
     if (this.#options.conversation.ensureSnapshot(agentId, threadId).messages.some(({ id }) => id === messageId))
       return openBotToolResult({ status: "shown", messageId });
     const files: PreviewFile[] = [];

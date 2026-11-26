@@ -257,7 +257,8 @@ export function AgentEventBridge() {
           current.filter((approval) => approval.agentId !== event.agentId || approval.threadId !== event.threadId),
         );
         if (event.status === "completed") {
-          markReplyCompleted(event.agentId);
+          // The agent's own activity is no reply to the owner, so the chat's row does not light up.
+          if (!event.agentTalk) markReplyCompleted(event.agentId);
           if (soundLevel() === "all" && !platform.chatWindow) playCompletionSoundForAgentEvent(event, agentList());
         }
         return;

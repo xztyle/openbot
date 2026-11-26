@@ -19,6 +19,7 @@ import {
   SKILL_EVENT_ITEM_TYPE_PREFIX,
   SYSTEM_NOTICE_ITEM_TYPE_PREFIX,
 } from "@openbot/contracts/ipc";
+import { isBackgroundRow, storedBackgroundTurns } from "@openbot/contracts/owner-conversation";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import type { ConversationMarkerExclusions } from "./database/conversation-queries";
@@ -26,7 +27,7 @@ import { type ReadLookups, ThreadReadStates } from "./database/thread-read-state
 import type { OpenBotDatabase } from "./openbot-database";
 
 export type { ConversationMarkerExclusions } from "./database/conversation-queries";
-export { isAgentTalkTurn } from "./database/thread-read-states";
+export { isBackgroundTurn } from "./database/thread-read-states";
 
 /**
  * Each member's read cursor of each thread and the state it gives: the unread count and the first
@@ -232,55 +233,21 @@ export class ConversationReadStore {
   }
 }
 
-function agentOnlyTurns(messages: ConversationSnapshot["messages"]): Set<string> {
-  const talk = new Set<string>();
-  const reports = new Map<string, string | null>();
-  const answers = new Map<string, Set<string>>();
-  const forwarded = new Map<string, string[]>();
-  const requestTurns = new Map<string, string>();
-  const fromPerson = new Set<string>();
-  // A person's own message, not a routine run's: only work a person asked for reports to them.
-  const personAsked = new Set<string>();
-  for (const message of messages) {
-    const turnId = message.turnId;
-    if (!turnId) continue;
-    if (message.author === "user") fromPerson.add(turnId);
-    if (message.author === "user" && message.source !== "routine") personAsked.add(turnId);
-    if (message.itemType === AGENT_EXCHANGE_ITEM_TYPE) {
-      // A message stored before the exchange summary counts as a request, as it did before.
-      const direction = message.exchange?.direction ?? (message.author === "agent" ? "incoming" : "outgoing");
-      if (direction === "incoming") {
-        if (message.exchange?.expectsReply === false) {
-          if (!reports.has(turnId)) reports.set(turnId, message.exchange.replyToMessageId);
-        } else talk.add(turnId);
-      } else {
-        forwarded.set(turnId, [...(forwarded.get(turnId) ?? []), message.text.trim()]);
-        if (message.exchange) requestTurns.set(message.exchange.messageId, turnId);
-      }
-    } else if (message.author === "assistant" && (!message.itemType || message.itemType === "agentMessage"))
-      answers.set(turnId, (answers.get(turnId) ?? new Set()).add(message.text.trim()));
-  }
-  for (const [turnId, replyTo] of reports) {
-    const said = answers.get(turnId);
-    const sentOn = Boolean(said && (forwarded.get(turnId) ?? []).some((text) => said.has(text)));
-    const requestTurn = replyTo ? requestTurns.get(replyTo) : undefined;
-    if (sentOn || requestTurn === undefined || !personAsked.has(requestTurn)) talk.add(turnId);
-  }
-  for (const turnId of fromPerson) talk.delete(turnId);
-  return talk;
-}
-
 function stateFromSnapshot(snapshot: ConversationSnapshot, throughMessageId: string | null): ConversationReadState {
   const throughIndex = throughMessageId
     ? snapshot.messages.findIndex((message) => message.id === throughMessageId)
     : -1;
-  const agentTurns = agentOnlyTurns(snapshot.messages);
+  // A snapshot in memory can hold only the latest messages, so its first turn can start before them.
+  const activity = storedBackgroundTurns(snapshot.messages, {
+    wholeTurns: true,
+    partialTurnId: snapshot.messages[0]?.turnId,
+  });
   const unread = snapshot.messages
     .slice(throughIndex + 1)
     .filter(
       (message) =>
         message.author !== "user" &&
-        !(message.author === "assistant" && message.turnId !== undefined && agentTurns.has(message.turnId)) &&
+        !(message.author === "assistant" && isBackgroundRow(message, activity)) &&
         message.itemType !== "commentary" &&
         message.itemType !== CONVERSATION_PLAN_ITEM_TYPE &&
         message.itemType !== CONVERSATION_SUBAGENTS_ITEM_TYPE &&

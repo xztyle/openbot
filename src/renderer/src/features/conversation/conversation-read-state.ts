@@ -1,6 +1,7 @@
 import { CHAT_VISUAL_ITEM_TYPE_PREFIX } from "@openbot/contracts/chat-visual";
 import { EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
 import type {
+  ConversationMessage,
   ConversationMessageAuthor,
   ConversationReadState,
   DirectConversationSnapshot,
@@ -20,7 +21,9 @@ import {
   SKILL_EVENT_ITEM_TYPE_PREFIX,
   SYSTEM_NOTICE_ITEM_TYPE_PREFIX,
 } from "@openbot/contracts/ipc";
+import { isBackgroundRow, storedBackgroundTurns } from "@openbot/contracts/owner-conversation";
 import type { AgentMessage } from "@openbot/ui/data";
+import { agentActivityTurns } from "./agent-turn-folds";
 
 /**
  * What the renderer has already asked main to mark read, per conversation. A
@@ -118,15 +121,25 @@ export function latestVisibleAgentMessageId(messages: readonly AgentMessage[] | 
   return null;
 }
 
-/** Recounts a read state against the messages it applies to. */
+/**
+ * Recounts a read state against the messages it applies to, as the host counts it: the agent's own
+ * activity (`backgroundTurns`) is not unread.
+ */
 export function readStateForMessages(
   state: ConversationReadState,
-  messages: readonly { author: ConversationMessageAuthor; id: string; itemType?: string | undefined }[],
+  messages: readonly ConversationMessage[],
 ): ConversationReadState {
   const throughIndex = state.throughMessageId
     ? messages.findIndex((message) => message.id === state.throughMessageId)
     : -1;
-  const unread = messages.slice(throughIndex + 1).filter(isIncomingConversationMessage);
+  const activity = storedBackgroundTurns(messages, { wholeTurns: true, partialTurnId: messages[0]?.turnId });
+  const unread = messages
+    .slice(throughIndex + 1)
+    .filter(
+      (message) =>
+        isIncomingConversationMessage(message) &&
+        !(message.author === "assistant" && isBackgroundRow(message, activity)),
+    );
   return {
     ...state,
     unreadCount: unread.length,
@@ -148,7 +161,10 @@ export function preserveKnownAgentUnread(
   const throughMessageId = state.throughMessageId ?? boundary;
   const throughIndex = throughMessageId ? messages.findIndex((message) => message.id === throughMessageId) : -1;
   if (throughMessageId && throughIndex < 0) return state;
-  const unread = messages.slice(throughIndex + 1).filter(isIncomingAgentMessage);
+  const activity = agentActivityTurns(messages);
+  const unread = messages
+    .slice(throughIndex + 1)
+    .filter((message) => isIncomingAgentMessage(message) && !isBackgroundRow(message, activity));
   if (unread.length <= state.unreadCount) return state;
   return {
     ...state,

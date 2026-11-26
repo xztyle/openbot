@@ -310,7 +310,11 @@ const tools = new OwnerTools({
     },
     discardStagedGeneratedAttachments: () => Effect.void,
   },
-  conversation: { ensureSnapshot: () => snapshot, publishConversation: () => undefined },
+  conversation: {
+    ensureSnapshot: () => snapshot,
+    publishConversation: () => undefined,
+    isExecutionThread: () => false,
+  },
   teamChannel: () => "channel-launch",
 });
 const call = (tool: string, args: unknown) =>

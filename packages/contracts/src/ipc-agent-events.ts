@@ -151,10 +151,12 @@ export type AgentEvent =
        */
       moreWork?: true;
       /**
-       * A turn of the agent's talk with another agent: another agent's request started it, or its answer
-       * went on to an agent, and no person wrote in it. The chat folds it and does not count it as
-       * unread, so it shows no "Finished" notification. The turn in which an agent reports a teammate's
-       * answer back to the person who asked is not one. The Team API carries it under `fork-host-v1`.
+       * A turn of the agent's own activity (`backgroundTurns` in `owner-conversation.ts`): a Motion
+       * event, a teammate's message, a note from Atelier or a routine run started it, no person wrote in
+       * it, and the agent wrote nothing to the owner in it. The chat folds it and does not count it as
+       * unread, so it shows no "Finished" or "Failed" notification. The turn in which an agent reports a
+       * teammate's answer back to the person who asked is not one. The name stays for the wire: the
+       * Team API carries it under `fork-host-v1`.
        */
       agentTalk?: true;
     }

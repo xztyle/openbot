@@ -40,6 +40,7 @@ import { WorkspaceSidebarPane } from "./features/workspace/WorkspaceSidebarPane"
 import { WorkspaceAgentFrame, WorkspaceChrome, WorkspaceMain } from "./features/workspace/WorkspaceView";
 import { useWorkspace } from "./features/workspace/workspace-context";
 import { globalSearchShortcutLabel } from "./global-search-shortcut";
+import { ImageAnnotatorHost } from "./image-annotator";
 import { useLayout } from "./layout";
 import { usePlatform } from "./platform";
 import { currentDevicePlatform } from "./send-shortcut-preference";
@@ -297,6 +298,7 @@ function WorkspaceShellFrame(props: { account: () => CentralAuthUser }) {
           after={
             <>
               <WorkspaceOverlays account={props.account} />
+              <ImageAnnotatorHost />
               <Show when={workspaceOn()}>
                 <WorkspaceChrome />
               </Show>

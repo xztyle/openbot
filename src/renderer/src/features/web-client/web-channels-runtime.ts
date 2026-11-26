@@ -146,6 +146,9 @@ export function createWebChannelsPort(
         if (event.type === "channel-memories-changed" || event.type === "channel-routines-changed") listener(event);
       }),
     chooseAttachments: async () => importAttachments(await chooseFiles()),
+    // Bytes made on this client, such as an annotated image, go up as a file would.
+    importAttachmentData: (data) =>
+      importAttachments(data.map((item) => new File([new Uint8Array(item.bytes)], item.name, { type: item.mimeType }))),
     openAttachment: ({ attachmentId }) => files.download(attachmentId),
     discardDraftAttachment: (id) => remote.discard(id),
     respondToApproval: (input) => remote.approve(input),

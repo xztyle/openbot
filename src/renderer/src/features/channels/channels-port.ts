@@ -29,6 +29,7 @@ export interface ChannelsPort {
       Pick<
         OpenBotDesktopApi["agent"],
         | "discardDraftAttachment"
+        | "importAttachmentData"
         | "workspaceActivity"
         | "workspaceThreadStates"
         | "workspaceReadThread"

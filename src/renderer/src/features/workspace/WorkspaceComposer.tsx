@@ -1,12 +1,13 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { channelKind, type DraftAttachment } from "@openbot/contracts/ipc";
-import { Button, ConfirmDialog, IconButton, X } from "@openbot/ui";
+import { Button, ConfirmDialog, IconButton, PencilLine, X } from "@openbot/ui";
 import { AttachmentReferenceVisual } from "@openbot/ui/features/conversation/AttachmentReference";
 import { ComposerEditor } from "@openbot/ui/features/conversation/ComposerEditor";
 import type { ComposerTextFormat } from "@openbot/ui/features/conversation/composer-format";
 import { MessageComposer } from "@openbot/ui/features/workspace/MessageComposer";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
+import { attachmentImageSource, openImageAnnotator, rememberImageFile } from "../../image-annotator";
 import { usePlatform } from "../../platform";
 import { deviceSendShortcut } from "../../send-shortcut-preference";
 import { PartialAttachmentImportError } from "../channels/channels-port";
@@ -28,6 +29,17 @@ let lastComposer: symbol | null = null;
 
 /** Whether the page took a dropped file before any message box heard the drop. */
 const dropsTakenInPage = new WeakMap<Event, boolean>();
+
+/** The message boxes on the screen, by draft, so an annotated image reaches the box of its conversation. */
+const composers = new Map<string, (files: File[]) => void>();
+
+/** Puts files in the message box of the draft `key`. False when no box of that conversation is on the screen. */
+export function attachFilesToComposer(key: string, files: File[]): boolean {
+  const attach = composers.get(key);
+  if (!attach) return false;
+  attach(files);
+  return true;
+}
 
 export interface WorkspaceComposerProps {
   channelId: string;
@@ -209,13 +221,87 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     if (lastComposer === id) lastComposer = null;
   });
 
+  /** Imports files made on this client: the browser uploads them, the desktop imports their bytes. */
+  const importer = () => {
+    const port = ws.channels.port();
+    if (port.importAttachments) return port.importAttachments;
+    const importData = port.agent.importAttachmentData;
+    if (!importData) return undefined;
+    return async (files: File[]) =>
+      importData(
+        await Promise.all(
+          files.map(async (file) => ({
+            name: file.name,
+            mimeType: file.type,
+            bytes: new Uint8Array(await file.arrayBuffer()),
+          })),
+        ),
+      );
+  };
+  /** Imports the files and keeps them, so the annotator opens one without a read from the host. */
+  const importRemembering = async (files: File[], room?: number): Promise<readonly DraftAttachment[]> => {
+    const importFiles = importer();
+    if (!importFiles) throw new Error(t("workspace.app.composer.attachFailed"));
+    const imported = await importFiles(files, room);
+    imported.forEach((attachment, index) => {
+      const file = files.find((item) => item.name === attachment.name) ?? files[index];
+      if (file) rememberImageFile(attachment, file);
+    });
+    return imported;
+  };
+  /** Files made on this client, such as an annotated image, go up as a drop would. */
+  function attachFiles(files: File[]) {
+    lastComposer = id;
+    setError(null);
+    const target = key();
+    if (room(target) === 0) {
+      setError(t("composer.error.attachmentLimit", { limit: INPUT_LIMITS.attachments }));
+      return;
+    }
+    void upload(target, () => importRemembering(files, room(target)));
+  }
+  createEffect(
+    () => key(),
+    (current) => {
+      composers.set(current, attachFiles);
+      return () => {
+        if (composers.get(current) === attachFiles) composers.delete(current);
+      };
+    },
+  );
+  /** An annotated image takes the place of the draft image it was made from. */
+  async function replaceFile(previous: DraftAttachment, file: File): Promise<void> {
+    const target = key();
+    setUploads((current) => [...current, target]);
+    try {
+      const [imported] = await importRemembering([file]);
+      if (!imported) throw new Error(t("workspace.app.composer.attachFailed"));
+      setAttachments(
+        (current) =>
+          current.some((item) => item.id === previous.id)
+            ? current.map((item) => (item.id === previous.id ? imported : item))
+            : [...current, imported],
+        target,
+      );
+      void ws.channels
+        .port()
+        .agent.discardDraftAttachment?.(previous.id)
+        ?.catch(() => undefined);
+    } finally {
+      setUploads((current) => {
+        const index = current.indexOf(target);
+        return index < 0 ? current : [...current.slice(0, index), ...current.slice(index + 1)];
+      });
+    }
+  }
+
   /** Uploads pasted files on the web; the desktop preload imports them and reports them above. */
   const pasteFiles = () => {
     const importer = ws.channels.port().importAttachments;
     if (!importer) return undefined;
     return (files: File[]) => {
       const target = key();
-      void upload(target, () => importer(files, room(target)));
+      void upload(target, () => importRemembering(files, room(target)));
       return undefined;
     };
   };
@@ -271,7 +357,7 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
         setError(t("composer.error.attachmentLimit", { limit: INPUT_LIMITS.attachments }));
         return;
       }
-      void upload(target, () => importer(files, room(target)));
+      void upload(target, () => importRemembering(files, room(target)));
     };
     window.addEventListener("dragover", over);
     window.addEventListener("drop", drop);
@@ -458,8 +544,35 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
               <For each={attachments()} keyed={(file) => file.id}>
                 {(file) => (
                   <li class="ws-composer-file">
-                    <AttachmentReferenceVisual name={file().name} />
-                    <span class="ws-composer-file-name">{file().name}</span>
+                    <Show
+                      when={file().kind === "image"}
+                      fallback={
+                        <>
+                          <AttachmentReferenceVisual name={file().name} />
+                          <span class="ws-composer-file-name">{file().name}</span>
+                        </>
+                      }
+                    >
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        class="ws-composer-file-open"
+                        aria-label={t("chat.image.annotateFile", { name: file().name })}
+                        title={t("chat.image.annotate")}
+                        onClick={() =>
+                          openImageAnnotator({
+                            source: attachmentImageSource(file(), ws.channels.port()),
+                            sendLabel: "done",
+                            onSend: (next) => replaceFile(file(), next),
+                          })
+                        }
+                      >
+                        <AttachmentReferenceVisual name={file().name} />
+                        <span class="ws-composer-file-name">{file().name}</span>
+                        <PencilLine class="ws-composer-file-edit" aria-hidden="true" />
+                      </Button>
+                    </Show>
                     <IconButton
                       variant="ghost"
                       size="icon-xs"

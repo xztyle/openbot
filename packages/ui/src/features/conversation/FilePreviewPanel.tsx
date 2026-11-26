@@ -9,6 +9,7 @@ import {
   File,
   Folder,
   FolderOpen,
+  Pencil,
   WrapText,
   X,
 } from "@openbot/ui";
@@ -74,6 +75,8 @@ interface FilePreviewPanelProps {
   onOpenExternally: () => void;
   allowExternalOpen?: boolean;
   onDownload?: () => void;
+  /** Opens an image in the annotator. Shown for an image only. */
+  onAnnotate?: (() => void) | undefined;
   onReveal?: (() => void) | undefined;
   onClose: () => void;
   /** `dialog`: the panel fills a viewer over the app, with no resize handle. */
@@ -270,6 +273,20 @@ export default function FilePreviewPanel(props: FilePreviewPanelProps) {
           >
             <ExternalLink class="browser-toolbar-icon" />
           </Button>
+        </Show>
+        <Show when={previewKind() === "image" && props.onAnnotate}>
+          {(annotate) => (
+            <Button
+              variant="ghost"
+              type="button"
+              class="browser-toolbar-button"
+              aria-label={t("chat.image.annotate")}
+              title={t("chat.image.annotate")}
+              onClick={() => annotate()()}
+            >
+              <Pencil class="browser-toolbar-icon" />
+            </Button>
+          )}
         </Show>
         <Show when={file() && props.onDownload}>
           {(download) => (

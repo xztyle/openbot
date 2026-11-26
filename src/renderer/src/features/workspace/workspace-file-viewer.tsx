@@ -16,8 +16,13 @@ export interface WorkspaceFileViewer {
   Viewer: () => JSX.Element;
 }
 
-/** The viewer of the files of messages and artifacts, as Slack shows a file over the app. */
-export function createWorkspaceFileViewer(): WorkspaceFileViewer {
+/**
+ * The viewer of the files of messages and artifacts, as Slack shows a file over the app. `annotate`
+ * gives an image viewer an Annotate button.
+ */
+export function createWorkspaceFileViewer(
+  options: { annotate?: ((attachment: AttachmentSummary) => void) | undefined } = {},
+): WorkspaceFileViewer {
   const ws = useWorkspace();
   const { t, errorMessage } = useText();
   const port = () => ws.channels.port();
@@ -63,6 +68,7 @@ export function createWorkspaceFileViewer(): WorkspaceFileViewer {
             if (!ws.openLink(url)) void port().openUrl(url);
           }}
           onDownload={() => download(open().attachment)}
+          onAnnotate={options.annotate ? () => options.annotate?.(open().attachment) : undefined}
           onOpenExternally={
             port().fileActions === "native"
               ? () =>

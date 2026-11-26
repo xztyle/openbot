@@ -32,6 +32,7 @@
 @import "./styles/thinking.css";
 @import "./styles/attachments.css";
 @import "./styles/image-lightbox.css";
+@import "./styles/image-annotator.css";
 @import "./styles/queue.css";
 @import "./styles/agent-tasks.css";
 @import "./styles/side-question.css";

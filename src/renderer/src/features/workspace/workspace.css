@@ -384,6 +384,24 @@
   white-space: nowrap;
 }
 
+/* An image chip is a button: it opens the annotator. */
+.ws-composer-file-open {
+  display: inline-flex;
+  min-width: 0;
+  height: auto;
+  align-items: center;
+  gap: var(--openbot-space-1-5);
+  padding: 0 var(--openbot-space-1) 0 0;
+  font: inherit;
+}
+
+.ws-composer-file-edit {
+  flex: none;
+  width: var(--openbot-space-4);
+  height: var(--openbot-space-4);
+  color: var(--openbot-text-muted);
+}
+
 /* The right panel --------------------------------------------------------------------------------- */
 
 .ws-thread-frame {

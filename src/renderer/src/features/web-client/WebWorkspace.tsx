@@ -181,6 +181,7 @@ import { desktopAnalytics } from "../../analytics";
 import { toAgentMessage } from "../../app-message-projection";
 import { ProviderSignInDialogs } from "../../components/ProviderSignInDialogs";
 import { globalSearchShortcutLabel, isGlobalSearchShortcut, keyboardShortcuts } from "../../global-search-shortcut";
+import { ImageAnnotatorHost } from "../../image-annotator";
 import { LayoutProvider, useLayout } from "../../layout";
 import { AgentUsagePanel, RoutineFlowsCanvas, ScheduleView, ServerOnboarding, TasksView } from "../../lazy-views";
 import { PlatformProvider } from "../../platform";
@@ -3145,6 +3146,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         onSave={() => void chatApps.save()}
         onClose={chatApps.close}
       />
+      {/* Once per app: the notices render twice on a phone. */}
+      <ImageAnnotatorHost />
       <ChannelsControllerProvider controller={channels}>
         {/* As on desktop: the page rail sits at the left of the frame. */}
         <div class="app-window web-app-window">

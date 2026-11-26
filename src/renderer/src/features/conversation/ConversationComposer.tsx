@@ -72,6 +72,7 @@ import {
   Show,
 } from "solid-js";
 import { reportErrorBanner, reportNotification } from "../../error-reports";
+import { attachmentImageSource, openImageAnnotator } from "../../image-annotator";
 import { deviceSendShortcut, sendShortcutAriaKey, sendShortcutHintKey } from "../../send-shortcut-preference";
 import { speechReading } from "../speech/speech-playback";
 import { stopSpokenReply } from "../speech/speech-replies";
@@ -114,6 +115,7 @@ export function ConversationComposer() {
     openAttachmentPicker,
     openAttachmentPickerFromKey,
     pasteFiles,
+    replaceAttachment,
     presentedQueueDeliveries,
     othersWaiting,
     previewAttachment,
@@ -771,7 +773,25 @@ export function ConversationComposer() {
                         data-file-tone={chip() === "file" ? attachmentReferenceTone(attachment.name) : undefined}
                       >
                         <Show when={chip() === "image"} fallback={fileBadge(attachment)}>
-                          <img src={attachment.previewUrl ?? ""} alt="" />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            class="composer-attachment-annotate"
+                            aria-label={t("chat.image.annotateFile", { name: attachment.name })}
+                            title={t("chat.image.annotate")}
+                            disabled={voicePhase() === "transcribing" || savePending()}
+                            onClick={() =>
+                              openImageAnnotator({
+                                source: attachmentImageSource(attachment, {
+                                  previewAttachment: props.runtime?.previewAttachment,
+                                }),
+                                sendLabel: "done",
+                                onSend: (file) => replaceAttachment(attachment, file),
+                              })
+                            }
+                          >
+                            <img src={attachment.previewUrl ?? ""} alt="" />
+                          </Button>
                         </Show>
                       </span>
                       <Show when={chip() === "file"}>

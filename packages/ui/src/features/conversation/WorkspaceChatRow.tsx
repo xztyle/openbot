@@ -55,6 +55,8 @@ export interface WorkspaceChatRowProps {
   onOpenWorkspaceFile?: ((path: string) => void) | undefined;
   onOpenQuote?: ((messageId: string, text: string) => void) | undefined;
   onDownload?: ((attachment: AttachmentSummary) => void) | undefined;
+  /** Annotate in the image viewer; see `MessageBody`'s `onAnnotateImage`. */
+  onAnnotateImage?: ((attachment: AttachmentSummary, url: string) => void) | undefined;
   mediaSource?: AttachmentMediaSource | undefined;
 }
 
@@ -125,6 +127,7 @@ export function WorkspaceChatRow(props: WorkspaceChatRowProps): JSX.Element {
           onOpenWorkspaceFile={props.onOpenWorkspaceFile}
           onOpenQuote={props.onOpenQuote}
           onDownload={props.onDownload}
+          onAnnotateImage={props.onAnnotateImage}
           mediaSource={props.mediaSource}
           // Only the text folds: the images and files under it always show.
           foldText={(text) => (

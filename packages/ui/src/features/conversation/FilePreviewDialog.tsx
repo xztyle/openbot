@@ -25,6 +25,8 @@ export function FilePreviewDialog(props: {
   onDownload: () => void;
   /** Opens the file in another app. Absent in a browser, which has none. */
   onOpenExternally?: (() => void) | undefined;
+  /** Opens an image in the annotator. Absent, or for a file that is not an image, there is no Annotate. */
+  onAnnotate?: (() => void) | undefined;
   onClose: () => void;
 }) {
   const { t } = useText();
@@ -56,6 +58,7 @@ export function FilePreviewDialog(props: {
                     onOpenExternally={props.onOpenExternally ?? props.onDownload}
                     allowExternalOpen={props.onOpenExternally !== undefined}
                     onDownload={props.onDownload}
+                    onAnnotate={props.onAnnotate}
                     onClose={props.onClose}
                   />
                 </Loading>

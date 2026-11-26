@@ -283,6 +283,48 @@ export function createComposerActions(deps: ComposerActionsDeps) {
   }
 
   /**
+   * Puts an annotated image in the place of the draft image it was made from: in the row of files and
+   * in the text, where a paste named the original. The original leaves the draft. A pending Save and
+   * an edit of a queued message keep their files, so the swap waits for them.
+   */
+  async function replaceAttachment(previous: DraftAttachment, file: File): Promise<void> {
+    const target = deps.currentTarget();
+    if (!target || deps.submitting()) throw new Error(t("composer.error.keepAttachments"));
+    const sameConversation = deps.editingAgentId() === target.agentId && deps.editingServerId() === target.serverId;
+    if (sameConversation && (deps.editingPendingSave() || deps.editingEditId()))
+      throw new Error(t("composer.error.keepAttachments"));
+    if (file.size > ATTACHMENT_LIMITS.fileBytes) throw new Error(t("error.attachment.fileTooLarge"));
+    const runtime = conversationRuntime(deps.props);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const [imported] = await runtime.agent.importAttachmentData(
+      [{ name: file.name, mimeType: file.type, bytes }],
+      target.serverId,
+    );
+    if (!imported) throw new Error(t("composer.error.keepAttachments"));
+    rememberComposerFile(imported, file);
+    const key = composerDraftKey(target);
+    deps.setDrafts((current) => {
+      const draft = current[key] ?? EMPTY_DRAFT;
+      const present = draft.attachments.some((attachment) => attachment.id === previous.id);
+      return {
+        ...current,
+        [key]: {
+          ...draft,
+          attachments: present
+            ? draft.attachments.map((attachment) => (attachment.id === previous.id ? imported : attachment))
+            : [...draft.attachments, imported],
+          text: rewriteAttachmentReferences(draft.text, (reference) =>
+            reference.attachmentId === previous.id
+              ? { attachmentId: imported.id, name: imported.name }
+              : { attachmentId: reference.attachmentId, name: reference.name },
+          ),
+        },
+      };
+    });
+    void runtime.agent.discardDraftAttachment(previous.id, target.serverId);
+  }
+
+  /**
    * A cut moves its files with the text. The draft drops each one that `remaining` no longer names, and
    * discards it after the copy has read its bytes. A file that the copy could not read comes back. A
    * pending Save keeps its attachments, as in removal.
@@ -991,6 +1033,7 @@ export function createComposerActions(deps: ComposerActionsDeps) {
     stopTeamTyping,
     addAttachments,
     pasteFiles,
+    replaceAttachment,
     releaseCutAttachments,
     openAttachmentPicker,
     openAttachmentPickerFromKey,

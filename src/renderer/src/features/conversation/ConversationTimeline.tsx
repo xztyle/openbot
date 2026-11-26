@@ -1,5 +1,5 @@
 import { chatVisualReply } from "@openbot/contracts/chat-visual";
-import type { ConversationMessageSender, MessageReaction } from "@openbot/contracts/ipc";
+import type { AttachmentSummary, ConversationMessageSender, MessageReaction } from "@openbot/contracts/ipc";
 import { markdownPlainText } from "@openbot/contracts/markdown-preview-text";
 import type { ConversationUiBlock } from "@openbot/contracts/ui-blocks";
 import {
@@ -63,6 +63,7 @@ import {
 } from "solid-js";
 import { useShowAgentSteps } from "../../agent-steps-preference";
 import { planItems, planTitle } from "../../app-message-projection";
+import { attachmentImageSource, openImageAnnotator } from "../../image-annotator";
 import { currentDevicePlatform, deviceSendShortcut } from "../../send-shortcut-preference";
 import { type ChatCardCalls, chatCardOf, desktopChatCardCalls, HostChatCard } from "../portfolio/WorkspaceChatCard";
 import { remoteRoutineRecovery, serverSupportsCapability } from "../servers/server-capabilities";
@@ -163,6 +164,8 @@ export function ConversationTimeline() {
     activeChatSearchIndex,
     agentActivitySpaceReserved,
     attachmentAction,
+    currentDraft,
+    pasteFiles,
     browserTakeoverPreview,
     browserTakeoverResolution,
     browserTakeoverTab,
@@ -380,6 +383,20 @@ export function ConversationTimeline() {
   );
 
   const runtime = conversationRuntime(props);
+  /** Opens an image of the chat in the annotator; Send puts the result in this chat's message box. */
+  const annotateImage = (attachment: AttachmentSummary, url?: string) =>
+    openImageAnnotator({
+      source: attachmentImageSource(
+        attachment,
+        { previewAttachment: runtime.previewAttachment, attachmentMedia: runtime.attachmentMedia },
+        url,
+      ),
+      onSend: async (file) => {
+        const end = currentDraft().text.length;
+        const pasted = await pasteFiles([file], { start: end, end });
+        if (!pasted) throw new Error(sourceText("chat.annotate.sendFailed"));
+      },
+    });
   /** The cards of the chat's host (`[card:<id>]`): the client's own calls, or the desktop's main process. */
   const chatCardCalls: ChatCardCalls | undefined = props.runtime
     ? props.runtime.admin?.chatCards
@@ -1505,6 +1522,7 @@ export function ConversationTimeline() {
                         }
                         onOpenQuote={openQuote}
                         onDownload={(attachment) => attachmentAction(attachment, "download")}
+                        onAnnotateImage={annotateImage}
                         mediaSource={runtime.attachmentMedia}
                       >
                         {voice()}
@@ -1573,6 +1591,7 @@ export function ConversationTimeline() {
                               }
                               onOpenQuote={openQuote}
                               onDownload={(attachment) => attachmentAction(attachment, "download")}
+                              onAnnotateImage={annotateImage}
                               mediaSource={runtime.attachmentMedia}
                               class={!pending() && message()?.cancelled ? "message-entry-cancelled" : undefined}
                               actions={
@@ -1890,6 +1909,7 @@ export function ConversationTimeline() {
             onOpenSharedFile={openSharedFile}
             onOpenWorkspaceFile={openWorkspaceFile}
             onDownload={(attachment) => attachmentAction(attachment, "download")}
+            onAnnotateImage={annotateImage}
           />
         )}
       </Show>

@@ -30,10 +30,13 @@ import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, Show, untrack } from "solid-js";
 import { toAgentMessage } from "../../app-message-projection";
 import { writeClipboardText } from "../../clipboard";
+import { attachmentImageSource, openImageAnnotator } from "../../image-annotator";
 import { WorkspaceChatCard } from "../portfolio/WorkspaceChatCard";
+import { attachFilesToComposer } from "./WorkspaceComposer";
 import { WorkspaceMessageEditor } from "./WorkspaceMessageEditor";
 import { MemberProfile } from "./WorkspaceProfile";
 import { useWorkspace } from "./workspace-context";
+import { draftKey } from "./workspace-controller";
 import { debugMode } from "./workspace-debug";
 import { createWorkspaceFileViewer } from "./workspace-file-viewer";
 import {
@@ -54,6 +57,8 @@ export function WorkspaceMessageBody(props: {
   entry: ChannelMessage;
   /** A long text folds to its first lines; the images and files under it always show. */
   fold?: { id: string; enabled: boolean; live: boolean } | undefined;
+  /** The message is in the thread panel: an annotated image goes to the thread's box. */
+  inThread?: boolean | undefined;
 }) {
   const ws = useWorkspace();
   const message = createMemo((): AgentMessage => {
@@ -68,7 +73,20 @@ export function WorkspaceMessageBody(props: {
   const cardId = () => CHAT_CARD_MARKER.exec(props.entry.message.text)?.[1];
   const port = () => ws.channels.port();
   const { t, errorMessage } = useText();
-  const { view, download, Viewer } = createWorkspaceFileViewer();
+  /** The box that Send in the annotator fills: the thread's, when the message is in the thread panel. */
+  const composerKey = () =>
+    draftKey(
+      props.entry.channelId,
+      props.inThread ? (ws.state.thread?.rootId ?? props.entry.threadRootId ?? props.entry.id) : null,
+    );
+  const annotate = (attachment: AttachmentSummary, url?: string) =>
+    openImageAnnotator({
+      source: attachmentImageSource(attachment, port(), url),
+      onSend: (file) => {
+        if (!attachFilesToComposer(composerKey(), [file])) throw new Error(t("workspace.app.composer.attachFailed"));
+      },
+    });
+  const { view, download, Viewer } = createWorkspaceFileViewer({ annotate });
   const attachmentAction = (attachment: AttachmentSummary, action: "open" | "reveal" | "download") => {
     if (action === "open") return view(attachment);
     if (action === "download") return download(attachment);
@@ -88,6 +106,7 @@ export function WorkspaceMessageBody(props: {
         onPreview={view}
         onAttachmentAction={attachmentAction}
         onDownload={download}
+        onAnnotateImage={annotate}
         mediaSource={port().attachmentMedia}
         foldText={
           props.fold
@@ -396,7 +415,7 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
           )}
         </Show>
         <Show when={!props.row.pending && !plain()}>
-          <WorkspaceMessageBody entry={shownEntry()} fold={fold()} />
+          <WorkspaceMessageBody entry={shownEntry()} fold={fold()} inThread={props.inThread} />
         </Show>
         <Show when={props.row.progress?.length ? props.row.progress : undefined}>
           {(lines) => <ProgressFold lines={lines()} />}

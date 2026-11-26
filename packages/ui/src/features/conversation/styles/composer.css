@@ -961,6 +961,23 @@
   padding: 7px 12px 7px 8px;
 }
 
+/* The image of a chip is a button: it opens the annotator. */
+.composer-attachment-annotate {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  padding: 0;
+}
+
+.composer-attachment-annotate img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .composer-attachment-copy {
   display: block;
   min-width: 0;

@@ -87,6 +87,8 @@ export interface ChatMessageRowProps {
   onOpenWorkspaceFile?: ((path: string) => void) | undefined;
   onOpenQuote?: ((messageId: string, text: string) => void) | undefined;
   onDownload?: ((attachment: AttachmentSummary) => void) | undefined;
+  /** Annotate in the image viewer; see `MessageBody`'s `onAnnotateImage`. */
+  onAnnotateImage?: ((attachment: AttachmentSummary, url: string) => void) | undefined;
   /** Loads the images and media of a client that gets no `previewUrl`. */
   mediaSource?: AttachmentMediaSource | undefined;
 }
@@ -267,6 +269,7 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
                 onOpenWorkspaceFile={props.onOpenWorkspaceFile}
                 onOpenQuote={props.onOpenQuote}
                 onDownload={props.onDownload}
+                onAnnotateImage={props.onAnnotateImage}
                 mediaSource={props.mediaSource}
               />
               {props.children}

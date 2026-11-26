@@ -36,6 +36,8 @@ export interface AgentMessageDialogProps {
   onOpenSharedFile?: ((path: string) => void) | undefined;
   onOpenWorkspaceFile?: ((path: string) => void) | undefined;
   onDownload?: ((attachment: AttachmentSummary) => void) | undefined;
+  /** Annotate in the image viewer; see `MessageBody`'s `onAnnotateImage`. */
+  onAnnotateImage?: ((attachment: AttachmentSummary, url: string) => void) | undefined;
 }
 
 /**
@@ -168,6 +170,7 @@ export function AgentMessageDialog(props: AgentMessageDialogProps) {
                           onOpenSharedFile={props.onOpenSharedFile}
                           onOpenWorkspaceFile={props.onOpenWorkspaceFile}
                           onDownload={props.onDownload}
+                          onAnnotateImage={props.onAnnotateImage}
                         />
                       </Show>
                     </div>

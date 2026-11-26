@@ -47,7 +47,9 @@
   --openbot-tabs-bar-bg: #212121;
   --openbot-tabs-pill-bg: #2a2a2a;
   --openbot-bg-overlay: rgba(26, 26, 26, 0.92);
-  --openbot-dialog-overlay: rgba(0, 0, 0, 0.1);
+  /* The one backdrop under every dialog, sheet and viewer: it dims the page and `--openbot-overlay-blur`
+     blurs it, so what is behind stays in view but out of focus. `.ui-dialog-overlay` reads both. */
+  --openbot-dialog-overlay: rgba(0, 0, 0, 0.55);
   --openbot-dialog-ring: rgba(255, 255, 255, 0.1);
   --openbot-bg-glass: rgba(33, 33, 33, 0.76);
 
@@ -421,6 +423,8 @@
      `scripts/overlay-stack-e2e.ts` checks the order. */
   --openbot-layer-dropdown: 40;
   --openbot-layer-overlay: 100;
+  /* The blur under every overlay, with `--openbot-dialog-overlay`. The same in light and dark. */
+  --openbot-overlay-blur: 10px;
   --openbot-layer-popover: var(--openbot-layer-overlay);
   --openbot-layer-dialog: var(--openbot-layer-overlay);
   /* A toast stays readable and pressable over an open dialog. */

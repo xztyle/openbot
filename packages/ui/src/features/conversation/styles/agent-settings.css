@@ -577,11 +577,6 @@
   color: var(--openbot-danger);
 }
 
-/* The overlay fades out with the modal, which is not one of its children. */
-.agent-memories-overlay[data-closed] {
-  animation: agent-dialog-overlay-out var(--openbot-duration-dialog) ease;
-}
-
 .agent-memories-modal {
   position: fixed;
   z-index: var(--openbot-layer-overlay);
@@ -1302,12 +1297,6 @@
 
 .agent-memories-modal[data-closed] {
   animation: agent-dialog-content-out var(--openbot-duration-dialog) ease;
-}
-
-@keyframes agent-dialog-overlay-out {
-  to {
-    opacity: 0;
-  }
 }
 
 @keyframes agent-dialog-content-in {

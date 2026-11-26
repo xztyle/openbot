@@ -7,10 +7,6 @@
  * middle rather than a form with a toolbar under it.
  */
 
-.mcp-connect-backdrop {
-  z-index: var(--openbot-layer-overlay);
-}
-
 .mcp-connect-dialog {
   position: relative;
   width: min(420px, 100%);

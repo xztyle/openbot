@@ -187,11 +187,6 @@
   height: var(--openbot-icon-sm);
 }
 
-/* Above the settings window the flow opens from. */
-.integration-dialog-backdrop {
-  z-index: var(--openbot-layer-overlay);
-}
-
 .integration-wizard-dialog {
   position: fixed;
   top: 50%;

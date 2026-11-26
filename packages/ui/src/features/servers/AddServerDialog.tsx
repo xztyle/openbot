@@ -255,7 +255,11 @@ export function AddServerDialog(props: AddServerDialogProps) {
   return (
     <Dialog.Root open={rendered()} onOpenChange={(open) => !open && requestClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay class="join-server-backdrop" data-motion={closing() ? "closing" : "open"}>
+        <Dialog.Overlay
+          class="join-server-backdrop"
+          data-overlay-exit="none"
+          data-motion={closing() ? "closing" : "open"}
+        >
           <Show when={props.setupStatus === "ready" && !closing()}>
             <Confetti origin={progressLogo} />
           </Show>

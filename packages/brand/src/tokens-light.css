@@ -41,7 +41,7 @@
   --openbot-tabs-bar-bg: #ececee;
   --openbot-tabs-pill-bg: #ffffff;
   --openbot-bg-overlay: rgba(245, 245, 246, 0.92);
-  --openbot-dialog-overlay: rgba(20, 20, 20, 0.12);
+  --openbot-dialog-overlay: rgba(20, 20, 20, 0.4);
   --openbot-dialog-ring: rgba(20, 20, 20, 0.1);
   --openbot-bg-glass: rgba(255, 255, 255, 0.76);
   --openbot-glass-surface: rgba(20, 20, 20, 0.04);

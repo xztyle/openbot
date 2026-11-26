@@ -184,7 +184,11 @@ export function JoinServerDialog(props: JoinServerDialogProps) {
   return (
     <Dialog.Root open={rendered()} onOpenChange={(open) => !open && requestClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay class="join-server-backdrop" data-motion={closing() ? "closing" : "open"}>
+        <Dialog.Overlay
+          class="join-server-backdrop"
+          data-overlay-exit="none"
+          data-motion={closing() ? "closing" : "open"}
+        >
           <Dialog.Content
             as="section"
             class={`join-server-dialog t-modal${closing() ? " is-closing" : opened() ? " is-open" : ""}`}

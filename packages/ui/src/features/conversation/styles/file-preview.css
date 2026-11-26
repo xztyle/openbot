@@ -332,12 +332,8 @@
   text-align: center;
 }
 
-/* A file of a message in a viewer over the app. It covers the window on a phone, and most of it on a
- * computer, so a PDF page or a long file has room. */
-.ui-dialog-overlay.file-preview-dialog-backdrop {
-  background: var(--openbot-bg-overlay);
-}
-
+/* A file of a message in a viewer over the app, on the shared backdrop. It covers the window on a
+ * phone, and most of it on a computer, so a PDF page or a long file has room. */
 .ui-dialog-content.file-preview-dialog {
   position: fixed;
   z-index: var(--openbot-layer-overlay);

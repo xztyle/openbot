@@ -82,8 +82,8 @@
   border: 0;
   padding: var(--openbot-space-6);
   background: var(--openbot-dialog-overlay);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(var(--openbot-overlay-blur)) saturate(1.1);
+  -webkit-backdrop-filter: blur(var(--openbot-overlay-blur)) saturate(1.1);
   color: var(--openbot-text-primary);
   -webkit-app-region: no-drag;
   /* The top layer paints it above a modal dialog, but it still inherits the dialog's

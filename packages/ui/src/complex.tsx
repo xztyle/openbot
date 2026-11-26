@@ -15,6 +15,7 @@ import { createContext, createEffect, createSignal, merge, onCleanup, untrack, u
 import { claimLongPress, longPressClaimed } from "./long-press";
 import { useMenuMotion } from "./menu-motion";
 import { trackModal } from "./modal-stack";
+import { playExitCopy } from "./overlay-exit";
 import { claimTooltip, installTooltipCoordinator, isKeyboardFocus, tooltipMayOpen } from "./tooltip-coordinator";
 import { createPressedPopupCue } from "./utils";
 
@@ -248,6 +249,19 @@ interface DialogApi {
   CloseButton: typeof DialogPrimitive.CloseButton;
 }
 
+/**
+ * Inside an overlay: when the overlay leaves the page, an inert copy of it, with the dialog it holds,
+ * plays the exit of `.ui-dialog-overlay[data-overlay-closing]`. An overlay whose owner animates its
+ * own exit sets `data-overlay-exit="none"`.
+ */
+function OverlayExit(props: { overlay: () => HTMLElement | undefined }) {
+  onCleanup(() => {
+    const overlay = props.overlay();
+    if (overlay && overlay.dataset.overlayExit !== "none") playExitCopy(overlay, "overlayClosing");
+  });
+  return undefined;
+}
+
 export const Dialog: DialogApi = {
   Root: (props) => {
     trackModal(
@@ -258,7 +272,19 @@ export const Dialog: DialogApi = {
   },
   Portal: (props) => <DialogPrimitive.Portal {...props} />,
   Trigger: (props) => <DialogPrimitive.Trigger data-cuelume-open="" {...props} />,
-  Overlay: (props) => <DialogPrimitive.Overlay {...props} class={withBaseClass("ui-dialog-overlay", props.class)} />,
+  Overlay: (props) => {
+    let element: HTMLElement | undefined;
+    return (
+      <DialogPrimitive.Overlay
+        {...props}
+        ref={[props.ref, (node: HTMLElement) => (element = node)]}
+        class={withBaseClass("ui-dialog-overlay", props.class)}
+      >
+        <OverlayExit overlay={() => element} />
+        {props.children}
+      </DialogPrimitive.Overlay>
+    );
+  },
   Content: (props) => {
     const opener = createOpenerFocus();
     return (
@@ -304,9 +330,19 @@ export const AlertDialog: AlertDialogApi = {
   },
   Portal: (props) => <AlertDialogPrimitive.Portal {...props} />,
   Trigger: (props) => <AlertDialogPrimitive.Trigger data-cuelume-open="" {...props} />,
-  Overlay: (props) => (
-    <AlertDialogPrimitive.Overlay {...props} class={withBaseClass("ui-dialog-overlay", props.class)} />
-  ),
+  Overlay: (props) => {
+    let element: HTMLElement | undefined;
+    return (
+      <AlertDialogPrimitive.Overlay
+        {...props}
+        ref={[props.ref, (node: HTMLElement) => (element = node)]}
+        class={withBaseClass("ui-dialog-overlay", props.class)}
+      >
+        <OverlayExit overlay={() => element} />
+        {props.children}
+      </AlertDialogPrimitive.Overlay>
+    );
+  },
   Content: (props) => {
     const opener = createOpenerFocus();
     return (

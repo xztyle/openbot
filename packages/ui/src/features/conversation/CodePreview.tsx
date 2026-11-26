@@ -282,7 +282,7 @@ function PreviewDialog(props: {
   return (
     <Dialog.Root open onOpenChange={(isOpen) => !isOpen && close()}>
       <Dialog.Portal>
-        <Dialog.Overlay ref={backdrop} class="message-preview-backdrop">
+        <Dialog.Overlay ref={backdrop} class="message-preview-backdrop" data-overlay-exit="none">
           <Dialog.Content ref={surface} class="message-preview-dialog" as="section">
             <header class="message-preview-dialog-header">
               <Dialog.Title class="message-preview-dialog-title">{props.title}</Dialog.Title>

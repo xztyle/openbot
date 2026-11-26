@@ -4,6 +4,7 @@ import { Alert, AlertContent, AlertDescription, AlertIcon } from "./alert";
 import { Button, IconButton } from "./button";
 import { Dialog } from "./complex";
 import { ChevronLeft, TriangleAlert, X } from "./icons";
+import { sheetDragToDismiss } from "./sheet-drag";
 import { useText } from "./text";
 import { cx, PHONE_LAYOUT_QUERY } from "./utils";
 
@@ -107,6 +108,10 @@ export function FormDialog(props: FormDialogProps): JSX.Element {
           <Dialog.Content
             as="section"
             class={cx("ui-form-dialog", props.class)}
+            // On a phone a drag down on the sheet closes it, as on the action sheet. Not while busy.
+            ref={(element: HTMLElement) => {
+              if (phone()) sheetDragToDismiss(close)(element);
+            }}
             data-size={props.size ?? "md"}
             aria-busy={props.busy ? "true" : undefined}
             onCloseAutoFocus={(event: Event) => props.onCloseAutoFocus?.(event)}

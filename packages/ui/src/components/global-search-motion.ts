@@ -1,47 +1,8 @@
-import { prefersReducedMotion } from "../utils";
-
-// Kobalte removes a closed dialog at once, so a CSS exit cannot play. As in menu-motion.tsx, an
-// inert copy of the dialog takes its place and plays the exit that the stylesheet gives to
-// `[data-closing]`.
-const EXIT_FALLBACK_MS = 300;
+import { playExitCopy } from "../overlay-exit";
 
 /** Puts an inert copy of the closing search dialog on the page and removes it after its exit. */
 export function playDialogExit(dialog: HTMLElement): void {
-  if (typeof dialog.animate !== "function" || prefersReducedMotion()) return;
-  // Read now: the cleanup can run before the dialog leaves the page, and a copy keeps no scroll or typed text.
-  const scrolled = Array.from(dialog.querySelectorAll("*"), (element) => element.scrollTop);
-  const values = Array.from(dialog.querySelectorAll("input"), (input) => input.value);
-  const copy = dialog.cloneNode(true);
-  if (!(copy instanceof HTMLElement)) return;
-  copy.inert = true;
-  copy.setAttribute("aria-hidden", "true");
-  copy.style.pointerEvents = "none";
-  copy.removeAttribute("id");
-  for (const element of copy.querySelectorAll("[id]")) element.removeAttribute("id");
-  copy.dataset.closing = "";
-
-  queueMicrotask(() => {
-    // The dialog stays when only a child closed.
-    if (dialog.isConnected) return;
-    document.body.appendChild(copy);
-    for (const [index, element] of Array.from(copy.querySelectorAll("*")).entries()) {
-      const top = scrolled[index];
-      if (top) element.scrollTop = top;
-    }
-    for (const [index, input] of Array.from(copy.querySelectorAll("input")).entries())
-      input.value = values[index] ?? "";
-    if (copy.getAnimations().length === 0) {
-      copy.remove();
-      return;
-    }
-    const fallback = setTimeout(() => copy.remove(), EXIT_FALLBACK_MS);
-    copy.addEventListener("animationend", (event) => {
-      // Rows in the copy can end their own animations first.
-      if (event.target !== copy) return;
-      clearTimeout(fallback);
-      copy.remove();
-    });
-  });
+  playExitCopy(dialog, "closing");
 }
 
 /** The distance from the top of `ancestor` to the top of `element`, through each offset parent. */

@@ -1,8 +1,4 @@
-.join-server-backdrop {
-  animation: join-server-backdrop-in var(--modal-open-dur) var(--modal-ease) both;
-  will-change: opacity;
-}
-
+/* The shared backdrop fades in; the dialog's own closing step fades it out with the card. */
 .join-server-backdrop[data-motion="closing"] {
   animation: join-server-backdrop-out var(--modal-close-dur) var(--modal-ease) both;
 }
@@ -287,12 +283,6 @@
   line-height: var(--openbot-leading-sm);
 }
 
-@keyframes join-server-backdrop-in {
-  from {
-    opacity: 0;
-  }
-}
-
 @keyframes join-server-backdrop-out {
   to {
     opacity: 0;
@@ -336,10 +326,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .join-server-backdrop {
-    animation: none;
-  }
-
   .join-server-pages {
     transition: none;
   }

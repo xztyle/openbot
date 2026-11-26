@@ -2025,18 +2025,23 @@
   }
 }
 /* The one dialog overlay. Each Dialog.Overlay and AlertDialog.Overlay has this class. It covers the
- * window on the dialog layer, centers the dialog that it holds, and fades in. A dialog changes only
- * what is different for it, such as a nested layer. */
+ * window on the dialog layer, dims and blurs the page under it with the overlay tokens, centers the
+ * dialog that it holds, keeps clear of a phone's notch and home indicator, and fades in. On close,
+ * `Dialog.Overlay` leaves an inert copy that fades out (`overlay-exit.ts`). A dialog changes only what
+ * is different for it, such as where its content sits; it does not set its own dim, blur or layer. */
 .ui-dialog-overlay {
   position: fixed;
   inset: 0;
   z-index: var(--openbot-layer-dialog);
   display: grid;
   place-items: center;
-  padding: var(--openbot-space-6);
+  padding: max(var(--openbot-space-6), env(safe-area-inset-top, 0px))
+    max(var(--openbot-space-6), env(safe-area-inset-right, 0px))
+    max(var(--openbot-space-6), env(safe-area-inset-bottom, 0px))
+    max(var(--openbot-space-6), env(safe-area-inset-left, 0px));
   background: var(--openbot-dialog-overlay);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(var(--openbot-overlay-blur)) saturate(1.1);
+  -webkit-backdrop-filter: blur(var(--openbot-overlay-blur)) saturate(1.1);
   animation: ui-dialog-overlay-in var(--openbot-duration-overlay) var(--openbot-ease-out);
   /* The window swallows mouse events over a `-webkit-app-region: drag` area, such as the server rail
    * and the window headers, and hands them to the window manager instead. A click there while a
@@ -2338,6 +2343,49 @@
 @keyframes ui-dialog-overlay-in {
   from {
     opacity: 0;
+  }
+}
+
+/* The inert copy of a closed overlay: it fades out, and the dialog in it settles back a step. A sheet
+ * slides back down. `overlay-exit.ts` removes the copy when the animation ends. */
+.ui-dialog-overlay[data-overlay-closing] {
+  animation: ui-dialog-overlay-out var(--openbot-duration-normal) var(--openbot-ease-out) both;
+  pointer-events: none;
+}
+
+.ui-dialog-overlay[data-overlay-closing] > .ui-dialog-content {
+  animation: ui-dialog-content-out var(--openbot-duration-normal) var(--openbot-ease-out) both;
+}
+
+.ui-dialog-overlay.ui-sheet-overlay[data-overlay-closing] > .ui-dialog-content {
+  animation-name: ui-sheet-out;
+}
+
+@keyframes ui-dialog-overlay-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes ui-dialog-content-out {
+  to {
+    transform: scale(0.97) translateY(4px);
+  }
+}
+
+@keyframes ui-sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+/* Reduced motion: an overlay and its content fade in quickly, with no movement and no slide. The exit
+ * copy is not made (`overlay-exit.ts`), so a closed overlay leaves at once. */
+@media (prefers-reduced-motion: reduce) {
+  .ui-dialog-overlay,
+  .ui-dialog-overlay > .ui-dialog-content {
+    animation-name: ui-dialog-overlay-in;
+    animation-duration: var(--openbot-duration-fast);
   }
 }
 

@@ -20,6 +20,11 @@ A new screen uses these parts. A change to an old screen moves it to these parts
 | First run of a server (first agent, provider step) | Page in the main pane | `FirstAgentSetup`, onboarding |
 | Place a thing at a point (canvas) | Card at the point | `DiagramNewAgentCard` |
 
+Every overlay shares one backdrop: `.ui-dialog-overlay` dims the page with `--openbot-dialog-overlay`
+and blurs it with `--openbot-overlay-blur`, fades in, and fades out through an inert copy
+(`packages/ui/src/overlay-exit.ts`). A feature sets where its content sits, never its own dim, blur,
+layer or exit. `scripts/overlay-system-e2e.ts` checks the dim, the focus, the scroll lock and the exits.
+
 Do not make a page for a create flow, and do not make a dialog for a list. Do not build an overlay
 from `Dialog.*` parts in a feature: use `FormDialog` or `ConfirmDialog`. The primitives (`Dialog`,
 `Popover`, `DropdownMenu`) are for those components and for pickers.

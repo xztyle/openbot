@@ -1,17 +1,11 @@
 /*
  * The code sign-in dialog. It opens from the provider rows, which appear inside the settings modal
- * as well as on their own, so it sits one layer above the shared dialog layer for the same reason
- * `opencode-key-dialog.css` does: both portals are children of `body`, and insertion order alone
- * would decide it wrongly the first time a caller mounts it from elsewhere.
+ * as well as on their own. It opens last, so the one overlay layer puts it on top of the settings.
  *
  * The code itself is the largest thing on screen. It is about to be typed on another device from
  * this screen alone, so it is set in the mono face at display size with the characters spaced
  * apart: a code read wrong costs the whole round trip.
  */
-
-.provider-code-login-backdrop {
-  z-index: var(--openbot-layer-overlay);
-}
 
 .provider-code-login-dialog {
   position: relative;

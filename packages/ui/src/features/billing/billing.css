@@ -57,11 +57,7 @@
   white-space: nowrap;
 }
 
-/* The web client's Billing dialog. */
-.billing-dialog-backdrop {
-  background: var(--openbot-bg-overlay);
-}
-
+/* The web client's Billing dialog, on the shared backdrop. */
 .billing-dialog {
   position: relative;
   display: flex;

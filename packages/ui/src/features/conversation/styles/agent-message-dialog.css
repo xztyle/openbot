@@ -1,21 +1,9 @@
 /*
- * The peek at a message between agents. It opens from a marker in the chat as a translucent layer:
- * the chat stays faintly visible behind it. The panel is about 85% opaque over a blur, so the text
- * keeps its contrast on the light and the dark theme. It scrolls inside itself, so a long report
- * never grows past the window. On a narrow window it is a sheet at the bottom edge.
+ * The peek at a message between agents. It opens from a marker in the chat on the shared backdrop:
+ * the chat stays visible behind it, dimmed and blurred. The panel is about 85% opaque over a blur,
+ * so the text keeps its contrast on the light and the dark theme. It scrolls inside itself, so a
+ * long report never grows past the window. On a narrow window it is a sheet at the bottom edge.
  */
-
-.agent-message-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--openbot-layer-overlay);
-  display: grid;
-  place-items: center;
-  padding: var(--openbot-space-6);
-  background: color-mix(in srgb, var(--openbot-bg-canvas) 28%, transparent);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-}
 
 .agent-message-dialog.ui-dialog-content {
   display: flex;

@@ -746,16 +746,8 @@
   flex-wrap: wrap;
 }
 
-/* The install dialog opens over the Marketplace window: it opens last, so the overlay layer puts it on top. */
-.marketplace-install-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--openbot-layer-overlay);
-  display: grid;
-  place-items: center;
-  padding: var(--openbot-space-6);
-}
-
+/* The install dialog opens over the Marketplace window on the shared backdrop: it opens last, so the
+ * overlay layer puts it on top. */
 .marketplace-install-dialog {
   position: relative;
   display: grid;

@@ -11,13 +11,16 @@
 }
 
 .wfn-stage {
+  /* The spread of the canvas: between the node columns and above and under them. */
+  --wfn-stage-spread: 120px;
+
   display: flex;
   flex-wrap: wrap;
-  gap: 120px;
+  gap: var(--wfn-stage-spread);
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  padding: 120px var(--openbot-space-8);
+  padding: var(--wfn-stage-spread) var(--openbot-space-8);
   background-color: var(--openbot-bg-frame);
   background-image: radial-gradient(
     color-mix(in srgb, var(--openbot-text-primary) 9%, transparent) 1px,

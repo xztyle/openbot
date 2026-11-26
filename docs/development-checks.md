@@ -341,8 +341,14 @@ token as a dropped declaration, so `gap: var(--openbot-space-5)` painted a gap o
 Today touched for weeks while every check was green. The same change added the `untokenized spacing`
 budget: a `margin`, `padding`, `gap` or `inset` declaration that writes pixels of 2px or more
 instead of a `--openbot-space-*` step. `0`, `1px`, a negative value, a `calc()` and a `var()` are
-not counted. Every declaration whose pixels sat on the scale was rewritten to the token; the budget
-holds what is off the scale (7px, 14px, 28px...) and only goes down.
+not counted. Every declaration whose pixels sat on the scale was rewritten to the token, and the
+off-scale ones (7px, 14px, 28px...) were then snapped to the nearest step; a reserved inset for a
+fixed control, such as the macOS traffic lights or a title bar, is a named local custom property
+(`--sidebar-traffic-lights-inset: 78px`) read with `var()`, because it is a dimension and not
+spacing. The budget holds the Settings styles only (`settings-panel.css`, `agent-settings.css`,
+`settings-mobile-connect.css`, `server-settings-modal.css` and the avatar editor rules in
+`app-shell.css`), left as they are while the Settings pages are redesigned as one, and it only goes
+down.
 
 Errors cover prohibited syntax. Warnings ask for judgment, such as an `object` parameter or a
 module mock. Making correct boundary code worse to remove a warning defeats the check. A spy call

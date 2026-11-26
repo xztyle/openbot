@@ -318,9 +318,12 @@ export function checkUiFoundation(
       0,
     ],
     // Spacing between and around boxes reads `--openbot-space-*`. Every declaration whose pixels
-    // sat on the scale was rewritten to it in 2026-11; what remains is off the scale (7px, 14px,
-    // 28px...) in the sign-in screens, the app shell and the conversation styles, and each one is
-    // a design decision to take when that screen is next touched. A new one is not allowed.
+    // sat on the scale was rewritten to it in 2026-11, and the off-scale ones (7px, 14px, 28px...)
+    // were snapped to the nearest step after that; a reserved inset for a fixed control (the macOS
+    // traffic lights, a title bar) is a named local custom property instead. What remains sits in
+    // the Settings styles (settings-panel.css, agent-settings.css, settings-mobile-connect.css,
+    // server-settings-modal.css and the avatar editor rules of app-shell.css), left alone while
+    // those pages are redesigned as one. A new one is not allowed.
     ["untokenized spacing", matches(legacyStyles, SPACING_LITERAL), spacingBudget],
   ] as const;
 
@@ -341,7 +344,7 @@ if (import.meta.main) {
     [resolve(projectRoot, "src"), resolve(projectRoot, "apps"), resolve(projectRoot, "packages/ui/src")],
     resolve(projectRoot, "packages/ui/src"),
     [resolve(projectRoot, "packages/brand/src")],
-    147,
+    26,
   );
 
   if (failures.length > 0) {

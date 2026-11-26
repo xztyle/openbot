@@ -432,19 +432,20 @@
 .openbot-dynamic-island[data-layout-state="expanded"] .dynamic-island-panel,
 .openbot-dynamic-island .dynamic-island-panel[data-phase="exiting"],
 .openbot-dynamic-island .dynamic-island-panel[data-phase="leaving"] {
-  padding: 14px calc(var(--dynamic-island-expanded-shoulder-size) + 20px) 20px;
+  padding: var(--openbot-space-4) calc(var(--dynamic-island-expanded-shoulder-size) + var(--openbot-space-5))
+    var(--openbot-space-5);
 }
 
 .dynamic-island-external.openbot-dynamic-island[data-layout-state="expanded"] .dynamic-island-panel,
 .dynamic-island-external.openbot-dynamic-island .dynamic-island-panel[data-phase="exiting"],
 .dynamic-island-external.openbot-dynamic-island .dynamic-island-panel[data-phase="leaving"] {
-  padding: 14px 20px 20px;
+  padding: var(--openbot-space-4) var(--openbot-space-5) var(--openbot-space-5);
 }
 
 .openbot-dynamic-island.dynamic-island-working[data-layout-state="expanded"] .dynamic-island-panel,
 .openbot-dynamic-island.dynamic-island-working .dynamic-island-panel[data-phase="exiting"],
 .openbot-dynamic-island.dynamic-island-working .dynamic-island-panel[data-phase="leaving"] {
-  padding-bottom: 14px;
+  padding-bottom: var(--openbot-space-4);
 }
 
 /* External displays use a detached capsule because there is no physical notch to join. */

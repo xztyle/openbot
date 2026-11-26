@@ -655,7 +655,7 @@ body:has(.dynamic-island-surface),
 .dynamic-island-surface-command {
   min-width: 0;
   display: grid;
-  gap: 3px;
+  gap: var(--openbot-space-0-5);
   border-left: 1px solid var(--openbot-warning);
   padding: var(--openbot-space-0-5) 0 var(--openbot-space-0-5) var(--openbot-space-2-5);
 }
@@ -745,7 +745,7 @@ div.dynamic-island-surface-context-line span {
   border: 0;
   border-radius: var(--openbot-radius-md);
   background: var(--openbot-question-option-soft);
-  padding: 7px 10px;
+  padding: var(--openbot-space-2) var(--openbot-space-2-5);
   color: inherit;
   cursor: pointer;
   font: inherit;

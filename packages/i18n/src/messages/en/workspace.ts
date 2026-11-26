@@ -942,6 +942,9 @@ export const messages = defineMessages("workspace", {
   "workspace.needsYou.ticket.sendBack": "Send back with a note",
   "workspace.needsYou.ticket.sentBack": "Sent back. Fix this: {note}",
   "workspace.needsYou.ticket.declinedNote": "Declined: {note}",
+  "workspace.needsYou.ticket.signIn": "Sign in to {site}",
+  "workspace.needsYou.ticket.signInNow":
+    "I want to sign in to {site} now. Open the sign-in page ({page}) in your browser and ask me to take over the tab.",
   "workspace.today.noteLabel": "Note",
   "workspace.today.notePlaceholder": "Add a note (optional)",
   "workspace.today.notePlaceholderRequired": "What should change?",

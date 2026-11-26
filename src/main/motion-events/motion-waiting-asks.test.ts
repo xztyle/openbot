@@ -8,7 +8,16 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { decodeMotionEvent, type MotionEvent } from "./motion-event";
 import { keptOwnerOnly, MotionEventsService, type WaitingTicket } from "./motion-events-service";
 import { missingLine } from "./motion-grader";
-import { fallbackReason, parseWaitingAsks, waitingAsksPrompt, waitingComments } from "./motion-waiting-asks";
+import {
+  fallbackReason,
+  nothingAsked,
+  ownerHasNothingToDo,
+  parseWaitingAsks,
+  routeWithoutOwner,
+  waitingAsksPrompt,
+  waitingChat,
+  waitingComments,
+} from "./motion-waiting-asks";
 
 const dev = { id: "u-dev", name: "Dev", kind: "agent", agent_key: "agent-dev", role: "member" };
 const ana = { id: "u-ana", name: "Ana", kind: "person", agent_key: null, role: "owner" };
@@ -155,6 +164,8 @@ describe("why a ticket waits on the owner", () => {
       reason: "Aprobar el copy",
       ownerOnly: null,
       plain: null,
+      ownerAction: true,
+      signIn: null,
     });
     expect(
       parseWaitingAsks(
@@ -191,5 +202,147 @@ describe("why a ticket waits on the owner", () => {
       reason: "Aprobar el copy",
     });
     expect(() => decodeAttentionItems([{ ...base, asks: "pay" }])).toThrow();
+  });
+
+  // Failure mode: "Te espera en Motion" cards that said "No se le pide nada" (EVE-35) or "No hace falta
+  // que decida nada" (MAN-10) sat in Needs you with Accept / Send back buttons, while MAN-10's real
+  // blocker, a Hotmart sign-in, was only in the agent's chat.
+  it("re-routes a ticket whose summary asks the owner nothing, away from the owner", async () => {
+    const plain = {
+      asks: "No se le pide nada: el trabajo ya fue aprobado por su equipo de ventas y puede cerrarse.",
+      why: "Sirve para decidir en qué países anunciar.",
+      if_yes: "Se cierra el trabajo.",
+      if_no: "Nada cambia.",
+    };
+    // The judge said there is an action, but its own summary says there is none: the check wins.
+    const judged = parseWaitingAsks(
+      JSON.stringify({ asks: "review-escalated", reason: "x", owner_action: "yes", plain }),
+    );
+    expect(judged && ownerHasNothingToDo(judged)).toBe(true);
+    expect(nothingAsked("No hace falta que decida nada: la página de regalos sigue en pausa.")).toBe(true);
+    expect(nothingAsked("¿Cerramos este trabajo ya aprobado?")).toBe(false);
+    const none = parseWaitingAsks('{"asks": "other", "reason": "Pausada", "owner_action": "none"}');
+    expect(none && ownerHasNothingToDo(none)).toBe(true);
+
+    // With a manager, the manager answers it; the owner never sees it.
+    const routed: unknown[] = [];
+    const first = service();
+    await first.events.receive(waitingEvent());
+    const ticket = first.events.waiting()[0];
+    if (!ticket) throw new Error("no ticket");
+    const told: string[] = [];
+    const tell = async (_agent: string, text: string) => void told.push(text);
+    expect(
+      await routeWithoutOwner({
+        ticket,
+        evidence: "",
+        approvalId: "ticket:issue-41",
+        approvals: {
+          route: async (request) => {
+            routed.push(request);
+            return { approver: "manager", agentId: "agent-lead" };
+          },
+        },
+        events: first.events,
+        tell,
+      }),
+    ).toBe("manager");
+    expect(routed).toHaveLength(1);
+    expect(first.events.waiting()[0]?.approver).toBe("manager");
+    expect(first.shown.at(-1)).toEqual([]);
+
+    // With no agent that may answer it, it leaves the list, and its agent hears why.
+    const second = service();
+    await second.events.receive(waitingEvent());
+    const again = second.events.waiting()[0];
+    if (!again) throw new Error("no ticket");
+    expect(
+      await routeWithoutOwner({
+        ticket: again,
+        evidence: "",
+        approvalId: "ticket:issue-41",
+        approvals: { route: async () => ({ approver: "owner" }) },
+        events: second.events,
+        tell,
+      }),
+    ).toBe("dismissed");
+    expect(second.events.waiting()).toEqual([]);
+    expect(told.at(-1)).toContain("asks the owner nothing");
+  });
+
+  it("makes a sign-in blocker a sign-in card that stays with the owner", async () => {
+    const judged = parseWaitingAsks(
+      JSON.stringify({
+        asks: "other",
+        reason: "Ninguna decisión pedida",
+        owner_action: "yes",
+        owner_only: "none",
+        sign_in: { site: "Hotmart", url: "https://sso.hotmart.com/login" },
+        plain: {
+          asks: "Inicia sesión en Hotmart con la cuenta de Seminarios.Online para que podamos afiliar los cursos.",
+          why: "Sin la sesión no hay enlaces de compra.",
+          if_yes: "El agente abre la página y tú inicias sesión.",
+          if_no: "Las páginas siguen sin enlace de compra.",
+        },
+      }),
+    );
+    expect(judged?.signIn).toEqual({ site: "Hotmart", url: "https://sso.hotmart.com/login" });
+    expect(judged && ownerHasNothingToDo(judged)).toBe(false);
+    // An address that is not a web page is dropped; the site stays.
+    expect(
+      parseWaitingAsks('{"asks": "blocked", "reason": "x", "sign_in": {"site": "Hotmart", "url": "javascript:x"}}')
+        ?.signIn,
+    ).toEqual({
+      site: "Hotmart",
+    });
+
+    const { events, shown } = service();
+    await events.receive(waitingEvent());
+    await events.setAsks("issue-41", judged?.asks ?? "other", judged?.reason ?? "", {
+      ownerOnly: judged?.ownerOnly ?? null,
+      plain: judged?.plain ?? null,
+      signIn: judged?.signIn ?? null,
+    });
+    expect(events.waiting()[0]).toMatchObject({ ownerOnly: "credentials", signIn: { site: "Hotmart" } });
+    await events.setApprover("issue-41", "owner");
+    expect(shown.at(-1)?.[0]?.signIn?.site).toBe("Hotmart");
+    // The wire keeps it; a bad one fails closed.
+    const base = {
+      kind: "question",
+      requestId: "motion:issue-41",
+      agentId: "agent-dev",
+      threadId: "thread-dev",
+      turnId: "motion",
+      createdAt: new Date(0).toISOString(),
+    };
+    expect(decodeAttentionItems([{ ...base, signIn: { site: "Hotmart" } }])[0]?.signIn).toEqual({ site: "Hotmart" });
+    expect(() => decodeAttentionItems([{ ...base, signIn: { site: "" } }])).toThrow();
+  });
+
+  it("reads the agent's chat lines that name the ticket, and its newest answers", () => {
+    const message = (author: "assistant" | "user" | "system", text: string) => ({
+      id: `m-${Math.random()}`,
+      author,
+      text,
+      createdAt: new Date(0).toISOString(),
+    });
+    const chat = waitingChat(
+      [
+        message("assistant", "MAN-10 espera que Alejandro inicie sesión en Hotmart."),
+        message("assistant", "Otra cosa 1"),
+        message("user", "MAN-10 del dueño"),
+        message("system", "MAN-10 nota del host"),
+        message("assistant", "Otra cosa 2"),
+      ],
+      "man-10",
+    );
+    expect(chat.map((line) => line.body)).toEqual([
+      "MAN-10 espera que Alejandro inicie sesión en Hotmart.",
+      "Otra cosa 1",
+      "Otra cosa 2",
+    ]);
+    expect(waitingAsksPrompt({ key: "MAN-10", title: "Landing", comments: [], chat })).toContain(
+      "inicie sesión en Hotmart",
+    );
   });
 });

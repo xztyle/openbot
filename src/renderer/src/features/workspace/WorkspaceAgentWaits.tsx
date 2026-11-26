@@ -18,7 +18,7 @@ import {
 } from "@openbot/contracts/ipc";
 import { Button } from "@openbot/ui/button";
 import { Input } from "@openbot/ui/form";
-import { Check, ExternalLink, Ticket, X } from "@openbot/ui/icons";
+import { Check, ExternalLink, LogIn, Ticket, X } from "@openbot/ui/icons";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { useWorkspace } from "./workspace-context";
@@ -138,7 +138,7 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
         const key = () => String(item().requestId);
         const answers = () => ticketAnswers(item(), t);
         /** A ticket that waits for a decision: a reply to it is a question, not the answer. */
-        const decides = () => answers().primary !== undefined;
+        const decides = () => answers().primary?.decision !== undefined;
         const title = () => ticketTitle(item());
         return (
           <section
@@ -176,7 +176,7 @@ export function WorkspaceAgentWaits(props: { agentId: string }) {
                     disabled={busy() !== null}
                     onClick={() => void answer(item(), primary().answer, primary().verdict, primary().decision)}
                   >
-                    <Check aria-hidden="true" />
+                    {primary().signIn ? <LogIn aria-hidden="true" /> : <Check aria-hidden="true" />}
                     {primary().label}
                   </Button>
                 )}

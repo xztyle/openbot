@@ -16,6 +16,8 @@ import type { ChannelsPort } from "../channels/channels-port";
 
 /**
  * The answers a waiting ticket offers, from why it waits (the host reads that from the ticket):
+ * - a sign-in (the owner must sign in on a site): Sign in to <site>, which asks the agent to open the
+ *   sign-in page in its browser and hand the tab over, so the owner signs in there;
  * - an approval: Approve, and Decline with an optional note;
  * - an escalated review: Accept as is, and Send back with a note it needs;
  * - anything else, or a ticket the host has not read yet: only a written answer.
@@ -24,7 +26,8 @@ import type { ChannelsPort } from "../channels/channels-port";
  * button also says what it decides, so the host answers the ticket's decision card the same way.
  */
 export interface TicketAnswers {
-  primary?: { label: string; answer: string; verdict?: TicketVerdict; decision: TicketDecision };
+  /** `signIn`: the sign-in button. A primary with no decision is no decision: a reply is an answer. */
+  primary?: { label: string; answer: string; verdict?: TicketVerdict; decision?: TicketDecision; signIn?: true };
   secondary?: {
     label: string;
     answer: (note: string) => string;
@@ -46,7 +49,18 @@ export function ticketTitle(item: Pick<AgentAttentionItem, "plain" | "summary">)
   return parts.length > 1 ? parts.slice(1).join(" · ") : summary;
 }
 
-export function ticketAnswers(item: Pick<AgentAttentionItem, "asks">, t: AppTranslate): TicketAnswers {
+export function ticketAnswers(item: Pick<AgentAttentionItem, "asks" | "signIn">, t: AppTranslate): TicketAnswers {
+  if (item.signIn)
+    return {
+      primary: {
+        label: t("workspace.needsYou.ticket.signIn", { site: item.signIn.site }),
+        answer: t("workspace.needsYou.ticket.signInNow", {
+          site: item.signIn.site,
+          page: item.signIn.url ?? item.signIn.site,
+        }),
+        signIn: true,
+      },
+    };
   if (item.asks === "approval")
     return {
       primary: {

@@ -27,7 +27,15 @@ import { MotionGrader } from "./motion-grader";
 import { MotionHumanViews } from "./motion-human-views";
 import { MotionOrders } from "./motion-orders";
 import { type MotionStartInput, MotionTickets } from "./motion-tickets";
-import { fallbackReason, parseWaitingAsks, waitingAsksPrompt, waitingComments } from "./motion-waiting-asks";
+import {
+  fallbackReason,
+  ownerHasNothingToDo,
+  parseWaitingAsks,
+  routeWithoutOwner,
+  waitingAsksPrompt,
+  waitingChat,
+  waitingComments,
+} from "./motion-waiting-asks";
 
 export { motionServer } from "./motion-client";
 
@@ -227,6 +235,7 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
         key: ticket.key,
         title: ticket.title,
         comments,
+        chat: waitingChat(options.evidence(ticket.agentId), ticket.key),
         language: options.ownerLanguage?.(),
       });
       const judged = await options
@@ -237,15 +246,22 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
       await events.setAsks(ticket.issueId, judged?.asks ?? "other", reason, {
         ownerOnly: judged?.ownerOnly ?? null,
         plain: judged?.plain ?? null,
+        signIn: judged?.signIn ?? null,
       });
-      logger.info("Read why a Motion ticket waits on a person.", { key: ticket.key, asks: judged?.asks ?? "other" });
+      const nothing = judged !== null && ownerHasNothingToDo(judged);
+      logger.info("Read why a Motion ticket waits on a person.", {
+        key: ticket.key,
+        asks: judged?.asks ?? "other",
+        ...(judged?.signIn ? { signIn: judged.signIn.site } : {}),
+        ...(nothing ? { ownerAsked: "nothing" } : {}),
+      });
       const evidence = [
         events.escalationBody(ticket.issueId) ?? "",
         ...comments.slice(-4).map((comment) => `${comment.author || "comment"}: ${comment.body.slice(0, 1_500)}`),
       ]
         .filter(Boolean)
         .join("\n\n");
-      await route(ticket.issueId, evidence);
+      await route(ticket.issueId, evidence, nothing);
     } catch (error) {
       logger.warn("Could not read why a Motion ticket waits on a person.", {
         key: ticket.key,
@@ -258,12 +274,32 @@ export async function startMotionEventsHost(options: MotionEventsHostOptions): P
   }
   /**
    * Who answers a ticket that the host read (`docs/approvals.md`): the owner when only the owner may
-   * decide it or no agent may; otherwise the approval router wakes the agent's manager.
+   * decide it or no agent may; otherwise the approval router wakes the agent's manager. A ticket that
+   * asks the owner nothing (`ownerless`) never goes to the owner: its manager answers it (an accepted
+   * review then closes), or, with no manager, it leaves the list and its agent hears why.
    */
-  async function route(issueId: string, evidence: string): Promise<void> {
+  async function route(issueId: string, evidence: string, ownerless = false): Promise<void> {
     const ticket = events.waiting().find((item) => item.issueId === issueId);
     if (!ticket || ticket.approver) return;
     const approvals = options.approvals;
+    if (ownerless) {
+      const outcome = await routeWithoutOwner({
+        ticket,
+        evidence,
+        approvalId: ticketApprovalId(issueId),
+        approvals,
+        events,
+        tell: (agentId, text, clientMessageId) =>
+          Effect.runPromise(options.send({ agentId, text, clientMessageId }, true)).then(() => undefined),
+      });
+      logger.info(
+        outcome === "manager"
+          ? "A Motion ticket that asks the owner nothing goes to the agent's manager."
+          : "A Motion ticket that asks the owner nothing left Needs you.",
+        { key: ticket.key },
+      );
+      return;
+    }
     if (ticket.ownerOnly || !approvals) {
       await events.setApprover(issueId, "owner");
       return;

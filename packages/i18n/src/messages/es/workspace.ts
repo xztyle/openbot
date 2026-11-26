@@ -928,6 +928,9 @@ export const messages = {
   "workspace.needsYou.ticket.sendBack": "Devolver con nota",
   "workspace.needsYou.ticket.sentBack": "Devuelto. Corrige esto: {note}",
   "workspace.needsYou.ticket.declinedNote": "Rechazado: {note}",
+  "workspace.needsYou.ticket.signIn": "Iniciar sesión en {site}",
+  "workspace.needsYou.ticket.signInNow":
+    "Quiero iniciar sesión en {site} ahora. Abre la página de inicio de sesión ({page}) en tu navegador y pídeme que tome el control de la pestaña.",
   "workspace.today.noteLabel": "Nota",
   "workspace.today.notePlaceholder": "Añade una nota (opcional)",
   "workspace.today.notePlaceholderRequired": "¿Qué debe cambiar?",

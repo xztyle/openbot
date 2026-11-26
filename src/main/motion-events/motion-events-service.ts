@@ -39,7 +39,13 @@ import {
   type OwnerSummary,
 } from "@openbot/contracts/agent-approvals";
 import { agentManagers } from "@openbot/contracts/agent-org";
-import { TICKET_ASKS, type TicketAsks, type WorkspaceMotionEventsSettings } from "@openbot/contracts/ipc";
+import {
+  isTicketSignIn,
+  TICKET_ASKS,
+  type TicketAsks,
+  type TicketSignIn,
+  type WorkspaceMotionEventsSettings,
+} from "@openbot/contracts/ipc";
 import { isDynamicRecord, isOneOf, isString } from "@openbot/contracts/runtime-values";
 import { Effect } from "effect";
 import { writeJsonFileAtomically } from "../../backend/atomic-json-file";
@@ -77,6 +83,8 @@ export interface WaitingTicket {
   ownerOnly?: OwnerOnlyClass | null | undefined;
   /** The ticket explained for the owner, who has no technical background. */
   plain?: OwnerSummary | undefined;
+  /** The real ask is that the owner signs in on this site in the agent's browser: a sign-in card. */
+  signIn?: TicketSignIn | undefined;
   /**
    * Who answers it: the owner (Needs you), or the asker's manager (`ApprovalRouter`). Absent until the
    * host read why it waits; only the owner's tickets show in Needs you.
@@ -91,10 +99,12 @@ export interface WaitingTicket {
 
 /**
  * The version of how a waiting ticket is read. 2: money only when the asked action itself spends,
- * credentials only when the owner must hand over their own. 3: `keptOwnerOnly` checks both. A ticket that went to the owner under an
+ * credentials only when the owner must hand over their own. 3: `keptOwnerOnly` checks both. 4: the
+ * agent's chat is read too, the plain summary names the owner's concrete action, a ticket that asks the
+ * owner nothing does not reach them, and a sign-in is a sign-in card. A ticket that went to the owner under an
  * older reading, and that no manager escalated, is read again at start.
  */
-export const WAITING_RULES = 3;
+export const WAITING_RULES = 4;
 
 /** Words of a real credential: what the owner alone can hand over. */
 const CREDENTIAL_WORDS =
@@ -196,6 +206,7 @@ function isWaitingTicket(value: unknown): value is WaitingTicket {
     (value.reason === undefined || isString(value.reason)) &&
     (value.ownerOnly === undefined || value.ownerOnly === null || isOneOf(OWNER_ONLY_CLASSES, value.ownerOnly)) &&
     (value.plain === undefined || isOwnerSummary(value.plain)) &&
+    (value.signIn === undefined || isTicketSignIn(value.signIn)) &&
     (value.approver === undefined || isOneOf(APPROVERS, value.approver)) &&
     (value.escalatedBy === undefined || isString(value.escalatedBy)) &&
     (value.escalationReason === undefined || isString(value.escalationReason)) &&
@@ -565,7 +576,7 @@ export class MotionEventsService {
     issueId: string,
     asks: TicketAsks,
     reason: string,
-    extra: { ownerOnly?: OwnerOnlyClass | null; plain?: OwnerSummary | null } = {},
+    extra: { ownerOnly?: OwnerOnlyClass | null; plain?: OwnerSummary | null; signIn?: TicketSignIn | null } = {},
   ): Promise<void> {
     const run = this.#chain.then(async () => {
       await this.start();
@@ -575,20 +586,24 @@ export class MotionEventsService {
       // The grader's escalation says what it is; a judge's later reading does not undo it.
       const kept = ticket.asks === "review-escalated" ? ticket.asks : asks;
       const reasonKept = ticket.asks === "review-escalated" && ticket.reason ? ticket.reason : line;
-      this.#state.waiting = this.#state.waiting.map((item) =>
-        item.issueId === issueId
-          ? {
-              ...item,
-              asks: kept,
-              ...(reasonKept ? { reason: reasonKept } : {}),
-              ...(extra.ownerOnly !== undefined
-                ? { ownerOnly: keptOwnerOnly(kept, reasonKept || line, extra.ownerOnly) }
-                : {}),
-              ...(extra.plain ? { plain: extra.plain } : {}),
-              rules: WAITING_RULES,
-            }
-          : item,
-      );
+      // Only the owner can sign in on their own account: a sign-in stays with the owner (tier 2).
+      const signIn = extra.signIn ?? undefined;
+      this.#state.waiting = this.#state.waiting.map((item) => {
+        if (item.issueId !== issueId) return item;
+        const { signIn: _before, ...rest } = item;
+        return {
+          ...rest,
+          asks: kept,
+          ...(reasonKept ? { reason: reasonKept } : {}),
+          ...(signIn
+            ? { ownerOnly: "credentials" as const, signIn }
+            : extra.ownerOnly !== undefined
+              ? { ownerOnly: keptOwnerOnly(kept, reasonKept || line, extra.ownerOnly) }
+              : {}),
+          ...(extra.plain ? { plain: extra.plain } : {}),
+          rules: WAITING_RULES,
+        };
+      });
       this.#show();
       await this.#save();
     });

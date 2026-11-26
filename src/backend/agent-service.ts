@@ -110,6 +110,7 @@ import type {
   TestMcpServerInput,
   TestRoutineInput,
   TicketAsks,
+  TicketSignIn,
   TicketVerdict,
   UpdateAgentInput,
   UpdateAgentMemoryInput,
@@ -2321,6 +2322,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       asks?: TicketAsks | undefined;
       reason?: string | undefined;
       plain?: OwnerSummary | undefined;
+      signIn?: TicketSignIn | undefined;
       escalatedBy?: string | undefined;
       escalationReason?: string | undefined;
     }[],
@@ -2344,6 +2346,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             ...(ticket.asks ? { asks: ticket.asks } : {}),
             ...(ticket.reason ? { reason: ticket.reason.slice(0, AGENT_ATTENTION_TEXT_LIMIT) } : {}),
             ...(ticket.plain ? { plain: ticket.plain } : {}),
+            ...(ticket.signIn ? { signIn: ticket.signIn } : {}),
             ...(ticket.escalatedBy ? { escalatedBy: ticket.escalatedBy.slice(0, AGENT_ATTENTION_TEXT_LIMIT) } : {}),
             ...(ticket.escalationReason
               ? { escalationReason: ticket.escalationReason.slice(0, AGENT_ATTENTION_TEXT_LIMIT) }

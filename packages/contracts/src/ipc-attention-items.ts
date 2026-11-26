@@ -77,6 +77,12 @@ export interface AgentAttentionItem {
   escalatedBy?: string;
   escalationReason?: string;
   /**
+   * A ticket whose real ask is that the owner signs in on a site in the agent's browser: the card
+   * offers a sign-in button, not Approve and Decline. `site` names it for the owner ("Hotmart"); `url`
+   * is the sign-in page the agent opens.
+   */
+  signIn?: TicketSignIn;
+  /**
    * The owner wrote to the agent while this waits, and the agent has not answered since: the owner
    * asked something instead of deciding. A question decides nothing, so the request stays.
    */
@@ -99,6 +105,20 @@ export interface AgentAttentionOption {
 
 /** The most buttons a listed decision carries: up to three options and the No. */
 export const AGENT_ATTENTION_OPTIONS_LIMIT = 4;
+
+export interface TicketSignIn {
+  site: string;
+  url?: string;
+}
+
+export function isTicketSignIn(value: unknown): value is TicketSignIn {
+  return (
+    isDynamicRecord(value) &&
+    isBoundedString(value.site, AGENT_ATTENTION_TEXT_LIMIT) &&
+    value.site.trim().length > 0 &&
+    (value.url === undefined || (isBoundedString(value.url, 2_000) && /^https?:\/\//u.test(value.url)))
+  );
+}
 
 export function isAgentAttentionOption(value: unknown): value is AgentAttentionOption {
   return (
@@ -173,6 +193,7 @@ export function isAgentAttentionItem(value: unknown): value is AgentAttentionIte
     (value.plain === undefined || isOwnerSummary(value.plain)) &&
     (value.escalatedBy === undefined || isBoundedString(value.escalatedBy, AGENT_ATTENTION_TEXT_LIMIT)) &&
     (value.escalationReason === undefined || isBoundedString(value.escalationReason, AGENT_ATTENTION_TEXT_LIMIT)) &&
+    (value.signIn === undefined || isTicketSignIn(value.signIn)) &&
     (value.ownerAsked === undefined || value.ownerAsked === true) &&
     (value.decision === undefined || value.decision === true) &&
     (value.options === undefined ||

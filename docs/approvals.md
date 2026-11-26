@@ -104,6 +104,13 @@ trail.
 
 - **Needs you / Today**: only tier-2 items and escalations. A ticket for a manager never shows there and
   sends no push.
+- A waiting ticket that asks the owner nothing (the judge's `owner_action` is `none`, or its summary
+  says "no se le pide nada", "no hace falta que decida" and similar, `nothingAsked`) never reaches the
+  owner: its manager answers it (a review the manager accepts closes), or, with no manager, it leaves
+  the list and its agent gets an FYI note (`routeWithoutOwner` in `motion-waiting-asks.ts`).
+- A ticket whose real ask is a sign-in on the owner's account (`sign_in`) is a sign-in card: the button
+  "Sign in to <site>" asks the agent to open the page in its browser and hand the tab over (a takeover),
+  in place of Approve and Decline. It stays with the owner as `credentials`.
 - **Inbox, "Decided by agents"**: what managers decided, as an FYI, with Reopen where the request can be
   taken back (a ticket goes back to Needs you).
 - **Trust page**: "Your interventions": how many approvals and decisions the owner and the agents
@@ -114,6 +121,8 @@ trail.
 Everything that reaches the owner is in plain, non-technical words, in the owner's language
 (`OPENBOT_OWNER_LANGUAGE`, or the host's language). The host asks the cheap judge model for a summary
 of each ticket and each agent decision (`ownerSummaryPrompt`): what is asked, why it matters for the
-business, and what a yes and a no do. `plainText` takes out ids, codes, long numbers, flags, paths and
+business, and what a yes and a no do. A waiting ticket's summary also reads the agent's recent chat, where the
+real blocker is often said, and its `asks` is the owner's concrete action as a question or an
+imperative ("¿Cerramos este trabajo ya aprobado?"); `if_yes` and `if_no` say what the card's buttons do. `plainText` takes out ids, codes, long numbers, flags, paths and
 technical words that the model leaves in. The raw text stays behind a collapsed "technical details",
 which only the owner opens.

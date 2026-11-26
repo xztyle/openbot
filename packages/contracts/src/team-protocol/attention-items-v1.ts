@@ -21,6 +21,10 @@
 // owner, and why; at most 200 characters each). A client of before drops them.
 // Added later, optional: `ownerAsked` (only `true`): the owner wrote to the agent while the request
 // waits and the agent has not answered since. A client of before drops it.
+// Added later, optional, on a Motion ticket: `signIn` (`{ site, url? }`, a site name of at most 200
+// characters and an http or https sign-in page of at most 2000): the owner is asked to sign in on that
+// site in the agent's browser, so the card offers a sign-in button. A client of before drops it and
+// shows the ticket as before.
 //
 // The host sends the event after each runtime snapshot that it sends to a peer, and again at each
 // change, to a peer that has `fork-host-v1` only. It leaves out each request of an agent that the peer
@@ -38,6 +42,7 @@ import {
   AGENT_ATTENTION_KINDS,
   AGENT_ATTENTION_TEXT_LIMIT,
   type AgentAttentionItem,
+  isTicketSignIn,
   TICKET_ASKS,
 } from "../ipc-attention-items";
 import { isDynamicRecord, isNumber, isOneOf, isString } from "../runtime-values";
@@ -80,6 +85,7 @@ function item(value: unknown): AgentAttentionItem {
   const plain = value.plain === undefined ? undefined : isOwnerSummary(value.plain) ? value.plain : invalid();
   const escalatedBy = text(value.escalatedBy);
   const escalationReason = text(value.escalationReason);
+  const signIn = value.signIn === undefined ? undefined : isTicketSignIn(value.signIn) ? value.signIn : invalid();
   if (value.ownerAsked !== undefined && value.ownerAsked !== true) invalid();
   return {
     kind: value.kind,
@@ -99,6 +105,9 @@ function item(value: unknown): AgentAttentionItem {
       : { plain: { asks: plain.asks, why: plain.why, ifYes: plain.ifYes, ifNo: plain.ifNo } }),
     ...(escalatedBy === undefined ? {} : { escalatedBy }),
     ...(escalationReason === undefined ? {} : { escalationReason }),
+    ...(signIn === undefined
+      ? {}
+      : { signIn: { site: signIn.site, ...(signIn.url === undefined ? {} : { url: signIn.url }) } }),
     ...(value.ownerAsked === true ? { ownerAsked: true as const } : {}),
   };
 }

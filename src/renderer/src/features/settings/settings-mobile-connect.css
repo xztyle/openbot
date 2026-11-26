@@ -115,23 +115,6 @@
   margin-bottom: var(--openbot-space-2);
 }
 
-.settings-mobile-devices {
-  display: grid;
-  gap: var(--openbot-space-3);
-}
-
-.settings-mobile-devices-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--openbot-space-3);
-}
-
-.settings-mobile-devices-heading h3 {
-  margin: 0;
-  font-weight: var(--openbot-weight-medium);
-}
-
 .settings-mobile-devices-states {
   display: grid;
 }
@@ -576,21 +559,6 @@
 }
 
 /* How devices connect: two cards with a radio dot, as in the sound theme picker. */
-.settings-mobile-route {
-  display: grid;
-  gap: var(--openbot-space-3);
-}
-
-.settings-mobile-route-heading {
-  display: grid;
-  gap: var(--openbot-space-1);
-}
-
-.settings-mobile-route-heading h3 {
-  margin: 0;
-  font-weight: var(--openbot-weight-medium);
-}
-
 .settings-mobile-route-choice {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

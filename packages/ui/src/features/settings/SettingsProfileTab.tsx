@@ -1,18 +1,19 @@
 import type { AccountSession, CentralAuthUser, ClientAgentSummary, HostAnalytics } from "@openbot/contracts/ipc";
 import {
+  Alert,
+  AlertContent,
+  AlertDescription,
+  AlertIcon,
   Badge,
   Button,
   ConfirmDialog,
   ErrorReference,
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemTitle,
   Pencil,
+  SettingsGroup,
+  SettingsRow,
   SettingsSection,
   Text,
+  TriangleAlert,
   Upload,
   UserAvatar,
 } from "@openbot/ui";
@@ -135,29 +136,33 @@ export function SettingsProfileTab(props: SettingsProfileTabProps) {
       </Show>
 
       <SettingsSection title={t("settings.profile.account.title")}>
-        <ItemGroup class="settings-modal-card">
-          <Item data-settings-row="settings.profile.email.title" class="settings-modal-account-email-row">
-            <ItemContent>
-              <ItemTitle>{t("settings.profile.email.title")}</ItemTitle>
-              <ItemDescription>{t("settings.profile.email.description")}</ItemDescription>
+        <SettingsGroup label={t("settings.profile.account.title")}>
+          <SettingsRow
+            data-settings-row="settings.profile.email.title"
+            label={t("settings.profile.email.title")}
+            description={t("settings.profile.email.description")}
+            help={
               <Show when={signOutError()}>
-                {(message) => <ItemDescription role="alert">{message()}</ItemDescription>}
-              </Show>
-            </ItemContent>
-            <ItemActions>
-              <Text as="span" class="settings-modal-readonly-value" variant="body">
-                {props.account.email}
-              </Text>
-              <Show when={props.onSignOut}>
-                {(onSignOut) => (
-                  <Button variant="outline" disabled={signingOut()} onClick={() => void signOut(onSignOut())}>
-                    {signingOut() ? t("account.menu.signingOut") : t("account.menu.signOut")}
-                  </Button>
+                {(message) => (
+                  <Text variant="caption" tone="danger" role="alert">
+                    {message()}
+                  </Text>
                 )}
               </Show>
-            </ItemActions>
-          </Item>
-        </ItemGroup>
+            }
+          >
+            <Text as="span" class="settings-modal-readonly-value" variant="body">
+              {props.account.email}
+            </Text>
+            <Show when={props.onSignOut}>
+              {(onSignOut) => (
+                <Button variant="outline" size="sm" disabled={signingOut()} onClick={() => void signOut(onSignOut())}>
+                  {signingOut() ? t("account.menu.signingOut") : t("account.menu.signOut")}
+                </Button>
+              )}
+            </Show>
+          </SettingsRow>
+        </SettingsGroup>
       </SettingsSection>
       <Show when={props.canListSessions}>
         <SettingsSection
@@ -165,64 +170,73 @@ export function SettingsProfileTab(props: SettingsProfileTabProps) {
           title={t("settings.profile.sessions.title")}
           description={t("settings.profile.sessions.description")}
         >
-          <Button
-            variant="outline"
-            disabled={props.store.state.sessions.loading || Boolean(props.store.state.sessions.revokingId)}
-            onClick={() => void props.store.refreshSessions()}
-          >
-            {props.store.state.sessions.loading
-              ? t("settings.profile.sessions.loading")
-              : t("settings.profile.sessions.refresh")}
-          </Button>
           <Show when={props.store.state.sessions.error}>
             {(error) => (
-              <Text role="alert" class="settings-modal-error">
-                {error().message}
-                <ErrorReference reference={error().reference} />
-              </Text>
+              <Alert tone="danger" role="alert">
+                <AlertIcon>
+                  <TriangleAlert />
+                </AlertIcon>
+                <AlertContent>
+                  <AlertDescription>
+                    {error().message}
+                    <ErrorReference reference={error().reference} />
+                  </AlertDescription>
+                </AlertContent>
+              </Alert>
             )}
           </Show>
-          <ItemGroup class="settings-modal-card">
+          <SettingsGroup
+            label={t("settings.profile.sessions.title")}
+            actions={
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={props.store.state.sessions.loading || Boolean(props.store.state.sessions.revokingId)}
+                onClick={() => void props.store.refreshSessions()}
+              >
+                {props.store.state.sessions.loading
+                  ? t("settings.profile.sessions.loading")
+                  : t("settings.profile.sessions.refresh")}
+              </Button>
+            }
+          >
             <For each={props.store.state.sessions.items}>
               {(session) => (
-                <Item>
-                  <ItemContent>
-                    <ItemTitle>
-                      {session.name}
-                      {session.current ? `${SESSION_TITLE_SEPARATOR}${t("settings.profile.sessions.thisDevice")}` : ""}
-                    </ItemTitle>
-                    <ItemDescription>
-                      {t("settings.profile.sessions.details", {
-                        kind: sessionKind(session),
+                <SettingsRow
+                  label={`${session.name}${
+                    session.current ? `${SESSION_TITLE_SEPARATOR}${t("settings.profile.sessions.thisDevice")}` : ""
+                  }`}
+                  description={t("settings.profile.sessions.details", {
+                    kind: sessionKind(session),
+                    signedIn: sessionTime(session.connectedAt),
+                    lastActive: sessionTime(session.lastActiveAt),
+                  })}
+                  help={
+                    session.hostedServer && !session.current
+                      ? t("settings.profile.sessions.hostedServerNote")
+                      : undefined
+                  }
+                >
+                  <Show when={!session.current} fallback={<Badge>{t("settings.profile.sessions.thisDevice")}</Badge>}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label={t("settings.profile.sessions.disconnectLabel", {
+                        name: session.name,
                         signedIn: sessionTime(session.connectedAt),
-                        lastActive: sessionTime(session.lastActiveAt),
                       })}
-                    </ItemDescription>
-                    <Show when={session.hostedServer && !session.current}>
-                      <ItemDescription>{t("settings.profile.sessions.hostedServerNote")}</ItemDescription>
-                    </Show>
-                  </ItemContent>
-                  <ItemActions>
-                    <Show when={!session.current} fallback={<Badge>{t("settings.profile.sessions.thisDevice")}</Badge>}>
-                      <Button
-                        variant="outline"
-                        aria-label={t("settings.profile.sessions.disconnectLabel", {
-                          name: session.name,
-                          signedIn: sessionTime(session.connectedAt),
-                        })}
-                        disabled={Boolean(props.store.state.sessions.revokingId) || !props.canRevokeSession}
-                        onClick={() => setDisconnectTarget(session.sessionId)}
-                      >
-                        {props.store.state.sessions.revokingId === session.sessionId
-                          ? t("settings.disconnect.pending")
-                          : t("settings.disconnect.action")}
-                      </Button>
-                    </Show>
-                  </ItemActions>
-                </Item>
+                      disabled={Boolean(props.store.state.sessions.revokingId) || !props.canRevokeSession}
+                      onClick={() => setDisconnectTarget(session.sessionId)}
+                    >
+                      {props.store.state.sessions.revokingId === session.sessionId
+                        ? t("settings.disconnect.pending")
+                        : t("settings.disconnect.action")}
+                    </Button>
+                  </Show>
+                </SettingsRow>
               )}
             </For>
-          </ItemGroup>
+          </SettingsGroup>
           <ConfirmDialog
             open={disconnectTarget() !== null}
             onCancel={() => setDisconnectTarget(null)}

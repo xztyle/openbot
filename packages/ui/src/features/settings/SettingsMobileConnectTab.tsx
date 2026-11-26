@@ -27,6 +27,7 @@ import {
   SlidingTabs,
   Smartphone,
   Text,
+  TriangleAlert,
 } from "@openbot/ui";
 import { createSignal, For, Show } from "solid-js";
 import { useText } from "../../text";
@@ -186,9 +187,9 @@ export function SettingsMobileConnectTab(props: SettingsMobileConnectTabProps) {
             <ItemDescription>{t("settings.mobileConnect.signIn.description")}</ItemDescription>
             <Show when={props.store.state.connect.error}>
               {(error) => (
-                <ItemDescription class="settings-modal-error" role="alert">
+                <Text as="span" variant="caption" tone="danger" role="alert">
                   {error()}
-                </ItemDescription>
+                </Text>
               )}
             </Show>
           </ItemContent>
@@ -283,9 +284,9 @@ export function SettingsMobileConnectTab(props: SettingsMobileConnectTabProps) {
               <ItemDescription>{t("settings.mobileConnect.link.description")}</ItemDescription>
               <Show when={props.store.state.link.error}>
                 {(error) => (
-                  <ItemDescription class="settings-modal-error" role="alert">
+                  <Text as="span" variant="caption" tone="danger" role="alert">
                     {error()}
-                  </ItemDescription>
+                  </Text>
                 )}
               </Show>
             </ItemContent>
@@ -381,19 +382,29 @@ export function SettingsMobileConnectTab(props: SettingsMobileConnectTabProps) {
         />
       </Show>
 
-      <section
+      <SettingsSection
         data-settings-row="settings.mobileConnect.devices.title"
-        class="settings-mobile-devices"
-        aria-labelledby="settings-mobile-devices-title"
-      >
-        <div class="settings-mobile-devices-heading">
-          <h3 id="settings-mobile-devices-title">{t("settings.mobileConnect.devices.title")}</h3>
+        title={t("settings.mobileConnect.devices.title")}
+        actions={
           <Show when={props.store.state.devices.loading}>
             <Text as="span" variant="caption" tone="muted" role="status">
               {t("settings.mobileConnect.devices.refreshing")}
             </Text>
           </Show>
-        </div>
+        }
+      >
+        <Show when={props.store.state.devices.error}>
+          {(error) => (
+            <Alert tone="danger" role="alert">
+              <AlertIcon>
+                <TriangleAlert />
+              </AlertIcon>
+              <AlertContent>
+                <AlertDescription>{error()}</AlertDescription>
+              </AlertContent>
+            </Alert>
+          )}
+        </Show>
         <div class="settings-mobile-devices-states">
           <div
             class="settings-mobile-devices-state"
@@ -494,27 +505,26 @@ export function SettingsMobileConnectTab(props: SettingsMobileConnectTabProps) {
             </div>
           </div>
         </div>
-        <Show when={props.store.state.devices.error}>
-          {(error) => (
-            <Text class="settings-modal-error" variant="caption" role="alert">
-              {error()}
-            </Text>
-          )}
-        </Show>
-      </section>
+      </SettingsSection>
 
       <Show when={props.store.state.route.current || props.store.state.route.error}>
-        <section
+        <SettingsSection
           data-settings-row="settings.mobileConnect.route.title"
-          class="settings-mobile-route"
-          aria-labelledby="settings-mobile-route-title"
+          title={t("settings.mobileConnect.route.title")}
+          description={t("settings.mobileConnect.route.description")}
         >
-          <div class="settings-mobile-route-heading">
-            <h3 id="settings-mobile-route-title">{t("settings.mobileConnect.route.title")}</h3>
-            <Text variant="caption" tone="muted">
-              {t("settings.mobileConnect.route.description")}
-            </Text>
-          </div>
+          <Show when={props.store.state.route.error}>
+            {(error) => (
+              <Alert tone="danger" role="alert">
+                <AlertIcon>
+                  <TriangleAlert />
+                </AlertIcon>
+                <AlertContent>
+                  <AlertDescription>{error()}</AlertDescription>
+                </AlertContent>
+              </Alert>
+            )}
+          </Show>
           <Show when={props.store.state.route.current}>
             {(current) => (
               <RemoteNetworkRouteChoice
@@ -525,14 +535,7 @@ export function SettingsMobileConnectTab(props: SettingsMobileConnectTabProps) {
               />
             )}
           </Show>
-          <Show when={props.store.state.route.error}>
-            {(error) => (
-              <Text class="settings-modal-error" variant="caption" role="alert">
-                {error()}
-              </Text>
-            )}
-          </Show>
-        </section>
+        </SettingsSection>
       </Show>
     </SettingsSection>
   );

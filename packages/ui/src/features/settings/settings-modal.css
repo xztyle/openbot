@@ -945,8 +945,7 @@ label.ui-settings-row-label {
   }
 
   .settings-identity-name-row,
-  .settings-identity-image-row,
-  .settings-modal-account-email-row {
+  .settings-identity-image-row {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -966,8 +965,7 @@ label.ui-settings-row-label {
     position: static;
   }
 
-  .settings-identity-image-control,
-  .settings-modal-account-email-row .ui-item-actions {
+  .settings-identity-image-control {
     width: 100%;
     max-width: none;
     justify-content: space-between;

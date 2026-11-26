@@ -15,15 +15,12 @@ import {
   Field,
   FormDialog,
   Input,
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemTitle,
+  SettingsGroup,
+  SettingsHelp,
+  SettingsRow,
 } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, Show } from "solid-js";
 import { GROUP_TEXT, PROBLEM_TEXT } from "./cloud-backups-text";
 
 const parentOf = (path: string): string => path.split("/").slice(0, -1).join("/");
@@ -42,6 +39,7 @@ export function CloudFolderDialog(props: {
   onChanged: (result: CloudConnectResult, mode: "move" | "use") => void;
 }) {
   const { t, errorMessage } = useText();
+  const ids = createUniqueId();
   const [path, setPath] = createSignal("");
   const [listing, setListing] = createSignal<CloudFolderList | null>(null);
   const [name, setName] = createSignal("");
@@ -114,108 +112,97 @@ export function CloudFolderDialog(props: {
       error={error()}
       onSubmit={() => void submit()}
     >
-      <div class="flex flex-col gap-3">
-        <ItemGroup class="settings-modal-card">
-          <Item class="settings-modal-row">
-            <ItemContent>
-              <ItemTitle>{path() || t("backups.cloud.folderRoot")}</ItemTitle>
-            </ItemContent>
-            <Show when={path()}>
-              <ItemActions>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={pending()}
-                  onClick={() => void open(parentOf(path()))}
-                >
-                  {t("backups.cloud.folderUp")}
-                </Button>
-              </ItemActions>
-            </Show>
-          </Item>
-          <Show when={listing()?.folders.length === 0}>
-            <Item class="settings-modal-row">
-              <ItemContent>
-                <ItemDescription>{t("backups.cloud.folderEmpty")}</ItemDescription>
-              </ItemContent>
-            </Item>
+      <SettingsGroup label={t("backups.cloud.folderTitle")}>
+        <SettingsRow label={path() || t("backups.cloud.folderRoot")} layout="inline">
+          <Show when={path()}>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={pending()}
+              onClick={() => void open(parentOf(path()))}
+            >
+              {t("backups.cloud.folderUp")}
+            </Button>
           </Show>
-          <For each={listing()?.folders ?? []}>
-            {(folder) => (
-              <Item class="settings-modal-row">
-                <ItemContent>
-                  <ItemTitle>{folder}</ItemTitle>
-                </ItemContent>
-                <ItemActions>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={pending()}
-                    onClick={() => void open(path() ? `${path()}/${folder}` : folder)}
-                  >
-                    {t("backups.cloud.browsePick", { name: folder })}
-                  </Button>
-                </ItemActions>
-              </Item>
-            )}
-          </For>
-        </ItemGroup>
-        <div class="flex items-end gap-2">
-          <Field label={t("backups.cloud.folderNew")} class="flex-1">
-            <Input value={name()} onValueChange={setName} />
-          </Field>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={pending() || !name().trim() || name().includes("/")}
-            onClick={() => {
-              const next = path() ? `${path()}/${name().trim()}` : name().trim();
-              setName("");
-              void open(next, true);
-            }}
-          >
-            {t("backups.cloud.folderCreate")}
-          </Button>
-        </div>
-        <Show
-          when={!listing()?.hasCopies}
-          fallback={
-            <Alert tone="neutral" role="status">
-              <AlertContent>
-                <AlertDescription>{t("backups.cloud.folderHasCopies")}</AlertDescription>
-              </AlertContent>
-            </Alert>
-          }
+        </SettingsRow>
+        <Show when={listing() === null && pending()}>
+          <SettingsHelp>{t("backups.cloud.connect.busy")}</SettingsHelp>
+        </Show>
+        <Show when={listing()?.folders.length === 0}>
+          <SettingsRow label={t("backups.cloud.folderEmpty")} />
+        </Show>
+        <For each={listing()?.folders ?? []}>
+          {(folder) => (
+            <SettingsRow label={folder} layout="inline">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={pending()}
+                onClick={() => void open(path() ? `${path()}/${folder}` : folder)}
+              >
+                {t("backups.cloud.browsePick", { name: folder })}
+              </Button>
+            </SettingsRow>
+          )}
+        </For>
+      </SettingsGroup>
+      <SettingsRow label={t("backups.cloud.folderNew")} controlId={`${ids}-folder-name`} layout="stack">
+        <Input id={`${ids}-folder-name`} value={name()} onValueChange={setName} />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={pending() || !name().trim() || name().includes("/")}
+          onClick={() => {
+            const next = path() ? `${path()}/${name().trim()}` : name().trim();
+            setName("");
+            void open(next, true);
+          }}
         >
-          <div class="flex items-center gap-2">
-            <Checkbox id="cloud-folder-move" checked={mode() === "move"} onChange={() => setMode("move")} />
-            <label for="cloud-folder-move">{t("backups.cloud.folderMove")}</label>
-          </div>
-          <p class="text-muted-foreground">{t("backups.cloud.folderMoveHint")}</p>
-          <div class="flex items-center gap-2">
-            <Checkbox id="cloud-folder-start" checked={mode() === "use"} onChange={() => setMode("use")} />
-            <label for="cloud-folder-start">{t("backups.cloud.folderStart")}</label>
-          </div>
-          <Show when={mode() === "use"}>
-            <Alert tone="warning" role="status">
-              <AlertContent>
-                <AlertDescription>{t("backups.cloud.folderStartWarning")}</AlertDescription>
-              </AlertContent>
-            </Alert>
-          </Show>
-        </Show>
-        <Show when={askRepository()}>
-          <Field
-            label={t("backups.cloud.connect.repositoryPassword")}
-            description={t("backups.cloud.connect.repositoryPasswordHint")}
+          {t("backups.cloud.folderCreate")}
+        </Button>
+      </SettingsRow>
+      <Show
+        when={!listing()?.hasCopies}
+        fallback={
+          <Alert tone="neutral" role="status">
+            <AlertContent>
+              <AlertDescription>{t("backups.cloud.folderHasCopies")}</AlertDescription>
+            </AlertContent>
+          </Alert>
+        }
+      >
+        <SettingsGroup label={t("backups.cloud.folderUse")}>
+          <SettingsRow
+            layout="inline"
+            label={t("backups.cloud.folderMove")}
+            description={t("backups.cloud.folderMoveHint")}
+            controlId={`${ids}-move`}
           >
-            <Input type="password" value={repository()} onInput={(event) => setRepository(event.currentTarget.value)} />
-          </Field>
+            <Checkbox id={`${ids}-move`} checked={mode() === "move"} onChange={() => setMode("move")} />
+          </SettingsRow>
+          <SettingsRow layout="inline" label={t("backups.cloud.folderStart")} controlId={`${ids}-start`}>
+            <Checkbox id={`${ids}-start`} checked={mode() === "use"} onChange={() => setMode("use")} />
+          </SettingsRow>
+        </SettingsGroup>
+        <Show when={mode() === "use"}>
+          <Alert tone="warning" role="status">
+            <AlertContent>
+              <AlertDescription>{t("backups.cloud.folderStartWarning")}</AlertDescription>
+            </AlertContent>
+          </Alert>
         </Show>
-      </div>
+      </Show>
+      <Show when={askRepository()}>
+        <Field
+          label={t("backups.cloud.connect.repositoryPassword")}
+          description={t("backups.cloud.connect.repositoryPasswordHint")}
+        >
+          <Input type="password" value={repository()} onInput={(event) => setRepository(event.currentTarget.value)} />
+        </Field>
+      </Show>
     </FormDialog>
   );
 }
@@ -234,6 +221,7 @@ export function CloudRestoreDialog(props: {
   onClose: () => void;
 }) {
   const { t, format, errorMessage } = useText();
+  const ids = createUniqueId();
   const [kind, setKind] = createSignal<"whole" | "some" | "files">("whole");
   const [groups, setGroups] = createSignal<CloudGroup[]>([]);
   const [path, setPath] = createSignal("/");
@@ -291,17 +279,16 @@ export function CloudRestoreDialog(props: {
   }
 
   const choice = (value: "whole" | "some" | "files", label: string) => (
-    <div class="flex items-center gap-2">
+    <SettingsRow layout="inline" label={label} controlId={`${ids}-${value}`}>
       <Checkbox
-        id={`cloud-restore-${value}`}
+        id={`${ids}-${value}`}
         checked={kind() === value}
         onChange={() => {
           setKind(value);
           if (value === "files" && entries() === null) void open("/");
         }}
       />
-      <label for={`cloud-restore-${value}`}>{label}</label>
-    </div>
+    </SettingsRow>
   );
 
   return (
@@ -319,103 +306,95 @@ export function CloudRestoreDialog(props: {
       error={error()}
       onSubmit={() => void submit()}
     >
-      <div class="flex flex-col gap-3">
-        <p>{t("backups.cloud.restoreWhat")}</p>
+      <SettingsGroup title={t("backups.cloud.restoreWhat")}>
         {choice("whole", t("backups.cloud.restoreWhole"))}
         {choice("some", t("backups.cloud.restoreSome"))}
         <Show when={kind() === "some"}>
-          <div class="flex flex-col gap-2 ps-6">
-            <For each={available()}>
-              {(group) => (
-                <div class="flex items-center gap-2">
-                  <Checkbox
-                    id={`cloud-restore-group-${group}`}
-                    checked={groups().includes(group)}
-                    onChange={(event) =>
-                      setGroups((current) =>
-                        event.currentTarget.checked ? [...current, group] : current.filter((item) => item !== group),
-                      )
-                    }
-                  />
-                  <label for={`cloud-restore-group-${group}`}>{t(GROUP_TEXT[group][0])}</label>
-                </div>
-              )}
-            </For>
-          </div>
+          <For each={available()}>
+            {(group) => (
+              <SettingsRow
+                layout="inline"
+                label={t(GROUP_TEXT[group][0])}
+                description={t(GROUP_TEXT[group][1])}
+                controlId={`${ids}-group-${group}`}
+              >
+                <Checkbox
+                  id={`${ids}-group-${group}`}
+                  checked={groups().includes(group)}
+                  onChange={(event) =>
+                    setGroups((current) =>
+                      event.currentTarget.checked ? [...current, group] : current.filter((item) => item !== group),
+                    )
+                  }
+                />
+              </SettingsRow>
+            )}
+          </For>
         </Show>
         {choice("files", t("backups.cloud.restoreFiles"))}
-        <Show when={kind() === "files"}>
-          <ItemGroup class="settings-modal-card">
-            <Item class="settings-modal-row">
-              <ItemContent>
-                <ItemTitle>{path()}</ItemTitle>
-                <Show when={picked().length > 0}>
-                  <ItemDescription>{t("backups.cloud.browsePicked", { count: picked().length })}</ItemDescription>
-                </Show>
-              </ItemContent>
-              <Show when={path() !== "/"}>
-                <ItemActions>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    disabled={pending()}
-                    onClick={() => void open(parentOf(path()) || "/")}
-                  >
-                    {t("backups.cloud.browseUp")}
-                  </Button>
-                </ItemActions>
-              </Show>
-            </Item>
-            <Show when={entries()?.length === 0}>
-              <Item class="settings-modal-row">
-                <ItemContent>
-                  <ItemDescription>{t("backups.cloud.browseEmpty")}</ItemDescription>
-                </ItemContent>
-              </Item>
+      </SettingsGroup>
+      <Show when={kind() === "files"}>
+        <SettingsGroup label={t("backups.cloud.restoreFiles")}>
+          <SettingsRow
+            layout="inline"
+            label={path()}
+            description={picked().length > 0 ? t("backups.cloud.browsePicked", { count: picked().length }) : undefined}
+          >
+            <Show when={path() !== "/"}>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={pending()}
+                onClick={() => void open(parentOf(path()) || "/")}
+              >
+                {t("backups.cloud.browseUp")}
+              </Button>
             </Show>
-            <For each={entries() ?? []}>
-              {(entry) => (
-                <Item class="settings-modal-row">
-                  <Checkbox
-                    id={`cloud-pick-${entry.path}`}
-                    aria-label={t("backups.cloud.browsePick", { name: entry.name })}
-                    checked={picked().includes(entry.path)}
-                    onChange={(event) =>
-                      setPicked((current) =>
-                        event.currentTarget.checked
-                          ? [...current, entry.path]
-                          : current.filter((item) => item !== entry.path),
-                      )
-                    }
-                  />
-                  <ItemContent>
-                    <Show
-                      when={entry.dir}
-                      fallback={
-                        <>
-                          <ItemTitle>{entry.name}</ItemTitle>
-                          <ItemDescription>{format.fileSize(entry.bytes)}</ItemDescription>
-                        </>
-                      }
+          </SettingsRow>
+          <Show when={entries() === null && pending()}>
+            <SettingsHelp>{t("backups.cloud.connect.busy")}</SettingsHelp>
+          </Show>
+          <Show when={entries()?.length === 0}>
+            <SettingsRow label={t("backups.cloud.browseEmpty")} />
+          </Show>
+          <For each={entries() ?? []}>
+            {(entry) => (
+              <SettingsRow
+                layout="inline"
+                label={
+                  <Show when={entry.dir} fallback={entry.name}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="link"
+                      disabled={pending()}
+                      onClick={() => void open(entry.path)}
                     >
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        disabled={pending()}
-                        onClick={() => void open(entry.path)}
-                      >
-                        {entry.name}/
-                      </Button>
-                    </Show>
-                  </ItemContent>
-                </Item>
-              )}
-            </For>
-          </ItemGroup>
-        </Show>
-      </div>
+                      {entry.name}/
+                    </Button>
+                  </Show>
+                }
+                description={entry.dir ? undefined : format.fileSize(entry.bytes)}
+                controlId={entry.dir ? undefined : `${ids}-pick-${entry.path}`}
+              >
+                <Checkbox
+                  id={`${ids}-pick-${entry.path}`}
+                  aria-label={t("backups.cloud.browsePick", { name: entry.name })}
+                  checked={picked().includes(entry.path)}
+                  onChange={(event) =>
+                    setPicked((current) =>
+                      event.currentTarget.checked
+                        ? [...current, entry.path]
+                        : current.filter((item) => item !== entry.path),
+                    )
+                  }
+                />
+              </SettingsRow>
+            )}
+          </For>
+        </SettingsGroup>
+      </Show>
     </FormDialog>
   );
 }

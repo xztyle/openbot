@@ -24,18 +24,13 @@ import {
   FormDialog,
   History,
   Input,
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemTitle,
   NativeSelect,
   Progress,
   SettingsGroup,
   SettingsRow,
   SettingsSection,
   SwitchField,
+  Text,
   TriangleAlert,
 } from "@openbot/ui";
 import { SettingsSaveBar } from "@openbot/ui/features/settings/SettingsDialogShell";
@@ -231,6 +226,30 @@ export function ServerCloudBackupsPanel(props: {
     return Number.isNaN(date.getTime()) ? iso : format.date(date, { dateStyle: "medium", timeStyle: "short" });
   };
   const sizeOf = (group: CloudGroup): number | null => ready()?.sizes.find((row) => row.group === group)?.bytes ?? null;
+  /** "Next copy at 15:00" while the plan runs, "paused" while it does not; nothing until the host knows. */
+  const nextRun = (value: Ready): string | null =>
+    value.plan.enabled
+      ? value.nextRunAt
+        ? t("backups.cloud.next", { time: format.date(new Date(value.nextRunAt), { timeStyle: "short" }) })
+        : null
+      : t("backups.cloud.paused");
+  const typical = (value: Ready): string | undefined =>
+    value.typical
+      ? t("backups.cloud.typical", {
+          duration: duration(value.typical.seconds),
+          size: format.fileSize(value.typical.addedBytes),
+        })
+      : undefined;
+  /** The technical text of a failed run, behind a closed "technical details" the owner opens. */
+  const technical = (detail: string | null | undefined) =>
+    detail ? (
+      <details>
+        <summary>{t("backups.cloud.technical")}</summary>
+        <Text as="p" variant="caption" tone="muted">
+          {detail}
+        </Text>
+      </details>
+    ) : undefined;
 
   async function loadSnapshots(): Promise<void> {
     setSnapshotsError(null);
@@ -349,48 +368,35 @@ export function ServerCloudBackupsPanel(props: {
               )}
             </For>
 
-            <ItemGroup class="settings-modal-card" aria-label={t("backups.cloud.destinations")}>
-              <Item class="settings-modal-row">
-                <ItemContent>
-                  <ItemTitle>{t("backups.cloud.destinations")}</ItemTitle>
-                  <Show when={!props.canManage}>
-                    <ItemDescription>{t("backups.cloud.ownerOnly")}</ItemDescription>
-                  </Show>
-                </ItemContent>
-              </Item>
+            <SettingsGroup
+              title={t("backups.cloud.destinations")}
+              description={props.canManage ? undefined : t("backups.cloud.ownerOnly")}
+            >
               <Show
                 when={value().destinations[0]}
                 fallback={
-                  <Item class="settings-modal-row">
-                    <ItemContent>
-                      <ItemTitle>{t("backups.cloud.provider.proton")}</ItemTitle>
-                      <ItemDescription>{t("backups.cloud.notConnected")}</ItemDescription>
-                    </ItemContent>
+                  <SettingsRow label={t("backups.cloud.provider.proton")} description={t("backups.cloud.notConnected")}>
                     <Show when={props.canManage}>
-                      <ItemActions>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={manageDisabled()}
-                          onClick={() => setConnectOpen(true)}
-                        >
-                          {t("backups.cloud.connectProton")}
-                        </Button>
-                      </ItemActions>
+                      <Button type="button" size="sm" disabled={manageDisabled()} onClick={() => setConnectOpen(true)}>
+                        {t("backups.cloud.connectProton")}
+                      </Button>
                     </Show>
-                  </Item>
+                  </SettingsRow>
                 }
               >
                 {(drive) => (
-                  <Item class="settings-modal-row">
-                    <ItemContent>
-                      <ItemTitle>
-                        {t("backups.cloud.provider.proton")}{" "}
+                  <SettingsRow
+                    label={
+                      <>
+                        {t("backups.cloud.provider.proton")}
                         <Show when={drive().status === "relogin"}>
+                          {" "}
                           <Badge variant="destructive-light">{t("backups.cloud.relogin")}</Badge>
                         </Show>
-                      </ItemTitle>
-                      <ItemDescription>
+                      </>
+                    }
+                    description={
+                      <>
                         {drive().account}
                         <Show when={drive().space}>
                           {(space) => (
@@ -405,124 +411,112 @@ export function ServerCloudBackupsPanel(props: {
                             </>
                           )}
                         </Show>
-                      </ItemDescription>
-                      <Show when={drive().folder}>
-                        {(folder) => (
-                          <ItemDescription>{t("backups.cloud.folder", { folder: folder() })}</ItemDescription>
-                        )}
-                      </Show>
-                    </ItemContent>
+                      </>
+                    }
+                    help={drive().folder ? t("backups.cloud.folder", { folder: drive().folder ?? "" }) : undefined}
+                  >
                     <Show when={props.canManage}>
-                      <ItemActions>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={manageDisabled() || value().running !== null || drive().status !== "ok"}
+                        onClick={() => setFolderOpen(true)}
+                      >
+                        {t("backups.cloud.changeFolder")}
+                      </Button>
+                      <Show when={drive().status === "relogin"}>
                         <Button
                           type="button"
                           size="sm"
-                          variant="outline"
-                          disabled={manageDisabled() || value().running !== null || drive().status !== "ok"}
-                          onClick={() => setFolderOpen(true)}
-                        >
-                          {t("backups.cloud.changeFolder")}
-                        </Button>
-                        <Show when={drive().status === "relogin"}>
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={manageDisabled()}
-                            onClick={() => setConnectOpen(true)}
-                          >
-                            {t("backups.cloud.relogin")}
-                          </Button>
-                        </Show>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
                           disabled={manageDisabled()}
-                          onClick={() => setDisconnecting(true)}
+                          onClick={() => setConnectOpen(true)}
                         >
-                          {t("backups.cloud.disconnect")}
+                          {t("backups.cloud.relogin")}
                         </Button>
-                      </ItemActions>
+                      </Show>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={manageDisabled()}
+                        onClick={() => setDisconnecting(true)}
+                      >
+                        {t("backups.cloud.disconnect")}
+                      </Button>
                     </Show>
-                  </Item>
+                  </SettingsRow>
                 )}
               </Show>
               <For each={["googleDrive", "onedrive"] as const}>
                 {(provider) => (
-                  <Item class="settings-modal-row">
-                    <ItemContent>
-                      <ItemTitle>
-                        {provider === "googleDrive"
-                          ? t("backups.cloud.provider.googleDrive")
-                          : t("backups.cloud.provider.onedrive")}{" "}
-                        <Badge variant="secondary">{t("backups.cloud.soon")}</Badge>
-                      </ItemTitle>
-                    </ItemContent>
-                  </Item>
+                  <SettingsRow
+                    label={
+                      provider === "googleDrive"
+                        ? t("backups.cloud.provider.googleDrive")
+                        : t("backups.cloud.provider.onedrive")
+                    }
+                    layout="inline"
+                  >
+                    <Badge variant="secondary">{t("backups.cloud.soon")}</Badge>
+                  </SettingsRow>
                 )}
               </For>
-            </ItemGroup>
+            </SettingsGroup>
 
             <Show when={value().destinations[0]}>
-              <ItemGroup class="settings-modal-card" aria-label={t("backups.cloud.status")}>
-                <Item class="settings-modal-row">
-                  <ItemContent>
-                    <ItemTitle>
-                      {value().lastSuccessAt
-                        ? t("backups.cloud.lastCopy", { ago: ago(value().lastSuccessAt) })
-                        : t("backups.cloud.never")}
-                    </ItemTitle>
-                    <ItemDescription aria-live="polite">
-                      <Show when={value().running}>
-                        {(job) => (
-                          <>
-                            {job().kind === "test"
-                              ? t("backups.cloud.running.test")
-                              : job().kind === "restore"
-                                ? t("backups.cloud.running.restore")
-                                : job().kind === "move"
-                                  ? t("backups.cloud.running.move")
-                                  : t("backups.cloud.running.backup")}{" "}
-                          </>
-                        )}
-                      </Show>
-                      <Show when={value().lastBackup?.ok ? value().lastBackup : null}>
-                        {(run) => (
-                          <>
-                            {t("backups.cloud.lastCopyDetail", {
+              <SettingsGroup title={t("backups.cloud.status")} description={t("backups.cloud.incremental")}>
+                <SettingsRow
+                  label={
+                    value().lastSuccessAt
+                      ? t("backups.cloud.lastCopy", { ago: ago(value().lastSuccessAt) })
+                      : t("backups.cloud.never")
+                  }
+                  description={
+                    <Show when={value().lastBackup}>
+                      {(run) =>
+                        run().ok
+                          ? t("backups.cloud.lastCopyDetail", {
                               size: format.fileSize(run().totalBytes),
                               added: format.fileSize(run().addedBytes),
                               duration: duration(run().seconds),
-                            })}{" "}
-                          </>
-                        )}
-                      </Show>
-                      <Show when={value().lastBackup && !value().lastBackup?.ok ? value().lastBackup : null}>
-                        {(run) => (
-                          <>
-                            {t("backups.cloud.lastFailed", { ago: ago(run().finishedAt) })}{" "}
-                            {t(PROBLEM_TEXT[run().problem ?? "other"])}{" "}
-                          </>
-                        )}
-                      </Show>
-                      {value().plan.enabled
-                        ? value().nextRunAt
-                          ? t("backups.cloud.next", {
-                              time: format.date(new Date(value().nextRunAt ?? ""), { timeStyle: "short" }),
                             })
-                          : ""
-                        : t("backups.cloud.paused")}
-                    </ItemDescription>
-                    <Show when={value().running?.progress}>
-                      {(progress) => (
-                        <>
-                          <Progress
-                            value={progress().bytesDone}
-                            maxValue={Math.max(progress().totalBytes, progress().bytesDone, 1)}
-                            aria-label={t("backups.cloud.running.backup")}
-                          />
-                          <ItemDescription aria-live="polite">
-                            {progress().totalBytes > 0
+                          : `${t("backups.cloud.lastFailed", { ago: ago(run().finishedAt) })} ${t(PROBLEM_TEXT[run().problem ?? "other"])}`
+                      }
+                    </Show>
+                  }
+                  help={technical(value().lastBackup?.detail)}
+                >
+                  <Button
+                    type="button"
+                    size="sm"
+                    loading={busy() === "backup" || value().running?.kind === "backup"}
+                    disabled={disabled() || value().running !== null}
+                    onClick={() =>
+                      void act("backup", () => props.calls.run("backup", props.serverId), t("backups.cloud.started"))
+                    }
+                  >
+                    {t("backups.backUpNow")}
+                  </Button>
+                </SettingsRow>
+                <Show when={value().running}>
+                  {(job) => (
+                    <SettingsRow
+                      layout="stack"
+                      aria-live="polite"
+                      label={
+                        job().kind === "test"
+                          ? t("backups.cloud.running.test")
+                          : job().kind === "restore"
+                            ? t("backups.cloud.running.restore")
+                            : job().kind === "move"
+                              ? t("backups.cloud.running.move")
+                              : t("backups.cloud.running.backup")
+                      }
+                      description={
+                        <Show when={job().progress}>
+                          {(progress) =>
+                            progress().totalBytes > 0
                               ? t("backups.cloud.progress", {
                                   done: format.fileSize(progress().bytesDone),
                                   total: format.fileSize(progress().totalBytes),
@@ -532,65 +526,58 @@ export function ServerCloudBackupsPanel(props: {
                               : t("backups.cloud.progressNoTotal", {
                                   done: format.fileSize(progress().bytesDone),
                                   speed: format.fileSize(progress().bytesPerSecond),
-                                })}
-                          </ItemDescription>
-                        </>
-                      )}
-                    </Show>
-                    <ItemDescription>{t("backups.cloud.incremental")}</ItemDescription>
-                    <Show when={value().typical}>
-                      {(typical) => (
-                        <ItemDescription>
-                          {t("backups.cloud.typical", {
-                            duration: duration(typical().seconds),
-                            size: format.fileSize(typical().addedBytes),
-                          })}
-                        </ItemDescription>
-                      )}
-                    </Show>
-                    <ItemDescription>
-                      {value().lastTest
-                        ? value().lastTest?.ok
-                          ? t("backups.cloud.testOk", { ago: ago(value().lastTest?.finishedAt) })
-                          : `${t("backups.cloud.testFailed", { ago: ago(value().lastTest?.finishedAt) })} ${t(PROBLEM_TEXT[value().lastTest?.problem ?? "other"])}`
-                        : t("backups.cloud.testNever")}
-                    </ItemDescription>
-                    <Show when={[value().lastBackup, value().lastTest].find((run) => run?.detail)?.detail}>
-                      {(detail) => (
-                        <details>
-                          <summary>{t("backups.cloud.technical")}</summary>
-                          <p class="text-muted-foreground">{detail()}</p>
-                        </details>
-                      )}
-                    </Show>
-                  </ItemContent>
-                  <ItemActions>
-                    <Button
-                      type="button"
-                      size="sm"
-                      loading={busy() === "backup" || value().running?.kind === "backup"}
-                      disabled={disabled() || value().running !== null}
-                      onClick={() =>
-                        void act("backup", () => props.calls.run("backup", props.serverId), t("backups.cloud.started"))
+                                })
+                          }
+                        </Show>
                       }
                     >
-                      {t("backups.backUpNow")}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      loading={busy() === "test" || value().running?.kind === "test"}
-                      disabled={disabled() || value().running !== null}
-                      onClick={() =>
-                        void act("test", () => props.calls.run("test", props.serverId), t("backups.cloud.testStarted"))
-                      }
-                    >
-                      {t("backups.cloud.testNow")}
-                    </Button>
-                  </ItemActions>
-                </Item>
-              </ItemGroup>
+                      <Show when={job().progress}>
+                        {(progress) => (
+                          <Progress
+                            value={progress().bytesDone}
+                            maxValue={Math.max(progress().totalBytes, progress().bytesDone, 1)}
+                            aria-label={t("backups.cloud.running.backup")}
+                          />
+                        )}
+                      </Show>
+                    </SettingsRow>
+                  )}
+                </Show>
+                <Show when={nextRun(value()) || value().typical}>
+                  <SettingsRow
+                    label={nextRun(value()) ?? typical(value())}
+                    description={nextRun(value()) ? typical(value()) : undefined}
+                  />
+                </Show>
+                <SettingsRow
+                  label={
+                    value().lastTest
+                      ? value().lastTest?.ok
+                        ? t("backups.cloud.testOk", { ago: ago(value().lastTest?.finishedAt) })
+                        : t("backups.cloud.testFailed", { ago: ago(value().lastTest?.finishedAt) })
+                      : t("backups.cloud.testNever")
+                  }
+                  description={
+                    value().lastTest && !value().lastTest?.ok
+                      ? t(PROBLEM_TEXT[value().lastTest?.problem ?? "other"])
+                      : undefined
+                  }
+                  help={technical(value().lastTest?.detail)}
+                >
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    loading={busy() === "test" || value().running?.kind === "test"}
+                    disabled={disabled() || value().running !== null}
+                    onClick={() =>
+                      void act("test", () => props.calls.run("test", props.serverId), t("backups.cloud.testStarted"))
+                    }
+                  >
+                    {t("backups.cloud.testNow")}
+                  </Button>
+                </SettingsRow>
+              </SettingsGroup>
 
               <Show when={plan()}>
                 {(draft) => (
@@ -722,111 +709,104 @@ export function ServerCloudBackupsPanel(props: {
                 )}
               </Show>
 
-              <ItemGroup class="settings-modal-card" aria-label={t("backups.cloud.restoreTitle")}>
-                <Item class="settings-modal-row">
-                  <ItemContent>
-                    <ItemTitle>{t("backups.cloud.restoreTitle")}</ItemTitle>
-                    <ItemDescription>{t("backups.cloud.restoreDescription")}</ItemDescription>
-                    <Show when={snapshotsError()}>
-                      {(error) => <ItemDescription class="text-destructive">{error()}</ItemDescription>}
-                    </Show>
-                  </ItemContent>
-                  <ItemActions>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      loading={busy() === "snapshots"}
-                      disabled={disabled()}
-                      onClick={() => void loadSnapshots()}
-                    >
-                      {t("backups.cloud.showCopies")}
-                    </Button>
-                  </ItemActions>
-                </Item>
+              <Show when={snapshotsError()}>
+                {(error) => (
+                  <Alert tone="danger" role="alert">
+                    <AlertIcon>
+                      <TriangleAlert />
+                    </AlertIcon>
+                    <AlertContent>
+                      <AlertDescription>{error()}</AlertDescription>
+                    </AlertContent>
+                  </Alert>
+                )}
+              </Show>
+              <SettingsGroup
+                title={t("backups.cloud.restoreTitle")}
+                description={t("backups.cloud.restoreDescription")}
+                actions={
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    loading={busy() === "snapshots"}
+                    disabled={disabled()}
+                    onClick={() => void loadSnapshots()}
+                  >
+                    {t("backups.cloud.showCopies")}
+                  </Button>
+                }
+              >
                 <For each={value().restores.slice().reverse()}>
                   {(row) => (
-                    <Item class="settings-modal-row">
-                      <ItemContent>
-                        <ItemDescription>
-                          {row.status !== "ok"
-                            ? t("backups.cloud.restoreFailedRow", { when: when(row.finishedAt) })
-                            : row.partial
-                              ? t("backups.cloud.restorePartialReady", { when: when(row.finishedAt) })
-                              : t("backups.cloud.restoreReady", { when: when(row.finishedAt) })}
-                        </ItemDescription>
-                      </ItemContent>
+                    <SettingsRow
+                      label={
+                        row.status !== "ok"
+                          ? t("backups.cloud.restoreFailedRow", { when: when(row.finishedAt) })
+                          : row.partial
+                            ? t("backups.cloud.restorePartialReady", { when: when(row.finishedAt) })
+                            : t("backups.cloud.restoreReady", { when: when(row.finishedAt) })
+                      }
+                    >
                       <Show when={row.status === "ok" && props.canManage}>
-                        <ItemActions>
-                          <Show
-                            when={!row.preparedAs}
-                            fallback={<Badge variant="success-light">{t("backups.cloud.preparedBadge")}</Badge>}
-                          >
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={manageDisabled() || value().running !== null}
-                              onClick={() => {
-                                setApplyUnderstood(false);
-                                setApplyError(null);
-                                setApplying({ id: row.id, finishedAt: row.finishedAt });
-                              }}
-                            >
-                              {t("backups.cloud.apply")}
-                            </Button>
-                          </Show>
-                        </ItemActions>
-                      </Show>
-                    </Item>
-                  )}
-                </For>
-                <Show when={snapshots()?.length === 0 && !snapshotsError()}>
-                  <Item class="settings-modal-row">
-                    <ItemContent>
-                      <ItemDescription>{t("backups.cloud.noCopies")}</ItemDescription>
-                    </ItemContent>
-                  </Item>
-                </Show>
-                <For each={snapshots() ?? []}>
-                  {(snapshot) => (
-                    <Item class="settings-modal-row">
-                      <ItemContent>
-                        <ItemTitle>{when(snapshot.time)}</ItemTitle>
-                        <ItemDescription>
-                          {format.fileSize(snapshot.bytes)} ·{" "}
-                          {snapshot.groups.length
-                            ? t("backups.cloud.copyGroups", {
-                                groups: format.list(snapshot.groups.map((group) => t(GROUP_TEXT[group][0]))),
-                              })
-                            : t("backups.cloud.copyAll")}
-                        </ItemDescription>
-                      </ItemContent>
-                      <Show when={props.canManage}>
-                        <ItemActions>
+                        <Show
+                          when={!row.preparedAs}
+                          fallback={<Badge variant="success-light">{t("backups.cloud.preparedBadge")}</Badge>}
+                        >
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
                             disabled={manageDisabled() || value().running !== null}
-                            onClick={() => setRestoring(snapshot)}
+                            onClick={() => {
+                              setApplyUnderstood(false);
+                              setApplyError(null);
+                              setApplying({ id: row.id, finishedAt: row.finishedAt });
+                            }}
                           >
-                            {t("backups.cloud.restore")}
+                            {t("backups.cloud.apply")}
                           </Button>
-                        </ItemActions>
+                        </Show>
                       </Show>
-                    </Item>
+                    </SettingsRow>
                   )}
                 </For>
-                <Item class="settings-modal-row">
-                  <ItemContent>
-                    <ItemTitle>{t("backups.cloud.otherServerTitle")}</ItemTitle>
-                    <ItemDescription>
-                      {t("backups.cloud.otherServerDescription", { folder: value().destinations[0]?.folder ?? "" })}
-                    </ItemDescription>
-                  </ItemContent>
-                </Item>
-              </ItemGroup>
+                <Show when={snapshots()?.length === 0 && !snapshotsError()}>
+                  <SettingsRow label={t("backups.cloud.noCopies")} />
+                </Show>
+                <For each={snapshots() ?? []}>
+                  {(snapshot) => (
+                    <SettingsRow
+                      label={when(snapshot.time)}
+                      description={`${format.fileSize(snapshot.bytes)} · ${
+                        snapshot.groups.length
+                          ? t("backups.cloud.copyGroups", {
+                              groups: format.list(snapshot.groups.map((group) => t(GROUP_TEXT[group][0]))),
+                            })
+                          : t("backups.cloud.copyAll")
+                      }`}
+                    >
+                      <Show when={props.canManage}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={manageDisabled() || value().running !== null}
+                          onClick={() => setRestoring(snapshot)}
+                        >
+                          {t("backups.cloud.restore")}
+                        </Button>
+                      </Show>
+                    </SettingsRow>
+                  )}
+                </For>
+                <SettingsRow
+                  label={t("backups.cloud.otherServerTitle")}
+                  description={t("backups.cloud.otherServerDescription", {
+                    folder: value().destinations[0]?.folder ?? "",
+                  })}
+                />
+              </SettingsGroup>
             </Show>
           </SettingsSection>
         )}
@@ -866,31 +846,30 @@ export function ServerCloudBackupsPanel(props: {
           void act("saved", () => props.calls.passwordSaved(props.serverId));
         }}
       >
-        <div class="flex flex-col gap-3">
-          <Input size="sm" readonly value={password() ?? ""} aria-label={t("backups.cloud.password.title")} />
-          <div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                void navigator.clipboard
-                  ?.writeText(password() ?? "")
-                  .then(() => actionToast.success(t("backups.cloud.password.copied")));
-              }}
-            >
-              {t("backups.cloud.password.copy")}
-            </Button>
-          </div>
-          <div class="flex items-center gap-2">
-            <Checkbox
-              id="cloud-backups-password-kept"
-              checked={passwordKept()}
-              onChange={(event) => setPasswordKept(event.currentTarget.checked)}
-            />
-            <label for="cloud-backups-password-kept">{t("backups.cloud.password.confirm")}</label>
-          </div>
+        <Field label={t("backups.cloud.password.title")}>
+          <Input size="sm" readonly value={password() ?? ""} />
+        </Field>
+        <div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              void navigator.clipboard
+                ?.writeText(password() ?? "")
+                .then(() => actionToast.success(t("backups.cloud.password.copied")));
+            }}
+          >
+            {t("backups.cloud.password.copy")}
+          </Button>
         </div>
+        <SettingsRow layout="inline" label={t("backups.cloud.password.confirm")} controlId={`${ids}-password-kept`}>
+          <Checkbox
+            id={`${ids}-password-kept`}
+            checked={passwordKept()}
+            onChange={(event) => setPasswordKept(event.currentTarget.checked)}
+          />
+        </SettingsRow>
       </FormDialog>
 
       <ConfirmDialog
@@ -942,14 +921,13 @@ export function ServerCloudBackupsPanel(props: {
         error={applyError() ?? undefined}
         onConfirm={() => apply()}
       >
-        <div class="flex items-center gap-2">
+        <SettingsRow layout="inline" label={t("backups.cloud.applyUnderstand")} controlId={`${ids}-apply-understood`}>
           <Checkbox
-            id="cloud-apply-understood"
+            id={`${ids}-apply-understood`}
             checked={applyUnderstood()}
             onChange={(event) => setApplyUnderstood(event.currentTarget.checked)}
           />
-          <label for="cloud-apply-understood">{t("backups.cloud.applyUnderstand")}</label>
-        </div>
+        </SettingsRow>
       </ConfirmDialog>
     </>
   );
@@ -1007,6 +985,7 @@ function ProtonConnectDialog(props: {
   onConnected: (result: CloudConnectResult) => void;
 }) {
   const { t, errorMessage } = useText();
+  const ids = createUniqueId();
   const [form, setForm] = createStore<ConnectDraft>({ ...untrack(() => connectDraft(props.serverId)) });
   const [pending, setPending] = createSignal(false);
   /** One field changed: the store redraws it, and the draft keeps it. */
@@ -1098,52 +1077,43 @@ function ProtonConnectDialog(props: {
       error={problem()}
       onSubmit={() => void submit()}
     >
-      <div class="flex flex-col gap-3">
-        <Field label={t("backups.cloud.connect.email")}>
-          <Input type="email" autocomplete="username" value={email()} onValueChange={setEmail} />
+      <Field label={t("backups.cloud.connect.email")}>
+        <Input type="email" autocomplete="username" value={email()} onValueChange={setEmail} />
+      </Field>
+      <Field label={t("backups.cloud.connect.password")}>
+        <Input
+          type="password"
+          autocomplete="current-password"
+          value={password()}
+          onInput={(event) => setPassword(event.currentTarget.value)}
+        />
+      </Field>
+      <Field label={t("backups.cloud.connect.folder")} description={t("backups.cloud.connect.folderHint")}>
+        <Input value={form.folder} onValueChange={(value) => set("folder", value)} />
+      </Field>
+      <Field label={t("backups.cloud.connect.twoFactor")} description={t("backups.cloud.connect.twoFactorHint")}>
+        <Input inputmode="numeric" autocomplete="one-time-code" maxlength={8} value={code()} onValueChange={setCode} />
+      </Field>
+      <SettingsRow layout="inline" label={t("backups.cloud.connect.twoPasswords")} controlId={`${ids}-two-passwords`}>
+        <Checkbox
+          id={`${ids}-two-passwords`}
+          checked={twoPasswords()}
+          onChange={(event) => setTwoPasswords(event.currentTarget.checked)}
+        />
+      </SettingsRow>
+      <Show when={twoPasswords()}>
+        <Field label={t("backups.cloud.connect.mailboxPassword")}>
+          <Input type="password" value={mailbox()} onInput={(event) => setMailbox(event.currentTarget.value)} />
         </Field>
-        <Field label={t("backups.cloud.connect.password")}>
-          <Input
-            type="password"
-            autocomplete="current-password"
-            value={password()}
-            onInput={(event) => setPassword(event.currentTarget.value)}
-          />
+      </Show>
+      <Show when={askRepository()}>
+        <Field
+          label={t("backups.cloud.connect.repositoryPassword")}
+          description={t("backups.cloud.connect.repositoryPasswordHint")}
+        >
+          <Input type="password" value={repository()} onInput={(event) => setRepository(event.currentTarget.value)} />
         </Field>
-        <Field label={t("backups.cloud.connect.folder")} description={t("backups.cloud.connect.folderHint")}>
-          <Input value={form.folder} onValueChange={(value) => set("folder", value)} />
-        </Field>
-        <Field label={t("backups.cloud.connect.twoFactor")} description={t("backups.cloud.connect.twoFactorHint")}>
-          <Input
-            inputmode="numeric"
-            autocomplete="one-time-code"
-            maxlength={8}
-            value={code()}
-            onValueChange={setCode}
-          />
-        </Field>
-        <div class="flex items-center gap-2">
-          <Checkbox
-            id="cloud-backups-two-passwords"
-            checked={twoPasswords()}
-            onChange={(event) => setTwoPasswords(event.currentTarget.checked)}
-          />
-          <label for="cloud-backups-two-passwords">{t("backups.cloud.connect.twoPasswords")}</label>
-        </div>
-        <Show when={twoPasswords()}>
-          <Field label={t("backups.cloud.connect.mailboxPassword")}>
-            <Input type="password" value={mailbox()} onInput={(event) => setMailbox(event.currentTarget.value)} />
-          </Field>
-        </Show>
-        <Show when={askRepository()}>
-          <Field
-            label={t("backups.cloud.connect.repositoryPassword")}
-            description={t("backups.cloud.connect.repositoryPasswordHint")}
-          >
-            <Input type="password" value={repository()} onInput={(event) => setRepository(event.currentTarget.value)} />
-          </Field>
-        </Show>
-      </div>
+      </Show>
     </FormDialog>
   );
 }

@@ -93,8 +93,43 @@ function adminRuntime(mock: ReturnType<typeof createMockOpenBot>): WebAdminRunti
             ],
           }),
         );
+      case HOST_CLOUD_BACKUPS_ROUTES.folders: {
+        const path =
+          body && typeof body === "object" && "path" in body && typeof body.path === "string" ? body.path : "";
+        return decode({
+          ok: true,
+          path,
+          folders: path ? ["Delynith", "Oficina"] : ["Atelier Backups", "Documentos", "Fotos"],
+          hasCopies: false,
+        });
+      }
+      case HOST_CLOUD_BACKUPS_ROUTES.browse:
+        return decode(
+          wholeNumbers({
+            ok: true,
+            entries: [
+              { name: "agents", path: "/agents", dir: true, bytes: 0 },
+              { name: "settings", path: "/settings", dir: true, bytes: 0 },
+              { name: "openbot.db", path: "/openbot.db", dir: false, bytes: 2.3 * GB },
+            ],
+          }),
+        );
       case HOST_BACKUPS_ROUTES.overview:
         return decode(wholeNumbers(BACKUPS));
+      case HOST_BACKUPS_ROUTES.check:
+        return decode({
+          ok: true,
+          problems: [],
+          warnings: ["La copia es de ayer: el trabajo de hoy se reemplaza."],
+          backup: { id: "backup-20261125-030000", createdAt: "2026-11-25T03:00:00Z", schema: 47 },
+          current: { schema: 47 },
+          restore: ["core", "motion-files"],
+          counts: [
+            { table: "messages", now: 18420, backup: 18102 },
+            { table: "tickets", now: 312, backup: 309 },
+          ],
+          confirm: "backup-20261125-030000",
+        });
       case WORKSPACE_ROUTES.settings:
         return decode(DEFAULT_WORKSPACE_SETTINGS);
       default:

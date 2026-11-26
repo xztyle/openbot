@@ -16,17 +16,14 @@ import {
   History,
   Info,
   Input,
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemTitle,
+  SettingsGroup,
+  SettingsRow,
   SettingsSection,
+  Text,
   TriangleAlert,
 } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createSignal, For, onCleanup, Show, untrack } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, onCleanup, Show, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { type HostCloudBackupsCalls, ServerCloudBackupsPanel } from "./ServerCloudBackupsPanel";
 
@@ -61,6 +58,7 @@ export function ServerBackupsPanel(
   props: ServerBackupsOptions & { serverId: string; hostName: string; actionsAvailable: boolean },
 ) {
   const { t, errorMessage, format } = useText();
+  const ids = createUniqueId();
   const [overview, setOverview] = createSignal<HostBackupsOverview | null>(null);
   const [loadError, setLoadError] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal<string | null>(null);
@@ -199,23 +197,7 @@ export function ServerBackupsPanel(
 
   return (
     <>
-      <SettingsSection
-        title={t("backups.title", { name: props.hostName })}
-        description={t("backups.description")}
-        actions={
-          <Show when={ready()}>
-            <Button
-              type="button"
-              size="sm"
-              loading={busy() === "create" || ready()?.running?.kind === "backup"}
-              disabled={!props.actionsAvailable || Boolean(busy()) || working()}
-              onClick={() => void backUpNow()}
-            >
-              {t("backups.backUpNow")}
-            </Button>
-          </Show>
-        }
-      >
+      <SettingsSection title={t("backups.title", { name: props.hostName })} description={t("backups.description")}>
         <Show when={loadError()}>
           {(error) => (
             <Alert tone="danger" role="alert">
@@ -266,79 +248,78 @@ export function ServerBackupsPanel(
                   </Alert>
                 )}
               </Show>
-              <ItemGroup class="settings-modal-card">
-                <Item class="settings-modal-row">
-                  <ItemContent>
-                    <ItemTitle>{t("backups.schedule", { time: value().nightly })}</ItemTitle>
-                    <ItemDescription>
-                      {t("backups.retention", { daily: value().retention.daily, weekly: value().retention.weekly })}{" "}
-                      {t("backups.disk", {
-                        free: format.fileSize(value().disk.freeBytes),
-                        total: format.fileSize(value().disk.totalBytes),
-                      })}{" "}
-                      {value().offsite ? t("backups.offsiteOn") : t("backups.offsiteOff")}
-                    </ItemDescription>
-                  </ItemContent>
-                </Item>
+              <SettingsGroup label={t("backups.title", { name: props.hostName })}>
+                <SettingsRow
+                  label={t("backups.schedule", { time: value().nightly })}
+                  description={`${t("backups.retention", { daily: value().retention.daily, weekly: value().retention.weekly })} ${t(
+                    "backups.disk",
+                    {
+                      free: format.fileSize(value().disk.freeBytes),
+                      total: format.fileSize(value().disk.totalBytes),
+                    },
+                  )} ${value().offsite ? t("backups.offsiteOn") : t("backups.offsiteOff")}`}
+                >
+                  <Button
+                    type="button"
+                    size="sm"
+                    loading={busy() === "create" || value().running?.kind === "backup"}
+                    disabled={!props.actionsAvailable || Boolean(busy()) || working()}
+                    onClick={() => void backUpNow()}
+                  >
+                    {t("backups.backUpNow")}
+                  </Button>
+                </SettingsRow>
                 {/* A restore shows in the notice above. */}
                 <Show when={value().running?.kind === "restore" ? null : value().running}>
                   {(job) => (
-                    <Item class="settings-modal-row">
-                      <ItemContent>
-                        <ItemTitle>
-                          {job().kind === "restore" ? t("backups.restoring", { id: job().id }) : t("backups.running")}
-                        </ItemTitle>
-                        <ItemDescription aria-live="polite">{job().phase}</ItemDescription>
-                      </ItemContent>
-                    </Item>
+                    <SettingsRow
+                      aria-live="polite"
+                      label={job().kind === "restore" ? t("backups.restoring", { id: job().id }) : t("backups.running")}
+                      description={job().phase}
+                    />
                   )}
                 </Show>
                 <Show when={value().backups.length === 0}>
-                  <Item class="settings-modal-row">
-                    <ItemContent>
-                      <ItemDescription>{t("backups.empty")}</ItemDescription>
-                    </ItemContent>
-                  </Item>
+                  <SettingsRow label={t("backups.empty")} />
                 </Show>
                 <For each={value().backups}>
                   {(backup) => (
-                    <Item class="settings-modal-row">
-                      <ItemContent>
-                        <ItemTitle>
+                    <SettingsRow
+                      label={
+                        <>
                           {when(backup.createdAt)} {statusBadge(backup)}
-                        </ItemTitle>
-                        <ItemDescription>
-                          {backup.status === "failed"
-                            ? `${reasonLabel(backup)} · ${backup.error ?? t("backups.status.failed")}`
-                            : [
-                                t("backups.row", {
-                                  reason: reasonLabel(backup),
-                                  size: format.fileSize(backup.bytes),
-                                  added: format.fileSize(backup.newBytes),
-                                }),
-                                ...(skipped(backup).length > 0
-                                  ? [t("backups.skipped", { parts: format.list(skipped(backup)) })]
-                                  : []),
-                              ].join(" · ")}
-                        </ItemDescription>
-                      </ItemContent>
+                        </>
+                      }
+                      description={
+                        backup.status === "failed"
+                          ? `${reasonLabel(backup)} · ${backup.error ?? t("backups.status.failed")}`
+                          : [
+                              t("backups.row", {
+                                reason: reasonLabel(backup),
+                                size: format.fileSize(backup.bytes),
+                                added: format.fileSize(backup.newBytes),
+                              }),
+                              ...(skipped(backup).length > 0
+                                ? [t("backups.skipped", { parts: format.list(skipped(backup)) })]
+                                : []),
+                            ].join(" · ")
+                      }
+                    >
                       <Show when={props.canRestore && backup.status !== "failed" && backup.status !== "running"}>
-                        <ItemActions>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={!props.actionsAvailable || working()}
-                            onClick={() => openRestore(backup)}
-                          >
-                            {t("backups.restore")}
-                          </Button>
-                        </ItemActions>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={!props.actionsAvailable || working()}
+                          onClick={() => openRestore(backup)}
+                        >
+                          {t("backups.restore")}
+                        </Button>
                       </Show>
-                    </Item>
+                    </SettingsRow>
                   )}
                 </For>
-              </ItemGroup>
+              </SettingsGroup>
             </>
           )}
         </Show>
@@ -364,51 +345,71 @@ export function ServerBackupsPanel(
           }}
         >
           <Show when={check() === null && checkError() === null}>
-            <p>{t("backups.checking")}</p>
+            <Text as="p" variant="body-sm" tone="muted">
+              {t("backups.checking")}
+            </Text>
           </Show>
           <Show when={check()}>
             {(result) => (
-              <div class="flex flex-col gap-2">
-                <For each={result().problems}>{(problem) => <p class="text-destructive">{problem}</p>}</For>
-                <For each={result().warnings}>{(warning) => <p class="text-muted-foreground">{warning}</p>}</For>
-                <Show when={result().counts.length > 0}>
-                  <p class="text-muted-foreground">
-                    {format.list(
-                      result().counts.map((row) =>
-                        t("backups.countRow", {
-                          table: row.table.replace(/^projection_/u, "").replaceAll("_", " "),
-                          now: format.number(row.now),
-                          backup: format.number(row.backup),
-                        }),
-                      ),
-                    )}
-                  </p>
+              <>
+                <Show when={result().problems.length + result().warnings.length + result().counts.length > 0}>
+                  <ul>
+                    <For each={result().problems}>
+                      {(problem) => (
+                        <li>
+                          <Text variant="body-sm" tone="danger">
+                            {problem}
+                          </Text>
+                        </li>
+                      )}
+                    </For>
+                    <For each={result().warnings}>{(warning) => <li>{warning}</li>}</For>
+                    <Show when={result().counts.length > 0}>
+                      <li>
+                        {format.list(
+                          result().counts.map((row) =>
+                            t("backups.countRow", {
+                              table: row.table.replace(/^projection_/u, "").replaceAll("_", " "),
+                              now: format.number(row.now),
+                              backup: format.number(row.backup),
+                            }),
+                          ),
+                        )}
+                      </li>
+                    </Show>
+                  </ul>
                 </Show>
-                <div class="flex items-center gap-2">
-                  <Checkbox
-                    id="server-backups-include-spaces"
-                    checked={spaces()}
-                    onChange={(event) => {
-                      const next = event.currentTarget.checked;
-                      setSpaces(next);
-                      const backup = target();
-                      if (backup) void runCheck(backup, next);
-                    }}
-                  />
-                  <label for="server-backups-include-spaces">{t("backups.includeSpaces")}</label>
-                </div>
-                <Show when={result().ok}>
-                  <p>{t("backups.typeToConfirm", { id: result().confirm })}</p>
-                  <Input
-                    size="sm"
-                    value={typed()}
-                    autocomplete="off"
-                    spellcheck={false}
-                    onValueChange={setTyped}
-                    aria-label={t("backups.typeToConfirm", { id: result().confirm })}
-                  />
-                </Show>
-              </div>
+                <SettingsGroup label={t("backups.restoreConfirm")}>
+                  <SettingsRow layout="inline" label={t("backups.includeSpaces")} controlId={`${ids}-spaces`}>
+                    <Checkbox
+                      id={`${ids}-spaces`}
+                      checked={spaces()}
+                      onChange={(event) => {
+                        const next = event.currentTarget.checked;
+                        setSpaces(next);
+                        const backup = target();
+                        if (backup) void runCheck(backup, next);
+                      }}
+                    />
+                  </SettingsRow>
+                  <Show when={result().ok}>
+                    <SettingsRow
+                      layout="stack"
+                      label={t("backups.typeToConfirm", { id: result().confirm })}
+                      controlId={`${ids}-confirm`}
+                    >
+                      <Input
+                        id={`${ids}-confirm`}
+                        size="sm"
+                        value={typed()}
+                        autocomplete="off"
+                        spellcheck={false}
+                        onValueChange={setTyped}
+                      />
+                    </SettingsRow>
+                  </Show>
+                </SettingsGroup>
+              </>
             )}
           </Show>
         </ConfirmDialog>

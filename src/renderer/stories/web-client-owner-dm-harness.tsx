@@ -71,6 +71,90 @@ function motion(id: string, turnId: string, time: string, text: string): Convers
   };
 }
 
+/** A message between agents in Research's chat, as the host stores it: a request, or a report to one. */
+function exchange(
+  id: string,
+  turnId: string,
+  time: string,
+  text: string,
+  link: { direction: "incoming" | "outgoing"; agent: string; replyTo?: string },
+): ConversationMessage {
+  const incoming = link.direction === "incoming";
+  return {
+    id: incoming ? id : `outbox-${id}`,
+    turnId,
+    author: incoming ? "agent" : "system",
+    source: incoming ? "agent" : "system",
+    itemType: "agent-exchange",
+    ...(incoming ? { senderAgentId: link.agent } : {}),
+    text,
+    createdAt: at(time),
+    status: "completed",
+    exchange: {
+      direction: link.direction,
+      messageId: id,
+      senderAgentId: incoming ? link.agent : AGENT,
+      recipientAgentIds: [incoming ? AGENT : link.agent],
+      replyToMessageId: link.replyTo ?? null,
+      ...(link.replyTo ? { expectsReply: false } : {}),
+      deliveries: [],
+    },
+  };
+}
+
+/**
+ * A delegation chain of `hops` teammates that the owner's message starts: each teammate's report makes
+ * Research ask the next, and the last report makes Research deliver. Only the owner's turn has a
+ * person's message; the chain links each report to its request by the exchange ids.
+ */
+function delegationChain(key: string, start: number, hops: number, delivery: string) {
+  const turns: { turnId: string; activity: boolean; messages: ConversationMessage[] }[] = [];
+  const time = (minute: number) =>
+    `${15 + Math.floor((start + minute) / 60)}:${String((start + minute) % 60).padStart(2, "0")}`;
+  const turn = (index: number) => `turn-${key}-${index}`;
+  const request = (index: number) => `${key}-request-${index}`;
+  turns.push({
+    turnId: turn(0),
+    activity: false,
+    messages: [
+      person(`${key}-owner`, turn(0), time(0), `Necesito la portada (${key}).`),
+      exchange(request(0), turn(0), time(1), "Genera la portada 16:9.", { direction: "outgoing", agent: "chief" }),
+      answer(`${key}-asked`, turn(0), time(1), "Se la pedí al equipo."),
+    ],
+  });
+  for (let hop = 1; hop <= hops; hop += 1) {
+    const reported = exchange(`${key}-report-${hop}`, turn(hop), time(hop * 2), `Paso ${hop} listo.`, {
+      direction: "incoming",
+      agent: "chief",
+      replyTo: request(hop - 1),
+    });
+    turns.push({
+      turnId: turn(hop),
+      activity: false,
+      messages:
+        hop < hops
+          ? [
+              reported,
+              exchange(request(hop), turn(hop), time(hop * 2 + 1), `Haz el paso ${hop + 1}.`, {
+                direction: "outgoing",
+                agent: "chief",
+              }),
+              answer(`${key}-passed-${hop}`, turn(hop), time(hop * 2 + 1), `Paso ${hop} hecho, sigue el ${hop + 1}.`),
+            ]
+          : [reported, answer(`${key}-delivery`, turn(hop), time(hop * 2 + 1), delivery)],
+    });
+  }
+  return turns;
+}
+
+/** Text of the turns that deliver a delegation chain to the owner (`scripts/owner-dm-only-web-e2e.ts`). */
+const CHAIN_DELIVERIES = {
+  two: "Aquí tienes las tres portadas. ¿Va la v2, o prefieres la v1 o la v3?",
+  three: "Listo el pack completo tras tres pasos.",
+} as const;
+/** The answer to a report to a request that a Motion event started: no chain of the owner. */
+const BACKGROUND_REPORT_ANSWER = "El banner está revisado.";
+
 /** The turns, in the order a host adds them, with whether each is the agent's own activity. */
 export const OWNER_DM_TURNS: { turnId: string; activity: boolean; messages: ConversationMessage[] }[] = [
   {
@@ -136,6 +220,29 @@ export const OWNER_DM_TURNS: { turnId: string; activity: boolean; messages: Conv
         ],
       },
       answer("told-3", "turn-told", "14:02", "Listo."),
+    ],
+  },
+  ...delegationChain("two", 0, 2, CHAIN_DELIVERIES.two),
+  ...delegationChain("three", 20, 3, CHAIN_DELIVERIES.three),
+  {
+    turnId: "turn-bg-motion",
+    activity: true,
+    messages: [
+      motion("bg-1", "turn-bg-motion", "16:00", "Motion · MAS-33 needs a banner check."),
+      exchange("bg-request", "turn-bg-motion", "16:01", "Revisa el banner.", { direction: "outgoing", agent: "chief" }),
+      answer("bg-2", "turn-bg-motion", "16:01", "Pedí revisar el banner."),
+    ],
+  },
+  {
+    turnId: "turn-bg-report",
+    activity: true,
+    messages: [
+      exchange("bg-report", "turn-bg-report", "16:05", "Banner revisado.", {
+        direction: "incoming",
+        agent: "chief",
+        replyTo: "bg-request",
+      }),
+      answer("bg-3", "turn-bg-report", "16:06", BACKGROUND_REPORT_ANSWER),
     ],
   },
 ];

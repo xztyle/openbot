@@ -7,10 +7,12 @@
  * guardrail note, a research result), a mail, or a routine run. It counts nothing unread, tells
  * nothing, and the chat folds it into one "Agent activity" row for each burst.
  *
- * Two kinds of message still reach the owner from such a turn: a message that the agent wrote to the
- * owner on purpose (`OWNER_MESSAGE_ITEM_TYPE`, from `message_owner`), and a question that waits for
- * the owner's answer. A teammate's report that answers a request the agent sent while it worked on a
- * person's own message is that person's answer too, unless the agent passed it on to another agent.
+ * A turn in which the agent writes to the owner on purpose (`OWNER_MESSAGE_ITEM_TYPE`, from
+ * `message_owner`) or asks the owner a question that waits for the answer is the owner's conversation,
+ * whatever started it. A teammate's report that answers a request of the owner's request chain is the
+ * owner's answer too, unless the agent passed it on to another agent. The chain is transitive: a request
+ * that the agent sent in a person's own turn, or in a turn that a report of the chain started, at any
+ * depth. The links are the exchange ids (`messageId` and `replyToMessageId`), not times.
  *
  * This is the one rule. The host's read state (`conversation-read-store.ts`, and its SQL twin in
  * `thread-read-states.ts`), the end-of-turn notice (`isBackgroundTurn`), the chat's fold and the
@@ -77,9 +79,10 @@ export interface OwnerConversationRow {
   /**
    * `person`: a person's own message. `routine`: the message of a routine run. `notice`: a note from
    * Atelier (`system-notice:*`). `exchange`: a message between agents. `answer`: the agent's answer
-   * text. `other`: any other row.
+   * text. `owner`: a message to the owner on purpose or a question to them (`isOwnerAddressedItemType`).
+   * `other`: any other row.
    */
-  role: "person" | "routine" | "notice" | "exchange" | "answer" | "other";
+  role: "person" | "routine" | "notice" | "exchange" | "answer" | "owner" | "other";
   notice?: SystemNoticeKind | null | undefined;
   /** On an `exchange` row. Absent on one stored before the summary: its author tells its direction. */
   exchange?:
@@ -113,8 +116,9 @@ function sameSource(left: AgentActivitySource, right: AgentActivitySource): bool
 /**
  * The turns of the agent's own activity, with what woke the agent for each, in the order it came.
  * A turn is one when no person wrote in it and something else started it: a Motion event, a note from
- * Atelier, a mail, a routine run, or a teammate's message. A teammate's report that answers a request
- * sent in a turn a person's own message started is not one, unless the agent sent its answer on to an
+ * Atelier, a mail, a routine run, or a teammate's message. It is not one when the agent wrote to the
+ * owner in it on purpose or asked the owner a question. A teammate's report that answers a request of
+ * a person's request chain (`ownerChainTurns`) is not one, unless the agent sent its answer on to an
  * agent. With `wholeTurns`, the rows hold every message of each turn, so a turn that no person wrote
  * in is one even with no sign of what started it, such as a restart note. Without it, such a turn is
  * not one, nor is `partialTurnId`: a client holds the latest pages, and the first turn it holds can
@@ -126,13 +130,13 @@ export function backgroundTurns(
 ): Map<string, AgentActivitySource[]> {
   const sources = new Map<string, AgentActivitySource[]>();
   const seen = new Set<string>();
-  const relays = new Set<string>();
   const requests = new Set<string>();
-  const reports = new Map<string, { agentId: string; replyTo: string | null }>();
+  const reports = new Map<string, Array<{ agentId: string; replyTo: string | null }>>();
   const answers = new Map<string, Set<string>>();
   const forwarded = new Map<string, string[]>();
   const requestTurns = new Map<string, string>();
   const people = new Set<string>();
+  const toOwner = new Set<string>();
   // A person's own message, not a routine run's: only work a person asked for reports to them.
   const personAsked = new Set<string>();
   const add = (turnId: string, source: AgentActivitySource) => {
@@ -147,7 +151,8 @@ export function backgroundTurns(
     if (row.role === "person") {
       people.add(turnId);
       personAsked.add(turnId);
-    } else if (row.role === "routine") add(turnId, { kind: "routine" });
+    } else if (row.role === "owner") toOwner.add(turnId);
+    else if (row.role === "routine") add(turnId, { kind: "routine" });
     else if (row.role === "notice") {
       const source = row.notice ? NOTICE_SOURCES[row.notice] : null;
       if (source) add(turnId, source);
@@ -156,8 +161,11 @@ export function backgroundTurns(
       if (direction === "incoming") {
         const agentId = row.exchange?.senderAgentId;
         if (row.exchange?.expectsReply === false) {
-          if (agentId && !reports.has(turnId))
-            reports.set(turnId, { agentId, replyTo: row.exchange.replyToMessageId ?? null });
+          if (agentId)
+            reports.set(turnId, [
+              ...(reports.get(turnId) ?? []),
+              { agentId, replyTo: row.exchange.replyToMessageId ?? null },
+            ]);
         } else {
           requests.add(turnId);
           if (agentId) add(turnId, { kind: "agent", agentId });
@@ -168,21 +176,52 @@ export function backgroundTurns(
       }
     } else if (row.role === "answer") answers.set(turnId, (answers.get(turnId) ?? new Set()).add(row.text.trim()));
   }
-  for (const [turnId, report] of reports) {
+  const chain = ownerChainTurns(personAsked, reports, requestTurns);
+  const relays = new Set<string>();
+  for (const [turnId, turnReports] of reports) {
     if (requests.has(turnId)) continue;
     const said = answers.get(turnId);
     const sentOn = Boolean(said && (forwarded.get(turnId) ?? []).some((text) => said.has(text)));
-    const requestTurn = report.replyTo ? requestTurns.get(report.replyTo) : undefined;
-    const forPerson = requestTurn !== undefined && personAsked.has(requestTurn);
-    if (sentOn || !forPerson) add(turnId, { kind: "agent", agentId: report.agentId });
-    else relays.add(turnId);
+    if (!sentOn && chain.has(turnId)) relays.add(turnId);
+    else for (const report of turnReports) add(turnId, { kind: "agent", agentId: report.agentId });
   }
   // With every row of each turn, a turn that no person started is the agent's own also with no sign.
   if (options.wholeTurns)
     for (const turnId of seen)
       if (turnId !== options.partialTurnId && !relays.has(turnId) && !sources.has(turnId)) sources.set(turnId, []);
+  for (const turnId of relays) sources.delete(turnId);
   for (const turnId of people) sources.delete(turnId);
+  for (const turnId of toOwner) sources.delete(turnId);
   return sources;
+}
+
+/**
+ * The turns of a person's request chain: each turn that a person's own message started, and each turn
+ * that a teammate's report started that answers a request sent in a turn of the chain, at any depth.
+ * A report links to its request by `replyToMessageId`, and the request to its turn by its `messageId`.
+ */
+function ownerChainTurns(
+  personAsked: ReadonlySet<string>,
+  reports: ReadonlyMap<string, ReadonlyArray<{ replyTo: string | null }>>,
+  requestTurns: ReadonlyMap<string, string>,
+): Set<string> {
+  const chain = new Set(personAsked);
+  // Each pass adds the reports to the requests of the turns found so far; a chain of n hops takes n passes.
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [turnId, turnReports] of reports) {
+      if (chain.has(turnId)) continue;
+      const linked = turnReports.some((report) => {
+        const requestTurn = report.replyTo ? requestTurns.get(report.replyTo) : undefined;
+        return requestTurn !== undefined && requestTurn !== turnId && chain.has(requestTurn);
+      });
+      if (linked) {
+        chain.add(turnId);
+        grew = true;
+      }
+    }
+  }
+  return chain;
 }
 
 /** Whether a row of the agent's chat is the agent's own activity, by `backgroundTurns`. */
@@ -201,6 +240,7 @@ export function storedMessageRole(message: {
   source?: string | undefined;
 }): OwnerConversationRow["role"] {
   if (message.itemType?.startsWith(SYSTEM_NOTICE_ITEM_TYPE_PREFIX)) return "notice";
+  if (isOwnerAddressedItemType(message.itemType)) return "owner";
   if (message.author === "user")
     return message.source === "routine" || message.itemType === "routine" ? "routine" : "person";
   if (message.itemType === AGENT_EXCHANGE_ITEM_TYPE) return "exchange";

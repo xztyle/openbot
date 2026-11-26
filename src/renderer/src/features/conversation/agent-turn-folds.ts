@@ -14,6 +14,7 @@ import { startsDay } from "./agent-message-timeline";
 /** The role of a drawn row in the rule of the owner's conversation (`backgroundTurns`). */
 function rowRole(message: AgentMessage): OwnerConversationRow["role"] {
   if (storedNoticeKind(message.itemType)) return "notice";
+  if (isOwnerAddressedItemType(message.itemType)) return "owner";
   if (message.author === "you") return message.routine || message.itemType === "routine" ? "routine" : "person";
   if (message.itemType === AGENT_EXCHANGE_ITEM_TYPE) return message.exchange ? "exchange" : "other";
   if (!message.itemType || message.itemType === "agentMessage") return "answer";

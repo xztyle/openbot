@@ -336,64 +336,73 @@ export class ThreadReadStates {
 }
 
 /**
- * The turns, of the thread that `ordered` reads, whose answer is not for the person: an agent's
- * request started them, a teammate's report started them that does not answer a request sent in a
- * turn a person's own message (not a routine run) started, or OpenBot sent the answer on to an agent (an outgoing
- * exchange with the answer's text). A message stored before the exchange summary counts as a request.
+ * The turns of a person's request chain in the thread that `ordered` reads, as `ownerChainTurns` in
+ * `@openbot/contracts/owner-conversation`: each turn that a person's own message (not a routine run)
+ * started, and each turn that a teammate's report started that answers (`replyToMessageId`) a request
+ * that OpenBot sent (`messageId`) in a turn of the chain, at any depth.
  *
- * The caller adds the turn to test (`AND exchange.turn_id = ...`), so the test reads the rows of that
- * turn through the turn index. As an `IN` list it read and parsed every exchange of the thread for each
- * unread count, also for a count with only the last few messages after the cursor. The teammate part of
- * `backgroundTurns` in `@openbot/contracts/owner-conversation`.
+ * It names no outer row, so SQLite reads it once for a statement, not once for each unread row.
  */
-const AGENT_TALK_TURNS = `SELECT 1 FROM ordered exchange
-  JOIN projection_thread_messages stored ON stored.thread_id = exchange.thread_id AND stored.message_id = exchange.message_id
-  WHERE exchange.item_type = '${AGENT_EXCHANGE_ITEM_TYPE}' AND exchange.turn_id IS NOT NULL AND (
-    (exchange.author = 'agent' AND COALESCE(json_extract(stored.message_json, '$.exchange.expectsReply'), 1) != 0)
-    OR (exchange.author = 'agent' AND NOT EXISTS (
-      SELECT 1 FROM ordered request
-      JOIN projection_thread_messages sent ON sent.thread_id = request.thread_id AND sent.message_id = request.message_id
-      WHERE request.item_type = '${AGENT_EXCHANGE_ITEM_TYPE}' AND request.author != 'agent' AND request.turn_id IS NOT NULL
-        AND json_extract(sent.message_json, '$.exchange.messageId') = json_extract(stored.message_json, '$.exchange.replyToMessageId')
-        AND request.turn_id IN (
-          SELECT asked.turn_id FROM ordered asked
-          JOIN projection_thread_messages person ON person.thread_id = asked.thread_id AND person.message_id = asked.message_id
-          WHERE asked.author = 'user' AND asked.turn_id IS NOT NULL
-            AND COALESCE(json_extract(person.message_json, '$.source'), 'user') != 'routine'
-        )
-    ))
-    OR (exchange.author != 'agent' AND EXISTS (
-      SELECT 1 FROM ordered answer
-      JOIN projection_thread_messages said ON said.thread_id = answer.thread_id AND said.message_id = answer.message_id
-      WHERE answer.turn_id = exchange.turn_id AND answer.author = 'assistant' AND COALESCE(answer.item_type, 'agentMessage') = 'agentMessage'
-        AND trim(json_extract(said.message_json, '$.text')) = trim(json_extract(stored.message_json, '$.text'))
-    ))
-  )`;
+const OWNER_CHAIN_TURNS = `WITH RECURSIVE links AS MATERIALIZED (
+    SELECT exchange.turn_id, exchange.author,
+      json_extract(stored.message_json, '$.exchange.messageId') AS exchange_id,
+      json_extract(stored.message_json, '$.exchange.replyToMessageId') AS reply_to,
+      json_extract(stored.message_json, '$.exchange.expectsReply') AS expects_reply
+    FROM ordered exchange
+    JOIN projection_thread_messages stored ON stored.thread_id = exchange.thread_id AND stored.message_id = exchange.message_id
+    WHERE exchange.item_type = '${AGENT_EXCHANGE_ITEM_TYPE}' AND exchange.turn_id IS NOT NULL
+  ), chain(turn_id) AS (
+    SELECT asked.turn_id FROM ordered asked
+    JOIN projection_thread_messages person ON person.thread_id = asked.thread_id AND person.message_id = asked.message_id
+    WHERE asked.author = 'user' AND asked.turn_id IS NOT NULL
+      AND COALESCE(asked.item_type, '') != 'routine' AND COALESCE(asked.item_type, '') NOT LIKE '${SYSTEM_NOTICE_ITEM_TYPE_PREFIX}%'
+      AND COALESCE(json_extract(person.message_json, '$.source'), 'user') != 'routine'
+    UNION
+    SELECT report.turn_id FROM chain
+    JOIN links request ON request.turn_id = chain.turn_id AND request.author != 'agent'
+    JOIN links report ON report.author = 'agent' AND report.expects_reply = 0
+      AND report.reply_to = request.exchange_id AND report.turn_id != request.turn_id
+  )
+  SELECT turn_id FROM chain`;
 
 /**
  * The test that the turn `turn` (an SQL expression) of the thread that `ordered` reads is the agent's
  * own activity, by the rule of `backgroundTurns` with whole turns (`@openbot/contracts/owner-conversation`):
- * no person wrote in it, and it is not a teammate's report back to a person's request that the agent
- * passes on to the person. A teammate's report that `AGENT_TALK_TURNS` names stays the agent's own.
+ * no person wrote in it, the agent wrote nothing in it to the owner on purpose and asked them nothing,
+ * and it is not a teammate's report of a person's request chain (`OWNER_CHAIN_TURNS`) that the agent
+ * passes on to the person. A report stays the agent's own in a turn that a teammate's request also
+ * started, or when OpenBot sent the answer on to an agent (an outgoing exchange with the answer's text).
+ * A message stored before the exchange summary counts as a request.
+ *
+ * The tests of the turn's own rows read them through the turn index.
  */
 function backgroundTurn(turn: string): string {
   return `(NOT EXISTS (
       SELECT 1 FROM ordered person WHERE person.turn_id = ${turn} AND person.author = 'user'
         AND COALESCE(person.item_type, '') != 'routine' AND COALESCE(person.item_type, '') NOT LIKE '${SYSTEM_NOTICE_ITEM_TYPE_PREFIX}%'
+    ) AND NOT EXISTS (
+      SELECT 1 FROM ordered addressed WHERE addressed.turn_id = ${turn}
+        AND addressed.item_type IN ('${OWNER_MESSAGE_ITEM_TYPE}', 'question_prompt')
     ) AND (
-      EXISTS (${AGENT_TALK_TURNS} AND exchange.turn_id = ${turn})
-      OR NOT EXISTS (
-        SELECT 1 FROM ordered relay
-        JOIN projection_thread_messages reported ON reported.thread_id = relay.thread_id AND reported.message_id = relay.message_id
-        WHERE relay.turn_id = ${turn} AND relay.author = 'agent' AND relay.item_type = '${AGENT_EXCHANGE_ITEM_TYPE}'
-          AND json_extract(reported.message_json, '$.exchange.expectsReply') = 0
+      EXISTS (
+        SELECT 1 FROM ordered exchange
+        JOIN projection_thread_messages stored ON stored.thread_id = exchange.thread_id AND stored.message_id = exchange.message_id
+        WHERE exchange.turn_id = ${turn} AND exchange.item_type = '${AGENT_EXCHANGE_ITEM_TYPE}' AND (
+          (exchange.author = 'agent' AND COALESCE(json_extract(stored.message_json, '$.exchange.expectsReply'), 1) != 0)
+          OR (exchange.author != 'agent' AND EXISTS (
+            SELECT 1 FROM ordered answer
+            JOIN projection_thread_messages said ON said.thread_id = answer.thread_id AND said.message_id = answer.message_id
+            WHERE answer.turn_id = exchange.turn_id AND answer.author = 'assistant' AND COALESCE(answer.item_type, 'agentMessage') = 'agentMessage'
+              AND trim(json_extract(said.message_json, '$.text')) = trim(json_extract(stored.message_json, '$.text'))
+          ))
+        )
       )
+      OR ${turn} NOT IN (${OWNER_CHAIN_TURNS})
     ))`;
 }
 
 /**
- * Whether a turn of the thread is the agent's own activity (`backgroundTurn`) and the agent wrote
- * nothing in it to the owner on purpose. A turn that completes with this tells nothing: no "Finished"
+ * Whether a turn of the thread is the agent's own activity (`backgroundTurn`). A turn that completes with this tells nothing: no "Finished"
  * notification, sound or push, as it adds nothing unread.
  */
 export function isBackgroundTurn(database: { readonly connection: DatabaseSync }, threadId: string, turnId: string) {
@@ -401,8 +410,7 @@ export function isBackgroundTurn(database: { readonly connection: DatabaseSync }
     database.connection
       .prepare(
         `${ORDERED_THREAD_MESSAGES}
-         SELECT 1 WHERE ${backgroundTurn("?2")}
-           AND NOT EXISTS (SELECT 1 FROM ordered WHERE turn_id = ?2 AND item_type = '${OWNER_MESSAGE_ITEM_TYPE}')`,
+         SELECT 1 WHERE ${backgroundTurn("?2")}`,
       )
       .get(threadId, turnId) !== undefined
   );

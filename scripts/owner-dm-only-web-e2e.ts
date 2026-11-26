@@ -3,12 +3,17 @@
 // (a) A Motion event wake and a teammate's message wake add nothing unread (host count, tab title)
 //     and show no browser notification.
 // (b) The owner's message and its answer count as unread and notify.
-// (c) A message that the agent wrote to the owner on purpose (`message_owner`) counts and notifies.
+// (c) A message that the agent wrote to the owner on purpose (`message_owner`) counts and notifies, and
+//     so does the rest of its turn: the turn is the owner's conversation.
 // (d) In the chat, the two wakes are one collapsed "Agent activity" row ("2 updates · Motion,
 //     Chief"), which opens to their messages; the owner's exchange and the message to the owner show
-//     as messages; the rest of the turn with the message to the owner is one activity row before it.
+//     as messages, with the answer of its turn; only the Motion note of that turn is an activity row.
 //     The message to the owner shows the image that the agent passed on with it (`message_owner`
 //     with `paths`), on a computer and on a phone.
+// (f) A two-hop and a three-hop delegation chain that the owner's message starts: each turn of the
+//     chain, and the turn that delivers to the owner, shows as a message, counts and notifies. A
+//     teammate's report to a request that a Motion event started is in no chain of the owner: it folds,
+//     counts nothing and does not notify.
 // (e) A money ticket's strip at the top of the DM stays, with Approve and Decline, when the owner
 //     asks the agent something (its Reply, or the chat's box); it says "You asked something" while the
 //     host says so; Approve takes it away.
@@ -50,6 +55,12 @@ const VIEWPORTS = {
   phone: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
 } as const;
 type ViewportName = keyof typeof VIEWPORTS;
+/** The texts of the harness's delegation chains (`web-client-owner-dm-harness.tsx`). */
+const CHAIN_DELIVERIES = {
+  two: "Aquí tienes las tres portadas. ¿Va la v2, o prefieres la v1 o la v3?",
+  three: "Listo el pack completo tras tres pasos.",
+} as const;
+const BACKGROUND_REPORT_ANSWER = "El banner está revisado.";
 
 const HARNESS = `<!doctype html>
 <html lang="en">
@@ -177,8 +188,25 @@ async function badges(browser: Browser, viewport: ViewportName): Promise<void> {
   });
   await step(page, viewport, "a message to the owner on purpose counts and notifies", async () => {
     await nextTurn(page);
-    await settle(page, () => unread(page), 2, "the message to the owner is not unread, or the turn's answer is");
+    // The owner's answer, then the message to the owner and its turn's answer.
+    await settle(page, () => unread(page), 3, "the message to the owner or its turn's answer is not unread");
     await settle(page, () => notifications(page), 2, "the message to the owner did not notify");
+  });
+  await step(page, viewport, "each turn of a two-hop delegation chain counts and notifies", async () => {
+    for (let turn = 0; turn < 3; turn += 1) await nextTurn(page);
+    await settle(page, () => unread(page), 6, "a turn of the two-hop chain is not unread");
+    await settle(page, () => notifications(page), 5, "a turn of the two-hop chain did not notify");
+  });
+  await step(page, viewport, "each turn of a three-hop delegation chain counts and notifies", async () => {
+    for (let turn = 0; turn < 4; turn += 1) await nextTurn(page);
+    await settle(page, () => unread(page), 10, "a turn of the three-hop chain is not unread");
+    await settle(page, () => notifications(page), 9, "a turn of the three-hop chain did not notify");
+  });
+  await step(page, viewport, "a report in no chain of the owner counts nothing and does not notify", async () => {
+    await nextTurn(page);
+    await nextTurn(page);
+    await settle(page, () => unread(page), 10, "a report in no chain of the owner counts as unread");
+    assert.equal(await notifications(page), 9, "a report in no chain of the owner notified");
   });
   await page.context().close();
 }
@@ -212,10 +240,24 @@ async function display(browser: Browser, viewport: ViewportName): Promise<void> 
       ),
       "the image of the message to the owner did not load",
     );
-    assert.equal(await activity.count(), 2, "the turn with the message to the owner is not one activity row");
-    assert.equal(await page.getByText("Listo.", { exact: true }).count(), 0, "that turn's answer shows");
+    // The two wakes, the Motion note of the turn with the message to the owner, and the turns that a
+    // Motion event started with the report to them.
+    assert.equal(await activity.count(), 3, "the activity rows are not the wakes, the note and the Motion chain");
+    await page.getByText("Listo.", { exact: true }).filter({ visible: true }).first().waitFor({ timeout: UI_WAIT_MS });
     await page.screenshot({ path: resolve(OUT, `${viewport}-chat.png`) });
     report.screenshots.push(resolve(OUT, `${viewport}-chat.png`));
+  });
+  await step(page, viewport, "the deliveries of the delegation chains show as messages", async () => {
+    for (const text of [CHAIN_DELIVERIES.two, CHAIN_DELIVERIES.three])
+      await page.getByText(text).filter({ visible: true }).first().waitFor({ timeout: UI_WAIT_MS });
+    assert.equal(
+      await page.getByText(BACKGROUND_REPORT_ANSWER).filter({ visible: true }).count(),
+      0,
+      "the report in no chain of the owner shows",
+    );
+    await page.getByText(CHAIN_DELIVERIES.two).filter({ visible: true }).first().scrollIntoViewIfNeeded();
+    await page.screenshot({ path: resolve(OUT, `${viewport}-chain.png`) });
+    report.screenshots.push(resolve(OUT, `${viewport}-chain.png`));
   });
   await step(page, viewport, "the activity row opens to the wakes' messages", async () => {
     await activity.first().getByRole("button").first().click();

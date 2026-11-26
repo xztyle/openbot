@@ -5,10 +5,17 @@
 //     nothing (`agentTalk`, so `notificationForAgentEvent` gives no notice on desktop, web or push).
 // (b) A teammate's message wakes the agent: the same.
 // (c) The owner writes: the answer counts as unread and the end of the turn tells the owner.
-// (d) A Motion event wakes the agent and it writes to the owner with `message_owner`: that message,
-//     and only it, counts as unread, and the end of the turn tells the owner with its text.
+// (d) A Motion event wakes the agent and it writes to the owner with `message_owner`: the turn is the
+//     owner's conversation, so the message and the turn's answer count as unread, and the end of the
+//     turn tells the owner.
 // (e) A Motion ticket that waits for the owner's money decision stays in Needs you when the owner asks
 //     the agent something, marked `ownerAsked`, until the agent answers.
+// (f) A two-hop chain: the owner asks the lead, the lead asks a teammate, the teammate's report makes
+//     the lead ask a second teammate, and the second report makes the lead deliver. Each turn of the
+//     chain counts as unread, and the delivery turn tells the owner.
+// (g) The same with three hops.
+// (h) A Motion event makes the lead ask a teammate: the teammate's report is not in any chain of the
+//     owner, so its turn adds nothing unread and tells nothing.
 // The host's two counts (the SQL one and the one over a snapshot) agree at each step.
 // `bun scripts/owner-dm-only-e2e.ts`. Writes .openbot-build/owner-dm-only-e2e/report.json.
 import assert from "node:assert/strict";
@@ -94,7 +101,10 @@ const answer = (message) => {
       write({ id: message.id, result: { turn: { id: turnId, status: "inProgress", items: [] } } });
       write({ method: "turn/started", params: { threadId: params.threadId, turn: { id: turnId } } });
       const step = [...text.matchAll(/STEP:([a-z0-9-]+)/g)].at(-1)?.[1];
-      const call = step ? JSON.parse(readFileSync(PLAN, "utf8"))[step] : undefined;
+      const planned = step ? JSON.parse(readFileSync(PLAN, "utf8"))[step] : undefined;
+      // "$IN" in an argument is the id of the last teammate message that the turn reads.
+      const incoming = [...text.matchAll(/Message ID: (\\S+)/g)].at(-1)?.[1] ?? null;
+      const call = planned && JSON.parse(JSON.stringify(planned).replaceAll('"$IN"', JSON.stringify(incoming)));
       if (!call) return setTimeout(() => finish(params.threadId, turnId), 20);
       const id = "tool-" + turnId;
       waiting.set(id, { threadId: params.threadId, turnId });
@@ -249,6 +259,17 @@ try {
   await runCauseEffect(agents.initialize());
   const lead = await create("QA de Producto");
   const teammate = await create("CSO");
+  const images = await create("Generador de Imágenes");
+  const flyers = await create("Diseñador de Flyers");
+  const photos = await create("Fotógrafo");
+  const ask = (to: string, text: string) => ({
+    tool: "send_message",
+    args: { recipientAgentIds: [to], text, expectsReply: true },
+  });
+  const reply = (text: string) => ({
+    tool: "send_message",
+    args: { recipientAgentIds: [lead.id], text, replyToMessageId: "$IN", expectsReply: false },
+  });
   writeFileSync(
     planFile,
     JSON.stringify({
@@ -259,6 +280,21 @@ try {
       "tell-owner": { tool: "message_owner", args: { text: OWNER_NOTE } },
       // Holds the turn on a question to the owner, so the turn has not answered yet.
       hold: { tool: "ask_user", args: { questions: [{ question: "¿México o Colombia?" }] } },
+      // (f) Two hops: the lead asks the images agent, then the flyers agent, then delivers.
+      "two-ask-images": ask(images.id, "Genera la portada 16:9. STEP:two-images-reply"),
+      "two-images-reply": reply("Imagen lista. STEP:two-ask-flyers"),
+      "two-ask-flyers": ask(flyers.id, "Haz tres variantes. STEP:two-flyers-reply"),
+      "two-flyers-reply": reply("Variantes v1, v2 y v3 listas."),
+      // (g) Three hops: images, flyers, photos, then the lead delivers.
+      "three-ask-images": ask(images.id, "Genera la portada. STEP:three-images-reply"),
+      "three-images-reply": reply("Imagen lista. STEP:three-ask-flyers"),
+      "three-ask-flyers": ask(flyers.id, "Haz el flyer. STEP:three-flyers-reply"),
+      "three-flyers-reply": reply("Flyer listo. STEP:three-ask-photos"),
+      "three-ask-photos": ask(photos.id, "Retoca la foto. STEP:three-photos-reply"),
+      "three-photos-reply": reply("Foto retocada."),
+      // (h) A Motion event starts the request: no chain of the owner.
+      "motion-ask-images": ask(images.id, "Revisa el banner. STEP:motion-images-reply"),
+      "motion-images-reply": reply("Banner revisado."),
     }),
   );
   await readAll(lead.id);
@@ -333,7 +369,7 @@ try {
   const told = await afterTurn("message_owner", lead.id, before);
   const posted = told.snapshot.messages.find((message) => message.itemType === OWNER_MESSAGE_ITEM_TYPE);
   assert.equal(posted?.text, OWNER_NOTE, "The message to the owner is in the chat.");
-  assert.equal(told.unread, 1, "Only the message to the owner counts as unread, not the turn's answer.");
+  assert.equal(told.unread, 2, "The turn writes to the owner: its message and its answer count as unread.");
   assert.equal(told.ended.agentTalk, undefined, "A turn with a message to the owner tells the owner.");
   assert.ok(told.content, "The owner is told.");
   report.cases.push({
@@ -387,6 +423,75 @@ try {
     name: "the agent answers: the ticket waits for the decision again",
     unread: -1,
     agentTalk: false,
+    notification: null,
+    passed: true,
+  });
+  /**
+   * The owner asks the lead; the lead's turns of the chain end one after another. Returns what the
+   * owner gets from the last one, the delivery.
+   */
+  async function chain(name: string, step: string, hops: number) {
+    await readAll(lead.id);
+    const start = completions(lead.id).length;
+    await runCauseEffect(agents.sendMessage({ agentId: lead.id, text: `Necesito la portada. STEP:${step}` }, owner));
+    for (let hop = 0; hop < hops; hop += 1)
+      await waitFor(
+        "a turn of the chain",
+        () => completions(lead.id)[start + hop],
+        AGENT_WAKE_COALESCE_MS * 4 + 60_000,
+      );
+    const delivered = await afterTurn(name, lead.id, start + hops, AGENT_WAKE_COALESCE_MS * 4 + 60_000);
+    const delivery = delivered.snapshot.messages.findLast(
+      (message) => message.turnId === delivered.ended.turnId && message.author === "assistant",
+    );
+    assert.ok(delivery, `${name}: the delivery is in the chat.`);
+    const reports = delivered.snapshot.messages.filter(
+      (message) =>
+        message.exchange?.direction === "incoming" && message.exchange.expectsReply === false && message.turnId,
+    );
+    assert.ok(reports.length >= hops, `${name}: each teammate reported to the lead.`);
+    // The owner's answer, and the answer of each turn of the chain.
+    assert.equal(delivered.unread, hops + 1, `${name}: each turn of the chain counts as unread.`);
+    assert.equal(delivered.ended.agentTalk, undefined, `${name}: the delivery is the owner's conversation.`);
+    assert.ok(delivered.content, `${name}: the delivery tells the owner.`);
+    report.cases.push({
+      name,
+      unread: delivered.unread,
+      agentTalk: false,
+      notification: delivered.content.body,
+      passed: true,
+    });
+  }
+  // (f) and (g).
+  await chain("two-hop delegation chain", "two-ask-images", 2);
+  await chain("three-hop delegation chain", "three-ask-images", 3);
+
+  // (h) A Motion event makes the lead ask a teammate; the report is in no chain of the owner.
+  await readAll(lead.id);
+  before = completions(lead.id).length;
+  await runCauseEffect(
+    agents.sendMessage(
+      { agentId: lead.id, text: "Motion · MAS-31 needs a banner check. STEP:motion-ask-images" },
+      undefined,
+      undefined,
+      "motion-event",
+    ),
+  );
+  await waitFor("the Motion turn", () => completions(lead.id)[before]);
+  const backgroundReport = await afterTurn("background report", lead.id, before + 1, AGENT_WAKE_COALESCE_MS + 60_000);
+  assert.ok(
+    backgroundReport.snapshot.messages.some(
+      (message) => message.exchange?.direction === "incoming" && message.exchange.senderAgentId === images.id,
+    ),
+    "The teammate reported to the lead.",
+  );
+  assert.equal(backgroundReport.unread, 0, "A report in no chain of the owner adds nothing unread.");
+  assert.equal(backgroundReport.ended.agentTalk, true, "A report in no chain of the owner is the agent's own.");
+  assert.equal(backgroundReport.content, null, "A report in no chain of the owner tells nothing.");
+  report.cases.push({
+    name: "report to a Motion request: no owner chain",
+    unread: 0,
+    agentTalk: true,
     notification: null,
     passed: true,
   });

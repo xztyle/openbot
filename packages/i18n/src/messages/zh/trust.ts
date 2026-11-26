@@ -137,6 +137,9 @@ export const messages = {
   "trust.guardrails.usage": "{turns} 回合 · {cost} · {tokens} 个 token",
   "trust.guardrails.limits": "上限",
   "trust.guardrails.enabled": "启用护栏",
+  "trust.guardrails.group.alerts": "警告与支出",
+  "trust.guardrails.group.stuck": "卡住的智能体",
+  "trust.guardrails.group.failover": "订阅用完时",
   "trust.guardrails.enabledDescription":
     "预算会在智能体达到上限时暂停它们，熔断会停止失控的回合，在接触外部内容后执行高风险操作前会先进行检查。",
   "trust.guardrails.limitsDescription":

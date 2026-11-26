@@ -376,7 +376,7 @@ export function TrustGuardrailsPanel(props: {
                 limits={policy().routine}
                 onChange={(routine) => change((current) => ({ ...current, routine }))}
               />
-              <SettingsGroup label={t("trust.guardrails.warnPercent")}>
+              <SettingsGroup title={t("trust.guardrails.group.alerts")}>
                 <NumberRow
                   label={t("trust.guardrails.warnPercent")}
                   value={policy().warnPercent}
@@ -395,7 +395,7 @@ export function TrustGuardrailsPanel(props: {
                   label={t("trust.guardrails.injection")}
                 />
               </SettingsGroup>
-              <SettingsGroup label={t("trust.guardrails.stuck")}>
+              <SettingsGroup title={t("trust.guardrails.group.stuck")}>
                 <SwitchField
                   checked={policy().stuck.enabled}
                   onChange={(enabled) => change((current) => ({ ...current, stuck: { ...current.stuck, enabled } }))}
@@ -417,7 +417,7 @@ export function TrustGuardrailsPanel(props: {
                   }
                 />
               </SettingsGroup>
-              <SettingsGroup label={t("trust.guardrails.failover")}>
+              <SettingsGroup title={t("trust.guardrails.group.failover")}>
                 <SwitchField
                   checked={policy().failover.enabled}
                   onChange={(enabled) =>

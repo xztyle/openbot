@@ -199,7 +199,7 @@ export const messages = {
   "server.settings.membersDescription": "Publique este servidor, convide pessoas e gerencie o acesso.",
   "server.settings.desktopTitle": "Área de trabalho remota",
   "server.settings.desktopDescription": "Configure ou conecte-se à área de trabalho deste servidor.",
-  "server.settings.mcpTitle": "MCP",
+  "server.settings.mcpTitle": "Ferramentas externas (MCP)",
   "server.settings.mcpDescription":
     "Conecte servidores MCP e escolha quais deles os agentes deste servidor podem usar.",
   "server.settings.storageTitle": "Armazenamento",

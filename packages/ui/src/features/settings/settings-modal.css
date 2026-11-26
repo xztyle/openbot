@@ -543,27 +543,28 @@ label.ui-settings-row-label {
   will-change: auto;
 }
 
-:is(.app-settings-modal-shell, .server-settings-modal-shell) .ui-settings-section {
+:is(.app-settings-modal-shell, .server-settings-modal-shell, .ws-view) .ui-settings-section {
   gap: var(--openbot-space-4);
 }
 
-:is(.app-settings-modal-shell, .server-settings-modal-shell) .ui-settings-section-header {
+:is(.app-settings-modal-shell, .server-settings-modal-shell, .ws-view) .ui-settings-section-header {
   padding-inline: 0;
 }
 
 /*
  * The hierarchy of a settings page: the page title (2xl), a section title (lg, semibold), a group
  * title (md, semibold), and the rows (md labels). Each level is a size apart, so a section
- * title never reads as the label of the row under it.
+ * title never reads as the label of the row under it. A workspace view that holds settings (Trust)
+ * takes the same hierarchy through `.ws-view`.
  */
-:is(.app-settings-modal-shell, .server-settings-modal-shell) .ui-settings-section-heading {
+:is(.app-settings-modal-shell, .server-settings-modal-shell, .ws-view) .ui-settings-section-heading {
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-lg);
   font-weight: var(--openbot-weight-semibold);
   line-height: var(--openbot-leading-lg);
 }
 
-:is(.app-settings-modal-shell, .server-settings-modal-shell) .ui-settings-section-description {
+:is(.app-settings-modal-shell, .server-settings-modal-shell, .ws-view) .ui-settings-section-description {
   max-width: 64ch;
   margin-top: var(--openbot-space-1);
   font-size: var(--openbot-text-md);
@@ -1006,7 +1007,9 @@ label.ui-settings-row-label {
 
   .settings-modal-row .ui-item-actions,
   .ui-settings-row:not([data-layout="inline"]) > .ui-settings-row-control,
-  :is(.settings-modal-select, .settings-modal-update-track-select) {
+  .app-settings-modal-shell
+    :is(.settings-modal-select, .settings-modal-update-track-select, .settings-modal-link-select),
+  .settings-modal-row .ui-item-actions > :is(.ui-select, .ui-native-select, .ui-input) {
     width: 100%;
     max-width: none;
     justify-content: flex-start;
@@ -1016,9 +1019,11 @@ label.ui-settings-row-label {
     margin-left: auto;
   }
 
-  /* A finger needs the whole row height: the switch rows are at least the touch target tall. */
+  /* A finger needs the whole row height: the switch rows are at least the touch target tall. The
+     rows of one card share one inset, whatever primitive each is built on. */
   .settings-modal-card > .ui-switch-field,
-  .settings-modal-card > .ui-settings-row {
+  .settings-modal-card > .ui-settings-row,
+  .settings-modal-card > .ui-item {
     min-height: var(--openbot-touch-target);
     padding: var(--openbot-space-4);
   }

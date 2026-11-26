@@ -139,6 +139,9 @@ export const messages = {
   "trust.guardrails.usage": "{turns} Durchläufe · {cost} · {tokens} Tokens",
   "trust.guardrails.limits": "Limits",
   "trust.guardrails.enabled": "Schutzmechanismen an",
+  "trust.guardrails.group.alerts": "Warnungen und Ausgaben",
+  "trust.guardrails.group.stuck": "Festgefahrene Agenten",
+  "trust.guardrails.group.failover": "Wenn ein Abonnement aufgebraucht ist",
   "trust.guardrails.enabledDescription":
     "Budgets pausieren Agenten an ihren Limits, Notbremsen stoppen außer Kontrolle geratene Durchläufe, und vor riskanten Aktionen nach externen Inhalten läuft eine Prüfung.",
   "trust.guardrails.limitsDescription":

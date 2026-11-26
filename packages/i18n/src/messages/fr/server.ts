@@ -200,7 +200,7 @@ export const messages = {
   "server.settings.membersDescription": "Publiez ce serveur, invitez des personnes et gérez l’accès.",
   "server.settings.desktopTitle": "Bureau distant",
   "server.settings.desktopDescription": "Configurez le bureau de ce serveur ou connectez-vous à celui-ci.",
-  "server.settings.mcpTitle": "MCP",
+  "server.settings.mcpTitle": "Outils externes (MCP)",
   "server.settings.mcpDescription":
     "Connectez des serveurs MCP et choisissez ceux que les agents de ce serveur peuvent utiliser.",
   "server.settings.storageTitle": "Stockage",

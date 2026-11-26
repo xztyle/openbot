@@ -166,7 +166,6 @@ export const messages = defineMessages("backups", {
   "backups.cloud.plan.keepWeekly": "One a week, for (weeks)",
   "backups.cloud.plan.keepMonthly": "One a month, for (months)",
   "backups.cloud.plan.largeFiles": "Leave out files larger than (MB)",
-  "backups.cloud.plan.save": "Save plan",
   "backups.cloud.plan.saved": "Plan saved",
   "backups.cloud.restoreTitle": "Restore from the cloud",
   "backups.cloud.restoreDescription":

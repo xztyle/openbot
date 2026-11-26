@@ -204,7 +204,7 @@ export const messages = {
   "server.settings.membersDescription": "Opublikuj serwer, zapraszaj osoby i zarządzaj dostępem.",
   "server.settings.desktopTitle": "Zdalny pulpit",
   "server.settings.desktopDescription": "Skonfiguruj pulpit tego serwera lub połącz się z nim.",
-  "server.settings.mcpTitle": "MCP",
+  "server.settings.mcpTitle": "Narzędzia zewnętrzne (MCP)",
   "server.settings.mcpDescription": "Połącz serwery MCP i wybierz, których mogą używać agenci tego serwera.",
   "server.settings.storageTitle": "Pamięć dyskowa",
   "server.settings.storageDescription": "Zobacz, co Atelier przechowuje na dysku tego serwera, i zwolnij miejsce.",

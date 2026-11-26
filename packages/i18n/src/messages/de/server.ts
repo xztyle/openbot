@@ -203,7 +203,7 @@ export const messages = {
   "server.settings.membersDescription": "Veröffentliche diesen Server, lade Personen ein und verwalte den Zugriff.",
   "server.settings.desktopTitle": "Remotedesktop",
   "server.settings.desktopDescription": "Richte den Desktop dieses Servers ein oder verbinde dich damit.",
-  "server.settings.mcpTitle": "MCP",
+  "server.settings.mcpTitle": "Externe Werkzeuge (MCP)",
   "server.settings.mcpDescription":
     "Verbinde MCP-Server und wähle, welche die Agenten dieses Servers verwenden dürfen.",
   "server.settings.storageTitle": "Speicher",

@@ -139,6 +139,9 @@ export const messages = {
   "trust.guardrails.usage": "{turns} tur · {cost} · {tokens} token",
   "trust.guardrails.limits": "Sınırlar",
   "trust.guardrails.enabled": "Korkuluklar açık",
+  "trust.guardrails.group.alerts": "Uyarılar ve harcama",
+  "trust.guardrails.group.stuck": "Takılan ajanlar",
+  "trust.guardrails.group.failover": "Bir abonelik bittiğinde",
   "trust.guardrails.enabledDescription":
     "Bütçeler ajanları sınırlarında duraklatır, devre kesiciler kontrolden çıkan turları durdurur ve dış içerikten sonra riskli eylemlerden önce bir denetim çalışır.",
   "trust.guardrails.limitsDescription":

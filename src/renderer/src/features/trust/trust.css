@@ -22,34 +22,9 @@
 }
 
 /*
- * The hierarchy of a settings page outside the settings dialog: a section title (lg, semibold), a
- * group title (md, semibold), and the rows. Each level is a size apart, so a section title never
- * reads as the label of the row under it.
+ * The view takes the settings hierarchy through `.ws-view` (settings-modal.css). What is left here is
+ * the inset of the card children that are not rows: help, meter windows, events and matrix rows.
  */
-.trust-view .ui-settings-section {
-  gap: var(--openbot-space-4);
-}
-
-.trust-view .ui-settings-section-header {
-  padding-inline: 0;
-}
-
-.trust-view .ui-settings-section-heading {
-  color: var(--openbot-text-primary);
-  font-size: var(--openbot-text-lg);
-  font-weight: var(--openbot-weight-semibold);
-  line-height: var(--openbot-leading-lg);
-}
-
-.trust-view .ui-settings-section-description {
-  max-width: 64ch;
-  margin-top: var(--openbot-space-1);
-  font-size: var(--openbot-text-md);
-  line-height: var(--openbot-leading-md);
-  text-wrap: pretty;
-}
-
-/* A card child that is not a row (a note, a meter window, an event, a matrix row) keeps the row inset. */
 .trust-view .settings-modal-card > :is(.ui-settings-help, .guardrails-window, .guardrails-event, .trust-grid-row) {
   padding: var(--openbot-space-3) var(--openbot-space-5);
 }

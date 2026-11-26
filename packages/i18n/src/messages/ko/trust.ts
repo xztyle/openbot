@@ -137,6 +137,9 @@ export const messages = {
   "trust.guardrails.usage": "{turns}턴 · {cost} · 토큰 {tokens}",
   "trust.guardrails.limits": "한도",
   "trust.guardrails.enabled": "가드레일 켜기",
+  "trust.guardrails.group.alerts": "경고 및 지출",
+  "trust.guardrails.group.stuck": "멈춘 에이전트",
+  "trust.guardrails.group.failover": "구독을 모두 사용했을 때",
   "trust.guardrails.enabledDescription":
     "예산은 한도에 도달한 에이전트를 일시 중지하고, 차단기는 통제를 벗어난 턴을 멈추며, 외부 콘텐츠 이후의 위험한 작업 전에는 점검이 실행돼요.",
   "trust.guardrails.limitsDescription":

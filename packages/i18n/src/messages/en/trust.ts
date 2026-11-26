@@ -163,6 +163,9 @@ export const messages = defineMessages("trust", {
   "trust.guardrails.usage": "{turns} turns · {cost} · {tokens} tokens",
   "trust.guardrails.limits": "Limits",
   "trust.guardrails.enabled": "Guardrails on",
+  "trust.guardrails.group.alerts": "Warnings and spend",
+  "trust.guardrails.group.stuck": "Stuck agents",
+  "trust.guardrails.group.failover": "When a subscription runs out",
   "trust.guardrails.enabledDescription":
     "Budgets pause agents at their limits, breakers stop runaway turns, and a check runs before risky actions after outside content.",
   "trust.guardrails.limitsDescription":

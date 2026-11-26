@@ -164,6 +164,9 @@ export const messages = {
   "trust.guardrails.usage": "{turns} turnos · {cost} · {tokens} tokens",
   "trust.guardrails.limits": "Límites",
   "trust.guardrails.enabled": "Salvaguardas activas",
+  "trust.guardrails.group.alerts": "Avisos y gasto",
+  "trust.guardrails.group.stuck": "Agentes atascados",
+  "trust.guardrails.group.failover": "Cuando se agota una suscripción",
   "trust.guardrails.enabledDescription":
     "Los presupuestos pausan a los agentes en su límite, los cortes detienen turnos desbocados y se hace un control antes de acciones de riesgo tras leer contenido externo.",
   "trust.guardrails.limitsDescription":

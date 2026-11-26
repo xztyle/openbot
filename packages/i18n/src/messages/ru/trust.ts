@@ -149,6 +149,9 @@ export const messages = {
   "trust.guardrails.usage": "Ходов: {turns} · {cost} · токенов: {tokens}",
   "trust.guardrails.limits": "Лимиты",
   "trust.guardrails.enabled": "Защитные ограничения включены",
+  "trust.guardrails.group.alerts": "Предупреждения и расходы",
+  "trust.guardrails.group.stuck": "Застрявшие агенты",
+  "trust.guardrails.group.failover": "Когда подписка исчерпана",
   "trust.guardrails.enabledDescription":
     "Бюджеты ставят агентов на паузу при достижении лимитов, предохранители останавливают вышедшие из-под контроля ходы, а перед рискованными действиями после внешнего контента выполняется проверка.",
   "trust.guardrails.limitsDescription":

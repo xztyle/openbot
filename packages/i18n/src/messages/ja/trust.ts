@@ -139,6 +139,9 @@ export const messages = {
   "trust.guardrails.usage": "{turns} ターン · {cost} · {tokens} トークン",
   "trust.guardrails.limits": "上限",
   "trust.guardrails.enabled": "ガードレールを有効にする",
+  "trust.guardrails.group.alerts": "警告と支出",
+  "trust.guardrails.group.stuck": "行き詰まったエージェント",
+  "trust.guardrails.group.failover": "サブスクリプションを使い切ったとき",
   "trust.guardrails.enabledDescription":
     "予算は上限に達したエージェントを一時停止し、ブレーカーは暴走したターンを止めます。外部コンテンツの後の危険な操作の前にはチェックが行われます。",
   "trust.guardrails.limitsDescription":

@@ -205,7 +205,7 @@ export const messages = {
   "server.settings.membersDescription": "Публикуйте сервер, приглашайте людей и управляйте доступом.",
   "server.settings.desktopTitle": "Рабочий стол",
   "server.settings.desktopDescription": "Настройте рабочий стол этого сервера или подключитесь к нему.",
-  "server.settings.mcpTitle": "MCP",
+  "server.settings.mcpTitle": "Внешние инструменты (MCP)",
   "server.settings.mcpDescription":
     "Подключайте серверы MCP и выбирайте, какие из них могут использовать агенты этого сервера.",
   "server.settings.storageTitle": "Хранилище",

@@ -169,7 +169,6 @@ export const messages = {
   "backups.cloud.plan.keepWeekly": "Una por semana, durante (semanas)",
   "backups.cloud.plan.keepMonthly": "Una por mes, durante (meses)",
   "backups.cloud.plan.largeFiles": "Dejar fuera archivos de más de (MB)",
-  "backups.cloud.plan.save": "Guardar plan",
   "backups.cloud.plan.saved": "Plan guardado",
   "backups.cloud.restoreTitle": "Restaurar desde la nube",
   "backups.cloud.restoreDescription":

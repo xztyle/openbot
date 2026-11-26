@@ -149,6 +149,9 @@ export const messages = {
   "trust.guardrails.usage": "Tury: {turns} · {cost} · tokeny: {tokens}",
   "trust.guardrails.limits": "Limity",
   "trust.guardrails.enabled": "Zabezpieczenia włączone",
+  "trust.guardrails.group.alerts": "Ostrzeżenia i wydatki",
+  "trust.guardrails.group.stuck": "Zablokowani agenci",
+  "trust.guardrails.group.failover": "Gdy subskrypcja się wyczerpie",
   "trust.guardrails.enabledDescription":
     "Budżety wstrzymują agentów na ich limitach, bezpieczniki zatrzymują niekontrolowane tury, a przed ryzykownymi akcjami po treściach z zewnątrz działa sprawdzenie.",
   "trust.guardrails.limitsDescription":

@@ -206,7 +206,7 @@ export const messages = {
   "server.settings.membersDescription": "Bu sunucuyu yayımlayın, kişileri davet edin ve erişimi yönetin.",
   "server.settings.desktopTitle": "Uzak masaüstü",
   "server.settings.desktopDescription": "Bu sunucunun masaüstünü yapılandırın veya masaüstüne bağlanın.",
-  "server.settings.mcpTitle": "MCP",
+  "server.settings.mcpTitle": "Dış araçlar (MCP)",
   "server.settings.mcpDescription":
     "MCP sunucularını bağlayın ve bu sunucunun ajanlarının hangilerini kullanabileceğini seçin.",
   "server.settings.storageTitle": "Depolama",

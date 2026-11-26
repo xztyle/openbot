@@ -193,7 +193,7 @@ export const messages = {
   "server.settings.membersDescription": "このサーバーを公開し、ユーザーを招待して、アクセスを管理します。",
   "server.settings.desktopTitle": "デスクトップ",
   "server.settings.desktopDescription": "このサーバーのデスクトップを設定、または接続します。",
-  "server.settings.mcpTitle": "MCP",
+  "server.settings.mcpTitle": "外部ツール（MCP）",
   "server.settings.mcpDescription": "MCP サーバーを接続し、このサーバーのエージェントが使用できるものを選択します。",
   "server.settings.storageTitle": "ストレージ",
   "server.settings.storageDescription":

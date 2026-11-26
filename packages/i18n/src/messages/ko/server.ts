@@ -220,7 +220,7 @@ export const messages = {
   "server.settings.membersDescription": "이 서버를 게시하고, 사람을 초대하고, 접근 권한을 관리해요.",
   "server.settings.desktopTitle": "원격 데스크톱",
   "server.settings.desktopDescription": "이 서버의 데스크톱을 설정하거나 연결해요.",
-  "server.settings.mcpTitle": "MCP",
+  "server.settings.mcpTitle": "외부 도구(MCP)",
   "server.settings.mcpDescription": "MCP 서버를 연결하고 이 서버의 에이전트가 사용할 서버를 선택해요.",
   "server.settings.storageTitle": "저장 공간",
   "server.settings.storageDescription": "Atelier가 이 서버의 디스크에 보관하는 항목을 확인하고 공간을 확보해요.",

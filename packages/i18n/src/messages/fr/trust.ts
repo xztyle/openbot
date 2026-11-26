@@ -139,6 +139,9 @@ export const messages = {
   "trust.guardrails.usage": "{turns} tours · {cost} · {tokens} jetons",
   "trust.guardrails.limits": "Limites",
   "trust.guardrails.enabled": "Garde-fous activés",
+  "trust.guardrails.group.alerts": "Alertes et dépenses",
+  "trust.guardrails.group.stuck": "Agents bloqués",
+  "trust.guardrails.group.failover": "Quand un abonnement est épuisé",
   "trust.guardrails.enabledDescription":
     "Les budgets mettent les agents en pause à leurs limites, les coupe-circuits arrêtent les tours incontrôlés, et une vérification a lieu avant les actions risquées qui suivent un contenu externe.",
   "trust.guardrails.limitsDescription":

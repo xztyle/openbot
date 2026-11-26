@@ -365,6 +365,10 @@ export const messages = {
   "error.backend.workspacePathNotFile": "La ruta del espacio de trabajo no es un archivo.",
   "error.backend.workspacePathNotDirectory": "La ruta del espacio de trabajo no es una carpeta.",
   "error.backend.workspacePathMissing": "No existe nada en {path} dentro del espacio de trabajo del agente {root}.",
+  "error.backend.fileReferenceUnavailable":
+    "Este archivo no se puede abrir aquí. Puede que se haya movido o que no esté en una carpeta que puedas ver.",
+  "error.backend.fileReferenceTooLarge":
+    "Este archivo es demasiado grande para abrirlo aquí. Pide al agente que te lo envíe adjunto.",
   "error.backend.workspacePathMissingForMember": "No existe nada en {path} dentro del espacio de trabajo del agente.",
   "error.backend.useChannelTaskControls": "Usa los controles de tareas del canal para esta asignación.",
   "error.backend.editFinished": "Esta edición ya terminó.",

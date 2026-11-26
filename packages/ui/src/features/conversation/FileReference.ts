@@ -108,7 +108,12 @@ function isSharedFilePath(value: string): boolean {
   const normalized = value.replaceAll("\\", "/");
   const segments = normalized.split("/").filter(Boolean);
   if (segments[0] === "Shared" && segments.length > 1) return true;
-  return segments.some((segment, index) => segment === "OpenBot" && segments[index + 1] === "Shared");
+  // A space's shared folder, such as `/data/OpenBot/Spaces/ventas/Shared/copy.txt`, is shared too.
+  return segments.some(
+    (segment, index) =>
+      segment === "OpenBot" &&
+      (segments[index + 1] === "Shared" || (segments[index + 1] === "Spaces" && segments[index + 3] === "Shared")),
+  );
 }
 
 function sharedPathCandidates(body: string): TextRange[] {

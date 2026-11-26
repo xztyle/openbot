@@ -42,6 +42,7 @@ import {
   type ListRoutineRunsInput,
   type MarkConversationReadInput,
   type OpenAttachmentInput,
+  type OpenFileReferenceInput,
   type OpenMessageLinkInput,
   type OpenSharedFileInput,
   type OpenWorkspaceFileInput,
@@ -832,6 +833,14 @@ export function parseOpenWorkspaceFile(value: unknown): OpenWorkspaceFileInput {
     agentId: requireString(value.agentId, "agentId", INPUT_LIMITS.identifier),
     path: requireString(value.path, "path", INPUT_LIMITS.path),
     action: parseFileAction(value.action),
+  };
+}
+
+export function parseOpenFileReference(value: unknown): OpenFileReferenceInput {
+  if (!isObject(value)) throw new Error("Invalid file reference request.");
+  return {
+    agentId: value.agentId === null ? null : requireString(value.agentId, "agentId", INPUT_LIMITS.identifier),
+    path: requireString(value.path, "path", INPUT_LIMITS.path),
   };
 }
 

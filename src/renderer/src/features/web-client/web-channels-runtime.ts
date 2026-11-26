@@ -150,6 +150,7 @@ export function createWebChannelsPort(
     importAttachmentData: (data) =>
       importAttachments(data.map((item) => new File([new Uint8Array(item.bytes)], item.name, { type: item.mimeType }))),
     openAttachment: ({ attachmentId }) => files.download(attachmentId),
+    openFileReference: (input) => remote.fileReference(input),
     discardDraftAttachment: (id) => remote.discard(id),
     respondToApproval: (input) => remote.approve(input),
     respondToPrompt: (input) => remote.answer(input),

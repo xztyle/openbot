@@ -148,6 +148,60 @@ export function isWorkspaceDirectory(value: unknown): value is WorkspaceDirector
 /** The same check at the preload and the remote host client: the shape has one producer. */
 export const decodeWorkspaceDirectory = guardedDecoder(isWorkspaceDirectory, "workspace directory");
 
+/**
+ * A path or a file name that a message names, for a person who opens its chip. `agentId` is the agent
+ * whose message it is: a relative path or a bare name is looked for in its folders. Null when the
+ * message is a person's.
+ */
+export interface OpenFileReferenceInput {
+  agentId: string | null;
+  path: string;
+}
+
+export interface FileReferenceFolderEntry {
+  name: string;
+  /** A path that `openFileReference` accepts again. */
+  path: string;
+  kind: "file" | "directory";
+  /** Bytes for a file, 0 for a folder. */
+  size: number;
+}
+
+/**
+ * What a named file or folder is on the host. A file comes as an attachment, so it opens in the viewer
+ * of every client through the attachment routes and their renditions. A folder comes as its entries.
+ */
+export type FileReferenceTarget =
+  | { kind: "file"; attachment: AttachmentSummary }
+  | { kind: "folder"; name: string; path: string; entries: FileReferenceFolderEntry[]; truncated: boolean };
+
+function isFileReferenceFolderEntry(value: unknown): value is FileReferenceFolderEntry {
+  return (
+    isDynamicRecord(value) &&
+    isBoundedString(value.name, 1_024) &&
+    isBoundedString(value.path, INPUT_LIMITS.path) &&
+    isOneOf(WORKSPACE_DIRECTORY_ENTRY_KINDS, value.kind) &&
+    isNumber(value.size)
+  );
+}
+
+export function isFileReferenceTarget(value: unknown): value is FileReferenceTarget {
+  if (!isDynamicRecord(value)) return false;
+  if (value.kind === "file") return isAttachmentSummary(value.attachment);
+  return (
+    value.kind === "folder" &&
+    isBoundedString(value.name, 1_024) &&
+    isBoundedString(value.path, INPUT_LIMITS.path) &&
+    Array.isArray(value.entries) &&
+    value.entries.length <= WORKSPACE_DIRECTORY_LIMIT &&
+    value.entries.every(isFileReferenceFolderEntry) &&
+    isBoolean(value.truncated)
+  );
+}
+
+/** The same check at the preload and the remote host client. */
+export const decodeFileReferenceTarget = guardedDecoder(isFileReferenceTarget, "file reference");
+
 // Wider than AttachmentPreviewKind on purpose: FilePreview never crosses the Team API, so it can
 // gain kinds that the frozen v1-v4 attachment validators would reject. The preload boundary decodes
 // against this list, so a new kind must be added here to reach the renderer.

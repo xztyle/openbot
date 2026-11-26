@@ -89,7 +89,7 @@ export function isFileReference(value: string): boolean {
   if (!value || /[\0\r\n]/u.test(value) || /[/\\]$/u.test(value)) return false;
   const name = fileReferenceName(value);
   if (/^(Dockerfile|Makefile|\.gitignore)$/iu.test(name)) return true;
-  return /\.(?:avif|bash|c|conf|cpp|cs|css|csv|env|fish|gif|go|h|hpp|html?|ini|java|jpe?g|jsx?|json|kt|kts|log|markdown|md|pdf|php|png|ps1|py|rb|rs|scala|sh|sql|swift|toml|tsx?|txt|webp|xml|ya?ml|zsh)$/iu.test(
+  return /\.(?:avif|bash|c|conf|cpp|cs|css|csv|docx?|env|eml|fish|gif|go|gz|h|heic|hpp|html?|ini|java|jpe?g|jsx?|json|kt|kts|log|m4a|markdown|md|mov|mp3|mp4|od[pst]|ogg|pdf|php|png|pptx?|ps1|py|rb|rs|rtf|scala|sh|sql|svg|swift|tar|tgz|toml|tsv|tsx?|txt|wav|webm|webp|xlsx?|xml|ya?ml|zip|zsh)$/iu.test(
     name,
   );
 }

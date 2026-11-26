@@ -163,6 +163,7 @@ type TeamApiAgentMethods = Pick<
   | "resolveSharedFile"
   | "resolveWorkspaceFile"
   | "listWorkspaceDirectory"
+  | "openFileReference"
   | "sendMessage"
   | "listQueue"
   | "acknowledgeFailedTurn"

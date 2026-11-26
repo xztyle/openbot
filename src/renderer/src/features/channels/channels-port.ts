@@ -17,6 +17,7 @@ export interface ChannelsPort {
     | "chooseAttachments"
     | "listChannels"
     | "openAttachment"
+    | "openFileReference"
     | "readChannel"
     | "respondToApproval"
     | "respondToBrowserSecret"

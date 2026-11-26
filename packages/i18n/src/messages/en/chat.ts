@@ -294,6 +294,7 @@ export const messages = defineMessages("chat", {
   "chat.file.openShared": "Open shared file {name}",
   "chat.file.openWorkspace": "Open workspace file {name}",
   "chat.file.openWorkspaceFolder": "Open workspace folder {name}",
+  "chat.file.folderDownload": "Open a file of the folder to download it.",
   "chat.file.openAttached": "Open attached file {name}",
   "chat.reference.kind.agent": "Agent",
   "chat.reference.kind.mcp": "MCP server",

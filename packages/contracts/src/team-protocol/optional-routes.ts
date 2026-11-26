@@ -37,6 +37,7 @@ import { EVENT_CHECK_API_CODECS } from "./event-check-api-v1";
 import { EVENT_CHECK_TEMPLATES_CODECS } from "./event-check-templates-v1";
 import { EVENT_CHECKS_CODECS } from "./event-checks-v1";
 import { EVENTS_CODECS } from "./events-v1";
+import { FILE_REFERENCES_CODECS } from "./file-references-v1";
 import { FILE_TICKETS_CODECS } from "./file-tickets-v1";
 import { FOCUS_USE_CODECS } from "./focus-use-v1";
 import { GUARDRAILS_CODECS } from "./guardrails-v1";
@@ -159,6 +160,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...CONNECTORS_CODECS,
   ...CONVERSATION_FILE_SEARCH_CODECS,
   ...FILE_TICKETS_CODECS,
+  ...FILE_REFERENCES_CODECS,
   ...FOCUS_USE_CODECS,
   ...MCP_SIGN_IN_APP_CODECS,
   ...MCP_SIGN_IN_CODECS,

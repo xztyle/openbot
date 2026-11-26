@@ -37,6 +37,7 @@ import type {
   AgentWaitsSnapshot,
   AskSideQuestionInput,
   AttachmentDataInput,
+  AttachmentSummary,
   AvatarImageInput,
   CancelMcpSignInInput,
   CapabilityState,
@@ -65,6 +66,7 @@ import type {
   DeleteSharedTableInput,
   DraftAttachment,
   DuplicateAgentResult,
+  FileReferenceTarget,
   GenerateAgentProfileInput,
   HiddenAgentsSnapshot,
   HostAnalyticsInput,
@@ -76,6 +78,7 @@ import type {
   McpSignInAppState,
   McpSignInState,
   McpTestResult,
+  OpenFileReferenceInput,
   ProviderCodeLoginStart,
   ProviderUsageResets,
   QueuedMessageReceipt,
@@ -205,6 +208,7 @@ import { MemoryHold } from "./agent/memory-hold";
 import { MEMORY_REVIEW_MESSAGES, MEMORY_REVIEW_STATE_FILE, MemoryReview } from "./agent/memory-review";
 import type { ReviewSkill } from "./agent/memory-review-prompt";
 import { MemoryReviewState } from "./agent/memory-review-state";
+import { MentionedFiles } from "./agent/mentioned-files";
 import {
   creationModel,
   developmentDefaultsApply,
@@ -306,6 +310,7 @@ import { EventCheckDelivery } from "./event-check-delivery";
 import type { EventCheckReader } from "./event-check-reader";
 import type { EventCheckScheduler } from "./event-check-scheduler";
 import type { EventCheckTemplates } from "./event-check-templates";
+import { FileReferenceRefused, FileReferenceResolver, fileMentions } from "./file-references";
 import { guardrailsRuntime } from "./guardrails/guardrails-runtime";
 import type { GuardrailsService } from "./guardrails/guardrails-service";
 import type { HostMemory } from "./host-memory";
@@ -661,6 +666,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #sessionSettings: SessionSettings;
   readonly #queue: QueueControls;
   readonly #attachments: AttachmentGateway;
+  readonly #mentionedFiles: MentionedFiles;
+  /** The attachment made for each version of a file that a chip opened, by path, size and time. */
+  readonly #referencedFiles = new Map<string, AttachmentSummary>();
   readonly #browserUploads: BrowserUploads;
   readonly #mailboxSync: MailboxSync;
   readonly #followUp: DelegationFollowUp;
@@ -1316,6 +1324,17 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
       },
     });
+    this.#mentionedFiles = new MentionedFiles({
+      attachments: this.#attachments,
+      mailbox,
+      conversation: this.#conversation,
+      space: (agentId) => {
+        const space = store.spaces.agentSpace(agentId);
+        return { slug: space.slug, sharedDirectory: store.spaces.sharedDirectory(space) };
+      },
+      recentFiles: (agentId) =>
+        this.#turn.fileHistory.paths(agentId, store.list().find((agent) => agent.id === agentId)?.threadId ?? null),
+    });
     this.#browserUploads = new BrowserUploads({
       browser,
       attachments: this.#attachments,
@@ -1866,6 +1885,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         takeRoutinePreview: (deliveryId) => this.#routines.takePreviewBeforeRun(deliveryId),
         closeRoutineSession: (externalThreadId) => this.#threads.closeRoutineThread(externalThreadId),
         conversationTurnEnded: (agentId, turn) => this.#memoryReview.turnEnded(agentId, turn),
+        attachMentionedFiles: (agentId, snapshot, turnId) =>
+          this.#mentionedFiles.attachToAnswer(agentId, snapshot, turnId),
         answerFinished: (answer) => {
           this.#condenseLater(answer);
           this.#scoreAnswerLater(answer);
@@ -1998,6 +2019,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       browser,
       browserUploads: this.#browserUploads,
       attachments: this.#attachments,
+      mentionedFiles: this.#mentionedFiles,
       channels: this.channels,
       messaging: this.messaging,
       hostedSites: this.#hostedSites,
@@ -5282,6 +5304,62 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     );
   }).bind(this);
 
+  /**
+   * A file or folder that a message names, for a person who opens its chip. `canSee` says which agents
+   * the reader may see; the reader opens their workspaces and the shared folders of their spaces, and
+   * nothing else. Absent for the owner at this computer, who sees every agent. A file comes as an
+   * attachment, made once for each version of the file, so every client opens it in its viewer.
+   */
+  readonly openFileReference = Effect.fn("AgentService.openFileReference")(function* (
+    this: AgentService,
+    input: OpenFileReferenceInput,
+    canSee?: (agentId: string) => boolean,
+  ): Effect.fn.Return<FileReferenceTarget, AgentLifecycleFailed> {
+    const refuse = (reason: FileReferenceRefused["reason"]) =>
+      new AgentLifecycleFailed({ operation: "open file reference", cause: new FileReferenceRefused(reason) });
+    const visible = this.#store.list().filter((agent) => canSee?.(agent.id) ?? true);
+    const spaces = this.#store.spaces;
+    const visibleSpaceIds = new Set(visible.map((agent) => spaces.agentSpaceId(agent.id)));
+    const agent = input.agentId === null ? undefined : visible.find((candidate) => candidate.id === input.agentId);
+    if (input.agentId !== null && !agent) return yield* refuse("outside");
+    const resolver = new FileReferenceResolver({
+      agent: agent
+        ? { id: agent.id, workspacePath: agent.workspacePath, sharedDirectory: spaces.agentSharedDirectory(agent.id) }
+        : null,
+      spaces: new Map(
+        spaces
+          .list()
+          .filter((space) => canSee === undefined || visibleSpaceIds.has(space.id))
+          .map((space) => [space.slug, spaces.sharedDirectory(space)]),
+      ),
+      workspaces: new Map(visible.map((candidate) => [candidate.id, candidate.workspacePath])),
+      // The old global folder holds what every space shared before spaces; a member downloads from it.
+      legacyShared: this.#store.sharedRoot,
+      recentFiles: agent ? this.#turn.fileHistory.paths(agent.id, agent.threadId) : [],
+    });
+    const found = yield* resolver.resolve(input.path);
+    if (found.kind === "refused") return yield* refuse(found.reason);
+    if (found.kind === "folder") {
+      const listing = yield* resolver.listFolder(found.path);
+      return { kind: "folder", name: found.name, path: found.path, ...listing };
+    }
+    const key = `${found.path}\0${found.size}\0${found.modifiedAt}`;
+    const cached = this.#referencedFiles.get(key);
+    if (cached) {
+      const stored = yield* this.#mailbox.resolveAttachment(cached.id).pipe(Effect.orElseSucceed(() => null));
+      if (stored) return { kind: "file", attachment: cached };
+    }
+    const attachment = yield* this.#mailbox
+      .storeGeneratedAttachment({ sourcePath: found.path, ...(agent ? { ownerAgentId: agent.id } : {}) })
+      .pipe(
+        Effect.mapError(
+          (failure) => new AgentLifecycleFailed({ operation: "open file reference", cause: failure.cause }),
+        ),
+      );
+    this.#referencedFiles.set(key, attachment);
+    return { kind: "file", attachment };
+  }).bind(this);
+
   #agentForFile(agentId: string): AgentSummary {
     const agent = this.#store.list().find((candidate) => candidate.id === agentId);
     if (!agent) throw new Error(sourceText("error.agent.unknown", { id: agentId }));
@@ -6978,6 +7056,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     // Before the event: a client learns who delegated a request before the request arrives.
     this.#escalations?.observe(event);
     this.#observeAttention(event);
+    this.#attachCardFiles(event);
     this.#modelPolicy.observe(event);
     this.#guardrails?.observe(event);
     if (event.type === "agents-changed") this.playbooks.scheduleSync();
@@ -6985,6 +7064,60 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.workspace?.observe(event);
     if (this.channels?.event(event) || this.messaging?.event(event, this.#scope) || this.#tasks?.event(event)) return;
     this.emit("event", event);
+  }
+
+  /**
+   * A question or an approval card in the agent's chat with the owner that names files: the host attaches
+   * them in the card's turn, so the owner sees them with the card. The card shows at once either way.
+   */
+  #attachCardFiles(event: AgentEvent): void {
+    const card =
+      event.type === "prompt"
+        ? {
+            agentId: event.agentId,
+            threadId: event.threadId,
+            turnId: event.turnId,
+            key: String(event.requestId),
+            texts: event.questions.flatMap((question) => [
+              question.header,
+              question.question,
+              ...(question.options ?? []).flatMap((option) => [option.label, option.description]),
+            ]),
+          }
+        : event.type === "approval" && event.approval.reason
+          ? {
+              agentId: event.approval.agentId,
+              threadId: event.approval.threadId,
+              turnId: event.approval.turnId,
+              key: String(event.approval.requestId),
+              texts: [event.approval.reason],
+            }
+          : null;
+    if (!card || this.#stopping || fileMentions(card.texts.join("\n")).length === 0) return;
+    try {
+      if (this.#conversation.isExecutionThread(this.#conversation.publicThreadId(card.agentId, card.threadId))) return;
+    } catch {
+      return;
+    }
+    const callId = `card-files:${card.key}`;
+    Effect.runFork(
+      this.#mentionedFiles.paths(card.agentId, card.texts, new Set()).pipe(
+        Effect.flatMap((paths) =>
+          paths.length === 0
+            ? Effect.void
+            : this.#attachments.attachFiles(
+                card.agentId,
+                { threadId: card.threadId, turnId: card.turnId, callId },
+                paths,
+                `${card.turnId}:${callId}`,
+              ),
+        ),
+        Effect.catchCause((cause) =>
+          Effect.sync(() => logger.warn("The files that a card names were not attached.", { cause: String(cause) })),
+        ),
+        Effect.forkIn(this.#scope),
+      ),
+    );
   }
 
   /** Removes live provider state for an execution thread before its durable rows are deleted. */

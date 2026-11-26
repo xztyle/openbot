@@ -336,6 +336,10 @@ export const messages = defineMessages("error.backend", {
   "error.backend.workspacePathNotFile": "Workspace path is not a file.",
   "error.backend.workspacePathNotDirectory": "Workspace path is not a folder.",
   "error.backend.workspacePathMissing": "Nothing exists at {path} in the agent workspace {root}.",
+  "error.backend.fileReferenceUnavailable":
+    "This file can't be opened here. It may have been moved, or it is not in a folder you can see.",
+  "error.backend.fileReferenceTooLarge":
+    "This file is too large to open here. Ask the agent to send it as an attachment.",
   "error.backend.workspacePathMissingForMember": "Nothing exists at {path} in the agent workspace.",
   "error.backend.useChannelTaskControls": "Use the channel task controls for this assignment.",
   "error.backend.editFinished": "This edit has already finished.",

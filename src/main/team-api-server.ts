@@ -229,6 +229,7 @@ import { routeDiscordAccess } from "./team-api/route-discord-access";
 import { routeDiscordChannels } from "./team-api/route-discord-channels";
 import { eventCheckCapability, routeEventChecks } from "./team-api/route-event-checks";
 import { routeEvents } from "./team-api/route-events";
+import { routeFileReferences } from "./team-api/route-file-references";
 import { routeFiles } from "./team-api/route-files";
 import { routeFocusUse } from "./team-api/route-focus-use";
 import { routeGuardrails } from "./team-api/route-guardrails";
@@ -1051,6 +1052,7 @@ export class TeamApiServer {
       if ((await routeContextReset(context, this.#options.agents, hidden)) === "handled") return;
       if ((await routeAgentMemoryPage(context, this.#options.agents, hidden)) === "handled") return;
       if ((await routeWorkspaceDirectory(context, this.#options.agents, hidden)) === "handled") return;
+      if ((await routeFileReferences(context, this.#options.agents, hidden)) === "handled") return;
       if ((await routeConversationFiles(context, this.#options.agents)) === "handled") return;
       if ((await routeSideQuestion(context, this.#options.agents, hidden)) === "handled") return;
       if ((await routeRoutineFlows(context, this.#options.routineFlows, this.#options.agents, hidden)) === "handled")

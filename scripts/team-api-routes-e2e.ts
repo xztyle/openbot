@@ -382,6 +382,7 @@ const fakeAgents: TeamApiAgents = {
   markConversationRead: unused("markConversationRead"),
   markConversationUnread: unused("markConversationUnread"),
   listWorkspaceDirectory: unused("listWorkspaceDirectory"),
+  openFileReference: unused("openFileReference"),
   sendMessage: unused("sendMessage"),
   setMessageReaction: unused("setMessageReaction"),
   clearAgentContext: unused("clearAgentContext"),

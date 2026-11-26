@@ -17,6 +17,7 @@ import {
 import { ATTACHMENT_LIMITS, INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   type DownloadAttachmentsInput,
+  decodeFileReferenceTarget,
   decodeWorkspaceDirectory,
   type FileAction,
   type ImportAttachmentsInput,
@@ -30,6 +31,10 @@ import {
   TEAM_TEXT_ATTACHMENTS_CAPABILITY,
   TEAM_ZIP_ATTACHMENTS_CAPABILITY,
 } from "@openbot/contracts/team-protocol/current";
+import {
+  FILE_REFERENCES_CAPABILITY,
+  FILE_REFERENCES_ROUTES,
+} from "@openbot/contracts/team-protocol/file-references-v1";
 import {
   WORKSPACE_DIRECTORY_CAPABILITY,
   WORKSPACE_DIRECTORY_ROUTES,
@@ -56,6 +61,7 @@ import {
   parseFilePreviewPageUrl,
   parseImportAttachments,
   parseOpenAttachment,
+  parseOpenFileReference,
   parseOpenSharedFile,
   parseOpenWorkspaceFile,
 } from "./agent-inputs";
@@ -72,6 +78,7 @@ export interface AttachmentIpcDependencies {
     | "resolveSharedFile"
     | "resolveLocalWorkspaceFile"
     | "listLocalWorkspaceDirectory"
+    | "openFileReference"
   >;
   mailbox: Pick<MailboxStore, "resolveAttachment">;
   remoteServers: Pick<
@@ -258,6 +265,20 @@ export function attachmentIpcHandlers({
             throw new Error(sourceText("error.team.workspaceDirectoryUnsupported"));
           return runCauseEffect(
             remoteServers.request(serverId, WORKSPACE_DIRECTORY_ROUTES.list, decodeWorkspaceDirectory, {
+              method: "POST",
+              body: { agentId: parsed.agentId, path: parsed.path },
+            }),
+          );
+        },
+      }),
+      openFileReference: scopedHandler(parseOpenFileReference, {
+        // The owner at this computer sees every agent and every space.
+        local: (parsed) => runCauseEffect(service.openFileReference(parsed)),
+        remote: (parsed, serverId) => {
+          if (!remoteServers.supportsCapability(serverId, FILE_REFERENCES_CAPABILITY))
+            throw new Error(sourceText("error.backend.fileReferenceUnavailable"));
+          return runCauseEffect(
+            remoteServers.request(serverId, FILE_REFERENCES_ROUTES.open, decodeFileReferenceTarget, {
               method: "POST",
               body: { agentId: parsed.agentId, path: parsed.path },
             }),

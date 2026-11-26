@@ -688,7 +688,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "attach_files_to_response",
     description:
-      "Attach existing local files to the current response for the user. Use this after creating screenshots, charts, diagrams, reports, ZIP archives, or other files that the user should receive. Atelier copies each file and shows image previews in the conversation.",
+      "Attach existing local files to the current response for the user. Use this after creating screenshots, charts, diagrams, reports, copies, drafts, sheets, ZIP archives, or other files that the user should receive. Attach every file you name: the user cannot open a file name or a folder path. Atelier copies each file and shows previews in the conversation.",
     shape: { paths: z.array(z.string().min(1).max(INPUT_LIMITS.path)).min(1).max(INPUT_LIMITS.attachments) },
   },
   {
@@ -1035,7 +1035,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "message_owner",
     description:
-      "Write to the owner in your chat with them, when they need to know or decide something, with the files they must see in paths (an image you made, or one a teammate sent you: pass its attached local file path). In a turn that the owner's own message started, just answer: this is for the other turns. A turn that a Motion event, a teammate, a routine or a note from Atelier started is your own activity: the owner does not see its answer as a message and is not told about it. Only this message (or ask_user, or alert_owner for an emergency) reaches them, and it tells them. Your normal updates go to the board, not to the owner. One short message; never an acknowledgement or a status echo.",
+      "Write to the owner in your chat with them, when they need to know or decide something, with the files they must see in paths (an image you made, a document or copy you wrote, or one a teammate sent you: pass its attached local file path). Pass every file you name: the owner cannot open a file name or a folder path. In a turn that the owner's own message started, just answer: this is for the other turns. A turn that a Motion event, a teammate, a routine or a note from Atelier started is your own activity: the owner does not see its answer as a message and is not told about it. Only this message (or ask_user, or alert_owner for an emergency) reaches them, and it tells them. Your normal updates go to the board, not to the owner. One short message; never an acknowledgement or a status echo.",
     shape: messageOwnerToolSchema.shape,
   },
   {

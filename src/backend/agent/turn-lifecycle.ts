@@ -192,6 +192,8 @@ export interface TurnHooks {
    * reply condenser may make it shorter later. It must not wait: the turn has ended already.
    */
   answerFinished?(answer: FinishedAnswer): void;
+  /** A turn of the owner's conversation answered: the host attaches the files that the answer names. */
+  attachMentionedFiles?(agentId: string, snapshot: ConversationSnapshot, turnId: string): Effect.Effect<void>;
 }
 
 /** The answer of a finished turn, as `TurnHooks.answerFinished` gets it. */
@@ -1274,6 +1276,22 @@ export class TurnLifecycle {
           this.#hooks.emit({ type: "agents-changed", agents: this.#hooks.listAgents() });
         }
       }
+      // The owner's conversation: the files that the answer names go with it, so a file name is never a dead end.
+      if (
+        outcome === "completed" &&
+        !channelTurn &&
+        !taskTurn &&
+        !routineSession &&
+        deliveries.some(({ delivery }) => delivery.sender.kind === "user") &&
+        this.#hooks.attachMentionedFiles
+      )
+        yield* this.#hooks
+          .attachMentionedFiles(agentId, snapshot, turnId)
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.sync(() => logger.warn("Mentioned files were not attached.", { cause: String(cause) })),
+            ),
+          );
       if (trace) this.#attachTrace(snapshot.messages, agentId, turnId, trace);
       addMemoryChangesMessage(snapshot, turnId, memoryChanges, (text) => this.#hooks.redactMcp(text));
       this.#conversation.emitConversation(snapshot, "turn.completed", { turnId, status: outcome });

@@ -1,6 +1,7 @@
 import { fileReferenceName, isFileReference } from "@openbot/brand/file-reference";
 import { blockChatMath, chatMathBlockStart, chatMathStart, inlineChatMath } from "@openbot/contracts/chat-math";
 import { chatPreviewKind } from "@openbot/contracts/chat-preview";
+import type { AttachmentSummary } from "@openbot/contracts/ipc";
 import { Button, Checkbox } from "@openbot/ui";
 import { Dynamic } from "@solidjs/web";
 import { Marked, type Token, type Tokens, type TokensList } from "marked";
@@ -638,6 +639,11 @@ function MarkdownInline(props: {
             );
           case "codespan": {
             if (!tokenIs(token, "codespan")) return token.raw;
+            // A name of a file that the message carries opens that file, wherever the agent said it is.
+            const attached = attachmentNamed(token.text, props.content.attachments);
+            const onOpenAttachment = props.content.onOpenAttachment;
+            if (attached && onOpenAttachment)
+              return <AttachedFileLink attachment={attached} label={token.text} onOpen={onOpenAttachment} />;
             const file = mentionedFileTarget(token.text, props.content.fileDirectory);
             return file && file.kind === "shared" && props.content.onOpenSharedFile ? (
               <LocalFileLink
@@ -990,6 +996,36 @@ function markdownInlinePlainText(tokens: Token[]): string {
     .join("");
 }
 
+/** The attachment of the message whose name a code span or a path ends with. */
+function attachmentNamed(value: string, attachments: readonly AttachmentSummary[] | undefined) {
+  if (!attachments?.length) return undefined;
+  const name = fileReferenceName(value.trim().replace(/[/\\]+$/u, ""));
+  return attachments.find((attachment) => attachment.name === name);
+}
+
+function AttachedFileLink(props: {
+  attachment: AttachmentSummary;
+  label: string;
+  onOpen: (attachment: AttachmentSummary) => void;
+}) {
+  const { t } = useText();
+  return (
+    <Button
+      variant="ghost"
+      type="button"
+      class="message-file-reference"
+      data-file-tone={attachmentReferenceTone(props.attachment.name)}
+      aria-label={t("chat.file.openAttached", { name: props.attachment.name })}
+      title={props.label}
+      data-cuelume-tap="open"
+      onClick={() => props.onOpen(props.attachment)}
+    >
+      <AttachmentReferenceVisual name={props.attachment.name} />
+      <span class="inline-file-reference-name">{props.label}</span>
+    </Button>
+  );
+}
+
 function LocalFileLink(props: {
   path: string;
   label: string;
@@ -1176,6 +1212,11 @@ function messageFileDirectory(body: string): FileDirectoryContext | null {
 
 function mentionedFileTarget(value: string, directory: FileDirectoryContext | null): FileDirectoryContext | null {
   const path = value.trim();
+  // A folder path, such as `landing-review/` or `/data/OpenBot/Spaces/ventas/Shared/fotos/`, opens its listing.
+  if (/^(?:~?[/\\]|\.{1,2}[/\\])?[^\s`]*[^\s`/\\][/\\]$/u.test(path)) {
+    const shared = sharedFileTarget(path);
+    return shared ? { path: shared, kind: "shared" } : { path, kind: "workspace" };
+  }
   if (!isFileReference(path)) return null;
   const shared = sharedFileTarget(path);
   if (shared) return { path: shared, kind: "shared" };

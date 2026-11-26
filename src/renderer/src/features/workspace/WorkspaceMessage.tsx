@@ -103,7 +103,14 @@ export function WorkspaceMessageBody(props: {
       () => props.entry,
       () => props.inThread === true,
     );
-  const { view, download, Viewer } = props.viewer ?? createWorkspaceFileViewer({ annotate });
+  const { view, viewNamed, download, Viewer } = props.viewer ?? createWorkspaceFileViewer({ annotate });
+  /** A path or a file name in the text opens in the viewer, on every client through the host port. */
+  const openReference = (path: string) =>
+    viewNamed(path, {
+      attachments: props.entry.message.attachments,
+      agentId: props.entry.author.kind === "agent" ? props.entry.author.id : null,
+    });
+
   const attachmentAction = (attachment: AttachmentSummary, action: "open" | "reveal" | "download") => {
     if (action === "open") return view(attachment);
     if (action === "download") return download(attachment);
@@ -121,6 +128,8 @@ export function WorkspaceMessageBody(props: {
           if (!ws.openLink(url)) void port().openUrl(url);
         }}
         onPreview={view}
+        onOpenSharedFile={openReference}
+        onOpenWorkspaceFile={openReference}
         onAttachmentAction={attachmentAction}
         onDownload={download}
         onAnnotateImage={annotate}

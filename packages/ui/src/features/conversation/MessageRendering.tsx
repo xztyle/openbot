@@ -36,7 +36,6 @@ import { ComparisonTable } from "./ComparisonTable";
 import { CheckIcon, CopyIcon, PlusIcon, ReactionIcon, ReplyIcon, StopIcon } from "./ConversationIcons";
 import { createContentBlockCache } from "./contentBlockCache";
 import { DataTable, type MessageContentBlock, messageContentBlocks, reuseUnchangedBlocks } from "./DataTable";
-import { messageFileReferences } from "./FileReference";
 import { ImageGeneration } from "./ImageGeneration";
 import { ImageGallery, ImageLightbox, type ImageLightboxOpening, isLightboxImage } from "./ImageLightbox";
 import { MarkdownInlineText, MarkdownMessageText, markdownImageName } from "./MarkdownMessageText";
@@ -313,19 +312,11 @@ export function MessageBody(props: {
       imageGenerationStatus(props.message.streaming, props.message.status) !== "completed"
     );
   });
-  /* A file that the text names shows there. An image always shows as an image, under the text. */
+  /* Every file shows under the text as its preview, also one that the text names: the name in the
+     text is a chip that opens the same file. */
   const standaloneAttachments = createMemo(() => {
-    const referencedIds = new Set(
-      messageFileReferences(message().body, props.message.attachments ?? []).flatMap((reference) =>
-        reference.kind === "attachment" && reference.attachment.previewKind !== "image"
-          ? [reference.attachment.id]
-          : [],
-      ),
-    );
     const generatedAttachmentId = generatedImageShown() ? props.message.attachments?.[0]?.id : undefined;
-    return (props.message.attachments ?? []).filter(
-      (attachment) => !referencedIds.has(attachment.id) && attachment.id !== generatedAttachmentId,
-    );
+    return (props.message.attachments ?? []).filter((attachment) => attachment.id !== generatedAttachmentId);
   });
   /* A client with no `previewUrl` (the browser) reads an image through its media source and shows it
      inline too. An image whose copy cannot load goes back to a file card, with its download. */

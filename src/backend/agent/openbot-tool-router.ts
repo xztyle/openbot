@@ -117,6 +117,7 @@ import { handleLoopTool } from "./loop-tools";
 import { type AgentMailPort, MAIL_TOOLS, parseMailToolCall } from "./mail-tools";
 import type { MailboxSync } from "./mailbox-sync";
 import { type AgentMcpServers, handleMcpServerTool, isMcpServerTool } from "./mcp-tools";
+import type { MentionedFiles } from "./mentioned-files";
 import {
   agentAccountSetup,
   listModelsPayload,
@@ -302,6 +303,8 @@ export interface OpenBotToolRouterOptions {
   browser: AgentBrowserHost;
   browserUploads: BrowserUploads;
   attachments: AttachmentGateway;
+  /** The files that a message to the owner names, which `message_owner` attaches. */
+  mentionedFiles?: Pick<MentionedFiles, "sources"> | null | undefined;
   channels: ChannelService;
   messaging: MessagingThreads;
   hostedSites: HostedSiteCoordinator;
@@ -504,6 +507,7 @@ export class OpenBotToolRouter {
       motionPreview: options.motionPreview ?? null,
       visualPreview: options.visualPreview ?? null,
       attachments: options.attachments,
+      mentionedFiles: options.mentionedFiles ?? null,
       mailbox: options.mailbox,
       conversation: options.conversation,
       teamChannel: (agentId, turnId) => options.channels.teamContext(agentId, turnId)?.channelId ?? null,

@@ -32,6 +32,7 @@ import {
   decodeChannelRoutines,
   decodeChannelSummaries,
   decodeClaudeContextSetting,
+  decodeFileReferenceTarget,
   decodeHermesImportPreview,
   decodeHermesImportResult,
   decodeHostAgentMemoryLimit,
@@ -1205,6 +1206,7 @@ const openbotApi: OpenBotDesktopApi = {
       previewWorkspaceFile: decodeFilePreview,
       releaseFilePreview: decodeVoid,
       listWorkspaceDirectory: decodeWorkspaceDirectory,
+      openFileReference: decodeFileReferenceTarget,
     }),
     onAttachmentImport: (listener) => {
       attachmentImportListeners.add(listener);

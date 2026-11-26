@@ -90,6 +90,7 @@ import {
   type ExternalLinkBrowsers,
   type ExternalLinkPreference,
   type FilePreview,
+  type FileReferenceTarget,
   type HostedSiteSummary,
   type HostStatus,
   hostAgentMemoryLimit,
@@ -102,6 +103,7 @@ import {
   normalizeMcpConfig,
   type OpenAttachmentInput,
   type OpenBotDesktopApi,
+  type OpenFileReferenceInput,
   type OpenSharedFileInput,
   type OpenWorkspaceFileInput,
   type PromptCacheTtlSetting,
@@ -2729,6 +2731,32 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         return mockFilePreview(input.path, "workspace-file");
       },
       listWorkspaceDirectory: async (input: OpenWorkspaceFileInput) => mockWorkspaceDirectory(input.path),
+      // The preview host has no files: a named file opens as a short text attachment, a folder as its listing.
+      openFileReference: async (input: OpenFileReferenceInput): Promise<FileReferenceTarget> => {
+        if (!/\.[^/]+$/u.test(input.path)) {
+          const directory = mockWorkspaceDirectory(input.path);
+          return {
+            kind: "folder",
+            name: directory.name,
+            path: directory.path,
+            entries: directory.entries.map(({ name, path, kind, size }) => ({ name, path, kind, size })),
+            truncated: directory.truncated,
+          };
+        }
+        const name = input.path.split("/").at(-1) ?? input.path;
+        return {
+          kind: "file",
+          attachment: {
+            id: `mock-reference-${name}`,
+            name,
+            size: 0,
+            kind: "file",
+            mimeType: "text/plain",
+            previewKind: "text",
+            previewUrl: null,
+          },
+        };
+      },
       sendMessage: async (input: SendMessageInput) => {
         if (agents.some((agent) => agent.id === input.agentId && agent.hiddenAt !== undefined))
           throw new Error(sourceText("error.backend.recipientHidden"));

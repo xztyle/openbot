@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { basename, extname } from "node:path";
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
+import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { AttachmentSummary, ConversationMessage } from "@openbot/contracts/ipc";
 import { OWNER_MESSAGE_ITEM_TYPE } from "@openbot/contracts/owner-conversation";
 import { Effect, Result } from "effect";
 import { z } from "zod";
-import type { MailboxStore } from "../mailbox-store";
+import type { GeneratedAttachmentSource, MailboxStore } from "../mailbox-store";
 import {
   alertOwnerToolSchema,
   holdForOwnerToolSchema,
@@ -19,6 +20,7 @@ import type { AttachmentGateway } from "./attachment-gateway";
 import type { ChatVisualPreviewHost } from "./chat-visual-preview";
 import type { ConversationRuntime } from "./conversation-runtime";
 import { humanViewHtml, type MotionPagePreview } from "./human-view-preview";
+import type { MentionedFiles } from "./mentioned-files";
 import { type OpenBotToolResponse, openBotToolFailure, openBotToolResult } from "./routine-tools";
 import { csvPreviewHtml } from "./share-preview";
 import { toToolOperationFailed } from "./tool-operation";
@@ -72,6 +74,8 @@ export interface OwnerToolsOptions {
   ownerText?: ((agentId: string, text: string) => void) | null;
   /** The human version of a Motion page link: `share_preview` draws it instead of the page. */
   motionPreview?: MotionPagePreview | null;
+  /** The files that a message to the owner names, which go with it. */
+  mentionedFiles?: Pick<MentionedFiles, "sources"> | null;
 }
 
 function failure(error: z.ZodError): OpenBotToolResponse {
@@ -177,6 +181,7 @@ export class OwnerTools {
     const paths = parsed.data.paths ?? [];
     // The files go with the message as they are: a teammate's image is passed on, not uploaded again.
     let attachments: AttachmentSummary[] = [];
+    let sources: GeneratedAttachmentSource[] = [];
     if (paths.length > 0) {
       const opened = yield* Effect.result(
         this.#options.attachments.openSources(agentId, [...paths], { allowAnyReadablePath: false }),
@@ -185,7 +190,23 @@ export class OwnerTools {
         return openBotToolFailure(
           "A file could not be read: pass files of your workspace or Shared, or the attached local files of a teammate's message, by their absolute paths. Nothing was sent.",
         );
-      const sources = opened.success;
+      sources = opened.success;
+    }
+    // A file that the text names and `paths` left out goes too: the owner cannot open a name.
+    const named = this.#options.mentionedFiles
+      ? yield* this.#options.mentionedFiles.sources(
+          agentId,
+          [parsed.data.text],
+          new Set(sources.map((source) => basename(source.path))),
+          INPUT_LIMITS.attachments - sources.length,
+        )
+      : [];
+    const fresh = named.filter((source) => !sources.some(({ path }) => path === source.path));
+    const repeated = named.filter((source) => !fresh.includes(source));
+    if (repeated.length > 0)
+      yield* Effect.promise(() => Promise.allSettled(repeated.map((source) => source.handle.close())));
+    sources = [...sources, ...fresh];
+    if (sources.length > 0) {
       attachments = yield* mailbox
         .stageGeneratedAttachments({ sources, ownerAgentId: agentId })
         .pipe(

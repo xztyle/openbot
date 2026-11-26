@@ -23,8 +23,10 @@ import type {
   CreateAgentInput,
   DuplicateAgentResult,
   EditQueuedMessageInput,
+  FileReferenceTarget,
   HiddenAgentsSnapshot,
   InvitePreview,
+  OpenFileReferenceInput,
   QueueSnapshot,
   ReorderQueueInput,
   RespondToApprovalInput,
@@ -50,6 +52,7 @@ import type {
 import {
   canAdministerServer,
   decodeCreatedSpaceAgent,
+  decodeFileReferenceTarget,
   decodeWorkspaceDirectory,
   isAccountUsage,
   isAgentStatus,
@@ -97,6 +100,10 @@ import {
   TEAM_BROWSER_NAVIGATION_CAPABILITY,
   TEAM_TEXT_ATTACHMENTS_CAPABILITY,
 } from "@openbot/contracts/team-protocol/current";
+import {
+  FILE_REFERENCES_CAPABILITY,
+  FILE_REFERENCES_ROUTES,
+} from "@openbot/contracts/team-protocol/file-references-v1";
 import {
   FILE_TICKET_ROUTES,
   type FileTicket,
@@ -320,6 +327,8 @@ export interface WebWorkspaceRuntime {
   workspaceFile(agentId: string, path: string): Promise<WebFile>;
   /** A folder in one agent's workspace on the host. */
   workspaceDirectory(agentId: string, path: string): Promise<WorkspaceDirectory>;
+  /** A file or folder that a message names (`file-references-v1`): a file comes as an attachment. */
+  fileReference(input: OpenFileReferenceInput): Promise<FileReferenceTarget>;
   /** The routine canvas routes. Each call refuses while the host does not serve `routine-flows-v1`. */
   routineFlows?: TeamRoutineFlowsApi;
   /** Changes an agent routine, such as its instruction. */
@@ -1323,6 +1332,12 @@ export function createWebWorkspaceRuntime(
       if (!capabilities.includes(WORKSPACE_DIRECTORY_CAPABILITY))
         throw new Error(currentText().t("error.team.workspaceDirectoryUnsupported"));
       return decodeWorkspaceDirectory(await request("POST", WORKSPACE_DIRECTORY_ROUTES.list, { agentId, path }));
+    },
+    async fileReference(input) {
+      if (!capabilities.includes(FILE_REFERENCES_CAPABILITY))
+        throw new Error(currentText().t("error.backend.fileReferenceUnavailable"));
+      const body = { agentId: input.agentId, path: input.path };
+      return decodeFileReferenceTarget(await request("POST", FILE_REFERENCES_ROUTES.open, body));
     },
     routineFlows,
     updateRoutine: agentRoutines.updateRoutine,

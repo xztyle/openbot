@@ -176,8 +176,10 @@ import type {
   DownloadAttachmentsInput,
   DraftAttachment,
   FilePreview,
+  FileReferenceTarget,
   ImportAttachmentsInput,
   OpenAttachmentInput,
+  OpenFileReferenceInput,
   OpenSharedFileInput,
   OpenWorkspaceFileInput,
   WorkspaceDirectory,
@@ -1664,6 +1666,8 @@ export const IPC_ENDPOINTS = {
     listWorkspaceDirectory: scopedRequest<OpenWorkspaceFileInput, WorkspaceDirectory>()(
       "agent:list-workspace-directory",
     ),
+    /** A file or folder that a message names, for its chip: a file comes as an attachment. */
+    openFileReference: scopedRequest<OpenFileReferenceInput, FileReferenceTarget>()("agent:open-file-reference"),
   },
   // Not part of `agentAttachments`: the preload sends the paths of dropped and pasted files, and the
   // renderer must never name a path to import. So this group is never bridged to the renderer.

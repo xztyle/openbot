@@ -56,13 +56,11 @@ export interface WorkspaceChatRowProps {
   onOpenWorkspaceFile?: ((path: string) => void) | undefined;
   onOpenQuote?: ((messageId: string, text: string) => void) | undefined;
   onDownload?: ((attachment: AttachmentSummary) => void) | undefined;
-  /** Annotate in the image viewer; see `MessageBody`'s `onAnnotateImage`. */
+  /** Annotate in the image viewer and in the right-click menu of an image; see `MessageBody`'s `onAnnotateImage`. */
   onAnnotateImage?: ((attachment: AttachmentSummary, url: string) => void) | undefined;
   mediaSource?: AttachmentMediaSource | undefined;
   /** Quotes text selected in the message in the composer, from the right-click menu. */
   onQuote?: ((text: string) => void) | undefined;
-  /** Opens the image editor on a picture of the message, from its right-click menu. */
-  onAnnotateImage?: MessageTargetActions["annotateImage"];
 }
 
 /**
@@ -105,7 +103,12 @@ export function WorkspaceChatRow(props: WorkspaceChatRowProps): JSX.Element {
     },
     openLink: props.onOpenLink,
     quote: props.onQuote,
-    annotateImage: props.onAnnotateImage,
+    annotateImage: props.onAnnotateImage
+      ? ({ attachmentId, src }) => {
+          const file = attachmentId ? attachment(attachmentId) : undefined;
+          if (file) props.onAnnotateImage?.(file, src);
+        }
+      : undefined,
     directMessage: props.author.kind === "agent" ? () => props.onSelectAgent(props.author.id) : undefined,
   });
   return (

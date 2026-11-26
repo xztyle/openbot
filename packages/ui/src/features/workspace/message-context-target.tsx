@@ -11,6 +11,7 @@
 import { Copy, Download, ExternalLink, Highlighter, Link, MessageCircle, TextQuote, UserRound } from "../../icons";
 import { useText } from "../../text";
 import { toast } from "../../toast";
+import { canCopyImage, copyImageToClipboard } from "../conversation/image-clipboard";
 import type { WorkspaceMenuItem } from "./workspace-types";
 
 export interface ImageTarget {
@@ -130,27 +131,6 @@ function nameFromUrl(url: string): string {
   }
 }
 
-/** Copies a picture's pixels. The clipboard takes PNG only, so another format is redrawn as PNG. */
-export async function copyImageToClipboard(src: string): Promise<void> {
-  if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) throw new Error("No image clipboard.");
-  const png = async (): Promise<Blob> => {
-    const response = await fetch(src);
-    const blob = await response.blob();
-    if (blob.type === "image/png") return blob;
-    const bitmap = await createImageBitmap(blob);
-    const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
-    bitmap.close();
-    return new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob((out) => (out ? resolve(out) : reject(new Error("No PNG."))), "image/png"),
-    );
-  };
-  // The item is made in the tap, with the pending bytes, so Safari keeps the user activation.
-  await navigator.clipboard.write([new ClipboardItem({ "image/png": png() })]);
-}
-
 /** Saves a picture that is not an attachment, such as one in the Markdown text, through a download link. */
 export function saveImageFromUrl(src: string, name: string): void {
   const anchor = document.createElement("a");
@@ -184,8 +164,9 @@ export function createMessageTargetItems(
     const act = actions() ?? {};
     switch (target.kind) {
       case "image": {
-        const out: WorkspaceMenuItem[] = [
-          {
+        const out: WorkspaceMenuItem[] = [];
+        if (canCopyImage())
+          out.push({
             id: "target-copy-image",
             label: t("workspace.context.copyImage"),
             icon: <Copy aria-hidden="true" />,
@@ -194,8 +175,7 @@ export function createMessageTargetItems(
                 () => toast.success(t("workspace.context.imageCopied")),
                 () => toast.error(t("workspace.context.imageCopyFailed")),
               ),
-          },
-        ];
+          });
         if (target.attachmentId ? act.download : true) {
           const id = target.attachmentId;
           out.push({

@@ -29,6 +29,7 @@
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
   line-height: var(--openbot-leading-sm);
+  letter-spacing: var(--openbot-tracking-snug);
   border-radius: 0;
   transition: none;
   /* Spacing the budget leaves alone: a step, a zero, a 1px nudge, a negative, a calc(). */

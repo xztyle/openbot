@@ -88,6 +88,7 @@ describe("ui foundation check", () => {
         budget("untokenized font-weight", 1),
         // One, the 17px in .legacy. The token and the unitless 1.2 in tokens.css must stay uncounted.
         budget("untokenized line-height", 1),
+        budget("untokenized letter-spacing", 1),
         // One, the `size-[14px]` in branches/TailwindArbitrary.tsx. The theme classes beside it,
         // `size-4` and `fill-current`, must stay uncounted.
         budget("Tailwind arbitrary values in class names", 1),

@@ -1115,7 +1115,7 @@ button.chat-action-target:active,
 }
 
 .message-entry .ui-bubble {
-  letter-spacing: -0.15px;
+  letter-spacing: var(--openbot-tracking-snug);
 }
 
 .message-entry-agent .ui-bubble {

@@ -381,7 +381,7 @@
   color: var(--openbot-unread-surface);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-bold);
-  letter-spacing: 0.08em;
+  letter-spacing: var(--openbot-tracking-caps);
   line-height: 1;
 }
 

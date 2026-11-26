@@ -277,6 +277,7 @@ export function checkUiFoundation(
     // A line-height in px is a step of the leading scale or it is off it (a 17px under a 12px
     // size was the common case). A unitless ratio scales with the size and is not counted.
     ["untokenized line-height", matches(legacyStyles, /line-height:\s*\d*\.?\d+px/gu), 0],
+    ["untokenized letter-spacing", matches(legacyStyles, /letter-spacing:(?!\s*(?:var\(|inherit\b))\s*[^;]+/gu), 0],
     // `size-[14px]` and `bg-[#fff]` are the stylesheet literals one layer up: Tailwind writes the
     // value into a class, so the CSS scans above never see it. Only a value in square brackets
     // counts; `size-4` and `fill-current` come from the theme.

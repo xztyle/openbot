@@ -312,6 +312,12 @@
   --openbot-tracking-tight: -0.1px;
   --openbot-tracking-normal: 0;
   --openbot-tracking-wide: 0.02em;
+  /* Headlines and names close up a little; display type above the scale closes up more; a
+   * small label in capitals opens up. The five are the whole tracking scale: check:ui holds
+   * "untokenized letter-spacing" at zero. */
+  --openbot-tracking-snug: -0.01em;
+  --openbot-tracking-display: -0.03em;
+  --openbot-tracking-caps: 0.08em;
   /* The spacing scale: the 4px scale, named as Tailwind names it (a step is its value in 4px
    * units). Every gap, padding and margin between and around boxes reads a step; `check:ui`
    * fails a `var(--openbot-space-*)` that is not declared here, because a missing step is not an

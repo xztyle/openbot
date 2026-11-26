@@ -1787,7 +1787,7 @@ textarea {
   color: var(--openbot-success);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-bold);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--openbot-tracking-wide);
 }
 
 .person-avatar > img,
@@ -2259,7 +2259,7 @@ textarea {
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--openbot-tracking-wide);
   text-transform: uppercase;
 }
 
@@ -2985,7 +2985,7 @@ textarea {
   gap: var(--openbot-space-2);
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-md);
-  letter-spacing: -0.01em;
+  letter-spacing: var(--openbot-tracking-snug);
   text-align: left;
   transition: background-color var(--openbot-duration-hover) ease;
 }

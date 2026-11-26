@@ -1522,13 +1522,13 @@
 .attachment-reference-visual > span {
   font-size: var(--openbot-glyph-sm);
   font-weight: var(--openbot-weight-bold);
-  letter-spacing: -0.2px;
+  letter-spacing: var(--openbot-tracking-snug);
   line-height: 1;
 }
 
 .attachment-reference-visual[data-badge-length="4"] > span {
   font-size: var(--openbot-glyph-xs);
-  letter-spacing: -0.4px;
+  letter-spacing: var(--openbot-tracking-display);
 }
 
 /* The page icon is on a 20-unit grid, so its stroke is scaled to match lucide's 24, as `.ui-glyph-20` does. */

@@ -17,6 +17,7 @@
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
   line-height: 1;
+  letter-spacing: var(--openbot-tracking-normal);
   border-radius: 0;
   transition: none;
 }

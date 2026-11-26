@@ -141,7 +141,7 @@
   color: var(--whats-new-tone);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-semibold);
-  letter-spacing: 0.08em;
+  letter-spacing: var(--openbot-tracking-caps);
   text-transform: uppercase;
 }
 
@@ -159,7 +159,7 @@
   background: color-mix(in srgb, var(--whats-new-tone) 12%, transparent);
   font-family: var(--openbot-font-mono);
   font-weight: var(--openbot-weight-medium);
-  letter-spacing: 0;
+  letter-spacing: var(--openbot-tracking-normal);
 }
 
 .whats-new-list {

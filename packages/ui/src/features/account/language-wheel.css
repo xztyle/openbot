@@ -112,7 +112,7 @@
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-3xl);
   font-weight: var(--openbot-weight-semibold);
-  letter-spacing: -0.03em;
+  letter-spacing: var(--openbot-tracking-display);
   line-height: 1;
   cursor: inherit;
 }
@@ -133,7 +133,7 @@
 
 .language-wheel-flag {
   scale: 0.9;
-  letter-spacing: 0;
+  letter-spacing: var(--openbot-tracking-normal);
 }
 
 /* Continue: a full arrow that steps forward on hover, on a background that stays solid. */

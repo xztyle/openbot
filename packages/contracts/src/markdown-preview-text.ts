@@ -1,4 +1,5 @@
 import { Marked, type Token, type Tokens } from "marked";
+import { withoutAttachmentReferences } from "./attachment-references";
 import { blockChatMath, chatMathBlockStart, chatMathStart, inlineChatMath } from "./chat-math";
 import { chatTagReferences, expandChatTagReferences } from "./chat-tag-references";
 
@@ -96,7 +97,7 @@ function inlineText(tokens: Token[], lineBreak = " "): string {
  */
 export function markdownPreviewText(body: string): string {
   return markdown
-    .lexer(body)
+    .lexer(withoutAttachmentReferences(body))
     .map((token) => plainText(token))
     .join(" ")
     .replace(/\s+/gu, " ")
@@ -146,7 +147,7 @@ function blockText(token: Token): string {
  */
 export function markdownPlainText(body: string): string {
   return markdown
-    .lexer(body)
+    .lexer(withoutAttachmentReferences(body))
     .map(blockText)
     .filter((text) => text.trim())
     .join("\n\n")

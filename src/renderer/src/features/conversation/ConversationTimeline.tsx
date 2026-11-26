@@ -22,7 +22,6 @@ import { AgentMessageDialog } from "@openbot/ui/features/conversation/AgentMessa
 import { AgentStepsDisclosure, type AgentStepsTrace } from "@openbot/ui/features/conversation/AgentSteps";
 import { AgentTaskChips } from "@openbot/ui/features/conversation/AgentTasks";
 import { AgentTurnsFoldMarker } from "@openbot/ui/features/conversation/AgentTurnsFold";
-import { AttachmentCards } from "@openbot/ui/features/conversation/AttachmentCards";
 import { UsageLimitAskCard } from "@openbot/ui/features/conversation/BackupModels";
 import { ChatActionMarker } from "@openbot/ui/features/conversation/ChatActionMarker";
 import { type ChatMessageAuthor, ChatMessageRow } from "@openbot/ui/features/conversation/ChatMessageRow";
@@ -34,7 +33,7 @@ import { ContextCompactionMarker, type ContextCompactionView } from "@openbot/ui
 import { BrowserTakeoverCard } from "@openbot/ui/features/conversation/ConversationPrompts";
 import { dayMarkerLabel } from "@openbot/ui/features/conversation/chat-day-markers";
 import { ReplyReturnButton, ScrollToLatestButton } from "@openbot/ui/features/conversation/MessageNavigation";
-import { MessageActions, MessageMenu } from "@openbot/ui/features/conversation/MessageRendering";
+import { MessageActions, MessageBody, MessageMenu } from "@openbot/ui/features/conversation/MessageRendering";
 import { PendingSendStatus } from "@openbot/ui/features/conversation/PendingSendStatus";
 import { SubagentGroup } from "@openbot/ui/features/conversation/Subagents";
 import { TaskList } from "@openbot/ui/features/conversation/TaskList";
@@ -1191,15 +1190,23 @@ export function ConversationTimeline() {
                               </Show>
                             )}
                           </Show>
-                          <Show when={drawsAttachmentCards(message())}>
-                            <div class="chat-action-attachments">
-                              <AttachmentCards
-                                attachments={message()?.attachments ?? []}
-                                mediaSource={runtime.attachmentMedia}
-                                onPreview={(attachment) => void previewAttachment(attachment)}
-                                onAction={attachmentAction}
-                              />
-                            </div>
+                          <Show when={drawsAttachmentCards(message()) ? message() : undefined}>
+                            {(marked) => (
+                              /* The files only, as a message draws them: an image shows as an image. */
+                              <div class="chat-action-attachments">
+                                <MessageBody
+                                  message={{ ...marked(), body: "" }}
+                                  agents={props.agents}
+                                  onSelectAgent={props.onSelectAgent}
+                                  onOpenLink={(url) => void openExternalMessageUrl(url)}
+                                  onPreview={(attachment) => void previewAttachment(attachment)}
+                                  onAttachmentAction={attachmentAction}
+                                  onDownload={(attachment) => attachmentAction(attachment, "download")}
+                                  onAnnotateImage={annotateImage}
+                                  mediaSource={runtime.attachmentMedia}
+                                />
+                              </div>
+                            )}
                           </Show>
                         </article>
                       </ChatRowBoundary>

@@ -69,3 +69,16 @@ export function removeAttachmentReferences(value: string, attachmentId: string):
     candidateId === attachmentId ? "" : marker,
   );
 }
+
+const SHOWN_ATTACHMENT_REFERENCE_PATTERN = new RegExp(`[ \\t]*${ATTACHMENT_REFERENCE_PATTERN.source}`, "gu");
+
+/**
+ * The text that a person reads. An attachment shows under its message, never in the text, so each
+ * marker goes with the spaces before it. Stored text keeps its markers: they tell the agent which
+ * file the text means.
+ */
+export function withoutAttachmentReferences(value: string): string {
+  if (!value.includes("](attachment:")) return value;
+  const shown = value.replace(SHOWN_ATTACHMENT_REFERENCE_PATTERN, "");
+  return shown.trim() ? shown.replace(/^[ \t]+/u, "") : "";
+}

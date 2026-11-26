@@ -2,7 +2,7 @@ import {
   attachmentReferenceIds,
   expandAttachmentReferences,
   rewriteAttachmentReferences,
-  serializeAttachmentReference,
+  withoutAttachmentReferences,
 } from "@openbot/contracts/attachment-references";
 import { fileQuoteTarget } from "@openbot/contracts/chat-tag-references";
 import { ATTACHMENT_LIMITS, INPUT_LIMITS } from "@openbot/contracts/input-limits";
@@ -21,6 +21,7 @@ import {
 } from "@openbot/ui/features/conversation/ComposerEditor";
 import { currentText } from "@openbot/ui/text";
 import { playActionSound } from "../../../action-sounds";
+import { rememberImageFile } from "../../../image-annotator";
 import { claimDictatedSend } from "../../speech/speech-replies";
 import { rememberAttachmentKinds } from "../attachment-analytics";
 import { type PastedComposerCopy, rememberComposerFile } from "../composer-clipboard";
@@ -207,7 +208,7 @@ export function createComposerActions(deps: ComposerActionsDeps) {
   async function pasteFiles(
     files: ReadonlyArray<File | Promise<File>>,
     selection: ComposerSelection,
-    copy?: Pick<PastedComposerCopy, "text" | "sourceIds">,
+    copy?: Pick<PastedComposerCopy, "text">,
   ): Promise<ComposerPasteResult | undefined> {
     const target = deps.currentTarget();
     if (!target || deps.submitting()) return;
@@ -255,20 +256,16 @@ export function createComposerActions(deps: ComposerActionsDeps) {
       const imported = await runtime.agent.importAttachmentData(data, target.serverId);
       imported.forEach((attachment, index) => {
         const file = originals[index];
-        if (file) rememberComposerFile(attachment, file);
+        if (!file) return;
+        rememberComposerFile(attachment, file);
+        // The annotator opens the pasted image from this file: a browser client gets no preview of a draft.
+        rememberImageFile(attachment, file);
       });
       const accepted = await addAttachments(imported, target);
       // The draft refused the files and shows why. The text of a copy still comes, with their names.
       if (!accepted.length) return copy?.text ? insert(expandAttachmentReferences(copy.text)) : undefined;
-      const replacements = new Map((copy?.sourceIds ?? []).map((id, index) => [id, accepted[index]]));
-      const text =
-        copy === undefined
-          ? accepted.map((attachment) => serializeAttachmentReference(attachment.name, attachment.id)).join(" ")
-          : rewriteAttachmentReferences(copy.text, (reference) => {
-              const attachment = replacements.get(reference.attachmentId);
-              return attachment ? { attachmentId: attachment.id, name: attachment.name } : null;
-            });
-      const result = insert(text);
+      // The files go in the row of files, never in the text: a copy brings its words only.
+      const result = insert(copy === undefined ? "" : withoutAttachmentReferences(copy.text));
       // The files stay in the row, so a paste that does not fit loses no file.
       if (!result) throw new Error(t("error.agent.messageTooLong"));
       return result;
@@ -302,6 +299,7 @@ export function createComposerActions(deps: ComposerActionsDeps) {
     );
     if (!imported) throw new Error(t("composer.error.keepAttachments"));
     rememberComposerFile(imported, file);
+    rememberImageFile(imported, file);
     const key = composerDraftKey(target);
     deps.setDrafts((current) => {
       const draft = current[key] ?? EMPTY_DRAFT;

@@ -7,10 +7,12 @@ import { createEffect, createSignal } from "solid-js";
 import type { WebFile, WebWorkspaceRuntime } from "./web-runtime";
 
 /**
- * An image above this size shows inline only when the host sends a small copy of it: the original
- * must not cost a large download for a picture in a chat row.
+ * An image above this size shows inline from a small copy that the host makes. When the host makes
+ * none, the original comes, up to `WEB_MEDIA_BYTES`: an image always shows as an image.
  */
 const WEB_THUMBNAIL_BYTES = 4 * 1024 * 1024;
+/** `nativeImage` on the host makes a small copy of a PNG or JPEG up to this size. */
+const HOST_PREVIEW_SOURCE_BYTES = 40 * 1024 * 1024;
 /** The host connection sends at most this many bytes for one file. */
 const WEB_MEDIA_BYTES = MOBILE_ATTACHMENT_BYTES;
 const CACHE_BYTES = 96 * 1024 * 1024;
@@ -145,8 +147,8 @@ export function createWebAttachmentMedia(
     let file: WebFile | null = null;
     if (variant === "inline" && remote.attachmentPreview && RESIZABLE_TYPES.has(declared))
       file = await remote.attachmentPreview(attachment.id);
-    // Without a copy from the host, a large original is not read for a picture in a chat row.
-    if (!file && variant === "inline" && attachment.size > WEB_THUMBNAIL_BYTES) return null;
+    // Without a copy from the host, the original comes when the connection can carry it.
+    if (!file && variant === "inline" && attachment.size > WEB_MEDIA_BYTES) return null;
     file ??= await remote.download(attachment.id);
     const bytes = base64ToBytes(file.base64);
     // The host's type is used only when it made a copy, and only when it is an allowed image type.
@@ -212,10 +214,10 @@ export function createWebAttachmentMedia(
   const inlineImage = (attachment: AttachmentSummary) => {
     const type = mediaType(attachment);
     if (!type || (!IMAGE_TYPES.has(type) && type !== SVG_TYPE)) return false;
-    // A host with previews sends a small copy of a large PNG or JPEG.
+    // A host with previews sends a small copy of a large PNG or JPEG. Another image comes as it is.
     return (
-      attachment.size <= WEB_THUMBNAIL_BYTES ||
-      (Boolean(remote.attachmentPreview) && RESIZABLE_TYPES.has(type) && attachment.size <= 40 * 1024 * 1024)
+      attachment.size <= WEB_MEDIA_BYTES ||
+      (Boolean(remote.attachmentPreview) && RESIZABLE_TYPES.has(type) && attachment.size <= HOST_PREVIEW_SOURCE_BYTES)
     );
   };
 

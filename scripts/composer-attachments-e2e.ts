@@ -64,21 +64,21 @@ async function caretAtEnd(editor: Locator): Promise<void> {
   });
 }
 
-// An inline image shows only in the text. Delete on its reference moves the file to the row above the
-// draft, as for any attachment reference; the row's remove button discards the file.
-async function removeImages(editor: Locator, name = "image.png"): Promise<void> {
-  const reference = editor.getByRole("button", { name: `Open attached file ${name}`, exact: true });
-  while (await reference.count()) {
-    const count = await reference.count();
-    await reference.first().press("Delete");
-    await page.waitForFunction(
-      (expected) =>
-        document.querySelectorAll(".composer-editor-surface [data-attachment-reference-id]").length === expected,
-      count - 1,
-    );
-  }
+// A pasted or attached file goes in the row of files over the draft, never in its text. The row's
+// remove button discards the file.
+async function removeImages(_editor: Locator, name = "image.png"): Promise<void> {
   const remove = page.getByRole("button", { name: `Remove ${name}`, exact: true });
   while (await remove.count()) await remove.first().click();
+}
+
+/** Waits until the row over the draft holds `expected` files, and the text holds no file marker. */
+async function waitForRow(expected: number): Promise<void> {
+  await page.waitForFunction(
+    (count) =>
+      document.querySelectorAll(".composer-attachments .composer-attachment").length === count &&
+      document.querySelectorAll(".composer-editor-surface [data-attachment-reference-id]").length === 0,
+    expected,
+  );
 }
 
 async function clearTestDraft(editor: Locator): Promise<void> {
@@ -122,31 +122,29 @@ async function pasteCopy(editor: Locator, data: Record<string, string>): Promise
   await waitReady(editor);
 }
 
-// The draft as the editor shows it, with each inline attachment as "[name]".
+// The draft as the editor shows it. A file never shows in it.
 async function layout(editor: Locator): Promise<string> {
-  return editor.evaluate((element) =>
-    Array.from(element.childNodes, (node) =>
-      node instanceof HTMLElement && node.dataset.attachmentReferenceId
-        ? `[${node.dataset.attachmentReferenceName}]`
-        : (node.textContent ?? ""),
-    ).join(""),
-  );
+  return editor.evaluate((element) => {
+    if (element.querySelector("[data-attachment-reference-id]")) throw new Error("A file shows in the text.");
+    return element.textContent ?? "";
+  });
 }
 
-async function images(editor: Locator): Promise<{ id: string; bytes: number[]; loaded: boolean }[]> {
-  return editor.evaluate(async (element) =>
+// The pictures of the row over the draft, in order, with the attachment URL that names each one.
+async function images(_editor: Locator): Promise<{ id: string; bytes: number[]; loaded: boolean }[]> {
+  return page.evaluate(async () =>
     Promise.all(
-      Array.from(element.querySelectorAll<HTMLElement>("[data-attachment-reference-id]")).map(async (token) => {
-        const image = token.querySelector("img");
-        if (!image) throw new Error("An inline image needs a preview.");
-        const response = await fetch(image.src);
-        if (!response.ok) throw new Error(`Image read failed: ${response.status}`);
-        return {
-          id: token.dataset.attachmentReferenceId ?? "",
-          bytes: Array.from(new Uint8Array(await response.arrayBuffer())),
-          loaded: image.complete && image.naturalWidth > 0,
-        };
-      }),
+      Array.from(document.querySelectorAll<HTMLImageElement>(".composer-attachments .composer-attachment img")).map(
+        async (image) => {
+          const response = await fetch(image.src);
+          if (!response.ok) throw new Error(`Image read failed: ${response.status}`);
+          return {
+            id: image.src,
+            bytes: Array.from(new Uint8Array(await response.arrayBuffer())),
+            loaded: image.complete && image.naturalWidth > 0,
+          };
+        },
+      ),
     ),
   );
 }
@@ -169,21 +167,17 @@ try {
     document.getSelection()?.addRange(range);
   });
   await pasteImages(source, [png]);
-  await page.waitForFunction(
-    () => document.querySelectorAll(".composer-editor-surface [data-attachment-reference-id]").length === 1,
-  );
+  await waitForRow(1);
   await source.press("x");
-  assert.equal(await layout(source), "Before [image.png]x after");
+  assert.equal(await layout(source), "Before x after");
   const first = await copy(source);
-  assert.equal(first["text/plain"], "Before image.pngx after");
+  assert.equal(first["text/plain"], "Before x after image.png");
   assert.equal((await images(source))[0]?.bytes.length, png.length);
-  results.push("Binary image paste inserts a resolvable reference exactly at the caret. Copy gives readable text.");
+  results.push("Binary image paste puts the file in the row and leaves the text and caret as they were.");
 
   await caretAtEnd(source);
   await pasteImages(source, [png2]);
-  await page.waitForFunction(
-    () => document.querySelectorAll(".composer-editor-surface [data-attachment-reference-id]").length === 2,
-  );
+  await waitForRow(2);
   const payload = await copy(source);
   const sourceImages = await images(source);
   assert.equal(new Set(sourceImages.map((entry) => entry.id)).size, 2);
@@ -191,8 +185,8 @@ try {
     sourceImages.map((entry) => hash(entry.bytes)),
     [hash(png), hash(png2)],
   );
-  assert.equal(await layout(source), "Before [image.png]x after[image.png]");
-  assert.equal(payload["text/plain"], "Before image.pngx afterimage.png");
+  assert.equal(await layout(source), "Before x after");
+  assert.equal(payload["text/plain"], "Before x after image.png image.png");
   assert.ok(payload["text/html"]?.includes("data-openbot-composer-fragment"));
   results.push("Distinct images with the same filename keep their order, IDs and original bytes.");
   await page.screenshot({ path: resolve(out, "source.png") });
@@ -203,9 +197,7 @@ try {
   const destination = await openAgent("Builder");
   await clearTestDraft(destination);
   await pasteCopy(destination, payload);
-  await page.waitForFunction(
-    () => document.querySelectorAll(".composer-editor-surface [data-attachment-reference-id]").length === 2,
-  );
+  await waitForRow(2);
   const copiedImages = await images(destination);
   assert.deepEqual(
     copiedImages.map((entry) => hash(entry.bytes)),
@@ -214,14 +206,12 @@ try {
   assert.ok(copiedImages.every((entry) => !sourceImages.some((original) => original.id === entry.id)));
   results.push("Copy survives source removal and imports independent files into another agent.");
 
-  assert.equal(await layout(destination), "Before [image.png]x after[image.png]");
+  assert.equal(await layout(destination), "Before x after");
   const currentCopy = await copy(destination);
   assert.equal(currentCopy["text/plain"], payload["text/plain"]);
   await caretAtEnd(destination);
   await pasteCopy(destination, currentCopy);
-  await page.waitForFunction(
-    () => document.querySelectorAll(".composer-editor-surface [data-attachment-reference-id]").length === 4,
-  );
+  await waitForRow(4);
   assert.equal(new Set((await images(destination)).map((entry) => entry.id)).size, 4);
   results.push("Repeated paste creates fresh attachment identities.");
 
@@ -256,9 +246,7 @@ try {
   const pickedTarget = await openAgent("Launch");
   await clearTestDraft(pickedTarget);
   await pasteCopy(pickedTarget, pickedCopy);
-  await page.waitForFunction(
-    () => document.querySelectorAll(".composer-editor-surface [data-attachment-reference-id]").length === 1,
-  );
+  await waitForRow(1);
   assert.deepEqual(
     (await images(pickedTarget)).map((entry) => hash(entry.bytes)),
     [hash(picked)],
@@ -275,9 +263,7 @@ try {
   const nativeTarget = await openAgent("Research");
   await clearTestDraft(nativeTarget);
   await nativeTarget.press("ControlOrMeta+v");
-  await page.waitForFunction(
-    () => document.querySelectorAll(".composer-editor-surface [data-attachment-reference-id]").length === 4,
-  );
+  await waitForRow(4);
   assert.deepEqual(
     (await images(nativeTarget)).map((entry) => hash(entry.bytes)),
     [hash(png), hash(png2), hash(png), hash(png2)],

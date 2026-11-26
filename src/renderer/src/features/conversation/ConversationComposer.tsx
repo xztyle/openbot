@@ -1,5 +1,6 @@
 import { isKnownAgentProvider } from "@openbot/contracts/agent-providers";
 import { supportedAttachmentExtensions } from "@openbot/contracts/attachment-files";
+import { withoutAttachmentReferences } from "@openbot/contracts/attachment-references";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   type AgentWait,
@@ -593,7 +594,7 @@ export function ConversationComposer() {
                 <div>
                   <span>{replyLabel(message())}</span>
                   <ReplyQuote
-                    body={message().body || t("composer.reply.attachment")}
+                    body={withoutAttachmentReferences(message().body) || t("composer.reply.attachment")}
                     agents={props.agents}
                     skills={installedSkills()}
                     attachments={message().attachments}
@@ -768,15 +769,16 @@ export function ConversationComposer() {
             <div class="composer-attachments">
               <For each={unreferencedDraftAttachments()}>
                 {(attachment) => {
-                  // An image with no preview (the web client) shows as a file, with its name.
+                  // An image with no preview (the web client) shows its name too, and still opens in the annotator.
                   const chip = () => (attachment.kind === "image" && attachment.previewUrl ? "image" : "file");
+                  const annotates = () => attachment.kind === "image";
                   return (
                     <div class="composer-attachment ui-removable-image" data-kind={chip()}>
                       <span
                         class="composer-attachment-preview"
                         data-file-tone={chip() === "file" ? attachmentReferenceTone(attachment.name) : undefined}
                       >
-                        <Show when={chip() === "image"} fallback={fileBadge(attachment)}>
+                        <Show when={annotates()} fallback={fileBadge(attachment)}>
                           <Button
                             type="button"
                             variant="ghost"
@@ -788,13 +790,16 @@ export function ConversationComposer() {
                               openImageAnnotator({
                                 source: attachmentImageSource(attachment, {
                                   previewAttachment: props.runtime?.previewAttachment,
+                                  attachmentMedia: props.runtime?.attachmentMedia,
                                 }),
                                 sendLabel: "done",
                                 onSend: (file) => replaceAttachment(attachment, file),
                               })
                             }
                           >
-                            <img src={attachment.previewUrl ?? ""} alt="" />
+                            <Show when={attachment.previewUrl} fallback={fileBadge(attachment)}>
+                              {(url) => <img src={url()} alt="" />}
+                            </Show>
                           </Button>
                         </Show>
                       </span>

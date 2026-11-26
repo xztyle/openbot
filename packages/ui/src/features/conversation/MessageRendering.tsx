@@ -1,3 +1,4 @@
+import { withoutAttachmentReferences } from "@openbot/contracts/attachment-references";
 import { chatPreviewKind } from "@openbot/contracts/chat-preview";
 import type { AttachmentSummary, InstalledSkill, MessageReaction } from "@openbot/contracts/ipc";
 import { canPreviewAttachment, MESSAGE_REACTIONS, MORE_MESSAGE_REACTIONS } from "@openbot/contracts/ipc";
@@ -287,17 +288,20 @@ export function MessageBody(props: {
   foldText?: ((text: JSX.Element) => JSX.Element) | undefined;
 }) {
   const { t } = useText();
+  /* A file shows under the text, never in it: the markers of a paste in older messages stay stored, not shown. */
+  const message = createMemo(() => {
+    const body = withoutAttachmentReferences(props.message.body);
+    return body === props.message.body ? props.message : { ...props.message, body };
+  });
   const streamingBody = createStreamingBody(
-    () => props.message,
+    message,
     untrack(() => props.animate),
   );
   const streamedBody = streamingBody.body;
   const referenceOpens = () => Boolean(props.onOpenReference);
   const referenceTextId = `message-reply-${createUniqueId()}`;
   const selectionInstruction = createMemo(() =>
-    props.message.author === "you" && props.message.replyToMessageId
-      ? parseSelectionInstruction(props.message.body)
-      : null,
+    props.message.author === "you" && props.message.replyToMessageId ? parseSelectionInstruction(message().body) : null,
   );
   /* A finished image with no `previewUrl` (the web client) shows as a file card instead. */
   const generatedImageShown = createMemo(() => {
@@ -309,11 +313,14 @@ export function MessageBody(props: {
       imageGenerationStatus(props.message.streaming, props.message.status) !== "completed"
     );
   });
+  /* A file that the text names shows there. An image always shows as an image, under the text. */
   const standaloneAttachments = createMemo(() => {
     const referencedIds = new Set(
-      messageFileReferences(props.message.body, props.message.attachments ?? [])
-        .filter((reference) => reference.kind === "attachment")
-        .map((reference) => reference.attachment.id),
+      messageFileReferences(message().body, props.message.attachments ?? []).flatMap((reference) =>
+        reference.kind === "attachment" && reference.attachment.previewKind !== "image"
+          ? [reference.attachment.id]
+          : [],
+      ),
     );
     const generatedAttachmentId = generatedImageShown() ? props.message.attachments?.[0]?.id : undefined;
     return (props.message.attachments ?? []).filter(
@@ -342,20 +349,17 @@ export function MessageBody(props: {
     shownImages.set(attachment.id, shown);
     return shown;
   };
-  const standaloneImageAttachments = createMemo(() =>
-    props.message.author === "agent" ? standaloneAttachments().filter(inlineImage).map(shownImage) : [],
-  );
+  /* Every author's image shows as an image: the owner's paste as an agent's reply. */
+  const standaloneImageAttachments = createMemo(() => standaloneAttachments().filter(inlineImage).map(shownImage));
   const standaloneFileAttachments = createMemo(() =>
-    props.message.author === "agent"
-      ? standaloneAttachments().filter((attachment) => !inlineImage(attachment))
-      : standaloneAttachments(),
+    standaloneAttachments().filter((attachment) => !inlineImage(attachment)),
   );
   const contentBlocks = createMemo<MessageContentBlock[]>((previous) =>
     reuseUnchangedBlocks(
       previous ?? [],
       props.message.author === "agent"
         ? sharedContentBlocks(streamedBody(), streamingBody.revealing())
-        : [{ type: "text", text: selectionInstruction()?.instruction ?? props.message.body }],
+        : [{ type: "text", text: selectionInstruction()?.instruction ?? message().body }],
     ),
   );
   const textTailAfter = createMemo(
@@ -506,7 +510,7 @@ export function MessageBody(props: {
             </span>
             <ReplyQuote
               id={referenceTextId}
-              body={referenced().body || t("chat.message.attachment")}
+              body={withoutAttachmentReferences(referenced().body) || t("chat.message.attachment")}
               agents={props.agents}
               skills={props.skills}
               attachments={referenced().attachments}
@@ -529,7 +533,7 @@ export function MessageBody(props: {
         <div class="message-content-resize" ref={(element) => (messageContentResize = element)}>
           <div class="message-content-blocks" ref={(element) => (messageContent = element)}>
             <StreamingRevealContext value={streamingBody.trail}>
-              <Show when={props.message.author === "agent" ? streamedBody() : props.message.body}>
+              <Show when={props.message.author === "agent" ? streamedBody() : message().body}>
                 {/* Unkeyed, so a growing reply keeps each block mounted and updates only the block that grew. */}
                 <For each={contentBlocks()} keyed={false}>
                   {(block, index) => (

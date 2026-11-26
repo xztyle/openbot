@@ -233,14 +233,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
     );
     return rankAgentMentions(others, query);
   });
-  const matchingAttachments = createMemo(() => {
-    const query = mention()?.query.trim().toLocaleLowerCase() ?? "";
-    const referencedIds = attachmentReferenceIds(props.value);
-    return (props.attachments ?? []).filter(
-      (attachment) =>
-        !referencedIds.has(attachment.id) && (!query || attachment.name.toLocaleLowerCase().includes(query)),
-    );
-  });
   const usableSkills = createMemo(() =>
     (props.skills ?? []).filter((skill) => skill.state !== "needs-repair" && skill.enabled !== false),
   );
@@ -300,11 +292,8 @@ export function ComposerEditor(props: ComposerEditorProps) {
     return [
       ...matchingAgents().map((agent) => ({ type: "agent" as const, agent })),
       ...matchingMembers().map((member) => ({ type: "member" as const, member })),
+      // No files: a file goes with the message, not into its text.
       ...matchingBroadcasts().map((broadcast) => ({ type: "broadcast" as const, broadcast })),
-      ...matchingAttachments().map((attachment) => ({
-        type: "attachment" as const,
-        attachment,
-      })),
     ];
   });
   const activePickerValue = createMemo(() => {

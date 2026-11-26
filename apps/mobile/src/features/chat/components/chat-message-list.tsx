@@ -1,6 +1,6 @@
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import type { AnchoredEndSpaceConfig } from "@legendapp/list/react-native";
-import { expandAttachmentReferences } from "@openbot/contracts/attachment-references";
+import { expandAttachmentReferences, withoutAttachmentReferences } from "@openbot/contracts/attachment-references";
 import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references";
 import type { AttachmentSummary, BrowserTakeoverRequest } from "@openbot/contracts/ipc";
 import { markdownPlainText } from "@openbot/contracts/markdown-preview-text";
@@ -631,7 +631,8 @@ const MessageRow = memo(function MessageRow({
             </Button.Label>
           </Button>
         ) : null}
-        {message.body.trim() ? (
+        {/* A file shows under the text, never in it. */}
+        {withoutAttachmentReferences(message.body).trim() ? (
           <ChatBubble
             agent={message.author === "agent"}
             collapsed={waiting}
@@ -661,7 +662,7 @@ const MessageRow = memo(function MessageRow({
               >
                 <ChatMarkdown
                   agents={agents}
-                  body={message.body}
+                  body={withoutAttachmentReferences(message.body)}
                   finished={!isStreamingReply(message)}
                   selectable={message.author === "user"}
                   color={textColor}

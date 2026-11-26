@@ -10,7 +10,7 @@ import {
   Link,
   List,
   ListOrdered,
-  Paperclip,
+  Plus,
   Quote,
   Send,
   SmilePlus,
@@ -189,7 +189,7 @@ export function MessageComposer(props: MessageComposerProps): JSX.Element {
                   disabled={props.disabled}
                   onClick={() => attach()()}
                 >
-                  <Paperclip />
+                  <Plus />
                 </IconButton>
               )}
             </Show>

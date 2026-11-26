@@ -26,7 +26,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 28px;
+  gap: var(--openbot-space-6);
   padding-inline: var(--openbot-space-4);
   text-align: center;
 }
@@ -40,7 +40,7 @@
 .app-loading-row {
   display: flex;
   align-items: flex-end;
-  gap: 18px;
+  gap: var(--openbot-space-5);
   padding-top: var(--openbot-space-5);
 }
 

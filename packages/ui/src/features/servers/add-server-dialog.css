@@ -94,7 +94,7 @@
   position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 3px;
+  padding: var(--openbot-space-1);
   border: 1px solid var(--openbot-border);
   border-radius: var(--openbot-radius-pill);
   background: var(--openbot-bg-canvas);
@@ -103,10 +103,10 @@
 .hosted-billing::before {
   content: "";
   position: absolute;
-  top: 3px;
-  bottom: 3px;
-  left: 3px;
-  width: calc(50% - 3px);
+  top: var(--openbot-space-1);
+  bottom: var(--openbot-space-1);
+  left: var(--openbot-space-1);
+  width: calc(50% - var(--openbot-space-1));
   border-radius: var(--openbot-radius-pill);
   background: var(--openbot-bg-control-active);
   box-shadow: inset 0 0 0 1px var(--openbot-border);

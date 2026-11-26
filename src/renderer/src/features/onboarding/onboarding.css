@@ -16,7 +16,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 52px 24px;
+  /* Room above the content for the window controls and the title bar. */
+  --onboarding-top-inset: 52px;
+
+  padding: var(--onboarding-top-inset) var(--openbot-space-6);
   -webkit-app-region: no-drag;
 }
 
@@ -87,7 +90,7 @@
 
 .onboarding-provider {
   width: min(100%, 480px);
-  margin-top: 26px;
+  margin-top: var(--openbot-space-6);
   text-align: left;
 }
 
@@ -355,7 +358,7 @@
   width: min(100%, 288px);
   display: grid;
   gap: var(--openbot-space-2);
-  margin-top: 22px;
+  margin-top: var(--openbot-space-6);
 }
 
 .onboarding-screen[data-step="computer"] .onboarding-actions {
@@ -382,7 +385,9 @@
 
 @media (max-width: 620px) {
   .onboarding-shell {
-    padding: 48px 18px;
+    --onboarding-top-inset: 48px;
+
+    padding-inline: var(--openbot-space-4);
   }
 
   .onboarding-panel h1 {
@@ -421,7 +426,7 @@
 
   .onboarding-computer-visual {
     width: min(100%, 320px);
-    margin-top: 14px;
+    margin-top: var(--openbot-space-4);
   }
 }
 
@@ -699,7 +704,7 @@ html:active-view-transition-type(open)::view-transition-new(*) {
   align-items: center;
   justify-content: center;
   gap: var(--openbot-space-3);
-  margin-bottom: 40px;
+  margin-bottom: calc(var(--openbot-space-8) + var(--openbot-space-2));
 }
 
 .first-run-choice-avatar {
@@ -802,7 +807,7 @@ html:active-view-transition-type(open)::view-transition-new(*) {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--openbot-space-1);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-regular);
@@ -937,7 +942,7 @@ html:active-view-transition-type(open)::view-transition-new(*) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 40px;
+  gap: calc(var(--openbot-space-8) + var(--openbot-space-2));
 }
 
 .first-run-launch-team {

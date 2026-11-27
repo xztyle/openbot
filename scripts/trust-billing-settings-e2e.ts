@@ -228,6 +228,21 @@ const SURFACES: { name: string; open: (target: Page, origin: string, theme: Them
         current.getByRole("dialog").getByText(t("connector.github.pendingTitle")),
       ),
   },
+  // The connect dialogs of the chat apps and the Remove of a marketplace app share WizardDialog.
+  ...(["slack", "discord", "telegram"] as const).flatMap((app) =>
+    ["", "&step=2"].map((step) => ({
+      name: `${app}-connect${step ? "-step2" : ""}`,
+      open: (target: Page, origin: string, theme: Theme) =>
+        openAt(target, `${harness(origin, `${app}-connect`, theme)}${step}`, (current) => current.getByRole("dialog")),
+    })),
+  ),
+  {
+    name: "marketplace-remove",
+    open: (target, origin, theme) =>
+      openAt(target, harness(origin, "marketplace-remove", theme), (current) =>
+        current.getByRole("dialog", { name: t("marketplace.app.remove.confirmTitle", { name: "Inventario" }) }),
+      ),
+  },
   {
     name: "bitwarden-host",
     open: (target, origin, theme) =>

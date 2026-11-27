@@ -9,14 +9,17 @@
  * - `bitwarden-host`: Bitwarden of a joined server, which asks for an API key.
  * - `mcp-key`, `mcp-local`, `mcp-sign-in`: the connect dialogs of an app from the marketplace.
  * - `chat-apps`: which apps an agent in a chat may read or write.
+ * - `slack-connect`, `discord-connect`, `telegram-connect`: the connect dialog of a chat app; `&step=2`
+ *   shows the step that adds the orchestrator.
+ * - `marketplace-remove`: the dialog that removes an app the user added from the marketplace.
  *
  * `?theme=light` shows the light theme; the text is Spanish unless `?lang=en`. The calls the page
  * makes land in `document.body.dataset.harnessCalls`, one per line.
  */
-import type { GitHubConnectorStatus } from "@openbot/contracts/ipc";
+import type { GitHubConnectorStatus, MessagingConnection } from "@openbot/contracts/ipc";
 import type { McpKeyFlow, McpLocalFlow } from "@openbot/contracts/mcp-connect-flows";
 import type { McpChatGrant, McpChatSnapshot } from "@openbot/contracts/team-protocol/mcp-chat-v1";
-import { Button, Toaster } from "@openbot/ui";
+import { Button, Plug, Toaster } from "@openbot/ui";
 import { BillingDialog } from "@openbot/ui/features/billing/BillingDialog";
 import { BillingPanel } from "@openbot/ui/features/billing/BillingPanel";
 import { createBillingStore } from "@openbot/ui/features/billing/billing-store";
@@ -26,11 +29,15 @@ import type { ConnectorDetail } from "@openbot/ui/features/connectors/ConnectorD
 import { BitwardenConnectorPanel } from "@openbot/ui/features/settings/BitwardenConnectorPanel";
 import { ChatAppsDialog } from "@openbot/ui/features/settings/ChatAppsDialog";
 import { GitHubConnectorPanel } from "@openbot/ui/features/settings/GitHubConnectorPanel";
+import { WizardDialog } from "@openbot/ui/features/settings/IntegrationLayout";
 import { McpKeyDialog } from "@openbot/ui/features/settings/McpKeyDialog";
 import { McpLocalDialog } from "@openbot/ui/features/settings/McpLocalDialog";
 import { McpSignInDialog } from "@openbot/ui/features/settings/McpSignInDialog";
 import { SettingsDialogShell, type SettingsPagePlacement } from "@openbot/ui/features/settings/SettingsDialogShell";
+import { SlackConnectDialog } from "@openbot/ui/features/settings/SlackIntegrationPanel";
 import { createSettingsHostedServersStore } from "@openbot/ui/features/settings/stores/hosted-servers-store";
+import { TelegramConnectDialog } from "@openbot/ui/features/settings/TelegramIntegrationPanel";
+import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { render } from "@solidjs/web";
 import { createSignal, createStore, Match, Switch } from "solid-js";
@@ -378,6 +385,81 @@ function ChatApps() {
   );
 }
 
+/** A chat app connection that is connected and waits for its orchestrator (`&step=2`). */
+function messagingConnection(platform: "slack" | "discord" | "telegram"): MessagingConnection {
+  return {
+    workspaceId: platform === "telegram" ? "-1001234567890" : "T0HARNESS",
+    platform,
+    enabled: true,
+    state: "connected",
+    workspaceName: platform === "telegram" ? "Equipo Acme" : "Acme",
+    botUserId: "U0HARNESS",
+    missingScopes: [],
+    retryAt: null,
+    credentials: "saved",
+    orchestratorAgentId: null,
+  };
+}
+
+function ChatAppConnect(props: { platform: "slack" | "discord" | "telegram" }) {
+  const second = params.get("step") === "2";
+  const agents = [{ id: "agent-chief" }];
+  const note = (call: string) => {
+    document.body.dataset.harnessCalls = `${document.body.dataset.harnessCalls ?? ""}${call}\n`;
+  };
+  return props.platform === "telegram" ? (
+    <TelegramConnectDialog
+      open
+      connections={second ? [messagingConnection("telegram")] : []}
+      agents={agents}
+      busy={false}
+      onConnectChat={async () => {
+        note("telegram-connect");
+        return true;
+      }}
+      onAddOrchestrator={() => note("telegram-orchestrator")}
+      onClose={() => note("close")}
+    />
+  ) : (
+    <SlackConnectDialog
+      platform={props.platform}
+      open
+      connection={second ? messagingConnection(props.platform) : null}
+      agents={agents}
+      busy={false}
+      onConnectWorkspace={() => note(`${props.platform}-connect`)}
+      onAddOrchestrator={() => note(`${props.platform}-orchestrator`)}
+      onClose={() => note("close")}
+    />
+  );
+}
+
+/** The same dialog as the Remove of an app the user added (`MarketplaceAppPage`). */
+function MarketplaceRemove() {
+  const { t } = useText();
+  return (
+    <WizardDialog
+      open
+      closeLabel={t("common.close")}
+      onClose={() => undefined}
+      logo={<Plug aria-hidden="true" />}
+      link="broken"
+      title={t("marketplace.app.remove.confirmTitle", { name: "Inventario" })}
+      description={t("marketplace.app.remove.description")}
+      footer={
+        <>
+          <Button type="button" variant="outline">
+            {t("marketplace.app.remove.keep")}
+          </Button>
+          <Button type="button" variant="destructive">
+            {t("marketplace.app.remove.action")}
+          </Button>
+        </>
+      }
+    />
+  );
+}
+
 const root = document.getElementById("root");
 if (root)
   render(
@@ -411,6 +493,18 @@ if (root)
           </Match>
           <Match when={surface === "chat-apps"}>
             <ChatApps />
+          </Match>
+          <Match when={surface === "slack-connect"}>
+            <ChatAppConnect platform="slack" />
+          </Match>
+          <Match when={surface === "discord-connect"}>
+            <ChatAppConnect platform="discord" />
+          </Match>
+          <Match when={surface === "telegram-connect"}>
+            <ChatAppConnect platform="telegram" />
+          </Match>
+          <Match when={surface === "marketplace-remove"}>
+            <MarketplaceRemove />
           </Match>
         </Switch>
       </StaticI18nProvider>

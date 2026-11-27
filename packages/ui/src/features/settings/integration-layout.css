@@ -87,6 +87,7 @@
 /* The connect dialog is the shared FormDialog; its body opens with the two marks and the steps. */
 .integration-wizard-dialog .ui-form-dialog-body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: var(--openbot-space-4);
 }
@@ -169,13 +170,22 @@
 
 .integration-wizard-body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--openbot-space-3);
 }
 
+/* Two long actions do not fit side by side on a phone: they wrap, each as wide as the dialog. */
 .integration-wizard-foot {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--openbot-space-2);
   justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+  .integration-wizard-foot > .ui-button {
+    flex: 1 1 100%;
+  }
 }
 
 /* CopyButton draws its icon at full size; match the 14px icons of the other footer buttons. */

@@ -166,51 +166,53 @@
 
 .space-dialog-identity {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: var(--openbot-space-3);
 }
 
 .space-dialog-name {
   flex: 1 1 auto;
+  min-width: 0;
 }
 
-.space-dialog-row {
+.space-dialog-row,
+.space-dialog-swatches {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--openbot-space-2);
 }
 
-.space-dialog-label {
-  color: var(--openbot-text-secondary);
-  font-size: var(--openbot-text-sm);
-  font-weight: var(--openbot-weight-semibold);
+/* The emoji is a field's control: framed, the height of a field. */
+.space-dialog-emoji.ui-button {
+  width: var(--openbot-control-md);
+  height: var(--openbot-control-md);
+  border: 1px solid var(--openbot-border);
+  font-size: var(--openbot-text-lg);
 }
 
 .space-dialog-colors {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--openbot-space-1);
+  min-width: 0;
   margin: 0;
   border: 0;
   padding: 0;
 }
 
 .space-dialog-colors > legend {
-  width: 100%;
-  margin-bottom: var(--openbot-space-1);
+  margin-bottom: var(--openbot-space-1-5);
+  padding: 0;
 }
 
 .ui-button.space-dialog-color {
-  width: 30px;
-  height: 30px;
+  width: var(--openbot-control-sm);
+  height: var(--openbot-control-sm);
   padding: 0;
 }
 
 .space-dialog-swatch {
   display: block;
-  width: 20px;
-  height: 20px;
+  width: var(--openbot-space-5);
+  height: var(--openbot-space-5);
   border-radius: var(--openbot-radius-pill);
 }
 
@@ -221,6 +223,19 @@
 .space-dialog-color-selected .space-dialog-swatch {
   outline: 2px solid var(--openbot-text-primary);
   outline-offset: 2px;
+}
+
+/* A finger hits every swatch and the emoji (docs/ux/standard.md § 7e). */
+@media (hover: none), (pointer: coarse) {
+  .ui-button.space-dialog-color,
+  .space-dialog-emoji.ui-button {
+    width: var(--openbot-touch-target);
+    height: var(--openbot-touch-target);
+  }
+
+  .space-dialog-row > .ui-button {
+    min-height: var(--openbot-touch-target);
+  }
 }
 
 .space-dialog-note {

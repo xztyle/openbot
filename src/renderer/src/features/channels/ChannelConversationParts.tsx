@@ -4,10 +4,11 @@
  * data, so each part reads the open channel from `useChannels()`.
  */
 
-import { Button, ErrorReference } from "@openbot/ui";
+import { Button, createSettingsDrafts, ErrorReference, SettingsDraftsContext } from "@openbot/ui";
 import { SettingsPanel, SettingsPanelContent, SettingsPanelHeader } from "@openbot/ui/components/SettingsPanel";
 import { ChannelAvatar } from "@openbot/ui/features/channels/ChannelAvatar";
 import { ChannelStoppedTasks } from "@openbot/ui/features/channels/ChannelStoppedTasks";
+import { SettingsDraftsSaveBar } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createStore, Show } from "solid-js";
 import { createSettingsPanelWidth, saveSettingsPanelWidth } from "../../components/settings-panel-width";
@@ -151,8 +152,10 @@ export function ChannelSettingsPane(
   props: ConversationChannelSettingsPaneProps & { channelId: string; routines: ChannelRoutineHost },
 ) {
   const channels = useChannels();
-  const { t } = useText();
+  const { t, errorMessage } = useText();
   const runtime = () => channels.port();
+  // The name, title and instructions save with one save bar at the foot of the panel.
+  const drafts = createSettingsDrafts((error) => errorMessage(error, t("channel.settings.saveFailed")));
   const [panelWidth, setPanelWidth] = createSettingsPanelWidth();
   createEffect(panelWidth, (width) => {
     props.onWidthChange(width);
@@ -225,22 +228,25 @@ export function ChannelSettingsPane(
               onClose={props.onClose}
               closeLabel={t("channel.panel.close")}
             />
-            <SettingsPanelContent>
-              <ChannelEditor
-                memoryCount={panel.memories.count}
-                routineCount={panel.routines.count}
-                onOpenMemories={() =>
-                  setPanel((state) => {
-                    state.memories.open = true;
-                  })
-                }
-                onOpenRoutines={() =>
-                  setPanel((state) => {
-                    state.routines.open = true;
-                  })
-                }
-              />
-            </SettingsPanelContent>
+            <SettingsDraftsContext value={drafts}>
+              <SettingsPanelContent>
+                <ChannelEditor
+                  memoryCount={panel.memories.count}
+                  routineCount={panel.routines.count}
+                  onOpenMemories={() =>
+                    setPanel((state) => {
+                      state.memories.open = true;
+                    })
+                  }
+                  onOpenRoutines={() =>
+                    setPanel((state) => {
+                      state.routines.open = true;
+                    })
+                  }
+                />
+              </SettingsPanelContent>
+              <SettingsDraftsSaveBar drafts={drafts} label={t("channel.saveBar.label")} />
+            </SettingsDraftsContext>
             <AgentMemoriesModal
               port={memoriesPort()}
               open={panel.memories.open}

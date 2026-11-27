@@ -1,6 +1,6 @@
 import type { AvatarHue } from "@openbot/contracts/ipc";
 import type { JSX } from "@solidjs/web";
-import { createEffect, createStore, For, Show } from "solid-js";
+import { createEffect, createStore, createUniqueId, For, Show } from "solid-js";
 import { AVATAR_HUE_CHOICES, avatarHueSwatch } from "../../bloub-avatar";
 import { Button } from "../../button";
 import { ConfirmDialog } from "../../confirm-dialog";
@@ -49,6 +49,7 @@ export function SpaceDialog(props: SpaceDialogProps): JSX.Element {
     error: null,
   });
   const [state, setState] = createStore<DialogState>(fresh());
+  const ids = `space-dialog-${createUniqueId()}`;
   const valid = () => state.name.trim().length > 0;
 
   function close(open: boolean): void {
@@ -98,7 +99,12 @@ export function SpaceDialog(props: SpaceDialogProps): JSX.Element {
     >
       <div class="space-dialog-identity">
         <SpaceMark name={state.name || "?"} icon={state.icon} hue={state.hue} class="space-mark-large" />
-        <Field label={t("workspace.spaces.name")} required class="space-dialog-name">
+        <Field
+          label={t("workspace.spaces.name")}
+          description={t("workspace.spaces.nameHint")}
+          required
+          class="space-dialog-name"
+        >
           <Input
             value={state.name}
             maxlength={SPACE_NAME_MAX}
@@ -112,76 +118,87 @@ export function SpaceDialog(props: SpaceDialogProps): JSX.Element {
           />
         </Field>
       </div>
-      <div class="space-dialog-row">
-        <span class="space-dialog-label">{t("workspace.spaces.emoji")}</span>
-        <EmojiPickerPopover
-          open={state.emojiOpen}
-          onOpenChange={(open) =>
-            setState((draft) => {
-              draft.emojiOpen = open;
-            })
-          }
-          trigger={
-            <Show when={state.icon} fallback={<SmilePlus />}>
-              {(icon) => <span>{icon()}</span>}
-            </Show>
-          }
-          triggerLabel={t("workspace.spaces.pickEmoji")}
-          placement="bottom-start"
-          onPick={(emoji) =>
-            setState((draft) => {
-              draft.icon = emoji;
-            })
-          }
-        />
-        <Show when={state.icon}>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() =>
+      <fieldset class="ui-field space-dialog-colors" aria-describedby={`${ids}-emoji-hint`}>
+        <legend class="ui-label">{t("workspace.spaces.emoji")}</legend>
+        <div class="space-dialog-row">
+          <EmojiPickerPopover
+            open={state.emojiOpen}
+            onOpenChange={(open) =>
               setState((draft) => {
-                draft.icon = null;
+                draft.emojiOpen = open;
               })
             }
-          >
-            {t("workspace.spaces.removeEmoji")}
-          </Button>
-        </Show>
-      </div>
-      <fieldset class="space-dialog-colors" aria-label={t("workspace.spaces.color")}>
-        <legend class="space-dialog-label">{t("workspace.spaces.color")}</legend>
-        <Button
-          variant="ghost"
-          type="button"
-          class={["space-dialog-color", { "space-dialog-color-selected": state.hue === null }]}
-          aria-label={t("workspace.spaces.noColor")}
-          aria-pressed={state.hue === null ? "true" : "false"}
-          onClick={() =>
-            setState((draft) => {
-              draft.hue = null;
-            })
-          }
-        >
-          <span class="space-dialog-swatch space-dialog-swatch-none" />
-        </Button>
-        <For each={AVATAR_HUE_CHOICES}>
-          {(choice) => (
+            trigger={
+              <Show when={state.icon} fallback={<SmilePlus />}>
+                {(icon) => <span>{icon()}</span>}
+              </Show>
+            }
+            triggerLabel={t("workspace.spaces.pickEmoji")}
+            triggerClass="space-dialog-emoji"
+            placement="bottom-start"
+            onPick={(emoji) =>
+              setState((draft) => {
+                draft.icon = emoji;
+              })
+            }
+          />
+          <Show when={state.icon}>
             <Button
-              variant="ghost"
-              type="button"
-              class={["space-dialog-color", { "space-dialog-color-selected": state.hue === choice.hue }]}
-              aria-label={t(AVATAR_HUE_LABEL[choice.hue])}
-              aria-pressed={state.hue === choice.hue ? "true" : "false"}
+              variant="outline"
+              size="sm"
               onClick={() =>
                 setState((draft) => {
-                  draft.hue = choice.hue;
+                  draft.icon = null;
                 })
               }
             >
-              <span class="space-dialog-swatch" style={{ background: avatarHueSwatch(choice.hue) }} />
+              {t("workspace.spaces.removeEmoji")}
             </Button>
-          )}
-        </For>
+          </Show>
+        </div>
+        <div id={`${ids}-emoji-hint`} class="ui-field-description">
+          {t("workspace.spaces.emojiHint")}
+        </div>
+      </fieldset>
+      <fieldset class="ui-field space-dialog-colors" aria-describedby={`${ids}-color-hint`}>
+        <legend class="ui-label">{t("workspace.spaces.color")}</legend>
+        <div class="space-dialog-swatches">
+          <Button
+            variant="ghost"
+            type="button"
+            class={["space-dialog-color", { "space-dialog-color-selected": state.hue === null }]}
+            aria-label={t("workspace.spaces.noColor")}
+            aria-pressed={state.hue === null ? "true" : "false"}
+            onClick={() =>
+              setState((draft) => {
+                draft.hue = null;
+              })
+            }
+          >
+            <span class="space-dialog-swatch space-dialog-swatch-none" />
+          </Button>
+          <For each={AVATAR_HUE_CHOICES}>
+            {(choice) => (
+              <Button
+                variant="ghost"
+                type="button"
+                class={["space-dialog-color", { "space-dialog-color-selected": state.hue === choice.hue }]}
+                aria-label={t(AVATAR_HUE_LABEL[choice.hue])}
+                aria-pressed={state.hue === choice.hue ? "true" : "false"}
+                onClick={() =>
+                  setState((draft) => {
+                    draft.hue = choice.hue;
+                  })
+                }
+              >
+                <span class="space-dialog-swatch" style={{ background: avatarHueSwatch(choice.hue) }} />
+              </Button>
+            )}
+          </For>
+        </div>
+        <div id={`${ids}-color-hint`} class="ui-field-description">
+          {t("workspace.spaces.colorHint")}
+        </div>
       </fieldset>
     </FormDialog>
   );

@@ -1,5 +1,5 @@
 import { channelKind } from "@openbot/contracts/ipc";
-import { ConfirmDialog, FormDialog, Input, Textarea } from "@openbot/ui";
+import { ConfirmDialog, Field, FormDialog, Input, Textarea } from "@openbot/ui";
 import { CreateChannelDialog } from "@openbot/ui/features/workspace/CreateChannelDialog";
 import { MemberPicker } from "@openbot/ui/features/workspace/MemberPicker";
 import { NewMessageDialog } from "@openbot/ui/features/workspace/NewMessageDialog";
@@ -108,26 +108,22 @@ function EditMetaDialog(props: { channelId: string; field: "topic" | "descriptio
         if (!open) props.onClose();
       }}
       title={t(props.field === "topic" ? "workspace.app.meta.topicTitle" : "workspace.app.meta.descriptionTitle")}
-      description={t(props.field === "topic" ? "workspace.app.meta.topicHint" : "workspace.app.meta.descriptionHint")}
       error={error()}
       busy={busy()}
       submitLabel={t("common.save")}
       onSubmit={() => void save()}
     >
-      <Show
-        when={props.field === "topic"}
-        fallback={
-          <Textarea
-            value={value()}
-            maxlength={2000}
-            rows={5}
-            onValueChange={setValue}
-            aria-label={t("workspace.details.description")}
-          />
-        }
+      <Field
+        label={t(props.field === "topic" ? "workspace.details.topic" : "workspace.details.description")}
+        description={t(props.field === "topic" ? "workspace.app.meta.topicHint" : "workspace.app.meta.descriptionHint")}
       >
-        <Input value={value()} maxlength={250} onValueChange={setValue} aria-label={t("workspace.details.topic")} />
-      </Show>
+        <Show
+          when={props.field === "topic"}
+          fallback={<Textarea value={value()} maxlength={2000} rows={5} onValueChange={setValue} />}
+        >
+          <Input value={value()} maxlength={250} onValueChange={setValue} />
+        </Show>
+      </Field>
     </FormDialog>
   );
 }
@@ -170,7 +166,9 @@ function InviteDialog(props: { channelId: string; candidates: readonly Workspace
     >
       <MemberPicker
         autofocus
+        showLabel
         label={t("workspace.app.invite.label")}
+        hint={t("workspace.app.invite.hint")}
         candidates={props.candidates.filter((member) => !present().has(member.id))}
         selectedIds={ids()}
         onChange={setIds}

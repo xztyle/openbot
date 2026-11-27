@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, createUniqueId, For, Show } from "solid-js";
 import { Button, IconButton } from "../../button";
 import { Input } from "../../form";
 import { Check, Search, X } from "../../icons";
@@ -16,6 +16,9 @@ export interface MemberPickerProps {
   max?: number | undefined;
   /** The accessible name of the search field. */
   label: string;
+  /** Shows `label` above the search field, with `hint` under it, as a form field. */
+  showLabel?: boolean | undefined;
+  hint?: string | undefined;
   /** Moves focus to the search field when the picker opens. */
   autofocus?: boolean | undefined;
   class?: string;
@@ -24,6 +27,7 @@ export interface MemberPickerProps {
 /** Search, chosen chips, and the people and agents to choose from. */
 export function MemberPicker(props: MemberPickerProps): JSX.Element {
   const { t } = useText();
+  const id = `member-picker-${createUniqueId()}`;
   const [query, setQuery] = createSignal("");
   const selected = () => new Set(props.selectedIds);
   const chosen = () => props.selectedIds.flatMap((id) => props.candidates.filter((member) => member.id === id));
@@ -64,6 +68,11 @@ export function MemberPicker(props: MemberPickerProps): JSX.Element {
   );
   return (
     <div class={cx("ws-picker", props.class)}>
+      <Show when={props.showLabel}>
+        <label class="ui-label" for={`${id}-search`}>
+          {props.label}
+        </label>
+      </Show>
       <div class="ws-picker-field">
         <Search class="ws-picker-search-icon" aria-hidden="true" />
         <For each={chosen()} keyed={(member) => member.id}>
@@ -87,10 +96,12 @@ export function MemberPicker(props: MemberPickerProps): JSX.Element {
           ref={(element) => {
             if (props.autofocus) requestAnimationFrame(() => element.focus());
           }}
+          id={`${id}-search`}
           class="ws-picker-input"
           size="sm"
           value={query()}
-          aria-label={props.label}
+          aria-label={props.showLabel ? undefined : props.label}
+          aria-describedby={props.showLabel && props.hint ? `${id}-hint` : undefined}
           placeholder={t("workspace.picker.placeholder")}
           onValueChange={setQuery}
           onKeyDown={(event: KeyboardEvent) => {
@@ -109,6 +120,11 @@ export function MemberPicker(props: MemberPickerProps): JSX.Element {
           }}
         />
       </div>
+      <Show when={props.showLabel && props.hint}>
+        <div id={`${id}-hint`} class="ui-field-description">
+          {props.hint}
+        </div>
+      </Show>
       <Show when={full()}>
         <p class="ws-picker-note">{t("workspace.picker.full", { count: props.max ?? 0 })}</p>
       </Show>

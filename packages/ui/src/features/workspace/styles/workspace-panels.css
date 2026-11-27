@@ -98,10 +98,78 @@
 }
 
 .ws-details-content {
+  container: settings-panel / inline-size;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: var(--openbot-space-4);
+}
+
+/*
+ * About and Settings are on the settings design system, as the agent and channel settings panels
+ * (settings-modal.css): sections (lg, semibold) of groups, each a card of rows. The panel is narrow,
+ * so its rows stack their controls under the label below 460 px of panel width; a switch row keeps
+ * its switch beside the label.
+ */
+.ws-details-page {
+  padding-block: var(--openbot-space-2);
+}
+
+.ws-details :is(.ui-settings-section, .ui-settings-group, .ui-settings-group-card) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* The panel is the surface color, so its cards take the line of the other cards of the panel. */
+.ws-details .ui-settings-group-card {
+  border: 1px solid var(--ws-line);
+}
+
+.ws-details .ui-settings-section {
+  gap: var(--openbot-space-3);
+}
+
+.ws-details .ui-settings-row-control {
+  min-width: 0;
+}
+
+.ws-details .ui-settings-section-header {
+  padding-inline: var(--openbot-space-1);
+}
+
+.ws-details .ui-settings-section-heading {
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-lg);
+  font-weight: var(--openbot-weight-semibold);
+  line-height: var(--openbot-leading-lg);
+}
+
+.ws-details .ui-settings-section-description {
+  margin-top: var(--openbot-space-0-5);
+  font-size: var(--openbot-text-md);
+  line-height: var(--openbot-leading-md);
+  text-wrap: pretty;
+}
+
+/* A read-only value, such as who made the channel, reads as the row's description. */
+.ws-details-created {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+/* Delete: an outline button in the danger color, as Forget in the agent settings. */
+.ws-details-danger-button.ui-button {
+  border-color: color-mix(in srgb, var(--openbot-danger) 45%, transparent);
+  color: var(--openbot-danger);
+}
+
+/* The save bar sits at the foot of the panel, over the home indicator on a phone. */
+.ws-details > .settings-modal-save-dock {
+  flex: 0 0 auto;
+}
+
+.ws-details .settings-modal-save-bar {
+  padding: var(--openbot-space-3) var(--openbot-space-4) calc(var(--openbot-space-3) + env(safe-area-inset-bottom, 0px));
 }
 
 .ws-details-card {
@@ -115,49 +183,6 @@
 
 .ws-details-card > * + * {
   border-top: 1px solid var(--ws-line);
-}
-
-.ws-details-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--openbot-space-1);
-  padding: var(--openbot-space-3) var(--openbot-space-4);
-}
-
-.ws-details-field-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.ws-details-field-label {
-  color: var(--openbot-text-primary);
-  font-size: var(--openbot-text-md);
-  font-weight: var(--openbot-weight-bold);
-}
-
-.ws-details-field-value {
-  color: var(--openbot-text-secondary);
-  font-size: var(--openbot-text-md);
-  line-height: var(--openbot-leading-md);
-  overflow-wrap: anywhere;
-}
-
-.ws-details-edit.ui-button {
-  height: auto;
-  gap: var(--openbot-space-1);
-  padding: 0;
-}
-
-.ws-details-edit > svg {
-  width: var(--openbot-icon-xs);
-  height: var(--openbot-icon-xs);
-}
-
-.ws-details-created {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--openbot-space-2);
 }
 
 .ws-details-add.ui-button {
@@ -248,6 +273,8 @@
 /* No hover on a touch screen: Remove shows on every row. */
 @media (hover: none), (pointer: coarse) {
   .ws-details-remove {
+    min-width: var(--openbot-touch-target);
+    min-height: var(--openbot-touch-target);
     opacity: 1;
   }
 }
@@ -287,57 +314,6 @@
   margin: 0;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-md);
-}
-
-.ws-details-setting {
-  display: flex;
-  align-items: center;
-  gap: var(--openbot-space-3);
-  padding: var(--openbot-space-3) var(--openbot-space-4);
-}
-
-.ws-details-setting-icon {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  color: var(--openbot-text-muted);
-}
-
-.ws-details-setting-icon > svg {
-  width: var(--openbot-icon-md);
-  height: var(--openbot-icon-md);
-}
-
-.ws-details-setting-copy {
-  display: flex;
-  flex: 1 1 auto;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--openbot-space-0-5);
-}
-
-.ws-details-setting-label {
-  color: var(--openbot-text-primary);
-  font-size: var(--openbot-text-md);
-  font-weight: var(--openbot-weight-semibold);
-}
-
-.ws-details-setting-description {
-  color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-sm);
-  line-height: var(--openbot-leading-sm);
-}
-
-.ws-details-danger {
-  display: flex;
-  flex-direction: column;
-  gap: var(--openbot-space-1);
-  margin-top: var(--openbot-space-4);
-}
-
-.ws-details-danger-action.ui-button {
-  justify-content: flex-start;
-  gap: var(--openbot-space-2);
 }
 
 /* Select ---------------------------------------------------------------------------------------- */

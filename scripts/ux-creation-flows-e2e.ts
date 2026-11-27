@@ -240,7 +240,7 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
       .first()
       .click();
     await page.getByRole("tab", { name: english("workspace.details.settings"), exact: true }).click();
-    const remove = page.getByRole("button", { name: english("workspace.details.archive"), exact: true });
+    const remove = page.getByRole("button", { name: english("workspace.details.archiveButton"), exact: true });
     await remove.click();
     const confirm = page.getByRole("alertdialog", { name: english("sidebar.delete.title", { name: channelName }) });
     await confirm.waitFor({ timeout: UI_WAIT_MS });

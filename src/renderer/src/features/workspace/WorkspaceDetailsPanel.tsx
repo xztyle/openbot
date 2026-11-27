@@ -18,7 +18,7 @@ import {
 import { MemberAvatar } from "@openbot/ui/features/workspace/WorkspaceAvatar";
 import { WorkspaceSelect } from "@openbot/ui/features/workspace/WorkspaceSelect";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show, untrack } from "solid-js";
 import { useWorkspace } from "./workspace-context";
 import { conversationName, humanIds, memberById, previewText, readerJoined } from "./workspace-model";
 
@@ -120,6 +120,7 @@ function useChannelPins(channelId: string, open: () => boolean) {
 
 /** The right panel of a channel: About, Members with each agent's answer mode, Pins, Integrations, Decisions, Settings. */
 export function WorkspaceDetailsPanel(props: { channelId: string }) {
+  const { t } = useText();
   const ws = useWorkspace();
   const channel = () => {
     const page = ws.channels.state.page;
@@ -130,11 +131,15 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
     return panel?.kind === "details" ? panel.tab : "about";
   };
   return (
-    <Show when={channel()} keyed>
-      {(current) => {
+    // Keyed by the channel, not by its object: every refresh of the channel brings a new object, and a
+    // new panel would drop what the reader is typing for the save bar.
+    <Show when={channel() ? props.channelId : undefined} keyed>
+      {(channelId) => {
+        const current = untrack(channel);
+        if (!current) return null;
         const kind = channelKind(current);
-        const manage = () => ws.canManage(current);
-        const joined = () => readerJoined(ws.directory(), current);
+        const manage = () => ws.canManage(channel() ?? current);
+        const joined = () => readerJoined(ws.directory(), channel() ?? current);
         const members = createMemo((): ChannelDetailsMember[] => {
           const live = channel() ?? current;
           const people = humanIds(live).map((id) => ({
@@ -150,11 +155,11 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
           return [...people, ...agents];
         });
         const live = () => channel() ?? current;
-        const decisions = useChannelDecisions(current.id, () => tab() === "decisions");
-        const pins = useChannelPins(current.id, () => tab() === "pins");
+        const decisions = useChannelDecisions(channelId, () => tab() === "decisions");
+        const pins = useChannelPins(channelId, () => tab() === "pins");
         // The hands-off list is in the workspace settings, which only owners and admins read.
         if (ws.isAdmin()) void ws.workspaceSettings();
-        const handsOff = () => ws.state.settings?.handsOffChannelIds?.includes(current.id) ?? false;
+        const handsOff = () => ws.state.settings?.handsOffChannelIds?.includes(channelId) ?? false;
         return (
           <ChannelDetails
             channel={{
@@ -173,14 +178,12 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
             onTabChange={(next) => ws.setDetailsTab(next)}
             onClose={() => ws.closePanel()}
             onBack={() => ws.back()}
-            onEditTopic={
+            onSaveAbout={
               joined() && !live().archived
-                ? () => ws.openDialog({ kind: "edit-meta", channelId: props.channelId, field: "topic" })
-                : undefined
-            }
-            onEditDescription={
-              joined() && !live().archived
-                ? () => ws.openDialog({ kind: "edit-meta", channelId: props.channelId, field: "description" })
+                ? async (change) => {
+                    const done = await ws.setMeta(props.channelId, change);
+                    if (done !== true) throw new Error(done);
+                  }
                 : undefined
             }
             onAddMembers={
@@ -203,7 +206,11 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
             }
             onFocusChange={
               joined() && !live().archived
-                ? (agentId, focus) => void ws.setMember(props.channelId, agentId, { focus })
+                ? async (agentId, focus) => {
+                    // A failure shows its toast; the save bar keeps the field and shows it too.
+                    if (!(await ws.setMember(props.channelId, agentId, { focus })))
+                      throw new Error(t("workspace.app.error.member"));
+                  }
                 : undefined
             }
             onGateChange={

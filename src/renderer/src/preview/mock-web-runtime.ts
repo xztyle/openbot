@@ -20,6 +20,8 @@ export interface MockWebRuntimeOptions {
   admin?: WebAdminRuntime;
   /** Capabilities the host offers besides the preview's own. */
   capabilities?: readonly string[];
+  /** A host that serves channels but not the workspace: the client shows its older channel view. */
+  withoutWorkspace?: boolean;
 }
 
 /** The browser composition over a given mock host, for a fixture that also drives that host. */
@@ -78,7 +80,7 @@ export function mockWebRuntimeFor(
         "sidebar-layout",
         CHANNEL_CHATS_CAPABILITY,
         ROUTINE_FLOWS_CAPABILITY,
-        WORKSPACE_CAPABILITY,
+        ...(options.withoutWorkspace ? [] : [WORKSPACE_CAPABILITY]),
         ...(options.capabilities ?? []),
       ];
     },

@@ -21,12 +21,11 @@ function Details(props: { tab: ChannelDetailsTab }) {
         }}
         members={DETAILS_MEMBERS}
         onClose={fn()}
-        onEditTopic={fn()}
-        onEditDescription={fn()}
+        onSaveAbout={async () => {}}
         onAddMembers={fn()}
         onRemoveMember={fn()}
         onAnswerModeChange={fn()}
-        onFocusChange={fn()}
+        onFocusChange={async () => {}}
         onGateChange={fn()}
         integrations={
           <div style={{ display: "flex", "align-items": "center", gap: "12px", padding: "12px 16px" }}>

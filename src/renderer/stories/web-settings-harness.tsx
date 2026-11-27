@@ -9,6 +9,8 @@
  *
  * `?role=member` signs in as a member, so the check sees what a member does not get.
  * `?theme=light` shows the light theme.
+ * `?workspace=off` is a host without the workspace, so a channel opens in the older channel view with
+ * its settings side panel (`scripts/channels-settings-e2e.ts`).
  */
 import type { PerformanceReview } from "@openbot/contracts/agent-efficiency";
 import type { SettingsCheckpoint } from "@openbot/contracts/agent-learning";
@@ -43,6 +45,7 @@ declare global {
 const params = new URLSearchParams(window.location.search);
 const roleParam = params.get("role");
 const role: TeamRole = roleParam === "member" || roleParam === "admin" ? roleParam : "owner";
+const withoutWorkspace = params.get("workspace") === "off";
 if (params.get("theme") === "light") document.documentElement.dataset.openbotColorScheme = "light";
 
 const BACKUPS: HostBackupsOverview = {
@@ -213,7 +216,9 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
   return mockWebRuntimeFor(mock, events, {
     role,
     admin: adminRuntime(mock),
-    capabilities: [FORK_HOST_CAPABILITY, HOST_ADMIN_CAPABILITY],
+    // The fork host capability is the workspace's own, so a host without the workspace has neither.
+    capabilities: withoutWorkspace ? [HOST_ADMIN_CAPABILITY] : [FORK_HOST_CAPABILITY, HOST_ADMIN_CAPABILITY],
+    withoutWorkspace,
   });
 };
 

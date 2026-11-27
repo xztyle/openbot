@@ -25,7 +25,7 @@ export const messages = {
   "workspace.view.apps": "Apps",
   "workspace.routines.agent": "Agente",
   "workspace.view.agents": "Entre agentes",
-  "workspace.view.secrets": "Segredos",
+  "workspace.view.secrets": "Chaves e senhas",
   "workspace.secrets.description":
     "Chaves e tokens que seus agentes leem como arquivos. Os valores nunca aparecem no chat.",
   "workspace.secrets.shared": "Compartilhados com todos os agentes",

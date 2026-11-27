@@ -205,6 +205,7 @@ import { mockRoutineCalendar } from "./mock-routine-calendar";
 import { createMockRoutineFeed } from "./mock-routine-feed";
 import { mockRoutineFlows } from "./mock-routine-flows";
 import { type MockRoutineResultsOptions, mockRoutineResults } from "./mock-routine-results";
+import { createMockSecretVault } from "./mock-secret-vault";
 import { applySidebarLayoutAction } from "./mock-sidebar-layout";
 import { createMockSkills, type MockSkillsOptions } from "./mock-skills";
 import { createMockSpaces, type MockSpaceSeed } from "./mock-spaces";
@@ -997,6 +998,8 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     options.channelMemberId ?? PREVIEW_CHANNEL_MEMBER_ID,
   );
   threadReads.position = threadPosition;
+  // Made on the first call, when the preview's agents are known.
+  let mockVault: ReturnType<typeof createMockSecretVault> | undefined;
   const mockSpaces = createMockSpaces(
     emitAgentEvent,
     () => agents.map((entry) => entry.id),
@@ -1982,6 +1985,13 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       },
       workspaceSecretRemove: async ({ scope, name }) => {
         mockSecrets.delete(`${scope}/${name}`);
+      },
+      workspaceVault: (call) => {
+        mockVault ??= createMockSecretVault({
+          agentIds: agents.map((entry) => entry.id),
+          spaceIds: (options.spaces ?? []).map((seed) => seed.space.id),
+        });
+        return mockVault(call);
       },
       workspaceLoops: async ({ spaceId }) => ({
         spaceId,

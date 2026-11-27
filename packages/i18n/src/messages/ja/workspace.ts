@@ -25,7 +25,7 @@ export const messages = {
   "workspace.view.apps": "アプリ",
   "workspace.routines.agent": "エージェント",
   "workspace.view.agents": "エージェント間",
-  "workspace.view.secrets": "シークレット",
+  "workspace.view.secrets": "キーとパスワード",
   "workspace.secrets.description": "エージェントがファイルとして読み取るキーとトークン。値はチャットに表示されません。",
   "workspace.secrets.shared": "すべてのエージェントと共有",
   "workspace.secrets.add": "シークレットを追加",

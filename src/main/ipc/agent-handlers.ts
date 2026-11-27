@@ -22,6 +22,7 @@ import {
   decodeChannelSummaries,
   decodeCreatedSpaceAgent,
   decodeSaveAgentProfileResult,
+  decodeSecretVaultResult,
   decodeWorkspaceActivity,
   decodeWorkspaceAgentExchange,
   decodeWorkspaceAgentPairs,
@@ -51,6 +52,7 @@ import {
   parseLocalBrowserSecretResponse,
   parseResetAgentSessionSetting,
   parseSaveAgentProfile,
+  parseSecretVaultCall,
   parseSetAgentHiddenInput,
   parseSetAgentSessionSetting,
   parseWorkspaceActivityInput,
@@ -546,6 +548,12 @@ export function agentIpcHandlers({
         remote: async (input, serverId) => {
           await remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.secretRemove, input, acceptEmpty);
         },
+      }),
+      // The person at this computer is the host's owner.
+      workspaceVault: scopedHandler(parseSecretVaultCall, {
+        local: (input) => service.secrets.vault(input, { kind: "owner" }),
+        remote: (input, serverId) =>
+          remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.vault, input, decodeSecretVaultResult),
       }),
       workspaceDecisions: scopedHandler(parseWorkspaceDecisionsInput, {
         local: (input) => service.workspace.decisions(input, host.channelViewer()),

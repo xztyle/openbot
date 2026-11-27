@@ -25,7 +25,7 @@ export const messages = {
   "workspace.view.apps": "应用",
   "workspace.routines.agent": "代理",
   "workspace.view.agents": "代理之间",
-  "workspace.view.secrets": "密钥",
+  "workspace.view.secrets": "密钥和密码",
   "workspace.secrets.description": "智能体以文件形式读取的密钥和令牌。值永远不会出现在聊天中。",
   "workspace.secrets.shared": "与所有智能体共享",
   "workspace.secrets.add": "添加密钥",

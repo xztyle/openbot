@@ -2142,7 +2142,10 @@ export class BrowserHost {
           browserToolTimeout(args.timeoutMs),
         );
         const saved = yield* apiKeys
-          .save(shared ? SHARED_API_KEY_SCOPE : (agentId ?? ""), args.name, value)
+          .save(shared ? SHARED_API_KEY_SCOPE : (agentId ?? ""), args.name, value, {
+            kind: "agent",
+            ...(agentId ? { id: agentId } : {}),
+          })
           .pipe(Effect.mapError((failure) => browserFailure(failure.cause)));
         return textResult({ status: "saved", name: saved.name, path: saved.path, shared, snapshot });
       }),

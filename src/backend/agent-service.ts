@@ -1929,9 +1929,24 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       itemFinished: ({ agentIds, loop, item, outcome }) =>
         this.learning.taskFinished(agentIds, { source: "loop", ref: loop, title: `${item} (${outcome})` }),
     });
-    this.secrets = new WorkspaceSecretsService(options.agentApiKeys ?? null, (agentId) =>
-      this.listAgents().some((agent) => agent.id === agentId),
+    this.secrets = new WorkspaceSecretsService(
+      options.agentApiKeys ?? null,
+      (agentId) => this.listAgents().some((agent) => agent.id === agentId),
+      (spaceId) => store.spaces.get(spaceId) !== undefined,
     );
+    // The readers of each key follow the agents and their spaces.
+    options.agentApiKeys?.ledger.setDirectory(() =>
+      this.listAgents().map((agent) => ({
+        id: agent.id,
+        name: agent.name,
+        spaceId: store.spaces.agentSpaceId(agent.id) || null,
+      })),
+    );
+    this.secrets.setRequests({
+      list: () => this.#attention.secretRequests(),
+      fill: (requestId, value) => Effect.runPromise(this.#attention.fillSecretRequest(requestId, value)),
+      approve: (requestId, decision) => Effect.runPromise(this.#attention.answerSecretFill(requestId, decision)),
+    });
     this.workspace = new WorkspaceInsights({
       agents: () => this.listAgents(),
       database: store.database,

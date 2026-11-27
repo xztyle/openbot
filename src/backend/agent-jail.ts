@@ -298,6 +298,11 @@ export class AgentJail {
     for (const path of request.readRoots) add("read", path);
     add("read", join(this.#host.apiKeysRoot, request.agentId));
     add("read", join(this.#host.apiKeysRoot, "_shared"));
+    // The keys given to this agent beyond its own and the shared ones (a space's, a listed one).
+    // Never the store's `_vault` folder, or another agent's grants.
+    const grants = join(this.#host.apiKeysRoot, "_grants", request.agentId);
+    await mkdir(grants, { recursive: true, mode: 0o700 }).catch(() => undefined);
+    add("read", grants);
     add("read", join(this.#host.userDataPath, "provider-runtimes"));
     for (const path of request.readFiles) add("read", path);
     for (const folder of request.linkFolders) {

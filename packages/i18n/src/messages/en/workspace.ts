@@ -26,7 +26,7 @@ export const messages = defineMessages("workspace", {
   "workspace.view.apps": "Apps",
   "workspace.routines.agent": "Agent",
   "workspace.view.agents": "Between agents",
-  "workspace.view.secrets": "Secrets",
+  "workspace.view.secrets": "Keys and passwords",
   "workspace.view.noMatch": "No matches",
   "workspace.view.noMatchHint": "Try another search or filter.",
   "workspace.view.clearFilters": "Clear filters",

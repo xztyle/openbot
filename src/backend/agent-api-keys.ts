@@ -1,12 +1,15 @@
 import { readFileSync } from "node:fs";
-import { readdir, readFile, realpath, rm, stat } from "node:fs/promises";
+import { readFile, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
+import type { SecretActor } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
-import { registerSecretValue } from "@openbot/logging";
+import { createOpenBotLogger, registerSecretValue, toLogValue } from "@openbot/logging";
 import { Effect, Option, Schema } from "effect";
-import { writeFileAtomically, writeJsonFileAtomically } from "./atomic-json-file";
-import { isMissingFileError } from "./file-errors";
+import { writeJsonFileAtomically } from "./atomic-json-file";
+import { SecretLedger } from "./secret-ledger";
+
+const logger = createOpenBotLogger("agent-api-keys");
 
 /** An environment variable name, which is also the file name of the key. */
 export const API_KEY_NAME_PATTERN = /^[A-Z][A-Z0-9_]{0,63}$/;
@@ -62,9 +65,12 @@ const failed = () => new AgentApiKeyFailed({ cause: new Error(sourceText("error.
  */
 export class AgentApiKeys {
   readonly #root: string;
+  /** The source of truth: values, versions, access, history. The key files are its projection. */
+  readonly ledger: SecretLedger;
 
-  constructor(root: string) {
+  constructor(root: string, options: { now?: () => number } = {}) {
     this.#root = root;
+    this.ledger = new SecretLedger(root, options);
   }
 
   readonly save = Effect.fn("AgentApiKeys.save")(function* (
@@ -72,122 +78,125 @@ export class AgentApiKeys {
     scope: string,
     name: string,
     value: string,
+    actor: SecretActor = { kind: "host" },
   ) {
     if (value === "" || Buffer.byteLength(value) > API_KEY_VALUE_LIMIT) return yield* Effect.fail(failed());
     const path = yield* this.#keyPath(scope, name);
     registerSecretValue(value);
-    yield* writeFileAtomically(path, value, { createDirectory: true }).pipe(Effect.mapError(failed));
-    return savedKey(scope, name, path);
+    const ledger = this.ledger;
+    yield* Effect.try({ try: () => ledger.save(scope, name, value, actor), catch: failed });
+    return savedKey(scope, name, scope === SHARED_API_KEY_SCOPE ? ledger.homePath(scope, name) : path);
   });
 
+  /** The keys of one scope that are in force, with the file where their readers find them. */
   readonly list = Effect.fn("AgentApiKeys.list")(function* (this: AgentApiKeys, scope: string) {
-    const folder = yield* this.#scopeFolder(scope);
-    const names = yield* Effect.tryPromise({ try: () => folderNames(folder), catch: failed });
-    return names
-      .filter((name) => API_KEY_NAME_PATTERN.test(name))
-      .sort()
-      .map((name) => savedKey(scope, name, join(folder, name)));
+    yield* this.#scopeFolder(scope);
+    const ledger = this.ledger;
+    const secrets = yield* Effect.try({ try: () => ledger.list(), catch: failed });
+    return secrets
+      .filter((secret) => secret.scope === scope)
+      .map((secret) => savedKey(scope, secret.name, ledger.homePath(scope, secret.name)));
   });
 
-  /** The keys an agent reads: its own, then the shared ones that it has no own key for. */
+  /** The keys an agent reads, one per name: its own, then one given to it, then a shared one. */
   readonly listForAgent = Effect.fn("AgentApiKeys.listForAgent")(function* (this: AgentApiKeys, agentId: string) {
-    const own = yield* this.list(agentId);
-    const shared = yield* this.list(SHARED_API_KEY_SCOPE);
-    const names = new Set(own.map((key) => key.name));
-    return [...own, ...shared.filter((key) => !names.has(key.name))];
+    yield* this.#agentFolder(agentId);
+    const ledger = this.ledger;
+    const keys = yield* Effect.try({ try: () => ledger.keysFor(agentId), catch: failed });
+    return keys.map((key): SavedApiKey => {
+      const saved: SavedApiKey = { name: key.name, path: key.path };
+      if (key.scope === SHARED_API_KEY_SCOPE) saved.shared = true;
+      return saved;
+    });
   });
 
   /** Every key of the server, for the Secrets view: the shared ones and each agent's. */
   readonly listAll = Effect.fn("AgentApiKeys.listAll")(function* (this: AgentApiKeys) {
-    const folders = yield* Effect.tryPromise({ try: () => folderNames(this.#root), catch: failed });
-    const scopes = [
-      SHARED_API_KEY_SCOPE,
-      ...folders.filter((folder) => folder !== SHARED_FOLDER && AGENT_ID_PATTERN.test(folder)).sort(),
-    ];
-    const entries: ApiKeyEntry[] = [];
-    for (const scope of scopes) {
-      const keys = yield* this.list(scope);
-      for (const key of keys) {
-        const info = yield* Effect.promise(() => stat(key.path).catch(() => null));
-        entries.push({ scope, name: key.name, updatedAt: Math.round(info?.mtimeMs ?? 0) });
-      }
-    }
-    return entries;
+    const ledger = this.ledger;
+    const secrets = yield* Effect.try({ try: () => ledger.list(), catch: failed });
+    return secrets.map(
+      (secret): ApiKeyEntry => ({ scope: secret.scope, name: secret.name, updatedAt: secret.updatedAt }),
+    );
   });
 
-  /** The value of a key, for the server owner only. Null when there is no such key. */
-  readonly read = Effect.fn("AgentApiKeys.read")(function* (this: AgentApiKeys, scope: string, name: string) {
-    const path = yield* this.#keyPath(scope, name);
-    return yield* Effect.tryPromise({
-      try: () =>
-        readFile(path, "utf8").then(
-          (value) => value,
-          (error: unknown) => (isMissingFileError(error) ? null : Promise.reject(error)),
-        ),
-      catch: failed,
-    });
+  /** The value of a key, for the server owner only, written to its history. Null when there is no such key. */
+  readonly read = Effect.fn("AgentApiKeys.read")(function* (
+    this: AgentApiKeys,
+    scope: string,
+    name: string,
+    actor: SecretActor = { kind: "owner" },
+  ) {
+    yield* this.#keyPath(scope, name);
+    const ledger = this.ledger;
+    if (!ledger.has(scope, name)) return null;
+    return yield* Effect.try({ try: () => ledger.reveal(scope, name, actor, "show"), catch: failed });
   });
 
-  /** False when the scope has no key with that name. */
-  readonly remove = Effect.fn("AgentApiKeys.remove")(function* (this: AgentApiKeys, scope: string, name: string) {
-    const path = yield* this.#keyPath(scope, name);
+  /** Moves the key to the bin, where it stays restorable for 30 days. False when there is none. */
+  readonly remove = Effect.fn("AgentApiKeys.remove")(function* (
+    this: AgentApiKeys,
+    scope: string,
+    name: string,
+    actor: SecretActor = { kind: "host" },
+  ) {
+    yield* this.#keyPath(scope, name);
     yield* this.#changeFillSites((key) => key !== `${scope}/${name}`);
-    return yield* Effect.tryPromise({
-      try: () =>
-        rm(path).then(
-          () => true,
-          (error: unknown) => (isMissingFileError(error) ? false : Promise.reject(error)),
-        ),
-      catch: failed,
-    });
+    const ledger = this.ledger;
+    return yield* Effect.try({ try: () => ledger.remove(scope, name, actor), catch: failed });
   });
 
-  /** Removes every key of a deleted agent. */
+  /** Moves every key of a deleted agent to the bin. */
   readonly removeAgent = Effect.fn("AgentApiKeys.removeAgent")(function* (this: AgentApiKeys, agentId: string) {
     const folder = yield* this.#agentFolder(agentId);
     yield* this.#changeFillSites((key) => !key.startsWith(`${agentId}/`));
+    const ledger = this.ledger;
+    yield* Effect.try({ try: () => ledger.removeScope(agentId, { kind: "host" }), catch: failed });
     yield* Effect.tryPromise({ try: () => rm(folder, { recursive: true, force: true }), catch: failed });
-  });
-
-  /** Registers every saved value for redaction. A file that cannot be read is skipped. */
-  readonly registerSaved = Effect.fn("AgentApiKeys.registerSaved")(function* (this: AgentApiKeys) {
-    const agents = yield* Effect.promise(() => folderNames(this.#root).catch((): string[] => []));
-    const scopes = [SHARED_API_KEY_SCOPE, ...agents.filter((id) => AGENT_ID_PATTERN.test(id))];
-    for (const scope of scopes) {
-      const keys = yield* this.list(scope).pipe(Effect.catch(() => Effect.succeed<SavedApiKey[]>([])));
-      for (const key of keys) {
-        const value = yield* Effect.promise(() => readFile(key.path, "utf8").catch(() => ""));
-        registerSecretValue(value);
-      }
-    }
+    yield* Effect.tryPromise({
+      try: () => rm(join(this.#root, "_grants", agentId), { recursive: true, force: true }),
+      catch: failed,
+    });
   });
 
   /**
-   * One value now, for a connection that names a key: the agent's own key, the shared one, or (any)
-   * the agent's own when it has one, else the shared one. Null when there is none.
+   * Takes the key files into the ledger (a store from before it keeps every key), registers every
+   * value for redaction, and rebuilds the files agents read. Runs before the first agent starts.
    */
-  readNow(scope: "agent" | "shared" | "any", agentId: string | null, name: string): string | null {
-    if (!API_KEY_NAME_PATTERN.test(name)) return null;
-    const read = (folder: string) => {
+  readonly registerSaved = Effect.fn("AgentApiKeys.registerSaved")(function* (this: AgentApiKeys) {
+    const ledger = this.ledger;
+    yield* Effect.sync(() => {
       try {
-        return readFileSync(join(this.#root, folder, name), "utf8") || null;
-      } catch {
-        return null;
+        ledger.migrate();
+        ledger.registerForRedaction();
+        ledger.project();
+      } catch (error) {
+        logger.warn("The keys store could not be prepared", { error: toLogValue(error) });
       }
-    };
-    const own = scope !== "shared" && agentId && AGENT_ID_PATTERN.test(agentId) ? read(agentId) : null;
-    return own ?? (scope === "agent" ? null : read(SHARED_FOLDER));
+    });
+  });
+
+  /**
+   * One value now, for a connection that names a key: the agent's own key (`agent`), the shared one
+   * when the agent may read it (`shared`), or the one the agent reads by that name (`any`). Without
+   * an agent, the host's own helpers read the shared key. An expired key is null.
+   */
+  readNow(scope: "agent" | "shared" | "any", agentId: string | null, name: string, actor?: SecretActor): string | null {
+    if (agentId !== null && !AGENT_ID_PATTERN.test(agentId)) return null;
+    try {
+      return this.ledger.resolveFor(scope, agentId, name, actor)?.value ?? null;
+    } catch {
+      return null;
+    }
   }
 
-  /**
-   * The value of the key that an agent reads by `name` now, as `readNow("any", …)`, and the scope it
-   * comes from. Null when there is none.
-   */
+  /** The key an agent reads by `name` now, as `readNow("any", …)`, and the scope it comes from. */
   resolveNow(agentId: string, name: string): { scope: string; value: string } | null {
-    const own = this.readNow("agent", agentId, name);
-    if (own) return { scope: agentId, value: own };
-    const shared = this.readNow("shared", null, name);
-    return shared ? { scope: SHARED_API_KEY_SCOPE, value: shared } : null;
+    if (!AGENT_ID_PATTERN.test(agentId)) return null;
+    try {
+      return this.ledger.resolveFor("any", agentId, name);
+    } catch {
+      return null;
+    }
   }
 
   /** Whether the owner let agents fill the key `name` of `scope` into a password field on `origin`. */
@@ -244,7 +253,13 @@ export class AgentApiKeys {
   }
 
   #scopeFolder(scope: string): Effect.Effect<string, AgentApiKeyFailed> {
-    return scope === SHARED_API_KEY_SCOPE ? Effect.succeed(join(this.#root, SHARED_FOLDER)) : this.#agentFolder(scope);
+    if (scope === SHARED_API_KEY_SCOPE) return Effect.succeed(join(this.#root, SHARED_FOLDER));
+    // A space's keys have no folder of their own: each agent of the space finds them in its grants.
+    if (scope.startsWith("space:"))
+      return AGENT_ID_PATTERN.test(scope.slice(6))
+        ? Effect.succeed(join(this.#root, "_grants"))
+        : Effect.fail(failed());
+    return this.#agentFolder(scope);
   }
 
   #keyPath(scope: string, name: string): Effect.Effect<string, AgentApiKeyFailed> {
@@ -255,16 +270,6 @@ export class AgentApiKeys {
 
 function savedKey(scope: string, name: string, path: string): SavedApiKey {
   return scope === SHARED_API_KEY_SCOPE ? { name, path, shared: true } : { name, path };
-}
-
-/** The names in a folder; none when the folder is missing. */
-async function folderNames(folder: string): Promise<string[]> {
-  try {
-    return await readdir(folder);
-  } catch (error) {
-    if (isMissingFileError(error)) return [];
-    throw error;
-  }
 }
 
 /**

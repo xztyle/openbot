@@ -219,7 +219,7 @@ export const messages = defineMessages("server", {
   "server.role.owner": "Owner",
   "server.settings.generalTitle": "General",
   "server.settings.generalDescription": "Manage this server’s name, logo, and preferences.",
-  "server.settings.vaultTitle": "Keys and passwords",
+  "server.settings.vaultTitle": "Logins and cards",
   "server.settings.vaultDescription":
     "Save logins, cards and contact info that every agent on this server can fill in.",
   "server.settings.membersTitle": "Members",

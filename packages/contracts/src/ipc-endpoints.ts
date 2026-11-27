@@ -26,6 +26,7 @@ import type {
   ResetAgentSessionSettingInput,
   SetAgentSessionSettingInput,
 } from "./ipc-agent-session-settings";
+import type { SecretVaultCall, SecretVaultResult } from "./ipc-secret-vault";
 // The one channel list. Each endpoint holds its wire value, the group it belongs to, and whether it
 // is a request the renderer invokes or an event the main process sends. That is what lets a
 // registrar bind its handlers as an object keyed by endpoint, so a channel with no handler, and a
@@ -1465,6 +1466,8 @@ export const IPC_ENDPOINTS = {
     workspaceSecretRead: scopedRequest<WorkspaceSecretInput, WorkspaceSecretValue>()("agent:workspace:secret-read"),
     workspaceSecretSave: scopedRequest<WorkspaceSecretSaveInput, void>()("agent:workspace:secret-save"),
     workspaceSecretRemove: scopedRequest<WorkspaceSecretInput, void>()("agent:workspace:secret-remove"),
+    // The keys and passwords screen: one call with a kind. A value comes back only to the owner's reveal.
+    workspaceVault: scopedRequest<SecretVaultCall, SecretVaultResult>()("agent:workspace:vault"),
     // The decisions that agents made without a person in a hands-off channel the reader can see.
     workspaceDecisions: scopedRequest<WorkspaceDecisionsInput, WorkspaceDecisions>()("agent:workspace:decisions"),
     // The loops (pipelines) of a space: a joined server answers through workspace-loops-v1 (`fork-host-v1`).

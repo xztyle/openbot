@@ -406,6 +406,7 @@ const fakeAgents: TeamApiAgents = {
     read: unused("secrets.read"),
     save: unused("secrets.save"),
     remove: unused("secrets.remove"),
+    vault: unused("secrets.vault"),
   },
 };
 

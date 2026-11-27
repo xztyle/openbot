@@ -209,7 +209,7 @@ export const messages = {
   "server.role.owner": "所有者",
   "server.settings.generalTitle": "通用",
   "server.settings.generalDescription": "管理该服务器的名称、标志和偏好设置。",
-  "server.settings.vaultTitle": "密钥和密码",
+  "server.settings.vaultTitle": "登录信息和卡片",
   "server.settings.vaultDescription": "保存登录信息、银行卡和联系方式，该服务器上的每个助手都可以填写。",
   "server.settings.membersTitle": "成员",
   "server.settings.membersDescription": "发布该服务器、邀请成员并管理访问权限。",

@@ -56,15 +56,18 @@ export class EventCheckEnvironment {
     readonly cipher: Cipher,
     /** Whether the check's program is byte for byte the reviewed program of its linked template. */
     readonly reviewed: (check: EventCheck) => boolean = () => false,
-    /** The value of a Secrets key, read when a check runs; null when there is no such key. */
-    readonly secret: (scope: string, name: string) => string | null = () => null,
+    /**
+     * The value of a Secrets key, read when a check runs, as the check's agent may read it; null when
+     * there is no such key, it expired, or the agent may not read it.
+     */
+    readonly secret: (scope: string, name: string, check: EventCheck) => string | null = () => null,
   ) {}
 
   /** A stored value, or the current value of the Secrets key that it links. */
-  #resolve(value: string): string | undefined {
+  #resolve(value: string, check: EventCheck): string | undefined {
     const link = eventCheckSecretLink(value);
     if (!link) return value;
-    const resolved = this.secret(link.scope, link.name)?.trim();
+    const resolved = this.secret(link.scope, link.name, check)?.trim();
     if (!resolved) return undefined;
     for (const mask of [resolved, encodeURIComponent(resolved), JSON.stringify(resolved).slice(1, -1)])
       registerSecretValue(mask, { allowShort: true });
@@ -124,7 +127,7 @@ export class EventCheckEnvironment {
     const values: Record<string, string> = {};
     for (const name of source.variables) {
       const stored_value = stored.values[name];
-      const value = stored_value === undefined ? undefined : this.#resolve(stored_value);
+      const value = stored_value === undefined ? undefined : this.#resolve(stored_value, check);
       if (value !== undefined) values[name] = value;
     }
     return values;

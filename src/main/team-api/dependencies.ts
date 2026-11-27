@@ -197,7 +197,7 @@ export type TeamApiAgents = TeamApiAgentMethods & {
     | "decisions"
   >;
   /** workspace-fleet-v1 (`fork-host-v1`): the agent key store, for the owner and the admins. */
-  secrets: Pick<WorkspaceSecretsService, "list" | "read" | "save" | "remove">;
+  secrets: Pick<WorkspaceSecretsService, "list" | "read" | "save" | "remove" | "vault">;
   /** workspace-loops-v1 (`fork-host-v1`): the loops of each space. */
   loops?: Pick<LoopService, "board" | "apply">;
   /** workspace-insight-v1 (`fork-host-v1`): goals, money, costs, the briefing and the timeline of a request. */

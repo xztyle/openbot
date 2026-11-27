@@ -951,7 +951,13 @@ export class OpenBotToolRouter {
       const scope = parsed.data.shared ? SHARED_API_KEY_SCOPE : agentId;
       return yield* apiKeys.sourceFile(parsed.data.file, agent?.workspacePath ?? null).pipe(
         Effect.flatMap((source) =>
-          apiKeys.save(scope, parsed.data.name, source.value).pipe(Effect.tap(() => removeKeySourceFile(source.path))),
+          apiKeys
+            .save(scope, parsed.data.name, source.value, {
+              kind: "agent",
+              id: agentId,
+              ...(agent ? { name: agent.name } : {}),
+            })
+            .pipe(Effect.tap(() => removeKeySourceFile(source.path))),
         ),
         Effect.map((key) =>
           openBotToolResult({ status: "saved", name: key.name, path: key.path, shared: key.shared === true }),
@@ -963,12 +969,14 @@ export class OpenBotToolRouter {
       const parsed = removeApiKeyToolSchema.safeParse(params.arguments);
       if (!parsed.success)
         return openBotToolFailure(`${z.prettifyError(parsed.error)}\nCorrect the arguments and retry.`);
-      return yield* apiKeys.remove(parsed.data.shared ? SHARED_API_KEY_SCOPE : agentId, parsed.data.name).pipe(
-        Effect.map((removed) =>
-          openBotToolResult({ status: removed ? "removed" : "not_found", name: parsed.data.name }),
-        ),
-        Effect.catch(failed),
-      );
+      return yield* apiKeys
+        .remove(parsed.data.shared ? SHARED_API_KEY_SCOPE : agentId, parsed.data.name, { kind: "agent", id: agentId })
+        .pipe(
+          Effect.map((removed) =>
+            openBotToolResult({ status: removed ? "removed" : "not_found", name: parsed.data.name }),
+          ),
+          Effect.catch(failed),
+        );
     }
     const parsed = requestApiKeyToolSchema.safeParse(params.arguments);
     if (!parsed.success)
@@ -983,6 +991,10 @@ export class OpenBotToolRouter {
       blockId: randomUUID(),
       spec,
       apiKey: { name: parsed.data.name, ...(parsed.data.shared ? { shared: true } : {}) },
+    });
+    apiKeys.ledger.noteRequested(parsed.data.shared ? SHARED_API_KEY_SCOPE : agentId, parsed.data.name, {
+      kind: "agent",
+      id: agentId,
     });
     return null;
   });

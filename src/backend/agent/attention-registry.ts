@@ -14,6 +14,7 @@ import type {
   RespondToApprovalInput,
   RespondToBrowserTakeoverInput,
   RespondToPromptInput,
+  SecretRequest,
 } from "@openbot/contracts/ipc";
 import {
   AGENT_ATTENTION_ITEMS_LIMIT,
@@ -41,6 +42,7 @@ import {
   ownerDecisionView,
   pastDecisionBlockId,
   pastDecisionRequestId,
+  UI_BLOCK_SUBMIT_ACTION_ID,
   UI_BLOCK_TEXT_ACTION_ID,
   UI_BLOCK_VERSION,
   type UiBlockAutoAnswer,
@@ -484,6 +486,8 @@ export class AttentionRegistry {
   #pastDecisionAnswered: PastDecisionAnswered | null = null;
   readonly #prompts = new Map<RequestId, PendingPrompt>();
   readonly #approvals = new Map<RequestId, PendingApproval>();
+  /** The saved-key fills that wait for the owner's yes, by approval request id, for the keys screen. */
+  readonly #secretFills = new Map<RequestId, { agentId: string; name: string; site: string; createdAt: number }>();
   readonly #takeovers = new Map<RequestId, PendingBrowserTakeover>();
   /** When `attentionItems` first listed each request. */
   readonly #listedAt = new WeakMap<PendingPrompt | PendingApproval | PendingBrowserTakeover, string>();
@@ -677,6 +681,56 @@ export class AttentionRegistry {
       }),
     ];
   }
+
+  /** What agents wait for on the keys screen: a key to type in, or the owner's yes to fill a saved one. */
+  secretRequests(): SecretRequest[] {
+    const requests: SecretRequest[] = [];
+    for (const pending of this.#prompts.values()) {
+      const apiKey = pending.uiBlock?.apiKey;
+      if (!apiKey) continue;
+      const listed = this.#listedAt.get(pending);
+      requests.push({
+        kind: "fill",
+        requestId: String(pending.id),
+        agentId: pending.agentId,
+        name: apiKey.name,
+        shared: apiKey.shared === true,
+        createdAt: listed ? Date.parse(listed) : Date.now(),
+      });
+    }
+    for (const [requestId, fill] of this.#secretFills)
+      if (this.#approvals.has(requestId)) requests.push({ kind: "approve", requestId: String(requestId), ...fill });
+    return requests;
+  }
+
+  /** Types the key into an agent's `request_api_key` form from the keys screen, as the form's Save does. */
+  readonly fillSecretRequest = Effect.fn("AttentionRegistry.fillSecretRequest")(function* (
+    this: AttentionRegistry,
+    requestId: string,
+    value: string,
+    responder?: PromptResponder,
+  ) {
+    const pending = [...this.#prompts.values()].find((candidate) => String(candidate.id) === requestId);
+    if (!pending?.uiBlock?.apiKey)
+      return yield* Effect.fail(new InactiveAttentionRequest(sourceText("error.backend.promptInactive")));
+    const answers = uiBlockAnswersFromResponse(pending.uiBlock.spec, {
+      actionId: UI_BLOCK_SUBMIT_ACTION_ID,
+      values: { [API_KEY_FIELD_ID]: value },
+    });
+    yield* this.respondToPrompt({ requestId: pending.id, answers }, responder);
+  });
+
+  /** The owner's answer to a saved-key fill from the keys screen. */
+  readonly answerSecretFill = Effect.fn("AttentionRegistry.answerSecretFill")(function* (
+    this: AttentionRegistry,
+    requestId: string,
+    decision: "accept" | "decline",
+  ) {
+    const id = [...this.#secretFills.keys()].find((candidate) => String(candidate) === requestId);
+    if (id === undefined)
+      return yield* Effect.fail(new InactiveAttentionRequest(sourceText("error.backend.approvalInactive")));
+    yield* this.respondToApproval({ requestId: id, decision }, { owner: true });
+  });
 
   /**
    * Every request that waits for the user now, of every agent, with what is safe to show of it: the
@@ -1151,14 +1205,16 @@ export class AttentionRegistry {
       };
     });
     if (!answer) return null;
-    const key = yield* answer.apiKeys.save(answer.scope, answer.name, answer.value).pipe(
-      toAttentionOperationFailed,
-      Effect.ensuring(
-        Effect.sync(() => {
-          answer.pending.savingApiKey = false;
-        }),
-      ),
-    );
+    const key = yield* answer.apiKeys
+      .save(answer.scope, answer.name, answer.value, { kind: responder ? "person" : "owner" })
+      .pipe(
+        toAttentionOperationFailed,
+        Effect.ensuring(
+          Effect.sync(() => {
+            answer.pending.savingApiKey = false;
+          }),
+        ),
+      );
     return { pending: answer.pending, key };
   });
 
@@ -2406,6 +2462,7 @@ export class AttentionRegistry {
         approvalId: String(providerRequest.id),
         origin,
       });
+      this.#secretFills.set(providerRequest.id, { agentId, name, site: origin, createdAt: Date.now() });
       const decision = yield* this.awaitToolApproval(
         client,
         providerRequest,
@@ -2425,6 +2482,12 @@ export class AttentionRegistry {
           permissions: null,
         },
         { ownerOnly: true },
+      ).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            this.#secretFills.delete(providerRequest.id);
+          }),
+        ),
       );
       logger.info("The owner answered a saved key fill.", { agentId, requestId: String(requestId), decision });
       if (this.#takeovers.get(requestId) !== pending) return true;
@@ -2446,6 +2509,7 @@ export class AttentionRegistry {
     if (request.method === "authenticator" && !twoStepKey) return false;
     const value = twoStepKey ? yield* Effect.promise(() => twoStepCode(twoStepKey, Date.now())) : key.value;
     pending.filledSecretKey = name;
+    keys.ledger.noteUse(key.scope, name, { kind: "agent", id: agentId }, agentId, `filled on ${origin}`);
     const submitted = yield* Effect.result(
       this.respondToBrowserSecret({ requestId, agentId, decision: "submit", secret: value }),
     );

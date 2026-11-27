@@ -25,7 +25,7 @@ export const messages = {
   "workspace.view.apps": "Aplikacje",
   "workspace.routines.agent": "Agent",
   "workspace.view.agents": "Między agentami",
-  "workspace.view.secrets": "Sekrety",
+  "workspace.view.secrets": "Klucze i hasła",
   "workspace.secrets.description":
     "Klucze i tokeny, które agenci odczytują jako pliki. Wartości nigdy nie pojawiają się na czacie.",
   "workspace.secrets.shared": "Wspólne dla wszystkich agentów",

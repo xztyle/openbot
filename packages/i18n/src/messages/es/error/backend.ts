@@ -389,6 +389,12 @@ export const messages = {
   "error.backend.approvalOwnerOnly": "Solo el dueño del servidor puede aprobar esta acción.",
   "error.backend.takeoverInactive": "Esta toma de control del navegador ya no está activa.",
   "error.backend.authSubmitting": "Ya se están enviando los datos de autenticación.",
+  "error.backend.secretVaultPassphrase": "Esa frase no abre este archivo. Revísala e inténtalo de nuevo.",
+  "error.backend.secretVaultBundle": "Este archivo no es un archivo de claves exportado desde Atelier.",
+  "error.backend.secretVaultExists": "Ya hay una clave con ese nombre. Cámbiale el nombre o elimínala primero.",
+  "error.backend.secretVaultAgentGone": "El agente de esta clave fue eliminado, así que no se puede recuperar.",
+  "error.backend.secretVaultMissing": "Esa clave o versión ya no está. Actualiza la lista.",
+  "error.backend.secretVaultOwnerOnly": "Solo el propietario de este servidor puede hacer esto.",
   "error.backend.apiKeySaveFailed": "Atelier no pudo guardar la clave de API. Inténtalo de nuevo.",
   "error.backend.apiKeyNotAllowed":
     "Solo el propietario del servidor o un administrador puede ingresar una clave de API.",

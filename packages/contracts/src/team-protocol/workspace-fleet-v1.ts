@@ -52,6 +52,21 @@
 //   `retry`, `escalated`, `large`) on a working status: the model that the automatic model policy
 //   (agent-efficiency-v1) chose for the turn, and why. Absent for an agent with a fixed model.
 //
+// - Later, for the owner and the admins only (403 for any other member): the keys and passwords
+//   screen. `POST /v1/workspace/vault` takes one call `{ kind, ... }` and answers `{ kind, ... }`.
+//   Calls: `overview`; `detail`, `delete`, `restore`, `purge` `{ scope, name }`; `save` `{ scope,
+//   name, value (16384), type?, label? (80), folder? (160), tags? (12 of 32), note? (500) }`;
+//   `update` `{ scope, name, type?, label?, folder?, tags?, note?, rotateBy? (time or null),
+//   rotateEveryDays? (days or null), expiresAt? (time or null), access? { everyone, agents (500), spaces (200) } }`; `reveal` `{
+//   scope, name, purpose: "show" | "copy", version? }`; `rollback` `{ scope, name, version }`;
+//   `export` `{ passphrase (8 to 256) }`; `import` `{ bundle (8 MiB), passphrase }`; `fill` `{
+//   requestId, value (16384) }`; `approve` `{ requestId, decision: "accept" | "decline" }`.
+//   Answers: `overview` `{ secrets (2000), trash (500), requests (200) }`, `detail` `{ detail: {
+//   secret, versions (51), audit (300) } }`, `value` `{ value }` (only to `reveal`, only for the
+//   owner), `bundle` `{ bundle, count }`, `imported` `{ added, updated, unchanged }`, `done`. A scope
+//   is `shared`, `space:<id>` or an agent id. Audit rows and versions carry no value. `reveal`,
+//   `export`, `import`, `purge`, `approve` and an `update` with `access` are the owner's alone.
+//
 // A fork host built before these routes answers 404, so a client fails closed there. A present
 // malformed value fails closed. The bounds are written out: this file must not move with an IPC limit.
 import { isDynamicRecord } from "../runtime-values";
@@ -62,6 +77,7 @@ import {
   fields,
   identifier,
   list,
+  nullable,
   type OptionalRouteCodec,
   oneOf,
   string,
@@ -83,6 +99,7 @@ export const WORKSPACE_FLEET_ROUTES = {
   secretSave: "/v1/workspace/secrets/save",
   secretRemove: "/v1/workspace/secrets/remove",
   decisions: "/v1/workspace/decisions",
+  vault: "/v1/workspace/vault",
 } as const;
 
 /** The largest thumbnail image that a host sends and a client accepts. */
@@ -257,6 +274,134 @@ const decision = fields(
 );
 
 const secret = fields({ scope: identifier, name: string(64), updatedAt: count });
+
+const vaultRef = { scope: identifier, name: string(64) };
+const vaultSettings = {
+  type: oneOf("key", "password", "token", "code", "other"),
+  label: string(80),
+  folder: string(160),
+  tags: list(string(32), 12),
+  note: string(500),
+};
+const vaultAccess = fields({ everyone: boolean, agents: list(identifier, 500), spaces: list(identifier, 200) });
+const vaultActor = fields(
+  { kind: oneOf("owner", "person", "agent", "routine", "host") },
+  { id: string(128), name: string(120) },
+);
+const vaultTime = count;
+const vaultCall = variant({
+  overview: fields({ kind: string(16) }),
+  detail: fields({ kind: string(16), ...vaultRef }),
+  delete: fields({ kind: string(16), ...vaultRef }),
+  restore: fields({ kind: string(16), ...vaultRef }),
+  purge: fields({ kind: string(16), ...vaultRef }),
+  save: fields({ kind: string(16), ...vaultRef, value: string(16384) }, vaultSettings),
+  update: fields(
+    { kind: string(16), ...vaultRef },
+    {
+      ...vaultSettings,
+      rotateBy: nullable(vaultTime),
+      rotateEveryDays: nullable(count),
+      expiresAt: nullable(vaultTime),
+      access: vaultAccess,
+    },
+  ),
+  reveal: fields({ kind: string(16), ...vaultRef, purpose: oneOf("show", "copy") }, { version: count }),
+  rollback: fields({ kind: string(16), ...vaultRef, version: count }),
+  export: fields({ kind: string(16), passphrase: string(256) }),
+  import: fields({ kind: string(16), bundle: string(8 * 1024 * 1024), passphrase: string(256) }),
+  fill: fields({ kind: string(16), requestId: identifier, value: string(16384) }),
+  approve: fields({ kind: string(16), requestId: identifier, decision: oneOf("accept", "decline") }),
+});
+const vaultSummary = fields(
+  {
+    scope: identifier,
+    name: string(64),
+    type: oneOf("key", "password", "token", "code", "other"),
+    tags: list(string(32), 12),
+    access: vaultAccess,
+    createdAt: vaultTime,
+    updatedAt: vaultTime,
+    usedBy: list(fields({ agentId: identifier, at: vaultTime }), 500),
+    version: count,
+  },
+  {
+    label: string(80),
+    folder: string(160),
+    note: string(500),
+    rotatedAt: vaultTime,
+    rotateBy: vaultTime,
+    rotateEveryDays: count,
+    expiresAt: vaultTime,
+    lastUsedAt: vaultTime,
+  },
+);
+const vaultRequest = variant({
+  fill: fields({
+    kind: string(16),
+    requestId: identifier,
+    agentId: identifier,
+    name: string(64),
+    shared: boolean,
+    createdAt: vaultTime,
+  }),
+  approve: fields({
+    kind: string(16),
+    requestId: identifier,
+    agentId: identifier,
+    name: string(64),
+    site: string(2048),
+    createdAt: vaultTime,
+  }),
+});
+const vaultResult = variant({
+  overview: fields({
+    kind: string(16),
+    secrets: list(vaultSummary, 2000),
+    trash: list(fields({ ...vaultRef, deletedAt: vaultTime }, { label: string(80), by: vaultActor }), 500),
+    requests: list(vaultRequest, 200),
+  }),
+  detail: fields({
+    kind: string(16),
+    detail: fields({
+      secret: vaultSummary,
+      versions: list(fields({ version: count, createdAt: vaultTime, current: boolean }, { by: vaultActor }), 51),
+      audit: list(
+        fields(
+          {
+            at: vaultTime,
+            action: oneOf(
+              "created",
+              "changed",
+              "rolled-back",
+              "revealed",
+              "copied",
+              "used",
+              "blocked",
+              "access-changed",
+              "settings-changed",
+              "deleted",
+              "restored",
+              "purged",
+              "expired",
+              "exported",
+              "imported",
+              "requested",
+              "reminded",
+            ),
+            actor: vaultActor,
+          },
+          { detail: string(300) },
+        ),
+        300,
+      ),
+    }),
+  }),
+  value: fields({ kind: string(16), value: string(16384) }),
+  bundle: fields({ kind: string(16), bundle: string(8 * 1024 * 1024), count }),
+  imported: fields({ kind: string(16), added: count, updated: count, unchanged: count }),
+  done: fields({ kind: string(16) }),
+});
 const secretKey = fields({ scope: identifier, name: string(64) });
 
 export const WORKSPACE_FLEET_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
@@ -293,6 +438,7 @@ export const WORKSPACE_FLEET_CODECS: ReadonlyMap<string, OptionalRouteCodec> = n
     adminRoute(fields({ scope: identifier, name: string(64), value: string(16384) }), fields({})),
   ],
   [WORKSPACE_FLEET_ROUTES.secretRemove, adminRoute(secretKey, fields({}))],
+  [WORKSPACE_FLEET_ROUTES.vault, adminRoute(vaultCall, vaultResult)],
   [
     WORKSPACE_FLEET_ROUTES.decisions,
     adminRoute(fields({ channelId: identifier }), fields({ decisions: list(decision, 200) })),

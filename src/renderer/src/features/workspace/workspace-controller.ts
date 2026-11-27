@@ -262,6 +262,8 @@ export interface WorkspaceEnvironment {
   storageHygiene?: (() => StorageHygieneCalls | undefined) | undefined;
   /** True when the reader may see the agent key store: the server owner or an admin. */
   secrets?: (() => boolean) | undefined;
+  /** True when the reader owns the server: only the owner shows or copies a value, or sets who may use a key. */
+  secretsOwner?: (() => boolean) | undefined;
   /** The sleep, review and playbook calls of the host, for an owner or admin of a fork host. */
   efficiency?: (() => EfficiencyCalls | undefined) | undefined;
   /** Test suites, templates, value, the reality check and chat cards of a fork host, for an owner or admin. */

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import {
+  parseSecretVaultCall,
   parseWorkspaceAgentExchangeInput,
   parseWorkspaceAgentPairsInput,
   parseWorkspaceArtifactsInput,
@@ -8,6 +9,8 @@ import {
   parseWorkspaceSecretInput,
   parseWorkspaceSecretSaveInput,
   parseWorkspaceStepsInput,
+  type SecretActor,
+  secretVaultCallIsOwnerOnly,
 } from "@openbot/contracts/ipc";
 import {
   WORKSPACE_FLEET_CAPABILITY,
@@ -15,6 +18,7 @@ import {
   workspaceArtifactThumbnailId,
 } from "@openbot/contracts/team-protocol/workspace-fleet-v1";
 import { sourceText } from "@openbot/i18n/source";
+import { SecretVaultRefused } from "../../backend/workspace-secrets";
 import type { TeamApiAgents } from "./dependencies";
 import { HttpError } from "./http-error";
 import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
@@ -26,6 +30,7 @@ const SECRET_ROUTES: ReadonlySet<string> = new Set([
   WORKSPACE_FLEET_ROUTES.secretRead,
   WORKSPACE_FLEET_ROUTES.secretSave,
   WORKSPACE_FLEET_ROUTES.secretRemove,
+  WORKSPACE_FLEET_ROUTES.vault,
 ]);
 
 function parsed<T>(parse: (value: unknown) => T, value: unknown): T {
@@ -92,12 +97,34 @@ export async function routeWorkspaceFleet(
   if (SECRET_ROUTES.has(url.pathname)) {
     // The keys go to agents that every member may run, and their values are the server's: owner and admins.
     requireAdmin(context.member);
+    const owner = context.member.role === "owner";
+    const actor: SecretActor = {
+      kind: owner ? "owner" : "person",
+      id: context.member.id,
+      name: context.member.name ?? context.member.username,
+    };
+    // A value leaves the host only for the owner (credentials are the owner's, approvals tier 2).
+    const ownerOnly = () => {
+      if (!owner) throw new HttpError(403, sourceText("error.backend.secretVaultOwnerOnly"));
+    };
+    if (url.pathname === WORKSPACE_FLEET_ROUTES.vault) {
+      const call = parsed(parseSecretVaultCall, body);
+      if (secretVaultCallIsOwnerOnly(call)) ownerOnly();
+      try {
+        return json(200, await agents.secrets.vault(call, actor));
+      } catch (error) {
+        if (error instanceof SecretVaultRefused) throw new HttpError(400, error.message);
+        throw error;
+      }
+    }
     if (url.pathname === WORKSPACE_FLEET_ROUTES.secrets) return json(200, await agents.secrets.list());
-    if (url.pathname === WORKSPACE_FLEET_ROUTES.secretRead)
-      return json(200, await agents.secrets.read(parsed(parseWorkspaceSecretInput, body)));
+    if (url.pathname === WORKSPACE_FLEET_ROUTES.secretRead) {
+      ownerOnly();
+      return json(200, await agents.secrets.read(parsed(parseWorkspaceSecretInput, body), actor));
+    }
     if (url.pathname === WORKSPACE_FLEET_ROUTES.secretSave)
-      await agents.secrets.save(parsed(parseWorkspaceSecretSaveInput, body));
-    else await agents.secrets.remove(parsed(parseWorkspaceSecretInput, body));
+      await agents.secrets.save(parsed(parseWorkspaceSecretSaveInput, body), actor);
+    else await agents.secrets.remove(parsed(parseWorkspaceSecretInput, body), actor);
     return json(200, {});
   }
   if (url.pathname === WORKSPACE_FLEET_ROUTES.fleet)

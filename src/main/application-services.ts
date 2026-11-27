@@ -23,6 +23,7 @@ import { RoutineFlowStore } from "../backend/routine-flows/routine-flow-store";
 import { createRoutineFlows, type RoutineFlowsHandle } from "../backend/routine-flows/routine-flows";
 import { RoutineResultStore } from "../backend/routine-results/routine-result-store";
 import { createRoutineResults, type RoutineResultsHandle } from "../backend/routine-results/routine-results";
+import { startSecretUpkeep } from "../backend/secret-upkeep";
 import { SecurityAuditLog } from "../backend/security-audit-log";
 import { TrustAuditLog } from "../backend/trust/trust-audit-log";
 import { TrustService } from "../backend/trust/trust-service";
@@ -79,7 +80,7 @@ import { safeStorageCipher } from "./safe-storage-cipher";
  */
 
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { homedir, hostname, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -1944,17 +1945,14 @@ export async function createApplicationServices({
             safeStorageCipher("error.app.secretStorageUnavailable").decrypt(Buffer.from(value, "base64")),
         },
         (check) => eventCheckTemplates.reviewed(check),
-        // A variable can link a Secrets key; it is read from the key store when the check runs.
-        (scope, name) => {
-          try {
-            return readFileSync(
-              join(app.getPath("userData"), "agent-api-keys", scope === "shared" ? "_shared" : scope, name),
-              "utf8",
-            );
-          } catch {
-            return null;
-          }
-        },
+        // A variable can link a Secrets key; it is read from the key store when the check runs, as
+        // the check's agent may read it, and the use goes to the key's history.
+        (scope, name, check) =>
+          agentApiKeys.readNow(scope === "shared" ? "shared" : "agent", check.agentId, name, {
+            kind: "routine",
+            id: check.id,
+            name: check.name,
+          }),
       ),
       // A program that is only in the old global folder still runs from there, until it is moved.
       (agentId, program) => {
@@ -2071,6 +2069,28 @@ export async function createApplicationServices({
   service.ownerLanguage = ownerLanguage;
   hostTurnLimits.onChange(() => service.turnLimitsChanged());
   teardown.push(TEARDOWN_ORDER.service, "the agent service", () => runCauseEffect(service.stop()));
+  // The keys' upkeep: an expired key leaves the agents' files at its time, the bin empties after 30
+  // days, and a key to rotate or about to expire goes on the owner's list.
+  const stopSecretUpkeep = startSecretUpkeep(agentApiKeys.ledger, (reminder) => {
+    if (!reminder.agentId) return;
+    const date = new Intl.DateTimeFormat(language.locale, { dateStyle: "medium" }).format(new Date(reminder.at));
+    const key = {
+      rotate: "secrets.reminder.rotate",
+      expiring: "secrets.reminder.expiring",
+      expired: "secrets.reminder.expired",
+    } as const;
+    try {
+      ownerAway.hold({
+        agentId: reminder.agentId,
+        kind: "fyi",
+        title: language.translate(key[reminder.reason], { name: reminder.label, date }),
+        detail: language.translate("secrets.reminder.detail"),
+      });
+    } catch (error) {
+      logger.warn("A key reminder could not be held for the owner.", { error: toLogValue(error) });
+    }
+  });
+  teardown.push(TEARDOWN_ORDER.service, "the keys upkeep", async () => stopSecretUpkeep());
   const agentMemoryLimitSetting = reloadingAgentMemoryLimit(agentMemoryLimit, service);
   /** The answer an agent gave in one turn, for routine flows, routine results and local scripts. */
   const turnAnswer = (agentId: string, turnId: string): string | null => {
@@ -3082,7 +3102,7 @@ export async function createApplicationServices({
     helpers: {
       root: managedSkillsRoot,
       node: existsSync("/usr/bin/node") ? "/usr/bin/node" : "node",
-      secret: (name) => agentApiKeys.readNow("shared", null, name),
+      secret: (name) => agentApiKeys.readNow("shared", null, name, { kind: "host", name: "insights" }),
     },
     motion: () => {
       const board = service

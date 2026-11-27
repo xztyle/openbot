@@ -25,7 +25,7 @@ export const messages = {
   "workspace.view.apps": "앱",
   "workspace.routines.agent": "에이전트",
   "workspace.view.agents": "에이전트 간",
-  "workspace.view.secrets": "시크릿",
+  "workspace.view.secrets": "키와 비밀번호",
   "workspace.secrets.description": "에이전트가 파일로 읽는 키와 토큰입니다. 값은 채팅에 표시되지 않습니다.",
   "workspace.secrets.shared": "모든 에이전트와 공유",
   "workspace.secrets.add": "시크릿 추가",

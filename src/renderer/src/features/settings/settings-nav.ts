@@ -64,7 +64,16 @@ export type SettingsNavItem =
       deviceOnly?: boolean;
     }
   | { kind: "server"; id: ServerSettingsSection; group: SettingsNavGroup; titleKey: AppTextKey; icon: typeof Settings }
-  | { kind: "action"; id: "money" | "billing"; group: SettingsNavGroup; titleKey: AppTextKey; icon: typeof Settings };
+  | {
+      kind: "action";
+      id: SettingsActionId;
+      group: SettingsNavGroup;
+      titleKey: AppTextKey;
+      icon: typeof Settings;
+    };
+
+/** The views outside the settings pages that the list leads to. */
+export type SettingsActionId = "money" | "billing" | "secrets";
 
 /** The account's and the device's items, in order. `deviceOnly` marks what only this computer or browser keeps. */
 export const PERSONAL_NAV_ITEMS: readonly Extract<SettingsNavItem, { kind: "personal" }>[] = [
@@ -160,6 +169,8 @@ export const SERVER_NAV_ITEMS: readonly Extract<SettingsNavItem, { kind: "server
 
 /** The ways to views that live outside the settings pages. */
 export const ACTION_NAV_ITEMS: readonly Extract<SettingsNavItem, { kind: "action" }>[] = [
+  // The keys and passwords screen of the host, for the owner and the admins.
+  { kind: "action", id: "secrets", group: "connections", titleKey: "workspace.view.secrets", icon: KeyRound },
   { kind: "action", id: "money", group: "money", titleKey: "server.settings.shortcut.money", icon: CircleDollarSign },
   { kind: "action", id: "billing", group: "money", titleKey: "account.menu.billing", icon: CreditCard },
 ];
@@ -179,7 +190,7 @@ export function sameNavItem(
 export function settingsNavItems(options: {
   personal: ReadonlyArray<SettingsTab | WebAccountTab>;
   server: ReadonlyArray<ServerSettingsSection>;
-  actions: ReadonlyArray<"money" | "billing">;
+  actions: ReadonlyArray<SettingsActionId>;
 }): SettingsNavItem[] {
   const items: SettingsNavItem[] = [
     ...PERSONAL_NAV_ITEMS.filter((item) => options.personal.includes(item.id)),

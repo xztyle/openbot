@@ -25,7 +25,7 @@ export const messages = {
   "workspace.view.apps": "Uygulamalar",
   "workspace.routines.agent": "Ajan",
   "workspace.view.agents": "Ajanlar arası",
-  "workspace.view.secrets": "Gizli anahtarlar",
+  "workspace.view.secrets": "Anahtarlar ve şifreler",
   "workspace.secrets.description":
     "Ajanlarınızın dosya olarak okuduğu anahtarlar ve token'lar. Değerler sohbette asla görünmez.",
   "workspace.secrets.shared": "Tüm ajanlarla paylaşılan",

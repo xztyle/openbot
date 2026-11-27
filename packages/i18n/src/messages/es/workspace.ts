@@ -24,7 +24,7 @@ export const messages = {
   "workspace.view.apps": "Aplicaciones",
   "workspace.routines.agent": "Agente",
   "workspace.view.agents": "Entre agentes",
-  "workspace.view.secrets": "Secretos",
+  "workspace.view.secrets": "Claves y contraseñas",
   "workspace.view.noMatch": "Sin resultados",
   "workspace.view.noMatchHint": "Prueba otra búsqueda u otro filtro.",
   "workspace.view.clearFilters": "Quitar filtros",

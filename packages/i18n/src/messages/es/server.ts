@@ -214,7 +214,7 @@ export const messages = {
   "server.role.owner": "Propietario",
   "server.settings.generalTitle": "General",
   "server.settings.generalDescription": "Gestiona el nombre, el logotipo y las preferencias de este servidor.",
-  "server.settings.vaultTitle": "Claves y contraseñas",
+  "server.settings.vaultTitle": "Inicios de sesión y tarjetas",
   "server.settings.vaultDescription":
     "Guarda inicios de sesión, tarjetas y datos de contacto que todos los agentes de este servidor pueden llenar.",
   "server.settings.membersTitle": "Miembros",

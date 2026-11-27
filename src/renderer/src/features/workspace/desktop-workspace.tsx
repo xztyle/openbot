@@ -297,6 +297,7 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     localHost: local,
     openBrowserTab: (tabId) => activateBrowserTab(tabId),
     secrets: () => local() || serverRoleCanAdminister(activeServer()),
+    secretsOwner: () => local() || activeServer()?.role === "owner",
     // Owners and admins answer cards, as on the host; a joined server without the routes has none.
     chatCards: () => (local() || serverRoleCanAdminister(activeServer()) ? chatCardCalls : undefined),
     storageHygiene: () => {

@@ -29,6 +29,7 @@ import {
   decodeInstalledSkills,
   decodeRemoteAgentImportPreview,
   decodeRemoteAgentImportResult,
+  decodeSecretVaultResult,
   decodeWorkspaceActivity,
   decodeWorkspaceAgentExchange,
   decodeWorkspaceAgentPairs,
@@ -353,6 +354,7 @@ export type TeamChannelsApi = Pick<
   | "workspaceSecretRead"
   | "workspaceSecretSave"
   | "workspaceSecretRemove"
+  | "workspaceVault"
   | "workspaceDecisions"
   | "workspaceLoops"
   | "workspaceLoopAction"
@@ -444,6 +446,7 @@ export function teamChannelsApi(request: TeamApiRequest, options: TeamChannelsOp
     workspaceSecretRemove: async (input) => {
       await workspacePost(WORKSPACE_FLEET_ROUTES.secretRemove, ignoreResponse, input);
     },
+    workspaceVault: (call) => workspacePost(WORKSPACE_FLEET_ROUTES.vault, decodeSecretVaultResult, call),
     workspaceDecisions: (input) => workspacePost(WORKSPACE_FLEET_ROUTES.decisions, decodeWorkspaceDecisions, input),
     // A fork host built before workspace-loops-v1 answers 404; the caller then offers no Loops view.
     workspaceLoops: (input) => workspacePost(WORKSPACE_LOOPS_ROUTES.board, decodeWorkspaceLoops, input),

@@ -52,6 +52,7 @@ export interface ChannelsPort {
         | "workspaceSecretRead"
         | "workspaceSecretSave"
         | "workspaceSecretRemove"
+        | "workspaceVault"
         | "workspaceDecisions"
         | "workspaceLoops"
         | "workspaceLoopAction"

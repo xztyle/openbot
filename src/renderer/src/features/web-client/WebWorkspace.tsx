@@ -2267,6 +2267,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     connectorAccess,
     agentMailboxes,
     secrets: () => canAdministerServer(workspace.state.host?.role),
+    secretsOwner: () => workspace.state.host?.role === "owner",
     efficiency: () =>
       canAdministerServer(workspace.state.host?.role) && serverSupportsCapability(server(), FORK_HOST_CAPABILITY)
         ? efficiencyCalls
@@ -2407,7 +2408,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     },
   };
   /** Closes the settings pages and shows a view of the workspace, such as Trust from Settings. */
-  function openWorkspaceView(view: "trust") {
+  function openWorkspaceView(view: "trust" | "secrets") {
     showAgents();
     ws.openView(view);
   }
@@ -3269,7 +3270,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                           items={settingsNavItems({
                             personal: WEB_ACCOUNT_SETTINGS_TABS,
                             server: server() ? serverSections() : [],
-                            actions: server() && trustSupported() ? ["money", "billing"] : ["billing"],
+                            actions: [
+                              ...(server() && ws.viewAvailable("secrets") ? (["secrets"] as const) : []),
+                              ...(server() && trustSupported() ? (["money"] as const) : []),
+                              "billing",
+                            ],
                           })}
                           active={
                             settingsKind() === "personal"
@@ -3285,6 +3290,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                             } else if (item.kind === "server") {
                               if (id) void openServerSettings(id, null, item.id);
                             } else if (item.id === "money") openWorkspaceView("trust");
+                            else if (item.id === "secrets") openWorkspaceView("secrets");
                             else {
                               showAgents();
                               setBillingOpen(true);

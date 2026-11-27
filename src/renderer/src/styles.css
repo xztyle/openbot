@@ -89,6 +89,7 @@
 @import "@openbot/ui/features/custom-providers/custom-providers.css";
 @import "@openbot/ui/features/browser/browser-profiles.css";
 @import "@openbot/ui/features/vault/vault.css";
+@import "@openbot/ui/features/secrets/secrets-vault.css";
 @import "@openbot/ui/features/agents/agent-template.css";
 @import "@openbot/ui/features/agents/agent-delete-undo-toast.css";
 @import "@openbot/ui/features/updates/whats-new.css";

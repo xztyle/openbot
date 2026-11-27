@@ -1,6 +1,6 @@
 import type { ConnectorAccessState } from "@openbot/contracts/team-protocol/connector-access-v1";
+import { SecretsVault } from "@openbot/ui/features/secrets/SecretsVault";
 import { ConnectionsSection } from "@openbot/ui/features/workspace/ConnectionsSection";
-import { SecretsView } from "@openbot/ui/features/workspace/SecretsView";
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { NOW } from "./workspace-fixtures";
@@ -42,14 +42,14 @@ export const CONNECTIONS: ConnectorAccessState = {
 
 const view = (width: string, state: ConnectorAccessState) => () => (
   <StoryFrame width={width}>
-    <SecretsView
-      groups={[]}
-      scopes={[]}
-      namePattern={/^[A-Z][A-Z0-9_]*$/u}
-      onReveal={async () => ""}
-      onCopy={async () => undefined}
-      onSave={async () => undefined}
-      onRemove={async () => undefined}
+    <SecretsVault
+      overview={{ secrets: [], trash: [], requests: [] }}
+      agents={[]}
+      spaces={[]}
+      owner
+      call={async () => ({ kind: "done" })}
+      copyValue={async () => undefined}
+      refresh={() => undefined}
       footer={
         <ConnectionsSection
           state={state}

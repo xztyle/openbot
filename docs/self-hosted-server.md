@@ -305,7 +305,7 @@ The jail reaches:
   the old default of `appctl deploy --src` (`~/OpenBot/Shared/apps`), and the CLI's config folder
   with its sign-in and sessions (`CLAUDE_CONFIG_DIR`, `~/.claude` for the first account);
 - the workspaces of the agent's teammates in the same space, to read only (the list is read when the
-  process starts), the agent's own key folder and the shared keys, the provider runtimes, the GitHub connection's
+  process starts), the agent's own key folder, the shared keys that every agent may read and the keys given to this agent (`_grants/<agent>`; the keys store in `_vault` stays out of reach), the provider runtimes, the GitHub connection's
   folder, and the files that main writes for one start: the MCP config, the settings file and the
   skill plugins, with the folders their links point at, and the folder of each MCP server program;
 - a home folder of the agent's own, `<profile>/agent-jail/<agent>/home`, which `HOME` names. Each

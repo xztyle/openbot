@@ -1,6 +1,6 @@
 import type { AgentMailboxesState } from "@openbot/contracts/team-protocol/agent-mailboxes-v1";
+import { SecretsVault } from "@openbot/ui/features/secrets/SecretsVault";
 import { MailboxesSection } from "@openbot/ui/features/workspace/MailboxesSection";
-import { SecretsView } from "@openbot/ui/features/workspace/SecretsView";
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { NOW } from "./workspace-fixtures";
@@ -54,14 +54,14 @@ export const MAILBOXES: AgentMailboxesState = {
 
 const view = (width: string, state: AgentMailboxesState) => () => (
   <StoryFrame width={width}>
-    <SecretsView
-      groups={[]}
-      scopes={[]}
-      namePattern={/^[A-Z][A-Z0-9_]*$/u}
-      onReveal={async () => ""}
-      onCopy={async () => undefined}
-      onSave={async () => undefined}
-      onRemove={async () => undefined}
+    <SecretsVault
+      overview={{ secrets: [], trash: [], requests: [] }}
+      agents={[]}
+      spaces={[]}
+      owner
+      call={async () => ({ kind: "done" })}
+      copyValue={async () => undefined}
+      refresh={() => undefined}
       footer={
         <MailboxesSection
           state={state}

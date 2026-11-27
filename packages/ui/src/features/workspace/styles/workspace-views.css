@@ -605,14 +605,8 @@
 
 /* Secrets -------------------------------------------------------------------------------------- */
 
-.ws-secrets-mono,
-.ws-secret-name,
-.ws-secret-value {
+.ws-secrets-mono {
   font-family: var(--openbot-font-mono);
-}
-
-.ws-secrets-error {
-  color: var(--openbot-danger-text);
 }
 
 .ws-secrets-group {
@@ -643,20 +637,6 @@
     width: var(--openbot-touch-target);
     height: var(--openbot-touch-target);
   }
-}
-
-.ws-secret-value {
-  overflow-wrap: anywhere;
-  border-radius: var(--openbot-radius-sm);
-  background: var(--openbot-bg-surface-raised);
-  padding: var(--openbot-space-1-5) var(--openbot-space-2);
-  font-size: var(--openbot-text-sm);
-  user-select: all;
-}
-
-.ws-secret-replace {
-  display: flex;
-  gap: var(--openbot-space-2);
 }
 
 /* Drafts & sent --------------------------------------------------------------------------------- */

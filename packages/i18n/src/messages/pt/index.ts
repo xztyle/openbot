@@ -38,6 +38,7 @@ import { messages as provider } from "./provider";
 import { messages as queue } from "./queue";
 import { messages as remoteDesktop } from "./remoteDesktop";
 import { messages as routine } from "./routine";
+import { messages as secrets } from "./secrets";
 import { messages as server } from "./server";
 import { messages as settings } from "./settings";
 import { shared } from "./shared";
@@ -111,6 +112,7 @@ export const pt = {
   ...island,
   ...computerUse,
   ...connector,
+  ...secrets,
   ...vault,
   ...uiBlock,
   ...sitePage,

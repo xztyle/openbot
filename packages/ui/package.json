@@ -463,7 +463,6 @@
     "./features/workspace/AgentTalkView": "./src/features/workspace/AgentTalkView.tsx",
     "./features/workspace/LoopsView": "./src/features/workspace/LoopsView.tsx",
     "./features/secrets/SecretsVault": "./src/features/secrets/SecretsVault.tsx",
-    "./features/workspace/SecretsView": "./src/features/workspace/SecretsView.tsx",
     "./features/workspace/ConnectionsSection": "./src/features/workspace/ConnectionsSection.tsx",
     "./features/workspace/MailboxesSection": "./src/features/workspace/MailboxesSection.tsx",
     "./features/workspace/InsightView": "./src/features/workspace/InsightView.tsx",

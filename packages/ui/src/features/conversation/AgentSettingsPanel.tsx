@@ -39,12 +39,9 @@ import {
 } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
 import {
-  ArrowLeftRight,
-  Bell,
-  Brain,
   Button,
   ConfirmDialog,
-  Cpu,
+  createSettingsDrafts,
   ErrorReference,
   IconButton,
   Input,
@@ -57,18 +54,19 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  ShieldCheck,
-  SlidersHorizontal,
+  SettingsDraftsContext,
+  SettingsGroup,
+  SettingsHelp,
+  SettingsRow,
+  SettingsSection,
   Switch,
-  Text,
+  saveOnEnter,
   Textarea,
 } from "@openbot/ui";
 import { normalizeAvatarFile } from "@openbot/ui/avatar-image";
 import { AVATAR_HUE_OPTIONS, avatarCandidateSeeds, avatarHueSwatch } from "@openbot/ui/bloub-avatar";
 import { ProviderModelPicker, reasoningLabel } from "@openbot/ui/components/ProviderModelPicker";
 import {
-  SettingsField,
-  SettingsLinkGroup,
   SettingsLinkRow,
   SettingsPanel,
   SettingsPanelContent,
@@ -78,6 +76,7 @@ import type { AgentProfile } from "@openbot/ui/data";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
 import { InstructionsLimit, instructionsTooLong } from "@openbot/ui/features/agents/InstructionsLimit";
 import { type BrowserProfileChoice, BrowserProfileSelect } from "@openbot/ui/features/browser/BrowserProfileSelect";
+import { SettingsDraftsSaveBar } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { WorkspaceSelect } from "@openbot/ui/features/workspace/WorkspaceSelect";
 import { errorReference } from "@openbot/user-errors";
 import type { JSX } from "@solidjs/web";
@@ -160,8 +159,20 @@ export interface AgentSettingsPanelProps {
   width: number;
   onResize: (width: number) => void;
   onResizeEnd: (width: number) => void;
-  /** Application-owned navigation and detail surfaces, in the existing panel layout. */
-  links?: JSX.Element;
+  /**
+   * Application-owned rows, each placed in its group. Rows sit straight in the group's card
+   * (`SettingsRow`, `SettingsLinkRow`); text fields register with the panel's save bar through
+   * `useSettingsDraft`.
+   */
+  identityRows?: JSX.Element;
+  whereRows?: JSX.Element;
+  modelRows?: JSX.Element;
+  /** Whole groups under the model's group, such as the provider's own session options. */
+  modelGroups?: JSX.Element;
+  toolRows?: JSX.Element;
+  stateRows?: JSX.Element;
+  /** Application-owned sections after the panel's own: performance, memory, settings history. */
+  sections?: JSX.Element;
   /** The space of the agent and the spaces it can move to. Absent on a host without spaces. */
   space?:
     | {
@@ -210,8 +221,6 @@ function browserProfileChoice(profile: AgentBrowserProfile): BrowserProfileChoic
 function choiceBrowserProfile(choice: BrowserProfileChoice): AgentBrowserProfile {
   return choice === "shared" || choice === "agent" ? { kind: choice } : { kind: "profile", profileId: choice };
 }
-
-const INSTRUCTIONS_SAVE_DELAY_MS = 400;
 
 /**
  * The pages behind the root list. The root edits the agent's face, name, title and instructions
@@ -468,9 +477,8 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
   let avatarFileInput: HTMLInputElement | undefined;
   let lastSignature: string | undefined;
   let lastAgentId: string | undefined;
-  // Instructions save while the field remains focused. One queue also keeps blur, panel-close and
-  // agent-change saves ordered, so an older completion cannot declare a newer draft clean.
-  let instructionsSaveTimer: ReturnType<typeof setTimeout> | undefined;
+  // Text fields save with the save bar. Closing the panel or moving to another agent saves what is
+  // left; one queue keeps those saves ordered, so an older completion cannot declare a newer draft clean.
   let activeTextSave: TextSaveRequest | null = null;
   let disposed = false;
   const pendingTextSaves = new Map<string, TextSaveRequest>();
@@ -662,23 +670,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     if (pendingTextSaves.size > 0) void drainTextSaves();
   }
 
-  function cancelInstructionsSaveTimer(): void {
-    if (instructionsSaveTimer === undefined) return;
-    clearTimeout(instructionsSaveTimer);
-    instructionsSaveTimer = undefined;
-  }
-
-  function scheduleInstructionsSave(value: string): void {
-    cancelInstructionsSaveTimer();
-    const request = textSaveRequest("description", props.agent.id, value);
-    instructionsSaveTimer = setTimeout(() => {
-      instructionsSaveTimer = undefined;
-      queueTextSave(request);
-    }, INSTRUCTIONS_SAVE_DELAY_MS);
-  }
-
   function flushDirtyTextFields(agentId: string): void {
-    cancelInstructionsSaveTimer();
     for (const field of ["name", "title", "description"] as const) {
       if (draft.dirty[field]) queueTextSave(textSaveRequest(field, agentId));
     }
@@ -702,36 +694,62 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     }
   }
 
-  /**
-   * Switching to another app blurs the focused field while the window is inactive. That is not the
-   * person leaving the field: Chromium gives focus back on return, and the save happens at the next
-   * real blur. The save when the panel closes does not depend on this.
-   */
-  const windowInactive = () => !document.hasFocus();
+  /** A text field the save bar cannot store yet: the field says why, and the bar repeats it. */
+  function invalidDraft(message: string): Error {
+    const error = new Error(message);
+    error.name = INVALID_DRAFT;
+    return error;
+  }
 
-  function saveName(): void {
-    if (windowInactive()) return;
-    const value = draft.fields.name.trim();
+  /** Save on the bar: the name, the title and the instructions that hold a change, in turn. */
+  async function saveTextFields(): Promise<void> {
+    const agentId = props.agent.id;
+    for (const field of ["name", "title", "description"] as const) {
+      if (!draft.dirty[field]) continue;
+      const request = textSaveRequest(field, agentId);
+      if (field === "name" && !request.storedValue) {
+        setDraft((state) => {
+          state.nameMissing = true;
+        });
+        throw invalidDraft(t("agentSettings.nameMissing"));
+      }
+      if (field === "description" && instructionsTooLong(request.storedValue))
+        throw invalidDraft(t("agentSettings.saveFailed.instructions"));
+      setSaveError(null);
+      await props.onUpdateAgent(agentId, textSavePatch(request));
+      if (disposed || props.agent.id !== agentId || draft.fields[field] !== request.draftValue) continue;
+      setDraft((state) => {
+        state.dirty[field] = false;
+        state.fields[field] = request.storedValue;
+      });
+    }
+  }
+
+  /** Reset on the bar: the fields show the agent's stored values again. */
+  function resetTextFields(): void {
     setDraft((state) => {
-      state.fields.name = value;
-      state.nameMissing = value === "";
+      state.fields.name = props.agent.name;
+      state.fields.title = props.agent.title;
+      state.fields.description = props.agent.description;
+      state.dirty.name = false;
+      state.dirty.title = false;
+      state.dirty.description = false;
+      state.nameMissing = false;
     });
-    queueTextSave(textSaveRequest("name", props.agent.id));
   }
 
-  function saveTitle(): void {
-    if (windowInactive()) return;
-    const value = draft.fields.title.trim();
-    setDraft((state) => {
-      state.fields.title = value;
-    });
-    queueTextSave(textSaveRequest("title", props.agent.id));
-  }
-
-  function saveDescription(): void {
-    cancelInstructionsSaveTimer();
-    queueTextSave(textSaveRequest("description", props.agent.id));
-  }
+  const drafts = createSettingsDrafts((error) =>
+    error instanceof Error && error.name === INVALID_DRAFT
+      ? error.message
+      : failureWithReason(t("agentSettings.saveFailed"), error),
+  );
+  onSettled(() =>
+    drafts.register({
+      dirty: () => draft.dirty.name || draft.dirty.title || draft.dirty.description,
+      save: saveTextFields,
+      reset: resetTextFields,
+    }),
+  );
 
   async function setCustomAvatar(image: AvatarImageInput | null): Promise<boolean> {
     if (draft.avatar.uploadBusy) return false;
@@ -1071,6 +1089,185 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     }
   }
 
+  /** The face editor in the avatar popover: an uploaded image, then the generated faces and colors. */
+  function avatarEditor(): JSX.Element {
+    return (
+      <>
+        <Popover.Title class="sr-only">{t("agentSettings.avatar.editor")}</Popover.Title>
+        <Input
+          ref={(element) => (avatarFileInput = element)}
+          class="sr-only"
+          type="file"
+          aria-label={t("agentSettings.avatar.uploadImage")}
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          onChange={(event) => void uploadAgentAvatar(event.currentTarget.files?.[0])}
+        />
+        <div class="avatar-editor-heading">
+          <span>{t("agentSettings.avatar.image")}</span>
+          <div class="avatar-editor-actions">
+            <Show when={avatarUrl()}>
+              <Button
+                variant="outline"
+                type="button"
+                disabled={draft.avatar.uploadBusy}
+                onClick={() => void setCustomAvatar(null)}
+              >
+                {t("common.remove")}
+              </Button>
+            </Show>
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          type="button"
+          class={["avatar-image-upload", { "avatar-image-upload-active": Boolean(avatarUrl()) }]}
+          disabled={draft.avatar.uploadBusy}
+          onClick={() => avatarFileInput?.click()}
+        >
+          <span class="avatar-image-upload-preview">
+            <Show
+              when={avatarUrl()}
+              fallback={
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              }
+            >
+              <AgentAvatar seed={draft.avatar.seed} hue={draft.avatar.hue} url={avatarUrl()} />
+            </Show>
+          </span>
+          <span>
+            <strong>
+              {avatarUrl() ? t("agentSettings.avatar.replaceImage") : t("agentSettings.avatar.uploadImage")}
+            </strong>
+            <small>{t("agentSettings.avatar.imageHint")}</small>
+          </span>
+        </Button>
+        <div class="avatar-editor-divider" />
+        <Show
+          when={atelierTheme()}
+          fallback={
+            <>
+              <div class="avatar-editor-heading">
+                <span>{t("agentSettings.avatar.generatedFace")}</span>
+                <div class="avatar-editor-actions">
+                  <Show when={draft.avatar.seed !== props.agent.id}>
+                    <IconButton
+                      variant="outline"
+                      type="button"
+                      label={t("agentSettings.avatar.resetToId")}
+                      onClick={() => {
+                        setDraft((state) => {
+                          state.avatar.candidateSeed = props.agent.id;
+                          state.avatar.batch = 0;
+                        });
+                        void selectGeneratedAvatar(props.agent.id);
+                      }}
+                    >
+                      <RotateCcw aria-hidden="true" />
+                    </IconButton>
+                  </Show>
+                  <IconButton
+                    variant="outline"
+                    type="button"
+                    label={t("agentSettings.avatar.newSet")}
+                    onClick={() =>
+                      setDraft((state) => {
+                        state.avatar.candidateSeed = state.avatar.seed;
+                        state.avatar.batch += 1;
+                      })
+                    }
+                  >
+                    <RefreshCw aria-hidden="true" />
+                  </IconButton>
+                </div>
+              </div>
+              <fieldset class="avatar-face-grid" aria-label={t("agentSettings.avatar.faces")}>
+                <For each={avatarCandidates()}>
+                  {(seed, index) => (
+                    <Button
+                      variant="ghost"
+                      type="button"
+                      class={[
+                        "avatar-face-choice",
+                        { "avatar-choice-selected": !avatarUrl() && draft.avatar.seed === seed },
+                      ]}
+                      aria-label={
+                        !avatarUrl() && draft.avatar.seed === seed
+                          ? t("agentSettings.avatar.selected")
+                          : t("agentSettings.avatar.option", { number: index() + 1 })
+                      }
+                      aria-pressed={!avatarUrl() && draft.avatar.seed === seed ? "true" : "false"}
+                      data-cuelume-tap="select"
+                      onClick={() => void selectGeneratedAvatar(seed)}
+                    >
+                      <AgentAvatar seed={seed} hue={draft.avatar.hue} />
+                    </Button>
+                  )}
+                </For>
+              </fieldset>
+              <div class="avatar-editor-divider" />
+              <div class="avatar-editor-heading">
+                <span>{t("agentSettings.avatar.color")}</span>
+              </div>
+              <fieldset class="avatar-color-grid" aria-label={t("agentSettings.avatar.colorLabel")}>
+                <Button
+                  variant="ghost"
+                  type="button"
+                  class={["avatar-color-choice", { "avatar-choice-selected": draft.avatar.hue === null }]}
+                  aria-label={t("agentSettings.avatar.autoColor")}
+                  aria-pressed={draft.avatar.hue === null ? "true" : "false"}
+                  data-cuelume-tap="select"
+                  onClick={() => void selectAvatarHue(null)}
+                >
+                  <span class="avatar-color-swatch avatar-color-swatch-auto">
+                    {t("agentSettings.avatar.autoInitial")}
+                  </span>
+                </Button>
+                <For each={AVATAR_HUE_OPTIONS}>
+                  {(option) => (
+                    <Button
+                      variant="ghost"
+                      type="button"
+                      class={["avatar-color-choice", { "avatar-choice-selected": draft.avatar.hue === option.hue }]}
+                      aria-label={t("agentSettings.avatar.hueColor", {
+                        hue: t(AVATAR_HUE_LABEL[option.hue]),
+                      })}
+                      aria-pressed={draft.avatar.hue === option.hue ? "true" : "false"}
+                      data-cuelume-tap="select"
+                      onClick={() => void selectAvatarHue(option.hue)}
+                    >
+                      <span class="avatar-color-swatch" style={{ background: avatarHueSwatch(option.hue) }} />
+                    </Button>
+                  )}
+                </For>
+              </fieldset>
+            </>
+          }
+        >
+          <AgentFaceEditor
+            seed={draft.avatar.seed}
+            name={props.agent.name}
+            title={props.agent.title}
+            faceStyle={props.agent.faceStyle}
+            faceSeed={props.agent.faceSeed}
+            faceSkin={props.agent.faceSkin}
+            onChange={(change) => void saveAgentPatch(change, props.agent.id, "avatarFace")}
+          />
+        </Show>
+      </>
+    );
+  }
+
+  /** A select row of the panel: the label and its description on the left, the choice on the right. */
+  function selectTrigger(label: string, value: JSX.Element): JSX.Element {
+    return (
+      <SelectTrigger aria-label={label}>
+        <SelectValue<string>>{() => value}</SelectValue>
+      </SelectTrigger>
+    );
+  }
+
   return (
     <SettingsPanel
       onResizeEnd={props.onResizeEnd}
@@ -1106,667 +1303,572 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
         </Show>
       </Show>
       <Show when={!props.detailOpen}>
-        <SettingsPanelContent>
-          <div ref={(element) => (pageRoot = element)} class="agent-settings-page">
-            <Show when={page() === null}>
-              <div ref={(element) => (avatarPickerRoot = element)} class="agent-settings-avatar-picker">
-                <Popover.Root
-                  open={draft.avatar.pickerOpen}
-                  placement="bottom"
-                  gutter={11}
-                  onOpenChange={(open) =>
-                    setDraft((state) => {
-                      if (open) {
-                        state.avatar.candidateSeed = state.avatar.seed;
-                        state.avatar.batch = 0;
-                      }
-                      state.avatar.pickerOpen = open;
-                    })
-                  }
+        <SettingsDraftsContext value={drafts}>
+          <SettingsPanelContent>
+            <div ref={(element) => (pageRoot = element)} class="agent-settings-page settings-panel-page">
+              <Show when={page() === null}>
+                <SettingsSection
+                  title={t("agentSettings.group.identity")}
+                  description={t("agentSettings.group.identityDescription")}
                 >
-                  <Popover.Trigger class="agent-settings-avatar" aria-label={t("agentSettings.avatar.edit")}>
-                    <AgentAvatar seed={draft.avatar.seed} hue={draft.avatar.hue} url={avatarUrl()} motion="always" />
-                    <span class="agent-settings-avatar-badge" aria-hidden="true">
-                      <Pencil class="agent-settings-avatar-badge-icon" />
-                    </span>
-                  </Popover.Trigger>
-                  <Popover.Content class="avatar-editor" aria-hidden={draft.avatar.pickerOpen ? undefined : "true"}>
-                    <Popover.Title class="sr-only">{t("agentSettings.avatar.editor")}</Popover.Title>
-                    <Input
-                      ref={(element) => (avatarFileInput = element)}
-                      class="sr-only"
-                      type="file"
-                      aria-label={t("agentSettings.avatar.uploadImage")}
-                      accept="image/png,image/jpeg,image/gif,image/webp"
-                      onChange={(event) => void uploadAgentAvatar(event.currentTarget.files?.[0])}
-                    />
-                    <div class="avatar-editor-heading">
-                      <span>{t("agentSettings.avatar.image")}</span>
-                      <div class="avatar-editor-actions">
-                        <Show when={avatarUrl()}>
-                          <Button
-                            variant="outline"
-                            type="button"
-                            disabled={draft.avatar.uploadBusy}
-                            onClick={() => void setCustomAvatar(null)}
-                          >
-                            {t("common.remove")}
-                          </Button>
-                        </Show>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      type="button"
-                      class={["avatar-image-upload", { "avatar-image-upload-active": Boolean(avatarUrl()) }]}
-                      disabled={draft.avatar.uploadBusy}
-                      onClick={() => avatarFileInput?.click()}
-                    >
-                      <span class="avatar-image-upload-preview">
-                        <Show
-                          when={avatarUrl()}
-                          fallback={
-                            <svg aria-hidden="true" viewBox="0 0 24 24">
-                              <path d="M12 5v14M5 12h14" />
-                            </svg>
-                          }
-                        >
-                          <AgentAvatar seed={draft.avatar.seed} hue={draft.avatar.hue} url={avatarUrl()} />
-                        </Show>
-                      </span>
-                      <span>
-                        <strong>
-                          {avatarUrl() ? t("agentSettings.avatar.replaceImage") : t("agentSettings.avatar.uploadImage")}
-                        </strong>
-                        <small>{t("agentSettings.avatar.imageHint")}</small>
-                      </span>
-                    </Button>
-                    <div class="avatar-editor-divider" />
-                    <Show
-                      when={atelierTheme()}
-                      fallback={
+                  <SettingsGroup label={t("agentSettings.group.identity")}>
+                    <SettingsRow
+                      layout="inline"
+                      label={t("agentSettings.avatar.rowLabel")}
+                      description={t("agentSettings.avatar.rowDescription")}
+                      help={
                         <>
-                          <div class="avatar-editor-heading">
-                            <span>{t("agentSettings.avatar.generatedFace")}</span>
-                            <div class="avatar-editor-actions">
-                              <Show when={draft.avatar.seed !== props.agent.id}>
-                                <IconButton
-                                  variant="outline"
-                                  type="button"
-                                  label={t("agentSettings.avatar.resetToId")}
-                                  onClick={() => {
-                                    setDraft((state) => {
-                                      state.avatar.candidateSeed = props.agent.id;
-                                      state.avatar.batch = 0;
-                                    });
-                                    void selectGeneratedAvatar(props.agent.id);
-                                  }}
-                                >
-                                  <RotateCcw aria-hidden="true" />
-                                </IconButton>
-                              </Show>
-                              <IconButton
-                                variant="outline"
-                                type="button"
-                                label={t("agentSettings.avatar.newSet")}
-                                onClick={() =>
-                                  setDraft((state) => {
-                                    state.avatar.candidateSeed = state.avatar.seed;
-                                    state.avatar.batch += 1;
-                                  })
-                                }
-                              >
-                                <RefreshCw aria-hidden="true" />
-                              </IconButton>
-                            </div>
-                          </div>
-                          <fieldset class="avatar-face-grid" aria-label={t("agentSettings.avatar.faces")}>
-                            <For each={avatarCandidates()}>
-                              {(seed, index) => (
-                                <Button
-                                  variant="ghost"
-                                  type="button"
-                                  class={[
-                                    "avatar-face-choice",
-                                    { "avatar-choice-selected": !avatarUrl() && draft.avatar.seed === seed },
-                                  ]}
-                                  aria-label={
-                                    !avatarUrl() && draft.avatar.seed === seed
-                                      ? t("agentSettings.avatar.selected")
-                                      : t("agentSettings.avatar.option", { number: index() + 1 })
-                                  }
-                                  aria-pressed={!avatarUrl() && draft.avatar.seed === seed ? "true" : "false"}
-                                  data-cuelume-tap="select"
-                                  onClick={() => void selectGeneratedAvatar(seed)}
-                                >
-                                  <AgentAvatar seed={seed} hue={draft.avatar.hue} />
-                                </Button>
-                              )}
-                            </For>
-                          </fieldset>
-                          <div class="avatar-editor-divider" />
-                          <div class="avatar-editor-heading">
-                            <span>{t("agentSettings.avatar.color")}</span>
-                          </div>
-                          <fieldset class="avatar-color-grid" aria-label={t("agentSettings.avatar.colorLabel")}>
-                            <Button
-                              variant="ghost"
-                              type="button"
-                              class={["avatar-color-choice", { "avatar-choice-selected": draft.avatar.hue === null }]}
-                              aria-label={t("agentSettings.avatar.autoColor")}
-                              aria-pressed={draft.avatar.hue === null ? "true" : "false"}
-                              data-cuelume-tap="select"
-                              onClick={() => void selectAvatarHue(null)}
-                            >
-                              <span class="avatar-color-swatch avatar-color-swatch-auto">
-                                {t("agentSettings.avatar.autoInitial")}
-                              </span>
-                            </Button>
-                            <For each={AVATAR_HUE_OPTIONS}>
-                              {(option) => (
-                                <Button
-                                  variant="ghost"
-                                  type="button"
-                                  class={[
-                                    "avatar-color-choice",
-                                    { "avatar-choice-selected": draft.avatar.hue === option.hue },
-                                  ]}
-                                  aria-label={t("agentSettings.avatar.hueColor", {
-                                    hue: t(AVATAR_HUE_LABEL[option.hue]),
-                                  })}
-                                  aria-pressed={draft.avatar.hue === option.hue ? "true" : "false"}
-                                  data-cuelume-tap="select"
-                                  onClick={() => void selectAvatarHue(option.hue)}
-                                >
-                                  <span
-                                    class="avatar-color-swatch"
-                                    style={{ background: avatarHueSwatch(option.hue) }}
-                                  />
-                                </Button>
-                              )}
-                            </For>
-                          </fieldset>
+                          <SaveError field="avatar" />
+                          <SaveError field="avatarFace" />
+                          <SaveError field="avatarColor" />
                         </>
                       }
                     >
-                      <AgentFaceEditor
-                        seed={draft.avatar.seed}
-                        name={props.agent.name}
-                        title={props.agent.title}
-                        faceStyle={props.agent.faceStyle}
-                        faceSeed={props.agent.faceSeed}
-                        faceSkin={props.agent.faceSkin}
-                        onChange={(change) => void saveAgentPatch(change, props.agent.id, "avatarFace")}
+                      <div ref={(element) => (avatarPickerRoot = element)} class="agent-settings-avatar-picker">
+                        <Popover.Root
+                          open={draft.avatar.pickerOpen}
+                          placement="bottom-end"
+                          gutter={11}
+                          onOpenChange={(open) =>
+                            setDraft((state) => {
+                              if (open) {
+                                state.avatar.candidateSeed = state.avatar.seed;
+                                state.avatar.batch = 0;
+                              }
+                              state.avatar.pickerOpen = open;
+                            })
+                          }
+                        >
+                          <Popover.Trigger class="agent-settings-avatar" aria-label={t("agentSettings.avatar.edit")}>
+                            <AgentAvatar
+                              seed={draft.avatar.seed}
+                              hue={draft.avatar.hue}
+                              url={avatarUrl()}
+                              motion="always"
+                            />
+                            <span class="agent-settings-avatar-badge" aria-hidden="true">
+                              <Pencil class="agent-settings-avatar-badge-icon" />
+                            </span>
+                          </Popover.Trigger>
+                          <Popover.Content
+                            class="avatar-editor"
+                            aria-hidden={draft.avatar.pickerOpen ? undefined : "true"}
+                          >
+                            {avatarEditor()}
+                          </Popover.Content>
+                        </Popover.Root>
+                      </div>
+                    </SettingsRow>
+                    <SettingsRow
+                      layout="stack"
+                      controlId="agent-settings-name"
+                      label={t("agentSettings.name")}
+                      description={t("agentSettings.nameDescription")}
+                      help={
+                        <>
+                          <Show when={draft.nameMissing}>
+                            <span id="agent-settings-name-missing" class="agent-settings-field-error" role="alert">
+                              {t("agentSettings.nameMissing")}
+                            </span>
+                          </Show>
+                          <SaveError field="name" />
+                        </>
+                      }
+                    >
+                      <Input
+                        id="agent-settings-name"
+                        value={draft.fields.name}
+                        aria-label={t("agentSettings.nameLabel")}
+                        maxlength={INPUT_LIMITS.agentName}
+                        limitNote={limitNote}
+                        invalid={draft.nameMissing}
+                        aria-describedby={draft.nameMissing ? "agent-settings-name-missing" : undefined}
+                        onValueChange={(value) =>
+                          setDraft((state) => {
+                            state.fields.name = value;
+                            state.dirty.name = true;
+                            if (value.trim()) state.nameMissing = false;
+                          })
+                        }
+                        onKeyDown={saveOnEnter(drafts)}
+                      />
+                    </SettingsRow>
+                    <SettingsRow
+                      layout="stack"
+                      controlId="agent-settings-title"
+                      label={t("agentSettings.agentTitle")}
+                      description={t("agentSettings.agentTitleDescription")}
+                      help={<SaveError field="title" />}
+                    >
+                      <Input
+                        id="agent-settings-title"
+                        value={draft.fields.title}
+                        aria-label={t("agentSettings.agentTitleLabel")}
+                        placeholder={t("agentSettings.agentTitlePlaceholder")}
+                        maxlength={INPUT_LIMITS.agentTitle}
+                        limitNote={limitNote}
+                        onValueChange={(value) =>
+                          setDraft((state) => {
+                            state.fields.title = value;
+                            state.dirty.title = true;
+                          })
+                        }
+                        onKeyDown={saveOnEnter(drafts)}
+                      />
+                    </SettingsRow>
+                    {props.identityRows}
+                    <SettingsRow
+                      layout="stack"
+                      controlId="agent-settings-instructions"
+                      label={t("agentSettings.instructions")}
+                      description={t("agentSettings.instructionsDescription")}
+                      help={
+                        <>
+                          <InstructionsLimit text={draft.fields.description} />
+                          <SaveError field="description" />
+                        </>
+                      }
+                    >
+                      <Textarea
+                        id="agent-settings-instructions"
+                        class="settings-instructions-input"
+                        rows="6"
+                        value={draft.fields.description}
+                        aria-label={t("agentSettings.instructionsLabel")}
+                        placeholder={t("agentSettings.instructionsPlaceholder")}
+                        invalid={instructionsTooLong(draft.fields.description)}
+                        onValueChange={(value) =>
+                          setDraft((state) => {
+                            state.fields.description = value;
+                            state.dirty.description = true;
+                          })
+                        }
+                      />
+                    </SettingsRow>
+                  </SettingsGroup>
+                </SettingsSection>
+                <Show when={props.space || props.whereRows}>
+                  <SettingsSection
+                    title={t("agentSettings.group.where")}
+                    description={t("agentSettings.group.whereDescription")}
+                  >
+                    <SettingsGroup label={t("agentSettings.group.where")}>
+                      <Show when={props.space}>
+                        {(space) => (
+                          <SettingsRow
+                            label={t("workspace.spaces.space")}
+                            description={t("agentSettings.spaceDescription")}
+                          >
+                            <WorkspaceSelect
+                              label={t("workspace.spaces.space")}
+                              value={space().value}
+                              options={space().options}
+                              disabled={!space().onChange}
+                              onChange={(spaceId) => space().onChange?.(spaceId)}
+                            />
+                          </SettingsRow>
+                        )}
+                      </Show>
+                      {props.whereRows}
+                    </SettingsGroup>
+                  </SettingsSection>
+                </Show>
+                <SettingsSection
+                  title={t("agentSettings.group.model")}
+                  description={t("agentSettings.group.modelDescription")}
+                >
+                  <SettingsGroup label={t("agentSettings.group.model")}>
+                    <ProviderModelPicker
+                      variant="field"
+                      ariaLabel={t("agentSettings.runtime.model")}
+                      provider={draft.runtime.provider}
+                      foreignProvider={agentForeignProvider()}
+                      value={draft.runtime.model}
+                      agentStatus={props.agentStatus}
+                      modelOptions={props.modelOptions}
+                      runtimeStatuses={props.providerRuntimeStatuses}
+                      customProviders={props.customProviders}
+                      customAgents={props.customAgents}
+                      onDownloadProvider={props.onDownloadProvider}
+                      onCancelProviderDownload={props.onCancelProviderDownload}
+                      onConnectProvider={props.onConnectProvider}
+                      canConnectProvider={props.canConnectProvider}
+                      onManageProviders={props.onManageProviders}
+                      disabledReason={t("agentSettings.runtime.modelUnavailable")}
+                      accountChoice
+                      providerAccountId={agentNextProviderAccountId(props.agent)}
+                      onChange={(nextModel, provider, accountId) => void selectModel(nextModel, provider, accountId)}
+                    />
+                    <SettingsRow
+                      label={t("agentSettings.runtime.reasoning")}
+                      description={
+                        reasoningSetByProvider()
+                          ? t("agentSettings.runtime.reasoningSetByProvider", {
+                              provider: agentProviderName(draft.runtime.provider),
+                            })
+                          : t("agentSettings.runtime.reasoningDescription")
+                      }
+                      help={<SaveError field="runtime" />}
+                    >
+                      <Select<AgentReasoningEffort>
+                        options={reasoningOptions()}
+                        value={draft.runtime.reasoningEffort}
+                        disabled={reasoningSetByProvider() || agentForeignProvider() !== undefined}
+                        onChange={(nextReasoning) => {
+                          if (!nextReasoning || nextReasoning === draft.runtime.reasoningEffort) return;
+                          void selectReasoning(nextReasoning);
+                        }}
+                        itemComponent={(item) => (
+                          <SelectItem item={item.item}>{reasoningLabel(item.item.rawValue)}</SelectItem>
+                        )}
+                      >
+                        {selectTrigger(
+                          t("agentSettings.runtime.reasoningLabel"),
+                          reasoningSetByProvider() ? "—" : reasoningLabel(draft.runtime.reasoningEffort),
+                        )}
+                        <SelectContent />
+                      </Select>
+                    </SettingsRow>
+                    {props.modelRows}
+                    <Show when={props.backupModelsEditable}>
+                      <SettingsLinkRow
+                        ref={pageRowRef("backup-models")}
+                        label={t("agentSettings.backupModels.title")}
+                        value={backupModelsSummary()}
+                        onClick={() => openPage("backup-models")}
                       />
                     </Show>
-                  </Popover.Content>
-                </Popover.Root>
-              </div>
-              <SaveError field="avatar" />
-              <SaveError field="avatarFace" />
-              <SaveError field="avatarColor" />
-              <SettingsField label={t("agentSettings.name")}>
-                <Input
-                  value={draft.fields.name}
-                  aria-label={t("agentSettings.nameLabel")}
-                  maxlength={INPUT_LIMITS.agentName}
-                  limitNote={limitNote}
-                  invalid={draft.nameMissing}
-                  aria-describedby={draft.nameMissing ? "agent-settings-name-missing" : undefined}
-                  onValueChange={(value) =>
-                    setDraft((state) => {
-                      state.fields.name = value;
-                      state.dirty.name = true;
-                      if (value.trim()) state.nameMissing = false;
-                    })
-                  }
-                  onBlur={saveName}
-                />
-                <Show when={draft.nameMissing}>
-                  <small id="agent-settings-name-missing" class="agent-settings-field-error" role="alert">
-                    {t("agentSettings.nameMissing")}
-                  </small>
-                </Show>
-              </SettingsField>
-              <SaveError field="name" />
-              <SettingsField label={t("agentSettings.agentTitle")}>
-                <Input
-                  value={draft.fields.title}
-                  aria-label={t("agentSettings.agentTitleLabel")}
-                  placeholder={t("agentSettings.agentTitlePlaceholder")}
-                  maxlength={INPUT_LIMITS.agentTitle}
-                  limitNote={limitNote}
-                  onValueChange={(value) =>
-                    setDraft((state) => {
-                      state.fields.title = value;
-                      state.dirty.title = true;
-                    })
-                  }
-                  onBlur={saveTitle}
-                />
-              </SettingsField>
-              <SaveError field="title" />
-              <Show when={props.space}>
-                {(space) => (
-                  <SettingsField label={t("workspace.spaces.space")}>
-                    <WorkspaceSelect
-                      label={t("workspace.spaces.space")}
-                      value={space().value}
-                      options={space().options}
-                      disabled={!space().onChange}
-                      onChange={(spaceId) => space().onChange?.(spaceId)}
+                  </SettingsGroup>
+                  {props.modelGroups}
+                </SettingsSection>
+                <SettingsSection
+                  title={t("agentSettings.group.access")}
+                  description={t("agentSettings.group.accessDescription")}
+                >
+                  <SettingsGroup label={t("agentSettings.group.access")}>
+                    <SettingsLinkRow
+                      ref={pageRowRef("permissions")}
+                      label={t("agentSettings.permissions.title")}
+                      value={t(ACCESS_LABEL[draft.permission])}
+                      onClick={() => openPage("permissions")}
                     />
-                  </SettingsField>
-                )}
-              </Show>
-              {/* Before the long instructions field, so that a phone shows them without a long scroll. */}
-              {props.links}
-              <SettingsField label={t("agentSettings.instructions")}>
-                <Textarea
-                  class="settings-instructions-input"
-                  rows="5"
-                  value={draft.fields.description}
-                  aria-label={t("agentSettings.instructionsLabel")}
-                  placeholder={t("agentSettings.instructionsPlaceholder")}
-                  invalid={instructionsTooLong(draft.fields.description)}
-                  onValueChange={(value) => {
-                    setDraft((state) => {
-                      state.fields.description = value;
-                      state.dirty.description = true;
-                    });
-                    scheduleInstructionsSave(value);
-                  }}
-                  onBlur={saveDescription}
-                />
-                <InstructionsLimit text={draft.fields.description} />
-              </SettingsField>
-              <SaveError field="description" />
-              <SettingsLinkGroup inset class="agent-settings-runtime-rows" title={t("agentSettings.groups.brain")}>
-                <ProviderModelPicker
-                  variant="field"
-                  icon={
-                    <span class="settings-link-icon">
-                      <Cpu aria-hidden="true" />
-                    </span>
-                  }
-                  ariaLabel={t("agentSettings.runtime.model")}
-                  provider={draft.runtime.provider}
-                  foreignProvider={agentForeignProvider()}
-                  value={draft.runtime.model}
-                  agentStatus={props.agentStatus}
-                  modelOptions={props.modelOptions}
-                  runtimeStatuses={props.providerRuntimeStatuses}
-                  customProviders={props.customProviders}
-                  customAgents={props.customAgents}
-                  onDownloadProvider={props.onDownloadProvider}
-                  onCancelProviderDownload={props.onCancelProviderDownload}
-                  onConnectProvider={props.onConnectProvider}
-                  canConnectProvider={props.canConnectProvider}
-                  onManageProviders={props.onManageProviders}
-                  disabledReason={t("agentSettings.runtime.modelUnavailable")}
-                  accountChoice
-                  providerAccountId={agentNextProviderAccountId(props.agent)}
-                  onChange={(nextModel, provider, accountId) => void selectModel(nextModel, provider, accountId)}
-                />
-                <Select<AgentReasoningEffort>
-                  class="agent-settings-runtime-select"
-                  options={reasoningOptions()}
-                  value={draft.runtime.reasoningEffort}
-                  disabled={reasoningSetByProvider() || agentForeignProvider() !== undefined}
-                  onChange={(nextReasoning) => {
-                    if (!nextReasoning || nextReasoning === draft.runtime.reasoningEffort) return;
-                    void selectReasoning(nextReasoning);
-                  }}
-                  itemComponent={(item) => (
-                    <SelectItem item={item.item}>{reasoningLabel(item.item.rawValue)}</SelectItem>
-                  )}
+                    {props.toolRows}
+                    <SettingsLinkRow
+                      ref={pageRowRef("advanced")}
+                      label={t("agentSettings.advanced.title")}
+                      onClick={() => openPage("advanced")}
+                    />
+                  </SettingsGroup>
+                </SettingsSection>
+                <SettingsSection
+                  title={t("agentSettings.group.state")}
+                  description={t("agentSettings.group.stateDescription")}
                 >
-                  <SelectTrigger
-                    class="agent-settings-runtime-row"
-                    aria-label={t("agentSettings.runtime.reasoningLabel")}
+                  <SettingsGroup label={t("agentSettings.group.state")}>
+                    <SettingsRow
+                      layout="inline"
+                      controlId="agent-settings-notifications-title"
+                      label={t("agentSettings.notifications.title")}
+                      description={t("agentSettings.notifications.description")}
+                      help={<SaveError field="notifications" />}
+                    >
+                      <Switch
+                        id="agent-settings-notifications-title"
+                        aria-label={t("agentSettings.notifications.title")}
+                        checked={draft.notifications}
+                        onChange={(next) => void saveNotifications(next)}
+                      />
+                    </SettingsRow>
+                    {props.stateRows}
+                  </SettingsGroup>
+                </SettingsSection>
+                {props.sections}
+              </Show>
+              <Show when={page() === "permissions"}>
+                <SettingsGroup label={t("agentSettings.permissions.title")}>
+                  <SettingsRow
+                    label={t("agentSettings.runtime.access")}
+                    description={t("agentSettings.runtime.accessDescription")}
+                    help={<SaveError field="access" />}
                   >
-                    <span class="settings-link-icon">
-                      <Brain aria-hidden="true" />
-                    </span>
-                    <span class="agent-settings-runtime-label">{t("agentSettings.runtime.reasoning")}</span>
-                    <SelectValue<AgentReasoningEffort>>
-                      {(state) => {
-                        if (reasoningSetByProvider()) {
-                          return t("agentSettings.runtime.reasoningSetByProvider", {
-                            provider: agentProviderName(draft.runtime.provider),
+                    <Select<AgentPermissionLevel>
+                      options={[...agentPermissionLevels(knownProvider(), currentPermission())]}
+                      value={draft.permission}
+                      disabled={!props.onUpdatePermissions}
+                      onChange={(next) => {
+                        if (!next || next === draft.permission) return;
+                        // More freedom is the move that needs the warning. Less freedom is never
+                        // something a user needs protecting from, so it is written straight away.
+                        if (widensAgentPermission(draft.permission, next)) {
+                          setDraft((state) => {
+                            state.confirmingPermission = next;
                           });
-                        }
-                        const effort = state.selectedOption();
-                        return effort ? reasoningLabel(effort) : t("agentSettings.runtime.selectReasoning");
+                        } else void savePermission(next);
                       }}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent />
-                </Select>
-              </SettingsLinkGroup>
-              <SaveError field="runtime" />
-              <Show when={props.backupModelsEditable}>
-                <SettingsLinkGroup inset>
-                  <SettingsLinkRow
-                    ref={pageRowRef("backup-models")}
-                    icon={<ArrowLeftRight aria-hidden="true" />}
-                    label={t("agentSettings.backupModels.title")}
-                    value={backupModelsSummary()}
-                    onClick={() => openPage("backup-models")}
-                  />
-                </SettingsLinkGroup>
+                      itemComponent={(item) => (
+                        <SelectItem item={item.item}>{t(ACCESS_LABEL[item.item.rawValue])}</SelectItem>
+                      )}
+                    >
+                      {selectTrigger(t("agentSettings.runtime.accessLabel"), t(ACCESS_LABEL[draft.permission]))}
+                      <SelectContent />
+                    </Select>
+                  </SettingsRow>
+                  <Show when={props.computerUseEditable}>
+                    <SettingsRow
+                      layout="inline"
+                      controlId="agent-settings-computeruse-title"
+                      label={t("agentSettings.computerUse.title")}
+                      description={t("agentSettings.computerUse.description")}
+                      help={<SaveError field="computerUse" />}
+                    >
+                      <Switch
+                        id="agent-settings-computeruse-title"
+                        aria-label={t("agentSettings.computerUse.title")}
+                        checked={draft.computerUse}
+                        onChange={(next) => void saveComputerUse(next)}
+                      />
+                    </SettingsRow>
+                  </Show>
+                  <Show when={props.automationEditable}>
+                    <SettingsRow
+                      layout="inline"
+                      controlId="agent-settings-automation-title"
+                      label={t("agentSettings.automation.title")}
+                      description={t("agentSettings.automation.description")}
+                      help={<SaveError field="automation" />}
+                    >
+                      <Switch
+                        id="agent-settings-automation-title"
+                        aria-label={t("agentSettings.automation.title")}
+                        checked={draft.allowAutomation}
+                        onChange={(next) => void saveAllowAutomation(next)}
+                      />
+                    </SettingsRow>
+                  </Show>
+                </SettingsGroup>
+                <SettingsHelp class="agent-settings-runtime-note">
+                  <Show
+                    when={draft.permission === "workspace"}
+                    fallback={
+                      <>
+                        {t("agentSettings.runtime.fullAccessNote")}{" "}
+                        {draft.permission === "ask"
+                          ? t("agentSettings.runtime.askNote")
+                          : t("agentSettings.runtime.fullNote")}
+                      </>
+                    }
+                  >
+                    {t("agentSettings.runtime.workspaceNote")}{" "}
+                    {agentForeignProvider() === undefined ? workspaceEnforcementNote(draft.runtime.provider) : null}{" "}
+                    {/* The Computer Use switch is on this page only where the agent's computer is this one. */}
+                    {props.computerUseEditable
+                      ? t("agentSettings.runtime.workspaceUnlimited")
+                      : t("agentSettings.runtime.workspaceUnlimitedNoSwitch")}
+                  </Show>
+                </SettingsHelp>
               </Show>
-              <SettingsLinkGroup inset title={t("agentSettings.groups.rules")}>
-                <SettingsLinkRow
-                  ref={pageRowRef("permissions")}
-                  icon={<ShieldCheck aria-hidden="true" />}
-                  label={t("agentSettings.permissions.title")}
-                  value={t(ACCESS_LABEL[draft.permission])}
-                  onClick={() => openPage("permissions")}
+              <Show when={page() === "backup-models"}>
+                <BackupModelsPage
+                  agentName={props.agent.name}
+                  own={ownModel()}
+                  ownModel={ownModelName()}
+                  value={draft.backupModels}
+                  source={{
+                    modelOptions: props.modelOptions,
+                    providers: props.agentStatus.providers,
+                    limited: props.usageLimited,
+                  }}
+                  onChange={(next) => void saveBackupModels(next)}
                 />
-                <div class="agent-settings-switch-row">
-                  <span class="settings-link-label">
-                    <span class="settings-link-icon">
-                      <Bell aria-hidden="true" />
-                    </span>
-                    {t("agentSettings.notifications.title")}
-                  </span>
-                  <Switch
-                    size="sm"
-                    aria-label={t("agentSettings.notifications.title")}
-                    checked={draft.notifications}
-                    onChange={(next) => void saveNotifications(next)}
-                  />
-                </div>
-                <SettingsLinkRow
-                  ref={pageRowRef("advanced")}
-                  icon={<SlidersHorizontal aria-hidden="true" />}
-                  label={t("agentSettings.advanced.title")}
-                  onClick={() => openPage("advanced")}
-                />
-              </SettingsLinkGroup>
-              <SaveError field="notifications" />
-            </Show>
-            <Show when={page() === "permissions"}>
-              <Show when={props.onUpdatePermissions}>
-                <SettingsLinkGroup inset class="agent-settings-runtime-rows">
-                  <Select<AgentPermissionLevel>
-                    class="agent-settings-runtime-select"
-                    options={[...agentPermissionLevels(knownProvider(), currentPermission())]}
-                    value={draft.permission}
-                    onChange={(next) => {
-                      if (!next || next === draft.permission) return;
-                      // More freedom is the move that needs the warning. Less freedom is never
-                      // something a user needs protecting from, so it is written straight away.
-                      if (widensAgentPermission(draft.permission, next)) {
-                        setDraft((state) => {
-                          state.confirmingPermission = next;
-                        });
-                      } else void savePermission(next);
-                    }}
-                    itemComponent={(item) => (
-                      <SelectItem item={item.item}>{t(ACCESS_LABEL[item.item.rawValue])}</SelectItem>
-                    )}
-                  >
-                    <SelectTrigger
-                      class="agent-settings-runtime-row"
-                      aria-label={t("agentSettings.runtime.accessLabel")}
-                    >
-                      <span class="agent-settings-runtime-label">{t("agentSettings.runtime.access")}</span>
-                      <SelectValue<AgentPermissionLevel>>
-                        {(state) => t(ACCESS_LABEL[state.selectedOption() ?? draft.permission])}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent />
-                  </Select>
-                </SettingsLinkGroup>
-                <SaveError field="access" />
               </Show>
-              <Text as="p" class="agent-settings-runtime-note" variant="caption" tone="muted">
-                <Show
-                  when={draft.permission === "workspace"}
-                  fallback={
-                    <>
-                      {t("agentSettings.runtime.fullAccessNote")}{" "}
-                      {draft.permission === "ask"
-                        ? t("agentSettings.runtime.askNote")
-                        : t("agentSettings.runtime.fullNote")}
-                    </>
-                  }
-                >
-                  {t("agentSettings.runtime.workspaceNote")}{" "}
-                  {agentForeignProvider() === undefined ? workspaceEnforcementNote(draft.runtime.provider) : null}{" "}
-                  {/* The Computer Use switch is on this page only where the agent's computer is this one. */}
-                  {props.computerUseEditable
-                    ? t("agentSettings.runtime.workspaceUnlimited")
-                    : t("agentSettings.runtime.workspaceUnlimitedNoSwitch")}
-                </Show>
-              </Text>
-              <Show when={props.computerUseEditable}>
-                <div class="agent-settings-notifications">
-                  <div>
-                    <strong>{t("agentSettings.computerUse.title")}</strong>
-                    <span>{t("agentSettings.computerUse.description")}</span>
-                  </div>
-                  <Switch
-                    size="sm"
-                    aria-label={t("agentSettings.computerUse.title")}
-                    checked={draft.computerUse}
-                    onChange={(next) => void saveComputerUse(next)}
-                  />
-                </div>
-                <SaveError field="computerUse" />
-              </Show>
-              <Show when={props.automationEditable}>
-                <div class="agent-settings-notifications">
-                  <div>
-                    <strong>{t("agentSettings.automation.title")}</strong>
-                    <span>{t("agentSettings.automation.description")}</span>
-                  </div>
-                  <Switch
-                    size="sm"
-                    aria-label={t("agentSettings.automation.title")}
-                    checked={draft.allowAutomation}
-                    onChange={(next) => void saveAllowAutomation(next)}
-                  />
-                </div>
-                <SaveError field="automation" />
-              </Show>
-            </Show>
-            <Show when={page() === "backup-models"}>
-              <BackupModelsPage
-                agentName={props.agent.name}
-                own={ownModel()}
-                ownModel={ownModelName()}
-                value={draft.backupModels}
-                source={{
-                  modelOptions: props.modelOptions,
-                  providers: props.agentStatus.providers,
-                  limited: props.usageLimited,
-                }}
-                onChange={(next) => void saveBackupModels(next)}
-              />
-            </Show>
-            <Show when={page() === "advanced"}>
-              <SettingsLinkGroup inset class="agent-settings-runtime-rows">
-                <Show when={props.busyMessageModeEditable}>
-                  <Select<BusyMessageChoice>
-                    class="agent-settings-runtime-select"
-                    options={[...BUSY_MESSAGE_CHOICES]}
-                    value={draft.busyMessage}
-                    onChange={(next) => {
-                      if (!next || next === draft.busyMessage) return;
-                      void saveBusyMessage(next);
-                    }}
-                    itemComponent={(item) => (
-                      <SelectItem item={item.item}>{busyMessageLabel(item.item.rawValue)}</SelectItem>
-                    )}
-                  >
-                    <SelectTrigger
-                      class="agent-settings-runtime-row"
-                      aria-label={t("agentSettings.runtime.busyMessageLabel")}
+              <Show when={page() === "advanced"}>
+                <SettingsGroup title={t("agentSettings.advanced.work")}>
+                  <Show when={props.busyMessageModeEditable}>
+                    <SettingsRow
+                      label={t("agentSettings.runtime.busyMessage")}
+                      description={
+                        props.busyMessageModeEditable && steerUnsupported()
+                          ? t("agentSettings.busyMessage.steerUnsupported", {
+                              provider: agentProviderName(draft.runtime.provider),
+                            })
+                          : t("agentSettings.runtime.busyMessageDescription")
+                      }
+                      help={<SaveError field="busyMessage" />}
                     >
-                      <span class="agent-settings-runtime-label">{t("agentSettings.runtime.busyMessage")}</span>
-                      <SelectValue<BusyMessageChoice>>
-                        {(state) => busyMessageLabel(state.selectedOption() ?? "default")}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent />
-                  </Select>
-                </Show>
-                <Show when={props.taskLimitEditable}>
-                  <Select<TaskLimitChoice>
-                    class="agent-settings-runtime-select"
-                    options={[...TASK_LIMIT_CHOICES]}
-                    value={oneTurnAtATime() ? "1" : draft.taskLimit}
-                    disabled={oneTurnAtATime()}
-                    onChange={(next) => {
-                      if (!next || next === draft.taskLimit) return;
-                      void saveTaskLimit(next);
-                    }}
-                    itemComponent={(item) => (
-                      <SelectItem item={item.item}>{taskLimitLabel(item.item.rawValue)}</SelectItem>
-                    )}
-                  >
-                    <SelectTrigger
-                      class="agent-settings-runtime-row"
-                      aria-label={t("agentSettings.runtime.taskLimitLabel")}
+                      <Select<BusyMessageChoice>
+                        options={[...BUSY_MESSAGE_CHOICES]}
+                        value={draft.busyMessage}
+                        onChange={(next) => {
+                          if (!next || next === draft.busyMessage) return;
+                          void saveBusyMessage(next);
+                        }}
+                        itemComponent={(item) => (
+                          <SelectItem item={item.item}>{busyMessageLabel(item.item.rawValue)}</SelectItem>
+                        )}
+                      >
+                        {selectTrigger(
+                          t("agentSettings.runtime.busyMessageLabel"),
+                          busyMessageLabel(draft.busyMessage),
+                        )}
+                        <SelectContent />
+                      </Select>
+                    </SettingsRow>
+                  </Show>
+                  <Show when={props.taskLimitEditable}>
+                    <SettingsRow
+                      label={t("agentSettings.runtime.taskLimit")}
+                      description={
+                        oneTurnAtATime()
+                          ? t("agentSettings.taskLimit.oneTurn", {
+                              provider: agentProviderName(draft.runtime.provider),
+                            })
+                          : t("agentSettings.runtime.taskLimitDescription")
+                      }
                     >
-                      <span class="agent-settings-runtime-label">{t("agentSettings.runtime.taskLimit")}</span>
-                      <SelectValue<TaskLimitChoice>>
-                        {(state) => taskLimitLabel(state.selectedOption() ?? "default")}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent />
-                  </Select>
-                </Show>
+                      <Select<TaskLimitChoice>
+                        options={[...TASK_LIMIT_CHOICES]}
+                        value={oneTurnAtATime() ? "1" : draft.taskLimit}
+                        disabled={oneTurnAtATime()}
+                        onChange={(next) => {
+                          if (!next || next === draft.taskLimit) return;
+                          void saveTaskLimit(next);
+                        }}
+                        itemComponent={(item) => (
+                          <SelectItem item={item.item}>{taskLimitLabel(item.item.rawValue)}</SelectItem>
+                        )}
+                      >
+                        {selectTrigger(
+                          t("agentSettings.runtime.taskLimitLabel"),
+                          taskLimitLabel(oneTurnAtATime() ? "1" : draft.taskLimit),
+                        )}
+                        <SelectContent />
+                      </Select>
+                    </SettingsRow>
+                  </Show>
+                  <Show when={props.backgroundEditable}>
+                    <SettingsRow
+                      layout="inline"
+                      controlId="agent-settings-background-title"
+                      label={t("agentSettings.background.title")}
+                      description={t("agentSettings.background.description")}
+                      help={<SaveError field="background" />}
+                    >
+                      <Switch
+                        id="agent-settings-background-title"
+                        aria-label={t("agentSettings.background.title")}
+                        checked={draft.background}
+                        onChange={(next) => void saveBackground(next)}
+                      />
+                    </SettingsRow>
+                  </Show>
+                  <Show when={props.quickAcknowledgementEditable}>
+                    <SettingsRow
+                      layout="inline"
+                      controlId="agent-settings-quickacknowledgement-title"
+                      label={t("agentSettings.quickAcknowledgement.title")}
+                      description={t("agentSettings.quickAcknowledgement.description")}
+                    >
+                      <Switch
+                        id="agent-settings-quickacknowledgement-title"
+                        aria-label={t("agentSettings.quickAcknowledgement.title")}
+                        checked={draft.quickAcknowledgement}
+                        onChange={(next) => void saveQuickAcknowledgement(next)}
+                      />
+                    </SettingsRow>
+                  </Show>
+                  <SettingsRow
+                    layout="stack"
+                    label={t("agentSettings.runtime.workingDirectory")}
+                    description={
+                      <span class="agent-settings-runtime-path">
+                        {props.agent.workspacePath
+                          ? breakablePath(props.agent.workspacePath)
+                          : t("agentSettings.runtime.notAvailable")}
+                      </span>
+                    }
+                  />
+                </SettingsGroup>
                 <Show when={props.browserProfiles}>
                   {(options) => (
-                    <BrowserProfileSelect
-                      value={draft.browserProfile}
-                      profiles={options().profiles}
-                      onChange={(next) => void saveBrowserProfile(options(), next)}
-                      onCreate={options().onCreate}
-                    />
+                    <SettingsGroup title={t("agentSettings.advanced.browser")}>
+                      <BrowserProfileSelect
+                        value={draft.browserProfile}
+                        profiles={options().profiles}
+                        onChange={(next) => void saveBrowserProfile(options(), next)}
+                        onCreate={options().onCreate}
+                      />
+                      <SettingsRow
+                        label={t("agentSettings.browserProfile.manageTitle")}
+                        description={t("agentSettings.browserProfile.manageDescription")}
+                      >
+                        <Button
+                          variant="outline"
+                          type="button"
+                          onClick={(event) => options().onManage(event.currentTarget)}
+                        >
+                          {t("agentSettings.browserProfile.manage")}
+                        </Button>
+                      </SettingsRow>
+                    </SettingsGroup>
                   )}
                 </Show>
-                <div class="agent-settings-runtime-path">
-                  <span class="agent-settings-runtime-label">{t("agentSettings.runtime.workingDirectory")}</span>
-                  <span>
-                    {props.agent.workspacePath
-                      ? breakablePath(props.agent.workspacePath)
-                      : t("agentSettings.runtime.notAvailable")}
-                  </span>
-                </div>
-              </SettingsLinkGroup>
-              <SaveError field="busyMessage" />
-              <Show when={props.busyMessageModeEditable && steerUnsupported()}>
-                <Text as="p" class="agent-settings-runtime-note" variant="caption" tone="muted">
-                  {t("agentSettings.busyMessage.steerUnsupported", {
-                    provider: agentProviderName(draft.runtime.provider),
-                  })}
-                </Text>
-              </Show>
-              <Show when={props.backgroundEditable}>
-                <div class="agent-settings-notifications">
-                  <div>
-                    <strong>{t("agentSettings.background.title")}</strong>
-                    <span>{t("agentSettings.background.description")}</span>
-                  </div>
-                  <Switch
-                    size="sm"
-                    aria-label={t("agentSettings.background.title")}
-                    checked={draft.background}
-                    onChange={(next) => void saveBackground(next)}
-                  />
-                </div>
-                <SaveError field="background" />
-              </Show>
-              <Show when={props.taskLimitEditable && oneTurnAtATime()}>
-                <Text as="p" class="agent-settings-runtime-note" variant="caption" tone="muted">
-                  {t("agentSettings.taskLimit.oneTurn", { provider: agentProviderName(draft.runtime.provider) })}
-                </Text>
-              </Show>
-              <Show when={props.onStartNewChat}>
-                <div class="agent-settings-notifications">
-                  <div>
-                    <strong>{t("agentSettings.newChat.title")}</strong>
-                    <span>{t("agentSettings.newChat.description")}</span>
-                    <Show when={props.working}>
-                      <span id="agent-settings-new-chat-busy" class="agent-settings-disabled-reason">
-                        {t("agentSettings.newChat.busy")}
-                      </span>
+                <Show when={props.onStartNewChat || props.newChatEditable}>
+                  <SettingsGroup title={t("agentSettings.advanced.chat")}>
+                    <Show when={props.onStartNewChat}>
+                      <SettingsRow
+                        label={t("agentSettings.newChat.title")}
+                        description={t("agentSettings.newChat.description")}
+                        help={
+                          <Show when={props.working}>
+                            <span id="agent-settings-new-chat-busy" class="agent-settings-disabled-reason">
+                              {t("agentSettings.newChat.busy")}
+                            </span>
+                          </Show>
+                        }
+                      >
+                        <Button
+                          variant="outline"
+                          type="button"
+                          aria-label={t("agentSettings.newChat.confirm")}
+                          aria-haspopup="dialog"
+                          aria-describedby={props.working ? "agent-settings-new-chat-busy" : undefined}
+                          disabled={props.working}
+                          onClick={() => setNewChatOpen(true)}
+                        >
+                          {t("agentSettings.newChat.button")}
+                        </Button>
+                      </SettingsRow>
                     </Show>
-                  </div>
-                  <Button
-                    variant="outline"
-                    type="button"
-                    aria-label={t("agentSettings.newChat.confirm")}
-                    aria-haspopup="dialog"
-                    aria-describedby={props.working ? "agent-settings-new-chat-busy" : undefined}
-                    disabled={props.working}
-                    onClick={() => setNewChatOpen(true)}
-                  >
-                    {t("agentSettings.newChat.button")}
-                  </Button>
-                </div>
+                    <Show when={props.newChatEditable}>
+                      <SettingsRow
+                        layout="inline"
+                        controlId="agent-settings-agentnewchat-title"
+                        label={t("agentSettings.agentNewChat.title")}
+                        description={t("agentSettings.agentNewChat.description")}
+                      >
+                        <Switch
+                          id="agent-settings-agentnewchat-title"
+                          aria-label={t("agentSettings.agentNewChat.title")}
+                          checked={draft.allowNewChat}
+                          onChange={(next) => void saveAllowNewChat(next)}
+                        />
+                      </SettingsRow>
+                    </Show>
+                  </SettingsGroup>
+                </Show>
               </Show>
-              <Show when={props.newChatEditable}>
-                <div class="agent-settings-notifications">
-                  <div>
-                    <strong>{t("agentSettings.agentNewChat.title")}</strong>
-                    <span>{t("agentSettings.agentNewChat.description")}</span>
-                  </div>
-                  <Switch
-                    size="sm"
-                    aria-label={t("agentSettings.agentNewChat.title")}
-                    checked={draft.allowNewChat}
-                    onChange={(next) => void saveAllowNewChat(next)}
-                  />
-                </div>
-              </Show>
-              <Show when={props.quickAcknowledgementEditable}>
-                <div class="agent-settings-notifications">
-                  <div>
-                    <strong>{t("agentSettings.quickAcknowledgement.title")}</strong>
-                    <span>{t("agentSettings.quickAcknowledgement.description")}</span>
-                  </div>
-                  <Switch
-                    size="sm"
-                    aria-label={t("agentSettings.quickAcknowledgement.title")}
-                    checked={draft.quickAcknowledgement}
-                    onChange={(next) => void saveQuickAcknowledgement(next)}
-                  />
-                </div>
-              </Show>
-              <Show when={props.browserProfiles}>
-                {(options) => (
-                  <div class="agent-settings-notifications">
-                    <div>
-                      <strong>{t("agentSettings.browserProfile.manageTitle")}</strong>
-                      <span>{t("agentSettings.browserProfile.manageDescription")}</span>
-                    </div>
-                    <Button
-                      variant="outline"
-                      type="button"
-                      onClick={(event) => options().onManage(event.currentTarget)}
-                    >
-                      {t("agentSettings.browserProfile.manage")}
-                    </Button>
-                  </div>
+              <Show when={draft.saveError?.field === null ? draft.saveError : null}>
+                {(failure) => (
+                  <p class="agent-settings-save-error" role="alert">
+                    {failure().message}
+                    <ErrorReference reference={failure().reference} />
+                  </p>
                 )}
               </Show>
-            </Show>
-            <Show when={draft.saveError?.field === null ? draft.saveError : null}>
-              {(failure) => (
-                <p class="agent-settings-save-error" role="alert">
-                  {failure().message}
-                  <ErrorReference reference={failure().reference} />
-                </p>
-              )}
-            </Show>
-          </div>
-        </SettingsPanelContent>
+            </div>
+          </SettingsPanelContent>
+          <SettingsDraftsSaveBar drafts={drafts} label={t("agentSettings.saveBar.label")} />
+        </SettingsDraftsContext>
         <Show when={props.onStartNewChat}>
           {(start) => (
             <AgentNewChatDialog
@@ -1811,6 +1913,9 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     </SettingsPanel>
   );
 }
+
+/** The name of an error for a text field that is not valid yet, so the bar shows its own message. */
+const INVALID_DRAFT = "SettingsDraftInvalid";
 
 /** Lets a long path wrap after a slash instead of inside a folder name. */
 function breakablePath(path: string) {

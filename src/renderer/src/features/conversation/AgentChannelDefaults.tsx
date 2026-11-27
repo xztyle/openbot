@@ -14,10 +14,11 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  SwitchField,
-  Text,
+  SettingsRow,
+  Switch,
+  saveOnEnter,
+  useSettingsDraft,
 } from "@openbot/ui";
-import { SettingsField, SettingsLinkGroup } from "@openbot/ui/components/SettingsPanel";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createStore, onCleanup, Show } from "solid-js";
 
@@ -70,9 +71,9 @@ function withAgentDefaults(
 }
 
 /**
- * The answer mode and the focus note that an agent takes when someone adds it to a channel. Each
- * change saves at once, as the other agent settings do: the mode when it is chosen, the focus when
- * the field loses focus or the agent changes. A save reads the settings again first and changes only
+ * The answer mode and the focus note that an agent takes when someone adds it to a channel, as rows
+ * of the agent's "Where it works" group. The mode and the switch save at once; the focus is a text
+ * field and saves with the panel's save bar, or when the agent changes. A save reads the settings again first and changes only
  * this agent, so it keeps what another admin saved since the panel read them.
  */
 export function AgentChannelDefaults(props: { agentId: string; api: AgentChannelDefaultsApi }) {
@@ -193,23 +194,46 @@ export function AgentChannelDefaults(props: { agentId: string; api: AgentChannel
       ? t("agentSettings.channels.workspaceDefault", { mode: t(MODE_LABEL[state.workspaceMode]) })
       : t(MODE_LABEL[choice]);
 
+  const drafts = useSettingsDraft({
+    dirty: () => state.saved !== null && state.focus.trim() !== (state.saved.focus ?? ""),
+    async save() {
+      await save(props.agentId, props.api, { focus: state.focus.trim() });
+      if (state.error) throw new Error(state.error);
+    },
+    reset: () =>
+      setState((draft) => {
+        draft.focus = draft.saved?.focus ?? "";
+      }),
+  });
+
   return (
-    <SettingsLinkGroup title={t("agentSettings.channels.title")}>
-      <Text tone="muted">{t("agentSettings.channels.description")}</Text>
-      <Show when={state.error}>
-        {(message) => (
-          <>
-            <Text role="alert">{message()}</Text>
-            <Show when={!state.saved}>
-              <Button variant="ghost" onClick={() => reload?.()}>
-                {t("common.retry")}
-              </Button>
-            </Show>
-          </>
-        )}
+    <>
+      <Show when={state.error && !state.saved}>
+        <SettingsRow
+          label={t("agentSettings.channels.title")}
+          help={
+            <span class="agent-settings-save-error" role="alert">
+              {state.error}
+            </span>
+          }
+        >
+          <Button variant="outline" size="sm" onClick={() => reload?.()}>
+            {t("common.retry")}
+          </Button>
+        </SettingsRow>
       </Show>
       <Show when={state.saved}>
-        <SettingsField label={t("agentSettings.channels.answerMode")}>
+        <SettingsRow
+          label={t("agentSettings.channels.answerMode")}
+          description={t("agentSettings.channels.description")}
+          help={
+            <Show when={state.error}>
+              <span class="agent-settings-save-error" role="alert">
+                {state.error}
+              </span>
+            </Show>
+          }
+        >
           <Select<ModeChoice>
             options={[WORKSPACE_DEFAULT, ...CHANNEL_ANSWER_MODES]}
             value={modeChoice()}
@@ -229,34 +253,41 @@ export function AgentChannelDefaults(props: { agentId: string; api: AgentChannel
             </SelectTrigger>
             <SelectContent />
           </Select>
-        </SettingsField>
-        <SettingsField label={t("agentSettings.channels.focus")}>
+        </SettingsRow>
+        <SettingsRow
+          layout="stack"
+          controlId="agent-settings-channel-focus"
+          label={t("agentSettings.channels.focus")}
+          description={t("agentSettings.channels.focusDescription")}
+        >
           <Input
+            id="agent-settings-channel-focus"
             value={state.focus}
             maxlength={CHANNEL_FOCUS_LIMIT}
             placeholder={t("agentSettings.channels.focusPlaceholder")}
-            disabled={state.busy}
             onValueChange={(value) =>
               setState((draft) => {
                 draft.focus = value;
               })
             }
-            onBlur={() => commitFocus()}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter" || event.isComposing) return;
-              event.preventDefault();
-              commitFocus();
-            }}
+            onKeyDown={saveOnEnter(drafts)}
           />
-        </SettingsField>
-        <SwitchField
+        </SettingsRow>
+        <SettingsRow
+          layout="inline"
+          controlId="agent-settings-channels-sharemainchat"
           label={t("agentSettings.channels.shareMainChat")}
           description={t("agentSettings.channels.shareMainChatHint")}
-          checked={state.saved?.shareMainChat === true}
-          disabled={state.busy}
-          onChange={(shareMainChat) => void save(props.agentId, props.api, { shareMainChat })}
-        />
+        >
+          <Switch
+            id="agent-settings-channels-sharemainchat"
+            aria-label={t("agentSettings.channels.shareMainChat")}
+            checked={state.saved?.shareMainChat === true}
+            disabled={state.busy}
+            onChange={(shareMainChat) => void save(props.agentId, props.api, { shareMainChat })}
+          />
+        </SettingsRow>
       </Show>
-    </SettingsLinkGroup>
+    </>
   );
 }

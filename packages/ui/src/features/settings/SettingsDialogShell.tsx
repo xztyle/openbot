@@ -3,6 +3,7 @@ import { Text } from "@openbot/ui/typography";
 import { cx, prefersReducedMotion } from "@openbot/ui/utils";
 import { type JSX, Portal } from "@solidjs/web";
 import { createEffect, createSignal, createUniqueId, onCleanup, Show, untrack } from "solid-js";
+import type { SettingsDrafts } from "../../settings";
 import { useText } from "../../text";
 
 /** Where a settings page puts its parts, when the settings show as a page of the window. */
@@ -166,6 +167,28 @@ export function SettingsSaveBar(props: SettingsSaveBarProps): JSX.Element {
         </Button>
       </div>
     </section>
+  );
+}
+
+/**
+ * The save bar of a settings surface whose text forms register in `drafts`: it shows while one of
+ * them holds a change, saves them all with Save, and puts them back with Reset.
+ */
+export function SettingsDraftsSaveBar(props: { drafts: SettingsDrafts; label: string }): JSX.Element {
+  return (
+    <SaveBarDock value={props.drafts.dirty() ? true : null}>
+      {() => (
+        <SettingsSaveBar
+          label={props.label}
+          message={props.drafts.error() ?? undefined}
+          failed={props.drafts.error() !== null}
+          saving={props.drafts.saving()}
+          resetDisabled={props.drafts.saving()}
+          onReset={() => props.drafts.reset()}
+          onSave={() => void props.drafts.save()}
+        />
+      )}
+    </SaveBarDock>
   );
 }
 

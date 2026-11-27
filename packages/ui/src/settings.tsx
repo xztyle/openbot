@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { createUniqueId, omit, Show } from "solid-js";
+import { createContext, createSignal, createUniqueId, omit, onSettled, Show, useContext } from "solid-js";
 import { Monitor } from "./icons";
 import { useText } from "./text";
 import { Heading, Text } from "./typography";
@@ -162,4 +162,93 @@ export function SettingsDeviceNote(props: { class?: string }): JSX.Element {
       {t("settings.deviceOnly")}
     </span>
   );
+}
+
+/**
+ * One text form inside a settings surface that saves through the surface's one save bar: whether
+ * it holds a change, how to store it, and how to put the stored value back.
+ */
+export interface SettingsDraft {
+  dirty: () => boolean;
+  /** Stores the change. A failure throws, and the bar shows why. */
+  save: () => Promise<void>;
+  reset: () => void;
+}
+
+/** The text forms of one settings surface, saved and reset together by its save bar. */
+export interface SettingsDrafts {
+  register: (draft: SettingsDraft) => () => void;
+  dirty: () => boolean;
+  saving: () => boolean;
+  /** Why the last save failed, until the next save or reset. */
+  error: () => string | null;
+  /** Saves every draft with a change, one after another. False when one failed. */
+  save: () => Promise<boolean>;
+  reset: () => void;
+}
+
+/**
+ * The registry behind a settings surface's save bar (docs/ux/standard.md § 5): switches and
+ * selects save at once; text fields register here and save with the bar.
+ */
+export function createSettingsDrafts(failureText: (error: unknown) => string): SettingsDrafts {
+  const [drafts, setDrafts] = createSignal<readonly SettingsDraft[]>([]);
+  const [saving, setSaving] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+  const dirty = () => drafts().some((draft) => draft.dirty());
+  return {
+    register(draft) {
+      setDrafts((list) => [...list, draft]);
+      return () => setDrafts((list) => list.filter((item) => item !== draft));
+    },
+    dirty,
+    saving,
+    error: () => (dirty() ? error() : null),
+    async save() {
+      if (saving()) return false;
+      setSaving(true);
+      setError(null);
+      try {
+        for (const draft of drafts()) {
+          if (!draft.dirty()) continue;
+          try {
+            await draft.save();
+          } catch (failure) {
+            setError(failureText(failure));
+            return false;
+          }
+        }
+        return true;
+      } finally {
+        setSaving(false);
+      }
+    },
+    reset() {
+      setError(null);
+      for (const draft of drafts()) if (draft.dirty()) draft.reset();
+    },
+  };
+}
+
+/** The save bar registry of the settings surface around a form. */
+export const SettingsDraftsContext = createContext<SettingsDrafts | null>(null);
+
+/**
+ * Registers a text form with the save bar of the surface around it, for as long as the form is on
+ * screen. Returns the registry, so Enter in a field can save, or null outside a surface with a bar.
+ */
+export function useSettingsDraft(draft: SettingsDraft): SettingsDrafts | null {
+  const drafts = useContext(SettingsDraftsContext);
+  // After the mount: the list is a signal, and the component body is no place to write one.
+  if (drafts) onSettled(() => drafts.register(draft));
+  return drafts;
+}
+
+/** Enter in a one-line field of a surface with a save bar saves, as a form's submit does. */
+export function saveOnEnter(drafts: SettingsDrafts | null): (event: KeyboardEvent) => void {
+  return (event) => {
+    if (!drafts || event.key !== "Enter" || event.isComposing) return;
+    event.preventDefault();
+    void drafts.save();
+  };
 }

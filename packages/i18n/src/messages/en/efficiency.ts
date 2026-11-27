@@ -7,11 +7,11 @@ export const messages = defineMessages("efficiency", {
   "efficiency.policy.fixed": "Fixed: always its model",
   "efficiency.policy.auto": "Automatic: Haiku for routine runs",
   "efficiency.policy.hint":
-    "Automatic runs routine runs on Haiku in their own session, keeps chats on the agent's model, and moves to Opus for one turn after a failed turn or when the agent asks.",
+    "Automatic uses a cheaper model for routines and a stronger one when a task fails or the agent asks. Chats stay on its own model.",
   "efficiency.role.label": "Role",
   "efficiency.role.placeholder": "From the name: {role}",
   "efficiency.role.placeholderNone": "For example QA",
-  "efficiency.role.hint": "Agents of a role get its playbooks.",
+  "efficiency.role.hint": "Agents with the same role share its work guides.",
   "efficiency.sleep.label": "Asleep",
   "efficiency.sleep.hint": "No routines, checks or turns. Messages wait until you wake it.",
   "efficiency.sleep.team": "Put team to sleep",

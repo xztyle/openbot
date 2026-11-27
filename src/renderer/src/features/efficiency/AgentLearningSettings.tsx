@@ -7,9 +7,10 @@ import {
   type SettingsFieldChange,
 } from "@openbot/contracts/agent-learning";
 import type { AppTextKey } from "@openbot/i18n";
-import { Button, Text } from "@openbot/ui";
-import { SettingsField as Field } from "@openbot/ui/components/SettingsPanel";
+import { Button, ConfirmDialog, SettingsGroup, SettingsRow, SettingsSection } from "@openbot/ui";
+import { SettingsLinkRow } from "@openbot/ui/components/SettingsPanel";
 import { useText } from "@openbot/ui/text";
+import type { JSX } from "@solidjs/web";
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 import type { EfficiencyCalls } from "./efficiency-port";
 import "./efficiency.css";
@@ -31,12 +32,196 @@ const FIELD_TEXT = {
 /** Long texts show as their added and removed lines; short values as before → after. */
 const TEXT_FIELDS = new Set<SettingsField>(["instructions", "skill", "playbook"]);
 
+/** A note or a failure under the row it belongs to. */
+function RowNote(props: { note: string | null; error: string | null }): JSX.Element {
+  return (
+    <>
+      <Show when={props.error}>
+        {(message) => (
+          <span class="agent-settings-save-error" role="alert">
+            {message()}
+          </span>
+        )}
+      </Show>
+      <Show when={props.note}>{(message) => <span role="status">{message()}</span>}</Show>
+    </>
+  );
+}
+
 /**
- * What an agent learned and how its settings changed: the checkpoints of its settings with their
- * author and a one-tap rollback, a memory cleanup on demand, and the forget of what it learned in its
- * current chat. It needs the host's learning routes, which an owner or admin has.
+ * The Memory section of an agent's settings: what it remembers (a link to its memories), a memory
+ * cleanup on demand, and the forget of what it learned in its current chat, which asks first. The
+ * cleanup and the forget need the host's learning routes, which an owner or admin has.
  */
-export function AgentLearningSettings(props: {
+export function AgentMemorySection(props: {
+  agentId: string;
+  calls?: EfficiencyCalls | undefined;
+  /** The memories link, where the host has memories. */
+  memories?: { count: number; open: () => void } | undefined;
+}) {
+  const { t, errorMessage } = useText();
+  const [busy, setBusy] = createSignal(false);
+  const [dreaming, setDreaming] = createSignal(false);
+  const [note, setNote] = createSignal<{ row: "dream" | "forget"; text: string } | null>(null);
+  const [error, setError] = createSignal<{ row: "dream" | "forget"; text: string } | null>(null);
+  const [forget, setForget] = createSignal<ForgetConversationResult | null>(null);
+
+  createEffect(
+    () => props.agentId,
+    () => {
+      setForget(null);
+      setNote(null);
+      setError(null);
+    },
+  );
+
+  /**
+   * Runs one action for the agent that shows now. Its note, error and found items belong to that
+   * agent: when the panel moved to another agent meanwhile, they are dropped, so a forget never
+   * lists one agent's memories over the confirm button of another.
+   */
+  async function run(
+    row: "dream" | "forget",
+    work: (agentId: string, calls: EfficiencyCalls) => Promise<string | null>,
+    fallback: string,
+  ): Promise<void> {
+    const calls = props.calls;
+    if (!calls) return;
+    const agentId = props.agentId;
+    const current = () => props.agentId === agentId;
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      const done = await work(agentId, calls);
+      if (current() && done) setNote({ row, text: done });
+    } catch (failure) {
+      if (current()) setError({ row, text: errorMessage(failure, fallback) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const rowNote = (row: "dream" | "forget") => (
+    <RowNote
+      note={note()?.row === row ? (note()?.text ?? null) : null}
+      error={error()?.row === row ? (error()?.text ?? null) : null}
+    />
+  );
+  const found = () => {
+    const result = forget();
+    return result ? [...result.memories.map((item) => item.text), ...result.facts.map((item) => item.text)] : [];
+  };
+
+  return (
+    <Show when={props.memories || props.calls}>
+      <SettingsSection title={t("agentSettings.group.memory")} description={t("agentSettings.group.memoryDescription")}>
+        <SettingsGroup label={t("agentSettings.group.memory")}>
+          <Show when={props.memories}>
+            {(memories) => (
+              <SettingsLinkRow
+                label={t("agentSettings.links.memories")}
+                value={t("agentSettings.links.memoriesCount", { count: memories().count })}
+                onClick={() => memories().open()}
+              />
+            )}
+          </Show>
+          <Show when={props.calls}>
+            <SettingsRow
+              label={t("agentSettings.memory.tidy")}
+              description={t("agentSettings.memory.tidyDescription")}
+              help={rowNote("dream")}
+            >
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy()}
+                loading={dreaming()}
+                onClick={() =>
+                  void run(
+                    "dream",
+                    async (agentId, calls) => {
+                      setDreaming(true);
+                      try {
+                        const items = await calls.dream(agentId);
+                        return t("efficiency.learning.dreamDone", { count: items.length });
+                      } finally {
+                        setDreaming(false);
+                      }
+                    },
+                    t("efficiency.learning.dreamFailed"),
+                  )
+                }
+              >
+                {dreaming() ? t("efficiency.learning.dreamRunning") : t("agentSettings.memory.tidyButton")}
+              </Button>
+            </SettingsRow>
+            <SettingsRow
+              label={t("agentSettings.memory.forget")}
+              description={t("efficiency.learning.forgetHint")}
+              help={rowNote("forget")}
+            >
+              <Button
+                variant="outline"
+                size="sm"
+                class="agent-settings-danger-button"
+                disabled={busy()}
+                aria-haspopup="dialog"
+                onClick={() =>
+                  void run(
+                    "forget",
+                    async (agentId, calls) => {
+                      const preview = await calls.forgetConversation(agentId, false);
+                      if (preview.memories.length + preview.facts.length === 0)
+                        return t("efficiency.learning.forgetNothing");
+                      if (props.agentId === agentId) setForget(preview);
+                      return null;
+                    },
+                    t("efficiency.learning.forgetFailed"),
+                  )
+                }
+              >
+                {t("agentSettings.memory.forgetButton")}
+              </Button>
+            </SettingsRow>
+          </Show>
+        </SettingsGroup>
+        <ConfirmDialog
+          open={forget() !== null}
+          tone="destructive"
+          initialFocus="cancel"
+          title={t("agentSettings.memory.forgetTitle")}
+          description={t("agentSettings.memory.forgetConsequence")}
+          cancelLabel={t("common.cancel")}
+          confirmLabel={t("efficiency.learning.forgetConfirm", { count: found().length })}
+          error={forget() && error()?.row === "forget" ? error()?.text : undefined}
+          onCancel={() => setForget(null)}
+          onConfirm={() =>
+            run(
+              "forget",
+              async (agentId, calls) => {
+                const done = await calls.forgetConversation(agentId, true);
+                setForget(null);
+                return t("efficiency.learning.forgotten", { count: done.forgotten });
+              },
+              t("efficiency.learning.forgetFailed"),
+            )
+          }
+        >
+          <ul class="efficiency-changes">
+            <For each={found()}>{(text) => <li>{text}</li>}</For>
+          </ul>
+        </ConfirmDialog>
+      </SettingsSection>
+    </Show>
+  );
+}
+
+/**
+ * How the agent's settings changed: the checkpoints with their author, the changes on demand, and a
+ * one-tap rollback. It needs the host's learning routes, which an owner or admin has.
+ */
+export function AgentSettingsHistorySection(props: {
   agentId: string;
   calls: EfficiencyCalls;
   agentName(agentId: string): string;
@@ -45,11 +230,8 @@ export function AgentLearningSettings(props: {
   const [checkpoints, setCheckpoints] = createSignal<SettingsCheckpoint[] | null>(null);
   const [open, setOpen] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
-  // Only the cleanup says it is running; a rollback or a forget keeps its label.
-  const [dreaming, setDreaming] = createSignal(false);
   const [note, setNote] = createSignal<string | null>(null);
   const [error, setError] = createSignal<string | null>(null);
-  const [forget, setForget] = createSignal<ForgetConversationResult | null>(null);
   let generation = 0;
   onCleanup(() => {
     generation += 1;
@@ -71,29 +253,24 @@ export function AgentLearningSettings(props: {
     () => props.agentId,
     (agentId) => {
       setCheckpoints(null);
-      setForget(null);
       setNote(null);
       setError(null);
       reload(agentId);
     },
   );
 
-  /**
-   * Runs one action for the agent that shows now. Its note, error and found items belong to that
-   * agent: when the panel moved to another agent meanwhile, they are dropped, so a forget never
-   * lists one agent's memories over the confirm button of another.
-   */
-  async function run(work: (agentId: string) => Promise<string | null>, fallback: string): Promise<void> {
+  async function rollback(checkpoint: SettingsCheckpoint): Promise<void> {
     const agentId = props.agentId;
-    const current = () => props.agentId === agentId;
     setBusy(true);
     setError(null);
     setNote(null);
     try {
-      const done = await work(agentId);
-      if (current()) setNote(done);
+      await props.calls.rollback(checkpoint.id);
+      if (props.agentId !== agentId) return;
+      reload(agentId);
+      setNote(t("efficiency.history.rolledBack"));
     } catch (failure) {
-      if (current()) setError(errorMessage(failure, fallback));
+      if (props.agentId === agentId) setError(errorMessage(failure, t("efficiency.history.rollbackFailed")));
     } finally {
       setBusy(false);
     }
@@ -122,129 +299,59 @@ export function AgentLearningSettings(props: {
       : `${change.before ?? t("efficiency.history.unset")} → ${change.after ?? t("efficiency.history.unset")}`;
 
   return (
-    <>
-      <Show when={error()}>{(message) => <Text role="alert">{message()}</Text>}</Show>
-      <Show when={note()}>{(message) => <Text tone="muted">{message()}</Text>}</Show>
-      <Field label={t("efficiency.history.title")}>
-        <Show when={checkpoints()}>
+    <SettingsSection title={t("efficiency.history.title")} description={t("agentSettings.group.historyDescription")}>
+      <SettingsGroup label={t("efficiency.history.title")}>
+        <Show when={checkpoints()} fallback={<SettingsRow label={t("agentSettings.history.loading")} />}>
           {(list) => (
-            <Show when={list().length > 0} fallback={<Text tone="muted">{t("efficiency.history.empty")}</Text>}>
+            <Show when={list().length > 0} fallback={<SettingsRow label={t("efficiency.history.empty")} />}>
               <For each={list().slice(0, 10)} keyed={(checkpoint) => checkpoint.id}>
                 {(checkpoint) => (
-                  <div class="efficiency-review">
-                    <div class="efficiency-review-head">
-                      <strong>{checkpoint().changes.map(fieldName).join(", ")}</strong>
-                      <Text tone="muted">{author(checkpoint())}</Text>
-                      <Text tone="muted">
-                        {format.date(Date.parse(checkpoint().at), { dateStyle: "medium", timeStyle: "short" })}
-                      </Text>
-                    </div>
-                    <Show when={open() === checkpoint().id}>
-                      <For each={checkpoint().changes}>
-                        {(change) => (
-                          <>
-                            <Text tone="muted">{fieldName(change)}</Text>
-                            <pre class="efficiency-diff">{diff(change)}</pre>
-                          </>
-                        )}
-                      </For>
-                    </Show>
-                    <div class="efficiency-actions">
-                      <Button
-                        variant="ghost"
-                        onClick={() => setOpen((current) => (current === checkpoint().id ? null : checkpoint().id))}
-                      >
-                        {t("efficiency.history.show")}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        disabled={busy()}
-                        onClick={() =>
-                          void run(async (agentId) => {
-                            await props.calls.rollback(checkpoint().id);
-                            if (props.agentId === agentId) reload(agentId);
-                            return t("efficiency.history.rolledBack");
-                          }, t("efficiency.history.rollbackFailed"))
-                        }
-                      >
-                        {t("efficiency.history.rollback")}
-                      </Button>
-                    </div>
-                  </div>
+                  <SettingsRow
+                    layout="stack"
+                    class="agent-settings-history-row"
+                    label={checkpoint().changes.map(fieldName).join(", ")}
+                    description={`${author(checkpoint())} · ${format.date(Date.parse(checkpoint().at), {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}`}
+                    help={
+                      <Show when={open() === checkpoint().id}>
+                        <For each={checkpoint().changes}>
+                          {(change) => (
+                            <span class="agent-settings-history-change">
+                              <span>{fieldName(change)}</span>
+                              <pre class="efficiency-diff">{diff(change)}</pre>
+                            </span>
+                          )}
+                        </For>
+                      </Show>
+                    }
+                  >
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-expanded={open() === checkpoint().id ? "true" : "false"}
+                      onClick={() => setOpen((current) => (current === checkpoint().id ? null : checkpoint().id))}
+                    >
+                      {t("efficiency.history.show")}
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={busy()} onClick={() => void rollback(checkpoint())}>
+                      {t("efficiency.history.rollback")}
+                    </Button>
+                  </SettingsRow>
                 )}
               </For>
             </Show>
           )}
         </Show>
-      </Field>
-      <div class="efficiency-actions">
-        <Button
-          variant="ghost"
-          disabled={busy()}
-          onClick={() =>
-            void run(async () => {
-              setDreaming(true);
-              try {
-                const items = await props.calls.dream(props.agentId);
-                return t("efficiency.learning.dreamDone", { count: items.length });
-              } finally {
-                setDreaming(false);
-              }
-            }, t("efficiency.learning.dreamFailed"))
-          }
-        >
-          {dreaming() ? t("efficiency.learning.dreamRunning") : t("efficiency.learning.dream")}
-        </Button>
-        <Show
-          when={forget()}
-          fallback={
-            <Button
-              variant="ghost"
-              disabled={busy()}
-              onClick={() =>
-                void run(async (agentId) => {
-                  const found = await props.calls.forgetConversation(agentId, false);
-                  if (found.memories.length + found.facts.length === 0) return t("efficiency.learning.forgetNothing");
-                  if (props.agentId === agentId) setForget(found);
-                  return null;
-                }, t("efficiency.learning.forgetFailed"))
-              }
-            >
-              {t("efficiency.learning.forget")}
-            </Button>
-          }
-        >
-          {(found) => (
-            <Button
-              variant="destructive"
-              disabled={busy()}
-              onClick={() =>
-                void run(async (agentId) => {
-                  const done = await props.calls.forgetConversation(agentId, true);
-                  setForget(null);
-                  return t("efficiency.learning.forgotten", { count: done.forgotten });
-                }, t("efficiency.learning.forgetFailed"))
-              }
-            >
-              {t("efficiency.learning.forgetConfirm", { count: found().memories.length + found().facts.length })}
-            </Button>
-          )}
-        </Show>
-      </div>
-      <Show when={forget()}>
-        {(found) => (
-          <ul class="efficiency-changes">
-            <For each={[...found().memories.map((item) => item.text), ...found().facts.map((item) => item.text)]}>
-              {(text) => (
-                <li>
-                  <Text>{text}</Text>
-                </li>
-              )}
-            </For>
-          </ul>
+      </SettingsGroup>
+      <Show when={error() ?? note()}>
+        {(message) => (
+          <span class="ui-settings-help" role={error() ? "alert" : "status"}>
+            {message()}
+          </span>
         )}
       </Show>
-      <Text tone="muted">{t("efficiency.learning.forgetHint")}</Text>
-    </>
+    </SettingsSection>
   );
 }

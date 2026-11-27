@@ -2,13 +2,16 @@
 // `scripts/agent-learning-e2e.ts`. Each call the page makes lands in the body's `data-learning-calls`.
 // While the body has `data-hold-forget`, the forget preview waits; the "lead" link of the hash
 // (`#lead`) shows the settings of another agent. The Cost and performance settings show too; the
-// `#role-rolled-back` hash clears the agent's role, as a Roll back of it on the host does.
+// `#role-rolled-back` hash clears the agent's role, as a Roll back of it on the host does. The Role
+// field saves with a save bar, as in the agent's settings panel.
 import type { LearningReviewItem, SettingsCheckpoint } from "@openbot/contracts/agent-learning";
+import { createSettingsDrafts, SettingsDraftsContext } from "@openbot/ui";
 import type { AgentProfile } from "@openbot/ui/data";
+import { SettingsDraftsSaveBar } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { render } from "@solidjs/web";
 import { createSignal, createStore, For } from "solid-js";
-import { AgentEfficiencySettings } from "../src/features/efficiency/AgentEfficiencySettings";
-import { AgentLearningSettings } from "../src/features/efficiency/AgentLearningSettings";
+import { AgentRoleRow } from "../src/features/efficiency/AgentEfficiencySettings";
+import { AgentMemorySection, AgentSettingsHistorySection } from "../src/features/efficiency/AgentLearningSettings";
 import type { EfficiencyCalls } from "../src/features/efficiency/efficiency-port";
 import { LearningCard } from "../src/features/efficiency/LearningCard";
 import { StaticI18nProvider } from "../src/i18n-context";
@@ -128,6 +131,7 @@ const calls: EfficiencyCalls = {
 };
 
 function Page() {
+  const drafts = createSettingsDrafts((error) => String(error));
   const [list, setList] = createSignal(items);
   const agentOfHash = () => (location.hash === "#lead" ? "lead" : "chief");
   const [agentId, setAgentId] = createSignal(agentOfHash());
@@ -151,16 +155,26 @@ function Page() {
           />
         )}
       </For>
-      <AgentEfficiencySettings
-        agent={agent}
-        onUpdateAgent={async (_agentId, updates) => {
-          record(`update:${JSON.stringify(updates)}`);
-          setAgent((draft) => {
-            if ("playbookRole" in updates) draft.playbookRole = updates.playbookRole ?? undefined;
-          });
-        }}
+      <SettingsDraftsContext value={drafts}>
+        <div class="settings-modal-card">
+          <AgentRoleRow
+            agent={agent}
+            onUpdateAgent={async (_agentId, updates) => {
+              record(`update:${JSON.stringify(updates)}`);
+              setAgent((draft) => {
+                if ("playbookRole" in updates) draft.playbookRole = updates.playbookRole ?? undefined;
+              });
+            }}
+          />
+        </div>
+        <SettingsDraftsSaveBar drafts={drafts} label="Unsaved agent changes" />
+      </SettingsDraftsContext>
+      <AgentSettingsHistorySection
+        agentId={agentId()}
+        calls={calls}
+        agentName={(id) => (id === "lead" ? "Lead" : id)}
       />
-      <AgentLearningSettings agentId={agentId()} calls={calls} agentName={(id) => (id === "lead" ? "Lead" : id)} />
+      <AgentMemorySection agentId={agentId()} calls={calls} />
     </div>
   );
 }

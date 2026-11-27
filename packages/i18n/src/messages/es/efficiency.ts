@@ -7,11 +7,11 @@ export const messages = {
   "efficiency.policy.fixed": "Fija: siempre su modelo",
   "efficiency.policy.auto": "Automática: Haiku para las rutinas",
   "efficiency.policy.hint":
-    "Automática ejecuta las rutinas con Haiku en su propia sesión, mantiene los chats en el modelo del agente y pasa a Opus durante un turno tras un turno fallido o cuando el agente lo pide.",
+    "Automática usa un modelo más barato para las rutinas y uno más fuerte cuando una tarea falla o el agente lo pide. Los chats siguen en su propio modelo.",
   "efficiency.role.label": "Rol",
   "efficiency.role.placeholder": "Del nombre: {role}",
   "efficiency.role.placeholderNone": "Por ejemplo QA",
-  "efficiency.role.hint": "Los agentes de un rol reciben sus playbooks.",
+  "efficiency.role.hint": "Los agentes con el mismo rol comparten sus guías de trabajo.",
   "efficiency.sleep.label": "Dormido",
   "efficiency.sleep.hint": "Sin rutinas, comprobaciones ni turnos. Los mensajes esperan hasta que lo despiertes.",
   "efficiency.sleep.team": "Dormir al equipo",

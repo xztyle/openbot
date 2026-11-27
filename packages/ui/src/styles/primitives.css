@@ -2242,10 +2242,17 @@
 .ui-confirm-dialog-actions {
   display: flex;
   flex: 0 0 auto;
+  /* A long confirm label ("Forget 1 item learned in this chat") takes its own line on a phone
+     instead of pushing Cancel off the dialog. */
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--openbot-space-2);
   border-top: 1px solid var(--openbot-dialog-ring);
   padding: var(--openbot-space-4) var(--openbot-space-6);
+}
+
+.ui-confirm-dialog-actions .ui-button {
+  max-width: 100%;
 }
 
 .ui-confirm-dialog-actions .ui-button svg {

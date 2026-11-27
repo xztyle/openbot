@@ -1,8 +1,9 @@
 // Checks the learning card and the agent's learning settings on a phone: Undo of a cleanup that
 // applied by itself, Apply of a lesson, the settings history with its diff and Roll back, and the
-// forget of one chat with its confirm step, and a forget preview that comes back after the panel
+// forget of one chat with its confirm dialog, and a forget preview that comes back after the panel
 // moved to another agent, which must not show there. The Role field follows a role that the host
-// rolled back, and a tap in and out of it does not save the old role again. The page runs on fake host calls
+// rolled back, a tap in and out of it does not save the old role again, and a new role saves with
+// the save bar. The page runs on fake host calls
 // (`src/renderer/stories/agent-learning-harness.tsx`); each call it makes is checked.
 //
 // `bun scripts/agent-learning-e2e.ts [--browser-executable=<path>] [--headed] [--out=<dir>]`
@@ -104,11 +105,12 @@ try {
   await page.getByRole("button", { name: "Roll back" }).tap();
   await page.getByText("Rolled back").waitFor();
 
-  await page.getByRole("button", { name: "Forget what it learned in this chat" }).tap();
-  await page.getByRole("button", { name: "Forget 1 item learned in this chat" }).waitFor();
-  await page.getByText("The bakery opens at 8 on Sundays.").waitFor();
+  await page.getByRole("button", { name: "Forget", exact: true }).tap();
+  const confirm = page.getByRole("alertdialog", { name: "Forget what it learned in this chat?" });
+  await confirm.getByRole("button", { name: "Forget 1 item learned in this chat" }).waitFor();
+  await confirm.getByText("The bakery opens at 8 on Sundays.").waitFor();
   await page.screenshot({ path: resolve(OUT, "03-forget.png"), fullPage: true });
-  await page.getByRole("button", { name: "Forget 1 item learned in this chat" }).tap();
+  await confirm.getByRole("button", { name: "Forget 1 item learned in this chat" }).tap();
   await page.getByText("1 item forgotten").waitFor();
   assert.deepEqual((await calls()).slice(2), ["rollback:c1", "forget:chief:false", "forget:chief:true"]);
 
@@ -117,20 +119,18 @@ try {
   await page.evaluate(() => {
     document.body.dataset.holdForget = "";
   });
-  await page.getByRole("button", { name: "Forget what it learned in this chat" }).tap();
+  await page.getByRole("button", { name: "Forget", exact: true }).tap();
   await page.waitForFunction(() => (document.body.dataset.learningCalls ?? "").split("\n").length === 6);
   await page.evaluate(() => {
     location.hash = "lead";
   });
-  await page.getByRole("button", { name: "Forget what it learned in this chat" }).waitFor();
+  await page.getByRole("button", { name: "Forget", exact: true }).waitFor();
   await page.evaluate(() => {
     delete document.body.dataset.holdForget;
   });
   // The buttons come back once the held preview is done.
   await page.waitForFunction(() =>
-    [...document.querySelectorAll("button")].some(
-      (button) => button.textContent === "Tidy memories now" && !button.disabled,
-    ),
+    [...document.querySelectorAll("button")].some((button) => button.textContent === "Tidy now" && !button.disabled),
   );
   assert.equal(await page.getByRole("button", { name: "Forget 1 item learned in this chat" }).count(), 0);
   assert.equal(await page.getByText("The bakery opens at 8 on Sundays.").count(), 0);
@@ -158,6 +158,16 @@ try {
   assert.deepEqual(
     (await calls()).filter((call) => call.startsWith("update:")),
     [],
+  );
+  // A new role waits for the save bar, then saves with Save.
+  await role.fill("Editor");
+  await role.blur();
+  const bar = page.getByRole("region", { name: "Unsaved agent changes" });
+  await bar.getByRole("button", { name: "Save", exact: true }).tap();
+  await bar.waitFor({ state: "detached" });
+  assert.deepEqual(
+    (await calls()).filter((call) => call.startsWith("update:")),
+    ['update:{"playbookRole":"Editor"}'],
   );
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

@@ -1331,11 +1331,16 @@
   }
 }
 
-/* The root list and each page behind it: one column of cards with an even gap. */
+/* The root list and each page behind it: sections, or a page's cards, with two steps between them. */
 .agent-settings-page {
   display: flex;
   flex-direction: column;
-  gap: var(--openbot-space-4);
+  gap: var(--openbot-space-8);
+}
+
+/* A note under a card belongs to it. */
+.agent-settings-page > .ui-settings-help {
+  margin-top: calc(-1 * var(--openbot-space-6));
 }
 
 .agent-settings-page > .settings-field {
@@ -1445,42 +1450,6 @@
   line-height: var(--openbot-leading-sm);
 }
 
-.agent-settings-notifications {
-  display: flex;
-  min-height: 70px;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--openbot-space-3);
-  margin: 0;
-  border-radius: var(--openbot-radius-lg);
-  background: var(--openbot-border);
-  padding: var(--openbot-space-3);
-}
-
-.agent-settings-notifications > div {
-  min-width: 0;
-}
-
-.agent-settings-notifications strong,
-.agent-settings-notifications span {
-  display: block;
-}
-
-.agent-settings-notifications strong {
-  color: var(--openbot-text-primary);
-  font-size: var(--openbot-text-md);
-  font-weight: var(--openbot-weight-medium);
-  line-height: var(--openbot-leading-md);
-}
-
-.agent-settings-notifications div > span {
-  max-width: 194px;
-  margin-top: var(--openbot-space-0-5);
-  color: var(--openbot-text-secondary);
-  font-size: var(--openbot-text-sm);
-  line-height: var(--openbot-leading-sm);
-}
-
 /* The note that a `limitNote` field shows near its character limit, and after a paste was cut. */
 .ui-field-limit {
   display: block;
@@ -1491,7 +1460,8 @@
 }
 
 /* The reason a control is off, in the place where its description is. */
-.agent-settings-notifications div > .agent-settings-disabled-reason {
+.ui-settings-row-help > .agent-settings-disabled-reason {
+  display: block;
   color: var(--openbot-text-muted);
 }
 
@@ -1511,4 +1481,65 @@
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   line-height: var(--openbot-leading-sm);
+}
+
+/* The face in its Identity row: a 48 px picture, its pencil badge on the corner. */
+.ui-settings-row .agent-settings-avatar-picker,
+.ui-settings-row .agent-settings-avatar,
+.ui-settings-row .agent-settings-avatar .agent-avatar {
+  width: 48px;
+  height: 48px;
+  margin: 0;
+}
+
+.ui-settings-row .agent-settings-avatar .agent-avatar {
+  --agent-avatar-optical-offset: calc(48px * -0.14);
+}
+
+/* A failure in a row's help line. */
+.ui-settings-row-help > .agent-settings-save-error,
+.ui-settings-row-help > .agent-settings-field-error {
+  display: block;
+  margin: 0;
+  color: var(--openbot-danger);
+}
+
+/* The newest weekly review, flat inside the Performance card. */
+.settings-modal-card > .agent-settings-review {
+  padding: 0 var(--openbot-space-5) var(--openbot-space-4);
+}
+
+.agent-settings-review > .efficiency-review {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+/* A destructive action in a row: the outline in the danger colour. */
+.agent-settings-danger-button.ui-button {
+  border-color: color-mix(in srgb, var(--openbot-danger) 45%, transparent);
+  color: var(--openbot-danger);
+}
+
+/* A settings change with its diff under it. */
+.agent-settings-history-change {
+  display: grid;
+  gap: var(--openbot-space-1);
+  margin-top: var(--openbot-space-2);
+}
+
+.agent-settings-history-row > .ui-settings-row-control {
+  flex-wrap: wrap;
+}
+
+.agent-settings-session-effective {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+@media (max-width: 520px) {
+  .settings-modal-card > .agent-settings-review {
+    padding-inline: var(--openbot-space-4);
+  }
 }

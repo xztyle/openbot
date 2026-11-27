@@ -1071,3 +1071,184 @@ label.ui-settings-row-label {
 .settings-panel .settings-identity-name-control {
   width: 100%;
 }
+
+/*
+ * A settings side panel (an agent's or a channel's settings) on the same design system as the
+ * Settings page: the panel header is the page title, then sections (lg, semibold) of groups, each a
+ * card of rows. The panel is narrow, so its rows stack their controls under the label below 460 px
+ * of panel width, whatever the window width; a switch row keeps its switch beside the label.
+ */
+.settings-panel-content {
+  container: settings-panel / inline-size;
+}
+
+.settings-panel-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--openbot-space-8);
+}
+
+/* Every track takes the panel's width, never its longest line: a long choice ellipsizes in its select. */
+.settings-panel .ui-settings-section,
+.settings-panel .ui-settings-group,
+.settings-panel .ui-settings-group-card {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-panel .ui-settings-section {
+  gap: var(--openbot-space-3);
+}
+
+.settings-panel .ui-settings-row-control {
+  min-width: 0;
+}
+
+.settings-panel .ui-settings-section-header {
+  padding-inline: var(--openbot-space-1);
+}
+
+.settings-panel .ui-settings-section-heading {
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-lg);
+  font-weight: var(--openbot-weight-semibold);
+  line-height: var(--openbot-leading-lg);
+}
+
+.settings-panel .ui-settings-section-description {
+  margin-top: var(--openbot-space-0-5);
+  font-size: var(--openbot-text-md);
+  line-height: var(--openbot-leading-md);
+  text-wrap: pretty;
+}
+
+.settings-panel-page > .ui-settings-group + .ui-settings-group,
+.settings-panel .ui-settings-section > .ui-settings-group + .ui-settings-group {
+  margin-top: var(--openbot-space-2);
+}
+
+@container settings-panel (max-width: 460px) {
+  .ui-settings-row:not([data-layout="inline"]) {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--openbot-space-3);
+  }
+
+  .ui-settings-row:not([data-layout="inline"]) > .ui-settings-row-control {
+    width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  .ui-settings-row:not([data-layout="inline"]) > .ui-settings-row-control > :is(.ui-select, .ui-input, .ws-select) {
+    width: 100%;
+  }
+
+  .ui-settings-row:not([data-layout="inline"]) > .ui-settings-row-control > .ui-button {
+    margin-left: auto;
+  }
+
+  .settings-modal-card > .ui-settings-row,
+  .settings-modal-card > .settings-link,
+  .settings-modal-card > .provider-model-picker-field,
+  .settings-modal-card > .agent-settings-runtime-select {
+    padding-inline: var(--openbot-space-4);
+  }
+
+  .settings-modal-card > :not(:first-child)::before {
+    right: var(--openbot-space-4);
+    left: var(--openbot-space-4);
+  }
+}
+
+/* A stacked control fills the row: a long field or a list. */
+.ui-settings-row[data-layout="stack"] > .ui-settings-row-control > :is(.ui-input, .ui-textarea, textarea) {
+  width: 100%;
+}
+
+/*
+ * Rows that open something: a link to a page (Access, Memories) or a picker whose whole row is the
+ * trigger (the model, the browser profile). In a card they take a row's padding, height and type.
+ */
+.settings-modal-card > .settings-link {
+  min-height: 60px;
+  border-radius: 0;
+  padding: var(--openbot-space-3) var(--openbot-space-5);
+}
+
+.settings-modal-card > .settings-link .settings-link-label,
+.settings-modal-card > .provider-model-picker-field .provider-model-field-label,
+.settings-modal-card > .agent-settings-runtime-select .agent-settings-runtime-label {
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-lg);
+  font-weight: var(--openbot-weight-medium);
+  line-height: var(--openbot-leading-lg);
+}
+
+.settings-modal-card > .settings-link .settings-link-value,
+.settings-modal-card > .provider-model-picker-field .provider-model-trigger-name,
+.settings-modal-card > .agent-settings-runtime-select .ui-select-value {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-regular);
+}
+
+.settings-modal-card > .provider-model-picker-field,
+.settings-modal-card > .agent-settings-runtime-select {
+  width: 100%;
+  padding: 0;
+}
+
+.settings-modal-card > .provider-model-picker-field .provider-model-trigger-field,
+.settings-modal-card > .agent-settings-runtime-select .agent-settings-runtime-row {
+  width: 100%;
+  height: auto;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-3);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: var(--openbot-space-3) var(--openbot-space-5);
+  box-shadow: none;
+}
+
+.settings-modal-card > .provider-model-picker-field .provider-model-field-label,
+.settings-modal-card > .agent-settings-runtime-select .agent-settings-runtime-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+
+.settings-modal-card > .provider-model-picker-field .provider-model-trigger-field:focus-visible,
+.settings-modal-card > .agent-settings-runtime-select .agent-settings-runtime-row:focus-visible,
+.settings-modal-card > .settings-link:focus-visible {
+  outline: 0;
+  box-shadow: inset var(--openbot-focus-ring);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-modal-card > .settings-link:hover,
+  .settings-modal-card > .provider-model-picker-field .provider-model-trigger-field:hover:not(:disabled),
+  .settings-modal-card > .agent-settings-runtime-select .agent-settings-runtime-row:hover {
+    background: var(--openbot-hover);
+  }
+}
+
+/* The save bar of a side panel sits at its foot, over the home indicator on a phone. */
+.settings-panel > .settings-modal-save-dock {
+  flex: 0 0 auto;
+}
+
+.settings-panel .settings-modal-save-bar {
+  padding: var(--openbot-space-3) var(--openbot-space-4) calc(var(--openbot-space-3) + env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 520px) {
+  .settings-modal-card > .settings-link,
+  .settings-modal-card > .provider-model-picker-field .provider-model-trigger-field,
+  .settings-modal-card > .agent-settings-runtime-select .agent-settings-runtime-row {
+    min-height: var(--openbot-touch-target);
+    padding-inline: var(--openbot-space-4);
+  }
+}

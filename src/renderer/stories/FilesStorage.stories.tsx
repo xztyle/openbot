@@ -1,4 +1,4 @@
-import { SettingsLinkGroup, SettingsLinkRow } from "@openbot/ui/components/SettingsPanel";
+import { SettingsLinkRow } from "@openbot/ui/components/SettingsPanel";
 import AgentSettingsPanel from "@openbot/ui/features/conversation/AgentSettingsPanel";
 import { AgentFilesView, agentFilesLinkValue } from "@openbot/ui/features/files/AgentFilesView";
 import { ConversationFilesPanel } from "@openbot/ui/features/files/ConversationFilesPanel";
@@ -213,13 +213,12 @@ function AgentFilesStory(props: { initiallyOpen: boolean; loading?: boolean; emp
       <AgentSettingsPanel
         {...agentPanelArgs}
         detailOpen={open()}
-        links={
-          <SettingsLinkGroup>
-            <SettingsLinkRow label="Memories" value="12 saved" onClick={fn()} />
+        toolRows={
+          <>
             <SettingsLinkRow label="Skills" value="3 assigned" onClick={fn()} />
             <SettingsLinkRow label="Files" value={agentFilesLinkValue(breakdown())} onClick={() => setOpen(true)} />
             <SettingsLinkRow label="Routines" value="2 configured" onClick={fn()} />
-          </SettingsLinkGroup>
+          </>
         }
       >
         <Show when={open()}>

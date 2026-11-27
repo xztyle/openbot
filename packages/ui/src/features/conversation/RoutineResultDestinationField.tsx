@@ -1,5 +1,5 @@
 import type { RoutineResultConnectionOption, RoutineResultDestination } from "@openbot/contracts/ipc";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Text } from "@openbot/ui";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SettingsRow } from "@openbot/ui";
 import { For } from "solid-js";
 import { useText } from "../../text";
 
@@ -77,8 +77,20 @@ export function RoutineResultDestinationField(props: RoutineResultDestinationFie
   const selected = () => (props.value ? placeKey(props.value) : NONE);
 
   return (
-    <div class="settings-field">
-      <span id="agent-routine-result-destination-label">{t("routine.settings.resultDestination")}</span>
+    <SettingsRow
+      label={<span id="agent-routine-result-destination-label">{t("routine.settings.resultDestination")}</span>}
+      help={
+        failed().length > 0 ? (
+          <For each={failed()}>
+            {(connection) => (
+              <span>
+                {t("routine.settings.resultDestination.placesFailed", { connection: connection.connectionName })}
+              </span>
+            )}
+          </For>
+        ) : undefined
+      }
+    >
       <Select<string>
         options={[NONE, ...entries().map((candidate) => candidate.key)]}
         value={selected()}
@@ -94,13 +106,6 @@ export function RoutineResultDestinationField(props: RoutineResultDestinationFie
         </SelectTrigger>
         <SelectContent />
       </Select>
-      <For each={failed()}>
-        {(connection) => (
-          <Text variant="caption" tone="muted">
-            {t("routine.settings.resultDestination.placesFailed", { connection: connection.connectionName })}
-          </Text>
-        )}
-      </For>
-    </div>
+    </SettingsRow>
   );
 }

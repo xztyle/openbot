@@ -1,4 +1,4 @@
-import { Field, Input, SwitchField, Text, Textarea } from "@openbot/ui";
+import { Field, Input, SettingsRow, SwitchField, Textarea, Switch as Toggle } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
 import { Match, Show, Switch } from "solid-js";
 import { useText } from "../../text";
@@ -68,11 +68,13 @@ function SettingLabel(props: { label: string; required: boolean | undefined; mar
   );
 }
 
-/** A row of the settings panel groups a setting with its help. A dialog form lays its own fields out. */
+/** In the settings panel a picker takes the place of a row of its group. A dialog form lays its own fields out. */
 function Row(props: { panel: boolean; children: JSX.Element }) {
   return (
     <Show when={props.panel} fallback={props.children}>
-      <div class="event-check-config-field">{props.children}</div>
+      <div class="ui-settings-row event-check-config-field" data-layout="stack">
+        {props.children}
+      </div>
     </Show>
   );
 }
@@ -84,6 +86,7 @@ function Row(props: { panel: boolean; children: JSX.Element }) {
  */
 export function EventCheckSettingField(props: EventCheckSettingFieldProps) {
   const descriptionId = () => `event-check-config-${props.name}`;
+  const controlId = () => props.controlId ?? `event-check-config-${props.name}-control`;
   const isSwitch = () => props.type === "boolean";
   // A switch is never marked: it holds a value whether or not the person touches it.
   const mark = () => (isSwitch() ? undefined : props.required);
@@ -92,17 +95,26 @@ export function EventCheckSettingField(props: EventCheckSettingFieldProps) {
   const panel = () => props.layout === "panel";
   return (
     <Switch>
-      <Match when={props.type === "boolean"}>
-        <Row panel={panel()}>
-          <SwitchField
-            class={panel() ? undefined : "marketplace-install-switch"}
-            label={label(true)}
-            description={description()}
+      <Match when={props.type === "boolean" && panel()}>
+        <SettingsRow layout="inline" controlId={controlId()} label={label(true)} description={description()}>
+          <Toggle
+            id={controlId()}
+            aria-label={props.label}
             checked={props.value === "true"}
             disabled={props.disabled}
             onChange={(on) => props.onChange(on ? "true" : "false")}
           />
-        </Row>
+        </SettingsRow>
+      </Match>
+      <Match when={props.type === "boolean"}>
+        <SwitchField
+          class="marketplace-install-switch"
+          label={label(true)}
+          description={description()}
+          checked={props.value === "true"}
+          disabled={props.disabled}
+          onChange={(on) => props.onChange(on ? "true" : "false")}
+        />
       </Match>
       <Match when={props.picker}>
         {(binding) => (
@@ -126,24 +138,22 @@ export function EventCheckSettingField(props: EventCheckSettingFieldProps) {
         )}
       </Match>
       <Match when={panel()}>
-        <div class="event-check-config-field">
-          <label class="settings-field">
-            <span>{label(true)}</span>
-            <Input
-              value={props.value}
-              maxlength={8192}
-              required={props.required === true}
-              disabled={props.disabled}
-              aria-describedby={description() ? descriptionId() : undefined}
-              onInput={(event) => props.onChange(event.currentTarget.value)}
-            />
-          </label>
-          <Show when={description()}>
-            <Text as="small" variant="caption" tone="muted" id={descriptionId()} class="event-check-field-help">
-              {description()}
-            </Text>
-          </Show>
-        </div>
+        <SettingsRow
+          layout="stack"
+          controlId={controlId()}
+          label={label(true)}
+          description={description() ? <span id={descriptionId()}>{description()}</span> : undefined}
+        >
+          <Input
+            id={controlId()}
+            value={props.value}
+            maxlength={8192}
+            required={props.required === true}
+            disabled={props.disabled}
+            aria-describedby={description() ? descriptionId() : undefined}
+            onInput={(event) => props.onChange(event.currentTarget.value)}
+          />
+        </SettingsRow>
       </Match>
       <Match when={true}>
         <Field

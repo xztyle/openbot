@@ -256,6 +256,12 @@ export const messages = defineMessages("routine", {
   "routine.settings.deleteConsequence":
     "Delete “{name}”? It stops running and its run history is removed. You cannot undo this.",
   "routine.settings.discardNew": "Discard the new routine “{name}”? Nothing was saved.",
+  "routine.settings.deleteTitle": "Delete “{name}”?",
+  "routine.settings.deleteDescription": "It stops running and its run history is removed. You cannot undo this.",
+  "routine.settings.deleteRow": "Delete this routine",
+  "routine.settings.deleteRowDescription": "It stops running and its run history is removed.",
+  "routine.settings.discardRow": "Discard this new routine",
+  "routine.settings.discardConfirmNew": "Discard routine",
   "routine.settings.unnamed": "unnamed routine",
   "routine.settings.required": "(required)",
   "routine.settings.testNeedsSave": "Save the routine before you run a test.",

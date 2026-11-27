@@ -10,6 +10,7 @@ export const messages = defineMessages("agent", {
   "agent.setup.colorAutomatic": "Automatic agent color",
   "agent.setup.colorOption": "{color} agent color",
   "agent.setup.face": "Agent face",
+  "agent.setup.appearance": "Look",
   "agent.setup.faceOption": "Agent face {number}",
   "agent.setup.name": "Name",
   "agent.setup.purpose": "What should this agent help with?",

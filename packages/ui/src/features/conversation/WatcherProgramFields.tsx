@@ -1,5 +1,5 @@
 import type { EventCheckApiSource, EventCheckConfiguration } from "@openbot/contracts/event-checks";
-import { Field, Input, Text, Textarea } from "@openbot/ui";
+import { Input, SettingsRow, Textarea } from "@openbot/ui";
 import { For, Show, snapshot } from "solid-js";
 import { useText } from "../../text";
 import { EventCheckSettingField } from "./EventCheckSettingField";
@@ -41,28 +41,49 @@ export function WatcherProgramFields(props: {
   const update = (fields: Partial<EventCheckApiSource>) => props.change({ ...snapshot(props.source), ...fields });
   return (
     <>
-      <Field
-        class="settings-field event-check-field"
-        label={t("agentSettings.eventCheck.program")}
+      <SettingsRow
+        layout="stack"
+        controlId="event-check-program"
+        label={
+          <>
+            {t("agentSettings.eventCheck.program")}
+            <span class="ui-field-required" aria-hidden="true">
+              *
+            </span>
+          </>
+        }
         description={t("agentSettings.eventCheck.programHelp")}
-        required
-        error={props.programError}
+        help={props.programError ? <span class="event-check-field-error">{props.programError}</span> : undefined}
       >
         <Input
+          id="event-check-program"
           class="event-check-code"
+          aria-required="true"
+          invalid={Boolean(props.programError)}
           value={props.source.toolName}
           placeholder={t("agentSettings.eventCheck.programPlaceholder")}
           onInput={(e) => update({ toolName: e.currentTarget.value })}
           onBlur={() => props.onProgramBlur?.()}
         />
-      </Field>
-      <label class="settings-field">
-        <span>{t("agentSettings.eventCheck.accountLabel")}</span>
-        <Input value={props.source.connectionId} onInput={(e) => update({ connectionId: e.currentTarget.value })} />
-      </label>
-      <label class="settings-field">
-        <span>{t("agentSettings.eventCheck.variableNames")}</span>
+      </SettingsRow>
+      <SettingsRow
+        layout="stack"
+        controlId="event-check-api-account"
+        label={t("agentSettings.eventCheck.accountLabel")}
+      >
+        <Input
+          id="event-check-api-account"
+          value={props.source.connectionId}
+          onInput={(e) => update({ connectionId: e.currentTarget.value })}
+        />
+      </SettingsRow>
+      <SettingsRow
+        layout="stack"
+        controlId="event-check-variable-names"
+        label={t("agentSettings.eventCheck.variableNames")}
+      >
         <Textarea
+          id="event-check-variable-names"
           class="event-check-code"
           value={props.source.variables.join("\n")}
           onInput={(e) =>
@@ -74,38 +95,36 @@ export function WatcherProgramFields(props: {
             })
           }
         />
-      </label>
+      </SettingsRow>
       <Show when={props.source.configuration.length}>
-        <div class="event-check-card">
-          <h4>{t("agentSettings.eventCheck.configuration")}</h4>
-          <Text as="p" variant="caption" tone="muted" class="event-check-help">
-            {t("agentSettings.eventCheck.configurationHelp")}
-          </Text>
-          {/* Keyed by name: a change builds new entries, and a row that remounted would drop its list. */}
-          <For each={props.source.configuration} keyed={(field) => field.name}>
-            {(field) => (
-              <EventCheckSettingField
-                layout="panel"
-                name={field().name}
-                label={field().label}
-                description={field().description}
-                type={props.fields?.[field().name]?.type}
-                required={props.fields?.[field().name]?.required}
-                picker={props.pickers?.[field().name]}
-                value={field().value}
-                labels={field().optionLabels}
-                onChange={(value, labels) =>
-                  props.change({
-                    ...snapshot(props.source),
-                    configuration: props.source.configuration.map((entry) =>
-                      entry.name === field().name ? withValue(snapshot(entry), value, labels) : snapshot(entry),
-                    ),
-                  })
-                }
-              />
-            )}
-          </For>
-        </div>
+        <SettingsRow
+          label={t("agentSettings.eventCheck.configuration")}
+          description={t("agentSettings.eventCheck.configurationHelp")}
+        />
+        {/* Keyed by name: a change builds new entries, and a row that remounted would drop its list. */}
+        <For each={props.source.configuration} keyed={(field) => field.name}>
+          {(field) => (
+            <EventCheckSettingField
+              layout="panel"
+              name={field().name}
+              label={field().label}
+              description={field().description}
+              type={props.fields?.[field().name]?.type}
+              required={props.fields?.[field().name]?.required}
+              picker={props.pickers?.[field().name]}
+              value={field().value}
+              labels={field().optionLabels}
+              onChange={(value, labels) =>
+                props.change({
+                  ...snapshot(props.source),
+                  configuration: props.source.configuration.map((entry) =>
+                    entry.name === field().name ? withValue(snapshot(entry), value, labels) : snapshot(entry),
+                  ),
+                })
+              }
+            />
+          )}
+        </For>
       </Show>
     </>
   );

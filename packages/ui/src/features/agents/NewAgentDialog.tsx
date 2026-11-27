@@ -44,14 +44,22 @@ export function NewAgentDialog(props: NewAgentDialogProps): JSX.Element {
       submitDisabled={!editor.canSubmit()}
       onSubmit={() => void props.onSubmit(props.value)}
     >
-      <div class="new-agent-identity" data-avatar-seed={props.value.avatarSeed}>
-        <span class="new-agent-preview" aria-hidden="true">
-          <AgentAvatar seed={props.value.avatarSeed} hue={props.value.avatarHue} motion="idle" animationOffset={0.4} />
-        </span>
-        <div class="new-agent-appearance">
-          <AgentAppearanceFields value={props.value} submitting={props.submitting} editor={editor} />
+      {/* The faces are a field like the name: they have a visible label over them (docs/ux/standard.md § 2.3). */}
+      <FormSection title={t("agent.setup.appearance")} class="new-agent-look">
+        <div class="new-agent-identity" data-avatar-seed={props.value.avatarSeed}>
+          <span class="new-agent-preview" aria-hidden="true">
+            <AgentAvatar
+              seed={props.value.avatarSeed}
+              hue={props.value.avatarHue}
+              motion="idle"
+              animationOffset={0.4}
+            />
+          </span>
+          <div class="new-agent-appearance">
+            <AgentAppearanceFields value={props.value} submitting={props.submitting} editor={editor} />
+          </div>
         </div>
-      </div>
+      </FormSection>
       <AgentDetailsFields {...props} editor={editor} />
       <FormSection title={t("agent.setup.suggestions")} class="new-agent-ideas">
         <ul class="new-agent-idea-list">

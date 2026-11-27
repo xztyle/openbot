@@ -11,6 +11,7 @@ export const messages = {
   "agent.setup.colorAutomatic": "Color automático del agente",
   "agent.setup.colorOption": "Color del agente: {color}",
   "agent.setup.face": "Cara del agente",
+  "agent.setup.appearance": "Aspecto",
   "agent.setup.faceOption": "Cara del agente {number}",
   "agent.setup.name": "Nombre",
   "agent.setup.purpose": "¿En qué debe ayudar este agente?",

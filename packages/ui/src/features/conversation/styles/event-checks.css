@@ -19,13 +19,7 @@
   padding-right: var(--openbot-space-2);
 }
 
-.event-check-section {
-  display: grid;
-  gap: var(--openbot-space-1);
-}
-
-.event-check-help,
-.event-check-field-help {
+.event-check-help {
   margin: calc(var(--openbot-space-1) * -1) var(--openbot-space-2) var(--openbot-space-2);
   line-height: var(--openbot-leading-md);
 }
@@ -34,30 +28,8 @@
   display: grid;
 }
 
-/* A group of related fields on a raised surface. */
-.event-check-card {
-  border: 1px solid var(--openbot-border);
-  border-radius: var(--openbot-radius-lg);
-  background: var(--openbot-bg-surface);
-  padding: var(--openbot-space-3);
-}
-
 .event-check-code {
   font-family: var(--openbot-font-mono);
-}
-
-/* A shared Field inside the panel keeps the panel's label look, so it sits with the plain fields. */
-.event-check-field > .ui-label {
-  margin: 0 0 var(--openbot-space-1-5) var(--openbot-space-2);
-  color: var(--openbot-text-secondary);
-  font-size: var(--openbot-text-md);
-  font-weight: var(--openbot-weight-regular);
-  line-height: var(--openbot-leading-md);
-}
-
-.event-check-field > .ui-field-description,
-.event-check-field > .ui-field-error {
-  margin-inline: var(--openbot-space-2);
 }
 
 /* The unit sits beside the number it belongs to. */
@@ -119,17 +91,10 @@
   color: var(--openbot-warning-text);
 }
 
-.event-check-variable-actions,
 .event-check-run-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--openbot-space-2);
-}
-
-.event-check-variable-actions {
-  justify-content: flex-end;
-  margin-top: calc(var(--openbot-space-1) * -1);
-  margin-bottom: var(--openbot-space-3);
 }
 
 .event-check-run-actions {
@@ -269,29 +234,6 @@
   margin: 0 var(--openbot-space-2);
 }
 
-/* Section headings are bolder than the field labels below them. */
-.event-check-section h3,
-.event-check-card h4 {
-  margin: 0 0 var(--openbot-space-2) var(--openbot-space-2);
-  color: var(--openbot-text-primary);
-  font-size: var(--openbot-text-md);
-  font-weight: var(--openbot-weight-semibold);
-  line-height: var(--openbot-leading-md);
-}
-
-.event-check-card h4 {
-  margin: 0 0 var(--openbot-space-1);
-  font-weight: var(--openbot-weight-medium);
-}
-
-.event-check-card .event-check-help {
-  margin-inline: 0;
-}
-
-.event-check-config-field .event-check-field-help {
-  margin-top: calc(var(--openbot-space-1) * -1);
-}
-
 .event-check-details > summary {
   display: flex;
   align-items: center;
@@ -335,10 +277,6 @@
   color: var(--openbot-text-primary);
 }
 
-.event-check-section .settings-field {
-  margin-bottom: var(--openbot-space-2);
-}
-
 .event-check-details-body .settings-field {
   margin-bottom: var(--openbot-space-3);
 }
@@ -353,26 +291,9 @@
   resize: vertical;
 }
 
-.event-check-editor > .event-check-section,
 .event-check-editor > .event-check-details,
 .event-check-editor > .event-check-help {
   margin: 0;
-}
-
-/* Each top-level section starts below a divider, so the long form reads as groups. */
-.event-check-editor > .event-check-section:not(.event-check-card) {
-  border-top: 1px solid var(--openbot-border);
-  padding-top: var(--openbot-space-4);
-}
-
-.event-check-card .ui-switch-field + .settings-field {
-  margin-top: var(--openbot-space-3);
-}
-
-.event-check-card > .settings-field:last-child,
-.event-check-card > .event-check-variable:last-child .settings-field,
-.event-check-card > .event-check-config-field:last-child .settings-field {
-  margin-bottom: 0;
 }
 
 /* A setting that is filled from a list the program reads from the person's account. */
@@ -505,4 +426,69 @@
   padding: var(--openbot-space-3);
   border: 1px solid var(--openbot-border);
   border-radius: var(--openbot-radius-lg);
+}
+
+/*
+ * The event check list and editor on the settings design system: groups of rows (`SettingsGroup`,
+ * `SettingsRow`) in the page grid of the panel, as an agent's routines are.
+ */
+.event-check-list-view .event-check-intro {
+  margin: 0;
+}
+
+.ui-settings-row-control > .event-check-segmented {
+  min-width: 0;
+}
+
+.ui-settings-row-control > .event-check-segmented,
+.ui-settings-row.event-check-schedule {
+  margin: 0;
+}
+
+.ui-settings-row-control > .event-check-run-actions {
+  margin-inline: 0;
+}
+
+.settings-modal-card > .ui-settings-row.event-check-config-field {
+  gap: var(--openbot-space-2);
+}
+
+.settings-modal-card > .event-check-history {
+  margin: 0;
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+}
+
+.event-check-variable-controls {
+  display: grid;
+  min-width: 0;
+  gap: var(--openbot-space-2);
+}
+
+.event-check-variable-controls > .event-check-variable-remove {
+  justify-self: end;
+}
+
+.event-check-variable + .event-check-variable {
+  border-top: 0;
+}
+
+.event-check-field-error {
+  color: var(--openbot-danger);
+}
+
+/* The read options open under their summary as a group card of rows. */
+.event-check-details > .event-check-details-body {
+  padding: 0 var(--openbot-space-3) var(--openbot-space-3);
+}
+
+.settings-modal-card > .ui-settings-row .event-check-schema {
+  margin: var(--openbot-space-2) 0 0;
+}
+
+/* A long choice wraps inside its half of the switch, never past the edge of the panel. */
+.ui-settings-row-control > .event-check-segmented .ui-button {
+  min-width: 0;
+  height: auto;
+  white-space: normal;
+  text-wrap: balance;
 }

@@ -163,7 +163,8 @@
  * The model picker in this form reads as a form control, like the inputs above it: the same
  * border, radius and background, and no press-down scale, so opening it never moves it.
  */
-.first-agent-fields .provider-model-trigger-field {
+.first-agent-fields .provider-model-trigger-field,
+.new-agent-dialog .provider-model-trigger-field {
   border: 1px solid var(--openbot-border-strong);
   border-radius: var(--openbot-radius-md);
   background: var(--openbot-bg-control);
@@ -171,16 +172,20 @@
 }
 
 .first-agent-fields .provider-model-trigger-field:hover:not(:disabled),
-.first-agent-fields .provider-model-trigger-field[aria-expanded="true"] {
+.first-agent-fields .provider-model-trigger-field[aria-expanded="true"],
+.new-agent-dialog .provider-model-trigger-field:hover:not(:disabled),
+.new-agent-dialog .provider-model-trigger-field[aria-expanded="true"] {
   border-color: var(--openbot-border-strong);
   background: var(--openbot-bg-control);
 }
 
-.first-agent-fields .provider-model-trigger-field:active:not(:disabled) {
+.first-agent-fields .provider-model-trigger-field:active:not(:disabled),
+.new-agent-dialog .provider-model-trigger-field:active:not(:disabled) {
   transform: none;
 }
 
-.first-agent-fields .provider-model-trigger-field:focus-visible {
+.first-agent-fields .provider-model-trigger-field:focus-visible,
+.new-agent-dialog .provider-model-trigger-field:focus-visible {
   border-color: var(--openbot-border-focus);
   outline: none;
 }
@@ -436,7 +441,7 @@
   background: var(--openbot-accent-soft);
 }
 
-/* A phone: the faces scroll in one row instead of wrapping into three. */
+/* A phone: the faces scroll in one row instead of wrapping into three. The ideas wrap, so none is cut off. */
 @media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {
   .new-agent-identity {
     align-items: flex-start;
@@ -452,15 +457,5 @@
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
-  }
-
-  .new-agent-idea-list {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .new-agent-idea-list > li {
-    flex: 0 0 auto;
   }
 }

@@ -262,6 +262,13 @@ export const messages = {
   "routine.settings.deleteConsequence":
     "¿Borrar «{name}»? Deja de ejecutarse y se borra su historial de ejecuciones. No se puede deshacer.",
   "routine.settings.discardNew": "¿Descartar la nueva rutina «{name}»? No se guardó nada.",
+  "routine.settings.deleteTitle": "¿Eliminar «{name}»?",
+  "routine.settings.deleteDescription":
+    "Deja de ejecutarse y se borra su historial de ejecuciones. No se puede deshacer.",
+  "routine.settings.deleteRow": "Eliminar esta rutina",
+  "routine.settings.deleteRowDescription": "Deja de ejecutarse y se borra su historial de ejecuciones.",
+  "routine.settings.discardRow": "Descartar esta rutina nueva",
+  "routine.settings.discardConfirmNew": "Descartar rutina",
   "routine.settings.unnamed": "rutina sin nombre",
   "routine.settings.required": "(obligatorio)",
   "routine.settings.testNeedsSave": "Guarda la rutina antes de hacer una prueba.",

@@ -7,6 +7,9 @@
  * The agent efficiency and learning routes answer too, so an agent's settings show the weekly
  * review, the settings history and the memory actions (`scripts/agent-settings-page-e2e.ts`).
  *
+ * `?routines=1` also serves the event routines, the event checks and the schedule of the host, with a
+ * routine for Chief, so its routines, its checks and the Schedule page show (`scripts/agent-flows-settings-e2e.ts`).
+ *
  * `?role=member` signs in as a member, so the check sees what a member does not get.
  * `?theme=light` shows the light theme.
  * `?workspace=off` is a host without the workspace, so a channel opens in the older channel view with
@@ -14,9 +17,16 @@
  */
 import type { PerformanceReview } from "@openbot/contracts/agent-efficiency";
 import type { SettingsCheckpoint } from "@openbot/contracts/agent-learning";
-import { DEFAULT_WORKSPACE_SETTINGS, type TeamRole } from "@openbot/contracts/ipc";
+import { DEFAULT_WORKSPACE_SETTINGS, type Routine, type TeamRole } from "@openbot/contracts/ipc";
+import {
+  AGENT_BACKUP_MODELS_CAPABILITY,
+  AGENT_BACKUP_MODELS_ROUTES,
+} from "@openbot/contracts/team-protocol/agent-backup-models-v1";
 import { AGENT_EFFICIENCY_ROUTES } from "@openbot/contracts/team-protocol/agent-efficiency-v1";
 import { AGENT_LEARNING_ROUTES } from "@openbot/contracts/team-protocol/agent-learning-v1";
+import { EVENT_CHECK_API_ROUTES } from "@openbot/contracts/team-protocol/event-check-api-v1";
+import { EVENT_CHECKS_CAPABILITY, EVENT_CHECKS_ROUTES } from "@openbot/contracts/team-protocol/event-checks-v1";
+import { EVENTS_CAPABILITY, EVENTS_ROUTES } from "@openbot/contracts/team-protocol/events-v1";
 import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
 import { HOST_ADMIN_CAPABILITY } from "@openbot/contracts/team-protocol/host-admin-v1";
 import { HOST_BACKUPS_ROUTES, type HostBackupsOverview } from "@openbot/contracts/team-protocol/host-backups-v1";
@@ -46,6 +56,7 @@ const params = new URLSearchParams(window.location.search);
 const roleParam = params.get("role");
 const role: TeamRole = roleParam === "member" || roleParam === "admin" ? roleParam : "owner";
 const withoutWorkspace = params.get("workspace") === "off";
+const routines = params.get("routines") === "1";
 if (params.get("theme") === "light") document.documentElement.dataset.openbotColorScheme = "light";
 
 const BACKUPS: HostBackupsOverview = {
@@ -116,8 +127,64 @@ function wholeNumbers<T>(value: T): T {
 function adminRuntime(mock: ReturnType<typeof createMockOpenBot>): WebAdminRuntime {
   let cloud: CloudReady = wholeNumbers(CLOUD_CONNECTED);
   window.settingsHarnessCalls = [];
-  const request: WebAdminRuntime["request"] = async (_method, path, decode, body) => {
+  // The input of an event or check route is the call's own input (`eventBody` in team-admin-requests.ts).
+  // A copy of the body, read as the mock call takes it.
+  const input = () => JSON.parse(JSON.stringify(body ?? null));
+  let body: unknown;
+  // Chief moves to a smaller model when a usage limit holds it, and asks first.
+  let backupModels: unknown = { automatic: false, order: [{ provider: "codex", model: "gpt-5.6-terra" }] };
+  const request: WebAdminRuntime["request"] = async (_method, path, decode, sent) => {
     window.settingsHarnessCalls?.push(path);
+    body = sent;
+    if (routines) {
+      const runs = /^\/v1\/agents\/([^/]+)\/routines(?:\/([^/]+)\/runs)?/u.exec(path);
+      if (runs?.[1] && !runs[2]) return decode(await mock.api.agent.listRoutines(decodeURIComponent(runs[1])));
+      if (runs?.[1] && runs[2]) return decode([]);
+      const events = mock.api.events;
+      const checks = mock.api.eventChecks;
+      if (path === EVENT_CHECK_API_ROUTES.environment) return decode(await checks.environment(input()));
+      if (path === EVENT_CHECK_API_ROUTES.setEnvironment) return decode(await checks.setEnvironment(input()));
+      if (path === EVENT_CHECK_API_ROUTES.test) return decode(await checks.test(input()));
+      // A host with `event-check-api-v1` takes the other check calls at its own prefix.
+      switch (path.replace("/v1/event-check-api/", "/v1/event-checks/")) {
+        case AGENT_BACKUP_MODELS_ROUTES.settings:
+          return decode({ backupModels, usageLimitReturn: null });
+        case AGENT_BACKUP_MODELS_ROUTES.update: {
+          const next = input().backupModels;
+          backupModels = next ?? null;
+          return decode({ backupModels, usageLimitReturn: null });
+        }
+        case EVENTS_ROUTES.status:
+          return decode(await events.getStatus(SERVER));
+        case EVENTS_ROUTES.listRoutines:
+          return decode(await events.listRoutines(input(), SERVER));
+        case EVENTS_ROUTES.saveRoutine:
+          return decode(await events.saveRoutine(input(), SERVER));
+        case EVENTS_ROUTES.deleteRoutine:
+          await events.deleteRoutine(input(), SERVER);
+          return decode(null);
+        case EVENTS_ROUTES.testRoutine:
+          await events.testRoutine(input(), SERVER);
+          return decode(null);
+        case EVENTS_ROUTES.listActivity:
+          return decode(await events.listActivity(input(), SERVER));
+        case EVENT_CHECKS_ROUTES.list:
+          return decode(await checks.list(input()));
+        case EVENT_CHECKS_ROUTES.save:
+          return decode(await checks.save(input()));
+        case EVENT_CHECKS_ROUTES.remove:
+          await checks.remove(input());
+          return decode(null);
+        case EVENT_CHECKS_ROUTES.history:
+          return decode(await checks.history(input()));
+        case EVENT_CHECKS_ROUTES.checkNow:
+          return decode(await checks.checkNow(input()));
+        case EVENT_CHECKS_ROUTES.accounts:
+          return decode(await checks.accounts(input()));
+        case EVENT_CHECKS_ROUTES.tools:
+          return decode(await checks.tools(input()));
+      }
+    }
     switch (path) {
       case HOST_CLOUD_BACKUPS_ROUTES.overview:
         return decode(cloud);
@@ -201,8 +268,77 @@ function adminRuntime(mock: ReturnType<typeof createMockOpenBot>): WebAdminRunti
   return { request, team: mock.api.host };
 }
 
+/** The preview host's id, which the desktop events calls of the mock take. */
+const SERVER = "preview-host";
+
+/** Chief's routine on the Schedule page, from the released routine route. */
+const SCHEDULED: Routine = {
+  id: "routine-resumen",
+  agentId: "chief",
+  name: "Resumen de la mañana",
+  instruction: "Resume los pedidos nuevos y lo que falta por entregar hoy.",
+  active: true,
+  timezone: "Europe/Madrid",
+  trigger: {
+    id: "trigger-resumen",
+    routineId: "routine-resumen",
+    schedule: { kind: "weekdays", time: "08:00" },
+    nextRunAt: "2026-11-27T07:00:00.000Z",
+    createdAt: "2026-11-20T09:00:00.000Z",
+    updatedAt: "2026-11-20T09:00:00.000Z",
+  },
+  createdAt: "2026-11-20T09:00:00.000Z",
+  updatedAt: "2026-11-20T09:00:00.000Z",
+};
+
+/** Chief's routines and its check, as the events and check routes answer them. */
+function seedRoutines(mock: ReturnType<typeof createMockOpenBot>): void {
+  const owner = { kind: "agent", id: "chief" } as const;
+  void mock.api.events.saveRoutine(
+    {
+      owner,
+      name: SCHEDULED.name,
+      instruction: SCHEDULED.instruction,
+      active: true,
+      timezone: SCHEDULED.timezone,
+      trigger: { kind: "schedule", schedule: { kind: "weekdays", time: "08:00" } },
+    },
+    SERVER,
+  );
+  void mock.api.events.saveRoutine(
+    {
+      owner,
+      name: "Revisión semanal",
+      instruction: "Revisa el trabajo abierto y prepara las prioridades de la semana.",
+      active: false,
+      timezone: SCHEDULED.timezone,
+      trigger: { kind: "schedule", schedule: { kind: "weekly", weekday: 5, time: "16:00" } },
+    },
+    SERVER,
+  );
+  void mock.api.eventChecks.save({
+    agentId: "chief",
+    name: "Pedidos nuevos",
+    instruction: "Lee cada pedido nuevo y avísame si falta algún dato.",
+    active: true,
+    timezone: SCHEDULED.timezone,
+    schedule: { kind: "interval", amount: 5, unit: "minutes", anchorAt: "2026-11-20T08:00:00.000Z" },
+    selfEvents: { mode: "exclude", connectionId: "preview-linear", actorPointer: "/creator/id", accountActorIds: [] },
+    source: {
+      kind: "mcp",
+      connectionId: "preview-linear",
+      toolName: "list_issues",
+      argumentsJson: "{}",
+      cursorArgument: "cursor",
+      nextCursorPointer: "/cursor",
+    },
+    selection: { itemsPointer: "/issues", idPointer: "/id", revisionPointer: "/updatedAt" },
+  });
+}
+
 const runtime: WebRuntimeFactory = (_accountId, events) => {
   const mock = createMockOpenBot({
+    ...(routines ? { routines: { chief: [SCHEDULED] } } : {}),
     channels: seeds(WEB_PREVIEW_MEMBER_ID),
     channelMemberId: WEB_PREVIEW_MEMBER_ID,
     spaces: [
@@ -213,11 +349,16 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
       },
     ],
   });
+  if (routines) seedRoutines(mock);
   return mockWebRuntimeFor(mock, events, {
     role,
     admin: adminRuntime(mock),
     // The fork host capability is the workspace's own, so a host without the workspace has neither.
-    capabilities: withoutWorkspace ? [HOST_ADMIN_CAPABILITY] : [FORK_HOST_CAPABILITY, HOST_ADMIN_CAPABILITY],
+    capabilities: [
+      ...(withoutWorkspace ? [] : [FORK_HOST_CAPABILITY]),
+      HOST_ADMIN_CAPABILITY,
+      ...(routines ? [EVENTS_CAPABILITY, EVENT_CHECKS_CAPABILITY, AGENT_BACKUP_MODELS_CAPABILITY] : []),
+    ],
     withoutWorkspace,
   });
 };

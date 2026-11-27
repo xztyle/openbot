@@ -4,7 +4,7 @@ import {
   type EventCheckApi,
   type EventCheckEnvironmentStatus,
 } from "@openbot/contracts/event-checks";
-import { Button, Input, NativeSelect, Text } from "@openbot/ui";
+import { Button, Input, NativeSelect, SettingsGroup, SettingsRow } from "@openbot/ui";
 import { createEffect, createStore, createUniqueId, For, onCleanup, Show } from "solid-js";
 import { useText } from "../../text";
 
@@ -157,124 +157,141 @@ export function EventCheckEnvironmentSettings(props: {
   }
   const off = () => Boolean(props.busy) || state.busy;
   return (
-    <section class="event-check-section event-check-card" aria-labelledby={headingId}>
-      <h4 id={headingId}>{t("agentSettings.eventCheck.environment")}</h4>
-      <Text as="p" variant="caption" tone="muted" class="event-check-help">
-        {t("agentSettings.eventCheck.environmentHelp")}
-      </Text>
-      <Show when={state.variables.some((variable) => variable.reapprove)}>
-        <div class="event-check-variable">
-          <Text as="p" variant="caption" tone="muted" class="event-check-help" role="alert">
-            {t("agentSettings.eventCheck.reapproveHelp", { program: props.check.source.toolName })}
-          </Text>
-          <Show when={props.approveBlocked}>
-            <Text as="p" variant="caption" tone="muted" id={reasonId} class="event-check-help">
-              {t("agentSettings.eventCheck.environmentDisabled")}
-            </Text>
-          </Show>
-          <Button
-            variant="secondary"
-            type="button"
-            size="sm"
-            aria-describedby={props.approveBlocked ? reasonId : undefined}
-            disabled={off() || props.approveBlocked}
-            onClick={() => void approve()}
+    <>
+      <SettingsGroup
+        title={<span id={headingId}>{t("agentSettings.eventCheck.environment")}</span>}
+        description={t("agentSettings.eventCheck.environmentHelp")}
+      >
+        <Show when={state.variables.some((variable) => variable.reapprove)}>
+          <SettingsRow
+            label={t("agentSettings.eventCheck.approveProgram")}
+            description={
+              <span role="alert">
+                {t("agentSettings.eventCheck.reapproveHelp", { program: props.check.source.toolName })}
+              </span>
+            }
+            help={
+              props.approveBlocked ? (
+                <span id={reasonId}>{t("agentSettings.eventCheck.environmentDisabled")}</span>
+              ) : undefined
+            }
           >
-            {t("agentSettings.eventCheck.approveProgram")}
-          </Button>
-        </div>
-      </Show>
-      <For each={state.variables} keyed={(variable) => variable.name}>
-        {(variable, index) => {
-          const removing = () => props.removed[variable().name] === true;
-          const typed = () => (props.values[variable().name] ?? "") !== "";
-          const linking = () => typedLink(props.values[variable().name]);
-          return (
-            <div class="event-check-variable">
-              <label class="settings-field">
-                <span>
-                  <Show when={props.labels?.[variable().name]} fallback={<code>{variable().name}</code>}>
-                    {(label) => label()}
-                  </Show>{" "}
-                  —{" "}
-                  <span class={variable().configured ? "event-check-variable-set" : "event-check-variable-missing"}>
-                    {t(
-                      variable().configured
-                        ? "agentSettings.eventCheck.variableSet"
-                        : "agentSettings.eventCheck.variableMissing",
-                    )}
-                  </span>
-                </span>
-                <Input
-                  type="password"
-                  autocomplete="new-password"
-                  value={linking() ? "" : (props.values[variable().name] ?? "")}
-                  maxlength={8192}
-                  placeholder={t("agentSettings.eventCheck.variablePlaceholder")}
-                  aria-describedby={removing() || typed() ? noteId(index()) : undefined}
-                  disabled={off() || removing()}
-                  onInput={(event) => props.onValue(variable().name, event.currentTarget.value)}
-                />
-              </label>
-              <Show when={state.secrets.length > 0}>
-                <NativeSelect
-                  size="sm"
-                  aria-label={t("agentSettings.eventCheck.useSecret")}
-                  value={linking() ?? (typed() || removing() ? "" : (variable().linkedSecret ?? ""))}
-                  disabled={off() || removing()}
-                  onChange={(event) =>
-                    props.onValue(
-                      variable().name,
-                      event.currentTarget.value ? `${EVENT_CHECK_SECRET_LINK_PREFIX}${event.currentTarget.value}` : "",
-                    )
-                  }
-                >
-                  <option value="">{t("agentSettings.eventCheck.useSecret")}</option>
-                  <For each={state.secrets}>{(secret) => <option value={secret}>{secret}</option>}</For>
-                  {/* A link to a key that Secrets no longer holds still shows, so the select reads true. */}
-                  <Show when={variable().linkedSecret && !state.secrets.includes(variable().linkedSecret ?? "")}>
-                    <option value={variable().linkedSecret}>{variable().linkedSecret}</option>
+            <Button
+              variant="outline"
+              type="button"
+              size="sm"
+              aria-describedby={props.approveBlocked ? reasonId : undefined}
+              disabled={off() || props.approveBlocked}
+              onClick={() => void approve()}
+            >
+              {t("agentSettings.eventCheck.approveProgram")}
+            </Button>
+          </SettingsRow>
+        </Show>
+        <For each={state.variables} keyed={(variable) => variable.name}>
+          {(variable, index) => {
+            const removing = () => props.removed[variable().name] === true;
+            const typed = () => (props.values[variable().name] ?? "") !== "";
+            const linking = () => typedLink(props.values[variable().name]);
+            const inputId = `${headingId}-${index()}`;
+            return (
+              <SettingsRow
+                layout="stack"
+                class="event-check-variable"
+                controlId={inputId}
+                label={
+                  <>
+                    <Show when={props.labels?.[variable().name]} fallback={<code>{variable().name}</code>}>
+                      {(label) => label()}
+                    </Show>{" "}
+                    —{" "}
+                    <span class={variable().configured ? "event-check-variable-set" : "event-check-variable-missing"}>
+                      {t(
+                        variable().configured
+                          ? "agentSettings.eventCheck.variableSet"
+                          : "agentSettings.eventCheck.variableMissing",
+                      )}
+                    </span>
+                  </>
+                }
+                help={
+                  <>
+                    <Show when={!typed() && !removing() && variable().linkedSecret}>
+                      {(secret) => <span>{t("agentSettings.eventCheck.linkedSecret", { secret: secret() })}</span>}
+                    </Show>
+                    <Show when={removing() || typed()}>
+                      <span id={noteId(index())}>
+                        {removing()
+                          ? t("agentSettings.eventCheck.variableRemoving", { action: props.saveAction })
+                          : linking()
+                            ? t("agentSettings.eventCheck.linkPending", {
+                                secret: linking() ?? "",
+                                action: props.saveAction,
+                              })
+                            : t("agentSettings.eventCheck.variablePending", { action: props.saveAction })}
+                      </span>
+                    </Show>
+                  </>
+                }
+              >
+                <div class="event-check-variable-controls">
+                  <Input
+                    id={inputId}
+                    type="password"
+                    autocomplete="new-password"
+                    value={linking() ? "" : (props.values[variable().name] ?? "")}
+                    maxlength={8192}
+                    placeholder={t("agentSettings.eventCheck.variablePlaceholder")}
+                    aria-describedby={removing() || typed() ? noteId(index()) : undefined}
+                    disabled={off() || removing()}
+                    onInput={(event) => props.onValue(variable().name, event.currentTarget.value)}
+                  />
+                  <Show when={state.secrets.length > 0}>
+                    <NativeSelect
+                      size="sm"
+                      aria-label={t("agentSettings.eventCheck.useSecret")}
+                      value={linking() ?? (typed() || removing() ? "" : (variable().linkedSecret ?? ""))}
+                      disabled={off() || removing()}
+                      onChange={(event) =>
+                        props.onValue(
+                          variable().name,
+                          event.currentTarget.value
+                            ? `${EVENT_CHECK_SECRET_LINK_PREFIX}${event.currentTarget.value}`
+                            : "",
+                        )
+                      }
+                    >
+                      <option value="">{t("agentSettings.eventCheck.useSecret")}</option>
+                      <For each={state.secrets}>{(secret) => <option value={secret}>{secret}</option>}</For>
+                      {/* A link to a key that Secrets no longer holds still shows, so the select reads true. */}
+                      <Show when={variable().linkedSecret && !state.secrets.includes(variable().linkedSecret ?? "")}>
+                        <option value={variable().linkedSecret}>{variable().linkedSecret}</option>
+                      </Show>
+                    </NativeSelect>
                   </Show>
-                </NativeSelect>
-              </Show>
-              <Show when={!typed() && !removing() && variable().linkedSecret}>
-                {(secret) => (
-                  <Text as="p" variant="caption" tone="muted" class="event-check-help">
-                    {t("agentSettings.eventCheck.linkedSecret", { secret: secret() })}
-                  </Text>
-                )}
-              </Show>
-              <Show when={removing() || typed()}>
-                <Text as="p" variant="caption" tone="muted" id={noteId(index())} class="event-check-help">
-                  {removing()
-                    ? t("agentSettings.eventCheck.variableRemoving", { action: props.saveAction })
-                    : linking()
-                      ? t("agentSettings.eventCheck.linkPending", { secret: linking() ?? "", action: props.saveAction })
-                      : t("agentSettings.eventCheck.variablePending", { action: props.saveAction })}
-                </Text>
-              </Show>
-              <div class="event-check-variable-actions">
-                <Button
-                  variant="ghost"
-                  type="button"
-                  size="sm"
-                  disabled={off() || (!removing() && !variable().configured && !variable().linkedSecret)}
-                  onClick={() => props.onRemove(variable().name, !removing())}
-                >
-                  {removing()
-                    ? t("agentSettings.eventCheck.keepVariable")
-                    : t("agentSettings.eventCheck.removeVariable")}
-                </Button>
-              </div>
-            </div>
-          );
-        }}
-      </For>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    size="sm"
+                    class="event-check-variable-remove"
+                    disabled={off() || (!removing() && !variable().configured && !variable().linkedSecret)}
+                    onClick={() => props.onRemove(variable().name, !removing())}
+                  >
+                    {removing()
+                      ? t("agentSettings.eventCheck.keepVariable")
+                      : t("agentSettings.eventCheck.removeVariable")}
+                  </Button>
+                </div>
+              </SettingsRow>
+            );
+          }}
+        </For>
+      </SettingsGroup>
       <Show when={state.error}>
         <p class="agent-settings-save-error" role="alert">
           {state.error}
         </p>
       </Show>
-    </section>
+    </>
   );
 }

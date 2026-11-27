@@ -93,6 +93,11 @@ export const messages = {
   "agentSettings.eventCheck.timing": "Cuándo comprobar",
   "agentSettings.eventCheck.activity": "Actividad",
   "agentSettings.eventCheck.deleteNow": "Eliminar ahora",
+  "agentSettings.eventCheck.deleteTitle": "¿Eliminar «{name}»?",
+  "agentSettings.eventCheck.deleteDescription":
+    "El agente deja de buscar eventos nuevos con ella. No se puede deshacer.",
+  "agentSettings.eventCheck.deleteRow": "Eliminar esta comprobación",
+  "agentSettings.eventCheck.deleteRowDescription": "El agente deja de buscar eventos nuevos con ella.",
   "agentSettings.eventCheck.empty": "Aún no hay comprobaciones de eventos.",
   "agentSettings.eventCheck.failed": "No se pudo actualizar la comprobación de eventos.",
   "agentSettings.eventCheck.loading": "Cargando las comprobaciones de eventos…",

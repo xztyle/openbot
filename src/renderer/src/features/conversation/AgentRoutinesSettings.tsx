@@ -32,7 +32,10 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  SwitchField,
+  SettingsGroup,
+  SettingsHelp,
+  SettingsRow,
+  Switch,
   Text,
   Textarea,
   toast,
@@ -813,14 +816,14 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
         <Show
           when={draft()}
           fallback={
-            <div class="agent-routines-list-view">
-              <Show when={!loading()} fallback={<p class="agent-routines-empty">{t("routine.settings.loading")}</p>}>
+            <div class="agent-routines-list-view settings-panel-page">
+              <Show when={!loading()} fallback={<SettingsHelp>{t("routine.settings.loading")}</SettingsHelp>}>
                 <Show
                   when={routines().length > 0}
-                  fallback={<p class="agent-routines-empty">{t("routine.settings.empty")}</p>}
+                  fallback={<SettingsHelp>{t("routine.settings.empty")}</SettingsHelp>}
                 >
                   <HostedUpsellRoutinesNotice count={routines().filter((routine) => routine.active).length} />
-                  <div class="agent-routines-list">
+                  <SettingsGroup label={t("routine.settings.routines")}>
                     <For each={routines()}>
                       {(routine) => (
                         <div class="agent-routine-list-item">
@@ -868,7 +871,7 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
                           {/* A done one-time routine needs a new time to run again, so only the editor resumes it. */}
                           <Show when={!routineCompleted(routine)}>
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               type="button"
                               size="sm"
                               class="agent-routine-row-action"
@@ -886,112 +889,59 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
                         </div>
                       )}
                     </For>
-                  </div>
+                  </SettingsGroup>
                 </Show>
               </Show>
             </div>
           }
         >
           {(current) => (
-            <div class="agent-routine-editor">
+            <div class="agent-routine-editor settings-panel-page">
+              {/* The routine saves with its own Save: every field below, the switch too, waits for it. */}
               <div class="agent-routine-editor-actions">
-                <SwitchField
-                  class="agent-routine-active-toggle"
-                  label={current().active ? t("routine.settings.active") : t("routine.settings.paused")}
-                  checked={current().active}
-                  onChange={(active) => changeDraft((value) => ({ ...value, active }))}
-                />
-                <div class="agent-routine-action-buttons">
-                  <Show
-                    when={!confirmDelete()}
-                    fallback={
-                      <>
-                        <Button
-                          ref={(element) => queueMicrotask(() => element.focus())}
-                          variant="secondary"
-                          type="button"
-                          size="sm"
-                          disabled={deleting()}
-                          onClick={() => setConfirmDelete(false)}
-                        >
-                          {t("common.cancel")}
+                <Show
+                  when={dirty()}
+                  fallback={
+                    <>
+                      <Show when={props.port.runCommand && current().id}>
+                        <Button variant="outline" type="button" size="sm" onClick={() => void copyRunCommand()}>
+                          {t("routine.settings.copyRunCommand")}
                         </Button>
-                        <Button
-                          variant="destructive"
-                          type="button"
-                          size="sm"
-                          loading={deleting()}
-                          loadingLabel={t("common.deleting")}
-                          onClick={() => void deleteRoutine()}
-                        >
-                          {t("routine.settings.deleteNow")}
-                        </Button>
-                      </>
-                    }
-                  >
-                    <Show
-                      when={dirty()}
-                      fallback={
-                        <>
-                          <Show when={props.port.runCommand && current().id}>
-                            <Button variant="secondary" type="button" size="sm" onClick={() => void copyRunCommand()}>
-                              {t("routine.settings.copyRunCommand")}
-                            </Button>
-                          </Show>
-                          <Button
-                            type="button"
-                            size="sm"
-                            class="agent-routine-test"
-                            disabled={!current().id || !validDraft(current())}
-                            loading={testing()}
-                            loadingLabel={t("routine.settings.starting")}
-                            aria-describedby={!current().id ? "agent-routine-action-note" : undefined}
-                            onClick={() => void testRun()}
-                          >
-                            {t("routine.settings.testRun")}
-                          </Button>
-                        </>
-                      }
-                    >
+                      </Show>
                       <Button
+                        variant="outline"
                         type="button"
                         size="sm"
-                        loading={saving()}
-                        loadingLabel={t("common.saving")}
-                        onClick={() => void saveDraft()}
+                        class="agent-routine-test"
+                        disabled={!current().id || !validDraft(current())}
+                        loading={testing()}
+                        loadingLabel={t("routine.settings.starting")}
+                        aria-describedby={!current().id ? "agent-routine-action-note" : undefined}
+                        onClick={() => void testRun()}
                       >
-                        {t("common.save")}
+                        {t("routine.settings.testRun")}
                       </Button>
-                    </Show>
-                    {/* Delete comes last, away from Save, and it asks again before it acts. */}
-                    <Button variant="destructive" type="button" size="sm" onClick={() => setConfirmDelete(true)}>
-                      {t("common.delete")}
-                    </Button>
-                  </Show>
-                </div>
-              </div>
-              {/* Why Test run is off, and what Delete does, in the place of the buttons. */}
-              <Show
-                when={
-                  confirmDelete()
-                    ? t(current().id ? "routine.settings.deleteConsequence" : "routine.settings.discardNew", {
-                        name: current().name.trim() || t("routine.settings.unnamed"),
-                      })
-                    : !current().id
-                      ? t("routine.settings.testNeedsSave")
-                      : null
-                }
-              >
-                {(note) => (
-                  <Text
-                    id="agent-routine-action-note"
-                    variant="caption"
-                    tone={confirmDelete() ? "danger" : "muted"}
-                    role={confirmDelete() ? "alert" : "status"}
+                    </>
+                  }
+                >
+                  <Button
+                    type="button"
+                    size="sm"
+                    loading={saving()}
+                    loadingLabel={t("common.saving")}
+                    onClick={() => void saveDraft()}
                   >
-                    {note()}
-                  </Text>
-                )}
+                    {t("common.save")}
+                  </Button>
+                </Show>
+              </div>
+              {/* Why Test run is off. */}
+              <Show when={!current().id}>
+                <SettingsHelp>
+                  <span id="agent-routine-action-note" role="status">
+                    {t("routine.settings.testNeedsSave")}
+                  </span>
+                </SettingsHelp>
               </Show>
               <Show when={error()}>
                 {(message) => (
@@ -1001,208 +951,237 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
                 )}
               </Show>
 
-              <label class="settings-field">
-                <span>
-                  {t("routine.settings.name")}{" "}
-                  <span class="agent-routine-required" aria-hidden="true">
-                    {t("routine.settings.required")}
-                  </span>
-                </span>
-                <Input
-                  value={current().name}
-                  placeholder={t("routine.settings.namePlaceholder")}
-                  aria-required="true"
-                  maxlength={INPUT_LIMITS.routineName}
-                  limitNote={limitNote}
-                  invalid={showErrors() && !current().name.trim()}
-                  aria-describedby={showErrors() && !current().name.trim() ? "agent-routine-name-error" : undefined}
-                  onValueChange={(name) => changeDraft((value) => ({ ...value, name }))}
-                />
-                <Show when={showErrors() && !current().name.trim()}>
-                  <Text
-                    as="p"
-                    id="agent-routine-name-error"
-                    variant="caption"
-                    tone="danger"
-                    class="agent-routine-field-error"
-                  >
-                    {t("routine.settings.nameRequired")}
-                  </Text>
-                </Show>
-              </label>
-              <section class="agent-routine-when" aria-labelledby="agent-routine-when-heading">
-                <h3 id="agent-routine-when-heading">{t("routine.settings.whenToRun")}</h3>
-                {/* A host with events offers both triggers, so the choice is always in view. */}
-                <Show when={props.port.events}>
-                  <fieldset class="agent-routine-trigger-kind">
-                    <legend class="sr-only">{t("routine.trigger.kind")}</legend>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={current().triggerKind === "schedule" ? "secondary" : "ghost"}
-                      aria-pressed={current().triggerKind === "schedule" ? "true" : "false"}
-                      onClick={() => {
-                        if (current().triggerKind !== "schedule")
-                          changeDraft((value) => ({ ...value, triggerKind: "schedule" }));
-                      }}
-                    >
-                      <Clock3 class="agent-routine-trigger-kind-icon" aria-hidden="true" />
-                      {t("routine.trigger.groupSchedule")}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={current().triggerKind === "webhook" ? "secondary" : "ghost"}
-                      aria-pressed={current().triggerKind === "webhook" ? "true" : "false"}
-                      onClick={() => {
-                        if (current().triggerKind !== "webhook")
-                          changeDraft((value) => ({ ...value, triggerKind: "webhook" }));
-                      }}
-                    >
-                      <Webhook class="agent-routine-trigger-kind-icon" aria-hidden="true" />
-                      {t("routine.settings.triggerWebhook")}
-                    </Button>
-                  </fieldset>
-                </Show>
-                <Show
-                  when={current().triggerKind === "schedule"}
-                  fallback={
-                    <RoutineWebhookTrigger
-                      url={savedWebhook()?.url ?? null}
-                      saved={savedWebhook() !== null}
-                      connected={webhook.connected}
-                      eventType={current().eventType}
-                      filters={current().eventFilters}
-                      onEventTypeChange={(eventType) => changeDraft((value) => ({ ...value, eventType }))}
-                      onFiltersChange={(eventFilters) => changeDraft((value) => ({ ...value, eventFilters }))}
-                      secret={webhook.secret}
-                      onSecretDismiss={resetWebhookState}
-                      onRegenerateSecret={regenerateSecret}
-                      onSave={() => void saveDraft()}
-                      saving={saving()}
-                      onSendTest={sendTestEvent()}
-                    />
+              <SettingsGroup label={t("routine.settings.routine")}>
+                <SettingsRow
+                  layout="inline"
+                  controlId="agent-routine-active"
+                  label={t("routine.settings.active")}
+                  description={current().active ? undefined : t("routine.settings.paused")}
+                >
+                  <Switch
+                    id="agent-routine-active"
+                    aria-label={t("routine.settings.active")}
+                    checked={current().active}
+                    onChange={(active) => changeDraft((value) => ({ ...value, active }))}
+                  />
+                </SettingsRow>
+                <SettingsRow
+                  layout="stack"
+                  controlId="agent-routine-name"
+                  label={
+                    <>
+                      {t("routine.settings.name")}{" "}
+                      <span class="agent-routine-required">{t("routine.settings.required")}</span>
+                    </>
+                  }
+                  help={
+                    <Show when={showErrors() && !current().name.trim()}>
+                      <Text as="span" id="agent-routine-name-error" variant="caption" tone="danger">
+                        {t("routine.settings.nameRequired")}
+                      </Text>
+                    </Show>
                   }
                 >
-                  <RoutineSchedulePicker
-                    schedule={current().scheduleDraft}
-                    kinds={scheduleKinds()}
-                    action={triggerMenu(current)}
-                    onChange={(scheduleDraft) => changeDraft((value) => reopened(withSchedule(value, scheduleDraft)))}
+                  <Input
+                    id="agent-routine-name"
+                    value={current().name}
+                    placeholder={t("routine.settings.namePlaceholder")}
+                    aria-required="true"
+                    maxlength={INPUT_LIMITS.routineName}
+                    limitNote={limitNote}
+                    invalid={showErrors() && !current().name.trim()}
+                    aria-describedby={showErrors() && !current().name.trim() ? "agent-routine-name-error" : undefined}
+                    onValueChange={(name) => changeDraft((value) => ({ ...value, name }))}
+                  />
+                </SettingsRow>
+              </SettingsGroup>
+
+              <SettingsGroup title={t("routine.settings.whenToRun")}>
+                <SettingsRow
+                  layout="stack"
+                  class="agent-routine-when"
+                  label={t("routine.trigger.kind")}
+                  help={
+                    <Show when={current().triggerKind === "schedule"}>
+                      <span class="agent-routine-next-run">{scheduleNote(current())}</span>
+                    </Show>
+                  }
+                >
+                  <div class="agent-routine-when-controls">
+                    {/* A host with events offers both triggers, so the choice is always in view. */}
+                    <Show when={props.port.events}>
+                      <fieldset class="agent-routine-trigger-kind">
+                        <legend class="sr-only">{t("routine.trigger.kind")}</legend>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={current().triggerKind === "schedule" ? "secondary" : "ghost"}
+                          aria-pressed={current().triggerKind === "schedule" ? "true" : "false"}
+                          onClick={() => {
+                            if (current().triggerKind !== "schedule")
+                              changeDraft((value) => ({ ...value, triggerKind: "schedule" }));
+                          }}
+                        >
+                          <Clock3 class="agent-routine-trigger-kind-icon" aria-hidden="true" />
+                          {t("routine.trigger.groupSchedule")}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={current().triggerKind === "webhook" ? "secondary" : "ghost"}
+                          aria-pressed={current().triggerKind === "webhook" ? "true" : "false"}
+                          onClick={() => {
+                            if (current().triggerKind !== "webhook")
+                              changeDraft((value) => ({ ...value, triggerKind: "webhook" }));
+                          }}
+                        >
+                          <Webhook class="agent-routine-trigger-kind-icon" aria-hidden="true" />
+                          {t("routine.settings.triggerWebhook")}
+                        </Button>
+                      </fieldset>
+                    </Show>
+                    <Show
+                      when={current().triggerKind === "schedule"}
+                      fallback={
+                        <RoutineWebhookTrigger
+                          url={savedWebhook()?.url ?? null}
+                          saved={savedWebhook() !== null}
+                          connected={webhook.connected}
+                          eventType={current().eventType}
+                          filters={current().eventFilters}
+                          onEventTypeChange={(eventType) => changeDraft((value) => ({ ...value, eventType }))}
+                          onFiltersChange={(eventFilters) => changeDraft((value) => ({ ...value, eventFilters }))}
+                          secret={webhook.secret}
+                          onSecretDismiss={resetWebhookState}
+                          onRegenerateSecret={regenerateSecret}
+                          onSave={() => void saveDraft()}
+                          saving={saving()}
+                          onSendTest={sendTestEvent()}
+                        />
+                      }
+                    >
+                      <RoutineSchedulePicker
+                        schedule={current().scheduleDraft}
+                        kinds={scheduleKinds()}
+                        action={triggerMenu(current)}
+                        onChange={(scheduleDraft) =>
+                          changeDraft((value) => reopened(withSchedule(value, scheduleDraft)))
+                        }
+                      />
+                    </Show>
+                  </div>
+                </SettingsRow>
+              </SettingsGroup>
+
+              <SettingsGroup label={t("routine.settings.instruction")}>
+                <SettingsRow
+                  layout="stack"
+                  controlId="agent-routine-instruction"
+                  class="agent-routine-instruction-field"
+                  label={
+                    <>
+                      {t("routine.settings.instruction")}{" "}
+                      <span class="agent-routine-required">{t("routine.settings.required")}</span>
+                    </>
+                  }
+                  help={
+                    <>
+                      <Show when={showErrors() && !current().instruction.trim()}>
+                        <Text as="span" id="agent-routine-instruction-error" variant="caption" tone="danger">
+                          {t("routine.settings.instructionRequired")}
+                        </Text>
+                      </Show>
+                      {/* A scheduled run of an agent routine that answers only the marker posts nothing. */}
+                      <Show when={props.port.ownerNoun !== "channel"}>
+                        <span id="agent-routine-no-update-hint">{t("routine.settings.instructionNoUpdateHint")}</span>
+                      </Show>
+                    </>
+                  }
+                >
+                  <Textarea
+                    id="agent-routine-instruction"
+                    aria-required="true"
+                    limitNote={limitNote}
+                    invalid={showErrors() && !current().instruction.trim()}
+                    value={current().instruction}
+                    placeholder={
+                      props.port.ownerNoun === "channel"
+                        ? t("routine.settings.instructionPlaceholderChannel")
+                        : t("routine.settings.instructionPlaceholderAgent")
+                    }
+                    maxlength={INPUT_LIMITS.routineInstruction}
+                    aria-describedby={
+                      [
+                        showErrors() && !current().instruction.trim() ? "agent-routine-instruction-error" : "",
+                        props.port.ownerNoun === "channel" ? "" : "agent-routine-no-update-hint",
+                      ]
+                        .filter(Boolean)
+                        .join(" ") || undefined
+                    }
+                    onValueChange={(instruction) => changeDraft((value) => ({ ...value, instruction }))}
+                  />
+                </SettingsRow>
+                {/* The host does not skip a one-time run at a spent plan: it waits, so the reminder is not lost. */}
+                <Show
+                  when={
+                    props.port.limitPolicy &&
+                    !(current().triggerKind === "schedule" && current().scheduleDraft.kind === "once")
+                  }
+                >
+                  <SettingsRow
+                    label={<span id="agent-routine-limit-policy-label">{t("routine.settings.limitPolicy")}</span>}
+                  >
+                    <Select<RoutineLimitPolicy>
+                      options={[...ROUTINE_LIMIT_POLICIES]}
+                      value={current().limitPolicy}
+                      onChange={(limitPolicy) => {
+                        if (limitPolicy) changeDraft((value) => ({ ...value, limitPolicy }));
+                      }}
+                      itemComponent={(item) => (
+                        <SelectItem item={item.item}>{t(LIMIT_POLICY_LABELS[item.item.rawValue])}</SelectItem>
+                      )}
+                    >
+                      <SelectTrigger aria-labelledby="agent-routine-limit-policy-label">
+                        <SelectValue<RoutineLimitPolicy>>
+                          {(state) => t(LIMIT_POLICY_LABELS[state.selectedOption()])}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent />
+                    </Select>
+                  </SettingsRow>
+                </Show>
+                <Show when={props.port.missedPolicy && current().triggerKind === "schedule"}>
+                  <SettingsRow
+                    label={<span id="agent-routine-missed-policy-label">{t("routine.settings.missedPolicy")}</span>}
+                  >
+                    <Select<RoutineMissedPolicy>
+                      options={[...ROUTINE_MISSED_POLICIES]}
+                      value={current().missedPolicy}
+                      onChange={(missedPolicy) => {
+                        if (missedPolicy) changeDraft((value) => ({ ...value, missedPolicy }));
+                      }}
+                      itemComponent={(item) => (
+                        <SelectItem item={item.item}>{t(MISSED_POLICY_LABELS[item.item.rawValue])}</SelectItem>
+                      )}
+                    >
+                      <SelectTrigger aria-labelledby="agent-routine-missed-policy-label">
+                        <SelectValue<RoutineMissedPolicy>>
+                          {(state) => t(MISSED_POLICY_LABELS[state.selectedOption()])}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent />
+                    </Select>
+                  </SettingsRow>
+                </Show>
+                <Show when={props.port.results && (resultOptions().length > 0 || savedDestination())}>
+                  <RoutineResultDestinationField
+                    options={resultOptions()}
+                    saved={savedDestination()}
+                    value={current().destination === undefined ? savedDestination() : (current().destination ?? null)}
+                    onChange={(destination) => changeDraft((value) => ({ ...value, destination }))}
                   />
                 </Show>
-                <Show when={current().triggerKind === "schedule"}>
-                  <Text class="agent-routine-next-run" variant="caption" tone="muted">
-                    {scheduleNote(current())}
-                  </Text>
-                </Show>
-              </section>
-              <div class="settings-field agent-routine-instruction-field">
-                <span id="agent-routine-instruction-label">
-                  {t("routine.settings.instruction")}{" "}
-                  <span class="agent-routine-required" aria-hidden="true">
-                    {t("routine.settings.required")}
-                  </span>
-                </span>
-                <Textarea
-                  aria-labelledby="agent-routine-instruction-label"
-                  aria-required="true"
-                  limitNote={limitNote}
-                  invalid={showErrors() && !current().instruction.trim()}
-                  value={current().instruction}
-                  placeholder={
-                    props.port.ownerNoun === "channel"
-                      ? t("routine.settings.instructionPlaceholderChannel")
-                      : t("routine.settings.instructionPlaceholderAgent")
-                  }
-                  maxlength={INPUT_LIMITS.routineInstruction}
-                  aria-describedby={
-                    [
-                      showErrors() && !current().instruction.trim() ? "agent-routine-instruction-error" : "",
-                      props.port.ownerNoun === "channel" ? "" : "agent-routine-no-update-hint",
-                    ]
-                      .filter(Boolean)
-                      .join(" ") || undefined
-                  }
-                  onValueChange={(instruction) => changeDraft((value) => ({ ...value, instruction }))}
-                />
-                <Show when={showErrors() && !current().instruction.trim()}>
-                  <Text
-                    as="p"
-                    id="agent-routine-instruction-error"
-                    variant="caption"
-                    tone="danger"
-                    class="agent-routine-field-error"
-                  >
-                    {t("routine.settings.instructionRequired")}
-                  </Text>
-                </Show>
-                {/* A scheduled run of an agent routine that answers only the marker posts nothing. */}
-                <Show when={props.port.ownerNoun !== "channel"}>
-                  <Text id="agent-routine-no-update-hint" variant="caption" tone="muted">
-                    {t("routine.settings.instructionNoUpdateHint")}
-                  </Text>
-                </Show>
-              </div>
-              {/* The host does not skip a one-time run at a spent plan: it waits, so the reminder is not lost. */}
-              <Show
-                when={
-                  props.port.limitPolicy &&
-                  !(current().triggerKind === "schedule" && current().scheduleDraft.kind === "once")
-                }
-              >
-                <div class="settings-field">
-                  <span id="agent-routine-limit-policy-label">{t("routine.settings.limitPolicy")}</span>
-                  <Select<RoutineLimitPolicy>
-                    options={[...ROUTINE_LIMIT_POLICIES]}
-                    value={current().limitPolicy}
-                    onChange={(limitPolicy) => {
-                      if (limitPolicy) changeDraft((value) => ({ ...value, limitPolicy }));
-                    }}
-                    itemComponent={(item) => (
-                      <SelectItem item={item.item}>{t(LIMIT_POLICY_LABELS[item.item.rawValue])}</SelectItem>
-                    )}
-                  >
-                    <SelectTrigger aria-labelledby="agent-routine-limit-policy-label">
-                      <SelectValue<RoutineLimitPolicy>>
-                        {(state) => t(LIMIT_POLICY_LABELS[state.selectedOption()])}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent />
-                  </Select>
-                </div>
-              </Show>
-              <Show when={props.port.missedPolicy && current().triggerKind === "schedule"}>
-                <div class="settings-field">
-                  <span id="agent-routine-missed-policy-label">{t("routine.settings.missedPolicy")}</span>
-                  <Select<RoutineMissedPolicy>
-                    options={[...ROUTINE_MISSED_POLICIES]}
-                    value={current().missedPolicy}
-                    onChange={(missedPolicy) => {
-                      if (missedPolicy) changeDraft((value) => ({ ...value, missedPolicy }));
-                    }}
-                    itemComponent={(item) => (
-                      <SelectItem item={item.item}>{t(MISSED_POLICY_LABELS[item.item.rawValue])}</SelectItem>
-                    )}
-                  >
-                    <SelectTrigger aria-labelledby="agent-routine-missed-policy-label">
-                      <SelectValue<RoutineMissedPolicy>>
-                        {(state) => t(MISSED_POLICY_LABELS[state.selectedOption()])}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent />
-                  </Select>
-                </div>
-              </Show>
-
-              <Show when={props.port.results && (resultOptions().length > 0 || savedDestination())}>
-                <RoutineResultDestinationField
-                  options={resultOptions()}
-                  saved={savedDestination()}
-                  value={current().destination === undefined ? savedDestination() : (current().destination ?? null)}
-                  onChange={(destination) => changeDraft((value) => ({ ...value, destination }))}
-                />
-              </Show>
+              </SettingsGroup>
 
               <RoutineRunHistory
                 runs={runs()}
@@ -1210,6 +1189,25 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
                 activity={webhookActivity()}
                 deliveries={props.port.results ? { items: deliveries(), onResend: resendDelivery } : undefined}
               />
+
+              {/* Delete is last, away from Save, and it asks first. */}
+              <SettingsGroup label={t("common.delete")}>
+                <SettingsRow
+                  label={current().id ? t("routine.settings.deleteRow") : t("routine.settings.discardRow")}
+                  description={current().id ? t("routine.settings.deleteRowDescription") : undefined}
+                >
+                  <Button
+                    variant="outline"
+                    type="button"
+                    size="sm"
+                    class="agent-routine-delete"
+                    disabled={saving()}
+                    onClick={() => setConfirmDelete(true)}
+                  >
+                    {current().id ? t("common.delete") : t("routine.settings.discardConfirmNew")}
+                  </Button>
+                </SettingsRow>
+              </SettingsGroup>
             </div>
           )}
         </Show>
@@ -1221,6 +1219,22 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
           )}
         </Show>
       </div>
+      <ConfirmDialog
+        open={confirmDelete() && draft() !== null}
+        onCancel={() => setConfirmDelete(false)}
+        // A delete that worked closes the editor and this dialog; a failure stays here and says why.
+        onConfirm={deleteRoutine}
+        error={confirmDelete() ? (error() ?? undefined) : undefined}
+        tone={draft()?.id ? "destructive" : "default"}
+        title={t(draft()?.id ? "routine.settings.deleteTitle" : "routine.settings.discardNew", {
+          name: draft()?.name.trim() || t("routine.settings.unnamed"),
+        })}
+        description={draft()?.id ? t("routine.settings.deleteDescription") : undefined}
+        confirmLabel={draft()?.id ? t("common.delete") : t("routine.settings.discardConfirmNew")}
+        pendingLabel={t("common.deleting")}
+        pending={deleting()}
+        initialFocus="cancel"
+      />
       <ConfirmDialog
         open={pendingExit() !== null}
         onCancel={() => setPendingExit(null)}

@@ -11,7 +11,6 @@ import {
   sameAgentModelChoice,
 } from "@openbot/contracts/ipc";
 import {
-  ArrowLeftRight,
   Badge,
   Button,
   Checkbox,
@@ -26,11 +25,12 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SettingsGroup,
+  SettingsHelp,
+  SettingsRow,
   Switch,
-  Text,
   Trash2,
 } from "@openbot/ui";
-import { SettingsLinkGroup } from "@openbot/ui/components/SettingsPanel";
 import { errorReference } from "@openbot/user-errors";
 import { createSignal, createUniqueId, For, Show } from "solid-js";
 import { providerAccountName } from "../../components/provider-accounts";
@@ -150,6 +150,7 @@ export interface BackupModelsPageProps {
 export function BackupModelsPage(props: BackupModelsPageProps) {
   const { t } = useText();
   const label = useOptionLabel();
+  const askId = `backup-models-ask-${createUniqueId()}`;
   const automatic = () => props.value?.automatic === true;
   const order = () => props.value?.order ?? [];
   const entries = () => order().map((choice) => backupModelOption(choice, props.source));
@@ -163,91 +164,96 @@ export function BackupModelsPage(props: BackupModelsPageProps) {
         : null,
     );
   return (
-    <div class="backup-models-page">
-      <Text as="p" variant="body-sm" tone="secondary" class="backup-models-intro">
-        {t(automatic() ? "agentSettings.backupModels.introAutomatic" : "agentSettings.backupModels.intro", {
-          model: props.ownModel,
-          name: props.agentName,
-        })}
-      </Text>
-      <SettingsLinkGroup inset class="agent-settings-runtime-rows">
-        <div class="agent-settings-switch-row">
-          <span class="settings-link-label">
-            <span class="settings-link-icon">
-              <ArrowLeftRight aria-hidden="true" />
-            </span>
-            {t("agentSettings.backupModels.ask")}
-          </span>
+    <>
+      <SettingsGroup label={t("agentSettings.backupModels.title")}>
+        <SettingsRow
+          layout="inline"
+          controlId={askId}
+          label={t("agentSettings.backupModels.ask")}
+          description={t(
+            automatic() ? "agentSettings.backupModels.introAutomatic" : "agentSettings.backupModels.intro",
+            { model: props.ownModel, name: props.agentName },
+          )}
+        >
           <Switch
-            size="sm"
+            id={askId}
             aria-label={t("agentSettings.backupModels.ask")}
             checked={!automatic()}
             onChange={(ask) => save({ automatic: !ask, order: order() })}
           />
-        </div>
-      </SettingsLinkGroup>
-      <SettingsLinkGroup inset class="agent-settings-runtime-rows" title={t("agentSettings.backupModels.order")}>
+        </SettingsRow>
+      </SettingsGroup>
+      <SettingsGroup title={t("agentSettings.backupModels.order")}>
         <Show
           when={entries().length > 0}
           fallback={
-            <Text as="p" variant="body-sm" tone="muted" class="backup-models-empty">
-              {t("agentSettings.backupModels.empty", { name: props.agentName })}
-            </Text>
+            <SettingsRow
+              label={t("agentSettings.backupModels.listLabel")}
+              description={t("agentSettings.backupModels.empty", { name: props.agentName })}
+            />
           }
         >
           <ol class="backup-models-list" aria-label={t("agentSettings.backupModels.listLabel")}>
             <For each={entries()}>
               {(entry, index) => (
-                <li class="backup-models-row" data-state={entry.state}>
-                  <span class="backup-models-number" aria-hidden="true">
-                    {index() + 1}
-                  </span>
-                  <OptionLogo provider={entry.choice.provider} />
-                  <span class="backup-models-text">
-                    <span class="backup-models-name">{label(entry)}</span>
-                    <Show when={entry.state !== "ready"}>
-                      <span class="backup-models-state">
-                        {t(
-                          entry.state === "limit"
-                            ? "agentSettings.backupModels.limited"
-                            : "agentSettings.backupModels.unavailable",
-                        )}
+                <li>
+                  <SettingsRow
+                    layout="inline"
+                    class="backup-models-row"
+                    data-state={entry.state}
+                    label={
+                      <span class="backup-models-name">
+                        <span class="backup-models-number" aria-hidden="true">
+                          {index() + 1}
+                        </span>
+                        <OptionLogo provider={entry.choice.provider} />
+                        <span class="backup-models-text">{label(entry)}</span>
                       </span>
-                    </Show>
-                  </span>
-                  <span class="backup-models-actions">
-                    <IconButton
-                      variant="ghost"
-                      size="icon-xs"
-                      label={t("agentSettings.backupModels.moveUp", { model: label(entry) })}
-                      disabled={index() === 0}
-                      onClick={() => save({ automatic: automatic(), order: move(order(), index(), -1) })}
-                    >
-                      <ChevronUp />
-                    </IconButton>
-                    <IconButton
-                      variant="ghost"
-                      size="icon-xs"
-                      label={t("agentSettings.backupModels.moveDown", { model: label(entry) })}
-                      disabled={index() === entries().length - 1}
-                      onClick={() => save({ automatic: automatic(), order: move(order(), index(), 1) })}
-                    >
-                      <ChevronDown />
-                    </IconButton>
-                    <IconButton
-                      variant="ghost"
-                      size="icon-xs"
-                      label={t("agentSettings.backupModels.remove", { model: label(entry) })}
-                      onClick={() =>
-                        save({
-                          automatic: automatic(),
-                          order: order().filter((_, position) => position !== index()),
-                        })
-                      }
-                    >
-                      <Trash2 />
-                    </IconButton>
-                  </span>
+                    }
+                    description={
+                      entry.state === "ready"
+                        ? undefined
+                        : t(
+                            entry.state === "limit"
+                              ? "agentSettings.backupModels.limited"
+                              : "agentSettings.backupModels.unavailable",
+                          )
+                    }
+                  >
+                    <span class="backup-models-actions">
+                      <IconButton
+                        variant="ghost"
+                        size="icon-sm"
+                        label={t("agentSettings.backupModels.moveUp", { model: label(entry) })}
+                        disabled={index() === 0}
+                        onClick={() => save({ automatic: automatic(), order: move(order(), index(), -1) })}
+                      >
+                        <ChevronUp />
+                      </IconButton>
+                      <IconButton
+                        variant="ghost"
+                        size="icon-sm"
+                        label={t("agentSettings.backupModels.moveDown", { model: label(entry) })}
+                        disabled={index() === entries().length - 1}
+                        onClick={() => save({ automatic: automatic(), order: move(order(), index(), 1) })}
+                      >
+                        <ChevronDown />
+                      </IconButton>
+                      <IconButton
+                        variant="ghost"
+                        size="icon-sm"
+                        label={t("agentSettings.backupModels.remove", { model: label(entry) })}
+                        onClick={() =>
+                          save({
+                            automatic: automatic(),
+                            order: order().filter((_, position) => position !== index()),
+                          })
+                        }
+                      >
+                        <Trash2 />
+                      </IconButton>
+                    </span>
+                  </SettingsRow>
                 </li>
               )}
             </For>
@@ -270,19 +276,17 @@ export function BackupModelsPage(props: BackupModelsPageProps) {
             )}
           >
             <SelectTrigger class="agent-settings-runtime-row" aria-label={t("agentSettings.backupModels.add")}>
-              <span class="settings-link-icon">
-                <Plus aria-hidden="true" />
-              </span>
+              <Plus class="backup-models-add-icon" aria-hidden="true" />
               <span class="agent-settings-runtime-label">{t("agentSettings.backupModels.add")}</span>
             </SelectTrigger>
             <SelectContent />
           </Select>
         </Show>
-      </SettingsLinkGroup>
-      <Text as="p" class="agent-settings-runtime-note" variant="caption" tone="muted">
+      </SettingsGroup>
+      <SettingsHelp>
         {t("agentSettings.backupModels.note", { model: props.ownModel, name: props.agentName })}
-      </Text>
-    </div>
+      </SettingsHelp>
+    </>
   );
 }
 

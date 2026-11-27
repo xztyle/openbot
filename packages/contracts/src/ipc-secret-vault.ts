@@ -26,6 +26,7 @@ export const SECRET_VAULT_LIMITS = {
   trash: 500,
   requests: 200,
   detail: 300,
+  folders: 500,
   passphraseMin: 8,
   passphrase: 256,
   bundle: 8 * 1024 * 1024,
@@ -165,10 +166,29 @@ export type SecretRequest =
   | { kind: "fill"; requestId: string; agentId: string; name: string; shared: boolean; createdAt: number }
   | { kind: "approve"; requestId: string; agentId: string; name: string; site: string; createdAt: number };
 
+/**
+ * Who may use the keys under a folder path, such as `universidad-online/meta`. Every key in it and
+ * in its subfolders adds these readers to its own: the access is inherited, never taken away.
+ */
+export interface SecretFolderAccess {
+  path: string;
+  agents: string[];
+  spaces: string[];
+}
+
 export interface SecretOverview {
   secrets: SecretSummary[];
   trash: TrashedSecret[];
   requests: SecretRequest[];
+  /** Folders with an access of their own. A host from before folder access sends none. */
+  folders?: SecretFolderAccess[];
+}
+
+/** The folder paths that `folder` sits in, the outermost first, itself last. */
+export function secretFolderAncestors(folder: string | undefined): string[] {
+  if (!folder) return [];
+  const parts = folder.split("/");
+  return parts.map((_, index) => parts.slice(0, index + 1).join("/"));
 }
 
 export interface SecretRef {
@@ -205,7 +225,8 @@ export type SecretVaultCall =
   | { kind: "export"; passphrase: string }
   | { kind: "import"; bundle: string; passphrase: string }
   | { kind: "fill"; requestId: string; value: string }
-  | { kind: "approve"; requestId: string; decision: "accept" | "decline" };
+  | { kind: "approve"; requestId: string; decision: "accept" | "decline" }
+  | { kind: "folder"; folder: string; agents: string[]; spaces: string[] };
 
 export type SecretVaultResult =
   | ({ kind: "overview" } & SecretOverview)
@@ -223,6 +244,7 @@ export function secretVaultCallIsOwnerOnly(call: SecretVaultCall): boolean {
     case "import":
     case "purge":
     case "approve":
+    case "folder":
       return true;
     case "update":
       return call.access !== undefined;
@@ -411,6 +433,17 @@ export function parseSecretVaultCall(value: unknown): SecretVaultCall {
     case "approve":
       if (!isIdentifier(value.requestId) || (value.decision !== "accept" && value.decision !== "decline")) fail();
       return { kind: "approve", requestId: value.requestId, decision: value.decision };
+    case "folder": {
+      if (!isBoundedString(value.folder, SECRET_VAULT_LIMITS.folder)) fail();
+      const folder = normalizeSecretFolder(value.folder);
+      if (!folder) fail();
+      return {
+        kind: "folder",
+        folder,
+        agents: idList(value.agents, SECRET_VAULT_LIMITS.agents),
+        spaces: idList(value.spaces, SECRET_VAULT_LIMITS.spaces),
+      };
+    }
     default:
       return fail();
   }
@@ -545,6 +578,19 @@ function decodeAuditRow(item: unknown): SecretAuditRow {
   };
 }
 
+function decodeFolderAccess(value: unknown): SecretFolderAccess {
+  if (!isDynamicRecord(value) || !isBoundedString(value.path, SECRET_VAULT_LIMITS.folder)) invalid();
+  try {
+    return {
+      path: value.path,
+      agents: idList(value.agents, SECRET_VAULT_LIMITS.agents),
+      spaces: idList(value.spaces, SECRET_VAULT_LIMITS.spaces),
+    };
+  } catch {
+    return invalid();
+  }
+}
+
 function list<T>(value: unknown, maximum: number, decode: (item: unknown) => T): T[] {
   if (!Array.isArray(value) || value.length > maximum) invalid();
   return value.map(decode);
@@ -561,6 +607,12 @@ export function decodeSecretVaultResult(value: unknown): SecretVaultResult {
         secrets: list(value.secrets, SECRET_VAULT_LIMITS.secrets, decodeSummary),
         trash: list(value.trash, SECRET_VAULT_LIMITS.trash, decodeTrashed),
         requests: list(value.requests, SECRET_VAULT_LIMITS.requests, decodeRequest),
+        ...present(
+          "folders",
+          value.folders === undefined
+            ? undefined
+            : list(value.folders, SECRET_VAULT_LIMITS.folders, decodeFolderAccess),
+        ),
       };
     case "detail": {
       const detail = value.detail;

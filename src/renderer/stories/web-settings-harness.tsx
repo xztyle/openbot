@@ -24,6 +24,8 @@ import {
 } from "@openbot/contracts/team-protocol/agent-backup-models-v1";
 import { AGENT_EFFICIENCY_ROUTES } from "@openbot/contracts/team-protocol/agent-efficiency-v1";
 import { AGENT_LEARNING_ROUTES } from "@openbot/contracts/team-protocol/agent-learning-v1";
+import { AGENT_MAILBOXES_ROUTES } from "@openbot/contracts/team-protocol/agent-mailboxes-v1";
+import { CONNECTOR_ACCESS_ROUTES } from "@openbot/contracts/team-protocol/connector-access-v1";
 import { EVENT_CHECK_API_ROUTES } from "@openbot/contracts/team-protocol/event-check-api-v1";
 import { EVENT_CHECKS_CAPABILITY, EVENT_CHECKS_ROUTES } from "@openbot/contracts/team-protocol/event-checks-v1";
 import { EVENTS_CAPABILITY, EVENTS_ROUTES } from "@openbot/contracts/team-protocol/events-v1";
@@ -117,6 +119,54 @@ const CHECKPOINTS: SettingsCheckpoint[] = [
     changes: [{ field: "title", before: "Jefe", after: "Jefe de equipo" }],
   },
 ];
+
+const HOUR = 3_600_000;
+const NOW = Date.parse("2026-11-26T12:00:00Z");
+const CONNECTIONS = {
+  gateway: { listening: true, publicUrl: "https://connect.delynith.com" },
+  tokens: [
+    { id: "token-1", label: "Claude en mi celular", createdAt: NOW - 240 * HOUR, lastUsedAt: NOW - 3 * HOUR },
+    { id: "token-2", label: "ChatGPT en la oficina", createdAt: NOW - 30 * HOUR, lastUsedAt: null },
+  ],
+  inboxes: [
+    {
+      routeId: "route-stripe",
+      ownerKind: "agent",
+      ownerId: "chief",
+      ownerName: "Chief",
+      routineName: "Ventas de Stripe",
+      spaceId: "general",
+      scheme: "stripe",
+      hasSecret: true,
+      lastEventAt: NOW - 2 * HOUR,
+      lastStatus: 200,
+    },
+  ],
+};
+const MAILBOXES = {
+  gateway: { listening: true, publicUrl: "https://connect.delynith.com" },
+  inboxUrl: "https://connect.delynith.com/mail/in",
+  workerUrl: "https://atelier-mail.delynith.workers.dev",
+  hasSecret: true,
+  lastMailAt: NOW - HOUR,
+  lastStatus: 200,
+  mailboxes: [
+    {
+      id: "mailbox-1",
+      address: "ventas@aprendivo.com",
+      displayName: "Lucía de Aprendivo",
+      agentId: "chief",
+      agentName: "Chief",
+      spaceId: "general",
+      mode: "reply",
+      createdAt: NOW - 400 * HOUR,
+      lastMailAt: NOW - HOUR,
+      received: 128,
+      sentToday: 6,
+      ownerApprovesEverySend: false,
+    },
+  ],
+};
 
 /** The fixture's sizes are fractions of a gigabyte; the wire carries whole bytes. */
 function wholeNumbers<T>(value: T): T {
@@ -261,6 +311,11 @@ function adminRuntime(mock: ReturnType<typeof createMockOpenBot>): WebAdminRunti
           forgotten: confirm ? 1 : 0,
         });
       }
+      // The chat app links, webhooks and mailboxes under Keys and passwords.
+      case CONNECTOR_ACCESS_ROUTES.state:
+        return decode(CONNECTIONS);
+      case AGENT_MAILBOXES_ROUTES.state:
+        return decode(MAILBOXES);
       default:
         throw new Error(`Not in this fixture: ${path}`);
     }

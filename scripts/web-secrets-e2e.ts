@@ -144,6 +144,33 @@ async function flows(context: BrowserContext, origin: string, label: "1440" | "3
     await row(page, "Anuncios de Meta").waitFor({ timeout: UI_WAIT_MS });
   });
 
+  await step(page, `${label}: folders and tags narrow the list, and a key moves to a folder`, async () => {
+    const folders = screen(page).getByRole("navigation", { name: t("secrets.folder.browse") });
+    await press(folders.getByRole("button", { name: /universidad-online/u }), touch);
+    await screen(page)
+      .getByText(t("secrets.folder.accessTitle", { folder: "universidad-online" }))
+      .waitFor({ timeout: UI_WAIT_MS });
+    await row(page, "Campus Moodle").waitFor({ timeout: UI_WAIT_MS });
+    assert.equal(await row(page, "Correo de ventas").count(), 0, "A key outside the folder shows.");
+    await press(folders.getByRole("button", { name: t("secrets.folder.all") }), touch);
+    await press(screen(page).getByRole("button", { name: /#anuncios/u }), touch);
+    await page.waitForFunction(() => document.querySelectorAll(".sv-row").length === 1, undefined, {
+      timeout: UI_WAIT_MS,
+    });
+    await press(screen(page).getByRole("button", { name: /#anuncios/u }), touch);
+    await press(row(page, "Correo de ventas"), touch);
+    const panel = detail(page, "Correo de ventas");
+    await press(panel.getByRole("button", { name: t("secrets.folder.move"), exact: true }), touch);
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("textbox").first().fill("universidad-online/ventas");
+    await press(dialog.getByRole("button", { name: t("secrets.folder.move"), exact: true }), touch);
+    await panel.getByText("universidad-online › ventas").waitFor({ timeout: UI_WAIT_MS });
+    await shot(page, `${label}-folders-dark`);
+    if (touch) await press(page.locator(".sv-detail").getByRole("button", { name: t("secrets.detail.back") }), touch);
+    else await press(page.locator(".sv-detail").getByRole("button", { name: t("secrets.detail.close") }), touch);
+    await row(page, "Anuncios de Meta").waitFor({ timeout: UI_WAIT_MS });
+  });
+
   await step(page, `${label}: the owner limits a shared key to one agent`, async () => {
     await press(row(page, "Anuncios de Meta"), touch);
     const panel = detail(page, "Anuncios de Meta");
@@ -234,6 +261,20 @@ async function flows(context: BrowserContext, origin: string, label: "1440" | "3
     await press(screen(page).getByRole("button", { name: t("secrets.requests.save") }), touch);
     await row(page, "STRIPE_SECRET_KEY").waitFor({ timeout: UI_WAIT_MS });
     assert.equal(await screen(page).getByText(t("secrets.requests.title")).count(), 0, "The request stayed.");
+  });
+
+  await step(page, `${label}: chat apps, webhooks and mailboxes read as settings rows`, async () => {
+    await open(page, `${origin}/app/general/secrets`);
+    const mailbox = screen(page).getByText("ventas@aprendivo.com");
+    await mailbox.waitFor({ timeout: UI_WAIT_MS });
+    await screen(page).getByText("Ventas de Stripe").waitFor({ timeout: UI_WAIT_MS });
+    await screen(page).getByText("Claude en mi celular").waitFor({ timeout: UI_WAIT_MS });
+    // The Worker address stays behind the technical details.
+    assert.equal(await screen(page).getByText("https://atelier-mail.delynith.workers.dev").isVisible(), false);
+    await screen(page).getByText(t("workspace.connections.chatTitle")).scrollIntoViewIfNeeded();
+    await shot(page, `${label}-connections-dark`);
+    await mailbox.scrollIntoViewIfNeeded();
+    await shot(page, `${label}-mailboxes-dark`);
   });
   await page.close();
 

@@ -60,12 +60,14 @@
 //   rotateEveryDays? (days or null), expiresAt? (time or null), access? { everyone, agents (500), spaces (200) } }`; `reveal` `{
 //   scope, name, purpose: "show" | "copy", version? }`; `rollback` `{ scope, name, version }`;
 //   `export` `{ passphrase (8 to 256) }`; `import` `{ bundle (8 MiB), passphrase }`; `fill` `{
-//   requestId, value (16384) }`; `approve` `{ requestId, decision: "accept" | "decline" }`.
+//   requestId, value (16384) }`; `approve` `{ requestId, decision: "accept" | "decline" }`; `folder` `{ folder (160), agents (500), spaces (200) }`
+//   sets who may use every key under a folder path (owner only), and `overview` answers `folders?`
+//   (500) `{ path, agents, spaces }`.
 //   Answers: `overview` `{ secrets (2000), trash (500), requests (200) }`, `detail` `{ detail: {
 //   secret, versions (51), audit (300) } }`, `value` `{ value }` (only to `reveal`, only for the
 //   owner), `bundle` `{ bundle, count }`, `imported` `{ added, updated, unchanged }`, `done`. A scope
 //   is `shared`, `space:<id>` or an agent id. Audit rows and versions carry no value. `reveal`,
-//   `export`, `import`, `purge`, `approve` and an `update` with `access` are the owner's alone.
+//   `export`, `import`, `purge`, `approve`, `folder` and an `update` with `access` are the owner's alone.
 //
 // A fork host built before these routes answers 404, so a client fails closed there. A present
 // malformed value fails closed. The bounds are written out: this file must not move with an IPC limit.
@@ -312,6 +314,12 @@ const vaultCall = variant({
   import: fields({ kind: string(16), bundle: string(8 * 1024 * 1024), passphrase: string(256) }),
   fill: fields({ kind: string(16), requestId: identifier, value: string(16384) }),
   approve: fields({ kind: string(16), requestId: identifier, decision: oneOf("accept", "decline") }),
+  folder: fields({
+    kind: string(16),
+    folder: string(160),
+    agents: list(identifier, 500),
+    spaces: list(identifier, 200),
+  }),
 });
 const vaultSummary = fields(
   {
@@ -355,12 +363,17 @@ const vaultRequest = variant({
   }),
 });
 const vaultResult = variant({
-  overview: fields({
-    kind: string(16),
-    secrets: list(vaultSummary, 2000),
-    trash: list(fields({ ...vaultRef, deletedAt: vaultTime }, { label: string(80), by: vaultActor }), 500),
-    requests: list(vaultRequest, 200),
-  }),
+  overview: fields(
+    {
+      kind: string(16),
+      secrets: list(vaultSummary, 2000),
+      trash: list(fields({ ...vaultRef, deletedAt: vaultTime }, { label: string(80), by: vaultActor }), 500),
+      requests: list(vaultRequest, 200),
+    },
+    {
+      folders: list(fields({ path: string(160), agents: list(identifier, 500), spaces: list(identifier, 200) }), 500),
+    },
+  ),
   detail: fields({
     kind: string(16),
     detail: fields({

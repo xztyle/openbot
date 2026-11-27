@@ -23,11 +23,14 @@ import {
   Download,
   Eye,
   EyeOff,
+  Folder,
+  FolderOpen,
   Inbox,
   KeyRound,
   Plus,
   Search,
   ShieldCheck,
+  Tag,
   Trash2,
   TriangleAlert,
   Upload,
@@ -42,17 +45,20 @@ import { MemberAvatar } from "../workspace/WorkspaceAvatar";
 import { WorkspacePaneHeader } from "../workspace/WorkspacePaneHeader";
 import { WorkspaceSelect } from "../workspace/WorkspaceSelect";
 import type { WorkspaceMember } from "../workspace/workspace-types";
-import { SecretDetail } from "./SecretDetail";
+import { AccessLists, SecretDetail } from "./SecretDetail";
 import { SecretTypeIcon, StatusBadge, useSecretText } from "./SecretParts";
 import {
   displayName,
   EMPTY_FILTERS,
   filtersActive,
   groupSecrets,
+  knownFolders,
   matchesSecret,
   type SecretFilters,
   type SecretGrouping,
   secretStats,
+  subfolders,
+  tagCounts,
 } from "./secrets-vault-model";
 
 export interface SecretsVaultProps {
@@ -102,7 +108,7 @@ function createPhoneLayout(): () => boolean {
  * or copies one.
  */
 export function SecretsVault(props: SecretsVaultProps): JSX.Element {
-  const { t } = useText();
+  const { t, errorMessage } = useText();
   const text = useSecretText();
   const phone = createPhoneLayout();
   const [filters, setFilters] = createSignal<SecretFilters>(EMPTY_FILTERS);
@@ -116,6 +122,9 @@ export function SecretsVault(props: SecretsVaultProps): JSX.Element {
   const secrets = () => props.overview?.secrets ?? [];
   const scopeLabel = (secret: SecretSummary) => text.scope(secret.scope, secret.access, props.agents, props.spaces);
   const stats = createMemo(() => secretStats(secrets(), now()));
+  const folderPaths = createMemo(() => knownFolders(secrets()));
+  const tags = createMemo(() => tagCounts(secrets()));
+  const folderAccess = (path: string) => props.overview?.folders?.find((folder) => folder.path === path);
   const shown = createMemo(() =>
     secrets().filter((secret) => matchesSecret(secret, filters(), scopeLabel(secret), now())),
   );
@@ -178,6 +187,37 @@ export function SecretsVault(props: SecretsVaultProps): JSX.Element {
                     active={filters().status}
                     onFilter={(status) => setFilter({ status: filters().status === status ? "any" : status })}
                   />
+                </Show>
+                <Show when={secrets().length > 0}>
+                  <FolderBar secrets={secrets()} folder={filters().folder} onOpen={(folder) => setFilter({ folder })} />
+                </Show>
+                <Show when={filters().folder}>
+                  {(folder) => (
+                    <SettingsGroup
+                      title={t("secrets.folder.accessTitle", { folder: folder() })}
+                      description={t("secrets.folder.accessDescription")}
+                    >
+                      <AccessLists
+                        agentIds={folderAccess(folder())?.agents ?? []}
+                        spaceIds={folderAccess(folder())?.spaces ?? []}
+                        owner={props.owner}
+                        agents={props.agents}
+                        spaces={props.spaces}
+                        onChange={(agents, spaces) => {
+                          props
+                            .call({ kind: "folder", folder: folder(), agents, spaces })
+                            .then(() => {
+                              toast.success(t("secrets.access.saved"));
+                              props.refresh();
+                            })
+                            .catch((error: unknown) => toast.error(errorMessage(error, t("secrets.failed"))));
+                        }}
+                      />
+                      <Show when={!props.owner}>
+                        <SettingsHelp>{t("secrets.access.ownerOnly")}</SettingsHelp>
+                      </Show>
+                    </SettingsGroup>
+                  )}
                 </Show>
                 <Show
                   when={secrets().length > 0}
@@ -247,6 +287,25 @@ export function SecretsVault(props: SecretsVaultProps): JSX.Element {
                       />
                     </div>
                   </div>
+                  <Show when={tags().length > 0}>
+                    <fieldset class="sv-chips sv-tags">
+                      <legend class="sv-tags-legend">{t("secrets.tags.title")}</legend>
+                      <For each={tags()}>
+                        {(item) => (
+                          <Button
+                            class="sv-chip"
+                            variant={filters().tag === item.tag ? "secondary" : "ghost"}
+                            size="sm"
+                            aria-pressed={filters().tag === item.tag ? "true" : "false"}
+                            onClick={() => setFilter({ tag: filters().tag === item.tag ? null : item.tag })}
+                          >
+                            <Tag />#{item.tag}
+                            <span class="sv-group-count">{item.count}</span>
+                          </Button>
+                        )}
+                      </For>
+                    </fieldset>
+                  </Show>
                   <Show
                     when={groups().length > 0}
                     fallback={
@@ -354,6 +413,8 @@ export function SecretsVault(props: SecretsVaultProps): JSX.Element {
                 owner={props.owner}
                 agents={props.agents}
                 spaces={props.spaces}
+                folders={props.overview?.folders ?? []}
+                knownFolders={folderPaths()}
                 call={props.call}
                 copyValue={props.copyValue}
                 phone={phone()}
@@ -380,6 +441,66 @@ export function SecretsVault(props: SecretsVaultProps): JSX.Element {
       <ExportDialog open={exporting()} onOpenChange={setExporting} call={props.call} />
       <ImportDialog open={importing()} onOpenChange={setImporting} call={props.call} refresh={props.refresh} />
     </section>
+  );
+}
+
+/** Where the list is: the path from all folders, and the folders right under it. */
+function FolderBar(props: { secrets: readonly SecretSummary[]; folder: string; onOpen: (folder: string) => void }) {
+  const { t } = useText();
+  const segments = () => {
+    const parts = props.folder.split("/").filter(Boolean);
+    return parts.map((name, index) => ({ name, path: parts.slice(0, index + 1).join("/") }));
+  };
+  const children = () => subfolders(props.secrets, props.folder);
+  return (
+    <nav class="sv-folders" aria-label={t("secrets.folder.browse")}>
+      <ol class="sv-breadcrumb">
+        <li>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-current={props.folder === "" ? "page" : undefined}
+            onClick={() => props.onOpen("")}
+          >
+            <FolderOpen />
+            {t("secrets.folder.all")}
+          </Button>
+        </li>
+        <For each={segments()}>
+          {(segment) => (
+            <li>
+              <ChevronRight class="sv-breadcrumb-sep" aria-hidden="true" />
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-current={segment.path === props.folder ? "page" : undefined}
+                onClick={() => props.onOpen(segment.path)}
+              >
+                {segment.name}
+              </Button>
+            </li>
+          )}
+        </For>
+      </ol>
+      <Show when={props.folder === "" && children().length === 0}>
+        <SettingsHelp>{t("secrets.folder.emptyHint")}</SettingsHelp>
+      </Show>
+      <Show when={children().length > 0}>
+        <ul class="sv-folder-tiles">
+          <For each={children()}>
+            {(child) => (
+              <li>
+                <Button variant="outline" class="sv-folder-tile" onClick={() => props.onOpen(child.path)}>
+                  <Folder class="sv-folder-icon" />
+                  <span class="sv-folder-name">{child.name}</span>
+                  <span class="sv-group-count">{child.count}</span>
+                </Button>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Show>
+    </nav>
   );
 }
 

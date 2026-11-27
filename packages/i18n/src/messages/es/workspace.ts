@@ -1056,10 +1056,14 @@ export const messages = {
   "workspace.secretHygiene.saved": "Guardado como {name} en Secretos. Los agentes ya pueden usarlo.",
   "workspace.secretHygiene.saveFailed": "El secreto no se guardó. Agrégalo en Secretos.",
   "workspace.connections.chatTitle": "Apps de chat",
-  "workspace.connections.chatDescription":
-    "Habla con tus agentes desde Claude o ChatGPT: agrega Atelier como conector personalizado con un enlace de acceso. Solo texto; las aprobaciones y el dinero se quedan aquí.",
-  "workspace.connections.gatewayOff":
+  "workspace.connections.chatDescription": "Habla con tus agentes desde Claude o ChatGPT con un enlace de acceso.",
+  "workspace.connections.gatewayOff": "Este servidor aún no puede recibir apps de chat.",
+  "workspace.connections.gatewayOffDetails":
     "El servidor aún no tiene una dirección pública de conectores. Quien administra el servidor configura OPENBOT_CONNECTOR_LISTEN y OPENBOT_CONNECTOR_PUBLIC_URL detrás de HTTPS.",
+  "workspace.connections.gatewayStatus": "Conexión",
+  "workspace.connections.statusOff": "Sin configurar",
+  "workspace.connections.technical": "Ver detalles técnicos",
+  "workspace.connections.noLinks": "Aún no hay enlaces de acceso.",
   "workspace.connections.newLink": "Nuevo enlace de acceso",
   "workspace.connections.newLinkDescription": "Pon el nombre de la app que lo usará, para saber qué enlace revocar.",
   "workspace.connections.label": "App",
@@ -1078,10 +1082,8 @@ export const messages = {
   "workspace.connections.neverUsed": "Creado {time} · aún sin usar",
   "workspace.connections.lastUsed": "Último uso {time}",
   "workspace.connections.hooksTitle": "Webhooks de este espacio",
-  "workspace.connections.hooksDescription":
-    "Una venta de Stripe, una compra de Hotmart o un video nuevo de YouTube pueden despertar la rutina de webhook de un agente. Copia su dirección en el servicio y elige quién envía.",
-  "workspace.connections.hooksEmpty":
-    "Aún no hay rutinas de webhook en este espacio. Pide a un agente que cree una, por ejemplo: crea una rutina de webhook para las ventas de Stripe.",
+  "workspace.connections.hooksDescription": "Una venta o un video nuevo en otro servicio puede despertar a un agente.",
+  "workspace.connections.hooksEmpty": "Aún no hay rutinas de webhook aquí. Pide a un agente que cree una.",
   "workspace.connections.copyUrl": "Copiar dirección",
   "workspace.connections.sender": "Remitente",
   "workspace.connections.inboxLine": "{owner} · {sender}",
@@ -1257,9 +1259,13 @@ export const messages = {
   "workspace.money.topToday": "Quién más gasta hoy",
   "workspace.mailboxes.title": "Buzones de los agentes",
   "workspace.mailboxes.description":
-    "El correo a una dirección del negocio llega como trabajo al chat de un agente, y el agente responde con esa dirección. Lo llevan Cloudflare Email Routing y el Worker de correo.",
+    "El correo a una dirección del negocio llega a un agente, que responde desde esa dirección.",
   "workspace.mailboxes.gatewayOff": "Activa primero la pasarela de conectores: el Worker de correo publica en ella.",
-  "workspace.mailboxes.worker": "Worker de correo",
+  "workspace.mailboxes.worker": "Correo entrante",
+  "workspace.mailboxes.workerUnsetShort": "El correo entrante aún no está conectado.",
+  "workspace.mailboxes.noMailYet": "Conectado. Aún no llega correo.",
+  "workspace.mailboxes.statusOn": "Conectado",
+  "workspace.mailboxes.statusOff": "Sin conectar",
   "workspace.mailboxes.workerUnset": "Sin vincular. Despliega el Worker de correo y pega su dirección.",
   "workspace.mailboxes.copyInbox": "Copiar dirección de entrada",
   "workspace.mailboxes.linkWorker": "Vincular el Worker",

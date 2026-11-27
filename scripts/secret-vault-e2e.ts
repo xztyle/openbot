@@ -157,6 +157,21 @@ await step("a space's key reaches the agents of that space only, by default", as
   assert.equal(keys.readNow("any", "agent-beto", "ANA_KEY"), "ana-own-value-55e1d0");
 });
 
+await step("a folder's access reaches every key under it, and taking it away takes the files away", async () => {
+  // META_ACCESS_TOKEN sits in universidad-online/meta and reaches agent-carla only.
+  assert.equal(keys.readNow("any", "agent-ana", "META_ACCESS_TOKEN"), null);
+  await vault({ kind: "folder", folder: "universidad-online", agents: [], spaces: ["space-uni"] });
+  assert.equal(keys.readNow("any", "agent-ana", "META_ACCESS_TOKEN"), META);
+  assert.ok(agentFiles("agent-beto").includes("_grants/agent-beto/META_ACCESS_TOKEN"));
+  const listed = await overview();
+  assert.deepEqual(listed?.folders, [{ path: "universidad-online", agents: [], spaces: ["space-uni"] }]);
+  await vault({ kind: "folder", folder: "universidad-online", agents: [], spaces: [] });
+  assert.equal(keys.readNow("any", "agent-ana", "META_ACCESS_TOKEN"), null);
+  assert.ok(!agentFiles("agent-beto").some((file) => file.endsWith("META_ACCESS_TOKEN")));
+  const rows = (await detail("shared", "META_ACCESS_TOKEN")).audit;
+  assert.ok(rows.some((row) => row.action === "access-changed" && row.detail === "folder universidad-online"));
+});
+
 await step("a new value is a new version; going back restores the old value as the newest version", async () => {
   now += DAY;
   await vault({ kind: "save", scope: "shared", name: "META_ACCESS_TOKEN", value: META_2 });

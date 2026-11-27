@@ -9,15 +9,15 @@ import {
 import type { AppTextKey } from "@openbot/i18n";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, Show } from "solid-js";
-import { IconButton } from "../../button";
+import { Badge } from "../../badge";
+import { Button, IconButton } from "../../button";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { Field, Input } from "../../form";
 import { FormDialog } from "../../form-dialog";
-import { Copy, Pencil, Trash2 } from "../../icons";
+import { Copy, KeyRound, Pencil, Plus, Trash2 } from "../../icons";
+import { SettingsGroup, SettingsRow } from "../../settings";
 import { SwitchField } from "../../switch";
 import { useText } from "../../text";
-import { WorkspaceList, WorkspaceListRow } from "./WorkspaceList";
-import { PaneHeaderAction } from "./WorkspacePaneHeader";
 import { WorkspaceSelect } from "./WorkspaceSelect";
 
 export interface MailboxesSectionProps {
@@ -89,144 +89,151 @@ export function MailboxesSection(props: MailboxesSectionProps): JSX.Element {
       setSecret(await props.onNewSecret());
     });
 
+  const workerLinked = () => Boolean(props.state.workerUrl && props.state.hasSecret && props.state.inboxUrl);
+  const addMailbox = () => {
+    setError(null);
+    setDraft({
+      address: "",
+      agentId: props.agents[0]?.id ?? "",
+      mode: "reply",
+      displayName: "",
+      ownerApprovesEverySend: false,
+    });
+  };
+
   return (
     <>
-      <section class="ws-secrets-group">
-        <h3 class="ws-secrets-group-title">{t("workspace.mailboxes.title")}</h3>
-        <p class="ws-muted">{t("workspace.mailboxes.description")}</p>
-        <Show when={!props.state.inboxUrl}>
-          <p class="ws-muted">{t("workspace.mailboxes.gatewayOff")}</p>
-        </Show>
-        <WorkspaceList>
-          <WorkspaceListRow
-            title={t("workspace.mailboxes.worker")}
-            actions={
-              <>
-                <Show when={props.state.inboxUrl}>
-                  {(url) => (
-                    <IconButton
-                      variant="ghost"
-                      size="icon-xs"
-                      label={t("workspace.mailboxes.copyInbox")}
-                      onClick={() => void props.onCopy(url())}
-                    >
-                      <Copy />
-                    </IconButton>
-                  )}
+      <SettingsGroup
+        title={t("workspace.mailboxes.title")}
+        description={t("workspace.mailboxes.description")}
+        actions={
+          <Show when={props.agents.length > 0}>
+            <Button variant="outline" size="sm" onClick={addMailbox}>
+              <Plus />
+              {t("workspace.mailboxes.add")}
+            </Button>
+          </Show>
+        }
+      >
+        <SettingsRow
+          label={t("workspace.mailboxes.worker")}
+          description={
+            props.state.lastMailAt
+              ? t("workspace.mailboxes.lastMail", {
+                  time: when(props.state.lastMailAt),
+                  status: String(props.state.lastStatus ?? ""),
+                })
+              : workerLinked()
+                ? t("workspace.mailboxes.noMailYet")
+                : t("workspace.mailboxes.workerUnsetShort")
+          }
+          help={
+            <details class="ws-technical">
+              <summary>{t("workspace.connections.technical")}</summary>
+              <span class="ws-technical-body">
+                <Show when={!props.state.inboxUrl}>
+                  <span>{t("workspace.mailboxes.gatewayOff")}</span>
                 </Show>
-                <IconButton
-                  variant="ghost"
-                  size="icon-xs"
-                  label={t("workspace.mailboxes.linkWorker")}
-                  onClick={() => {
-                    setWorkerUrl(props.state.workerUrl ?? "");
-                    setError(null);
-                    setWorkerOpen(true);
-                  }}
-                >
-                  <Pencil />
-                </IconButton>
-              </>
-            }
-          >
-            <span class="ws-muted">{props.state.workerUrl ?? t("workspace.mailboxes.workerUnset")}</span>
-            <span class="ws-muted">
-              {props.state.hasSecret ? t("workspace.mailboxes.secretSet") : t("workspace.mailboxes.secretUnset")}
-            </span>
-            <Show when={props.state.lastMailAt}>
-              {(time) => (
-                <span class="ws-muted">
-                  {t("workspace.mailboxes.lastMail", {
-                    time: when(time()),
-                    status: String(props.state.lastStatus ?? ""),
-                  })}
+                <span class="ws-secrets-mono">{props.state.workerUrl ?? t("workspace.mailboxes.workerUnset")}</span>
+                <span>
+                  {props.state.hasSecret ? t("workspace.mailboxes.secretSet") : t("workspace.mailboxes.secretUnset")}
                 </span>
-              )}
-            </Show>
-          </WorkspaceListRow>
-        </WorkspaceList>
-        <PaneHeaderAction
-          label={t("workspace.mailboxes.newSecret")}
-          onClick={() => {
-            if (props.state.hasSecret) setReplacingSecret(true);
-            else void newSecret();
-          }}
-        />
-        <Show when={mailboxes().length > 0} fallback={<p class="ws-muted">{t("workspace.mailboxes.empty")}</p>}>
-          <WorkspaceList>
-            <For each={mailboxes()} keyed={(mailbox) => mailbox.id}>
-              {(mailbox) => (
-                <WorkspaceListRow
-                  title={mailbox().address}
-                  actions={
-                    <>
-                      <IconButton
-                        variant="ghost"
-                        size="icon-xs"
-                        label={t("workspace.mailboxes.edit")}
-                        onClick={() => {
-                          setError(null);
-                          setDraft({
-                            id: mailbox().id,
-                            address: mailbox().address,
-                            agentId: mailbox().agentId,
-                            mode: mailbox().mode,
-                            displayName: mailbox().displayName,
-                            ownerApprovesEverySend: mailbox().ownerApprovesEverySend,
-                          });
-                        }}
-                      >
-                        <Pencil />
-                      </IconButton>
-                      <IconButton
-                        variant="ghost"
-                        size="icon-xs"
-                        label={t("workspace.mailboxes.remove")}
-                        onClick={() => {
-                          setRemoveError(null);
-                          setRemoving(mailbox());
-                        }}
-                      >
-                        <Trash2 />
-                      </IconButton>
-                    </>
-                  }
+                <span class="ws-technical-actions">
+                  <Show when={props.state.inboxUrl}>
+                    {(url) => (
+                      <Button variant="ghost" size="sm" onClick={() => void props.onCopy(url())}>
+                        <Copy />
+                        {t("workspace.mailboxes.copyInbox")}
+                      </Button>
+                    )}
+                  </Show>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setWorkerUrl(props.state.workerUrl ?? "");
+                      setError(null);
+                      setWorkerOpen(true);
+                    }}
+                  >
+                    <Pencil />
+                    {t("workspace.mailboxes.linkWorker")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (props.state.hasSecret) setReplacingSecret(true);
+                      else void newSecret();
+                    }}
+                  >
+                    <KeyRound />
+                    {t("workspace.mailboxes.newSecret")}
+                  </Button>
+                </span>
+              </span>
+            </details>
+          }
+        >
+          <Badge variant={workerLinked() ? "success-light" : "warning-light"}>
+            {workerLinked() ? t("workspace.mailboxes.statusOn") : t("workspace.mailboxes.statusOff")}
+          </Badge>
+        </SettingsRow>
+        <Show when={mailboxes().length > 0} fallback={<SettingsRow label={t("workspace.mailboxes.empty")} />}>
+          <For each={mailboxes()} keyed={(mailbox) => mailbox.id}>
+            {(mailbox) => {
+              const agent = () => props.agents.find((candidate) => candidate.id === mailbox().agentId);
+              return (
+                <SettingsRow
+                  layout="inline"
+                  class="ws-mailbox-row"
+                  label={<span class="ws-secrets-mono">{mailbox().address}</span>}
+                  description={t("workspace.mailboxes.line", {
+                    agent: agent()?.name ?? mailbox().agentName,
+                    mode: mailbox().ownerApprovesEverySend
+                      ? t("workspace.mailboxes.modeWithOwnerApproval", { mode: t(MODE_LABEL[mailbox().mode]) })
+                      : t(MODE_LABEL[mailbox().mode]),
+                  })}
+                  help={t("workspace.mailboxes.stats", {
+                    received: format.number(mailbox().received),
+                    sent: format.number(mailbox().sentToday),
+                  })}
                 >
-                  <span class="ws-muted">
-                    {t("workspace.mailboxes.line", {
-                      agent: mailbox().agentName,
-                      mode: mailbox().ownerApprovesEverySend
-                        ? t("workspace.mailboxes.modeWithOwnerApproval", { mode: t(MODE_LABEL[mailbox().mode]) })
-                        : t(MODE_LABEL[mailbox().mode]),
-                    })}
-                  </span>
-                  <span class="ws-muted">
-                    {t("workspace.mailboxes.stats", {
-                      received: format.number(mailbox().received),
-                      sent: format.number(mailbox().sentToday),
-                    })}
-                  </span>
-                </WorkspaceListRow>
-              )}
-            </For>
-          </WorkspaceList>
-        </Show>
-        <Show when={props.agents.length > 0}>
-          <PaneHeaderAction
-            label={t("workspace.mailboxes.add")}
-            onClick={() => {
-              setError(null);
-              setDraft({
-                address: "",
-                agentId: props.agents[0]?.id ?? "",
-                mode: "reply",
-                displayName: "",
-                ownerApprovesEverySend: false,
-              });
+                  <IconButton
+                    variant="ghost"
+                    size="icon-sm"
+                    label={t("workspace.mailboxes.edit")}
+                    onClick={() => {
+                      setError(null);
+                      setDraft({
+                        id: mailbox().id,
+                        address: mailbox().address,
+                        agentId: mailbox().agentId,
+                        mode: mailbox().mode,
+                        displayName: mailbox().displayName,
+                        ownerApprovesEverySend: mailbox().ownerApprovesEverySend,
+                      });
+                    }}
+                  >
+                    <Pencil />
+                  </IconButton>
+                  <IconButton
+                    variant="ghost"
+                    size="icon-sm"
+                    label={t("workspace.mailboxes.remove")}
+                    onClick={() => {
+                      setRemoveError(null);
+                      setRemoving(mailbox());
+                    }}
+                  >
+                    <Trash2 />
+                  </IconButton>
+                </SettingsRow>
+              );
             }}
-          />
+          </For>
         </Show>
-      </section>
+      </SettingsGroup>
       <FormDialog
         open={draft() !== null}
         onOpenChange={(open) => {

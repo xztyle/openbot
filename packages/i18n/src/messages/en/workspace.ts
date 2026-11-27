@@ -1068,10 +1068,14 @@ export const messages = defineMessages("workspace", {
   "workspace.secretHygiene.saved": "Saved as {name} in Secrets. Agents can use it now.",
   "workspace.secretHygiene.saveFailed": "The secret was not saved. Add it in Secrets instead.",
   "workspace.connections.chatTitle": "Chat apps",
-  "workspace.connections.chatDescription":
-    "Talk to your agents from Claude or ChatGPT: add Atelier as a custom connector with an access link. Text only; approvals and money stay here.",
-  "workspace.connections.gatewayOff":
+  "workspace.connections.chatDescription": "Talk to your agents from Claude or ChatGPT with an access link.",
+  "workspace.connections.gatewayOff": "This server cannot take chat apps yet.",
+  "workspace.connections.gatewayOffDetails":
     "The server has no public connector address yet. Whoever runs the server sets OPENBOT_CONNECTOR_LISTEN and OPENBOT_CONNECTOR_PUBLIC_URL behind HTTPS.",
+  "workspace.connections.gatewayStatus": "Connection",
+  "workspace.connections.statusOff": "Not set up",
+  "workspace.connections.technical": "Technical details",
+  "workspace.connections.noLinks": "No access links yet.",
   "workspace.connections.newLink": "New access link",
   "workspace.connections.newLinkDescription": "Name the app that uses it, so you know which link to revoke.",
   "workspace.connections.label": "App",
@@ -1090,10 +1094,8 @@ export const messages = defineMessages("workspace", {
   "workspace.connections.neverUsed": "Made {time} · not used yet",
   "workspace.connections.lastUsed": "Last used {time}",
   "workspace.connections.hooksTitle": "Webhooks into this space",
-  "workspace.connections.hooksDescription":
-    "A Stripe sale, a Hotmart purchase or a new YouTube video can wake an agent's webhook routine. Copy its address into the service and choose who sends.",
-  "workspace.connections.hooksEmpty":
-    "No webhook routine in this space yet. Ask an agent to make one, for example: make a webhook routine for Stripe sales.",
+  "workspace.connections.hooksDescription": "A sale or a new video in another service can wake an agent.",
+  "workspace.connections.hooksEmpty": "No webhook routines here yet. Ask an agent to make one.",
   "workspace.connections.copyUrl": "Copy address",
   "workspace.connections.sender": "Sender",
   "workspace.connections.inboxLine": "{owner} · {sender}",
@@ -1268,10 +1270,13 @@ export const messages = defineMessages("workspace", {
   "workspace.today.source.eventCheck": "an event check",
   "workspace.money.topToday": "Top spenders today",
   "workspace.mailboxes.title": "Agent mailboxes",
-  "workspace.mailboxes.description":
-    "Mail to a business address becomes work in an agent's chat, and the agent answers as that address. Cloudflare Email Routing and the mail Worker carry it.",
+  "workspace.mailboxes.description": "Mail to a business address goes to an agent, who answers from that address.",
   "workspace.mailboxes.gatewayOff": "Turn on the connector gateway first: the mail Worker posts to it.",
-  "workspace.mailboxes.worker": "Mail Worker",
+  "workspace.mailboxes.worker": "Incoming mail",
+  "workspace.mailboxes.workerUnsetShort": "Incoming mail is not connected yet.",
+  "workspace.mailboxes.noMailYet": "Connected. No mail yet.",
+  "workspace.mailboxes.statusOn": "Connected",
+  "workspace.mailboxes.statusOff": "Not connected",
   "workspace.mailboxes.workerUnset": "Not linked. Deploy the mail Worker, then paste its address.",
   "workspace.mailboxes.copyInbox": "Copy inbox address",
   "workspace.mailboxes.linkWorker": "Link the Worker",

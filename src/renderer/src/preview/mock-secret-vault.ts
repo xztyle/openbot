@@ -3,11 +3,13 @@ import {
   type SecretActor,
   type SecretAuditAction,
   type SecretAuditRow,
+  type SecretFolderAccess,
   type SecretRequest,
   type SecretSummary,
   type SecretVaultCall,
   type SecretVaultResult,
   type SecretVersion,
+  secretFolderAncestors,
   secretScopeKind,
   type TrashedSecret,
 } from "@openbot/contracts/ipc";
@@ -42,6 +44,7 @@ export function createMockSecretVault(options: { agentIds: readonly string[]; sp
       createdAt: now - 6 * 60_000,
     },
   ];
+  const folders = new Map<string, SecretFolderAccess>();
   const keyOf = (scope: string, name: string) => `${scope}/${name}`;
   const log = (secret: MockSecret, action: SecretAuditAction, actor: SecretActor, detail?: string) => {
     secret.audit.unshift({ at: Date.now(), action, actor, ...(detail ? { detail } : {}) });
@@ -162,6 +165,7 @@ export function createMockSecretVault(options: { agentIds: readonly string[]; sp
             }),
           ),
           requests: [...requests],
+          folders: [...folders.values()],
         };
       case "detail": {
         const secret = get(input.scope, input.name);
@@ -322,6 +326,14 @@ export function createMockSecretVault(options: { agentIds: readonly string[]; sp
           log(secret, "created", owner);
           secrets.set(keyOf(scope, request.name), secret);
         }
+        return done;
+      }
+      case "folder": {
+        if (input.agents.length === 0 && input.spaces.length === 0) folders.delete(input.folder);
+        else folders.set(input.folder, { path: input.folder, agents: input.agents, spaces: input.spaces });
+        for (const secret of secrets.values())
+          if (secretFolderAncestors(secret.summary.folder).includes(input.folder))
+            log(secret, "access-changed", owner, `folder ${input.folder}`);
         return done;
       }
       case "approve": {

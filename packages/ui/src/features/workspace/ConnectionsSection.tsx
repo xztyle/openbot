@@ -7,14 +7,14 @@ import {
 import type { AppTextKey } from "@openbot/i18n";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, Show } from "solid-js";
-import { IconButton } from "../../button";
+import { Badge } from "../../badge";
+import { Button, IconButton } from "../../button";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { Field, Input } from "../../form";
 import { FormDialog } from "../../form-dialog";
-import { Copy, Pencil, Trash2 } from "../../icons";
+import { Copy, Pencil, Plus, Trash2 } from "../../icons";
+import { SettingsGroup, SettingsRow } from "../../settings";
 import { useText } from "../../text";
-import { WorkspaceList, WorkspaceListRow } from "./WorkspaceList";
-import { PaneHeaderAction } from "./WorkspacePaneHeader";
 import { WorkspaceSelect } from "./WorkspaceSelect";
 
 export interface ConnectionsSectionProps {
@@ -79,105 +79,120 @@ export function ConnectionsSection(props: ConnectionsSectionProps): JSX.Element 
     }
   }
 
+  const gatewayReady = () => props.state.gateway.listening && Boolean(props.state.gateway.publicUrl);
+
   return (
     <>
-      <section class="ws-secrets-group">
-        <h3 class="ws-secrets-group-title">{t("workspace.connections.chatTitle")}</h3>
-        <p class="ws-muted">{t("workspace.connections.chatDescription")}</p>
-        <Show when={!props.state.gateway.listening || !props.state.gateway.publicUrl}>
-          <p class="ws-muted">{t("workspace.connections.gatewayOff")}</p>
+      <SettingsGroup
+        title={t("workspace.connections.chatTitle")}
+        description={t("workspace.connections.chatDescription")}
+        actions={
+          <Button variant="outline" size="sm" disabled={!gatewayReady()} onClick={() => setCreating(true)}>
+            <Plus />
+            {t("workspace.connections.newLink")}
+          </Button>
+        }
+      >
+        <Show when={!gatewayReady()}>
+          <SettingsRow
+            label={t("workspace.connections.gatewayStatus")}
+            description={t("workspace.connections.gatewayOff")}
+            help={
+              <details class="ws-technical">
+                <summary>{t("workspace.connections.technical")}</summary>
+                <span>{t("workspace.connections.gatewayOffDetails")}</span>
+              </details>
+            }
+          >
+            <Badge variant="warning-light">{t("workspace.connections.statusOff")}</Badge>
+          </SettingsRow>
         </Show>
-        <WorkspaceList>
+        <Show
+          when={props.state.tokens.length > 0}
+          fallback={<SettingsRow label={t("workspace.connections.noLinks")} />}
+        >
           <For each={props.state.tokens} keyed={(token) => token.id}>
             {(token) => (
-              <WorkspaceListRow
-                title={token().label}
-                actions={
-                  <IconButton
-                    variant="ghost"
-                    size="icon-xs"
-                    label={t("workspace.connections.revoke")}
-                    onClick={() => {
-                      setRevokeError(null);
-                      setRevoking(token().id);
-                    }}
-                  >
-                    <Trash2 />
-                  </IconButton>
+              <SettingsRow
+                layout="inline"
+                label={token().label}
+                description={
+                  token().lastUsedAt === null
+                    ? t("workspace.connections.neverUsed", { time: when(token().createdAt) })
+                    : t("workspace.connections.lastUsed", { time: when(token().lastUsedAt ?? 0) })
                 }
               >
-                <span class="ws-muted">
-                  {token().lastUsedAt === null
-                    ? t("workspace.connections.neverUsed", { time: when(token().createdAt) })
-                    : t("workspace.connections.lastUsed", { time: when(token().lastUsedAt ?? 0) })}
-                </span>
-              </WorkspaceListRow>
+                <IconButton
+                  variant="ghost"
+                  size="icon-sm"
+                  label={t("workspace.connections.revoke")}
+                  onClick={() => {
+                    setRevokeError(null);
+                    setRevoking(token().id);
+                  }}
+                >
+                  <Trash2 />
+                </IconButton>
+              </SettingsRow>
             )}
           </For>
-        </WorkspaceList>
-        <PaneHeaderAction label={t("workspace.connections.newLink")} onClick={() => setCreating(true)} />
-      </section>
-      <section class="ws-secrets-group">
-        <h3 class="ws-secrets-group-title">{t("workspace.connections.hooksTitle")}</h3>
-        <p class="ws-muted">{t("workspace.connections.hooksDescription")}</p>
-        <Show when={inboxes().length > 0} fallback={<p class="ws-muted">{t("workspace.connections.hooksEmpty")}</p>}>
-          <WorkspaceList>
-            <For each={inboxes()} keyed={(inbox) => inbox.routeId}>
-              {(inbox) => (
-                <WorkspaceListRow
-                  title={inbox().routineName}
-                  actions={
-                    <>
-                      <Show when={hookUrl(inbox())}>
-                        {(url) => (
-                          <IconButton
-                            variant="ghost"
-                            size="icon-xs"
-                            label={t("workspace.connections.copyUrl")}
-                            onClick={() => void props.onCopy(url())}
-                          >
-                            <Copy />
-                          </IconButton>
-                        )}
-                      </Show>
-                      <IconButton
-                        variant="ghost"
-                        size="icon-xs"
-                        label={t("workspace.connections.sender")}
-                        onClick={() => {
-                          setEditing(inbox());
-                          setScheme(inbox().scheme);
-                          setSecret("");
-                          setError(null);
-                        }}
-                      >
-                        <Pencil />
-                      </IconButton>
-                    </>
-                  }
-                >
-                  <span class="ws-muted">
-                    {t("workspace.connections.inboxLine", {
-                      owner: inbox().ownerName,
-                      sender: t(SCHEME_LABEL[inbox().scheme]),
-                    })}
-                  </span>
-                  <Show when={inbox().lastEventAt}>
-                    {(time) => (
-                      <span class="ws-muted">
-                        {t("workspace.connections.lastEvent", {
-                          time: when(time()),
-                          status: String(inbox().lastStatus ?? ""),
-                        })}
-                      </span>
-                    )}
-                  </Show>
-                </WorkspaceListRow>
-              )}
-            </For>
-          </WorkspaceList>
         </Show>
-      </section>
+      </SettingsGroup>
+      <SettingsGroup
+        title={t("workspace.connections.hooksTitle")}
+        description={t("workspace.connections.hooksDescription")}
+      >
+        <Show when={inboxes().length > 0} fallback={<SettingsRow label={t("workspace.connections.hooksEmpty")} />}>
+          <For each={inboxes()} keyed={(inbox) => inbox.routeId}>
+            {(inbox) => (
+              <SettingsRow
+                layout="inline"
+                label={inbox().routineName}
+                description={t("workspace.connections.inboxLine", {
+                  owner: inbox().ownerName,
+                  sender: t(SCHEME_LABEL[inbox().scheme]),
+                })}
+                help={
+                  <Show when={inbox().lastEventAt}>
+                    {(time) =>
+                      t("workspace.connections.lastEvent", {
+                        time: when(time()),
+                        status: String(inbox().lastStatus ?? ""),
+                      })
+                    }
+                  </Show>
+                }
+              >
+                <Show when={hookUrl(inbox())}>
+                  {(url) => (
+                    <IconButton
+                      variant="ghost"
+                      size="icon-sm"
+                      label={t("workspace.connections.copyUrl")}
+                      onClick={() => void props.onCopy(url())}
+                    >
+                      <Copy />
+                    </IconButton>
+                  )}
+                </Show>
+                <IconButton
+                  variant="ghost"
+                  size="icon-sm"
+                  label={t("workspace.connections.sender")}
+                  onClick={() => {
+                    setEditing(inbox());
+                    setScheme(inbox().scheme);
+                    setSecret("");
+                    setError(null);
+                  }}
+                >
+                  <Pencil />
+                </IconButton>
+              </SettingsRow>
+            )}
+          </For>
+        </Show>
+      </SettingsGroup>
       <FormDialog
         open={creating()}
         onOpenChange={(open) => {

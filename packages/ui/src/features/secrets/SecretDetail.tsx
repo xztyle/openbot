@@ -5,9 +5,11 @@ import {
   type SecretAccess,
   type SecretActor,
   type SecretDetail as SecretDetailData,
+  type SecretFolderAccess,
   type SecretKind,
   type SecretVaultCall,
   type SecretVaultResult,
+  secretFolderAncestors,
   secretHealth,
   secretScopeKind,
   secretUnused,
@@ -24,6 +26,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  FolderOpen,
   History,
   LockKeyhole,
   RotateCcw,
@@ -55,6 +58,10 @@ export interface SecretDetailProps {
   owner: boolean;
   agents: readonly WorkspaceMember[];
   spaces: readonly { id: string; name: string }[];
+  /** Folders with an access of their own; a key inherits the ones it sits in. */
+  folders: readonly SecretFolderAccess[];
+  /** Every folder path in use, for the move picker. */
+  knownFolders: readonly string[];
   call: (call: SecretVaultCall) => Promise<SecretVaultResult>;
   copyValue: (value: Promise<string>, name: string) => Promise<void>;
   /** A change was saved: the list reads the keys again. */
@@ -96,6 +103,7 @@ export function SecretDetail(props: SecretDetailProps): JSX.Element {
   >(null);
   const [confirmError, setConfirmError] = createSignal<string | null>(null);
   const [changing, setChanging] = createSignal(false);
+  const [moving, setMoving] = createSignal(false);
   let timer: ReturnType<typeof setInterval> | undefined;
   onCleanup(() => {
     if (timer) clearInterval(timer);
@@ -318,8 +326,40 @@ export function SecretDetail(props: SecretDetailProps): JSX.Element {
                 </SettingsRow>
               </SettingsGroup>
 
+              <SettingsGroup title={t("secrets.folder.title")}>
+                <SettingsRow
+                  layout="inline"
+                  label={
+                    <span class="sv-inline-member">
+                      <FolderOpen aria-hidden="true" class="sv-folder-icon" />
+                      <Show when={secret().folder} fallback={t("secrets.group.noFolder")}>
+                        {(folder) => <span class="sv-breadcrumb-path">{folder().split("/").join(" › ")}</span>}
+                      </Show>
+                    </span>
+                  }
+                  description={t("secrets.folder.description")}
+                >
+                  <Button variant="outline" size="sm" onClick={() => setMoving(true)}>
+                    {t("secrets.folder.move")}
+                  </Button>
+                </SettingsRow>
+              </SettingsGroup>
+
+              <MoveDialog
+                open={moving()}
+                name={displayName(secret())}
+                current={secret().folder ?? ""}
+                known={props.knownFolders}
+                onOpenChange={setMoving}
+                onMove={(folder) =>
+                  change({ kind: "update", scope: props.scope, name: props.name, folder }, t("secrets.folder.moved"))
+                }
+              />
+
               <AccessGroup
                 scope={secret().scope}
+                folder={secret().folder}
+                folders={props.folders}
                 access={secret().access}
                 owner={props.owner}
                 agents={props.agents}
@@ -570,6 +610,8 @@ function confirmLabel(action: Confirming, t: Translate): string {
 /** A version number or a site from the log; nothing technical beyond that. */
 function auditDetail(detail: string | undefined): string | null {
   if (!detail) return null;
+  const folder = /^folder (.+)$/u.exec(detail);
+  if (folder?.[1]) return folder[1];
   const version = /^version (\d+)$/u.exec(detail);
   if (version) return `v${version[1]}`;
   const site = /^filled on (https?:\/\/\S+)$/u.exec(detail);
@@ -615,7 +657,9 @@ function DateControl(props: { id: string; value: number | undefined; onChange: (
 
 function AccessGroup(props: {
   scope: string;
+  folder: string | undefined;
   access: SecretAccess;
+  folders: readonly SecretFolderAccess[];
   owner: boolean;
   agents: readonly WorkspaceMember[];
   spaces: readonly { id: string; name: string }[];
@@ -634,10 +678,17 @@ function AccessGroup(props: {
         ? t("secrets.access.spaceScope", { name: scopeName() })
         : t("secrets.access.agentScope", { name: scopeName() });
   const listed = () => !(kind() === "shared" && props.access.everyone);
-  const agentOptions = () =>
-    props.agents.filter((agent) => agent.id !== props.scope && !props.access.agents.includes(agent.id));
-  const spaceOptions = () =>
-    props.spaces.filter((space) => `space:${space.id}` !== props.scope && !props.access.spaces.includes(space.id));
+  /** The folders this key sits in that give access of their own. */
+  const inherited = () =>
+    secretFolderAncestors(props.folder).flatMap((path) => props.folders.filter((folder) => folder.path === path));
+  const names = (folder: SecretFolderAccess) => [
+    ...folder.agents.map(
+      (id) => props.agents.find((agent) => agent.id === id)?.name ?? t("secrets.scope.unknownAgent"),
+    ),
+    ...folder.spaces.map(
+      (id) => props.spaces.find((space) => space.id === id)?.name ?? t("secrets.scope.unknownSpace"),
+    ),
+  ];
   return (
     <SettingsGroup title={t("secrets.access.title")} description={description()}>
       <Show when={kind() === "shared"}>
@@ -655,100 +706,139 @@ function AccessGroup(props: {
         </SettingsRow>
       </Show>
       <Show when={listed()}>
-        <SettingsRow label={t("secrets.access.agents")} layout="stack">
-          <div class="sv-access-list">
-            <For each={props.access.agents}>
-              {(agentId) => {
-                const agent = () => props.agents.find((candidate) => candidate.id === agentId);
-                return (
-                  <span class="sv-access-chip">
-                    <Show when={agent()}>{(member) => <MemberAvatar member={member()} size="xs" />}</Show>
-                    {agent()?.name ?? t("secrets.scope.unknownAgent")}
-                    <Show when={props.owner}>
-                      <IconButton
-                        variant="ghost"
-                        size="icon-xs"
-                        label={t("secrets.access.remove", { name: agent()?.name ?? agentId })}
-                        onClick={() =>
-                          props.onChange({
-                            ...props.access,
-                            agents: props.access.agents.filter((id) => id !== agentId),
-                          })
-                        }
-                      >
-                        <X />
-                      </IconButton>
-                    </Show>
-                  </span>
-                );
-              }}
-            </For>
-            <Show when={props.access.agents.length === 0}>
-              <span class="sv-access-empty">{t("secrets.access.none")}</span>
-            </Show>
-            <Show when={props.owner && agentOptions().length > 0}>
-              <WorkspaceSelect
-                label={t("secrets.access.addAgent")}
-                value={ADD}
-                options={[
-                  { value: ADD, label: t("secrets.access.addAgent") },
-                  ...agentOptions().map((agent) => ({ value: agent.id, label: agent.name })),
-                ]}
-                onChange={(id) => {
-                  if (id !== ADD) props.onChange({ ...props.access, agents: [...props.access.agents, id] });
-                }}
-              />
-            </Show>
-          </div>
-        </SettingsRow>
-        <SettingsRow label={t("secrets.access.spaces")} layout="stack">
-          <div class="sv-access-list">
-            <For each={props.access.spaces}>
-              {(spaceId) => {
-                const space = () => props.spaces.find((candidate) => candidate.id === spaceId);
-                return (
-                  <span class="sv-access-chip">
-                    {space()?.name ?? t("secrets.scope.unknownSpace")}
-                    <Show when={props.owner}>
-                      <IconButton
-                        variant="ghost"
-                        size="icon-xs"
-                        label={t("secrets.access.remove", { name: space()?.name ?? spaceId })}
-                        onClick={() =>
-                          props.onChange({
-                            ...props.access,
-                            spaces: props.access.spaces.filter((id) => id !== spaceId),
-                          })
-                        }
-                      >
-                        <X />
-                      </IconButton>
-                    </Show>
-                  </span>
-                );
-              }}
-            </For>
-            <Show when={props.access.spaces.length === 0}>
-              <span class="sv-access-empty">{t("secrets.access.none")}</span>
-            </Show>
-            <Show when={props.owner && spaceOptions().length > 0}>
-              <WorkspaceSelect
-                label={t("secrets.access.addSpace")}
-                value={ADD}
-                options={[
-                  { value: ADD, label: t("secrets.access.addSpace") },
-                  ...spaceOptions().map((space) => ({ value: space.id, label: space.name })),
-                ]}
-                onChange={(id) => {
-                  if (id !== ADD) props.onChange({ ...props.access, spaces: [...props.access.spaces, id] });
-                }}
-              />
-            </Show>
-          </div>
-        </SettingsRow>
+        <AccessLists
+          agentIds={props.access.agents}
+          spaceIds={props.access.spaces}
+          exclude={props.scope}
+          owner={props.owner}
+          agents={props.agents}
+          spaces={props.spaces}
+          onChange={(agents, spaces) => props.onChange({ ...props.access, agents, spaces })}
+        />
+        <For each={inherited()}>
+          {(folder) => (
+            <SettingsRow
+              label={t("secrets.access.inherited", { folder: folder.path })}
+              description={names(folder).join(", ")}
+            />
+          )}
+        </For>
       </Show>
       <SettingsHelp>{props.owner ? t("secrets.access.blockedNote") : t("secrets.access.ownerOnly")}</SettingsHelp>
     </SettingsGroup>
+  );
+}
+
+/** The agents and the spaces on a list, as chips, with pickers to add one. */
+export function AccessLists(props: {
+  agentIds: readonly string[];
+  spaceIds: readonly string[];
+  /** The scope the list sits beside: its own agent or space is not offered. */
+  exclude?: string;
+  owner: boolean;
+  agents: readonly WorkspaceMember[];
+  spaces: readonly { id: string; name: string }[];
+  onChange: (agents: string[], spaces: string[]) => void;
+}): JSX.Element {
+  const { t } = useText();
+  const agentOptions = () =>
+    props.agents.filter((agent) => agent.id !== props.exclude && !props.agentIds.includes(agent.id));
+  const spaceOptions = () =>
+    props.spaces.filter((space) => `space:${space.id}` !== props.exclude && !props.spaceIds.includes(space.id));
+  return (
+    <>
+      <SettingsRow label={t("secrets.access.agents")} layout="stack">
+        <div class="sv-access-list">
+          <For each={props.agentIds}>
+            {(agentId) => {
+              const agent = () => props.agents.find((candidate) => candidate.id === agentId);
+              return (
+                <span class="sv-access-chip">
+                  <Show when={agent()}>{(member) => <MemberAvatar member={member()} size="xs" />}</Show>
+                  {agent()?.name ?? t("secrets.scope.unknownAgent")}
+                  <Show when={props.owner}>
+                    <IconButton
+                      variant="ghost"
+                      size="icon-xs"
+                      label={t("secrets.access.remove", { name: agent()?.name ?? agentId })}
+                      onClick={() =>
+                        props.onChange(
+                          props.agentIds.filter((id) => id !== agentId),
+                          [...props.spaceIds],
+                        )
+                      }
+                    >
+                      <X />
+                    </IconButton>
+                  </Show>
+                </span>
+              );
+            }}
+          </For>
+          <Show when={props.agentIds.length === 0}>
+            <span class="sv-access-empty">{t("secrets.access.none")}</span>
+          </Show>
+          <Show when={props.owner && agentOptions().length > 0}>
+            <WorkspaceSelect
+              label={t("secrets.access.addAgent")}
+              value={ADD}
+              options={[
+                { value: ADD, label: t("secrets.access.addAgent") },
+                ...agentOptions().map((agent) => ({ value: agent.id, label: agent.name })),
+              ]}
+              onChange={(id) => {
+                if (id !== ADD) props.onChange([...props.agentIds, id], [...props.spaceIds]);
+              }}
+            />
+          </Show>
+        </div>
+      </SettingsRow>
+      <SettingsRow label={t("secrets.access.spaces")} layout="stack">
+        <div class="sv-access-list">
+          <For each={props.spaceIds}>
+            {(spaceId) => {
+              const space = () => props.spaces.find((candidate) => candidate.id === spaceId);
+              return (
+                <span class="sv-access-chip">
+                  {space()?.name ?? t("secrets.scope.unknownSpace")}
+                  <Show when={props.owner}>
+                    <IconButton
+                      variant="ghost"
+                      size="icon-xs"
+                      label={t("secrets.access.remove", { name: space()?.name ?? spaceId })}
+                      onClick={() =>
+                        props.onChange(
+                          [...props.agentIds],
+                          props.spaceIds.filter((id) => id !== spaceId),
+                        )
+                      }
+                    >
+                      <X />
+                    </IconButton>
+                  </Show>
+                </span>
+              );
+            }}
+          </For>
+          <Show when={props.spaceIds.length === 0}>
+            <span class="sv-access-empty">{t("secrets.access.none")}</span>
+          </Show>
+          <Show when={props.owner && spaceOptions().length > 0}>
+            <WorkspaceSelect
+              label={t("secrets.access.addSpace")}
+              value={ADD}
+              options={[
+                { value: ADD, label: t("secrets.access.addSpace") },
+                ...spaceOptions().map((space) => ({ value: space.id, label: space.name })),
+              ]}
+              onChange={(id) => {
+                if (id !== ADD) props.onChange([...props.agentIds], [...props.spaceIds, id]);
+              }}
+            />
+          </Show>
+        </div>
+      </SettingsRow>
+    </>
   );
 }
 
@@ -937,6 +1027,84 @@ function ChangeValueDialog(props: {
           </IconButton>
         </div>
       </Field>
+    </FormDialog>
+  );
+}
+
+function MoveDialog(props: {
+  open: boolean;
+  name: string;
+  current: string;
+  known: readonly string[];
+  onOpenChange: (open: boolean) => void;
+  onMove: (folder: string) => Promise<void>;
+}) {
+  const { t, errorMessage } = useText();
+  const [folder, setFolder] = createSignal(props.current);
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+  const normalized = () => normalizeSecretFolder(folder());
+  const suggestions = () => props.known.filter((path) => path !== props.current).slice(0, 12);
+  return (
+    <FormDialog
+      open={props.open}
+      onOpenChange={(open) => {
+        if (open) setFolder(props.current);
+        else setError(null);
+        props.onOpenChange(open);
+      }}
+      size="sm"
+      title={t("secrets.folder.moveTitle", { name: props.name })}
+      description={t("secrets.folder.moveDescription")}
+      submitLabel={t("secrets.folder.move")}
+      submitDisabled={normalized() === null || normalized() === props.current}
+      busy={busy()}
+      error={error()}
+      onSubmit={async () => {
+        const target = normalized();
+        if (target === null) return;
+        setBusy(true);
+        setError(null);
+        try {
+          await props.onMove(target);
+          props.onOpenChange(false);
+        } catch (failure) {
+          setError(errorMessage(failure, t("secrets.failed")));
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <Field
+        label={t("secrets.details.folder")}
+        description={t("secrets.details.folderDescription")}
+        error={normalized() === null ? t("secrets.details.folderInvalid") : undefined}
+      >
+        <Input
+          value={folder()}
+          maxlength={160}
+          placeholder={t("secrets.create.folderPlaceholder")}
+          onInput={(event) => setFolder(event.currentTarget.value)}
+        />
+      </Field>
+      <Show when={suggestions().length > 0}>
+        <fieldset class="sv-folder-suggestions">
+          <legend class="sv-folder-legend">{t("secrets.folder.existing")}</legend>
+          <For each={suggestions()}>
+            {(path) => (
+              <Button variant="secondary" size="sm" class="sv-chip" onClick={() => setFolder(path)}>
+                <FolderOpen />
+                {path}
+              </Button>
+            )}
+          </For>
+          <Show when={props.current !== ""}>
+            <Button variant="ghost" size="sm" class="sv-chip" onClick={() => setFolder("")}>
+              {t("secrets.group.noFolder")}
+            </Button>
+          </Show>
+        </fieldset>
+      </Show>
     </FormDialog>
   );
 }

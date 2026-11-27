@@ -125,6 +125,7 @@ export const messages = {
   "secrets.access.addAgent": "Añadir un agente",
   "secrets.access.addSpace": "Añadir un espacio",
   "secrets.access.remove": "Quitar a {name}",
+  "secrets.access.inherited": "También por la carpeta {folder}",
   "secrets.access.ownerOnly": "Solo el propietario puede cambiar quién la usa.",
   "secrets.access.saved": "Acceso cambiado",
   "secrets.access.blockedNote":
@@ -210,6 +211,23 @@ export const messages = {
   "secrets.delete.confirm": "Eliminar clave",
   "secrets.delete.done": "{name} movida a la papelera",
   "secrets.danger.title": "Eliminar",
+  "secrets.folder.title": "Carpeta",
+  "secrets.folder.description":
+    "Agrupa las claves por negocio o servicio. Una carpeta puede dar sus claves a agentes y espacios.",
+  "secrets.folder.move": "Mover",
+  "secrets.folder.moveTitle": "Mover {name}",
+  "secrets.folder.moveDescription":
+    "Escribe la ruta de una carpeta o elige una. Los agentes siguen leyendo la clave por su nombre.",
+  "secrets.folder.moved": "Movida",
+  "secrets.folder.existing": "Carpetas en uso",
+  "secrets.folder.browse": "Carpetas",
+  "secrets.folder.all": "Todas las carpetas",
+  "secrets.folder.emptyHint":
+    "Aún no hay carpetas. Abre una clave y elige Mover para ponerla en una, como universidad-online/meta.",
+  "secrets.folder.accessTitle": "Quién puede usar las claves de {folder}",
+  "secrets.folder.accessDescription":
+    "Cada clave de esta carpeta y sus subcarpetas llega también a estos agentes y espacios.",
+  "secrets.tags.title": "Etiquetas",
   "secrets.trash.title": "Papelera",
   "secrets.trash.description": "Las claves eliminadas quedan aquí 30 días. Los agentes no pueden usarlas.",
   "secrets.trash.deleted": "Eliminada {time}",

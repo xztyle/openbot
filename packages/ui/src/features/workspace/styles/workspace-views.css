@@ -609,21 +609,6 @@
   font-family: var(--openbot-font-mono);
 }
 
-.ws-secrets-group {
-  margin-top: var(--openbot-space-4);
-}
-
-.ws-secrets-group-title {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--openbot-space-2);
-  margin: 0 0 var(--openbot-space-1);
-  color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-sm);
-  font-weight: var(--openbot-weight-medium);
-}
-
 /* A phone: the title keeps the header (the add dialog says what a secret is), and the row actions,
  * which a touch screen always shows, are finger-sized. */
 @media (max-width: 720px), (max-height: 520px) and (pointer: coarse) {

@@ -30,6 +30,7 @@ import {
   type SecretSettings,
   type SecretSummary,
   type SecretVersion,
+  secretFolderAncestors,
   secretScopeKind,
   type TrashedSecret,
 } from "@openbot/contracts/ipc";
@@ -119,10 +120,17 @@ interface TrashEntry {
   by?: SecretActor;
 }
 
+interface FolderAccess {
+  agents: string[];
+  spaces: string[];
+}
+
 interface LedgerFile {
   version: 1;
   secrets: Record<string, Entry>;
   trash: TrashEntry[];
+  /** Who may use the keys under a folder path, besides each key's own readers. */
+  folders?: Record<string, FolderAccess>;
 }
 
 interface ProjectedFile {
@@ -601,16 +609,43 @@ export class SecretLedger {
     return entry.expiresAt !== undefined && entry.expiresAt <= now;
   }
 
-  /** Whether `agentId` may read the key, whatever its expiry. */
+  /**
+   * Whether `agentId` may read the key, whatever its expiry: its scope, the key's own list, or the
+   * list of a folder the key sits in (a folder's access reaches every key under it).
+   */
   #allowed(entry: Entry, agentId: string): boolean {
     const kind = secretScopeKind(entry.scope);
     if (kind === "agent" && entry.scope === agentId) return true;
     if (kind === "shared" && entry.access.everyone) return true;
-    if (entry.access.agents.includes(agentId)) return true;
     const space = this.#agents().find((agent) => agent.id === agentId)?.spaceId ?? null;
+    const folders = this.#load().folders ?? {};
+    const lists = [entry.access, ...secretFolderAncestors(entry.folder).flatMap((path) => folders[path] ?? [])];
+    if (lists.some((list) => list.agents.includes(agentId))) return true;
     if (!space) return false;
     if (kind === "space" && entry.scope === `space:${space}`) return true;
-    return entry.access.spaces.includes(space);
+    return lists.some((list) => list.spaces.includes(space));
+  }
+
+  /** The folders with an access of their own. */
+  folders(): { path: string; agents: string[]; spaces: string[] }[] {
+    return Object.entries(this.#load().folders ?? {})
+      .map(([path, access]) => ({ path, agents: access.agents, spaces: access.spaces }))
+      .sort((left, right) => left.path.localeCompare(right.path));
+  }
+
+  /** Sets who may use every key under `path`. Empty lists remove the folder's access. */
+  setFolderAccess(path: string, agents: readonly string[], spaces: readonly string[], actor: SecretActor): void {
+    const state = this.#load();
+    const folders = { ...(state.folders ?? {}) };
+    const access = { agents: [...new Set(agents)].sort(), spaces: [...new Set(spaces)].sort() };
+    if (access.agents.length === 0 && access.spaces.length === 0) delete folders[path];
+    else folders[path] = access;
+    state.folders = folders;
+    for (const entry of Object.values(state.secrets))
+      if (secretFolderAncestors(entry.folder).includes(path))
+        this.audit(keyOf(entry.scope, entry.name), "access-changed", actor, `folder ${path}`);
+    this.#save();
+    this.project();
   }
 
   /** Where agent `agentId` finds the key, when it may read it now: its own, a grant, or the shared folder. */
@@ -1155,7 +1190,12 @@ function ledgerFile(value: unknown): LedgerFile {
   if (!Array.isArray(value.trash) || !value.trash.every(isTrashEntry)) fail();
   const secrets: Record<string, Entry> = {};
   for (const [key, entry] of Object.entries(value.secrets)) if (isEntry(entry)) secrets[key] = entry;
-  return { version: 1, secrets, trash: value.trash };
+  const folders: Record<string, FolderAccess> = {};
+  if (isDynamicRecord(value.folders))
+    for (const [path, access] of Object.entries(value.folders))
+      if (isDynamicRecord(access) && isStringList(access.agents) && isStringList(access.spaces))
+        folders[path] = { agents: access.agents, spaces: access.spaces };
+  return { version: 1, secrets, trash: value.trash, folders };
 }
 
 function isProjectedFile(value: unknown): value is ProjectedFile {

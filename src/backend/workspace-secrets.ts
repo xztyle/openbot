@@ -105,6 +105,7 @@ export class WorkspaceSecretsService {
             secrets: ledger.list().filter((secret) => this.#scopeLives(secret.scope)),
             trash: ledger.trash(),
             requests: this.#requests?.list() ?? [],
+            folders: ledger.folders(),
           };
         case "detail":
           return { kind: "detail", detail: ledger.detail(call.scope, call.name) };
@@ -139,6 +140,9 @@ export class WorkspaceSecretsService {
         case "fill":
           if (!this.#requests) throw new Error(sourceText("error.backend.apiKeySaveFailed"));
           await this.#requests.fill(call.requestId, call.value.trim());
+          return { kind: "done" };
+        case "folder":
+          ledger.setFolderAccess(call.folder, call.agents, call.spaces, actor);
           return { kind: "done" };
         case "approve":
           if (!this.#requests) throw new Error(sourceText("error.backend.apiKeySaveFailed"));

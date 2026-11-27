@@ -15,12 +15,66 @@ export interface SecretFilters {
   query: string;
   scope: SecretScopeFilter;
   status: SecretStatusFilter;
+  /** The folder path the list is in: its keys and its subfolders'. Empty for every key. */
+  folder: string;
+  tag: string | null;
 }
 
-export const EMPTY_FILTERS: SecretFilters = { query: "", scope: "all", status: "any" };
+export const EMPTY_FILTERS: SecretFilters = { query: "", scope: "all", status: "any", folder: "", tag: null };
 
 export function filtersActive(filters: SecretFilters): boolean {
-  return filters.query.trim() !== "" || filters.scope !== "all" || filters.status !== "any";
+  return (
+    filters.query.trim() !== "" ||
+    filters.scope !== "all" ||
+    filters.status !== "any" ||
+    filters.folder !== "" ||
+    filters.tag !== null
+  );
+}
+
+/** Whether a key sits in `folder` or one of its subfolders. */
+export function inFolder(secret: Pick<SecretSummary, "folder">, folder: string): boolean {
+  if (!folder) return true;
+  const own = secret.folder ?? "";
+  return own === folder || own.startsWith(`${folder}/`);
+}
+
+/** The folders right under `folder`, with how many keys each holds, by name. */
+export function subfolders(
+  secrets: readonly SecretSummary[],
+  folder: string,
+): { path: string; name: string; count: number }[] {
+  const counts = new Map<string, number>();
+  const prefix = folder ? `${folder}/` : "";
+  for (const secret of secrets) {
+    const own = secret.folder ?? "";
+    if (!own.startsWith(prefix) || own === folder) continue;
+    const name = own.slice(prefix.length).split("/")[0];
+    if (!name) continue;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([name, count]) => ({ path: `${prefix}${name}`, name, count }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/** Every folder path in use, its parents included. */
+export function knownFolders(secrets: readonly SecretSummary[]): string[] {
+  const paths = new Set<string>();
+  for (const secret of secrets) {
+    const parts = (secret.folder ?? "").split("/").filter(Boolean);
+    for (let index = 1; index <= parts.length; index += 1) paths.add(parts.slice(0, index).join("/"));
+  }
+  return [...paths].sort((left, right) => left.localeCompare(right));
+}
+
+/** The tags in use, the most used first. */
+export function tagCounts(secrets: readonly SecretSummary[]): { tag: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const secret of secrets) for (const tag of secret.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  return [...counts.entries()]
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((left, right) => right.count - left.count || left.tag.localeCompare(right.tag));
 }
 
 export function needsAttention(health: SecretHealth): boolean {
@@ -53,6 +107,8 @@ export function matchesSecret(secret: SecretSummary, filters: SecretFilters, sco
   if (filters.status === "attention" && !needsAttention(secretHealth(secret, now))) return false;
   if (filters.status === "unused" && !secretUnused(secret, now)) return false;
   if (filters.status === "never-rotated" && secret.rotatedAt !== undefined) return false;
+  if (!inFolder(secret, filters.folder)) return false;
+  if (filters.tag !== null && !secret.tags.includes(filters.tag)) return false;
   const words = filters.query.trim().toLocaleLowerCase().split(/\s+/u).filter(Boolean);
   if (!words.length) return true;
   const haystack = [

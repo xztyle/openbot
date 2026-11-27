@@ -223,20 +223,21 @@ export function FleetView(props: FleetViewProps): JSX.Element {
                   </dl>
                   <div class="ws-fleet-card-actions">
                     <Show when={props.onMessage}>
-                      <Button variant="secondary" size="xs" onClick={() => props.onMessage?.(agent().member.id)}>
+                      <Button variant="outline" size="sm" onClick={() => props.onMessage?.(agent().member.id)}>
                         <MessageSquare aria-hidden="true" />
                         {t("workspace.fleet.message")}
                       </Button>
                     </Show>
                     <Show when={props.onSettings}>
-                      <IconButton
-                        variant="ghost"
-                        size="icon-xs"
-                        label={t("workspace.fleet.settings", { name: agent().member.name })}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-label={t("workspace.fleet.settings", { name: agent().member.name })}
                         onClick={() => props.onSettings?.(agent().member.id)}
                       >
-                        <Settings />
-                      </IconButton>
+                        <Settings aria-hidden="true" />
+                        {t("workspace.fleet.settingsShort")}
+                      </Button>
                     </Show>
                   </div>
                 </li>

@@ -571,14 +571,27 @@
   flex-direction: column;
 }
 
-.ws-org-panel-scroll {
-  display: flex;
+/*
+ * The panel body takes the settings side panel's scope (`settings-modal.css`: sections, groups, rows
+ * and the 460 px container rule), but it sits in the org chart's own column, not over a chat.
+ */
+.ws-org-panel .ws-org-settings.settings-panel {
+  position: static;
+  z-index: auto;
+  width: auto;
+  border: 0;
+  background: transparent;
+  animation: none;
+}
+
+.ws-org-settings > .settings-panel-content {
   min-height: 0;
   flex: 1 1 auto;
-  flex-direction: column;
-  gap: var(--openbot-space-4);
-  overflow-y: auto;
-  padding: var(--openbot-space-4);
+  padding: var(--openbot-space-4) var(--openbot-space-4) var(--openbot-space-6);
+}
+
+.ws-org-panel-page {
+  gap: var(--openbot-space-6);
 }
 
 .ws-org-panel-identity {
@@ -586,7 +599,7 @@
   flex-direction: column;
   align-items: center;
   gap: var(--openbot-space-2);
-  padding: var(--openbot-space-4) 0 var(--openbot-space-2);
+  padding: var(--openbot-space-2) 0 0;
   text-align: center;
 }
 
@@ -602,23 +615,13 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--openbot-space-2);
+  margin-top: var(--openbot-space-2);
 }
 
-.ws-org-panel-section {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--openbot-space-1-5);
-}
-
-.ws-org-panel-section > h3 {
+.ws-org-settings .ui-settings-group-heading {
   display: flex;
   align-items: center;
   gap: var(--openbot-space-1-5);
-  margin: 0;
-  color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-sm);
-  font-weight: var(--openbot-weight-semibold);
 }
 
 .ws-org-panel-count {
@@ -626,42 +629,40 @@
   border-radius: var(--openbot-radius-pill);
   background: var(--openbot-bg-control);
   color: var(--openbot-text-secondary);
-}
-
-.ws-org-panel-muted,
-.ws-org-panel-preview,
-.ws-org-panel-step,
-.ws-org-panel-failed,
-.ws-org-panel-error {
-  margin: 0;
-  font-size: var(--openbot-text-md);
-}
-
-.ws-org-panel-muted {
-  color: var(--openbot-text-muted);
-}
-
-.ws-org-panel-step {
-  max-width: 100%;
-  padding: var(--openbot-space-1-5) var(--openbot-space-2);
-  border-radius: var(--openbot-radius-sm);
-  background: var(--openbot-bg-control);
-  color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  overflow-wrap: anywhere;
+  font-weight: var(--openbot-weight-medium);
+}
+
+/* The state line is the label of the Now row: it reads at the row label's size. */
+.ws-org-settings .ws-org-panel-status {
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .ws-org-panel-preview {
   display: -webkit-box;
   overflow: hidden;
-  color: var(--openbot-text-secondary);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
 }
 
-.ws-org-panel-failed,
-.ws-org-panel-error {
+.ws-org-panel-failed {
   color: var(--openbot-danger-text);
+}
+
+.ws-org-panel-link-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-org-settings .settings-link-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ws-org-panel-list {
@@ -674,7 +675,7 @@
   list-style: none;
 }
 
-.ws-org-panel .ws-org-panel-row.ui-button {
+.ws-org-picker .ws-org-panel-row.ui-button {
   font-size: var(--openbot-text-md);
 }
 
@@ -687,8 +688,8 @@
 }
 
 .ws-org-panel-row-state {
-  width: 8px;
-  height: 8px;
+  width: var(--openbot-space-2);
+  height: var(--openbot-space-2);
   flex: 0 0 auto;
   margin-left: auto;
   border-radius: var(--openbot-radius-pill);
@@ -708,21 +709,18 @@
 }
 
 .ws-org-panel-top {
-  width: 24px;
-  height: 24px;
+  width: var(--openbot-space-6);
+  height: var(--openbot-space-6);
   flex: 0 0 auto;
   border: 1.5px dashed var(--openbot-text-muted);
   border-radius: var(--openbot-radius-pill);
 }
 
+/* The manager picker, in its dialog: the search, then the agents. */
 .ws-org-picker {
   display: flex;
   flex-direction: column;
   gap: var(--openbot-space-2);
-  padding: var(--openbot-space-2);
-  border: 1px solid var(--ws-line);
-  border-radius: var(--openbot-radius-lg);
-  background: var(--openbot-bg-surface);
 }
 
 .ws-org-picker .ws-org-picker-search {
@@ -732,7 +730,7 @@
 }
 
 .ws-org-picker .ws-org-panel-list {
-  max-height: 280px;
+  max-height: min(50vh, 360px);
   overflow-y: auto;
 }
 
@@ -764,7 +762,7 @@
   }
 
   /* The sheet runs to the bottom edge; its end keeps clear of the home indicator (`web-client.css`). */
-  .ws-org-panel-scroll {
+  .ws-org-settings > .settings-panel-content {
     padding-bottom: calc(var(--openbot-space-4) + var(--web-safe-bottom, 0px));
   }
 
@@ -806,7 +804,9 @@
   }
 
   .ws-org-panel .ws-pane-header-actions .ui-button,
-  .ws-org-panel .ws-org-panel-actions .ui-button {
+  .ws-org-panel .ws-org-panel-actions .ui-button,
+  .ws-org-settings .ui-settings-group-actions .ui-button,
+  .ws-org-picker .ws-org-panel-row.ui-button {
     min-height: var(--openbot-touch-target);
   }
 

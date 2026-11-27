@@ -220,8 +220,10 @@
     min-height: var(--openbot-touch-target);
   }
 
-  .ws-fleet-card-actions .ui-icon-button.ui-button {
-    width: var(--openbot-touch-target);
+  /* A Fleet card's Motion ticket opens it in Motion: a finger's size too. */
+  .ws-fleet-card .ws-ticket-chip {
+    min-height: var(--openbot-touch-target);
+    padding-inline: var(--openbot-space-2-5);
   }
 
   /* A row's own buttons, such as Open chat and Move of an agent in the space's list. */

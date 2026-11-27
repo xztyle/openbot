@@ -345,6 +345,9 @@ export const messages = defineMessages("workspace", {
   "workspace.org.panel.manager": "Reports to",
   "workspace.org.panel.reports": "Direct reports",
   "workspace.org.panel.noReports": "No direct reports",
+  "workspace.org.panel.actions": "Actions",
+  "workspace.org.panel.sleepTeamHint": "This agent and the agents under it stop work until you wake them.",
+  "workspace.org.managerPickerHint": "Choose who {name} reports to. The change saves at once.",
   "workspace.org.topLevel": "No manager (top level)",
   "workspace.org.openChat": "Open chat",
   "workspace.org.changeManager": "Change manager",
@@ -363,6 +366,7 @@ export const messages = defineMessages("workspace", {
   "workspace.fleet.timeToday": "Time today",
   "workspace.fleet.message": "Message",
   "workspace.fleet.settings": "Settings of {name}",
+  "workspace.fleet.settingsShort": "Settings",
 
   "workspace.activity.filter": "Activity type",
   "workspace.activity.all": "All",

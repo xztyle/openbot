@@ -1853,7 +1853,17 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
                 agentId: agent.id,
                 status,
                 ...(status.kind === "working"
-                  ? { currentStep: "npm run build", currentStepKind: "shell" as const, queued: 1 }
+                  ? {
+                      currentStep: "npm run build",
+                      currentStepKind: "shell" as const,
+                      queued: 1,
+                      // The Motion ticket of the running turn, so a story shows its chip.
+                      currentTicket: {
+                        key: "MOT-12",
+                        title: "Launch page for the bakery",
+                        url: "https://motion.example.com/issues/MOT-12",
+                      },
+                    }
                   : {}),
                 todayCostUsd: Math.round((3.4 / (index + 1)) * 100) / 100,
                 todayDurationMs: Math.round(5_400_000 / (index + 1)),

@@ -8,7 +8,17 @@
  */
 
 import type { McpLocalFlow } from "@openbot/contracts/mcp-connect-flows";
-import { Alert, AlertContent, AlertDescription, AlertIcon, Button, ExternalLink, Info, Text } from "@openbot/ui";
+import {
+  Alert,
+  AlertContent,
+  AlertDescription,
+  AlertIcon,
+  Button,
+  ExternalLink,
+  FormSection,
+  Info,
+  Text,
+} from "@openbot/ui";
 import { createMemo, For, Show } from "solid-js";
 import { useText } from "../../text";
 import { createConnectRun, type McpConnectBaseProps, McpConnectShell } from "./McpConnectShell";
@@ -36,39 +46,34 @@ export function McpLocalDialog(props: McpLocalDialogProps) {
       busy={busy}
       description={t("mcp.local.description", { name: props.subject.name })}
       onSubmit={() => void attempt(async () => props.subject.config)}
-      action={
-        <Button class="mcp-connect-primary" type="submit" loading={busy()} loadingLabel={t("common.connecting")}>
-          {state.phase === "failed" ? t("common.tryAgain") : t("mcp.connect.connect")}
-        </Button>
-      }
+      submitLabel={state.phase === "failed" ? t("common.tryAgain") : t("mcp.connect.connect")}
+      submitDisabled={busy()}
     >
-      <div class="mcp-connect-card">
-        <div class="mcp-connect-row">
-          <h3 class="mcp-local-heading">{t("mcp.local.stepsTitle", { name: props.subject.name })}</h3>
-          <Show when={docs()}>
-            {(page) => (
-              <Button
-                class="mcp-connect-docs"
-                type="button"
-                variant="link"
-                onClick={() => props.onOpenUrl?.(page().url)}
-              >
-                {page().label}
-                <ExternalLink aria-hidden="true" />
-              </Button>
-            )}
-          </Show>
-          <ol class="mcp-local-steps">
-            <For each={props.flow.steps}>{(step) => <li>{step}</li>}</For>
-          </ol>
-        </div>
-        <p class="mcp-connect-row mcp-local-address">
-          <Text as="span" tone="muted">
-            {t("mcp.local.address")}
-          </Text>
-          <code>{props.subject.config.url}</code>
-        </p>
-      </div>
+      <FormSection title={t("mcp.local.stepsTitle", { name: props.subject.name })}>
+        <ol class="mcp-local-steps">
+          <For each={props.flow.steps}>{(step) => <li>{step}</li>}</For>
+        </ol>
+        <Show when={docs()}>
+          {(page) => (
+            <Button
+              class="mcp-connect-docs"
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => props.onOpenUrl?.(page().url)}
+            >
+              {page().label}
+              <ExternalLink aria-hidden="true" />
+            </Button>
+          )}
+        </Show>
+      </FormSection>
+      <p class="mcp-local-address">
+        <Text as="span" tone="muted">
+          {t("mcp.local.address")}
+        </Text>
+        <code>{props.subject.config.url}</code>
+      </p>
 
       <Show when={props.flow.note}>
         {(note) => (

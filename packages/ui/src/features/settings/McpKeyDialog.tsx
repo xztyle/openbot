@@ -72,72 +72,59 @@ export function McpKeyDialog(props: McpKeyDialogProps) {
           : t("mcp.connect.noCredentialDescription", { name: props.subject.name })
       }
       onSubmit={submit}
-      action={
-        <Button
-          class="mcp-connect-primary"
-          type="submit"
-          loading={busy()}
-          loadingLabel={t("common.connecting")}
-          disabled={form.touched && !complete()}
-        >
-          {state.phase === "failed" ? t("common.tryAgain") : t("mcp.connect.connect")}
-        </Button>
-      }
+      submitLabel={state.phase === "failed" ? t("common.tryAgain") : t("mcp.connect.connect")}
+      submitDisabled={form.touched && !complete()}
     >
-      {/* The card is what this way in asks for, and nothing else. The address the server answers
-          on is the listing's business, unless the listing asks the user for their own link. */}
+      {/* What this way in asks for, and nothing else. The address the server answers on is the
+          listing's business, unless the listing asks the user for their own link. */}
       <Show when={props.flow.fields.length > 0}>
-        <div class="mcp-connect-card">
-          <For each={props.flow.fields}>
-            {(field, index) => (
-              <div class="mcp-connect-row">
-                <Field
-                  label={field.label}
-                  description={field.hint}
-                  required={!field.optional}
-                  error={
-                    form.touched && !field.optional && !(form.values[field.id] ?? "").trim()
-                      ? t("mcp.connect.required")
-                      : undefined
-                  }
-                >
-                  {/* A link is shown so the user can check what they pasted; a credential is not. */}
-                  <Input
-                    type={field.url ? "url" : "password"}
-                    autocomplete="off"
-                    spellcheck={false}
-                    placeholder={field.placeholder}
-                    value={form.values[field.id] ?? ""}
-                    disabled={busy()}
-                    onValueChange={(value) => edit(field.id, value)}
-                  />
-                </Field>
-                {/* The page the key is made on: once, on the first row's label line, and after the
-                    field in the order, so the dialog opens with the field focused and not the way out. */}
-                <Show when={index() === 0 && docs()}>
-                  {(page) => (
-                    <Button
-                      class="mcp-connect-docs"
-                      type="button"
-                      variant="link"
-                      onClick={() => props.onOpenUrl?.(page().url)}
-                    >
-                      {page().label}
-                      <ExternalLink aria-hidden="true" />
-                    </Button>
-                  )}
-                </Show>
-              </div>
-            )}
-          </For>
-
-          <p class="mcp-connect-row mcp-connect-privacy">
-            <ShieldCheck aria-hidden="true" />
-            <Text as="span" tone="muted">
-              {t("mcp.connect.keptOn", { host: props.hostName ?? t("mcp.connect.thisComputer") })}
-            </Text>
-          </p>
-        </div>
+        <For each={props.flow.fields}>
+          {(field) => (
+            <Field
+              label={field.label}
+              description={field.hint}
+              required={!field.optional}
+              error={
+                form.touched && !field.optional && !(form.values[field.id] ?? "").trim()
+                  ? t("mcp.connect.required")
+                  : undefined
+              }
+            >
+              {/* A link is shown so the user can check what they pasted; a credential is not. */}
+              <Input
+                type={field.url ? "url" : "password"}
+                autocomplete="off"
+                spellcheck={false}
+                placeholder={field.placeholder}
+                value={form.values[field.id] ?? ""}
+                disabled={busy()}
+                onValueChange={(value) => edit(field.id, value)}
+              />
+            </Field>
+          )}
+        </For>
+        {/* The page the key is made on, after the fields in the order, so the dialog opens with the
+            first field focused and not the way out. */}
+        <Show when={docs()}>
+          {(page) => (
+            <Button
+              class="mcp-connect-docs"
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => props.onOpenUrl?.(page().url)}
+            >
+              {page().label}
+              <ExternalLink aria-hidden="true" />
+            </Button>
+          )}
+        </Show>
+        <p class="mcp-connect-privacy">
+          <ShieldCheck aria-hidden="true" />
+          <Text as="span" tone="muted">
+            {t("mcp.connect.keptOn", { host: props.hostName ?? t("mcp.connect.thisComputer") })}
+          </Text>
+        </p>
       </Show>
     </McpConnectShell>
   );

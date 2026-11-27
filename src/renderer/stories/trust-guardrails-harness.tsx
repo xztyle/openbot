@@ -2,6 +2,7 @@
  * The Guardrails tab of the Trust view on a fake host, for `scripts/guardrails-ui-e2e.ts`: one agent
  * paused at its turn limit, a Claude account at 97% of its five-hour window, a failover, today's use
  * and the newest events. The script reads the calls from `document.body.dataset.guardrailsCalls`.
+ * `?lang=es` shows the Spanish text.
  */
 import {
   DEFAULT_GUARDRAIL_POLICY,
@@ -148,7 +149,7 @@ const root = document.getElementById("root");
 if (root)
   render(
     () => (
-      <StaticI18nProvider locale="en">
+      <StaticI18nProvider locale={new URLSearchParams(window.location.search).get("lang") === "es" ? "es" : "en"}>
         <Toaster />
         <section class="ws-view trust-view">
           <div class="ws-view-scroll trust-scroll">

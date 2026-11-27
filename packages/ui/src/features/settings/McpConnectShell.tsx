@@ -21,19 +21,7 @@
 
 import { AppLogo } from "@openbot/brand";
 import type { McpServerConfig, McpTestResult } from "@openbot/contracts/ipc";
-import {
-  Alert,
-  AlertContent,
-  AlertDescription,
-  AlertIcon,
-  AlertTitle,
-  Dialog,
-  Field,
-  IconButton,
-  Input,
-  OctagonX,
-  X,
-} from "@openbot/ui";
+import { Field, FormDialog, Input } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
 import { createStore, onSettled, Show } from "solid-js";
 import { useText } from "../../text";
@@ -152,8 +140,9 @@ export interface McpConnectShellProps
   description: JSX.Element;
   /** What this way in asks for. A sign-in asks for nothing here. */
   children?: JSX.Element;
-  /** The submit. */
-  action: JSX.Element;
+  /** The words of the submit, such as "Connect" or "Try again". */
+  submitLabel: JSX.Element;
+  submitDisabled?: boolean | undefined;
   onSubmit: () => void;
   onNameChange?: (name: string) => void;
   /** Widens the dialog for a page drawn inside it. */
@@ -165,7 +154,10 @@ export interface McpConnectShellProps
   onCancelBusy?: (() => void) | undefined;
 }
 
-/** The parts both dialogs show: the two ends of the connection, the header, the failure, the button. */
+/**
+ * The parts every way in shows, in the shared `FormDialog`: the two ends of the connection, the
+ * name, the failure above the footer, and Cancel with the submit.
+ */
 export function McpConnectShell(props: McpConnectShellProps) {
   const { t } = useText();
   const cancelableWhileBusy = () => Boolean(props.onCancelBusy || props.allowCancelWhileBusy);
@@ -176,84 +168,47 @@ export function McpConnectShell(props: McpConnectShellProps) {
     props.onCancel();
   };
   return (
-    <Dialog.Root
+    <FormDialog
       open={props.open}
       onOpenChange={(open) => {
         if (!open) close();
       }}
+      size={props.wide ? "lg" : "sm"}
+      class="mcp-connect-dialog"
+      title={t("mcp.connect.title", { name: props.subject.name })}
+      description={props.description}
+      /* A wait the user can stop keeps Cancel and the close button; the submit waits instead. */
+      busy={props.busy() && !cancelableWhileBusy()}
+      error={
+        props.state.phase === "failed" ? (
+          <>
+            <strong>{t("mcp.connect.notConnected")}</strong> {props.state.error}
+          </>
+        ) : null
+      }
+      submitLabel={props.submitLabel}
+      submitDisabled={props.submitDisabled ?? false}
+      onSubmit={props.onSubmit}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay class="mcp-connect-backdrop">
-          <Dialog.Content class="mcp-connect-dialog" data-page={props.wide ? "" : undefined} as="section">
-            <header class="mcp-connect-header">
-              {/* The two ends of the connection, side by side: this computer, and the app. It is the
-                  one picture the dialog needs, and it says what is about to be joined. */}
-              <div class="mcp-connect-marks" aria-hidden="true">
-                <span class="mcp-connect-mark">
-                  <AppLogo variant="production" animation="look-around" />
-                </span>
-                <span class="mcp-connect-dots" />
-                <PluginIcon iconUrl={props.subject.iconUrl} class="mcp-connect-mark-icon" />
-              </div>
-              <Dialog.Title class="mcp-connect-title">
-                {t("mcp.connect.title", { name: props.subject.name })}
-              </Dialog.Title>
-              <Dialog.Description class="mcp-connect-description">{props.description}</Dialog.Description>
-            </header>
-
-            <form
-              class="mcp-connect-form"
-              /* A missing key is reported under the field, in the field's own words. Left to the
-                 browser, the same miss is a native bubble that blocks the submit. */
-              novalidate
-              onSubmit={(event) => {
-                event.preventDefault();
-                props.onSubmit();
-              }}
-            >
-              <Show when={props.onNameChange}>
-                <Field label={t("mcp.connection.name")}>
-                  <Input
-                    value={props.state.connectionName}
-                    disabled={props.busy()}
-                    onInput={(event) => props.onNameChange?.(event.currentTarget.value)}
-                  />
-                </Field>
-              </Show>
-              {props.children}
-
-              {/* Only what the user can act on: the connection that worked has closed the dialog. */}
-              <div class="mcp-connect-status" aria-live="polite">
-                <Show when={props.state.phase === "failed"}>
-                  <Alert tone="danger" role="alert">
-                    <AlertIcon>
-                      <OctagonX />
-                    </AlertIcon>
-                    <AlertContent>
-                      <AlertTitle>{t("mcp.connect.notConnected")}</AlertTitle>
-                      <AlertDescription>{props.state.error}</AlertDescription>
-                    </AlertContent>
-                  </Alert>
-                </Show>
-              </div>
-
-              {props.action}
-            </form>
-
-            {/* Last in the order, first in the corner: the dialog opens with what it asks for
-                focused, not with the way out focused. */}
-            <IconButton
-              class="mcp-connect-close"
-              label={t("mcp.connect.close", { name: props.subject.name })}
-              variant="ghost"
-              disabled={props.busy() && !cancelableWhileBusy()}
-              onClick={close}
-            >
-              <X />
-            </IconButton>
-          </Dialog.Content>
-        </Dialog.Overlay>
-      </Dialog.Portal>
-    </Dialog.Root>
+      {/* The two ends of the connection, side by side: this computer, and the app. It is the one
+          picture the dialog needs, and it says what is about to be joined. */}
+      <div class="mcp-connect-marks" aria-hidden="true">
+        <span class="mcp-connect-mark">
+          <AppLogo variant="production" animation="look-around" />
+        </span>
+        <span class="mcp-connect-dots" />
+        <PluginIcon iconUrl={props.subject.iconUrl} class="mcp-connect-mark-icon" />
+      </div>
+      <Show when={props.onNameChange}>
+        <Field label={t("mcp.connection.name")}>
+          <Input
+            value={props.state.connectionName}
+            disabled={props.busy()}
+            onInput={(event) => props.onNameChange?.(event.currentTarget.value)}
+          />
+        </Field>
+      </Show>
+      {props.children}
+    </FormDialog>
   );
 }

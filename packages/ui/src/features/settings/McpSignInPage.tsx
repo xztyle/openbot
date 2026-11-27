@@ -11,7 +11,7 @@
  * browse.
  */
 
-import { Alert, AlertDescription, Button, Dialog, Field, IconButton, Input, ShieldCheck, Text, X } from "@openbot/ui";
+import { Alert, AlertDescription, Button, Field, FormDialog, Input, ShieldCheck, Text } from "@openbot/ui";
 import { createSignal, Show } from "solid-js";
 import { useText } from "../../text";
 import BrowserLiveView, { type BrowserViewRuntime } from "../browser/BrowserLiveView";
@@ -75,42 +75,24 @@ export function McpSignInPageDialog(props: McpSignInPageDialogProps) {
     props.onCancel();
   };
   return (
-    <Dialog.Root
+    <FormDialog
       open
       onOpenChange={(open) => {
         if (!open) cancel();
       }}
+      size="lg"
+      class="mcp-connect-dialog mcp-sign-in-page-dialog"
+      title={t("mcp.panel.signInTo", { name: props.name })}
+      description={t("mcp.signIn.pageDescription", { host: props.hostName })}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay class="mcp-connect-backdrop">
-          <Dialog.Content class="mcp-connect-dialog mcp-sign-in-page-dialog" as="section">
-            <header class="mcp-connect-header">
-              <Dialog.Title class="mcp-connect-title">{t("mcp.panel.signInTo", { name: props.name })}</Dialog.Title>
-              <Dialog.Description class="mcp-connect-description">
-                {t("mcp.signIn.pageDescription", { host: props.hostName })}
-              </Dialog.Description>
-            </header>
-            <McpSignInPage page={props.page} />
-            <footer class="mcp-sign-in-page-footer">
-              <McpSignInPageNote hostName={props.hostName} />
-              <Button type="button" variant="outline" loading={cancelling()} onClick={cancel}>
-                {t("mcp.panel.cancelSignIn")}
-              </Button>
-            </footer>
-            {/* Last in the dialog, as in McpConnectShell: the first focus stays on the page. */}
-            <IconButton
-              class="mcp-connect-close"
-              variant="ghost"
-              label={t("common.close")}
-              disabled={cancelling()}
-              onClick={cancel}
-            >
-              <X />
-            </IconButton>
-          </Dialog.Content>
-        </Dialog.Overlay>
-      </Dialog.Portal>
-    </Dialog.Root>
+      <McpSignInPage page={props.page} />
+      <div class="mcp-sign-in-page-footer">
+        <McpSignInPageNote hostName={props.hostName} />
+        <Button type="button" variant="outline" size="sm" loading={cancelling()} onClick={cancel}>
+          {t("mcp.panel.cancelSignIn")}
+        </Button>
+      </div>
+    </FormDialog>
   );
 }
 
@@ -164,8 +146,7 @@ export function McpSignInRelayControls(props: McpSignInRelayActions & { page: Mc
       setError(errorMessage(cause, t("error.mcp.relayEnded")));
     }
   };
-  const send = async (event: SubmitEvent) => {
-    event.preventDefault();
+  const send = async () => {
     if (sending() || !address().trim()) return;
     setSending(true);
     setError(null);
@@ -194,20 +175,38 @@ export function McpSignInRelayControls(props: McpSignInRelayActions & { page: Mc
           </Show>
         }
       >
-        <form class="mcp-sign-in-relay-form" onSubmit={send}>
+        {/* Not a form of its own: the controls sit inside the form of a dialog. Enter sends. */}
+        <div class="mcp-sign-in-relay-form">
           <Field
             label={t("mcp.signIn.relayAddress")}
             description={t(props.page.listening ? "mcp.signIn.relayPasteHint" : "mcp.signIn.relayPasteRequired")}
             error={error()}
           >
             <div class="mcp-sign-in-relay-row">
-              <Input type="url" autocomplete="off" spellcheck={false} value={address()} onValueChange={setAddress} />
-              <Button type="submit" variant="outline" loading={sending()} disabled={!address().trim()}>
+              <Input
+                type="url"
+                autocomplete="off"
+                spellcheck={false}
+                value={address()}
+                onValueChange={setAddress}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" || event.isComposing) return;
+                  event.preventDefault();
+                  void send();
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                loading={sending()}
+                disabled={!address().trim()}
+                onClick={() => void send()}
+              >
                 {t("mcp.signIn.relaySend")}
               </Button>
             </div>
           </Field>
-        </form>
+        </div>
       </Show>
     </>
   );
@@ -227,41 +226,23 @@ export function McpSignInRelayDialog(props: McpSignInRelayDialogProps) {
     props.onCancel();
   };
   return (
-    <Dialog.Root
+    <FormDialog
       open
       onOpenChange={(open) => {
         if (!open) cancel();
       }}
+      size="sm"
+      class="mcp-connect-dialog mcp-sign-in-relay-dialog"
+      title={t("mcp.panel.signInTo", { name: props.name })}
+      description={t(relayDescriptionKey(props.page), { page: props.page.authorizeHost, host: props.hostName })}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay class="mcp-connect-backdrop">
-          <Dialog.Content class="mcp-connect-dialog mcp-sign-in-relay-dialog" as="section">
-            <header class="mcp-connect-header">
-              <Dialog.Title class="mcp-connect-title">{t("mcp.panel.signInTo", { name: props.name })}</Dialog.Title>
-              <Dialog.Description class="mcp-connect-description">
-                {t(relayDescriptionKey(props.page), { page: props.page.authorizeHost, host: props.hostName })}
-              </Dialog.Description>
-            </header>
-            <McpSignInRelayControls page={props.page} onOpen={props.onOpen} onPaste={props.onPaste} />
-            <footer class="mcp-sign-in-page-footer">
-              <McpSignInPageNote hostName={props.hostName} />
-              <Button type="button" variant="outline" loading={cancelling()} onClick={cancel}>
-                {t("mcp.panel.cancelSignIn")}
-              </Button>
-            </footer>
-            {/* Last in the dialog, as in McpConnectShell: the first focus stays on the page. */}
-            <IconButton
-              class="mcp-connect-close"
-              variant="ghost"
-              label={t("common.close")}
-              disabled={cancelling()}
-              onClick={cancel}
-            >
-              <X />
-            </IconButton>
-          </Dialog.Content>
-        </Dialog.Overlay>
-      </Dialog.Portal>
-    </Dialog.Root>
+      <McpSignInRelayControls page={props.page} onOpen={props.onOpen} onPaste={props.onPaste} />
+      <div class="mcp-sign-in-page-footer">
+        <McpSignInPageNote hostName={props.hostName} />
+        <Button type="button" variant="outline" size="sm" loading={cancelling()} onClick={cancel}>
+          {t("mcp.panel.cancelSignIn")}
+        </Button>
+      </div>
+    </FormDialog>
   );
 }

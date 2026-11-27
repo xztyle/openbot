@@ -1,8 +1,8 @@
 /*
  * The Trust view: rules by role, sandbox first, budgets, overrides, the guardrails and the audit
  * trail. Its pages are built on the settings design system (`@openbot/ui` SettingsSection,
- * SettingsGroup, SettingsRow); this file holds what that system does not: the tabs, the matrix of
- * actions by role, the KPI tiles, the subscription meter, the event list and the audit list.
+ * SettingsGroup, SettingsRow); this file holds what that system does not: the tabs, the KPI tiles,
+ * the bar of the subscription meter and the audit list.
  */
 
 .trust-tabs {
@@ -23,9 +23,9 @@
 
 /*
  * The view takes the settings hierarchy through `.ws-view` (settings-modal.css). What is left here is
- * the inset of the card children that are not rows: help, meter windows, events and matrix rows.
+ * the inset of the card children that are not rows: the help line of an empty group.
  */
-.trust-view .settings-modal-card > :is(.ui-settings-help, .guardrails-window, .guardrails-event, .trust-grid-row) {
+.trust-view .settings-modal-card > .ui-settings-help {
   padding: var(--openbot-space-3) var(--openbot-space-5);
 }
 
@@ -53,40 +53,6 @@
   gap: var(--openbot-space-2);
   margin: 0;
   color: var(--openbot-danger-text);
-  font-size: var(--openbot-text-sm);
-}
-
-/* The matrix of actions by role: the action, a rule for a lead, one for a member, who approves. */
-.trust-grid-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(3, minmax(0, 10rem));
-  align-items: center;
-  gap: var(--openbot-space-3);
-  font-size: var(--openbot-text-md);
-}
-
-.trust-grid-head {
-  color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-sm);
-}
-
-.trust-grid-label {
-  color: var(--openbot-text-primary);
-  font-size: var(--openbot-text-lg);
-  font-weight: var(--openbot-weight-medium);
-  line-height: var(--openbot-leading-lg);
-}
-
-.trust-cell {
-  min-width: 0;
-  display: grid;
-  gap: var(--openbot-space-1);
-}
-
-/* The column heads name the cells on a computer; on a phone each cell carries its own name. */
-.trust-cell-label {
-  display: none;
-  color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
 }
 
@@ -189,20 +155,10 @@
   gap: var(--openbot-space-1-5);
 }
 
-.guardrails-window {
-  display: grid;
-  grid-template-columns: 3rem minmax(4rem, 8rem) minmax(0, 1fr);
-  align-items: center;
-  gap: var(--openbot-space-2);
-  font-size: var(--openbot-text-sm);
-}
-
-.guardrails-window-label {
-  color: var(--openbot-text-muted);
-}
-
+/* The share of a subscription window that is used, on the right of its row. */
 .guardrails-bar {
   display: block;
+  width: calc(var(--openbot-control-xl) * 3);
   overflow: hidden;
   height: var(--openbot-space-1-5);
   border-radius: var(--openbot-radius-pill);
@@ -215,14 +171,6 @@
   background: var(--openbot-accent);
 }
 
-.guardrails-event {
-  display: grid;
-  grid-template-columns: 7rem minmax(0, 1fr);
-  gap: var(--openbot-space-2);
-  overflow-wrap: anywhere;
-  font-size: var(--openbot-text-sm);
-}
-
 /* The Guardrails save bar scrolls with its page and stays in sight at the bottom. */
 .trust-scroll > .settings-modal-save-dock {
   position: sticky;
@@ -231,51 +179,19 @@
 }
 
 @media (max-width: 640px) {
-  /* Each action becomes its own block: the name on one line, the three named choices under it. */
-  .trust-grid-head {
-    display: none;
-  }
-
-  .trust-grid-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--openbot-space-2);
-  }
-
-  .trust-grid-label {
-    grid-column: 1 / -1;
-  }
-
-  .trust-cell-label {
-    display: block;
-  }
-
-  /* "Who approves" holds the longest words: it gets the whole second line. */
-  .trust-cell:last-child {
-    grid-column: 1 / -1;
-  }
-
   .trust-view .ui-settings-section-header {
     align-items: flex-start;
     flex-direction: column;
     gap: var(--openbot-space-2);
   }
 
-  /* A group's action is one icon (remove, close): it stays beside the title. */
+  /* A group's action (remove, close) stays beside its title. */
   .trust-view .ui-settings-group-header {
     align-items: flex-start;
     flex-direction: row;
   }
 
-  .trust-view .settings-modal-card > :is(.ui-settings-help, .guardrails-window, .guardrails-event, .trust-grid-row) {
+  .trust-view .settings-modal-card > .ui-settings-help {
     padding: var(--openbot-space-3) var(--openbot-space-4);
-  }
-
-  .guardrails-window {
-    grid-template-columns: 2.5rem minmax(3rem, 5rem) minmax(0, 1fr);
-  }
-
-  .guardrails-event {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
   }
 }

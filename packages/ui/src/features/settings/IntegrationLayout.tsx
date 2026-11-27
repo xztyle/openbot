@@ -1,7 +1,8 @@
 /**
  * The parts that every integration page shares: the logo on its tile, the status pill, the page
  * header, the danger zone, and the connect dialog with OpenBot and the other app side by side.
- * GitHub, Slack, Discord and Telegram use them.
+ * GitHub, Slack, Discord and Telegram use them. The danger zone is a settings row, and the connect
+ * dialog is the shared `FormDialog`.
  */
 
 import { AppLogo } from "@openbot/brand";
@@ -17,19 +18,13 @@ import {
   Button,
   Check,
   ConfirmDialog,
-  Dialog,
+  FormDialog,
   Heading,
-  IconButton,
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemTitle,
+  SettingsGroup,
+  SettingsRow,
   SettingsSection,
   Text,
   TriangleAlert,
-  X,
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
 import { createSignal, For, Show } from "solid-js";
@@ -147,25 +142,20 @@ export function DangerZone(props: {
   const [confirming, setConfirming] = createSignal(false);
   return (
     <SettingsSection title={t("connector.dangerZone")}>
-      <ItemGroup class="settings-modal-card">
-        <Item class="settings-modal-row">
-          <ItemContent>
-            <ItemTitle>{props.title}</ItemTitle>
-            <ItemDescription>{props.description}</ItemDescription>
-          </ItemContent>
-          <ItemActions>
-            <Button
-              type="button"
-              size="sm"
-              variant="destructive-ghost"
-              loading={props.busy ?? false}
-              onClick={() => (props.confirm ? setConfirming(true) : props.onAction())}
-            >
-              {props.action}
-            </Button>
-          </ItemActions>
-        </Item>
-      </ItemGroup>
+      <SettingsGroup label={t("connector.dangerZone")}>
+        <SettingsRow label={props.title} description={props.description}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            class="integration-danger-button"
+            loading={props.busy ?? false}
+            onClick={() => (props.confirm ? setConfirming(true) : props.onAction())}
+          >
+            {props.action}
+          </Button>
+        </SettingsRow>
+      </SettingsGroup>
       <Show when={props.confirm}>
         <ConfirmDialog
           open={confirming()}
@@ -220,10 +210,33 @@ export interface WizardProps {
   footer: JSX.Element;
 }
 
-/** The body of a connect dialog. `heading` is the title element, so a dialog can give its own. */
-export function WizardContent(props: WizardProps & { heading: JSX.Element }) {
+/**
+ * A connect dialog over the settings window: the shared `FormDialog` with OpenBot and the other app
+ * side by side above the steps. Its buttons are the wizard's own, at the end of the body, because a
+ * step can have two actions or none. With `dismissible` false, a click outside does not close it: the
+ * user may come back from the browser while a flow runs, and that click must not stop the flow.
+ */
+export function WizardDialog(
+  props: WizardProps & {
+    open: boolean;
+    /** What the close of the step does, such as "Cancel connecting". The shared close button says Close. */
+    closeLabel?: string;
+    dismissible?: boolean;
+    onClose: () => void;
+  },
+) {
   return (
-    <>
+    <FormDialog
+      open={props.open}
+      onOpenChange={(open) => {
+        if (!open) props.onClose();
+      }}
+      size="sm"
+      class="integration-wizard-dialog"
+      title={props.title}
+      description={props.description}
+      dismissible={props.dismissible ?? true}
+    >
       <div class="integration-wizard-head">
         <div class="integration-wizard-logos" data-link={props.link ?? "connecting"} aria-hidden="true">
           <AppLogo variant="production" animation="blink" class="integration-wizard-app" />
@@ -233,62 +246,11 @@ export function WizardContent(props: WizardProps & { heading: JSX.Element }) {
           </span>
         </div>
         {props.stepper}
-        {props.heading}
-        <Text variant="body-sm" tone="muted">
-          {props.description}
-        </Text>
       </div>
       <Show when={props.children}>
         <div class="integration-wizard-body">{props.children}</div>
       </Show>
       <div class="integration-wizard-foot">{props.footer}</div>
-    </>
-  );
-}
-
-/**
- * A connect dialog over the settings window. With `dismissible` false, a click outside does not close
- * it: the user may come back from the browser while a flow runs, and that click must not stop the flow.
- */
-export function WizardDialog(
-  props: WizardProps & { open: boolean; closeLabel: string; dismissible?: boolean; onClose: () => void },
-) {
-  return (
-    <Dialog.Root
-      open={props.open}
-      onOpenChange={(open) => {
-        if (!open) props.onClose();
-      }}
-    >
-      <Dialog.Portal>
-        <Dialog.Overlay class="integration-dialog-backdrop" />
-        <Dialog.Content
-          class="integration-wizard integration-wizard-dialog"
-          as="section"
-          onInteractOutside={(event) => {
-            if (props.dismissible === false) event.preventDefault();
-          }}
-        >
-          <WizardContent
-            {...props}
-            description={<Dialog.Description as="span">{props.description}</Dialog.Description>}
-            heading={
-              <Dialog.Title as="h2" class="ui-heading" data-size="md" data-tone="primary">
-                {props.title}
-              </Dialog.Title>
-            }
-          />
-          <IconButton
-            class="integration-dialog-close"
-            label={props.closeLabel}
-            variant="ghost"
-            data-cuelume-tap="close"
-            onClick={props.onClose}
-          >
-            <X />
-          </IconButton>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    </FormDialog>
   );
 }

@@ -19,16 +19,14 @@ import {
   CreditCard,
   DropdownMenu,
   Ellipsis,
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemMedia,
-  ItemTitle,
   OctagonX,
+  Plus,
   RotateCcw,
   ServerGradientLogo,
+  SettingsGroup,
+  SettingsHelp,
+  SettingsRow,
+  SettingsSection,
   SlidersHorizontal,
   Spinner,
   Text,
@@ -150,73 +148,79 @@ export function BillingPanel(props: BillingPanelProps): JSX.Element {
                   </AlertActions>
                 </Alert>
               </Show>
-              <div class="billing-toolbar">
-                <Text variant="caption" tone="muted">
-                  {t("billing.servers.title")}
-                </Text>
-                <Show when={state().hasCustomer}>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={props.store.state.pending !== null}
-                    aria-busy={managing() ? "true" : undefined}
-                    onClick={() => void props.store.openPortal({ flow: "manage" })}
-                  >
-                    <CreditCard aria-hidden="true" />
-                    {managing() ? t("billing.opening") : t("billing.manage")}
-                  </Button>
-                </Show>
-              </div>
-              <Show when={props.onAddServer}>
-                {(add) => (
-                  <Button variant="outline" onClick={() => add()()}>
-                    {t("settings.hostedServers.add")}
-                  </Button>
-                )}
-              </Show>
-              <For each={managedServers()} keyed={(server) => server.serverId}>
-                {(server) => {
-                  const plan = () => state().servers.find((entry) => entry.serverId === server().serverId);
-                  return (
-                    <Show when={plan()}>
-                      {(current) => (
-                        <Show when={props.hostedServers}>
-                          {(hosting) => (
-                            <BillingManagedServer
-                              server={server()}
-                              plan={current()}
-                              paidThrough={current().currentPeriodEnd ?? 0}
-                              billing={props.store}
-                              hosting={hosting()}
-                            />
-                          )}
-                        </Show>
-                      )}
-                    </Show>
-                  );
-                }}
-              </For>
-              <Show
-                when={state().servers.some((server) => !server.serverId || !managedIds().includes(server.serverId))}
-                fallback={
-                  <Show when={state().servers.length === 0}>
-                    <div class="billing-empty">
-                      <Text tone="muted">{t("billing.empty")}</Text>
-                    </div>
+              <SettingsSection
+                title={t("billing.servers.title")}
+                actions={
+                  <Show when={state().hasCustomer}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={props.store.state.pending !== null}
+                      aria-busy={managing() ? "true" : undefined}
+                      onClick={() => void props.store.openPortal({ flow: "manage" })}
+                    >
+                      <CreditCard aria-hidden="true" />
+                      {managing() ? t("billing.opening") : t("billing.manage")}
+                    </Button>
                   </Show>
                 }
               >
-                <ItemGroup class="billing-servers" role="list">
-                  <For
-                    each={state().servers.filter(
-                      (server) => !server.serverId || !managedIds().includes(server.serverId),
-                    )}
-                  >
-                    {(server) => <BillingServerRow server={server} store={props.store} />}
-                  </For>
-                </ItemGroup>
-              </Show>
+                <For each={managedServers()} keyed={(server) => server.serverId}>
+                  {(server) => {
+                    const plan = () => state().servers.find((entry) => entry.serverId === server().serverId);
+                    return (
+                      <Show when={plan()}>
+                        {(current) => (
+                          <Show when={props.hostedServers}>
+                            {(hosting) => (
+                              <BillingManagedServer
+                                server={server()}
+                                plan={current()}
+                                paidThrough={current().currentPeriodEnd ?? 0}
+                                billing={props.store}
+                                hosting={hosting()}
+                              />
+                            )}
+                          </Show>
+                        )}
+                      </Show>
+                    );
+                  }}
+                </For>
+                <Show
+                  when={state().servers.some((server) => !server.serverId || !managedIds().includes(server.serverId))}
+                  fallback={
+                    <Show when={state().servers.length === 0}>
+                      <SettingsGroup label={t("billing.servers.title")}>
+                        <SettingsHelp>{t("billing.empty")}</SettingsHelp>
+                      </SettingsGroup>
+                    </Show>
+                  }
+                >
+                  <SettingsGroup label={t("billing.servers.title")}>
+                    <For
+                      each={state().servers.filter(
+                        (server) => !server.serverId || !managedIds().includes(server.serverId),
+                      )}
+                    >
+                      {(server) => <BillingServerRow server={server} store={props.store} />}
+                    </For>
+                  </SettingsGroup>
+                </Show>
+                <Show when={props.onAddServer}>
+                  {(add) => (
+                    <SettingsGroup label={t("settings.hostedServers.add")}>
+                      <SettingsRow label={t("settings.hostedServers.add")}>
+                        <Button type="button" variant="outline" size="sm" onClick={() => add()()}>
+                          <Plus aria-hidden="true" />
+                          {t("common.add")}
+                        </Button>
+                      </SettingsRow>
+                    </SettingsGroup>
+                  )}
+                </Show>
+              </SettingsSection>
             </>
           )}
         </Match>
@@ -304,24 +308,23 @@ function BillingServerRow(props: { server: BillingServerPlan; store: BillingStor
   const open = (request: BillingPortalRequest) => void props.store.openPortal(request);
 
   return (
-    <Item class="billing-server" role="listitem">
-      <ItemMedia>
-        <ServerGradientLogo class="billing-server-logo" seed={props.server.serverId ?? props.server.subscriptionId} />
-      </ItemMedia>
-      <ItemContent>
-        <div class="billing-server-title">
-          <ItemTitle>{name()}</ItemTitle>
+    <SettingsRow
+      class="billing-server"
+      layout="inline"
+      label={
+        <span class="billing-server-title">
+          <ServerGradientLogo class="billing-server-logo" seed={props.server.serverId ?? props.server.subscriptionId} />
+          {name()}
           <Show when={badge()}>{(item) => <Badge variant={item().variant}>{t(item().text)}</Badge>}</Show>
-        </div>
-        <ItemDescription>
-          {t("billing.server.summary", {
-            plan: t(PLAN_NAME[props.server.plan]),
-            size: format.number(storageGb()),
-          })}
-        </ItemDescription>
-        <Show when={periodEnd()}>{(line) => <ItemDescription>{line()}</ItemDescription>}</Show>
-      </ItemContent>
-      <ItemActions>
+        </span>
+      }
+      description={t("billing.server.summary", {
+        plan: t(PLAN_NAME[props.server.plan]),
+        size: format.number(storageGb()),
+      })}
+      help={periodEnd() ?? undefined}
+    >
+      <span class="billing-server-actions">
         <Text as="span" variant="label" class="billing-server-price">
           {price()}
         </Text>
@@ -370,7 +373,7 @@ function BillingServerRow(props: { server: BillingServerPlan; store: BillingStor
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
-      </ItemActions>
-    </Item>
+      </span>
+    </SettingsRow>
   );
 }

@@ -3,8 +3,8 @@
  * `scripts/views-e2e.ts`: Portfolio (value, quality with a suite, templates, reality check), Reviews
  * (savings, a weekly review, playbooks, the learning queue), Trust (rules with a budget, the audit
  * trail, the guardrails) and Insights. `?data=empty` serves each view with nothing in it, and
- * `?data=extreme` with large numbers and long text; `?appearance=dark` paints the dark palette. Each
- * admin call lands in `data-views-calls`.
+ * `?data=extreme` with large numbers and long text; `?appearance=dark` paints the dark palette, and
+ * `?lang=es` shows the Spanish text. Each admin call lands in `data-views-calls`.
  */
 import type { LearningReviewItem } from "@openbot/contracts/agent-learning";
 import { DEFAULT_GUARDRAIL_POLICY, type GuardrailsView, normalizeGuardrailPolicy } from "@openbot/contracts/guardrails";
@@ -506,7 +506,7 @@ const root = document.getElementById("root");
 if (root)
   render(
     () => (
-      <StaticI18nProvider locale="en">
+      <StaticI18nProvider locale={params.get("lang") === "es" ? "es" : "en"}>
         <div class="web-app">
           <Toaster />
           <WebWorkspace

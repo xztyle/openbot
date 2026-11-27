@@ -84,20 +84,17 @@
 
 /* ------------------------------------------------ connect dialog */
 
-.integration-wizard {
+/* The connect dialog is the shared FormDialog; its body opens with the two marks and the steps. */
+.integration-wizard-dialog .ui-form-dialog-body {
   display: grid;
+  align-content: start;
   gap: var(--openbot-space-4);
-  padding: var(--openbot-space-6);
-  border-radius: var(--openbot-radius-xl);
-  background: var(--openbot-bg-sheet);
-  box-shadow: var(--openbot-shadow-dialog);
 }
 
 .integration-wizard-head {
   display: grid;
   gap: var(--openbot-space-2);
   justify-items: center;
-  text-align: center;
 }
 
 .integration-wizard-logos {
@@ -187,31 +184,23 @@
   height: var(--openbot-icon-sm);
 }
 
-.integration-wizard-dialog {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  z-index: var(--openbot-layer-overlay);
-  width: min(440px, calc(100vw - var(--openbot-space-6) * 2));
-  max-height: calc(100dvh - var(--openbot-space-6) * 2);
-  overflow-y: auto;
-  outline: 0;
-  transform: translate(-50%, -50%);
-}
-
 /* A select inside a wizard dialog opens its list above the dialog, not behind it. */
 .integration-select-content {
   z-index: var(--openbot-layer-overlay);
 }
 
-.integration-wizard-dialog h2 {
-  margin: 0;
+/* The buttons of a connect form on an integration page, under its group of fields. */
+.integration-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--openbot-space-2);
+  margin-top: var(--openbot-space-3);
 }
 
-.integration-dialog-close {
-  position: absolute;
-  top: var(--openbot-space-3);
-  right: var(--openbot-space-3);
+/* The action of the danger zone: a real button, in the colour of what it cannot undo. */
+.integration-danger-button.ui-button {
+  border-color: color-mix(in srgb, var(--openbot-danger) 45%, var(--openbot-transparent));
+  color: var(--openbot-danger);
 }
 
 /* ------------------------------------------------ stepper */

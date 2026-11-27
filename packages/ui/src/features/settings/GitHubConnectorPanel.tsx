@@ -10,18 +10,17 @@ import {
   Badge,
   Button,
   Check,
+  ConfirmDialog,
   CopyButton,
   ExternalLink,
   Input,
-  Item,
-  ItemContent,
-  ItemGroup,
-  ItemMedia,
-  ItemTitle,
   Link2Off,
   Lock,
   OctagonX,
   Search,
+  SettingsGroup,
+  SettingsHelp,
+  SettingsRow,
   SettingsSection,
   Spinner,
   Text,
@@ -157,16 +156,15 @@ export function GitHubConnectorPanel(props: GitHubConnectorPanelProps) {
 
       <Show when={props.status.state === "connected" || props.status.state === "expired"}>
         <SettingsSection title={t("connector.github.accountTitle")}>
-          <ItemGroup class="settings-modal-card">
-            <Item class="settings-modal-row">
-              <ItemMedia>
-                <GitHubAvatar login={login()} avatarUrl={props.status.avatarUrl} />
-              </ItemMedia>
-              <ItemContent>
-                <ItemTitle>@{login()}</ItemTitle>
-              </ItemContent>
-            </Item>
-          </ItemGroup>
+          <SettingsGroup label={t("connector.github.accountTitle")}>
+            <SettingsRow
+              label={
+                <span class="github-connector-account">
+                  <GitHubAvatar login={login()} avatarUrl={props.status.avatarUrl} />@{login()}
+                </span>
+              }
+            />
+          </SettingsGroup>
         </SettingsSection>
       </Show>
 
@@ -251,21 +249,21 @@ function RepositoriesSection(props: {
         </Button>
       }
     >
-      <ItemGroup class="settings-modal-card">
+      <SettingsGroup label={t("connector.github.repositoriesTitle")}>
         <Show when={props.repositoriesError}>
           {(message) => (
-            <Text class="github-connector-line" tone="danger" variant="caption" role="alert">
-              {message()}
-            </Text>
+            <SettingsHelp class="github-connector-line">
+              <span class="github-connector-error" role="alert">
+                {message()}
+              </span>
+            </SettingsHelp>
           )}
         </Show>
         <Show
           when={props.repositories}
           fallback={
             <Show when={!props.repositoriesError}>
-              <Text class="github-connector-line" tone="muted" variant="caption">
-                {t("connector.github.repositoriesLoading")}
-              </Text>
+              <SettingsHelp class="github-connector-line">{t("connector.github.repositoriesLoading")}</SettingsHelp>
             </Show>
           }
         >
@@ -273,9 +271,7 @@ function RepositoriesSection(props: {
             <Show
               when={list().repositories.length > 0}
               fallback={
-                <Text class="github-connector-line" tone="muted" variant="caption">
-                  {t("connector.github.noRepositories")}
-                </Text>
+                <SettingsHelp class="github-connector-line">{t("connector.github.noRepositories")}</SettingsHelp>
               }
             >
               <div class="github-connector-search">
@@ -292,44 +288,47 @@ function RepositoriesSection(props: {
               <Show
                 when={matches().length > 0}
                 fallback={
-                  <Text class="github-connector-line" variant="caption" tone="muted">
+                  <SettingsHelp class="github-connector-line">
                     {t("connector.github.noMatch", { query: query().trim() })}
-                  </Text>
+                  </SettingsHelp>
                 }
               >
-                <ul class="github-connector-repository-list" aria-label={t("connector.github.repositoriesTitle")}>
-                  <For each={matches()} keyed={(repository) => repository.fullName}>
-                    {(repository) => {
-                      const slash = () => repository().fullName.indexOf("/");
-                      return (
-                        <li class="github-connector-repository">
-                          <Text as="span" class="github-connector-repository-name" variant="body-sm" truncate>
+                <For each={matches()} keyed={(repository) => repository.fullName}>
+                  {(repository) => {
+                    const slash = () => repository().fullName.indexOf("/");
+                    return (
+                      <SettingsRow
+                        layout="inline"
+                        class="github-connector-repository"
+                        label={
+                          <>
                             <span class="github-connector-repository-owner">
                               {repository().fullName.slice(0, slash() + 1)}
                             </span>
                             {repository().fullName.slice(slash() + 1)}
-                          </Text>
-                          <Show when={repository().private}>
-                            <Badge variant="secondary" class="github-connector-private">
-                              <Lock size={12} aria-hidden="true" />
-                              {t("connector.github.private")}
-                            </Badge>
-                          </Show>
-                        </li>
-                      );
-                    }}
-                  </For>
-                </ul>
+                          </>
+                        }
+                      >
+                        <Show when={repository().private}>
+                          <Badge variant="secondary" class="github-connector-private">
+                            <Lock size={12} aria-hidden="true" />
+                            {t("connector.github.private")}
+                          </Badge>
+                        </Show>
+                      </SettingsRow>
+                    );
+                  }}
+                </For>
               </Show>
               <Show when={list().total > list().repositories.length}>
-                <Text class="github-connector-line" tone="muted" variant="caption">
+                <SettingsHelp class="github-connector-line">
                   {t("connector.github.moreRepositories", { count: list().total - list().repositories.length })}
-                </Text>
+                </SettingsHelp>
               </Show>
             </Show>
           )}
         </Show>
-      </ItemGroup>
+      </SettingsGroup>
     </SettingsSection>
   );
 }
@@ -521,6 +520,7 @@ function DeviceCode(props: { code: string }) {
   );
 }
 
+/** Asks before the connection ends. It reaches GitHub, so it confirms; nothing is lost, so its tone is default. */
 function DisconnectDialog(props: {
   open: boolean;
   login: string;
@@ -530,36 +530,20 @@ function DisconnectDialog(props: {
 }) {
   const { t } = useText();
   return (
-    <WizardDialog
+    <ConfirmDialog
       open={props.open}
-      closeLabel={t("connector.github.close")}
-      onClose={props.onClose}
-      logo={<GitHubMark />}
-      link="broken"
+      tone="default"
+      initialFocus="cancel"
       title={t("connector.github.disconnectConfirmTitle")}
       description={
         props.hostName
           ? t("connector.github.disconnectConfirmDescriptionHost", { login: props.login, host: props.hostName })
           : t("connector.github.disconnectConfirmDescription", { login: props.login })
       }
-      footer={
-        <>
-          <Button type="button" variant="ghost" onClick={props.onClose}>
-            {t("connector.github.keepConnected")}
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            class="github-connector-confirm"
-            data-cuelume-tap="close"
-            data-cuelume-emphasis="strong"
-            onClick={props.onConfirm}
-          >
-            <Link2Off aria-hidden="true" />
-            {t("connector.github.disconnect")}
-          </Button>
-        </>
-      }
+      cancelLabel={t("connector.github.keepConnected")}
+      confirmLabel={t("connector.github.disconnect")}
+      onCancel={props.onClose}
+      onConfirm={props.onConfirm}
     >
       <ul class="github-connector-effects">
         <li data-tone="danger">
@@ -583,6 +567,6 @@ function DisconnectDialog(props: {
             : t("connector.github.disconnectEffectKept")}
         </li>
       </ul>
-    </WizardDialog>
+    </ConfirmDialog>
   );
 }

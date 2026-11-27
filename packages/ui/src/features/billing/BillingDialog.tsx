@@ -1,4 +1,4 @@
-import { Dialog, IconButton, Text, X } from "@openbot/ui";
+import { FormDialog } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
 import { useText } from "../../text";
 import type { SettingsHostedServersStore } from "../settings/stores/hosted-servers-store";
@@ -15,37 +15,22 @@ export interface BillingDialogProps {
   license?: JSX.Element;
 }
 
-/** The Billing panel in a dialog, for the web client, which has no Billing settings. */
+/**
+ * The Billing panel in the shared form dialog, for the web client, which has no Billing settings. It
+ * has no footer: each plan acts from its own row.
+ */
 export function BillingDialog(props: BillingDialogProps): JSX.Element {
   const { t } = useText();
-
   return (
-    <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay class="billing-dialog-backdrop">
-          <Dialog.Content as="section" class="billing-dialog">
-            <IconButton
-              class="billing-dialog-close"
-              label={t("common.close")}
-              variant="ghost"
-              onClick={() => props.onOpenChange(false)}
-            >
-              <X />
-            </IconButton>
-            <header class="billing-dialog-header">
-              <Dialog.Title as="h2" class="billing-dialog-title">
-                {t("billing.title")}
-              </Dialog.Title>
-              <Dialog.Description as="p">
-                <Text tone="muted">{t("billing.description")}</Text>
-              </Dialog.Description>
-            </header>
-            <div class="billing-dialog-body">
-              <BillingPanel store={props.store} available hostedServers={props.hostedServers} license={props.license} />
-            </div>
-          </Dialog.Content>
-        </Dialog.Overlay>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <FormDialog
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      size="lg"
+      class="billing-dialog"
+      title={t("billing.title")}
+      description={t("billing.description")}
+    >
+      <BillingPanel store={props.store} available hostedServers={props.hostedServers} license={props.license} />
+    </FormDialog>
   );
 }

@@ -10,6 +10,8 @@ import {
   Input,
   RadioGroup,
   Server,
+  SettingsGroup,
+  SettingsRow,
   StableLabel,
   Text,
   Trash2,
@@ -92,26 +94,27 @@ export function BillingServerLifecycle(props: BillingServerLifecycleProps) {
           </Text>
         }
       >
-        <div class="billing-lifecycle-card">
-          <div class="billing-lifecycle-identity">
-            <span class="billing-lifecycle-server-icon">
-              <Server aria-hidden="true" />
-            </span>
-            <div class="billing-lifecycle-server-copy">
-              <Text as="strong" variant="label">
+        <SettingsGroup class="billing-lifecycle-card">
+          <SettingsRow
+            class="billing-lifecycle-identity"
+            layout="inline"
+            label={
+              <span class="billing-lifecycle-name">
+                <span class="billing-lifecycle-server-icon">
+                  <Server aria-hidden="true" />
+                </span>
                 {props.name}
-              </Text>
-              <Text tone="muted" variant="caption">
-                {props.planDescription}
-              </Text>
-            </div>
-            <div class="billing-lifecycle-price">
+              </span>
+            }
+            description={props.planDescription}
+          >
+            <span class="billing-lifecycle-price">
               <Text variant="label">{props.price}</Text>
               <Text variant="caption" tone="muted">
                 {props.statusLabel ??
                   t(props.running ? "settings.hostedServers.state.running" : "settings.hostedServers.state.stopped")}
               </Text>
-            </div>
+            </span>
             <DropdownMenu.Root placement="bottom-end">
               <DropdownMenu.Trigger
                 ref={menuButton}
@@ -159,13 +162,16 @@ export function BillingServerLifecycle(props: BillingServerLifecycleProps) {
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
-          </div>
-          <div class="billing-lifecycle-billing" data-scheduled={props.scheduled ? "" : undefined}>
-            <Show when={props.scheduled}>
-              <CalendarClock class="billing-lifecycle-calendar" aria-hidden="true" />
-            </Show>
-            <div class="billing-lifecycle-billing-copy" role={props.scheduled ? "status" : undefined}>
-              <Text variant="label-sm" tone={props.scheduled ? "warning" : "secondary"}>
+          </SettingsRow>
+          <SettingsRow
+            class="billing-lifecycle-billing"
+            data-scheduled={props.scheduled ? "" : undefined}
+            role={props.scheduled ? "status" : undefined}
+            label={
+              <span class="billing-lifecycle-name">
+                <Show when={props.scheduled}>
+                  <CalendarClock class="billing-lifecycle-calendar" aria-hidden="true" />
+                </Show>
                 {t(
                   props.scheduled
                     ? "billing.lifecycle.deletesOn"
@@ -174,19 +180,18 @@ export function BillingServerLifecycle(props: BillingServerLifecycleProps) {
                       : "billing.server.renews",
                   { date: shortDate() },
                 )}
-              </Text>
-              <Text tone="muted" variant="caption">
-                {t(
-                  props.scheduled
-                    ? "billing.lifecycle.scheduledDescription"
-                    : props.cancelAtPeriodEnd
-                      ? "billing.lifecycle.dataStays"
-                      : "billing.lifecycle.renews",
-                )}
-              </Text>
-            </div>
+              </span>
+            }
+            description={t(
+              props.scheduled
+                ? "billing.lifecycle.scheduledDescription"
+                : props.cancelAtPeriodEnd
+                  ? "billing.lifecycle.dataStays"
+                  : "billing.lifecycle.renews",
+            )}
+          >
             <Button
-              variant={props.scheduled || props.cancelAtPeriodEnd ? "default" : "ghost"}
+              variant={props.scheduled || props.cancelAtPeriodEnd ? "default" : "outline"}
               size="sm"
               onClick={(event) => {
                 setDialogTrigger(event.currentTarget);
@@ -199,8 +204,8 @@ export function BillingServerLifecycle(props: BillingServerLifecycleProps) {
                   : "billing.lifecycle.cancelRenewal",
               )}
             </Button>
-          </div>
-        </div>
+          </SettingsRow>
+        </SettingsGroup>
       </Show>
       <ConfirmDialog
         open={props.action !== null}

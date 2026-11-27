@@ -6,14 +6,15 @@ import {
   AlertIcon,
   AlertTitle,
   Button,
-  Field,
   Input,
   Lock,
   OctagonX,
+  SettingsGroup,
+  SettingsHelp,
+  SettingsRow,
   SettingsSection,
-  Text,
 } from "@openbot/ui";
-import { createEffect, createSignal, Show } from "solid-js";
+import { createEffect, createSignal, createUniqueId, Show } from "solid-js";
 import { useText } from "../../text";
 import { DangerZone, DetailHeader, ReadFailedAlert, UNKNOWN_STATUS } from "./IntegrationLayout";
 
@@ -72,6 +73,7 @@ export function BitwardenConnectorPanel(props: BitwardenConnectorPanelProps) {
   const [clientSecret, setClientSecret] = createSignal("");
   const [masterPassword, setMasterPassword] = createSignal("");
   const header = () => bitwardenStatus(props);
+  const ids = `bitwarden-${createUniqueId()}`;
   const hostReady = () => Boolean(serverUrl().trim() && clientId().trim() && clientSecret().trim() && masterPassword());
   return (
     <div class="onepassword-connector">
@@ -102,37 +104,28 @@ export function BitwardenConnectorPanel(props: BitwardenConnectorPanelProps) {
           </Alert>
         )}
       </Show>
-      <Show when={props.status.connected && props.status.serverUrl}>
-        {(server) => (
-          <Text variant="body-sm" tone="muted">
-            {t("connector.bitwarden.connectedServer", { server: server() })}
-          </Text>
-        )}
-      </Show>
-      <Show
-        when={props.hostName}
-        fallback={
-          <>
-            <Text variant="body-sm" tone="muted">
-              {t("connector.bitwarden.scope")}
-            </Text>
-            <Text variant="body-sm" tone="muted">
-              {t("connector.bitwarden.session")}
-            </Text>
-          </>
-        }
-      >
-        {(host) => (
-          <>
-            <Text variant="body-sm" tone="muted">
-              {t("connector.bitwarden.scopeHost", { host: host() })}
-            </Text>
-            <Text variant="body-sm" tone="muted">
-              {t("connector.bitwarden.sessionHost", { host: host() })}
-            </Text>
-          </>
-        )}
-      </Show>
+      {/* What the connection reaches and how long it lasts, as one group of plain lines. */}
+      <SettingsGroup label={t("connector.bitwarden.title")}>
+        <Show when={props.status.connected && props.status.serverUrl}>
+          {(server) => <SettingsHelp>{t("connector.bitwarden.connectedServer", { server: server() })}</SettingsHelp>}
+        </Show>
+        <Show
+          when={props.hostName}
+          fallback={
+            <>
+              <SettingsHelp>{t("connector.bitwarden.scope")}</SettingsHelp>
+              <SettingsHelp>{t("connector.bitwarden.session")}</SettingsHelp>
+            </>
+          }
+        >
+          {(host) => (
+            <>
+              <SettingsHelp>{t("connector.bitwarden.scopeHost", { host: host() })}</SettingsHelp>
+              <SettingsHelp>{t("connector.bitwarden.sessionHost", { host: host() })}</SettingsHelp>
+            </>
+          )}
+        </Show>
+      </SettingsGroup>
       {/* With the state not known, the page offers neither the connect form nor Disconnect. */}
       <Show when={!props.statusError}>
         <Show
@@ -153,7 +146,6 @@ export function BitwardenConnectorPanel(props: BitwardenConnectorPanelProps) {
             fallback={
               <SettingsSection title={t("connector.bitwarden.connect")} description={t("connector.bitwarden.setup")}>
                 <form
-                  class="onepassword-connector-token"
                   onSubmit={(event) => {
                     event.preventDefault();
                     const value = key().trim();
@@ -161,24 +153,30 @@ export function BitwardenConnectorPanel(props: BitwardenConnectorPanelProps) {
                     props.onConnect(value);
                   }}
                 >
-                  <Input
-                    type="password"
-                    autocomplete="off"
-                    spellcheck={false}
-                    aria-label={t("connector.bitwarden.sessionKey")}
-                    value={key()}
-                    disabled={props.busy}
-                    onInput={(event) => setKey(event.currentTarget.value)}
-                  />
-                  <Button type="submit" loading={props.busy} disabled={!key().trim()}>
-                    {t("connector.bitwarden.connect")}
-                  </Button>
+                  <SettingsGroup label={t("connector.bitwarden.connect")}>
+                    <SettingsRow label={t("connector.bitwarden.sessionKey")} controlId={`${ids}-key`} layout="stack">
+                      <Input
+                        id={`${ids}-key`}
+                        type="password"
+                        autocomplete="off"
+                        spellcheck={false}
+                        value={key()}
+                        disabled={props.busy}
+                        onInput={(event) => setKey(event.currentTarget.value)}
+                      />
+                    </SettingsRow>
+                  </SettingsGroup>
+                  <div class="integration-form-actions">
+                    <Show when={props.busy}>
+                      <Button type="button" variant="outline" size="sm" onClick={cancel}>
+                        {t("common.cancel")}
+                      </Button>
+                    </Show>
+                    <Button type="submit" size="sm" loading={props.busy} disabled={!key().trim()}>
+                      {t("connector.bitwarden.connect")}
+                    </Button>
+                  </div>
                 </form>
-                <Show when={props.busy}>
-                  <Button type="button" variant="ghost" onClick={cancel}>
-                    {t("common.cancel")}
-                  </Button>
-                </Show>
               </SettingsSection>
             }
           >
@@ -188,7 +186,6 @@ export function BitwardenConnectorPanel(props: BitwardenConnectorPanelProps) {
                 description={t("connector.bitwarden.setupHost", { host: host() })}
               >
                 <form
-                  class="bitwarden-connector-host-form"
                   onSubmit={(event) => {
                     event.preventDefault();
                     if (!hostReady() || props.busy || props.status.connecting) return;
@@ -203,54 +200,71 @@ export function BitwardenConnectorPanel(props: BitwardenConnectorPanelProps) {
                     props.onConnectHost?.(input);
                   }}
                 >
-                  <Field label={t("connector.bitwarden.serverUrl")}>
-                    <Input
-                      type="url"
-                      autocomplete="off"
-                      spellcheck={false}
-                      value={serverUrl()}
-                      onInput={(event) => setServerUrl(event.currentTarget.value)}
-                    />
-                  </Field>
-                  <Field label={t("connector.bitwarden.clientId")}>
-                    <Input
-                      autocomplete="off"
-                      spellcheck={false}
-                      value={clientId()}
-                      onInput={(event) => setClientId(event.currentTarget.value)}
-                    />
-                  </Field>
-                  <Field label={t("connector.bitwarden.clientSecret")}>
-                    <Input
-                      type="password"
-                      autocomplete="off"
-                      spellcheck={false}
-                      value={clientSecret()}
-                      onInput={(event) => setClientSecret(event.currentTarget.value)}
-                    />
-                  </Field>
-                  <Field label={t("connector.bitwarden.masterPassword")}>
-                    <Input
-                      type="password"
-                      autocomplete="off"
-                      spellcheck={false}
-                      value={masterPassword()}
-                      onInput={(event) => setMasterPassword(event.currentTarget.value)}
-                    />
-                  </Field>
-                  <Button
-                    type="submit"
-                    loading={props.busy || props.status.connecting}
-                    disabled={!hostReady() || props.status.connecting}
-                  >
-                    {t("connector.bitwarden.connect")}
-                  </Button>
+                  <SettingsGroup label={t("connector.bitwarden.connect")}>
+                    <SettingsRow label={t("connector.bitwarden.serverUrl")} controlId={`${ids}-server`} layout="stack">
+                      <Input
+                        id={`${ids}-server`}
+                        type="url"
+                        autocomplete="off"
+                        spellcheck={false}
+                        value={serverUrl()}
+                        onInput={(event) => setServerUrl(event.currentTarget.value)}
+                      />
+                    </SettingsRow>
+                    <SettingsRow label={t("connector.bitwarden.clientId")} controlId={`${ids}-client`} layout="stack">
+                      <Input
+                        id={`${ids}-client`}
+                        autocomplete="off"
+                        spellcheck={false}
+                        value={clientId()}
+                        onInput={(event) => setClientId(event.currentTarget.value)}
+                      />
+                    </SettingsRow>
+                    <SettingsRow
+                      label={t("connector.bitwarden.clientSecret")}
+                      controlId={`${ids}-secret`}
+                      layout="stack"
+                    >
+                      <Input
+                        id={`${ids}-secret`}
+                        type="password"
+                        autocomplete="off"
+                        spellcheck={false}
+                        value={clientSecret()}
+                        onInput={(event) => setClientSecret(event.currentTarget.value)}
+                      />
+                    </SettingsRow>
+                    <SettingsRow
+                      label={t("connector.bitwarden.masterPassword")}
+                      controlId={`${ids}-master`}
+                      layout="stack"
+                    >
+                      <Input
+                        id={`${ids}-master`}
+                        type="password"
+                        autocomplete="off"
+                        spellcheck={false}
+                        value={masterPassword()}
+                        onInput={(event) => setMasterPassword(event.currentTarget.value)}
+                      />
+                    </SettingsRow>
+                  </SettingsGroup>
+                  <div class="integration-form-actions">
+                    <Show when={props.status.connecting}>
+                      <Button type="button" variant="outline" size="sm" onClick={cancel}>
+                        {t("common.cancel")}
+                      </Button>
+                    </Show>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      loading={props.busy || props.status.connecting}
+                      disabled={!hostReady() || props.status.connecting}
+                    >
+                      {t("connector.bitwarden.connect")}
+                    </Button>
+                  </div>
                 </form>
-                <Show when={props.status.connecting}>
-                  <Button type="button" variant="ghost" onClick={cancel}>
-                    {t("common.cancel")}
-                  </Button>
-                </Show>
               </SettingsSection>
             )}
           </Show>

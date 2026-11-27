@@ -1,6 +1,6 @@
 import type { McpChatGrant, McpChatSnapshot } from "@openbot/contracts/team-protocol/mcp-chat-v1";
-import { Button, FormDialog, FormSection, LoadingState, Text } from "@openbot/ui";
-import { For, Show } from "solid-js";
+import { FormDialog, LoadingState, NativeSelect, SettingsGroup, SettingsRow, Text } from "@openbot/ui";
+import { createUniqueId, For, Show } from "solid-js";
 import { useText } from "../../text";
 
 const MODE_LABEL = { off: "mcp.chat.off", read: "mcp.chat.read", write: "mcp.chat.write" } as const;
@@ -15,28 +15,27 @@ export interface ChatAppsDialogProps {
   onSave: () => void;
   onClose: () => void;
 }
+/** One app: its name on the left, Off, Read or Write on the right. A choice applies at once. */
 function ChatAppRow(props: { id: string; name: string; dialog: ChatAppsDialogProps }) {
   const { t } = useText();
+  const controlId = `chat-app-${createUniqueId()}`;
   const mode = () => props.dialog.snapshot.grants.find((grant) => grant.connectionId === props.id)?.mode ?? "off";
   return (
-    <FormSection title={props.name}>
-      <div class="chat-apps-modes">
+    <SettingsRow layout="inline" label={props.name} controlId={controlId}>
+      <NativeSelect
+        id={controlId}
+        value={mode()}
+        disabled={props.dialog.busy}
+        onChange={(event) => {
+          const value = event.currentTarget.value;
+          props.dialog.onMode(props.id, value === "read" || value === "write" ? value : "off");
+        }}
+      >
         <For each={["off", "read", "write"] as const}>
-          {(value) => (
-            <Button
-              type="button"
-              size="sm"
-              variant={mode() === value ? "default" : "outline"}
-              aria-pressed={mode() === value ? "true" : "false"}
-              disabled={props.dialog.busy}
-              onClick={() => props.dialog.onMode(props.id, value)}
-            >
-              {t(MODE_LABEL[value])}
-            </Button>
-          )}
+          {(value) => <option value={value}>{t(MODE_LABEL[value])}</option>}
         </For>
-      </div>
-    </FormSection>
+      </NativeSelect>
+    </SettingsRow>
   );
 }
 
@@ -60,7 +59,11 @@ export function ChatAppsDialog(props: ChatAppsDialogProps) {
       <Show when={props.loading}>
         <LoadingState rows={2} label={t("mcp.chat.title")} />
       </Show>
-      <For each={props.snapshot.connections}>{(connection) => <ChatAppRow {...connection} dialog={props} />}</For>
+      <Show when={props.snapshot.connections.length > 0}>
+        <SettingsGroup label={t("mcp.chat.title")}>
+          <For each={props.snapshot.connections}>{(connection) => <ChatAppRow {...connection} dialog={props} />}</For>
+        </SettingsGroup>
+      </Show>
       <Show when={!props.loading && props.snapshot.connections.length === 0}>
         <Text>{t("mcp.chat.empty")}</Text>
       </Show>

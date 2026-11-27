@@ -363,7 +363,7 @@ export const messages = {
   "routine.settings.instructionPlaceholderAgent": "Describe lo que debe hacer este agente.",
   "routine.settings.instructionPlaceholderChannel": "Describe lo que debe hacer este canal.",
   "routine.settings.instructionNoUpdateHint":
-    "Para no decir nada cuando no haya novedades, pide al agente que responda [[no-update]].",
+    "Para no recibir nada cuando no haya novedades, dilo en la instrucción, por ejemplo: «Si no hay nada nuevo, no digas nada».",
   "routine.settings.limitPolicy": "Si la cuenta alcanza su límite",
   "routine.settings.limitPolicy.wait": "Esperar y ejecutar cuando se restablezca el límite",
   "routine.settings.limitPolicy.skip": "Omitir ejecución",

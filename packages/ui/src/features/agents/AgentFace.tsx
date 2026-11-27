@@ -1,6 +1,6 @@
 import { atelierFaceDefault, atelierSkinDefault, atelierSkinOf, atelierTheme } from "@openbot/brand/atelier-appearance";
 import { agentFaceSVG, FACE_STYLES, type FaceState, type FaceStyle } from "@openbot/brand/faces";
-import { createEffect, createMemo, createSignal, onCleanup, onSettled } from "solid-js";
+import { createEffect, createMemo, createSignal, createUniqueId, onCleanup, onSettled } from "solid-js";
 import { documentColorScheme } from "../../document-color-scheme";
 import { agentFaceEntry } from "./agent-face-directory";
 
@@ -179,6 +179,13 @@ export function AgentFace(props: AgentFaceProps) {
     );
   });
 
+  // The drawing of an agent is one cached string, so every copy of a face names its clip paths the
+  // same. A `url(#id)` reads the first element with that id in the page: when that copy sits in a
+  // hidden place (the sidebar under a full page), the clip hides the whole face and leaves its tile
+  // empty. Each face on screen gets its own ids.
+  const scope = createUniqueId();
+  const markup = createMemo(() => svg().replace(/(id="|url\(#)([^")]+)/gu, `$1$2-${scope}`));
+
   onSettled(() => {
     if (!element) return;
     return watch(element, {
@@ -195,7 +202,7 @@ export function AgentFace(props: AgentFaceProps) {
       style={props.style}
       data-state={state()}
       aria-hidden="true"
-      innerHTML={svg()}
+      innerHTML={markup()}
     />
   );
 }

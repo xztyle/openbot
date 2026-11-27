@@ -313,6 +313,26 @@ try {
             resolve(ROOT, ".openbot-build/ui-agent-settings", shots, device === "desktop" ? "1440" : "390"),
             `agent-settings-${theme}`,
           );
+          // The pages behind the Access and Advanced rows.
+          for (const [row, name] of [
+            [t("agentSettings.permissions.title"), "access"],
+            [t("agentSettings.advanced.title"), "advanced"],
+          ] as const) {
+            await openChiefSettings(page, origin, device, theme);
+            const link = panel(page)
+              .getByRole("button", { name: new RegExp(`^${row}`, "u") })
+              .first();
+            await link.scrollIntoViewIfNeeded();
+            await tap(device, link);
+            await panel(page)
+              .getByRole("button", { name: t("agentSettings.backToSettings") })
+              .waitFor({ timeout: UI_WAIT_MS });
+            await panelShots(
+              page,
+              resolve(ROOT, ".openbot-build/ui-agent-settings", shots, device === "desktop" ? "1440" : "390"),
+              `agent-settings-${name}-${theme}`,
+            );
+          }
         });
       }
       await page.close();

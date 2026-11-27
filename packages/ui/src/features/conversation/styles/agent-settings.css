@@ -1423,16 +1423,8 @@
   min-width: 0;
 }
 
+/* The agent's folder, in its row's description: it wraps after a slash and can be copied. */
 .agent-settings-runtime-path {
-  display: grid;
-  gap: var(--openbot-space-0-5);
-  padding: 11px var(--openbot-space-3);
-}
-
-.agent-settings-runtime-path > span:last-child {
-  color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-sm);
-  line-height: var(--openbot-leading-sm);
   overflow-wrap: anywhere;
   user-select: text;
 }

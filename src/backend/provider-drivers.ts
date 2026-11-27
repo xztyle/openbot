@@ -26,8 +26,9 @@ import {
   isOpencodeModelUnusableWithStoredKey,
   modelsAfterOpenCodeDiscoveryFailure,
 } from "./agent/provider-models";
+import { CODEX_JAILED_CONFIG_OVERRIDES } from "./agent/workspace-sandbox";
 import type { AgentClient } from "./agent-client";
-import type { AgentJail } from "./agent-jail";
+import { type AgentJail, markClientJailed } from "./agent-jail";
 import { ANTIGRAVITY_USAGE_PROMPT, antigravityRateLimits } from "./antigravity-usage";
 import { CodexAppServerClient } from "./app-server-client";
 import { ClaudeAgentClient } from "./claude-client";
@@ -730,13 +731,16 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
       };
       // Only the jail confines Codex: a Workspace only agent elsewhere keeps Codex's own sandbox.
       const jail = confinement?.jail ? confinement : undefined;
-      return new CodexAppServerClient(
+      const client = new CodexAppServerClient(
         cli.executable,
         requestTimeoutMs,
         environment,
-        codexVariableOverrides(variables),
+        [...codexVariableOverrides(variables), ...(jail ? CODEX_JAILED_CONFIG_OVERRIDES : [])],
         jail ? (target) => confineSpawnTarget(target, jail, codexStatePaths(environment)) : undefined,
       );
+      // Marked before the process starts, so what it writes at start is read as of a jailed client.
+      if (jail) markClientJailed(client);
+      return client;
     },
     authState: (account) => ({ kind: "chatgpt", email: account?.email ?? null }),
     validateAccount: (account) => {

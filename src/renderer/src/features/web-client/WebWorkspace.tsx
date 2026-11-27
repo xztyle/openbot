@@ -115,6 +115,7 @@ import {
   MessageCircle,
   MessageCircleQuestionMark,
   openModalCount,
+  PlainErrorText,
   Search,
   Settings,
   Sparkles,
@@ -198,7 +199,7 @@ import {
 import { createUsageRefreshPoll } from "../account/usage-refresh-poll";
 import { type NewAgentDraft, newAgentInput } from "../agents/agent-create-input";
 import { type CreationPreference, resolveCreationModel } from "../agents/agent-creation-model";
-import { claimErrorToast, readableAgentError } from "../agents/agent-error-text";
+import { claimErrorToast, plainAgentError, readableAgentError } from "../agents/agent-error-text";
 import { AGENT_SELECTION_STORAGE_KEY, webAgentSelectionKey, writeAgentSelection } from "../agents/agent-selection";
 import { withHostAccountUsage, withHostProfileAccount } from "../agents/host-provider-accounts";
 import { needsYouItems, withAttentionItems } from "../agents/needs-you";
@@ -1628,10 +1629,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         controller.setConversationErrors((current) => ({ ...current, [key]: readableAgentError(event.message) }));
         return;
       }
-      const description = readableAgentError(event.message);
-      if (claimErrorToast(description))
+      // A provider's own words stay behind the collapsed technical details (plain language rule).
+      const plain = plainAgentError(event.message);
+      if (claimErrorToast(plain.technical ?? plain.text))
         toast.error(t("webClient.error.hostReported"), {
-          ...{ description },
+          description: () => <PlainErrorText text={plain.text} technical={plain.technical} />,
           report: { operation: "other", source: "system", cause_code: "unknown" },
         });
     }),

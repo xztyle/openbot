@@ -3,7 +3,7 @@ import type { AgentEvent, AgentRuntimeSnapshot } from "@openbot/contracts/ipc";
 import { cleanAgentMessageText } from "@openbot/team-client/agent-message-text";
 import { reconcileQueuesWithRuntimeWork } from "@openbot/team-client/dynamic-island-coordinator";
 import { classifyFailure } from "@openbot/telemetry";
-import { toast } from "@openbot/ui";
+import { PlainErrorText, toast } from "@openbot/ui";
 import { currentText } from "@openbot/ui/text";
 import { classifyUserError } from "@openbot/user-errors";
 import { flush, onSettled } from "solid-js";
@@ -27,7 +27,7 @@ import { appendTurnStepLine } from "../conversation/turn-step-lines";
 import { useServers } from "../servers/servers-context";
 import { useSidebar } from "../sidebar/sidebar-context";
 import { readDictatedReplies } from "../speech/speech-replies";
-import { claimErrorToast, providerErrorTitle, readableAgentError } from "./agent-error-text";
+import { claimErrorToast, plainAgentError, providerErrorTitle, readableAgentError } from "./agent-error-text";
 import { createAgentEventSounds } from "./agent-event-sounds";
 import { reconcileAttentionApprovals, reconcileAttentionPrompts } from "./agent-runtime-snapshot";
 import { useAgents } from "./agents-context";
@@ -357,6 +357,9 @@ export function AgentEventBridge() {
         // No agent to attach it to - a provider that fails to start is the common case - so this
         // one stays global. The message is already redacted in the main process.
         const toastKey = readableAgentError(event.message);
+        // A provider's own words stay behind the collapsed technical details (plain language rule).
+        const plain = plainAgentError(event.message);
+        const description = () => <PlainErrorText text={plain.text} technical={plain.technical} />;
         if (claimErrorToast(toastKey)) {
           // Codex ignored a setting and runs without it. The provider works, so this is a warning
           // about the user's file, not a provider error.
@@ -373,7 +376,7 @@ export function AgentEventBridge() {
           const title =
             event.code === "mcp_server_not_started" ? t("agent.error.mcpNotStarted") : providerErrorTitle(event.code);
           toast.error(title, {
-            ...{ description: toastKey },
+            description,
             report: { operation: "provider", source: "provider", cause_code: classifyFailure(event.message) },
           });
         }

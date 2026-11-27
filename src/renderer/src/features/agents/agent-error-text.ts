@@ -1,5 +1,7 @@
 import { agentProviderName, isAgentProvider } from "@openbot/contracts/ipc";
+import { matchingSourceKeys } from "@openbot/i18n";
 import { currentText } from "@openbot/ui/text";
+import { classifyUserError } from "@openbot/user-errors";
 
 /** A provider quotes what it was given, so an error can carry a whole request body back. */
 const ERROR_DESCRIPTION_LIMIT = 300;
@@ -14,6 +16,25 @@ export function readableAgentError(message: string): string {
   const readable = errorMessage(message, t("agent.error.continueFailed"));
   if (readable.length <= ERROR_DESCRIPTION_LIMIT) return readable;
   return `${readable.slice(0, ERROR_DESCRIPTION_LIMIT - 1).trimEnd()}…`;
+}
+
+/**
+ * An error for the owner: Atelier's own sentence in their language, or, for what a provider or a
+ * tool wrote in its own words, a plain sentence with that text kept for the collapsed technical
+ * details. A provider writes English with codes and file names, which the owner cannot act on.
+ */
+export function plainAgentError(message: string): { text: string; technical: string | null } {
+  const { t } = currentText();
+  const text = readableAgentError(message);
+  if (matchingSourceKeys(message).length > 0 || classifyUserError(message) !== "unknown") {
+    return { text, technical: null };
+  }
+  const technical = message.trim();
+  return { text: t("agent.error.providerPlain"), technical: technical ? shorten(technical) : null };
+}
+
+function shorten(text: string): string {
+  return text.length <= ERROR_DESCRIPTION_LIMIT ? text : `${text.slice(0, ERROR_DESCRIPTION_LIMIT - 1).trimEnd()}…`;
 }
 
 /**

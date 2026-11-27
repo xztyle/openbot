@@ -58,6 +58,9 @@ export const messages = {
   "agent.error.continueFailed": "Агент не смог продолжить. Повторите попытку.",
   "agent.error.mcpNotStarted": "Сервер MCP не запущен",
   "agent.error.codexConfigIgnored": "Предупреждение о конфигурации Codex",
+  "agent.error.providerPlain":
+    "У агента возникла техническая проблема. Обычно она решается сама. Если агент перестал отвечать, напишите ему ещё раз или сообщите тому, кто управляет сервером.",
+  "agent.error.technicalDetails": "Показать технические подробности",
   "agent.error.provider": "Ошибка провайдера",
   "agent.error.run": "{provider} · {model}",
   "agent.error.providerNamed": "Ошибка провайдера {provider}",

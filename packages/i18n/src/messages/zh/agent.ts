@@ -53,6 +53,9 @@ export const messages = {
   "agent.error.continueFailed": "助手无法继续，请重试。",
   "agent.error.mcpNotStarted": "MCP 服务器未启动",
   "agent.error.codexConfigIgnored": "Codex 配置警告",
+  "agent.error.providerPlain":
+    "某个智能体遇到了技术问题。通常会自行恢复。如果该智能体不再回复，请再给它发一条消息，或告知服务器管理员。",
+  "agent.error.technicalDetails": "查看技术详情",
   "agent.error.provider": "服务商错误",
   "agent.error.run": "{provider} · {model}",
   "agent.error.providerNamed": "{provider} 错误",

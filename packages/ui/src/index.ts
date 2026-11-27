@@ -33,6 +33,7 @@ export * from "./slider";
 export * from "./sliding-tabs";
 export * from "./surface";
 export * from "./switch";
+export * from "./technical-details";
 export * from "./toast";
 export * from "./tooltip";
 export * from "./typography";

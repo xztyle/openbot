@@ -233,6 +233,22 @@ export function isBundledSandboxFallbackDiagnostic(message: string): boolean {
 }
 
 /**
+ * Whether a provider text says that Codex's own Linux sandbox cannot start: its bubblewrap needs a
+ * user namespace, and the host or the agent jail does not allow one. Codex writes it at `ERROR` level
+ * when it starts with a sandbox default other than `danger-full-access`, and a command in that sandbox
+ * fails with bubblewrap's own `bwrap:` line.
+ */
+export function isCodexSandboxUnavailableDiagnostic(message: string): boolean {
+  return (
+    /\bbubblewrap and needs access to create user namespaces\b/i.test(message) ||
+    /\bbwrap: (?:setting up uid map: Permission denied|No permissions to create a new namespace|Creating new namespace failed)/i.test(
+      message,
+    ) ||
+    /\bloopback: Failed RTM_NEW(?:ADDR|LINK)\b/.test(message)
+  );
+}
+
+/**
  * Whether a provider diagnostic is the ACP SDK's own copy of an error that the agent also answered.
  *
  * The TypeScript ACP SDK that a Node agent is built on writes `Error handling request`, the whole

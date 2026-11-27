@@ -15,6 +15,15 @@ type SandboxedAgent = Pick<AgentSummary, "access" | "provider" | "workspacePath"
  * `confined-process` ignores it: `ProviderRuntime` runs such an agent in a sandboxed process of its
  * own (`process-confinement.ts`).
  */
+/**
+ * The `-c` overrides of a Codex app-server that runs in the jail. A thread and a turn name their own
+ * sandbox, but Codex also reads the process default: at start, where it checks that its bubblewrap
+ * can make a user namespace (the jail forbids that, so Codex logged an `ERROR` on each start), and in
+ * each thread that does not name one, such as a helper that Codex's own `spawn_agent` starts, a
+ * review or a compaction. The jail is the only sandbox, so the default is `danger-full-access` too.
+ */
+export const CODEX_JAILED_CONFIG_OVERRIDES: readonly string[] = ['sandbox_mode="danger-full-access"'];
+
 export function codexSandboxMode(agent: SandboxedAgent, jailed = false): "workspace-write" | "danger-full-access" {
   return !jailed && workspaceAccessEnforced(agent) ? "workspace-write" : "danger-full-access";
 }

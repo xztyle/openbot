@@ -10,6 +10,7 @@ import {
 import { sourceText } from "@openbot/i18n/source";
 import { Effect, Fiber, Result, Schema } from "effect";
 import type { AgentClient } from "../agent-client";
+import { clientRunsJailed } from "../agent-jail";
 import { causeHelpers } from "../effect-boundary";
 import {
   type AppServerNotification,
@@ -193,7 +194,8 @@ export const toollessTurn = Effect.fnUntraced(function* (
           persistSession: false,
           profileGeneration: true,
           ...(web ? { webResearch: true } : {}),
-          sandbox: "read-only",
+          // No tool runs here. A jailed process has no sandbox of its own, as in `codexSandboxMode`.
+          sandbox: clientRunsJailed(client) ? "danger-full-access" : "read-only",
           approvalPolicy: "never",
           dynamicTools: [],
           runtimeWorkspaceRoots: [],

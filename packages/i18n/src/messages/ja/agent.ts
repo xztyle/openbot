@@ -58,6 +58,9 @@ export const messages = {
   "agent.error.continueFailed": "エージェントは続行できませんでした。もう一度お試しください。",
   "agent.error.mcpNotStarted": "MCP サーバーが起動していません",
   "agent.error.codexConfigIgnored": "Codex の設定に関する警告",
+  "agent.error.providerPlain":
+    "エージェントで技術的な問題が発生しました。通常は自動的に解決します。エージェントが応答しなくなった場合は、もう一度メッセージを送るか、サーバーの管理者に知らせてください。",
+  "agent.error.technicalDetails": "技術的な詳細を表示",
   "agent.error.provider": "プロバイダーのエラー",
   "agent.error.run": "{provider} · {model}",
   "agent.error.providerNamed": "{provider} のエラー",

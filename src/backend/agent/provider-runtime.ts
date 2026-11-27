@@ -36,7 +36,7 @@ import { Deferred, Effect, Exit, Result, Schema, Scope, Semaphore } from "effect
 import { startAcpAuthentication } from "./../acp-sign-in";
 import { type AgentClient, AgentProcessExitError, type AgentProvider } from "./../agent-client";
 import { agentInheritedEnvironment } from "../agent-inherited-environment";
-import { AgentJailUnavailableError, markClientJailed } from "../agent-jail";
+import { AgentJailUnavailableError, clientRunsJailed, markClientJailed } from "../agent-jail";
 import { CodexAppServerClient } from "./../app-server-client";
 import {
   type AgentCliInfo,
@@ -94,6 +94,7 @@ import {
   isBackgroundRefreshDiagnostic,
   isBundledSandboxFallbackDiagnostic,
   isCodexCredentialFallbackDiagnostic,
+  isCodexSandboxUnavailableDiagnostic,
   isGlogBelowErrorDiagnostic,
   isIgnoredConfigDiagnostic,
   isMcpSubsystemDiagnostic,
@@ -138,6 +139,8 @@ const USAGE_RESET_PROVIDERS: ReadonlySet<AgentProvider> = new Set(["codex"]);
  * hangs would hold chat back for all of them.
  */
 const LONG_START_TIMEOUT_MS = 180_000;
+/** The error code of Codex's own sandbox failing outside the jail. One report per OpenBot run. */
+const CODEX_SANDBOX_UNAVAILABLE = "codex_sandbox_unavailable";
 /** How long a provider CLI stays running with nothing to do before its process is stopped. */
 const PROVIDER_IDLE_RELEASE_MS = 10 * 60_000;
 /**
@@ -3708,6 +3711,19 @@ export class ProviderRuntime implements ProviderPort {
       }
       if (isBundledSandboxFallbackDiagnostic(message)) {
         stderrLogger.warn("A provider uses its bundled bubblewrap.", { provider: client.provider, message });
+        return;
+      }
+      // Codex's own sandbox could not start. In the jail it is off (`CODEX_JAILED_CONFIG_OVERRIDES`,
+      // and each thread and turn send `danger-full-access`), so a line here is a start check that
+      // changes nothing; a turn that it failed runs again in a new session (`refusedSessionFailure`).
+      // Outside the jail the owner gets one sentence in their own language, never Codex's English.
+      if (client.provider === "codex" && isCodexSandboxUnavailableDiagnostic(message)) {
+        const jailed = clientRunsJailed(client);
+        stderrLogger.warn("Codex reported that its own sandbox cannot start.", { jailed, message });
+        if (!jailed && !this.#reportedConfigWarnings.has(CODEX_SANDBOX_UNAVAILABLE)) {
+          this.#reportedConfigWarnings.add(CODEX_SANDBOX_UNAVAILABLE);
+          this.#emitError(CODEX_SANDBOX_UNAVAILABLE, sourceText("error.provider.codexSandboxUnavailable"));
+        }
         return;
       }
       // The usage notice reports the limit only for a provider with a usage reading. Another

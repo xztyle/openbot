@@ -58,6 +58,9 @@ export const messages = {
   "agent.error.continueFailed": "에이전트가 계속 진행하지 못했어요. 다시 시도해 주세요.",
   "agent.error.mcpNotStarted": "MCP 서버가 시작되지 않았어요",
   "agent.error.codexConfigIgnored": "Codex 구성 경고",
+  "agent.error.providerPlain":
+    "에이전트에 기술적인 문제가 생겼습니다. 보통은 저절로 해결됩니다. 에이전트가 응답하지 않으면 다시 메시지를 보내거나 서버 관리자에게 알려 주세요.",
+  "agent.error.technicalDetails": "기술 세부 정보 보기",
   "agent.error.provider": "제공자 오류",
   "agent.error.run": "{provider} · {model}",
   "agent.error.providerNamed": "{provider} 오류",

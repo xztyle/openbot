@@ -59,6 +59,9 @@ export const messages = defineMessages("agent", {
   "agent.error.continueFailed": "The agent could not continue. Try again.",
   "agent.error.mcpNotStarted": "MCP server not started",
   "agent.error.codexConfigIgnored": "Codex configuration warning",
+  "agent.error.providerPlain":
+    "An agent ran into a technical problem. It usually fixes itself. If the agent stops answering, write to it again or tell the person who manages the server.",
+  "agent.error.technicalDetails": "Show technical details",
   "agent.error.provider": "Provider error",
   "agent.error.run": "{provider} · {model}",
   "agent.error.providerNamed": "{provider} error",

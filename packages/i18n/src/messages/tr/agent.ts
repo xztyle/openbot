@@ -59,6 +59,9 @@ export const messages = {
   "agent.error.continueFailed": "Ajan devam edemedi. Tekrar deneyin.",
   "agent.error.mcpNotStarted": "MCP sunucusu başlatılmadı",
   "agent.error.codexConfigIgnored": "Codex yapılandırma uyarısı",
+  "agent.error.providerPlain":
+    "Bir ajan teknik bir sorunla karşılaştı. Genellikle kendiliğinden düzelir. Ajan yanıt vermeyi bırakırsa ona yeniden yazın veya sunucuyu yöneten kişiye haber verin.",
+  "agent.error.technicalDetails": "Teknik ayrıntıları göster",
   "agent.error.provider": "Sağlayıcı hatası",
   "agent.error.run": "{provider} · {model}",
   "agent.error.providerNamed": "{provider} hatası",

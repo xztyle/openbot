@@ -12,8 +12,19 @@
 // 3. A Codex agent with Workspace only access, in the jail: `codexSandboxMode` gives
 //    `danger-full-access`, and a fake model has it `cat` its skill file and then another agent's key.
 //    The skill file is read, the key is refused by the jail, and Codex sends no approval request.
+// 4. The same Codex turn has the fake model start a Codex helper (`spawn_agent`), and the helper runs
+//    a command in the jail too. Neither Codex process writes the bubblewrap user-namespace error: the
+//    jailed app-server starts with `CODEX_JAILED_CONFIG_OVERRIDES`. A control process started without
+//    them shows that the check is real where Codex reports the error. The runtime guards
+//    (`isCodexSandboxUnavailableDiagnostic`, `refusedSessionFailure`) read the error as a session to
+//    start again in plain words, and the renderer's toast text for it is the plain Spanish sentence.
 //
 // Needs Linux with Landlock 3 and python3. `bun scripts/agent-jail-providers-e2e.ts`.
+// The control reports the error only with the server's container settings, where the owner met it:
+// `sudo docker run --rm --security-opt seccomp=/opt/openbot/seccomp.json --security-opt
+// no-new-privileges:true --user 1000:1000 -e HOME=/tmp -e OPENBOT_PROVIDER_RUNTIMES=/rt -v $PWD:/wt
+// -v <runtimes>:/rt:ro -v <bun folder>:/bt -w /wt --entrypoint /bt/bun <host image>
+// scripts/agent-jail-providers-e2e.ts` (also mount the `node_modules` that the worktree links to).
 // `OPENBOT_PROVIDER_RUNTIMES` names the runtimes folder; the default is the server's data volume.
 // Writes .openbot-build/agent-jail-providers-e2e/report.json.
 import assert from "node:assert/strict";
@@ -25,12 +36,16 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { isAgentProvider } from "@openbot/contracts/agent-providers";
 import type { AgentSummary } from "@openbot/contracts/ipc";
-import { codexSandboxMode } from "../src/backend/agent/workspace-sandbox";
-import { AgentJail, type AgentJailPlan, clientRunsJailed, markClientJailed } from "../src/backend/agent-jail";
+import { localizeSourceText } from "@openbot/i18n";
+import { isCodexSandboxUnavailableDiagnostic } from "../src/backend/agent/provider-diagnostics";
+import { isNonActionableCodexWarning, refusedSessionFailure } from "../src/backend/agent/thread-items";
+import { CODEX_JAILED_CONFIG_OVERRIDES, codexSandboxMode } from "../src/backend/agent/workspace-sandbox";
+import { AgentJail, type AgentJailPlan, clientRunsJailed } from "../src/backend/agent-jail";
 import { CodexAppServerClient } from "../src/backend/app-server-client";
 import type { AgentCliInfo } from "../src/backend/cli";
 import { runCauseEffect } from "../src/backend/effect-boundary";
 import {
+  codexStatePaths,
   confineSpawnTarget,
   type ProcessConfinement,
   type ProviderStatePaths,
@@ -75,7 +90,15 @@ const report: {
   codex?: {
     sandbox: string;
     approvals: string[];
-    commands: Array<{ command: string; exitCode: unknown; output: string }>;
+    commands: Array<{ command: string; exitCode: unknown; output: string; threadId: string }>;
+    /** The commands of the Codex helper that the agent's turn started, in its own thread. */
+    helper: { offered: boolean; threadId: string | null; commands: string[]; tools: string[] };
+    /** What the jailed Codex processes wrote to stderr that reads as its sandbox failing. */
+    sandboxErrors: string[];
+    /** A jailed app-server started without `CODEX_JAILED_CONFIG_OVERRIDES`: does Codex report the error? */
+    control: { overrides: string[]; sandboxErrors: string[] };
+    /** The runtime guard for the error: the session starts again, the owner reads plain Spanish. */
+    guard: { retried: boolean; warningHidden: boolean; owner: string };
   };
   error?: string;
 } = { passed: false, runtimes: RUNTIMES, providers: [] };
@@ -160,12 +183,19 @@ function listen(server: Server): Promise<{ port: number; close: () => Promise<vo
   });
 }
 
+/** The task the fake model gives the Codex helper; only the helper's requests carry it. */
+const HELPER_TASK = "helper-task-4c18: print the jail marker";
+const PARENT_TASK = "read the board skill";
+
 /**
- * A model that speaks the Responses API: it runs one shell command for each entry of `commands`,
- * with whichever shell tool Codex offers, and then answers "done".
+ * A model that speaks the Responses API. In the agent's own thread it runs one shell command for each
+ * entry of `commands`, with whichever shell tool Codex offers, then starts one Codex helper with
+ * `spawn_agent` when Codex offers it, and then answers "done". In the helper's thread it runs each of
+ * `helperCommands` and answers "done".
  */
-async function startFakeModel(commands: readonly string[]) {
+async function startFakeModel(commands: readonly string[], helperCommands: readonly string[]) {
   const offered: string[][] = [];
+  const spawnSchemas: unknown[] = [];
   const server = createServer((request, response) => {
     let body = "";
     request.on("data", (chunk) => {
@@ -177,8 +207,22 @@ async function startFakeModel(commands: readonly string[]) {
       const tools = isRecord(parsed) && Array.isArray(parsed.tools) ? parsed.tools : [];
       const names = tools.flatMap((tool) => (isRecord(tool) && typeof tool.name === "string" ? [tool.name] : []));
       offered.push(names);
+      // Codex 0.172 offers its helper tools in a namespace, such as `multi_agent_v1.spawn_agent`.
+      const spawnNamespace = tools.find(
+        (tool) =>
+          isRecord(tool) &&
+          tool.type === "namespace" &&
+          Array.isArray(tool.tools) &&
+          tool.tools.some((inner) => isRecord(inner) && inner.name === "spawn_agent"),
+      );
+      const namespace =
+        isRecord(spawnNamespace) && typeof spawnNamespace.name === "string" ? spawnNamespace.name : null;
+      if (namespace && spawnSchemas.length === 0) spawnSchemas.push(namespace);
+      const inputText = JSON.stringify(input);
+      const helper = inputText.includes(HELPER_TASK.slice(0, 16)) && !inputText.includes(PARENT_TASK);
       const done = input.filter((item) => isRecord(item) && item.type === "function_call").length;
-      const command = commands[done];
+      const own = helper ? helperCommands : commands;
+      const command = own[done];
       const tool = ["shell_command", "exec_command", "shell"].find((name) => names.includes(name));
       const args =
         tool === "exec_command"
@@ -186,6 +230,10 @@ async function startFakeModel(commands: readonly string[]) {
           : tool === "shell"
             ? { command: ["bash", "-lc", command] }
             : { command };
+      const spawn = !helper && done === commands.length && (namespace !== null || names.includes("spawn_agent"));
+      // Atelier stops a helper when the turn that started it ends, so the turn waits for it.
+      const helperId = /\\?"agent_id\\?":\\?"([0-9a-f-]+)/.exec(inputText)?.[1];
+      const wait = !helper && done === commands.length + 1 && helperId !== undefined;
       const item =
         command !== undefined && tool
           ? {
@@ -195,7 +243,25 @@ async function startFakeModel(commands: readonly string[]) {
               name: tool,
               arguments: JSON.stringify(args),
             }
-          : { type: "message", role: "assistant", id: "m", content: [{ type: "output_text", text: "done" }] };
+          : wait
+            ? {
+                type: "function_call",
+                id: `c${done}`,
+                call_id: `call_${done}`,
+                name: "wait_agent",
+                ...(namespace ? { namespace } : {}),
+                arguments: JSON.stringify({ targets: [helperId], timeout_ms: 30_000 }),
+              }
+            : spawn
+              ? {
+                  type: "function_call",
+                  id: `c${done}`,
+                  call_id: `call_${done}`,
+                  name: "spawn_agent",
+                  ...(namespace ? { namespace } : {}),
+                  arguments: JSON.stringify({ message: HELPER_TASK }),
+                }
+              : { type: "message", role: "assistant", id: "m", content: [{ type: "output_text", text: "done" }] };
       const send = (event: unknown) => {
         const type = isRecord(event) ? String(event.type) : "";
         response.write(`event: ${type}${NL}data: ${JSON.stringify(event)}${NL}${NL}`);
@@ -215,7 +281,7 @@ async function startFakeModel(commands: readonly string[]) {
       response.end();
     });
   });
-  return { offered, ...(await listen(server)) };
+  return { offered, spawnSchemas, ...(await listen(server)) };
 }
 
 const MODEL_CATALOG = {
@@ -251,6 +317,7 @@ async function codexTurn(
   cli: AgentCliInfo,
   confinement: ProcessConfinement,
 ): Promise<NonNullable<typeof report.codex>> {
+  const helperCommands = ['echo "helper OPENBOT_AGENT_JAILED=$OPENBOT_AGENT_JAILED"'];
   const codexHome = join(home, ".codex");
   const agentHome = join(userData, "agent-jail", "agent-a", "home");
   const commands = [
@@ -258,7 +325,7 @@ async function codexTurn(
     `cat ${otherKey}`,
     `echo "OPENBOT_AGENT_JAILED=$OPENBOT_AGENT_JAILED HOME=$([ "$HOME" = ${agentHome} ] && echo agent || echo "$HOME")"`,
   ];
-  const model = await startFakeModel(commands);
+  const model = await startFakeModel(commands, helperCommands);
   // In the provider folder: the jail lets Codex read nothing else of the fake server.
   const catalog = join(codexHome, "model-catalog.json");
   await mkdir(codexHome, { recursive: true });
@@ -274,6 +341,9 @@ async function codexTurn(
       `base_url = "http://127.0.0.1:${model.port}/v1"`,
       'env_key = "FAKE_KEY"',
       'wire_api = "responses"',
+      // Codex's own helpers (`spawn_agent`), which an agent's model may start.
+      "[features]",
+      "multi_agent = true",
       "",
     ].join(NL),
   );
@@ -286,10 +356,14 @@ async function codexTurn(
     confinement,
   );
   assert(client instanceof CodexAppServerClient);
-  // As `ProviderRuntime.#startConfined` does for a process it starts in the jail.
-  markClientJailed(client);
+  // The driver marks a jailed client before it starts, so the start check reads as jailed.
+  assert.equal(clientRunsJailed(client), true, "The Codex driver marks its jailed client.");
   const approvals: string[] = [];
-  const outputs: Array<{ command: string; exitCode: unknown; output: string }> = [];
+  const sandboxErrors: string[] = [];
+  const outputs: Array<{ command: string; exitCode: unknown; output: string; threadId: string }> = [];
+  client.on("diagnostic", (line) => {
+    if (isCodexSandboxUnavailableDiagnostic(line)) sandboxErrors.push(line);
+  });
   let turnDone = () => {};
   client.on("request", (request) => {
     if (/approval/i.test(request.method)) approvals.push(request.method);
@@ -299,10 +373,13 @@ async function codexTurn(
     if (notification.method !== "item/completed") return;
     const item = getRecord(notification.params, "item");
     if (getString(item, "type") !== "commandExecution") return;
+    const output = getString(item, "aggregatedOutput") ?? "";
+    if (isCodexSandboxUnavailableDiagnostic(output)) sandboxErrors.push(output);
     outputs.push({
       command: getString(item, "command") ?? "",
       exitCode: isRecord(item) ? item.exitCode : null,
-      output: getString(item, "aggregatedOutput") ?? "",
+      output,
+      threadId: getString(notification.params, "threadId") ?? "",
     });
   });
   client.start();
@@ -332,11 +409,7 @@ async function codexTurn(
       turnDone = resolveTurn;
     });
     await runCauseEffect(
-      client.request(
-        "turn/start",
-        { threadId, input: [{ type: "text", text: "read the board skill" }] },
-        decodeRecordResponse,
-      ),
+      client.request("turn/start", { threadId, input: [{ type: "text", text: PARENT_TASK }] }, decodeRecordResponse),
     );
     await Promise.race([
       done,
@@ -344,12 +417,75 @@ async function codexTurn(
         setTimeout(() => reject(new Error("The Codex turn did not end.")), DEADLINE_MS).unref(),
       ),
     ]);
-    return { sandbox, approvals, commands: outputs };
+    const offered = model.spawnSchemas.length > 0 || model.offered.some((names) => names.includes("spawn_agent"));
+    // The helper works on after the turn that started it; its command ends in its own thread.
+    const helperRun = offered
+      ? await waitFor("Codex helper command", () => outputs.find((output) => output.threadId !== threadId))
+      : null;
+    const helper = {
+      offered,
+      tools: [...new Set(model.offered.flat())].sort(),
+      threadId: helperRun?.threadId ?? null,
+      commands: outputs.filter((output) => output.threadId !== threadId).map((output) => output.output.trim()),
+    };
+    const control = await controlStart(cli, confinement, codexHome);
+    // The guard of the runtime, fed the line Codex writes: one more session, and plain Spanish.
+    const line = control.sandboxErrors[0] ?? CODEX_SANDBOX_LINE;
+    const failure = refusedSessionFailure("codex", line);
+    const owner = failure ? localizeSourceText(failure, "es") : "";
+    return {
+      sandbox,
+      approvals,
+      commands: outputs.filter((output) => output.threadId === threadId),
+      helper,
+      sandboxErrors,
+      control,
+      guard: {
+        retried: failure !== null,
+        warningHidden: isNonActionableCodexWarning(line) && isCodexSandboxUnavailableDiagnostic(line),
+        owner,
+      },
+    };
   } finally {
     await runCauseEffect(client.stop());
     await model.close();
     if (outputs.length === 0) process.stderr.write(`offered tools ${JSON.stringify(model.offered)}\n`);
   }
+}
+
+/** What Codex 0.172 writes when its bubblewrap cannot make a user namespace. */
+const CODEX_SANDBOX_LINE =
+  "ERROR codex_app_server: Codex's Linux sandbox uses bubblewrap and needs access to create user namespaces.";
+
+/**
+ * A jailed Codex app-server with Codex's own default sandbox, as before the fix: started, asked to
+ * initialize, and read until it reports the sandbox error or a few seconds pass.
+ */
+async function controlStart(cli: AgentCliInfo, confinement: ProcessConfinement, codexHome: string) {
+  const environment = { CODEX_HOME: codexHome, FAKE_KEY: "e2e" };
+  const client = new CodexAppServerClient(cli.executable, 30_000, environment, [], (target) =>
+    confineSpawnTarget(target, confinement, codexStatePaths(environment)),
+  );
+  const sandboxErrors: string[] = [];
+  client.on("diagnostic", (line) => {
+    if (isCodexSandboxUnavailableDiagnostic(line)) sandboxErrors.push(line);
+  });
+  client.start();
+  try {
+    await runCauseEffect(
+      client.request(
+        "initialize",
+        { clientInfo: { name: "openbot_e2e", title: "OpenBot E2E", version: "0.0.0" } },
+        decodeRecordResponse,
+      ),
+    );
+    // Codex writes the start check before or soon after it answers; this bound is not a wait for state.
+    const deadline = Date.now() + 5_000;
+    while (sandboxErrors.length === 0 && Date.now() < deadline) await new Promise((done) => setTimeout(done, 100));
+  } finally {
+    await runCauseEffect(client.stop());
+  }
+  return { overrides: [], sandboxErrors };
 }
 
 try {
@@ -460,6 +596,17 @@ try {
         `The jail let Codex read another agent's key: ${JSON.stringify(key)}`,
       );
       assert.equal(outcome.ownProcess, "OPENBOT_AGENT_JAILED=1 HOME=agent", "codex: the agent's own process");
+      assert.deepEqual(report.codex.sandboxErrors, [], "A jailed Codex process reported its own sandbox failing.");
+      assert.equal(report.codex.helper.offered, true, "Codex offered no spawn_agent tool to start a helper.");
+      assert.deepEqual(report.codex.helper.commands, ["helper OPENBOT_AGENT_JAILED=1"], "The Codex helper's command.");
+      assert.equal(report.codex.guard.retried, true, "The sandbox error does not start a new session.");
+      assert.equal(report.codex.guard.warningHidden, true, "The sandbox error would show as a banner.");
+      assert(
+        report.codex.guard.owner.startsWith("Codex no pudo activar") &&
+          !/bubblewrap|namespace/i.test(report.codex.guard.owner),
+        `The owner reads: ${report.codex.guard.owner}`,
+      );
+      assert.deepEqual([...CODEX_JAILED_CONFIG_OVERRIDES], ['sandbox_mode="danger-full-access"']);
       continue;
     }
     const before = new Set(providerProcessIds().keys());

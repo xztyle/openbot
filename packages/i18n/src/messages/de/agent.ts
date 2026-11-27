@@ -60,6 +60,9 @@ export const messages = {
   "agent.error.continueFailed": "Der Agent konnte nicht fortfahren. Versuche es erneut.",
   "agent.error.mcpNotStarted": "MCP-Server nicht gestartet",
   "agent.error.codexConfigIgnored": "Codex-Konfigurationswarnung",
+  "agent.error.providerPlain":
+    "Ein Agent hatte ein technisches Problem. Meist löst es sich von selbst. Wenn der Agent nicht mehr antwortet, schreiben Sie ihm erneut oder sagen Sie der Person Bescheid, die den Server verwaltet.",
+  "agent.error.technicalDetails": "Technische Details anzeigen",
   "agent.error.provider": "Anbieterfehler",
   "agent.error.run": "{provider} · {model}",
   "agent.error.providerNamed": "{provider}-Fehler",

@@ -272,6 +272,8 @@ export const messages = {
     "{provider} no aceptó el razonamiento anterior de este chat porque lo recibió otra cuenta o clave de API. Atelier inició una nueva sesión de {provider} con el historial del chat. Inténtalo de nuevo.",
   "error.provider.opencodeSessionRejected":
     "OpenCode rechazó la solicitud y no indicó la causa. Esto puede ocurrir en un chat largo o después de cambiar de modelo. Atelier inició una nueva sesión de OpenCode con el historial del chat. Inténtalo de nuevo. Si el error continúa, elige otro modelo o un esfuerzo menor.",
+  "error.provider.codexSandboxUnavailable":
+    "Codex no pudo activar su propia protección en este servidor. Atelier ya protege al agente por su cuenta y repite la tarea si hace falta, así que no tienes que hacer nada. Si las tareas de este agente siguen fallando, avisa a quien administra el servidor.",
   "error.provider.museMcpStartupFault":
     "Muse no pudo iniciar un servidor MCP y bloqueó MCP en esta sesión. Atelier inició una nueva sesión de Muse con el historial del chat. Inténtalo de nuevo. Si el error continúa, desactiva Uso del equipo o el servidor MCP que falló para este agente.",
   "error.provider.grokSignIn": "Ejecuta `grok login` o define XAI_API_KEY para usar Grok.",

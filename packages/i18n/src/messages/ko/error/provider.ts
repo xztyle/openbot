@@ -250,6 +250,8 @@ export const messages = {
     "다른 계정이나 API 키가 받은 추론이라서 {provider}이(가) 이 채팅의 이전 추론을 수락하지 않았어요. Atelier가 채팅 기록으로 새 {provider} 세션을 시작했어요. 다시 시도해 주세요.",
   "error.provider.opencodeSessionRejected":
     "OpenCode가 원인을 알리지 않고 요청을 거부했어요. 긴 채팅이나 모델 변경 후에 발생할 수 있어요. Atelier가 채팅 기록으로 새 OpenCode 세션을 시작했어요. 다시 시도해 주세요. 오류가 계속되면 다른 모델이나 낮은 강도를 선택하세요.",
+  "error.provider.codexSandboxUnavailable":
+    "Codex가 이 서버에서 자체 보호 기능을 켜지 못했습니다. Atelier가 에이전트를 직접 보호하고 필요하면 작업을 다시 실행하므로 따로 할 일은 없습니다. 이 에이전트의 작업이 계속 실패하면 서버 관리자에게 알려 주세요.",
   "error.provider.museMcpStartupFault":
     "Muse가 MCP 서버를 시작하지 못해서 이 세션에서 MCP를 차단했어요. Atelier가 채팅 기록으로 새 Muse 세션을 시작했어요. 다시 시도해 주세요. 오류가 계속되면 이 에이전트의 컴퓨터 제어 또는 실패한 MCP 서버를 끄세요.",
   "error.provider.grokSignIn": "Grok을 사용하려면 `grok login`을 실행하거나 XAI_API_KEY를 설정하세요.",

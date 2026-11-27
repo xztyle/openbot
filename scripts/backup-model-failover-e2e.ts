@@ -61,6 +61,7 @@ process.env.OPENBOT_CODEX_PATH = codexExecutable;
 process.env.CODEX_HOME = join(home, ".codex");
 mkdirSync(home, { recursive: true });
 
+const { AGENT_LEARNING_FILE } = await import("../src/backend/agent-learning/agent-learning");
 const { AgentService } = await import("../src/backend/agent-service");
 const { AgentStore } = await import("../src/backend/agent-store");
 const { ClaudeAgentClient } = await import("../src/backend/claude-client");
@@ -69,6 +70,14 @@ const { runCauseEffect } = await import("../src/backend/effect-boundary");
 const { MailboxStore } = await import("../src/backend/mailbox-store");
 const { OpenBotDatabase } = await import("../src/backend/openbot-database");
 const { importProviderHistory } = await import("../src/backend/provider-history-import");
+
+// The nightly memory cleanup runs real turns on the agents' own model in the host's quiet hours.
+// Off here, so the turns that this check counts do not depend on the time it runs.
+mkdirSync(userData, { recursive: true });
+writeFileSync(
+  join(userData, AGENT_LEARNING_FILE),
+  JSON.stringify({ version: 1, settings: { dreaming: false, taskLearning: true } }),
+);
 
 // The stand-in for the Claude CLI. It speaks enough of the stream-json protocol for a turn to end,
 // and logs the model and the outcome of each turn.

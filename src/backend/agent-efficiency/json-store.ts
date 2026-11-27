@@ -21,7 +21,8 @@ export class JsonStore<Content extends VersionedJsonFile> {
   readonly #decode: (value: unknown) => Content | null;
   readonly #writes = Semaphore.makeUnsafe(1);
   #content: Content;
-  #loaded = false;
+  /** The one read of the file. Every caller waits for it, also one that comes while it runs. */
+  #loading: Promise<Content> | null = null;
 
   constructor(path: string, empty: Content, decode: (value: unknown) => Content | null) {
     this.#path = path;
@@ -30,23 +31,24 @@ export class JsonStore<Content extends VersionedJsonFile> {
   }
 
   load(): Effect.Effect<Content> {
-    if (this.#loaded) return Effect.succeed(this.#content);
-    return Effect.promise(async () => {
-      if (!this.#loaded) {
-        this.#loaded = true;
-        try {
-          const contents = await readFile(this.#path, "utf8");
-          if (!isEmptyStoredFile(contents)) {
-            const parsed = parseStoredJson(this.#path, contents, this.#decode);
-            if (parsed) this.#content = parsed;
-            else logger.warn("A stored efficiency file is not readable; it starts empty.", { path: this.#path });
-          }
-        } catch (error) {
-          if (!isMissingFileError(error)) logger.warn("Could not read a stored efficiency file.", { error });
-        }
+    return Effect.promise(() => {
+      this.#loading ??= this.#read();
+      return this.#loading;
+    }).pipe(Effect.map(() => this.#content));
+  }
+
+  async #read(): Promise<Content> {
+    try {
+      const contents = await readFile(this.#path, "utf8");
+      if (!isEmptyStoredFile(contents)) {
+        const parsed = parseStoredJson(this.#path, contents, this.#decode);
+        if (parsed) this.#content = parsed;
+        else logger.warn("A stored efficiency file is not readable; it starts empty.", { path: this.#path });
       }
-      return this.#content;
-    });
+    } catch (error) {
+      if (!isMissingFileError(error)) logger.warn("Could not read a stored efficiency file.", { error });
+    }
+    return this.#content;
   }
 
   /** The content read last. Call `load` first. */

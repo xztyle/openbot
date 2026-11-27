@@ -7,6 +7,7 @@ import type {
   AgentRuntimeApproval,
   AgentStatus,
   AttachmentSummary,
+  AvatarImageInput,
   BrowserControlState,
   BrowserTab,
   BrowserTakeoverRequest,
@@ -25,6 +26,7 @@ import type {
   SidebarLayoutSnapshot,
   TeamPresenceSnapshot,
   TeamRealtimeEvent,
+  UpdateAgentInput,
 } from "@openbot/contracts/ipc";
 import { canAdministerServer } from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
@@ -366,6 +368,8 @@ export function createWebWorkspace(
   let turnCheck: Promise<void> | null = null;
   /** The read of the host's state after a return from the background, or after a window focus. */
   let resyncPromise: Promise<void> | null = null;
+  /** The agent ids that a host event named before the roster had them. See `readUnknownAgent`. */
+  const unknownAgentReads = new Set<string>();
   /** The agents whose queue was not read at the last resync. Selecting one of them reads it. */
   const staleQueues = new Set<string>();
   let recovery = makeRecovery();
@@ -586,6 +590,9 @@ export function createWebWorkspace(
       event(id, event) {
         if (disposed || id !== hostId) return;
         const changed = changedConversation(event);
+        // An agent that this tab has not read yet, such as a helper that another agent just made.
+        const named = changed ?? ("agentId" in event && typeof event.agentId === "string" ? event.agentId : undefined);
+        if (named !== undefined && event.type !== "agents-changed") readUnknownAgent(named);
         if (changed !== undefined && changed === selectedId) {
           hostEventAt = Date.now();
           hostEvents += 1;
@@ -855,6 +862,28 @@ export function createWebWorkspace(
     const read = runtime.listHiddenAgents;
     if (!capabilities.includes(AGENT_HIDDEN_CAPABILITY) || !read) return [];
     return (await read()).agents;
+  }
+  /**
+   * Reads the roster again when a host event names an agent that the roster does not have, so the
+   * agent shows with its name and face and not as "Agent". Each id is read for once: an agent that
+   * stays unknown after the read is gone, and its late events start no second read.
+   */
+  function readUnknownAgent(agentId: string): void {
+    if (!state.agentsLoaded || state.status !== "online" || unknownAgentReads.has(agentId)) return;
+    if (state.agents.some((agent) => agent.id === agentId)) return;
+    unknownAgentReads.add(agentId);
+    void resync();
+  }
+  /**
+   * Puts the agent that the host answered a change with in the roster at once, so every view shows
+   * the change before the roster event comes. The event then brings the same agent.
+   */
+  function applySavedAgent(agent: ClientAgentSummary | null, current: number): void {
+    if (!agent || disposed || current !== generation) return;
+    setState((draft) => {
+      const index = draft.agents.findIndex((item) => item.id === agent.id);
+      if (index >= 0) draft.agents[index] = agent;
+    });
   }
   function reconcileAgents(agents: ClientAgentSummary[]): void {
     const ids = new Set(agents.map((agent) => agent.id));
@@ -2383,6 +2412,16 @@ export function createWebWorkspace(
      * checks the space and refuses a loop. The list is read again at once, so the chart does not
      * wait for the `agents-changed` event.
      */
+    /** Saves a change of an agent's profile or runtime, and shows the saved agent at once. */
+    async updateAgent(input: UpdateAgentInput): Promise<void> {
+      const current = generation;
+      applySavedAgent(await runtime.updateAgent(input), current);
+    },
+    /** Sets or removes an agent's picture, and shows the new face at once. */
+    async setAvatar(agentId: string, image: AvatarImageInput | null): Promise<void> {
+      const current = generation;
+      applySavedAgent(await runtime.setAvatar(agentId, image), current);
+    },
     async setAgentManager(agentId: string, managerId: string | null): Promise<void> {
       if (state.status !== "online") throw new Error(currentText().t("webClient.error.offline"));
       const current = generation;

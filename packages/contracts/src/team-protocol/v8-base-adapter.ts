@@ -95,7 +95,7 @@ export function encodeTeamProtocolV8BaseCurrentEvent(
   if (decoded.kind !== "known") return null;
   const encoded = encodeTeamProtocolV8BaseEvent(decoded.event);
   if (encoded && event.type === "agents-changed")
-    return JSON.stringify(withAgentSideFields(JSON.parse(encoded), wireValue));
+    return JSON.stringify(withAgentSideFields(JSON.parse(encoded), currentValue));
   const moreWork = event.type === "turn-completed";
   const promptMultiSelect = options.promptMultiSelect === true && eventHasPromptQuestions(event.type);
   if (

@@ -241,6 +241,8 @@ export class AgentStore {
 
   readonly #agentDefaults: () => AgentDefaults;
 
+  readonly #rosterListeners = new Set<(eventType: string) => void>();
+
   constructor(
     userDataPath: string,
     homePath: string,
@@ -1820,6 +1822,17 @@ export class AgentStore {
 
   #persist(eventType: string, modelChange?: AgentModelChange): void {
     this.#database.replaceAgents(`agents:${eventType}:${randomUUID()}`, this.#state.agents, eventType, modelChange);
+    for (const listener of this.#rosterListeners) listener(eventType);
+  }
+
+  /**
+   * Calls `listener` with the event type after each saved change of the roster, from any caller. The
+   * agent service uses it so that every change reaches the clients, also one whose caller sends no
+   * `agents-changed` itself. Returns the function that removes the listener.
+   */
+  onRosterSaved(listener: (eventType: string) => void): () => void {
+    this.#rosterListeners.add(listener);
+    return () => this.#rosterListeners.delete(listener);
   }
 
   #createRecord(id: string, name: string, title: string, description = ""): StoredAgent {

@@ -340,13 +340,15 @@ export interface WebWorkspaceRuntime {
   /** Hides or restores an agent, and returns the host's hidden list. Needs `agent-hidden-v1`. */
   setAgentHidden?: (input: SetAgentHiddenInput) => Promise<HiddenAgentsSnapshot>;
   react(input: SetMessageReactionInput): Promise<void>;
-  setAvatar(agentId: string, image: AvatarImageInput | null): Promise<void>;
+  /** The agent with its new face, when the host answers with it. */
+  setAvatar(agentId: string, image: AvatarImageInput | null): Promise<ClientAgentSummary | null>;
   models(): Promise<ClientAgentModelOption[]>;
   status(): Promise<AgentStatus>;
   accountUsage?: () => Promise<AccountUsage>;
   createAgent(input: CreateAgentInput): Promise<ClientAgentSummary>;
   duplicateAgent(agentId: string): Promise<DuplicateAgentResult>;
-  updateAgent(input: UpdateAgentInput): Promise<void>;
+  /** The saved agent, when the host answers with it. */
+  updateAgent(input: UpdateAgentInput): Promise<ClientAgentSummary | null>;
   deleteAgent(agentId: string): Promise<void>;
   /** Searches one agent's conversation, or every conversation on the host when `agentId` is not set. */
   search(agentId: string | undefined, query: string, cursor?: string): Promise<ConversationSearchPage>;
@@ -1141,16 +1143,15 @@ export function createWebWorkspaceRuntime(
       });
     },
     async setAvatar(agentId, image) {
-      if (!image) {
-        await request("DELETE", TEAM_API_ROUTES.agent.avatar(agentId));
-        return;
-      }
-      await request(
-        "PUT",
-        TEAM_API_ROUTES.agent.avatar(agentId),
-        {},
-        { name: "avatar", mimeType: image.mimeType, base64: bytesToBase64(image.bytes) },
-      );
+      const value = image
+        ? await request(
+            "PUT",
+            TEAM_API_ROUTES.agent.avatar(agentId),
+            {},
+            { name: "avatar", mimeType: image.mimeType, base64: bytesToBase64(image.bytes) },
+          )
+        : await request("DELETE", TEAM_API_ROUTES.agent.avatar(agentId));
+      return isClientAgentSummary(value) && value.id === agentId ? value : null;
     },
     async send(id, text, attachmentDraftIds, replyToMessageId = null, clientMessageId) {
       const result = await request("POST", TEAM_API_ROUTES.agent.messages(id), {
@@ -1399,13 +1400,16 @@ export function createWebWorkspaceRuntime(
       const { providerAccountId, backupModels: _backupModels, leaveUsageLimit: _leaveUsageLimit, ...profile } = input;
       if (providerAccountId !== undefined && !capabilities.includes(PROVIDER_ACCOUNTS_CAPABILITY))
         throw new Error(currentText().t("error.team.providersUnsupported"));
-      await request("PATCH", TEAM_API_ROUTES.agent.one(input.agentId), { ...profile });
-      if (providerAccountId === undefined) return;
+      const value = await request("PATCH", TEAM_API_ROUTES.agent.one(input.agentId), { ...profile });
+      const saved: ClientAgentSummary | null = isClientAgentSummary(value) && value.id === input.agentId ? value : null;
+      if (providerAccountId === undefined) return saved;
       await runTeamEffect(
         setAgentProviderAccount(teamApi, { agentId: input.agentId, accountId: providerAccountId }).pipe(
           Effect.mapError((error) => error.cause),
         ),
       );
+      // The profile answer is from before the account change, which the account route made.
+      return saved ? { ...saved, providerAccountId: providerAccountId ?? undefined } : null;
     },
     async deleteAgent(agentId) {
       if (connectedHost && !canAdministerServer(connectedHost.role))

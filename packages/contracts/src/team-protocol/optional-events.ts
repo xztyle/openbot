@@ -1,5 +1,6 @@
 import { type AgentAccessEvent, agentAccessEvent } from "./agent-access-v1";
 import { type AgentHiddenEvent, agentHiddenEvent } from "./agent-hidden-v1";
+import { type AgentRosterEvent, agentRosterEvent, decodeAgentRoster } from "./agent-roster-v1";
 import { type AgentSessionSettingsEvent, agentSessionSettingsEvent } from "./agent-session-settings-v1";
 import { type AgentTasksEvent, agentTasksEvent } from "./agent-tasks-v1";
 import { type AttentionItemsEvent, attentionItemsEvent } from "./attention-items-v1";
@@ -25,6 +26,7 @@ export type OptionalTeamEvent =
   | AgentAccessEvent
   | AttentionItemsEvent
   | AgentHiddenEvent
+  | AgentRosterEvent
   | AgentSessionSettingsEvent
   | BrowserPageStateEvent
   | BrowserUserControlEvent
@@ -49,6 +51,7 @@ export function optionalTeamEvent(value: unknown): OptionalTeamEvent | null {
     agentAccessEvent(value) ??
     attentionItemsEvent(value) ??
     agentHiddenEvent(value) ??
+    agentRosterEvent(value) ??
     agentSessionSettingsEvent(value) ??
     browserPageStateEvent(value) ??
     browserUserControlEvent(value) ??
@@ -71,6 +74,8 @@ export function optionalTeamEvent(value: unknown): OptionalTeamEvent | null {
 
 /** Translate the optional wire event at each native transport boundary. */
 export function optionalTeamEventToCurrent(event: OptionalTeamEvent) {
+  if (event.type === "agent-roster-changed")
+    return { type: "agents-changed" as const, agents: decodeAgentRoster(event.agents) };
   return event.type === "quiet-turn-completed"
     ? { ...event, type: "turn-completed" as const, quiet: true as const }
     : event;

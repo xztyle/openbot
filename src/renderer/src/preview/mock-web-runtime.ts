@@ -137,17 +137,13 @@ export function mockWebRuntimeFor(
     updateRoutine: (input) => agent.updateRoutine(input),
     testRoutine: (input) => agent.testRoutine(input),
     react: (input) => agent.setMessageReaction(input),
-    setAvatar: async (agentId, image) => {
-      await agent.setAvatar({ agentId, image });
-    },
+    setAvatar: (agentId, image) => agent.setAvatar({ agentId, image }),
     models: () => agent.listModels(),
     status: () => agent.getStatus(),
     accountUsage: () => agent.getUsage(),
     createAgent: (input) => agent.createAgent(input),
     duplicateAgent: (agentId) => agent.duplicateAgent(agentId),
-    updateAgent: async (input) => {
-      await agent.updateAgent(input);
-    },
+    updateAgent: (input) => agent.updateAgent(input),
     deleteAgent: (agentId) => agent.deleteAgent(agentId),
     search: (agentId, query, cursor) =>
       agent.searchConversationMessages({

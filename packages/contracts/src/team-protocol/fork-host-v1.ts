@@ -12,6 +12,8 @@
  * before it sends no such event, so a client counts only the requests it has from other events.
  * The `connection.report` operation of `connection-report-v1.ts` came later too. A fork host built
  * before it answers with `unsupported_operation`, and the client ignores that answer.
+ * The `agent-roster-changed` event of `agent-roster-v1.ts` came later too. A fork host built before
+ * it sends `bots-changed`, which holds at most 100 agents.
  *
  * A released peer reads no capability from a header with more than 64 entries, and a released
  * client refuses a host that advertises more than 64. These features used seven entries, which put

@@ -68,7 +68,7 @@ export function encodeTeamProtocolV6BaseCurrentEvent(
   if (decoded.kind !== "known") return null;
   const encoded = encodeTeamProtocolV6BaseEvent(decoded.event);
   if (encoded && event.type === "agents-changed")
-    return JSON.stringify(withAgentSideFields(JSON.parse(encoded), wireValue));
+    return JSON.stringify(withAgentSideFields(JSON.parse(encoded), currentValue));
   if (
     !encoded ||
     (!options.preserveBrowserSecrets && !eventConversationKey(event.type) && event.type !== "turn-completed")

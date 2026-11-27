@@ -3119,11 +3119,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       }}
       agentWaits={agentWaits()}
       onUpdateAgent={async (agentId, updates) => {
-        await updateRemoteAgent(remoteAgentAdmin, { agentId, ...updates }, workspace.runtime.updateAgent);
+        await updateRemoteAgent(remoteAgentAdmin, { agentId, ...updates }, workspace.updateAgent);
         await workspace.refresh();
       }}
       onSetAgentAvatar={async (agentId, image) => {
-        await workspace.runtime.setAvatar(agentId, image);
+        await workspace.setAvatar(agentId, image);
         await workspace.refresh();
       }}
       onSendMessage={async (text, attachments, replyTo, target, clientMessageId) => {
@@ -4028,15 +4028,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                         void select(id);
                       }}
                       onUpdateAgent={async (agentId, updates) => {
-                        await updateRemoteAgent(
-                          remoteAgentAdmin,
-                          { agentId, ...updates },
-                          workspace.runtime.updateAgent,
-                        );
+                        await updateRemoteAgent(remoteAgentAdmin, { agentId, ...updates }, workspace.updateAgent);
                         await workspace.refresh();
                       }}
                       onSetAgentAvatar={async (agentId, image) => {
-                        await workspace.runtime.setAvatar(agentId, image);
+                        await workspace.setAvatar(agentId, image);
                         await workspace.refresh();
                       }}
                       onSendMessage={(text, attachments, replyTo, target, clientMessageId) => {

@@ -9,6 +9,7 @@ import {
   type AgentRuntimeSnapshot,
   type AgentSummary,
   AnalyticsInputError,
+  type ClientAgentSummary,
   canAdministerServer,
   type DirectConversationPage,
   type DirectConversationPageAnchor,
@@ -33,6 +34,7 @@ import { ACP_REGISTRY_CAPABILITY } from "@openbot/contracts/team-protocol/acp-re
 import { AGENT_ACCESS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-access-v1";
 import { AGENT_BACKUP_MODELS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-backup-models-v1";
 import { AGENT_HIDDEN_CAPABILITY } from "@openbot/contracts/team-protocol/agent-hidden-v1";
+import { AGENT_ROSTER_EVENT } from "@openbot/contracts/team-protocol/agent-roster-v1";
 import { AGENT_SESSION_SETTINGS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-session-settings-v1";
 import { AGENT_TASK_LIMIT_CAPABILITY } from "@openbot/contracts/team-protocol/agent-task-limit-v1";
 import { AGENT_TASKS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-tasks-v1";
@@ -1388,8 +1390,19 @@ export class TeamApiServer {
       return resolved;
     };
 
+    // The roster of each member's view, as `GET /v1/agents` encodes it. See `agent-roster-v1.ts`.
+    const rosterPayloads = new Map<string, string | null>();
     for (const [client, connection] of this.#eventClients) {
       let event = this.#eventFor(connection, broadcast, () => accessFor(connection));
+      if (
+        event.type === "agents-changed" &&
+        connection.capabilities.has(FORK_HOST_CAPABILITY) &&
+        eventProtocol(connection.capabilities) === TEAM_PROTOCOL_V8
+      ) {
+        const payload = this.#rosterPayload(event.agents, connection, accessFor(connection), rosterPayloads);
+        if (payload && client.readyState === webSockets.WebSocket.OPEN) client.send(payload);
+        continue;
+      }
       // Only accounts after the first: a client reads an empty reading as no provider reporting.
       if (event !== broadcast && event.type === "usage-changed" && event.usage.limits.length === 0) continue;
       if (event.type === "conversation") {
@@ -1592,6 +1605,46 @@ export class TeamApiServer {
       if (Buffer.byteLength(completionPayload) > AGENT_RUNTIME_SNAPSHOT_BYTES_LIMIT) continue;
       client.send(completionPayload);
     }
+  }
+
+  /**
+   * The `agent-roster-changed` event for one connection: every agent its member can see, encoded as
+   * the agent list response encodes it, so the event has no limit of 100 agents as `bots-changed`
+   * has. Connections with the same view share one encoding.
+   */
+  #rosterPayload(
+    agents: readonly ClientAgentSummary[],
+    connection: EventClientState,
+    access: { member: AccessMember; key: string },
+    cache: Map<string, string | null>,
+  ): string | null {
+    const capabilities = [...connection.capabilities].sort().join(",");
+    const key = `${access.key}:${capabilities}`;
+    const known = cache.get(key);
+    if (known !== undefined) return known;
+    let payload: string | null = null;
+    try {
+      const body = encodeTeamResponseBody(
+        {
+          method: "GET",
+          path: TEAM_API_ROUTES.agents.all,
+          protocol: TEAM_PROTOCOL_V8,
+          capabilities: connection.capabilities,
+          hiddenAgentIds: this.hiddenAgentIds(TEAM_PROTOCOL_V8, connection.capabilities, access.member),
+        },
+        200,
+        agents,
+      );
+      payload = JSON.stringify({ type: AGENT_ROSTER_EVENT, agents: JSON.parse(body) });
+      if (Buffer.byteLength(payload) > JSON_LIMIT) {
+        (this.#options.logger ?? logger).warn("The agent roster event is too large to send.");
+        payload = null;
+      }
+    } catch (error) {
+      (this.#options.logger ?? logger).warn("Team API event could not be encoded:", toLogValue(error));
+    }
+    cache.set(key, payload);
+    return payload;
   }
 
   /**

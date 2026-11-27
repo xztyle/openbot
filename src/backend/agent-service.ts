@@ -563,6 +563,27 @@ const DEPLOY_DRAIN_HOLD_GRACE_MS = 5 * 60_000;
 const ROUTINE_PRECHECKS_FILE = "openbot-routine-prechecks-v1.json";
 /** The `send_message` recipient limit, so one message can reach every section-mate the prompt names. */
 const MAX_SECTION_TEAMMATES = 32;
+/** How long a saved roster change waits for its caller's own `agents-changed` before the service sends one. */
+const ROSTER_FALLBACK_DELAY_MS = 150;
+/**
+ * The roster saves that change what a client shows of an agent: its profile, its runtime, its face,
+ * whether it is listed. The preview and thread saves are left out: the turn that makes them sends
+ * its own event, and they happen on every message.
+ */
+const ROSTER_PROFILE_EVENTS: ReadonlySet<string> = new Set([
+  "agent.created",
+  "agent.creator-recorded",
+  "agent.duplicated",
+  "agent.updated",
+  "agent.model-changed",
+  "agent.hidden",
+  "agent.restored",
+  "agent.marketplace-source-updated",
+  "agent.avatar-removed",
+  "agent.avatar-updated",
+  "agent.workspace-relocated",
+  "agents.replaced",
+]);
 
 /** The user's update, and the browser profile choice that the profile operations set after their checks. */
 export type AgentUpdate = UpdateAgentInput & { ownBrowserSession?: boolean; browserProfileId?: string | null };
@@ -613,6 +634,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   /** User sends still before their mailbox write, by idempotency key: a retry joins the first call. */
   readonly #pendingUserSends = new Map<string, Deferred.Deferred<QueuedMessageReceipt, AgentLifecycleFailed>>();
   readonly #store: AgentStore;
+  /** A saved roster change that no `agents-changed` has sent yet. See `#rosterSaved`. */
+  #rosterUnsent = false;
+  #rosterFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+  #stopRosterListener: (() => void) | null = null;
   readonly #mailbox: MailboxStore;
   readonly #browser: AgentBrowserHost;
   readonly #reader: ConversationReader;
@@ -744,6 +769,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#routineFlowTools = routineFlowTools;
     this.#guardrails = options.guardrails ?? null;
     this.#store = store;
+    // A test double of the store can leave the listener out.
+    this.#stopRosterListener = store.onRosterSaved?.((eventType) => this.#rosterSaved(eventType)) ?? null;
     // First of the sub-objects, because `#emitError` reads it to redact and every one of them is
     // given that callback.
     this.#agentApiKeys = options.agentApiKeys ?? null;
@@ -5986,6 +6013,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   readonly stop = Effect.fn("AgentService.stop")(function* (this: AgentService) {
     this.#stopping = true;
+    this.#stopRosterListener?.();
+    if (this.#rosterFallbackTimer) clearTimeout(this.#rosterFallbackTimer);
+    this.#rosterFallbackTimer = null;
     this.#guardrails?.dispose();
     if (this.#deployDrainTimer) clearTimeout(this.#deployDrainTimer);
     this.#deployDrainTimer = null;
@@ -7064,7 +7094,25 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.emit("event", { type: "agent-attention-changed", items });
   }
 
+  /**
+   * Every saved change of an agent's profile or runtime reaches the clients. Most callers send
+   * `agents-changed` themselves right after the save; a change whose caller does not (an agent's own
+   * tool, an operator route, a recovery) is sent here a moment later. The delay lets the caller's own
+   * event go first, so a change is sent once.
+   */
+  #rosterSaved(eventType: string): void {
+    if (!ROSTER_PROFILE_EVENTS.has(eventType) || this.#stopping) return;
+    this.#rosterUnsent = true;
+    if (this.#rosterFallbackTimer) return;
+    this.#rosterFallbackTimer = setTimeout(() => {
+      this.#rosterFallbackTimer = null;
+      if (this.#rosterUnsent && !this.#stopping) this.#emit({ type: "agents-changed", agents: this.listAgents() });
+    }, ROSTER_FALLBACK_DELAY_MS);
+    this.#rosterFallbackTimer.unref?.();
+  }
+
   #emit(event: AgentEvent): void {
+    if (event.type === "agents-changed") this.#rosterUnsent = false;
     recordAgentRestartActivity(event);
     // The account in use is not saved: a new reading, as at start, sets it again.
     if (event.type === "usage-changed") for (const provider of AGENT_PROVIDERS) this.#refreshPoolInUse(provider);

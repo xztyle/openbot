@@ -858,6 +858,16 @@ export class GuardrailsService {
       .slice(0, GUARDRAIL_VIEW_LIMITS.meter)
       .map((account) => meterRow(account, this.#state.policy.failover.thresholdPercent, nowSeconds));
     this.#meterCache = { at: this.#now(), rows };
+    logger.info("Subscription meter read", {
+      rows: rows.map((row) => ({
+        provider: row.provider,
+        account: row.accountId,
+        pooled: row.pooled,
+        out: row.nearlyExhausted,
+        onCredits: row.onCredits,
+        used: row.windows.map((window) => window.usedPercent),
+      })),
+    });
     return rows;
   }
 

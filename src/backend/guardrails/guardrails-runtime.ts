@@ -185,10 +185,16 @@ export function guardrailsRuntime(options: GuardrailsRuntimeOptions): Guardrails
     },
     noteAgent: (agentId, text) => options.noteAgent(agentId, text),
     recordTrust: (entry) => options.recordTrust(entry),
-    failoverTargets: (target, allowApiKey) => {
+    failoverTargets: (target, allowApiKey, chain) => {
       const models = options.models();
       const choices: AgentModelChoice[] = [];
-      if (target.provider === "claude") {
+      if (chain?.length) {
+        for (const step of chain)
+          if (!(step.provider === target.provider && step.model === target.model))
+            choices.push({ provider: step.provider, model: step.model });
+        if (allowApiKey && target.provider === "claude")
+          choices.push({ provider: "claude", model: target.model, providerAccountId: CLAUDE_API_KEY_ACCOUNT_ID });
+      } else if (target.provider === "claude") {
         for (const model of codexFailoverModels(models)) choices.push({ provider: "codex", model });
         if (allowApiKey)
           choices.push({ provider: "claude", model: target.model, providerAccountId: CLAUDE_API_KEY_ACCOUNT_ID });
@@ -197,6 +203,14 @@ export function guardrailsRuntime(options: GuardrailsRuntimeOptions): Guardrails
       // up, so its order is the Codex plan, then the Codex credits.
       return choices.filter((choice) => options.modelReady(choice));
     },
+    modelOptions: () =>
+      options
+        .models()
+        .flatMap((model) =>
+          (model.provider === "codex" || model.provider === "claude") && !model.id.includes("[")
+            ? [{ id: model.id, name: model.name, provider: model.provider }]
+            : [],
+        ),
     changed: () => options.changed(),
   };
 }

@@ -48,6 +48,36 @@ export interface GuardrailFailover {
   pinnedAgentIds: string[];
   /** Also move to the Claude API key, which costs money per token. Off by default. */
   allowApiKey: boolean;
+  /** The order of models an agent moves to. Unset: Codex's default model, then the newest. */
+  chains?: GuardrailFailoverChains;
+}
+
+/** One model of a fallback order. */
+export interface GuardrailChainChoice {
+  provider: GuardrailProvider;
+  model: string;
+  effort?: string;
+}
+
+export interface GuardrailFailoverChains {
+  /** The order for a model with none of its own. */
+  default?: GuardrailChainChoice[];
+  /** The order of one main model, by its id. */
+  byModel?: Record<string, GuardrailChainChoice[]>;
+}
+
+export const GUARDRAIL_CHAIN_LIMIT = 8;
+
+export const GUARDRAIL_PROVIDERS = ["claude", "codex"] as const;
+export type GuardrailProvider = (typeof GUARDRAIL_PROVIDERS)[number];
+
+/** A provider that the owner turned off for a while: the whole workspace, or one space. */
+export interface GuardrailDisabledProvider {
+  provider: GuardrailProvider;
+  /** Absent: the whole workspace. */
+  spaceId?: string;
+  /** ISO time at which it comes back. Absent: until the owner turns it on again. */
+  until?: string;
 }
 
 export interface GuardrailPolicy {
@@ -73,6 +103,8 @@ export interface GuardrailPolicy {
   /** A money approval that nobody answered expires after these hours. */
   moneyApprovalHours: number;
   failover: GuardrailFailover;
+  /** Providers that the owner turned off. Absent: none. */
+  disabledProviders?: GuardrailDisabledProvider[];
 }
 
 /**
@@ -285,6 +317,8 @@ export interface GuardrailsView {
   pauses: GuardrailPause[];
   meter: SubscriptionPoolMeter[];
   failovers: GuardrailFailoverRow[];
+  /** The models the owner can put in a fallback order. Absent from an older host. */
+  models?: { id: string; name: string; provider: GuardrailProvider }[];
   /** The failover step of each Claude and Codex agent. Absent from an older host. */
   steps?: GuardrailFailoverStepRow[];
   /** The newest events, at most 100. */
@@ -368,6 +402,46 @@ export function normalizeGuardrailPolicy(value: unknown): GuardrailPolicy | null
   const pinned = Array.isArray(failover.pinnedAgentIds)
     ? [...new Set(failover.pinnedAgentIds.filter(isIdentifier))].slice(0, GUARDRAIL_BOUNDS.pinned)
     : [];
+  const readChain = (raw: unknown): GuardrailChainChoice[] | undefined => {
+    if (!Array.isArray(raw)) return undefined;
+    const chain: GuardrailChainChoice[] = [];
+    for (const entry of raw.slice(0, GUARDRAIL_CHAIN_LIMIT)) {
+      if (!isDynamicRecord(entry) || !isOneOf(GUARDRAIL_PROVIDERS, entry.provider)) continue;
+      if (typeof entry.model !== "string" || !/^[\w.:/[\]-]{1,200}$/u.test(entry.model)) continue;
+      const effort = typeof entry.effort === "string" && /^[\w-]{1,40}$/u.test(entry.effort) ? entry.effort : undefined;
+      if (!chain.some((c) => c.provider === entry.provider && c.model === entry.model))
+        chain.push({ provider: entry.provider, model: entry.model, ...(effort ? { effort } : {}) });
+    }
+    return chain;
+  };
+  const rawChains = isDynamicRecord(failover.chains) ? failover.chains : {};
+  const defaultChain = readChain(rawChains.default);
+  const byModel: Record<string, GuardrailChainChoice[]> = {};
+  if (isDynamicRecord(rawChains.byModel))
+    for (const [id, raw] of Object.entries(rawChains.byModel).slice(0, 64)) {
+      const chain = readChain(raw);
+      if (chain?.length && /^[\w.:/[\]-]{1,200}$/u.test(id)) byModel[id] = chain;
+    }
+  const chains: GuardrailFailoverChains = {
+    ...(defaultChain?.length ? { default: defaultChain } : {}),
+    ...(Object.keys(byModel).length ? { byModel } : {}),
+  };
+  const disabled: GuardrailDisabledProvider[] = [];
+  if (Array.isArray(value.disabledProviders))
+    for (const entry of value.disabledProviders.slice(0, 64)) {
+      if (!isDynamicRecord(entry) || !isOneOf(GUARDRAIL_PROVIDERS, entry.provider)) continue;
+      const until =
+        typeof entry.until === "string" && entry.until.length <= 64 && Number.isFinite(Date.parse(entry.until))
+          ? entry.until
+          : undefined;
+      if (entry.until !== undefined && until === undefined) continue;
+      if (entry.spaceId !== undefined && !isIdentifier(entry.spaceId)) continue;
+      disabled.push({
+        provider: entry.provider,
+        ...(typeof entry.spaceId === "string" ? { spaceId: entry.spaceId } : {}),
+        ...(until === undefined ? {} : { until }),
+      });
+    }
   return {
     version: 1,
     enabled: flag(value.enabled, base.enabled),
@@ -391,7 +465,9 @@ export function normalizeGuardrailPolicy(value: unknown): GuardrailPolicy | null
       tiers,
       pinnedAgentIds: pinned,
       allowApiKey: flag(failover.allowApiKey, base.failover.allowApiKey),
+      ...(Object.keys(chains).length ? { chains } : {}),
     },
+    ...(disabled.length === 0 ? {} : { disabledProviders: disabled }),
   };
 }
 
@@ -535,6 +611,19 @@ export function decodeGuardrailsView(value: unknown): GuardrailsView | null {
     if (!bounded(value.steps, GUARDRAIL_VIEW_LIMITS.steps, isStepRow)) return null;
     steps = value.steps;
   }
+  let models: { id: string; name: string; provider: GuardrailProvider }[] | undefined;
+  if (Array.isArray(value.models)) {
+    models = value.models
+      .slice(0, 64)
+      .filter(
+        (m): m is { id: string; name: string; provider: GuardrailProvider } =>
+          isDynamicRecord(m) &&
+          isBoundedString(m.id, 200) &&
+          isBoundedString(m.name, 200) &&
+          isOneOf(GUARDRAIL_PROVIDERS, m.provider),
+      )
+      .map((m) => ({ id: m.id, name: m.name, provider: m.provider }));
+  }
   if (
     !policy ||
     !kpis ||
@@ -554,6 +643,7 @@ export function decodeGuardrailsView(value: unknown): GuardrailsView | null {
     meter: value.meter,
     failovers: value.failovers,
     ...(steps === undefined ? {} : { steps }),
+    ...(models === undefined ? {} : { models }),
     events: value.events,
     kpis,
   };

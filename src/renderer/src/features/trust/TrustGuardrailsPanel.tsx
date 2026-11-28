@@ -2,20 +2,38 @@ import {
   FAILOVER_STEPS,
   type FailoverStep,
   GUARDRAIL_LIMIT_KEYS,
+  GUARDRAIL_PROVIDERS,
+  type GuardrailChainChoice,
   type GuardrailEventKind,
   type GuardrailFullLimits,
   type GuardrailLimitKey,
   type GuardrailPolicy,
+  type GuardrailProvider,
   type GuardrailRunKey,
   type GuardrailRunLimits,
   type GuardrailsView,
   type SubscriptionWindowMeter,
 } from "@openbot/contracts/guardrails";
 import type { AppTextKey } from "@openbot/i18n";
-import { Badge, Button, Input, SettingsGroup, SettingsHelp, SettingsRow, SettingsSection, toast } from "@openbot/ui";
+import {
+  Badge,
+  Button,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SettingsGroup,
+  SettingsHelp,
+  SettingsRow,
+  SettingsSection,
+  toast,
+} from "@openbot/ui";
 import { SaveBarDock, SettingsSaveBar } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, createUniqueId, For, onSettled, Show } from "solid-js";
+import { TrustFailoverChain } from "./TrustFailoverChain";
 import { TrustSwitchRow } from "./TrustSwitchRow";
 import type { GuardrailCalls } from "./trust-port";
 
@@ -39,6 +57,16 @@ const STEP_LABEL = {
   "codex-credits": "trust.guardrails.step.codexCredits",
   none: "trust.guardrails.step.none",
 } as const satisfies Record<FailoverStep, AppTextKey>;
+
+const OFF_FOR_TEXT = {
+  always: "trust.guardrails.providers.for.always",
+  hour: "trust.guardrails.providers.for.hour",
+  today: "trust.guardrails.providers.for.today",
+} as const satisfies Record<"always" | "hour" | "today", AppTextKey>;
+const PROVIDER_TEXT = {
+  claude: "trust.guardrails.providers.claude",
+  codex: "trust.guardrails.providers.codex",
+} as const satisfies Record<GuardrailProvider, AppTextKey>;
 
 /** Token limits show in millions: a day of one agent is hundreds of millions. */
 const MILLION = 1_000_000;
@@ -115,6 +143,49 @@ export function TrustGuardrailsPanel(props: {
     }
   }
 
+  const [chainModel, setChainModel] = createSignal<string | null>(null);
+  const [offFor, setOffFor] = createSignal<"always" | "hour" | "today">("always");
+  const modelList = () => view()?.models ?? [];
+  const chains = () => draft()?.failover.chains ?? {};
+  const setChains = (next: { default?: GuardrailChainChoice[]; byModel?: Record<string, GuardrailChainChoice[]> }) =>
+    change((current) => ({ ...current, failover: { ...current.failover, chains: next } }));
+  const setDefaultChain = (chain: GuardrailChainChoice[]) => {
+    const { default: _unused, ...rest } = chains();
+    setChains(chain.length ? { ...rest, default: chain } : rest);
+  };
+  const setModelChain = (model: string, chain: GuardrailChainChoice[]) => {
+    const { [model]: _unused, ...others } = chains().byModel ?? {};
+    const byModel = chain.length ? { ...others, [model]: chain } : others;
+    const { byModel: _old, ...rest } = chains();
+    setChains(Object.keys(byModel).length ? { ...rest, byModel } : rest);
+  };
+  const providerOff = (provider: GuardrailProvider) =>
+    (draft()?.disabledProviders ?? []).find(
+      (entry) =>
+        entry.provider === provider &&
+        entry.spaceId === undefined &&
+        (entry.until === undefined || Date.parse(entry.until) > Date.now()),
+    );
+  const setProviderOff = (provider: GuardrailProvider, off: boolean) => {
+    const untilIso = (): string | undefined => {
+      if (offFor() === "hour") return new Date(Date.now() + 3_600_000).toISOString();
+      if (offFor() === "today") {
+        const end = new Date();
+        end.setHours(23, 59, 59, 999);
+        return end.toISOString();
+      }
+      return undefined;
+    };
+    const until = untilIso();
+    change((current) => {
+      const rest = (current.disabledProviders ?? []).filter(
+        (entry) => !(entry.provider === provider && entry.spaceId === undefined),
+      );
+      const next = off ? [...rest, { provider, ...(until === undefined ? {} : { until }) }] : rest;
+      const { disabledProviders: _old, ...others } = current;
+      return next.length ? { ...others, disabledProviders: next } : others;
+    });
+  };
   const change = (update: (policy: GuardrailPolicy) => GuardrailPolicy) => {
     const current = draft();
     if (current) setDraft(update(current));
@@ -408,6 +479,45 @@ export function TrustGuardrailsPanel(props: {
                   }
                 />
               </SettingsGroup>
+              <SettingsGroup title={t("trust.guardrails.group.providers")}>
+                <SettingsRow layout="inline" label={t("trust.guardrails.providers.offFor")}>
+                  <Select<"always" | "hour" | "today">
+                    options={["always", "hour", "today"]}
+                    value={offFor()}
+                    onChange={(value) => value && setOffFor(value)}
+                    placement="bottom-end"
+                    itemComponent={(selectProps) => (
+                      <SelectItem item={selectProps.item}>{t(OFF_FOR_TEXT[selectProps.item.rawValue])}</SelectItem>
+                    )}
+                  >
+                    <SelectTrigger size="sm" aria-label={t("trust.guardrails.providers.offFor")}>
+                      <SelectValue<"always" | "hour" | "today">>
+                        {(state) => t(OFF_FOR_TEXT[state.selectedOption()])}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent />
+                  </Select>
+                </SettingsRow>
+                <For each={GUARDRAIL_PROVIDERS}>
+                  {(provider) => (
+                    <TrustSwitchRow
+                      id={`${ids}-provider-${provider}`}
+                      checked={!providerOff(provider)}
+                      onChange={(on) => setProviderOff(provider, !on)}
+                      label={t(PROVIDER_TEXT[provider])}
+                      description={
+                        providerOff(provider)
+                          ? providerOff(provider)?.until
+                            ? t("trust.guardrails.providers.offUntil", {
+                                time: time(providerOff(provider)?.until ?? ""),
+                              })
+                            : t("trust.guardrails.providers.offAlways")
+                          : undefined
+                      }
+                    />
+                  )}
+                </For>
+              </SettingsGroup>
               <SettingsGroup title={t("trust.guardrails.group.failover")}>
                 <TrustSwitchRow
                   id={`${ids}-failover`}
@@ -425,6 +535,47 @@ export function TrustGuardrailsPanel(props: {
                   }
                   label={t("trust.guardrails.allowApiKey")}
                 />
+                <TrustFailoverChain
+                  title={t("trust.guardrails.chain.default")}
+                  description={t("trust.guardrails.chain.defaultHelp")}
+                  chain={chains().default ?? []}
+                  models={modelList()}
+                  onChange={setDefaultChain}
+                />
+                <SettingsRow layout="inline" label={t("trust.guardrails.chain.forModel")}>
+                  <Select<string>
+                    options={modelList().map((model) => model.id)}
+                    value={chainModel()}
+                    onChange={(id) => setChainModel(id)}
+                    placement="bottom-end"
+                    itemComponent={(selectProps) => (
+                      <SelectItem item={selectProps.item}>
+                        {modelList().find((model) => model.id === selectProps.item.rawValue)?.name ??
+                          selectProps.item.rawValue}
+                      </SelectItem>
+                    )}
+                  >
+                    <SelectTrigger size="sm" aria-label={t("trust.guardrails.chain.forModel")}>
+                      <SelectValue<string>>
+                        {(state) =>
+                          modelList().find((model) => model.id === state.selectedOption())?.name ??
+                          t("trust.guardrails.chain.pickModel")
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent />
+                  </Select>
+                </SettingsRow>
+                <Show when={chainModel()}>
+                  {(model) => (
+                    <TrustFailoverChain
+                      title={t("trust.guardrails.chain.modelOrder")}
+                      chain={chains().byModel?.[model()] ?? []}
+                      models={modelList()}
+                      onChange={(chain) => setModelChain(model(), chain)}
+                    />
+                  )}
+                </Show>
                 <NumberRow
                   label={t("trust.guardrails.failoverThreshold")}
                   value={policy().failover.thresholdPercent}

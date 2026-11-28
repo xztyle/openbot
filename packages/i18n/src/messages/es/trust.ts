@@ -194,6 +194,28 @@ export const messages = {
   "trust.guardrails.failover": "Pasar los agentes de Claude a Codex cuando se agota su suscripción",
   "trust.guardrails.failoverThreshold": "Agotada al (%)",
   "trust.guardrails.allowApiKey": "Usar también la clave de API de Claude (se paga por token)",
+  "trust.guardrails.group.providers": "Proveedores",
+  "trust.guardrails.providers.claude": "Claude",
+  "trust.guardrails.providers.codex": "Codex",
+  "trust.guardrails.providers.offFor": "Al apagar uno, mantenerlo apagado",
+  "trust.guardrails.providers.for.always": "Hasta que lo vuelva a activar",
+  "trust.guardrails.providers.for.hour": "1 hora",
+  "trust.guardrails.providers.for.today": "Hoy",
+  "trust.guardrails.providers.offUntil":
+    "Apagado hasta {time}. Sus agentes trabajan con el siguiente modelo del orden.",
+  "trust.guardrails.providers.offAlways":
+    "Apagado hasta que lo vuelvas a activar. Sus agentes trabajan con el siguiente modelo del orden.",
+  "trust.guardrails.chain.default": "Orden por defecto",
+  "trust.guardrails.chain.defaultHelp":
+    "A dónde van los agentes cuando se agota su modelo. Vacío: el modelo principal de Codex y luego el más nuevo.",
+  "trust.guardrails.chain.forModel": "Orden para un modelo",
+  "trust.guardrails.chain.pickModel": "Elige un modelo",
+  "trust.guardrails.chain.modelOrder": "Orden para este modelo",
+  "trust.guardrails.chain.step": "Opción {n}",
+  "trust.guardrails.chain.add": "Añadir un modelo",
+  "trust.guardrails.chain.up": "Subir",
+  "trust.guardrails.chain.down": "Bajar",
+  "trust.guardrails.chain.remove": "Quitar",
   "trust.guardrails.events": "Eventos recientes",
   "trust.guardrails.eventsEmpty": "Aún no hay eventos.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -8,6 +8,7 @@ import {
   GUARDRAIL_PAUSE_REASON_LIMIT,
   GUARDRAIL_TEXT_LIMIT,
   GUARDRAIL_VIEW_LIMITS,
+  type GuardrailChainChoice,
   type GuardrailEventKind,
   type GuardrailFailoverRow,
   type GuardrailFailoverStepRow,
@@ -16,6 +17,7 @@ import {
   type GuardrailPause,
   type GuardrailPauseReason,
   type GuardrailPolicy,
+  type GuardrailProvider,
   type GuardrailsView,
   type GuardrailUsageRow,
   isGuardrailPause,
@@ -112,7 +114,9 @@ export interface GuardrailsRuntime {
    * The models a failover moves a Claude agent to, in order: Codex, then the Claude API key when
    * allowed. Empty for a Codex agent, which stays on Codex and its credits.
    */
-  failoverTargets(agent: GuardrailAgent, allowApiKey: boolean): AgentModelChoice[];
+  failoverTargets(agent: GuardrailAgent, allowApiKey: boolean, chain?: GuardrailChainChoice[]): AgentModelChoice[];
+  /** The models the owner can put in a fallback order. */
+  modelOptions?(): { id: string; name: string; provider: GuardrailProvider }[];
   changed(): void;
 }
 
@@ -882,6 +886,26 @@ export class GuardrailsService {
     );
   }
 
+  /** The fallback order of this agent's main model, else the default order, else undefined (built-in). */
+  #chainOf(agent: GuardrailAgent): GuardrailChainChoice[] | undefined {
+    const chains = this.#state.policy.failover.chains;
+    return chains?.byModel?.[agent.model] ?? chains?.default;
+  }
+
+  /** True while the owner has this provider off for the agent's space or the whole workspace. */
+  #providerOff(provider: string, agentId: string): boolean {
+    const list = this.#state.policy.disabledProviders;
+    if (!list?.length) return false;
+    const now = this.#now();
+    const space = this.#runtime?.spaceOf(agentId);
+    return list.some(
+      (entry) =>
+        entry.provider === provider &&
+        (entry.spaceId === undefined || entry.spaceId === space) &&
+        (entry.until === undefined || Date.parse(entry.until) > now),
+    );
+  }
+
   /** Whether the failover may move this agent at all: on, a moving tier, not pinned, no backups of its own. */
   #movable(agent: GuardrailAgent): boolean {
     const policy = this.#state.policy;
@@ -904,15 +928,19 @@ export class GuardrailsService {
     const account = runtime.agentAccount(agent.id);
     if (!account) return null;
     const meter = this.#meter();
-    if (!options.limited && !this.#poolNearlyExhausted(account.provider, account.accountId, meter)) {
+    const off = this.#providerOff(account.provider, agent.id);
+    if (!off && !options.limited && !this.#poolNearlyExhausted(account.provider, account.accountId, meter)) {
       this.#noRoom.delete(agent.id);
       return null;
     }
     const choice =
       runtime
-        .failoverTargets(agent, this.#state.policy.failover.allowApiKey)
-        .find((target) => !this.#poolNearlyExhausted(target.provider, target.providerAccountId ?? "default", meter)) ??
-      null;
+        .failoverTargets(agent, this.#state.policy.failover.allowApiKey, this.#chainOf(agent))
+        .find(
+          (target) =>
+            !this.#providerOff(target.provider, agent.id) &&
+            !this.#poolNearlyExhausted(target.provider, target.providerAccountId ?? "default", meter),
+        ) ?? null;
     if (choice) this.#noRoom.delete(agent.id);
     else this.#tellNoRoom(agent);
     return choice;
@@ -957,7 +985,10 @@ export class GuardrailsService {
   /** True while the pool that a failover left is still nearly run out: the agent stays on the other model. */
   holdsReturn(agentId: string, choice: AgentModelChoice): boolean {
     if (!this.#state.failovers.some((row) => row.agentId === agentId)) return false;
-    return this.#poolNearlyExhausted(choice.provider, choice.providerAccountId ?? "default", this.#meter());
+    return (
+      this.#providerOff(choice.provider, agentId) ||
+      this.#poolNearlyExhausted(choice.provider, choice.providerAccountId ?? "default", this.#meter())
+    );
   }
 
   /** The failover moved an agent, or the agent went back. */
@@ -1032,6 +1063,7 @@ export class GuardrailsService {
       meter: this.#meter(),
       failovers: this.#state.failovers.slice(0, GUARDRAIL_VIEW_LIMITS.failovers),
       steps: this.#steps(this.#meter()),
+      ...(runtime?.modelOptions ? { models: runtime.modelOptions() } : {}),
       events: this.#events.newest(GUARDRAIL_VIEW_LIMITS.events),
       kpis: this.#events.counts(new Date(this.#now() - WEEK_MS).toISOString()),
     };

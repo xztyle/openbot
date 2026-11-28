@@ -2146,8 +2146,21 @@ export class AttentionRegistry {
     const turnId = getString(request.params, "turnId");
     const agentId = threadId ? this.#conversation.agentForThread(threadId) : undefined;
     const publicThreadId = threadId && agentId ? this.#conversation.publicThreadId(agentId, threadId) : null;
+    // Codex's consent to run one tool is answered before the card is built: a consent with no card
+    // text, or with no turn, must not be declined for that reason.
+    if (agentId && this.#answerMcpToolConsentWithoutAsking(client, request, agentId)) return;
     const questions = mcpElicitationQuestions(request.params);
     if (!threadId || !turnId || !agentId || !publicThreadId || !questions) {
+      const meta = getRecord(request.params, "_meta");
+      logger.warn("Declined a plugin request that Atelier cannot show.", {
+        agentId,
+        serverName: getString(request.params, "serverName"),
+        mode: getString(request.params, "mode"),
+        approvalKind: getString(meta, "codex_approval_kind"),
+        fields: Object.keys(getRecord(getRecord(request.params, "requestedSchema"), "properties") ?? {}),
+        hasThread: Boolean(threadId),
+        hasTurn: Boolean(turnId),
+      });
       client.respond(request.id, { action: "decline", content: null, _meta: null });
       this.#emitError(
         "mcp_safety_handoff",
@@ -2156,7 +2169,6 @@ export class AttentionRegistry {
       );
       return;
     }
-    if (this.#answerMcpToolConsentWithoutAsking(client, request, agentId)) return;
     if (this.#messagingThread(publicThreadId)) {
       client.respond(request.id, { action: "cancel", content: null, _meta: null });
       return;

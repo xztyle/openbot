@@ -192,6 +192,9 @@ export function guardrailsRuntime(options: GuardrailsRuntimeOptions): Guardrails
         for (const step of chain)
           if (!(step.provider === target.provider && step.model === target.model))
             choices.push({ provider: step.provider, model: step.model });
+        // When no entry of the chain is ready, the built-in order still applies after it.
+        if (target.provider === "claude")
+          for (const model of codexFailoverModels(models)) choices.push({ provider: "codex", model });
         if (allowApiKey && target.provider === "claude")
           choices.push({ provider: "claude", model: target.model, providerAccountId: CLAUDE_API_KEY_ACCOUNT_ID });
       } else if (target.provider === "claude") {
@@ -201,7 +204,13 @@ export function guardrailsRuntime(options: GuardrailsRuntimeOptions): Guardrails
       }
       // A Codex agent stays on Codex: Codex spends the account's credits by itself once the plan is used
       // up, so its order is the Codex plan, then the Codex credits.
-      return choices.filter((choice) => options.modelReady(choice));
+      const seen = new Set<string>();
+      return choices.filter((choice) => {
+        const key = `${choice.provider}/${choice.model}/${choice.providerAccountId ?? ""}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return options.modelReady(choice);
+      });
     },
     modelOptions: () =>
       options

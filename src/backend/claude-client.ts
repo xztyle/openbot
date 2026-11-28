@@ -2789,18 +2789,33 @@ function claudeEnvironment(cli: ClaudeCliInfo): NodeJS.ProcessEnv {
   };
 }
 
-function claudeRateLimits(value: unknown, model: string | null): AccountRateLimitsReadResult {
+export function claudeRateLimits(value: unknown, model: string | null): AccountRateLimitsReadResult {
   if (!isDynamicRecord(value) || value.rate_limits_available !== true || !isDynamicRecord(value.rate_limits)) {
     return { rateLimits: null, rateLimitsByLimitId: null };
   }
   const rateLimits = value.rate_limits;
   const primary = claudeUsageWindow(rateLimits.five_hour, 300);
-  const secondary = claudeUsageWindow(rateLimits[claudeWeeklyKey(rateLimits, model)], 10_080);
+  const secondary = moreUsedWindow(
+    claudeUsageWindow(rateLimits[claudeWeeklyKey(rateLimits, model)], 10_080),
+    claudeUsageWindow(rateLimits.seven_day, 10_080),
+  );
   if (!primary && !secondary) return { rateLimits: null, rateLimitsByLimitId: null };
   return {
     rateLimits: { limitId: "claude", primary, secondary },
     rateLimitsByLimitId: null,
   };
+}
+
+/**
+ * The weekly window that is more used. A model family can have room while the account's overall weekly window
+ * is used up, and the overall window stops every model, so a reading must show whichever is nearer its cap.
+ */
+export function moreUsedWindow(
+  family: AccountRateLimitWindowResult | null,
+  overall: AccountRateLimitWindowResult | null,
+): AccountRateLimitWindowResult | null {
+  if (!family || !overall) return family ?? overall;
+  return (overall.usedPercent ?? 0) > (family.usedPercent ?? 0) ? overall : family;
 }
 
 /** The weekly window a reading shows: the one of the model's family when Claude reports it, else the overall one. */
@@ -2816,7 +2831,7 @@ function claudeWeeklyKey(rateLimits: DynamicRecord, model: string | null): strin
  * window of `rateLimitType`, at the top level. `unifiedWindows` has no model-family weekly window, so a reading
  * that shows one keeps it.
  */
-function claudePushedWindows(
+export function claudePushedWindows(
   info: DynamicRecord,
   weeklyKey: string,
 ): { primary?: AccountRateLimitWindowResult; secondary?: AccountRateLimitWindowResult } | null {
@@ -2826,7 +2841,10 @@ function claudePushedWindows(
       ? { [info.rateLimitType]: info }
       : {};
   const primary = claudePushedWindow(windows.five_hour, 300);
-  const secondary = claudePushedWindow(windows[weeklyKey], 10_080);
+  const secondary = moreUsedWindow(
+    claudePushedWindow(windows[weeklyKey], 10_080),
+    claudePushedWindow(windows.seven_day, 10_080),
+  );
   if (!primary && !secondary) return null;
   return { ...(primary && { primary }), ...(secondary && { secondary }) };
 }

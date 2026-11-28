@@ -4764,7 +4764,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         ? (this.#guardrails?.failoverChoice(agent, { limited: !this.#usageLimits.mayDrain(agentId) }) ?? null)
         : null;
     if (!agent.usageLimitReturn && !agent.backupModels?.automatic && !failover) return null;
-    if (this.#runsTurn(agentId) || this.#mailbox.hasStartedDelivery(agentId)) return null;
+    if (this.#runsTurn(agentId) || this.#mailbox.hasStartedDelivery(agentId)) {
+      if (failover) logger.info("A failover waits: the agent has started work.", { agentId });
+      return null;
+    }
     // The agent keeps its reasoning effort where the other model has it. It goes back with the effort it left.
     const move = (choice: AgentModelChoice, reasoningEffort = agent.reasoningEffort) => {
       const model = this.#endpoints

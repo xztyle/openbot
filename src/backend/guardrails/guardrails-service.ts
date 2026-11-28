@@ -951,6 +951,15 @@ export class GuardrailsService {
             !this.#providerOff(target.provider, agent.id) &&
             !this.#poolNearlyExhausted(target.provider, target.providerAccountId ?? "default", meter),
         ) ?? null;
+    logger.info("Failover choice", {
+      agentId: agent.id,
+      off,
+      limited: options.limited === true,
+      targets: runtime
+        .failoverTargets(agent, this.#state.policy.failover.allowApiKey, this.#chainOf(agent))
+        .map((target) => `${target.provider}:${target.model}`),
+      choice: choice ? `${choice.provider}:${choice.model}` : null,
+    });
     if (choice) this.#noRoom.delete(agent.id);
     else this.#tellNoRoom(agent);
     return choice;

@@ -2678,7 +2678,12 @@ export class ProviderRuntime implements ProviderPort {
    */
   applyPushedUsage(source: AgentClient, params: unknown): void {
     const provider = source.provider;
-    if (this.#clients.get(provider) !== source) return;
+    // An agent's confined client on the provider's own sign-in reads the same plan: its pushes are
+    // the only live reading while every agent runs confined.
+    const ownSignIn =
+      this.#clients.get(provider) === source ||
+      [...this.#confined.values()].some((confined) => confined.client === source && confined.accountId === null);
+    if (!ownSignIn) return;
     const pushed = pushedUsageLimit(provider, params);
     if (!pushed) return;
     const kept = this.#lastUsage.get(provider);

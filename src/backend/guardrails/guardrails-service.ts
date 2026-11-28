@@ -858,16 +858,6 @@ export class GuardrailsService {
       .slice(0, GUARDRAIL_VIEW_LIMITS.meter)
       .map((account) => meterRow(account, this.#state.policy.failover.thresholdPercent, nowSeconds));
     this.#meterCache = { at: this.#now(), rows };
-    logger.info("Subscription meter read", {
-      rows: rows.map((row) => ({
-        provider: row.provider,
-        account: row.accountId,
-        pooled: row.pooled,
-        out: row.nearlyExhausted,
-        onCredits: row.onCredits,
-        used: row.windows.map((window) => window.usedPercent),
-      })),
-    });
     return rows;
   }
 
@@ -919,7 +909,8 @@ export class GuardrailsService {
   /** Whether the failover may move this agent at all: on, a moving tier, not pinned, no backups of its own. */
   #movable(agent: GuardrailAgent): boolean {
     const policy = this.#state.policy;
-    if (!policy.enabled || !policy.failover.enabled) return false;
+    // The failover has its own switch: turning the guardrails off must not stop agents moving off a spent plan.
+    if (!policy.failover.enabled) return false;
     if (agent.backupModels?.automatic || policy.failover.pinnedAgentIds.includes(agent.id)) return false;
     const tier = modelTier(agent.model);
     return tier !== null && policy.failover.tiers.includes(tier);
@@ -951,15 +942,6 @@ export class GuardrailsService {
             !this.#providerOff(target.provider, agent.id) &&
             !this.#poolNearlyExhausted(target.provider, target.providerAccountId ?? "default", meter),
         ) ?? null;
-    logger.info("Failover choice", {
-      agentId: agent.id,
-      off,
-      limited: options.limited === true,
-      targets: runtime
-        .failoverTargets(agent, this.#state.policy.failover.allowApiKey, this.#chainOf(agent))
-        .map((target) => `${target.provider}:${target.model}`),
-      choice: choice ? `${choice.provider}:${choice.model}` : null,
-    });
     if (choice) this.#noRoom.delete(agent.id);
     else this.#tellNoRoom(agent);
     return choice;

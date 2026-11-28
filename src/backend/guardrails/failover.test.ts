@@ -2,6 +2,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { GuardrailChainChoice, GuardrailPolicy } from "@openbot/contracts/guardrails";
 import type { AgentModelChoice, AgentModelOption, AgentReasoningEffort } from "@openbot/contracts/ipc";
 import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -120,10 +121,12 @@ describe("the subscription failover", () => {
       noteAgent: () => undefined,
       recordTrust: () => undefined,
       // As the host builds them: Codex's default model first, then the newest.
-      failoverTargets: (agent): AgentModelChoice[] =>
-        agent.provider === "claude"
-          ? codexFailoverModels(CODEX_MODELS).map((id) => ({ provider: "codex", model: id }))
-          : [],
+      failoverTargets: (agent, _allowApiKey, chain): AgentModelChoice[] =>
+        chain?.length
+          ? chain.map((step) => ({ provider: step.provider, model: step.model }))
+          : agent.provider === "claude"
+            ? codexFailoverModels(CODEX_MODELS).map((id) => ({ provider: "codex", model: id }))
+            : [],
       changed: () => undefined,
     };
     service.connect(runtime);
@@ -207,5 +210,95 @@ describe("the Codex model of a failover", () => {
   it("is Codex's default model for every tier, else the newest listed model", () => {
     expect(codexFailoverModels(CODEX_MODELS)[0]).toBe("gpt-6-luna");
     expect(codexFailoverModels(CODEX_MODELS.filter((option) => option.id !== "gpt-6-luna"))[0]).toBe("gpt-5.6-terra");
+  });
+});
+
+describe("the fallback order and the provider switch", () => {
+  let directory: string;
+  let service: GuardrailsService;
+  let codexUsed = 10;
+
+  beforeEach(() => {
+    directory = mkdtempSync(join(tmpdir(), "guardrails-chain-"));
+    codexUsed = 10;
+    service = new GuardrailsService({
+      file: join(directory, "guardrails-v1.json"),
+      events: new GuardrailEventLog(join(directory, "events")),
+      now: () => NOW,
+    });
+    service.connect({
+      agents: () => [OPUS, CODEX_AGENT],
+      spaceOf: () => "space",
+      dailyTotals: () => [],
+      turnTotals: () => null,
+      costsSince: () => new Map(),
+      meterAccounts: (): MeterAccount[] => [
+        { provider: "claude", accountId: "default", pooled: false, inUse: true, windows: [window(100)], agents: 1 },
+        {
+          provider: "codex",
+          accountId: "default",
+          pooled: false,
+          inUse: false,
+          windows: [window(codexUsed)],
+          agents: 0,
+        },
+      ],
+      agentAccount: (id) => ({ provider: id === OPUS.id ? "claude" : "codex", accountId: "default" }),
+      turnTask: () => [],
+      steer: () => Effect.succeed(false),
+      interrupt: () => Effect.void,
+      scheduleDrain: () => undefined,
+      generateCheap: () => Effect.succeed(""),
+      notifyOwner: () => undefined,
+      alertOwner: () => undefined,
+      noteAgent: () => undefined,
+      recordTrust: () => undefined,
+      failoverTargets: (agent, _allowApiKey, chain): AgentModelChoice[] =>
+        chain?.length
+          ? chain.map((step) => ({ provider: step.provider, model: step.model }))
+          : agent.provider === "claude"
+            ? [{ provider: "codex", model: "gpt-6-luna" }]
+            : [],
+      changed: () => undefined,
+    });
+  });
+
+  afterEach(() => {
+    service.dispose();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  const save = (patch: Partial<GuardrailPolicy>) =>
+    Effect.runPromise(service.savePolicy({ ...service.policy(), ...patch }));
+  const codex = (model: string): GuardrailChainChoice => ({ provider: "codex", model });
+
+  it("uses the order of the main model, else the default order, else the built-in one", async () => {
+    expect(service.failoverChoice(OPUS)).toEqual(codex("gpt-6-luna"));
+    await save({ failover: { ...service.policy().failover, chains: { default: [codex("gpt-5.6-terra")] } } });
+    expect(service.failoverChoice(OPUS)).toEqual(codex("gpt-5.6-terra"));
+    await save({
+      failover: {
+        ...service.policy().failover,
+        chains: { default: [codex("gpt-5.6-terra")], byModel: { [OPUS.model]: [codex("gpt-5.6-luna")] } },
+      },
+    });
+    expect(service.failoverChoice(OPUS)).toEqual(codex("gpt-5.6-luna"));
+  });
+
+  it("treats a provider that is off as out, and skips a target on it", async () => {
+    await save({ disabledProviders: [{ provider: "codex" }] });
+    expect(service.failoverChoice(OPUS)).toBeNull();
+    await save({ disabledProviders: [{ provider: "claude", spaceId: "space" }] });
+    expect(service.failoverChoice(CODEX_AGENT)).toBeNull();
+    expect(service.failoverChoice(OPUS)).toEqual(codex("gpt-6-luna"));
+    await save({ disabledProviders: [{ provider: "claude", spaceId: "other" }] });
+    expect(service.holdsReturn(OPUS.id, { provider: "claude", model: OPUS.model })).toBe(false);
+  });
+
+  it("brings the provider back when the time passes, and is back after the expiry", async () => {
+    await save({ disabledProviders: [{ provider: "codex", until: new Date(NOW + 60_000).toISOString() }] });
+    expect(service.failoverChoice(OPUS)).toBeNull();
+    await save({ disabledProviders: [{ provider: "codex", until: new Date(NOW - 60_000).toISOString() }] });
+    expect(service.failoverChoice(OPUS)).toEqual(codex("gpt-6-luna"));
   });
 });
